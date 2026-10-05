@@ -1,0 +1,12 @@
+id: showcase-asset-continuity
+name: Showcase Asset Continuity
+type: guidance
+description: 'Opt-in stage-aware visual-review reminder: reuse owner authorization/root locks, review replaceable assets and actual motion evidence; no automatic taste check.'
+guidanceFile: guidance.md
+pass_criteria:
+  - type: inline_guidance
+activation:
+  explicit_request: true
+subject: showcase-asset-continuity
+severity: medium
+enforcementMode: advisory

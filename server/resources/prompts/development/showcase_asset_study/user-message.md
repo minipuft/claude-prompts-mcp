@@ -1,0 +1,17 @@
+Brief: {{brief}}
+References: {{references | default("Use the current inspected owner anchors and relevant read-only note pointers; preserve provenance and do not scan/copy the full archive.")}}
+Supplied comparison/reference/production frames: {{frames | default("No frames supplied: resolve the authorized stage and named inputs from brief/context before proposing the smallest scoped unit.")}}
+Caller-owned output root: {{output_root}}
+Prior reviewed handoff, owner authorization and delegated root lock: {{context | default("Use the latest actual owner decisions and prior approvals. Scope and dependent unresolved choices come from the current brief; no default shape-only production hold is imposed.")}}
+
+Bound the work to the currently authorized stage:
+
+1. Read current owner/caller scope and evidence. Name which selections/approvals or explicit delegated root lock apply. Historical OWNER FAIL controls remain documentary evidence for their failed properties; they do not reset later accepted refinements or production authorization.
+2. WHEN THIS UNIT IS A HUMAN/ASSET CORRECTION: inspect or produce the one requested comparison/refinement. Judge visible graphic mass, attitude, face, cloth and medium against the CURRENT contextual preferences. Do not preserve failed anatomy under a surface filter or impose older lankiness/ratios. Defer pair/world/motion only when those units are outside the current authorization.
+3. Reuse actual prior approvals and bounded root selection where the owner delegated it. Proceed within that authorized slice without a redundant owner checkpoint. Ask only for a missing consequential choice that changes dependent work; otherwise report the next authorized action. Do not invent approval, silently expand scope or erase a current explicit hold.
+4. WHEN WORLD/SCENE OR ASSET PREPARATION IS AUTHORIZED: use the locked identities and declared replaceable slots/anchors. Keep soft painted spatial fields and selective illustrative authored structures coherent; no literal drawing mechanics or forced glyph labels are required. Separate source assets/slot contracts from camera, choreography, light sources, color script and timing. A separate new world/medium approval is required only if the owner's current instructions require it.
+5. WHEN MOTION/EXPORT IS AUTHORIZED: produce and review actual independent actor/hand/prop movement, contact/correction/continuation and an exported clip. Use the caller's duration/fps/frame-clock specification; record actual source paths/hashes, commands, decoded dimensions, fps/duration and visible motion evidence. Preserve rejected old CGI controls without animating them. Label still animatics, cutout/2.5D acting, unverified rig/physics claims and other limitations honestly. Executable artifact checks are separate from visual judgments and may not become invented artistic PASS or runtime badges.
+6. Report scoped artifact paths, visible supported/failed properties, actual owner grade or delegated root lock, source/export evidence, unresolved limits and the next authorized action. No mandatory new owner question if existing authorization settles it. No fabricated live provider trace or outward publication.
+
+Return five headings: Current Stage; Visible Shape and Medium Review; Owner Grade / Root Lock / Break Control; Artifact and Motion Evidence; Next Authorized Action / Open Choice.
+Review instructions are reminders for the client, not an automatic artist judge. Frameworks guide reasoning; the client performs production.
