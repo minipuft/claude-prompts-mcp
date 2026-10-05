@@ -1196,6 +1196,12 @@ value that outranks all of them permanently — the prompt stops following any l
 category or global default, and only another explicit call moves it again. Set them when this
 prompt must differ from its category; leave them out when it should follow along.
 
+In `launch` mode the native MCP prompt returns a message that routes the call through
+`prompt_engine`, listing the prompt's arguments and, for a single prompt, the gates it includes. A
+chain prompt's launch message names no gates: a chain's gates belong to its steps and are resolved
+when each step renders, so each step's own render names the gates that step enforces, and a list at
+launch would be a second answer that can drift from the first.
+
 Rollback restores `injection`, `subagent_model`, `agent_type`, `budget` and `artifacts` from the
 target version's snapshot. `register_with_mcp` and `mcp_prompt_mode` keep their current on-disk
 value across a rollback — a recorded value for those two cannot be distinguished from an inherited
