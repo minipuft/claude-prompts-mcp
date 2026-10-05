@@ -72,6 +72,48 @@ export interface TemporaryGateDefinition {
 }
 
 /**
+ * The keys `storeGate` decides rather than copies: the id it registered under, its own clock, the
+ * scope it was filed under, and the declared key (which falls back to the requested id).
+ */
+type DecidedKey = 'id' | 'created_at' | 'expires_at' | 'scope_id' | 'declared_key';
+type StoredKey = Exclude<keyof TemporaryGateDefinition, DecidedKey>;
+
+/**
+ * Every key a stored record copies as-is from the caller's definition — the same exhaustive table
+ * `gate-definition-converter.ts` keeps over `LightweightGateDefinition`. `satisfies` fails the
+ * typecheck both ways: a new `TemporaryGateDefinition` field until it is named here (or in
+ * `DecidedKey`), and a key the interface does not declare. The record used to be rebuilt from a
+ * hand-written field list, which dropped any field it did not list without a sound.
+ */
+const STORED_KEYS = {
+  name: true,
+  type: true,
+  scope: true,
+  description: true,
+  guidance: true,
+  source: true,
+  pass_criteria: true,
+  context: true,
+  target_step_number: true,
+  target_step_id: true,
+  apply_to_steps: true,
+  enforcement_mode: true,
+  origin: true,
+} as const satisfies Record<StoredKey, true>;
+
+/** The caller's copied keys, each present only when the caller set it. Pure. */
+function copyStoredKeys(
+  definition: Omit<TemporaryGateDefinition, 'id' | 'created_at'>
+): Pick<TemporaryGateDefinition, StoredKey> {
+  const carried: Record<string, unknown> = {};
+  for (const key of Object.keys(STORED_KEYS) as StoredKey[]) {
+    const value = definition[key];
+    if (value !== undefined) carried[key] = value;
+  }
+  return carried as Pick<TemporaryGateDefinition, StoredKey>;
+}
+
+/**
  * Scope management information
  */
 interface ScopeInfo {
@@ -224,40 +266,15 @@ export class TemporaryGateRegistry {
     }
 
     const now = Date.now();
-    const {
-      id: _unusedId,
-      expires_at,
-      scope_id,
-      pass_criteria,
-      context,
-      target_step_number,
-      target_step_id,
-      apply_to_steps,
-      enforcement_mode,
-      origin,
-      declared_key,
-      ...defWithoutId
-    } = definition;
-    const declaredKey = declared_key ?? definition.id;
+    const storedScopeId = scopeId ?? definition.scope_id;
+    const declaredKey = definition.declared_key ?? definition.id;
 
     const tempGate: TemporaryGateDefinition = {
       id: gateId,
-      name: defWithoutId.name,
-      type: defWithoutId.type,
-      scope: defWithoutId.scope,
-      description: defWithoutId.description,
-      guidance: defWithoutId.guidance,
-      source: defWithoutId.source,
+      ...copyStoredKeys(definition),
       created_at: now,
-      expires_at: expires_at ?? now + this.defaultExpirationMs,
-      ...((scopeId ?? scope_id) ? { scope_id: scopeId ?? scope_id } : {}),
-      ...(pass_criteria !== undefined ? { pass_criteria } : {}),
-      ...(context !== undefined ? { context } : {}),
-      ...(target_step_number !== undefined ? { target_step_number } : {}),
-      ...(target_step_id !== undefined ? { target_step_id } : {}),
-      ...(apply_to_steps !== undefined ? { apply_to_steps } : {}),
-      ...(enforcement_mode !== undefined ? { enforcement_mode } : {}),
-      ...(origin !== undefined ? { origin } : {}),
+      expires_at: definition.expires_at ?? now + this.defaultExpirationMs,
+      ...(storedScopeId ? { scope_id: storedScopeId } : {}),
       ...(declaredKey !== undefined ? { declared_key: declaredKey } : {}),
     };
 
