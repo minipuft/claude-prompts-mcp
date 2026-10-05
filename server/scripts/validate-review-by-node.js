@@ -31,8 +31,7 @@
  *
  * WHAT THIS DELIBERATELY DOES NOT CATCH (as of 2026-09-23 · flips when any of these shapes appears):
  *   - a name assembled at runtime from parts (`'pending' + 'GateReview'`) or read from data.
- *   - `tests/`, `scripts/` and `hooks/` (Python reads the `chain_sessions` projection key by
- *     contract; that key's writer is an accepted exception below).
+ *   - `tests/`, `scripts/` and `hooks/`.
  *
  * A green run is not a run that reached nothing: the scan fails closed below
  * `MINIMUM_SOURCE_FILES` scanned files, and every accepted entry must match a live occurrence.
@@ -61,52 +60,13 @@ const MINIMUM_SOURCE_FILES = 200;
 
 /**
  * Occurrences that stay on purpose. `where` is the enclosing function, or the type/class a
- * declaration sits on; `kind` must match too, so an accepted read never covers a new write.
+ * declaration sits on; `kind` must match too, so an accepted read never covers a new write. Empty
+ * since P6.20 (R193): the hook projection key became `currentStepReview` with its view column and
+ * Python readers, and the v35 bump retired the pre-3.1 residual reader in `run-registry.ts`.
+ *
+ * @type {Array<{subject: string, where: string, kind: string, reason: string, asOf: string, flipsWhen: string}>}
  */
-const ACCEPTED = [
-  {
-    subject: 'src/modules/chains/run-registry.ts',
-    where: 'ResidualRunState',
-    kind: 'declaration',
-    reason:
-      'Legacy load: the pre-3.1 residual document carried both fields, and a run persisted then ' +
-      'is still read into `reviews`. Typed `unknown`; nothing writes them.',
-    asOf: '2026-09-23',
-    flipsWhen:
-      'a SCHEMA_VERSION bump drops every pre-3.1 chain_runs row — delete both fields with readLegacyReviews',
-  },
-  {
-    subject: 'src/modules/chains/run-registry.ts',
-    where: 'readLegacyReviews',
-    kind: 'read',
-    reason:
-      'Legacy load: reads the two pre-3.1 fields of a residual document into `reviews`, one way.',
-    asOf: '2026-09-23',
-    flipsWhen:
-      'a SCHEMA_VERSION bump drops every pre-3.1 chain_runs row — delete readLegacyReviews',
-  },
-  {
-    subject: 'src/modules/chains/manager.ts',
-    where: 'collectActiveSessionRows',
-    kind: 'write',
-    reason:
-      'The `chain_sessions` hook projection: `pendingGateReview` is the JSON key the Python hooks ' +
-      'read (`hooks/lib/db_reader.py`, `hooks/lib/session_state.py`); its value is read by node.',
-    asOf: '2026-09-23',
-    flipsWhen: 'the Python readers move to a by-node key in the same PR as this writer',
-  },
-  {
-    subject: 'src/infra/database/sqlite-engine.ts',
-    where: 'applyViews',
-    kind: 'read',
-    reason:
-      'The `v_active_chain_sessions` view projects the same hook key (`$.pendingGateReview`) out ' +
-      'of the `chain_sessions` state document.',
-    asOf: '2026-09-23',
-    flipsWhen:
-      'the hook projection key is renamed (the manager.ts collectActiveSessionRows entry flips)',
-  },
-];
+const ACCEPTED = [];
 
 // ─── Scan ────────────────────────────────────────────────────────────────────
 

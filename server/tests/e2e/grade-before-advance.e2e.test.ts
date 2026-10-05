@@ -14,7 +14,7 @@
  */
 import { afterAll, beforeAll, describe, expect, test } from '@jest/globals';
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -41,6 +41,17 @@ const SECTIONLESS = 'plain sectionless answer';
 const STRUCTURAL = 'Structural Review Required';
 /** The line the phase guard's grader logs once per evaluation (R170). */
 const GRADED = '[PhaseGuardVerification] Graded the answer';
+/**
+ * A hook's `pending_gate` on every read path for a run on step 2 with no review open (the PASS on
+ * step 1 closed its review), measured 2026-10-04 (P6.20).
+ */
+const HOOK_REVIEW_NONE = { view: null, sessionTable: null, loader: null };
+/** The same, once step 2 is held by its structural review. */
+const HOOK_REVIEW_HELD = {
+  view: '__phase_guard__',
+  sessionTable: '__phase_guard__',
+  loader: '__phase_guard__',
+};
 
 interface RunRow {
   current: string | null;
@@ -71,6 +82,54 @@ const readRun = (runtimeRoot: string, chainId: string): RunRow =>
       ),
     };
   });
+
+/** The directory the Python hooks import from: `db_reader` is what a hook calls. */
+const HOOKS_LIB = path.join(SERVER_ROOT, '..', 'hooks', 'lib');
+
+/** What `db_reader` returns for a held run, by read path (P6.20). */
+interface HookView {
+  view: Record<string, unknown> | null;
+  sessionTable: Record<string, unknown> | null;
+  loader: Record<string, unknown> | null;
+}
+
+/**
+ * The run as a hook sees it (P6.20, R193): `db_reader`'s two read paths, each called on its own,
+ * and the public loader over them. Read separately because the loader falls back from the view to
+ * the session table, so a view that lost its column would still read correct through the loader.
+ * The server process is alive, so its rows pass the loader's owner check.
+ */
+const readHookView = (runtimeRoot: string, chainId: string): HookView => {
+  const script = [
+    'import json, sys',
+    `sys.path.insert(0, ${JSON.stringify(HOOKS_LIB)})`,
+    'import db_reader',
+    'chain_id = sys.argv[1]',
+    'conn = db_reader._connect_readonly()',
+    'view = db_reader._load_from_execution_view(conn, chain_id)',
+    'table = db_reader._load_from_session_table(conn, chain_id)',
+    'conn.close()',
+    'loader = db_reader.load_active_chain_state(chain_id)',
+    'print(json.dumps({"view": view, "sessionTable": table, "loader": loader}))',
+  ].join('\n');
+  const result = spawnSync('python3', ['-c', script, chainId], {
+    encoding: 'utf8',
+    env: {
+      PATH: process.env['PATH'] ?? '',
+      MCP_RUNTIME_ROOT: runtimeRoot,
+      PYTHONDONTWRITEBYTECODE: '1',
+    },
+  });
+  if (result.status !== 0) throw new Error(`hook read failed: ${result.stderr}`);
+  return JSON.parse(result.stdout) as HookView;
+};
+
+/** The review-derived fields of each read path, as one value. */
+const hookReviews = (view: HookView): Record<keyof HookView, unknown> => ({
+  view: view.view?.['pending_gate'],
+  sessionTable: view.sessionTable?.['pending_gate'],
+  loader: view.loader?.['pending_gate'],
+});
 
 /** The fixture every twin shares: three gated steps g1..g3 and three ungated steps u1..u3. */
 const authorFixtures = async (
@@ -258,6 +317,18 @@ describe('Streamable HTTP: an answer is graded before the run advances (P6.274, 
     expect(run(chainId)).toEqual({ current: 'n3', reviews: {} });
   });
 
+  test("(e) the held step's review is what a hook reads, on both of db_reader's paths (P6.20)", async () => {
+    const chainId = await gatedRunAtStep2();
+    // Positive control: the same probe reads no review before the hold, so it can tell them apart.
+    const before = hookReviews(readHookView(runtimeRoot, chainId));
+
+    await answer(chainId, SECTIONLESS, PASS);
+
+    expect(before).toEqual(HOOK_REVIEW_NONE);
+    expect(hookReviews(readHookView(runtimeRoot, chainId))).toEqual(HOOK_REVIEW_HELD);
+    expect(readHookView(runtimeRoot, chainId).loader?.['current_step']).toBe(2);
+  });
+
   test('(d) control: an ungated step answered with no sections advances as before', async () => {
     const { chainId } = await start(['>>u1', '>>u2', '>>u3'].join(ARROW));
     await answer(chainId, SECTIONLESS);
@@ -406,6 +477,17 @@ describe('STDIO: an answer is graded before the run advances (P6.303, R170 trans
     expect(retry.text).not.toContain('BODY-g2');
     expect(retry.text).not.toContain(STRUCTURAL);
     expect(run(chainId)).toEqual({ current: 'n3', reviews: {} });
+  });
+
+  test("(d) over STDIO the held step's review is what a hook reads, on both paths (P6.20)", async () => {
+    const chainId = await gatedRunAtStep2();
+    const before = hookReviews(readHookView(runtimeRoot, chainId));
+
+    await answer(chainId, SECTIONLESS, PASS);
+
+    expect(before).toEqual(HOOK_REVIEW_NONE);
+    expect(hookReviews(readHookView(runtimeRoot, chainId))).toEqual(HOOK_REVIEW_HELD);
+    expect(readHookView(runtimeRoot, chainId).loader?.['current_step']).toBe(2);
   });
 
   test('(c) control over STDIO: a PASS on a conforming answer advances', async () => {

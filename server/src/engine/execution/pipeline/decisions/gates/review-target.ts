@@ -71,7 +71,7 @@ export function resolveReviewTarget(input: ReviewTargetInput): ReviewTarget {
 
 /**
  * The node whose review a client is SHOWN when its call names none — what stage 13 publishes,
- * stage 20 renders and the hooks' `pendingGateReview` key carries: the review a bare verdict
+ * stage 20 renders and the hooks' `currentStepReview` key carries: the review a bare verdict
  * answers ({@link resolveReviewTarget}), else, with several step reviews open, the earliest the
  * store holds (the order they opened). Showing none would leave a held run re-rendering its step
  * with no word of the owed verdicts (measured 2026-09-23); a bare verdict on the shown review is

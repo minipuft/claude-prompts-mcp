@@ -581,7 +581,8 @@
         "edges",
         "budget",
         "artifacts",
-        "full_restart"
+        "full_restart",
+        "skip_version"
       ]
     },
     {
@@ -668,7 +669,8 @@
         "severity",
         "enforcement_mode",
         "block_response_on_fail",
-        "evaluation"
+        "evaluation",
+        "skip_version"
       ]
     },
     {
@@ -756,7 +758,8 @@
         "execution_type_enhancements",
         "template_enhancements",
         "execution_flow",
-        "quality_indicators"
+        "quality_indicators",
+        "skip_version"
       ]
     },
     {
@@ -831,12 +834,18 @@
     {
       "id": "common:history",
       "summary": "View version history for a resource.",
-      "parameters": ["resource_type", "action", "id", "limit"]
+      "parameters": [
+        "resource_type",
+        "action",
+        "id",
+        "limit",
+        "source_workspace"
+      ]
     },
     {
       "id": "common:rollback",
       "summary": "Rollback a resource to a previous version.",
-      "parameters": ["resource_type", "action", "id", "version"]
+      "parameters": ["resource_type", "action", "id", "version", "confirm"]
     },
     {
       "id": "common:compare",
@@ -846,7 +855,8 @@
         "action",
         "id",
         "from_version",
-        "to_version"
+        "to_version",
+        "source_workspace"
       ]
     }
   ],
