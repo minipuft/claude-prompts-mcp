@@ -201,6 +201,20 @@
       automerge: false,
     },
     {
+      // `validate:standards-pins` requires four references to name ONE version: this
+      // action's pin, the doc link in docs/guides/release-process.md, the `$schema` in
+      // plan-retirement.config.json, and the npm tarball in server/package.json and
+      // server/package-lock.json. Renovate can rewrite only the action pin, so a PR for it
+      // alone can never pass that gate. The version is bumped by hand, across all of them
+      // in one commit. Nothing reports when this repository falls behind: the fleet audit in
+      // minipuft/repository-standards audits this repository only for its delivery contract,
+      // not for the version of the standards it consumes.
+      description: "repository-standards action - bumped by hand across every reference",
+      matchManagers: ["github-actions"],
+      matchPackageNames: ["minipuft/repository-standards"],
+      enabled: false,
+    },
+    {
       description: "Pinned Python validation tools",
       matchDatasources: ["pypi"],
       matchPackageNames: ["ruff", "pyrefly", "pytest", "PyYAML"],
