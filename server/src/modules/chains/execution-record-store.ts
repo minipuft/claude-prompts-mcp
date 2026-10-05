@@ -147,7 +147,7 @@ export class ExecutionRecordStore {
    */
   append(input: ExecutionRecordAppendInput): string {
     const executionId = ulid();
-    const params = buildAppendParams(executionId, input, this.resolveTenantId(input.scope));
+    const params = buildAppendParams(executionId, input, resolveContinuityScopeId(input.scope));
 
     try {
       this.db.run(
@@ -185,7 +185,7 @@ export class ExecutionRecordStore {
    * Scope filter is applied when provided so cross-tenant rows are excluded.
    */
   queryBySession(sessionId: string, scope?: StateStoreOptions): ExecutionRecord[] {
-    const tenantId = this.resolveTenantId(scope);
+    const tenantId = resolveContinuityScopeId(scope);
     const rows = this.db.query<ExecutionRecordRow>(
       `SELECT * FROM execution_records
        WHERE session_id = ? AND tenant_id = ?
@@ -207,7 +207,7 @@ export class ExecutionRecordStore {
    * `execution_records` contract) would let one call read the whole ledger.
    */
   queryRecent(limit: number = DEFAULT_RECENT_LIMIT, scope?: StateStoreOptions): ExecutionRecord[] {
-    const tenantId = this.resolveTenantId(scope);
+    const tenantId = resolveContinuityScopeId(scope);
     const rows = this.db.query<ExecutionRecordRow>(
       `SELECT * FROM execution_records
        WHERE tenant_id = ?
@@ -231,7 +231,7 @@ export class ExecutionRecordStore {
    * `runId` matches either the session id or the run's chain id, the two names a client holds.
    */
   queryLatestPerStep(runId: string, scope?: StateStoreOptions): ExecutionRecord[] {
-    const tenantId = this.resolveTenantId(scope);
+    const tenantId = resolveContinuityScopeId(scope);
     const rows = this.db.query<ExecutionRecordRow>(
       `SELECT r.* FROM execution_records r
        JOIN (
@@ -251,7 +251,7 @@ export class ExecutionRecordStore {
    * Return all records for a chain ordered by creation (ULID order).
    */
   queryByChain(chainId: string, scope?: StateStoreOptions): ExecutionRecord[] {
-    const tenantId = this.resolveTenantId(scope);
+    const tenantId = resolveContinuityScopeId(scope);
     const rows = this.db.query<ExecutionRecordRow>(
       `SELECT * FROM execution_records
        WHERE chain_id = ? AND tenant_id = ?
@@ -259,13 +259,6 @@ export class ExecutionRecordStore {
       [chainId, tenantId]
     );
     return rows.map((row) => this.fromRow(row));
-  }
-
-  private resolveTenantId(scope?: StateStoreOptions): string {
-    if (scope?.continuityScopeId !== undefined) {
-      return scope.continuityScopeId;
-    }
-    return resolveContinuityScopeId(scope ?? {});
   }
 
   private fromRow(row: ExecutionRecordRow): ExecutionRecord {
