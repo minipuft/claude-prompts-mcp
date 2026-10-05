@@ -1,4 +1,4 @@
-// @lifecycle test - P6.279 / R173: a call carrying `gates` and no verdict, sent while its step's review is open, joins that review without counting an attempt, over Streamable HTTP and STDIO.
+// @lifecycle test - P6.279 / R173: a call carrying `gates` and no verdict, sent while its step's review is open, joins that review without counting an attempt; P6.12 / R194: a gate written on a step stays on that step; both over Streamable HTTP and STDIO.
 /**
  * MEASURED 2026-10-04 on `c97d80159` (this harness, both transports): a `>>gj_chain` run standing
  * at `b` with `b`'s review open (answered with `user_response` alone, attempt 0) and resumed with
@@ -10,6 +10,14 @@
  * the review re-renders listing the gate, the next verdict grades it, and no attempt is counted,
  * since no verdict was given. An id the review already holds is a no-op; a gate on another node
  * keeps its refusal. Every leg reads the reply, then the run's own row.
+ *
+ * P6.12 / P6.98 / P6.281, owner ruling R194. MEASURED 2026-10-05 on `4311d6841` (this harness's
+ * fixtures, Streamable HTTP): in `>>gr_a :: "CRIT-XA-12"` then `>>gr_b` then `>>gr_c`, step A's
+ * inline gate rendered in B's and C's Inline Gates and opened B's and C's reviews ("These inline
+ * gates triggered the review"); with `>>gr_b :: "CRIT-YB-12"` and `>>gr_a` as steps 2 and 3, step
+ * 3 rendered both criteria and B's review held both gates. The chain walk's accumulator carried
+ * every earlier step's gates forward. Now a gate written on a step renders and is reviewed on that
+ * step only, while a request gate with no target still reaches every step.
  */
 import { afterAll, beforeAll, describe, expect, test } from '@jest/globals';
 
@@ -119,6 +127,29 @@ const authorFixtures = async (tool: Tool): Promise<void> => {
       gate_configuration: OPT_OUT,
     });
   }
+  // P6.12: three gateless steps, so every gate a run shows is one its call named, and a
+  // registered gate for the request-gate control.
+  await author({
+    resource_type: 'gate',
+    action: 'create',
+    id: 'gr-req',
+    name: 'gr-req',
+    description: 'blocking e2e gate a request names',
+    guidance: 'GUIDANCE-gr-req',
+    enforcement_mode: 'blocking',
+  });
+  for (const id of ['gr_a', 'gr_b', 'gr_c']) {
+    await author({
+      resource_type: 'prompt',
+      action: 'create',
+      id,
+      category: 'general',
+      name: id,
+      description: `e2e gate-reach step ${id}`,
+      user_message_template: `BODY-${id}`,
+      gate_configuration: OPT_OUT,
+    });
+  }
   await author({
     resource_type: 'prompt',
     action: 'create',
@@ -203,6 +234,114 @@ const harness = (tool: Tool, runtimeRoot: () => string) => {
   return { run, openReviewOnB, gatesOnly, joins, otherNodeRefused };
 };
 
+/** Assembled, so no command literal in this file carries the operator as prose. */
+const ARROW = ' -' + '-> ';
+const XA = 'CRIT-XA-12';
+const YB = 'CRIT-YB-12';
+/** The guidance of `gr-req`, a registered gate a request names by id. */
+const RQ = 'GUIDANCE-gr-req';
+/** Shape (a): a gate written on step A of three. */
+const SHAPE_A = [`>>gr_a :: "${XA}"`, '>>gr_b', '>>gr_c'].join(ARROW);
+/** Shape (b): a gate on each of the first two steps, the third step A's prompt again. */
+const SHAPE_B = [`>>gr_a :: "${XA}"`, `>>gr_b :: "${YB}"`, '>>gr_a'].join(ARROW);
+
+/** One call of a run: where it stands, the criteria the reply shows, and its open reviews. */
+interface ReachStep {
+  current: string | null;
+  rendered: string[];
+  reviews: Record<string, string[]>;
+}
+
+/**
+ * P6.12 (R194): drive a run to its end and record every call as ONE value. Each step is answered
+ * with no verdict first, so an open review shows itself, and then PASSed while one is open. A
+ * review's gate ids are named by the criterion that registered them (`gateNames`, in the order the
+ * run first shows them), since an anonymous inline gate's id is minted per run.
+ */
+const gateReach = (tool: Tool, runtimeRoot: () => string) => {
+  // A gate's criterion renders as a numbered line; the command echo (`Re-run:`) is not one.
+  const criteriaIn = (text: string): string[] =>
+    [XA, YB, RQ].filter((marker) => new RegExp(`^(\\d+\\. )?${marker}$`, 'm').test(text));
+
+  return async (
+    args: Record<string, unknown>,
+    gateNames: readonly string[]
+  ): Promise<ReachStep[]> => {
+    const names = new Map<string, string>();
+    const name = (gateId: string): string => {
+      if (!gateId.startsWith('temp_')) return gateId;
+      if (!names.has(gateId)) names.set(gateId, gateNames[names.size] ?? gateId);
+      return names.get(gateId) ?? gateId;
+    };
+    const observe = (chainId: string, text: string): ReachStep => {
+      const row = readRun(runtimeRoot(), chainId);
+      return {
+        current: row.current,
+        rendered: criteriaIn(text),
+        reviews: Object.fromEntries(
+          Object.entries(row.reviews).map(([node, review]) => [node, review.gateIds.map(name)])
+        ),
+      };
+    };
+
+    const started = await tool('prompt_engine', args);
+    const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(started.text)?.[1];
+    if (chainId === undefined) throw new Error(`no chain id in: ${started.text.slice(0, 400)}`);
+    const steps = [observe(chainId, started.text)];
+    for (let calls = 0; steps[steps.length - 1]?.current !== null && calls < 12; calls++) {
+      const node = steps[steps.length - 1]?.current ?? '';
+      const held = await tool('prompt_engine', { chain_id: chainId, user_response: `${node} out` });
+      steps.push(observe(chainId, held.text));
+      if (readRun(runtimeRoot(), chainId).reviews[node] !== undefined) {
+        const passed = await tool('prompt_engine', {
+          chain_id: chainId,
+          user_response: `${node} out`,
+          gate_verdict: PASS,
+        });
+        steps.push(observe(chainId, passed.text));
+      }
+    }
+    return steps;
+  };
+};
+
+/** Shape (a) as R194 rules it: A renders and reviews its gate; B and C carry none. */
+const REACH_A: ReachStep[] = [
+  { current: 'n1', rendered: [XA], reviews: { n1: ['XA'] } },
+  { current: 'n1', rendered: [XA], reviews: { n1: ['XA'] } },
+  { current: 'n2', rendered: [], reviews: {} },
+  { current: 'n3', rendered: [], reviews: {} },
+  { current: null, rendered: [], reviews: {} },
+];
+
+/** Shape (b): each gated step renders and reviews its own gate; step 3 carries none. */
+const REACH_B: ReachStep[] = [
+  { current: 'n1', rendered: [XA], reviews: { n1: ['XA'] } },
+  { current: 'n1', rendered: [XA], reviews: { n1: ['XA'] } },
+  { current: 'n2', rendered: [YB], reviews: {} },
+  { current: 'n2', rendered: [YB], reviews: { n2: ['YB'] } },
+  { current: 'n3', rendered: [], reviews: {} },
+  { current: null, rendered: [], reviews: {} },
+];
+
+/**
+ * Control: a gate the request names by id, with no step target, reaches every step beside step
+ * A's own gate: each step's review holds it and shows its guidance. A later step's first render
+ * shows no guidance for it, measured the same before R194: gate guidance is shown on the first
+ * gated render only (the shipped gate-guidance frequency), while a step's own criteria always
+ * render. (A request gate given as criteria with no target binds the step the call stands on,
+ * `TemporaryGateRegistrar.normalizeGateInput`, so it is not this control.)
+ */
+const reachRequest = (id: string): ReachStep[] => [
+  { current: 'n1', rendered: [XA, RQ], reviews: { n1: [id, 'XA'] } },
+  { current: 'n1', rendered: [XA, RQ], reviews: { n1: [id, 'XA'] } },
+  { current: 'n2', rendered: [], reviews: {} },
+  { current: 'n2', rendered: [RQ], reviews: { n2: [id] } },
+  { current: 'n3', rendered: [], reviews: {} },
+  { current: 'n3', rendered: [RQ], reviews: { n3: [id] } },
+  { current: null, rendered: [], reviews: {} },
+];
+
 describe('Streamable HTTP: a gates-only call joins its step open review (P6.279, R173)', () => {
   const cleanup: Array<() => void | Promise<void>> = [];
   let client: ModernMcpClient;
@@ -219,6 +358,7 @@ describe('Streamable HTTP: a gates-only call joins its step open review (P6.279,
     };
   };
   const twins = harness(tool, () => runtimeRoot);
+  const reach = gateReach(tool, () => runtimeRoot);
 
   beforeAll(async () => {
     const roots = createHermeticRoots('gates-only-review-join-e2e');
@@ -295,6 +435,19 @@ describe('Streamable HTTP: a gates-only call joins its step open review (P6.279,
   test('(c) control: a gate on a node other than the reviewed one keeps its refusal', async () => {
     await twins.otherNodeRefused('o279');
   }, 120000);
+
+  test('P6.12 (a) a gate written on step A renders and is reviewed on A only', async () => {
+    expect(await reach({ command: SHAPE_A }, ['XA'])).toEqual(REACH_A);
+  }, 120000);
+
+  test("P6.98 (b) each step's own gate stays on that step", async () => {
+    expect(await reach({ command: SHAPE_B }, ['XA', 'YB'])).toEqual(REACH_B);
+  }, 120000);
+
+  test('P6.12 control: a request gate with no target still reaches every step', async () => {
+    const steps = await reach({ command: SHAPE_A, gates: ['gr-req'] }, ['XA']);
+    expect(steps).toEqual(reachRequest('gr-req'));
+  }, 120000);
 });
 
 describe('STDIO: a gates-only call joins its step open review (P6.279, R173 transport parity)', () => {
@@ -330,6 +483,7 @@ describe('STDIO: a gates-only call joins its step open review (P6.279, R173 tran
     };
   };
   const twins = harness(tool, () => runtimeRoot);
+  const reach = gateReach(tool, () => runtimeRoot);
 
   beforeAll(async () => {
     const roots = createHermeticRoots('gates-only-review-join-stdio-e2e');
@@ -384,5 +538,18 @@ describe('STDIO: a gates-only call joins its step open review (P6.279, R173 tran
 
   test('(c) control over STDIO: a gate on a node other than the reviewed one keeps its refusal', async () => {
     await twins.otherNodeRefused('s279o');
+  }, 120000);
+
+  test('P6.12 (a) over STDIO a gate written on step A renders and is reviewed on A only', async () => {
+    expect(await reach({ command: SHAPE_A }, ['XA'])).toEqual(REACH_A);
+  }, 120000);
+
+  test("P6.98 (b) over STDIO each step's own gate stays on that step", async () => {
+    expect(await reach({ command: SHAPE_B }, ['XA', 'YB'])).toEqual(REACH_B);
+  }, 120000);
+
+  test('P6.12 control over STDIO: a request gate with no target still reaches every step', async () => {
+    const steps = await reach({ command: SHAPE_A, gates: ['gr-req'] }, ['XA']);
+    expect(steps).toEqual(reachRequest('gr-req'));
   }, 120000);
 });
