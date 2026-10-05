@@ -10,7 +10,7 @@
  *   PromptExecutor (this file — orchestration)
  *     └── PipelineBuilder (pipeline-builder.ts — factory)
  *           └── PromptExecutionPipeline (coordinator)
- *                 └── PipelineStage[] (22 stages)
+ *                 └── PipelineStage[] (the `stages` array in pipeline-builder.ts)
  */
 
 import { ChainSessionRouter } from './chain-session-router.js';

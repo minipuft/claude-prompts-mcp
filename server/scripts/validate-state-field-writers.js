@@ -107,7 +107,8 @@ const WATCHED = [
   {
     file: 'src/engine/execution/context/internal-state.ts',
     interfaces: ['PipelineInternalState', 'ScriptState'],
-    reason: 'The pipeline state object, mutated across 22 stages. Held 2 of the 3 known instances.',
+    reason:
+      'The pipeline state object, mutated across every stage. Held 2 of the 3 known instances.',
   },
   {
     file: 'src/shared/types/core-config.ts',
