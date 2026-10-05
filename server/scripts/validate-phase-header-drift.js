@@ -5,15 +5,14 @@
  *
  * WHY THIS EXISTS. `section-splitter.ts` and `phase-guard-evaluator.ts` grade model output
  * against `section_header` strings declared in each framework's `phases.yaml` under
- * `resources/frameworks/`. Five prompt
- * files hand-restate that vocabulary so the model knows what to emit — `resource_manager` edits
+ * `resources/frameworks/`. Prompt files hand-restate that vocabulary so the model knows what to emit — `resource_manager` edits
  * are the only sanctioned way to change them, and nothing checked that the restated copy still
  * named a header the framework actually declares. `verification/user-message.md` drifted on a
  * *value* (min_length 80 vs the framework's 100) without the header STRINGS ever disagreeing —
  * plan `phase-guard-declaration-contract-2026-08-15.md` (OQ-3) resolved that by deleting the
  * value columns outright (task 4.0) rather than tracking them here. What is left to drift, and
  * what this checks, is the header string itself: rename `## Context` to `## Setup` in a
- * `phases.yaml` and the five hand-written copies still say `## Context` — the model would then be
+ * `phases.yaml` and the hand-written copies still say `## Context` — the model would then be
  * told to emit a header the guard no longer looks for.
  *
  * THE DISCRIMINATOR, STATED ONCE. `## Context` is a plain ASCII heading — the token by itself
@@ -39,18 +38,17 @@
  * coincidentally matching, only by actually restating a declared header. That structural
  * guarantee, not today's absence of findings, is what `--self-test` proves.
  *
- * WHAT COUNTS AS THE SSOT. Every `section_header` (current field) and `marker` (the field name
- * `examples/create_framework/user-message.md`'s own reference material still teaches, and
- * `resources/frameworks/verify/phases.yaml` still uses) across every framework's `phases.yaml`
+ * WHAT COUNTS AS THE SSOT. Every `section_header` (current field) and `marker` (also used by
+ * `resources/frameworks/verify/phases.yaml`) across every framework's `phases.yaml`
  * under `resources/frameworks/`.
  * Both names the same concept — the literal heading the splitter/marker matcher looks for — so
  * both feed one set. This check is header-string-only, per the OQ-3 ruling: it does not compare
  * `min_length` or any other guard value, because task 4.0 deleted that class of restatement
  * rather than asking a gate to track it.
  *
- * `--self-test` proves: a clean tree reports nothing, the four ordinary-heading prompts extract
- * zero declarations (not just zero findings), a seeded backtick declaration is caught, a seeded
- * fenced-example declaration is caught, and mutating an ordinary heading's text never fires.
+ * `--self-test` proves: a clean tree reports nothing, ordinary-heading fixtures extract zero
+ * declarations (not just zero findings), stale backtick, YAML-quoted and corroborated fenced
+ * declarations are caught, quote boundaries are required, and ordinary heading mutations never fire.
  */
 
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
@@ -126,9 +124,9 @@ function loadDeclaredHeaders() {
  * the SAME file also names that exact header via an unambiguous mechanism elsewhere — backtick-
  * quoted prose/table cell, or a `marker:`/`section_header:` YAML value. Those two shapes are
  * unambiguous by construction (nothing else in a prompt writes `` `## X` `` or `marker: '## X'`
- * except naming a phase-guard header) REGARDLESS of fence state — `create_framework`'s own
- * `marker: '## Context'` reference example sits inside a ```yaml fence and is still a direct,
- * unambiguous declaration, not something needing corroboration. Pass 1 collects both shapes on
+ * except naming a phase-guard header) REGARDLESS of fence state — a `marker: '## Context'`
+ * reference example inside a ```yaml fence is still a direct, unambiguous declaration, not
+ * something needing corroboration. Pass 1 collects both shapes on
  * every line; pass 2 admits a bare fenced heading only if pass 1 already established that exact
  * header for this file. A prompt whose only mention of `## Executive Summary` is the fence itself
  * has nothing to corroborate it, so it is never treated as a declaration — which is the correct
@@ -416,28 +414,75 @@ function selfTest() {
     }
   }
 
-  // Seed a stale YAML-QUOTED declaration (the shape used by create_framework's `marker:` field).
+  // Seed YAML declarations in an isolated source tree, rather than requiring an authoring
+  // prompt to retain an unrelated phase-guard example. Its modern thin adapter has no such duty.
   {
-    const relativePath = 'resources/prompts/examples/create_framework/user-message.md';
-    const original = clean.get(relativePath);
-    if (original === undefined) {
-      console.error(`  ✗ yaml-quoted fixture missing: ${relativePath}`);
+    const relativePath = '<inline>/yaml-phase-headers.md';
+    const header = declaredHeaders.keys().next().value;
+    const staleHeader = '## UndeclaredYamlSelfTestHeader';
+    if (header === undefined || declaredHeaders.has(staleHeader)) {
+      console.error('  ✗ yaml-quoted fixture: needs a declared header and an undeclared mutation');
       failures += 1;
     } else {
-      const mutated = original.replace("marker: '## Analysis'", "marker: '## Diagnosis'");
-      if (mutated === original) {
-        console.error("  ✗ yaml-quoted mutation: no-op — marker: '## Analysis' not found");
-        failures += 1;
+      const quotedLines = [
+        `marker: '${header}'`,
+        `marker: "${header}"`,
+        `section_header: '${header}'`,
+        `section_header: "${header}"`,
+      ];
+      const original = ['```yaml', ...quotedLines, '```'].join('\n');
+      const seededSources = new Map(clean);
+      seededSources.set(relativePath, original);
+      const declarations = extractDeclarations(original);
+      if (
+        declarations.length === quotedLines.length &&
+        declarations.every((entry) => entry.kind === 'yaml-quoted' && entry.header === header) &&
+        checkTree(seededSources, declaredHeaders).length === 0
+      ) {
+        console.log('  ✓ declared marker/section_header examples with either quote style pass');
       } else {
-        const mutatedSources = new Map(clean);
-        mutatedSources.set(relativePath, mutated);
-        const problems = checkTree(mutatedSources, declaredHeaders);
-        if (problems.some((p) => p.includes("'## Diagnosis'"))) {
-          console.log('  ✓ a stale yaml-quoted declaration is caught');
-        } else {
-          console.error('  ✗ yaml-quoted mutation: stale header did not trip the gate');
-          failures += 1;
-        }
+        console.error(
+          '  ✗ yaml-quoted clean fixture: declarations missing or clean headers rejected'
+        );
+        failures += 1;
+      }
+
+      const mutated = original.split(header).join(staleHeader);
+      const mutatedSources = new Map(seededSources);
+      mutatedSources.set(relativePath, mutated);
+      const problems = checkTree(mutatedSources, declaredHeaders);
+      const staleProblems = problems.filter(
+        (problem) =>
+          problem.startsWith(relativePath) &&
+          problem.includes('(yaml-quoted)') &&
+          problem.includes(`'${staleHeader}'`)
+      );
+      if (mutated !== original && staleProblems.length === quotedLines.length) {
+        console.log('  ✓ stale YAML declarations trip for both field names and quote styles');
+      } else {
+        console.error('  ✗ yaml-quoted mutation: not every stale declaration tripped the gate');
+        failures += 1;
+      }
+
+      // A missing quote boundary is not a declaration. These twins differ only by removing
+      // one delimiter; loosening either regex boundary must make this self-test fail.
+      const unquotedLines = ['marker', 'section_header'].flatMap((field) => [
+        `${field}: '${staleHeader}`,
+        `${field}: ${staleHeader}'`,
+        `${field}: "${staleHeader}`,
+        `${field}: ${staleHeader}"`,
+      ]);
+      const unquoted = ['```yaml', ...unquotedLines, '```'].join('\n');
+      const unquotedSources = new Map(seededSources);
+      unquotedSources.set(relativePath, unquoted);
+      if (
+        extractDeclarations(unquoted).length === 0 &&
+        checkTree(unquotedSources, declaredHeaders).length === 0
+      ) {
+        console.log('  ✓ removing either YAML quote boundary extracts no declaration');
+      } else {
+        console.error('  ✗ yaml quote boundaries: an incomplete quoted value became a declaration');
+        failures += 1;
       }
     }
   }

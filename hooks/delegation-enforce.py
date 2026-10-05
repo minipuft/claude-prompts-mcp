@@ -72,7 +72,8 @@ def parse_hook_input() -> dict:
         return {}
 
 
-def main():
+def main(client_id: str = "claude-code") -> None:
+    """Enforce delegation using the caller's existing spawn-pin contract."""
     hook_input = parse_hook_input()
 
     session_id = hook_input.get("session_id", "")
@@ -105,7 +106,7 @@ def main():
     if tool_name in {"Task", "Agent"}:
         tool_input = hook_input.get("tool_input", {}) or {}
         mode = state.get("delegation_mode", "blocking")
-        pinned, pin_reason = spawn_call_is_pinned("claude-code", tool_input, mode)
+        pinned, pin_reason = spawn_call_is_pinned(client_id, tool_input, mode)
         if not pinned and mode == "detached":
             log(f"{tool_name} tool invoked for a detached step but not backgrounded, BLOCKING ({pin_reason})")
             response = {

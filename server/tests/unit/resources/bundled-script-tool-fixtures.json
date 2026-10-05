@@ -1,12 +1,10 @@
 {
   "framework_builder": {
-    "emitsResourceManagerCall": true,
+    "emitsResourceManagerCall": false,
     "input": {
       "id": "probe-framework",
       "name": "Probe Framework",
-      "type": "PROBE",
-      "version": "1.0.0",
-      "enabled": true,
+      "enabled": false,
       "description": "A framework used only to exercise the builder's output mapping.",
       "system_prompt_guidance": "Apply the PROBE framework systematically:\n\n**Phase1**: Do the 1th thing thoroughly and record what it produced.\n**Phase2**: Do the 2th thing thoroughly and record what it produced.\n**Phase3**: Do the 3th thing thoroughly and record what it produced.",
       "phases": [
@@ -54,19 +52,24 @@
         {
           "name": "topic",
           "description": "What to probe",
-          "frameworkReason": "Phase One needs a subject"
+          "frameworkReason": "Phase One needs a subject",
+          "type": "string"
         },
         {
           "name": "depth",
           "description": "How far to probe",
-          "frameworkReason": "Phase Two needs a bound"
+          "frameworkReason": "Phase Two needs a bound",
+          "type": "string"
         }
       ],
       "template_suggestions": [
         {
-          "name": "probe_report",
+          "type": "structure",
+          "section": "user",
           "description": "Report template",
-          "frameworkJustification": "Phase Two output shape"
+          "content": "Record the findings",
+          "frameworkJustification": "Phase Two output shape",
+          "impact": "high"
         }
       ],
       "processing_steps": [
@@ -99,23 +102,26 @@
         {
           "id": "e1",
           "name": "E1",
-          "description": "d",
           "dependencies": [],
-          "expected_output": "o1"
+          "expected_output": "o1",
+          "frameworkPhase": "phase_one",
+          "action": "Record E1 evidence"
         },
         {
           "id": "e2",
           "name": "E2",
-          "description": "d",
           "dependencies": ["e1"],
-          "expected_output": "o2"
+          "expected_output": "o2",
+          "frameworkPhase": "phase_one",
+          "action": "Record E2 evidence"
         },
         {
           "id": "e3",
           "name": "E3",
-          "description": "d",
           "dependencies": ["e2"],
-          "expected_output": "o3"
+          "expected_output": "o3",
+          "frameworkPhase": "phase_one",
+          "action": "Record E3 evidence"
         }
       ],
       "tool_descriptions": {
@@ -140,7 +146,9 @@
       },
       "judge_prompt": "Judge whether both phases were carried out and recorded.",
       "template_enhancements": {
-        "probe_report": "Add a findings section."
+        "systemPromptAdditions": ["Record evidence"],
+        "userPromptModifications": ["Include findings"],
+        "contextualHints": ["Probe only"]
       },
       "execution_type_enhancements": {
         "chain": "Carry ground facts between steps."
@@ -148,16 +156,14 @@
     }
   },
   "gate_builder": {
-    "emitsResourceManagerCall": true,
+    "emitsResourceManagerCall": false,
     "input": {
       "id": "probe-gate",
       "name": "Probe Gate",
       "type": "validation",
       "description": "A gate used only to exercise the builder's output mapping",
       "guidance": "Check that the probe recorded what it observed.",
-      "guidanceFile": "guidance.md",
       "severity": "high",
-      "enforcementMode": "advisory",
       "pass_criteria": [
         {
           "type": "inline_guidance"
@@ -168,6 +174,14 @@
       },
       "activation": {
         "artifacts": ["plan"]
+      },
+      "enforcement_mode": "advisory",
+      "gate_type": "custom",
+      "subject": "probe-output",
+      "block_response_on_fail": false,
+      "evaluation": {
+        "mode": "self",
+        "strict": false
       }
     }
   },
@@ -178,25 +192,90 @@
       "name": "Probe Prompt",
       "category": "examples",
       "description": "A prompt used only to exercise the builder's output mapping",
-      "userMessageTemplate": "Probe {{topic}}",
-      "systemMessage": "You are a probe.",
       "arguments": [
         {
           "name": "topic",
           "description": "what to probe"
         }
       ],
-      "gateConfiguration": {
+      "tools": [],
+      "system_message": "You are a probe.",
+      "user_message_template": "Probe {{topic}}",
+      "gate_configuration": {
         "include": ["framework-compliance"]
       },
-      "chainSteps": [
+      "chain_steps": [
         {
-          "promptId": "probe_prompt",
-          "stepName": "Only Step"
+          "promptId": "probe_prompt/research",
+          "stepName": "Research",
+          "id": "research",
+          "args": {
+            "topic": "probe",
+            "count": 0,
+            "enabled": false,
+            "details": {}
+          },
+          "inlineGateIds": ["research-quality"],
+          "inlineGateCriteria": ["Record source evidence"],
+          "inputMapping": {
+            "topic": "topic"
+          },
+          "outputMapping": {
+            "result": "research_result"
+          },
+          "visibility": {
+            "expose": ["previous_step_output"],
+            "withhold": ["chain_history"]
+          },
+          "delegated": true,
+          "subagentModel": "fast",
+          "agentType": "researcher",
+          "await": "node",
+          "retries": 0,
+          "framework": "ReACT"
+        },
+        {
+          "promptId": "probe_prompt/review",
+          "stepName": "Review",
+          "id": "review",
+          "args": {},
+          "delegated": false,
+          "await": "run"
         }
       ],
-      "registerWithMcp": true,
-      "tools": []
+      "register_with_mcp": false,
+      "mcp_prompt_mode": "launch",
+      "subagent_model": "standard",
+      "agent_type": "researcher",
+      "edges": [
+        {
+          "from": "research",
+          "to": "review"
+        }
+      ],
+      "budget": {
+        "maxNodes": 2,
+        "maxFanOut": 1,
+        "maxInsertions": 0,
+        "declaredCostCeiling": 1,
+        "pauseOnBlocking": false
+      },
+      "artifacts": {
+        "produces": ["prompt", "docs"],
+        "fromArgument": "topic"
+      },
+      "composer": {
+        "inputArgument": "topic"
+      },
+      "injection": {
+        "system-prompt": {
+          "enabled": false,
+          "frequency": {
+            "mode": "never"
+          },
+          "target": "steps"
+        }
+      }
     }
   },
   "text_digest": {

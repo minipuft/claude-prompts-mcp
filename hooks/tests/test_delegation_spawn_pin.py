@@ -50,12 +50,14 @@ def _arm(session_id: str) -> None:
     )
 
 
-def run_delegation_enforce(monkeypatch, capsys, *, session_id, tool_name, tool_input=None):
+def run_delegation_enforce(
+    monkeypatch, capsys, *, session_id, tool_name, tool_input=None, client_id=None, agent_id=None
+):
     """Simulate a delegation-enforce.py PreToolUse invocation."""
-    payload = {"session_id": session_id, "tool_name": tool_name, "tool_input": tool_input or {}}
+    payload = {"session_id": session_id, "tool_name": tool_name, "tool_input": tool_input or {}, "agent_id": agent_id}
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
     with pytest.raises(SystemExit) as excinfo:
-        delegation_enforce.main()
+        delegation_enforce.main(**({"client_id": client_id} if client_id is not None else {}))
     out = capsys.readouterr().out
     return excinfo.value.code, (json.loads(out) if out.strip() else {})
 
@@ -239,3 +241,38 @@ class TestDetachedSpawnPin:
         # Control: a mode the table does not know tightens to the blocking pin, never loosens.
         assert spawn_call_is_pinned("claude-code", {"run_in_background": False}, "mystery") == (True, "")
         assert spawn_call_is_pinned("claude-code", {"run_in_background": True}, "mystery")[0] is False
+
+
+@pytest.mark.parametrize("mode", ["blocking", "detached"])
+@pytest.mark.parametrize("client_id", ["codex", None])
+@pytest.mark.parametrize("pin", ["absent", "correct"])
+def test_client_spawn_contract_through_main(patch_workspace, monkeypatch, capsys, mode, client_id, pin):
+    """Mapped Codex spawns need no Claude flag; the standalone default still does."""
+    sid = "client-spawn-contract"
+    (_arm_detached if mode == "detached" else _arm)(sid)
+    tool_input = {"task_name": "worker", "message": "Complete the delegated task"}
+    if pin == "correct":
+        tool_input["run_in_background"] = mode == "detached"
+    code, out = run_delegation_enforce(
+        monkeypatch, capsys, session_id=sid, tool_name="Task", tool_input=tool_input, client_id=client_id
+    )
+    allowed = client_id == "codex" or pin == "correct"
+    assert code == 0
+    assert (out.get("hookSpecificOutput", {}).get("permissionDecision") != "deny") is allowed
+    assert load_session_state(sid)["pending_delegation"] is not allowed
+
+
+@pytest.mark.parametrize(
+    "tool_name,agent_id,denied", [("Bash", None, True), ("Bash", "worker", False), ("Task", "worker", False)]
+)
+def test_codex_client_preserves_action_and_subagent_guards(
+    patch_workspace, monkeypatch, capsys, tool_name, agent_id, denied
+):
+    sid = "codex-action-and-subagent"
+    _arm(sid)
+    code, out = run_delegation_enforce(
+        monkeypatch, capsys, session_id=sid, tool_name=tool_name, client_id="codex", agent_id=agent_id
+    )
+    assert code == 0
+    assert (out.get("hookSpecificOutput", {}).get("permissionDecision") == "deny") is denied
+    assert load_session_state(sid)["pending_delegation"] is True
