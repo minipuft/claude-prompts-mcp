@@ -8,7 +8,7 @@ Frameworks are reasoning frameworks that the server injects into your prompts. T
 | ----------------------- | --------------------------------------------------- | ------------------------------- |
 | **Unstructured output** | Phase-based reasoning (Context, Analysis, Goals...) | Consistent, reviewable sections |
 | **Skipped thinking**    | Framework gates with validation criteria            | Each phase checked for depth    |
-| **One-size-fits-all**   | 6 built-in + custom creation                        | Match the framework to the task |
+| **One-size-fits-all**   | 8 built-in + custom creation                        | Match the framework to the task |
 
 > [!TIP]
 > **Quick start:** Run `system_control(action: "framework", operation: "switch", framework: "cageerf")` to activate a framework. Every prompt after that receives CAGEERF phase guidance automatically.
@@ -25,6 +25,8 @@ Frameworks are reasoning frameworks that the server injects into your prompts. T
 | `scamper`    | SCAMPER       | Creative ideation and brainstorming      | Substitute, Combine, Adapt, Modify, Put to other use, Eliminate, Reverse |
 | `focus`      | FOCUS         | Problem-solving with root cause analysis | Find, Organize, Clarify, Understand, Solution                            |
 | `liquescent` | LIQUESCENT    | Creative flow and artistic exploration   | Layered creative phases                                                  |
+| `radiant`    | RADIANT       | CloudySky visual design work             | Vision, Goals, Palette, Atmosphere, Surfaces, Constraints, Live test     |
+| `verify`     | V.E.R.I.F.Y   | Resume audit against a documented bio    | Voice, Evidence, Resonance, Inspect, Field isolation, Yield              |
 
 ---
 
@@ -122,7 +124,6 @@ Use modifiers to suppress framework injection:
 | ------------ | ------------------------------------------------- |
 | `%clean`     | Disable all injection (framework + gates + style) |
 | `%lean`      | Disable framework and style, keep gates           |
-| `%guided`    | Force all injection on                            |
 | `%framework` | Force framework injection on                      |
 
 ```

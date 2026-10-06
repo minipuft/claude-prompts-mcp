@@ -92,9 +92,9 @@ Resources are **4-30x more token efficient** than equivalent tool calls:
 
 | Operation         | Tool Call           | Resource    | Savings |
 | ----------------- | ------------------- | ----------- | ------- |
-| List 80 prompts   | ~4500 chars         | ~2800 chars | **38%** |
-| List 13 gates     | ~600 chars          | ~400 chars  | **33%** |
-| List 5 frameworks | ~350 chars          | ~200 chars  | **43%** |
+| List 52 prompts   | ~4500 chars         | ~2800 chars | **38%** |
+| List 26 gates     | ~600 chars          | ~400 chars  | **33%** |
+| List 8 frameworks | ~350 chars          | ~200 chars  | **43%** |
 | Pipeline metrics  | ~15KB (raw samples) | ~500 bytes  | **97%** |
 
 </details>
@@ -789,11 +789,6 @@ resource_manager(resource_type:"prompt", action:"analyze_type", id:"my_prompt")
 # Get gate suggestions
 resource_manager(resource_type:"prompt", action:"analyze_gates", id:"my_prompt")
 ```
-
-If `category` isn't shipped in the repo — excluded by `server/resources/prompts/.gitignore` —
-`create` and `update` still succeed, and the response appends a warning naming the file and the
-exact `!<category>/` and `!<category>/**` lines to add to ship it. A workspace overlay with no
-`.gitignore` of its own never warns.
 
 #### Prompt Authoring and Maintenance
 
@@ -1625,8 +1620,8 @@ The server injects guidance into prompts. Control this per-execution or globally
 ### Quick Control with Modifiers
 
 ```bash
-# Full injection (default for new analysis)
-prompt_engine(command:"%guided @CAGEERF audit_plan topic:'security'")
+# Force framework injection
+prompt_engine(command:"%framework @CAGEERF audit_plan topic:'security'")
 
 # No injection (follow-up in same context)
 prompt_engine(command:"%clean next_step input:'data'")

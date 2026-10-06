@@ -65,7 +65,6 @@ const NOT_OUR_OPTIONS = new Set([
   '--notes', // gh release create
   '--plugin-dir', // claude --plugin-dir
   '--print', // claude --print
-  '--strict', // npm run validate:identity-backfill -- --strict
   '--mode', // npm run validate:readme --mode=block
   '--test', // truncation of jest's --testPathPattern
   '--run', // truncation of jest's --runInBand (the token stops at the capital I)

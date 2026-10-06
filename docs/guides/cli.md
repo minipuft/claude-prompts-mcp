@@ -32,7 +32,7 @@ cpm validate --all -w ./my-workspace
 The npm installation follows the package's Node.js requirement. For CLI-only use on Node.js >=18.18.0, download the checksummed standalone bundle from the matching GitHub Release:
 
 ```bash
-VERSION=3.1.1
+VERSION=4.0.1
 curl -LO "https://github.com/minipuft/claude-prompts-mcp/releases/download/v${VERSION}/cpm-${VERSION}.js"
 curl -LO "https://github.com/minipuft/claude-prompts-mcp/releases/download/v${VERSION}/cpm-${VERSION}.js.sha256"
 sha256sum --check "cpm-${VERSION}.js.sha256"
