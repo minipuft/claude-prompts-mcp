@@ -861,6 +861,86 @@ scenarios:
     expect:
       text_contains: '**Prompt Updated**'
 
+  # ── `subject` / `gates.harnessCovers` (closes the last `validate-conformance-coverage.js` ────
+  # exception B.60 left standing — the four `chain_step_*` parameters retired 2026-09-16,
+  # `subject` remained because proving its one runtime effect needs `gates.harnessCovers` to
+  # differ across two executions, and `system_control config` refuses arbitrary writes over MCP
+  # by design. The driver's `buildIsolatedWorkspace()` now bakes one fixed
+  # `gates.harnessCovers: ["conformance-harness-subject"]` entry (same precedent as the
+  # `resources.registerWithMcp` patch beside it), which is what lets these two scenarios differ:
+  # one gate's `subject` matches the baked value, the other's does not. Both gates are reminder-
+  # tier (no `pass_criteria` — `gate-tier.ts`) and category-activated
+  # (`activation.prompt_categories`), the same registry-auto attachment path P4.11's gate rows
+  # above use. `category: analysis` is deliberate, not `examples` (the corpus default elsewhere):
+  # `CategoryExtractor.isValidCategory()` (category-extractor.ts) is a SEPARATE, narrower
+  # allow-list than the 9 bundled resource directories, and a category outside it degrades to
+  # "general" for the render-time gate context specifically — silently dropping ANY category-
+  # scoped reminder's guidance regardless of `harnessCovers`. `analysis` is on both lists, so it
+  # exercises the `subject` suppression alone. Measured against a live isolated server 2026-09-20.
+  - id: gate-subject-reminder-suppressed-when-harness-covers-it
+    claim_source: >-
+      gate-schema.ts `subject` — "suppressed via `gates.harnessCovers`"; GateGuidanceRenderer.ts —
+      "harnessCovers suppresses reminders only... A reminder with no `subject` is never
+      suppressed" (ruling B2).
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: create
+          id: conformance_gate_subject_covered
+          name: Conformance Subject Gate Covered
+          type: guidance
+          description: created by the conformance corpus
+          guidance: CONFORMANCE_SUBJECT_GUIDANCE_MARKER
+          subject: conformance-harness-subject
+          activation: { prompt_categories: [analysis] }
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_subject_prompt_covered
+          name: Conformance Subject Prompt Covered
+          category: analysis
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_SUBJECT_PROMPT_BODY
+      - tool: prompt_engine
+        args: { command: '>>conformance_subject_prompt_covered' }
+    # The positive control: the prompt's own body must be present (this IS the run whose guidance
+    # is being inspected) before the guidance marker's absence means anything. Without it, a
+    # refused or truncated execution would satisfy this row for the wrong reason.
+    expect:
+      text_contains: CONFORMANCE_SUBJECT_PROMPT_BODY
+      text_not_contains: CONFORMANCE_SUBJECT_GUIDANCE_MARKER
+
+  - id: gate-subject-reminder-shown-when-harness-does-not-cover-it
+    claim_source: >-
+      gate-schema.ts `subject` — "suppressed via `gates.harnessCovers`", inverted: a subject the
+      operator's config does NOT name is not suppressed.
+    requests:
+      - tool: resource_manager
+        args:
+          resource_type: gate
+          action: create
+          id: conformance_gate_subject_uncovered
+          name: Conformance Subject Gate Uncovered
+          type: guidance
+          description: created by the conformance corpus
+          guidance: CONFORMANCE_SUBJECT_GUIDANCE_MARKER
+          subject: conformance-harness-subject-uncovered
+          activation: { prompt_categories: [analysis] }
+      - tool: resource_manager
+        args:
+          resource_type: prompt
+          action: create
+          id: conformance_subject_prompt_uncovered
+          name: Conformance Subject Prompt Uncovered
+          category: analysis
+          description: created by the conformance corpus
+          user_message_template: CONFORMANCE_SUBJECT_PROMPT_BODY
+      - tool: prompt_engine
+        args: { command: '>>conformance_subject_prompt_uncovered' }
+    expect: { text_contains: CONFORMANCE_SUBJECT_GUIDANCE_MARKER }
+
   - id: gate-update-preview-is-refused-by-name
     claim_source: >-
       resource_manager contract — `preview_action` is validated per resource type. A gate has no
