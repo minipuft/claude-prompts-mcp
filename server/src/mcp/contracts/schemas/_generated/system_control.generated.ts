@@ -452,6 +452,12 @@ export const system_controlCommands: ToolCommand[] = [
     status: 'working',
   },
   {
+    id: 'execution_history:steps',
+    summary: "Show one run's steps, each at its latest record.",
+    parameters: ['action', 'operation', 'session_id'],
+    status: 'working',
+  },
+  {
     id: 'skills_sync:status',
     summary: 'Show sync config and manifest availability.',
     parameters: ['action', 'operation'],

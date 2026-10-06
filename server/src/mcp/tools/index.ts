@@ -204,6 +204,9 @@ export class McpToolRouter {
    * that path rebuilds from state per request and never calls `update()`.
    */
   private promptEngineTool?: ReturnType<McpServer['registerTool']>;
+  /** Handles to the other two tools, kept for the same STDIO reshape and overwritten the same way. */
+  private systemControlTool?: ReturnType<McpServer['registerTool']>;
+  private resourceManagerTool?: ReturnType<McpServer['registerTool']>;
   /**
    * The workspace this serving unit was built for, or undefined for the
    * process default. Gate state is workspace-scoped, so the surface has to be
@@ -524,6 +527,18 @@ export class McpToolRouter {
     return { content: [{ type: 'text', text: `❌ ${refusal}` }], isError: true };
   }
 
+  /** The framework state every tool description and parameter description is composed from. */
+  private readFrameworkDescriptionState(scope: StateStoreOptions | undefined): {
+    frameworkEnabled: boolean;
+    activeFrameworkType: string | undefined;
+  } {
+    const activeFramework = this.frameworkStateStore?.getActiveFramework(scope);
+    return {
+      frameworkEnabled: this.frameworkStateStore?.isFrameworkSystemEnabled(scope) ?? false,
+      activeFrameworkType: activeFramework?.type ?? activeFramework?.id,
+    };
+  }
+
   /**
    * Build the `prompt_engine` input schema from current runtime state.
    *
@@ -534,9 +549,7 @@ export class McpToolRouter {
    */
   // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
   private buildPromptEngineSurface(scope: StateStoreOptions | undefined) {
-    const frameworkEnabled = this.frameworkStateStore?.isFrameworkSystemEnabled(scope) ?? false;
-    const activeFramework = this.frameworkStateStore?.getActiveFramework(scope);
-    const activeFrameworkType = activeFramework?.type ?? activeFramework?.id;
+    const { frameworkEnabled, activeFrameworkType } = this.readFrameworkDescriptionState(scope);
 
     const describe: DescriptionResolver = (paramName, fallback) =>
       this.toolDescriptionLoader?.getParameterDescription(
@@ -551,6 +564,37 @@ export class McpToolRouter {
       describe,
       state: this.readToolSurfaceState(),
     });
+  }
+
+  /**
+   * One tool's description for the current framework state, which carries the active framework's
+   * guidance. Shared by registration and by the STDIO reshape for the same reason as
+   * {@link buildPromptEngineSurface}: a switch changes the text, and the long-lived STDIO instance
+   * shows a connected client whatever it was last given.
+   */
+  private describeTool(toolName: string, scope: StateStoreOptions | undefined): string {
+    const { frameworkEnabled, activeFrameworkType } = this.readFrameworkDescriptionState(scope);
+    return (
+      this.toolDescriptionLoader?.getDescription(toolName, frameworkEnabled, activeFrameworkType, {
+        applyFrameworkOverride: true,
+      }) ?? ''
+    );
+  }
+
+  /** The `system_control` input schema, whose parameter descriptions follow the framework too. */
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+  private buildSystemControlSurface(scope: StateStoreOptions | undefined) {
+    const { frameworkEnabled, activeFrameworkType } = this.readFrameworkDescriptionState(scope);
+    return buildSystemControlSchema(
+      (paramName: string, fallback: string) =>
+        this.toolDescriptionLoader?.getParameterDescription(
+          'system_control',
+          paramName,
+          frameworkEnabled,
+          activeFrameworkType,
+          { applyFrameworkOverride: true }
+        ) ?? fallback
+    );
   }
 
   /**
@@ -631,8 +675,8 @@ export class McpToolRouter {
     try {
       this.logger.info('🔄 Processing tool description changes...');
 
-      // Note: MCP SDK doesn't support dynamic tool updates
-      // The new descriptions will be loaded on next tool registration or server restart
+      // A framework switch or toggle redraws the registered tools itself
+      // (reregisterToolsWithUpdatedDescriptions); this listener only reports the reload.
       this.logger.info('✅ Tool descriptions reloaded');
       this.logger.info(
         `📊 Stats: ${stats.totalDescriptions} total, using ${
@@ -884,13 +928,7 @@ export class McpToolRouter {
     try {
       // Get dynamic description based on current framework state
       // Description loaded from tool-descriptions.contracts.json via ToolDescriptionLoader
-      const promptEngineDescription =
-        this.toolDescriptionLoader?.getDescription(
-          'prompt_engine',
-          frameworkEnabled,
-          activeFrameworkType,
-          { applyFrameworkOverride: true }
-        ) ?? '';
+      const promptEngineDescription = this.describeTool('prompt_engine', scope);
 
       // Log which description source is being used for transparency
       if (this.toolDescriptionLoader != null) {
@@ -1113,13 +1151,7 @@ export class McpToolRouter {
     // Register system_control tool
     try {
       // Description loaded from tool-descriptions.contracts.json via ToolDescriptionLoader
-      const systemControlDescription =
-        this.toolDescriptionLoader?.getDescription(
-          'system_control',
-          frameworkEnabled,
-          activeFrameworkType,
-          { applyFrameworkOverride: true }
-        ) ?? '';
+      const systemControlDescription = this.describeTool('system_control', scope);
 
       // Log which description source is being used for transparency
       if (this.toolDescriptionLoader != null) {
@@ -1132,19 +1164,10 @@ export class McpToolRouter {
         );
       }
 
-      const getSystemControlParamDescription = (paramName: string, fallback: string) =>
-        this.toolDescriptionLoader?.getParameterDescription(
-          'system_control',
-          paramName,
-          frameworkEnabled,
-          activeFrameworkType,
-          { applyFrameworkOverride: true }
-        ) ?? fallback;
-
       // Build schema with framework-aware parameter descriptions
-      const systemControlSchema = buildSystemControlSchema(getSystemControlParamDescription);
+      const systemControlSchema = this.buildSystemControlSurface(scope);
 
-      target.registerTool(
+      this.systemControlTool = target.registerTool(
         'system_control',
         {
           title: 'System Control',
@@ -1204,15 +1227,9 @@ export class McpToolRouter {
     // Register resource_manager tool (unified router for prompts, gates, frameworks)
     try {
       // Description loaded from tool-descriptions.contracts.json via ToolDescriptionLoader
-      const resourceManagerDescription =
-        this.toolDescriptionLoader?.getDescription(
-          'resource_manager',
-          frameworkEnabled,
-          activeFrameworkType,
-          { applyFrameworkOverride: true }
-        ) ?? '';
+      const resourceManagerDescription = this.describeTool('resource_manager', scope);
 
-      target.registerTool(
+      this.resourceManagerTool = target.registerTool(
         'resource_manager',
         {
           title: 'Resource Manager',
@@ -1325,13 +1342,23 @@ export class McpToolRouter {
 
       // Reshape the long-lived STDIO instance. Rebuilt from current state, so
       // it picks up both the new descriptions and any change to which
-      // parameters are reachable.
+      // parameters are reachable. Every tool's description carries the active
+      // framework's guidance, so all three are rewritten, not only the schema.
+      const scope = this.servingUnitScope;
       if (this.promptEngineTool != null) {
         this.promptEngineTool.update({
-          paramsSchema: this.buildPromptEngineSurface(this.servingUnitScope),
+          description: this.describeTool('prompt_engine', scope),
+          paramsSchema: this.buildPromptEngineSurface(scope),
         });
-        this.logger.info('✅ prompt_engine input schema rebuilt for current state');
+        this.logger.info('✅ prompt_engine description and input schema rebuilt for current state');
       }
+      this.systemControlTool?.update({
+        description: this.describeTool('system_control', scope),
+        paramsSchema: this.buildSystemControlSurface(scope),
+      });
+      this.resourceManagerTool?.update({
+        description: this.describeTool('resource_manager', scope),
+      });
 
       // Notify MCP clients that the tool list changed. The routing lives in the
       // runtime, which is the only place that knows whether HTTP or STDIO is
