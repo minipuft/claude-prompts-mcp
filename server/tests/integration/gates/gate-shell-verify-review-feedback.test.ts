@@ -123,21 +123,39 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         },
       });
 
-      const start = Date.now();
       const results = await runGateShellVerifications(
         ['timeout-gate'],
         provider,
         undefined,
         createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
       );
-      const elapsed = Date.now() - start;
 
+      // `timedOut`/`exitCode: -1` are the direct observation that the process was KILLED by the
+      // `shell_timeout` path rather than left to run to completion (a natural `sleep 10` exit
+      // would report `timedOut: undefined`/`exitCode: 0`) — this is what "bounded" means and it
+      // does not depend on how fast the machine is.
+      //
+      // A wall-clock upper bound used to sit here too ("completes in under 3s"), asserting the
+      // KILL WAS PROMPT. `shared/utils/process.ts` enforces the bound with a plain
+      // `setTimeout(..., timeout)`, and under a saturated event loop that timer can fire late —
+      // measured 4049-4237ms against this same 1000ms `shell_timeout` under concurrent load
+      // (server/tests/integration/gates/gate-shell-verify-review-feedback.test.ts:140, before this
+      // fix), which reds a PR boundary that has nothing to do with this gate. Wall-clock latency
+      // under contention is a property of the scheduler, not of the code, so it is not the right
+      // instrument for an upper bound.
+      //
+      // `durationMs` (the executor's OWN reported duration, `Date.now() - startTime` around the
+      // same `close` event) gives a load-INDEPENDENT lower bound instead: Node timers are
+      // guaranteed to never fire BEFORE their configured delay, so `durationMs` can only be
+      // pushed later by load, never earlier. Asserting the floor — not a ceiling — is what stays
+      // true on a quiet machine and a saturated one alike, while still catching a regression
+      // where `shell_timeout`'s configured value is read but not honored (e.g. always killed
+      // near-instantly regardless of the configured 1000ms).
       expect(results).toHaveLength(1);
       expect(results[0].passed).toBe(false);
       expect(results[0].timedOut).toBe(true);
       expect(results[0].exitCode).toBe(-1);
-      // Should complete near the timeout, not the full 10s
-      expect(elapsed).toBeLessThan(3000);
+      expect(results[0].durationMs).toBeGreaterThanOrEqual(1000);
     });
 
     test('applies shell_preset for timeout resolution', async () => {
