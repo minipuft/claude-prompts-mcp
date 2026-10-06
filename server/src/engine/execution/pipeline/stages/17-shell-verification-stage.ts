@@ -123,8 +123,9 @@ export class ShellVerificationStage extends BasePipelineStage {
       await this.stateManager.writeState(this.resolveVerifyStateKey(context), pending);
     }
 
-    // Execute verification via ShellVerifyExecutor
-    const result = await this.shellVerifyExecutor.execute(shellVerify);
+    // Execute verification via ShellVerifyExecutor. The caller's workspace decides whether the
+    // gate system is on, and the switch is what the executor refuses on.
+    const result = await this.shellVerifyExecutor.execute(shellVerify, context.getScopeOptions());
 
     // Update attempt count and results in state
     pending.attemptCount += 1;
