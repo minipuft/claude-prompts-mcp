@@ -372,6 +372,12 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:documented-tool-actions',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked'],
+    converse: 'unexamined',
+  },
+  {
     script: 'validate:required-contexts',
     io: 'read',
     reads: ['file', 'walk'],
