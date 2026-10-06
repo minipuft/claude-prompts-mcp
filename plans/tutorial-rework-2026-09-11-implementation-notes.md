@@ -1,7 +1,7 @@
 ---
 title: "Tutorial rework — implementation notes"
 date: 2026-09-11
-status: active
+status: reference
 tags: [docs, adoption, tutorial]
 ---
 
@@ -2279,3 +2279,13 @@ The plan and its branches were left on `docs/tutorial-first-run` on 2026-09-20 w
 - DEV-C-9 (C.11): 13 files against 6 (four sites under `teardown.push(`); the harness never knew the server pid, so the guard reads the spawned environment; a throw mid-teardown leaked servers until the guard was made to kill first. CI then caught two more files (`mcp-server-smoke`, `bundled-resource-fallback`) the worker had read but not run.
 - DEV-C-10 (release): #232 merged 2026-10-06 as 5.0.0 on the owner's word; npm publish failed (root workspace not installed before `test:ci`), fixed in #457; 5.0.1 (#458) is the first 5.x that publishes. Release-please moved Unreleased into 5.0.0; a planner script that rebuilt branch changelogs from `main` duplicated #451's bullet via #456, repaired by #455. Branch protection's up-to-date rule cost one CI cycle per merge.
 - DEV-C-11 (C.12): the vocabulary has 22 entries, not 9: four bundled styles list 13 tags that are not directories, and the brief had not counted them. Finding: a style's `activation.prompt_categories` has no reader under `src/` (only `style-schema.ts` declares it), a field with no consumer, a candidate row of its own.
+
+## B.15 walk (2026-10-06)
+
+A Sonnet agent with no other context read `docs/tutorials/build-first-prompt.md` on `main` and followed sections 2 to 5 with real calls; the owner then typed the section 3 line in the client. Everything the page says the server does, it did: validate wrote nothing; create wrote version 1 with the three files named; the run rendered the Task Context text verbatim; preview wrote nothing; update saved version 2; the `>>` hook turned the owner's line into the call and the 20-word template rendered. Findings a newcomer would hit:
+
+1. The page names the plugin data directory as the write root; the receipt names the real root (`~/.claude/resources/prompts` here, because the shell exports a resources override). The page could say the receipt is the source of the path.
+2. The rendered reply carries a framework block with required sections and a `chain_id` continue token; the page mentions framework guidance in one sentence and never says how Claude answers.
+3. Section 2 says Claude asks the reader to confirm; the server's own text says existing authorization suffices.
+4. Section 4 does not mention `expected_version`, which the agent passed on its own.
+5. Section 5's create JSON shows the pre-update template; the files section shows the 20-word one.
