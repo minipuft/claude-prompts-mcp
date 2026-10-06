@@ -380,6 +380,38 @@ describe('GateSetResolver — fixes delivered by routing enhancement through one
     expect(result.accepted[0]?.source).toBe('prompt-config');
   });
 
+  // A planned id has no source of its own. Entering every one at `prompt-config` relabelled a
+  // gate the planner took from the registry's category activation as the author's, and the
+  // accumulator reads `retry_config` only for `registry-auto`, so the review lost its budget.
+  // The twin differs in ONE property: whether the registry selects the planned id again.
+  test('a planned id the registry selects again keeps registry-auto; one it does not stays prompt-config', async () => {
+    const resolver = buildResolver(createLogger(), createGateManager(['category-gate']));
+
+    const result = await resolver.resolve(
+      baseInput({ plannedGateIds: ['category-gate', 'code-quality'] })
+    );
+
+    const sourceOf = (id: string) => result.accepted.find((gate) => gate.id === id)?.source;
+    expect(sourceOf('category-gate')).toBe('registry-auto');
+    expect(sourceOf('code-quality')).toBe('prompt-config');
+    // The attribution moves, the place does not: gate order is the rendered guidance order and the
+    // numbering a verdict's per-gate coverage answers against.
+    expect(result.gateIds).toEqual(['category-gate', 'code-quality']);
+  });
+
+  test("a re-derived planned id is still vetoed by the prompt's exclude", async () => {
+    const resolver = buildResolver(createLogger(), createGateManager(['category-gate']));
+
+    const result = await resolver.resolve(
+      baseInput({
+        prompt: makePrompt({ gateConfiguration: { exclude: ['category-gate'] } }),
+        plannedGateIds: ['category-gate'],
+      })
+    );
+
+    expect(result.gateIds).toEqual([]);
+  });
+
   test('knownFrameworkGateIds is used in place of a registry read', async () => {
     const loader = createGateLoader(['should-not-be-read']);
     const resolver = buildResolver(createLogger(), createGateManager(), loader);
