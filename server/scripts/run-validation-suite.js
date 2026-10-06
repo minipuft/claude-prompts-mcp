@@ -449,7 +449,7 @@ export const SUITE = [
     io: 'read',
     reads: ['file', 'walk'],
     converse:
-      'CHECKED — falsified 2026-09-22 by removing the scope from the prompt-guidance selectFramework call and the gate-enhancement provider in pipeline-builder; the gate reported both. Run against the pre-fix tree (acaf76c6) it reports 19 unscoped reads across 10 files, the P4.129 class. It fails closed below 15 scoped calls. Blind spots stated in the header: presence not value, options built across statements',
+      'CHECKED — falsified 2026-09-22 by removing the scope from the prompt-guidance selectFramework call and the gate-enhancement provider in pipeline-builder; the gate reported both. Run against the pre-fix tree (acaf76c6) it reports 19 unscoped reads across 10 files, the P4.129 class. It fails closed below 15 scoped calls. Gate reads CHECKED — falsified 2026-10-05 (row C.6) by dropping the scope at the shell executor switch resolver, stage 17, runGateReviewEvidence and runGateShellVerifications, and by a planted unscoped GateStateStore read; the gate reported all five. It fails closed below 8 scoped gate calls. Blind spots stated in the header: presence not value, options built across statements, calls through a function value',
   },
   {
     script: 'validate:review-by-node',

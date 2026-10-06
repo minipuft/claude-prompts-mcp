@@ -17,6 +17,7 @@ import type {
   McpNotificationEmitterPort,
   PipelineHookContext,
 } from '#shared/types/index.js';
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
 import type { ReviewEvent } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
 import type {
@@ -155,11 +156,13 @@ export class GateVerdictProcessor {
      * Runs a review's ground-truth checks (`runGateReviewEvidence`, bound to the gate loader and
      * the executors at the composition root) for a DETACHED node's review, whose checks run when
      * its verdict arrives (row 4.8). Absent, a detached review records no check results — the
-     * same outcome as a review of reminder-tier gates.
+     * same outcome as a review of reminder-tier gates. `scope` is the verdict request's, for the
+     * shell executor's gate master-switch read.
      */
     private readonly runReviewChecks?: (
       gateIds: string[],
-      agentResponse: string
+      agentResponse: string,
+      scope: StateStoreOptions | undefined
     ) => Promise<GateCheckResult[]>
   ) {}
 
@@ -194,7 +197,11 @@ export class GateVerdictProcessor {
         const checkResults =
           this.runReviewChecks === undefined
             ? []
-            : await this.runReviewChecks([...review.gateIds], review.reviewedOutput ?? '');
+            : await this.runReviewChecks(
+                [...review.gateIds],
+                review.reviewedOutput ?? '',
+                context.getScopeOptions()
+              );
         return checkResults.length > 0 ? { ...review, checkResults } : review;
       },
     });

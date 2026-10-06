@@ -850,6 +850,7 @@
     "additionalProperties": {},
     "properties": {
       "action": {
+        "description": "<present>",
         "enum": [
           "create",
           "update",
@@ -871,16 +872,19 @@
       },
       "activation": {
         "additionalProperties": {},
+        "description": "<present>",
         "propertyNames": {
           "type": "string"
         },
         "type": "object"
       },
       "agent_type": {
+        "description": "<present>",
         "minLength": 1,
         "type": "string"
       },
       "argument_suggestions": {
+        "description": "<present>",
         "items": {
           "additionalProperties": false,
           "properties": {
@@ -921,6 +925,7 @@
         "type": "array"
       },
       "argument_updates": {
+        "description": "<present>",
         "items": {
           "additionalProperties": false,
           "properties": {
@@ -988,6 +993,7 @@
         "type": "array"
       },
       "arguments": {
+        "description": "<present>",
         "items": {
           "additionalProperties": false,
           "properties": {
@@ -1056,6 +1062,7 @@
       },
       "artifacts": {
         "additionalProperties": false,
+        "description": "<present>",
         "properties": {
           "fromArgument": {
             "minLength": 1,
@@ -1084,10 +1091,12 @@
         "type": "object"
       },
       "block_response_on_fail": {
+        "description": "<present>",
         "type": "boolean"
       },
       "budget": {
         "additionalProperties": false,
+        "description": "<present>",
         "properties": {
           "declaredCostCeiling": {
             "exclusiveMinimum": 0,
@@ -1115,10 +1124,12 @@
         "type": "object"
       },
       "category": {
+        "description": "<present>",
         "type": "string"
       },
       "chain_step_data": {
         "additionalProperties": {},
+        "description": "<present>",
         "properties": {
           "agentType": {
             "minLength": 1,
@@ -1239,11 +1250,13 @@
         "type": "object"
       },
       "chain_step_index": {
+        "description": "<present>",
         "maximum": 9007199254740991,
         "minimum": 0,
         "type": "integer"
       },
       "chain_step_operation": {
+        "description": "<present>",
         "enum": [
           "add",
           "remove",
@@ -1253,6 +1266,7 @@
         "type": "string"
       },
       "chain_step_order": {
+        "description": "<present>",
         "items": {
           "maximum": 9007199254740991,
           "minimum": 0,
@@ -1261,6 +1275,7 @@
         "type": "array"
       },
       "chain_steps": {
+        "description": "<present>",
         "items": {
           "additionalProperties": {},
           "properties": {
@@ -1386,6 +1401,7 @@
       },
       "composer": {
         "additionalProperties": false,
+        "description": "<present>",
         "properties": {
           "inputArgument": {
             "minLength": 1,
@@ -1398,12 +1414,15 @@
         "type": "object"
       },
       "confirm": {
+        "description": "<present>",
         "type": "boolean"
       },
       "description": {
+        "description": "<present>",
         "type": "string"
       },
       "detail": {
+        "description": "<present>",
         "enum": [
           "summary",
           "full"
@@ -1411,6 +1430,7 @@
         "type": "string"
       },
       "edges": {
+        "description": "<present>",
         "items": {
           "additionalProperties": false,
           "properties": {
@@ -1434,12 +1454,15 @@
         "type": "array"
       },
       "enabled": {
+        "description": "<present>",
         "type": "boolean"
       },
       "enabled_only": {
+        "description": "<present>",
         "type": "boolean"
       },
       "enforcement_mode": {
+        "description": "<present>",
         "enum": [
           "blocking",
           "advisory",
@@ -1449,6 +1472,7 @@
       },
       "evaluation": {
         "additionalProperties": false,
+        "description": "<present>",
         "properties": {
           "mode": {
             "enum": [
@@ -1471,6 +1495,7 @@
       },
       "execution_flow": {
         "additionalProperties": false,
+        "description": "<present>",
         "properties": {
           "postProcessingSteps": {
             "items": {
@@ -1494,6 +1519,7 @@
         "type": "object"
       },
       "execution_steps": {
+        "description": "<present>",
         "items": {
           "additionalProperties": false,
           "properties": {
@@ -1537,24 +1563,29 @@
       },
       "execution_type_enhancements": {
         "additionalProperties": {},
+        "description": "<present>",
         "propertyNames": {
           "type": "string"
         },
         "type": "object"
       },
       "expected_version": {
+        "description": "<present>",
         "maximum": 9007199254740991,
         "minimum": 0,
         "type": "integer"
       },
       "filter": {
+        "description": "<present>",
         "type": "string"
       },
       "framework": {
+        "description": "<present>",
         "type": "string"
       },
       "framework_elements": {
         "additionalProperties": false,
+        "description": "<present>",
         "properties": {
           "optionalSections": {
             "items": {
@@ -1585,6 +1616,7 @@
         "type": "object"
       },
       "framework_gates": {
+        "description": "<present>",
         "items": {
           "additionalProperties": false,
           "properties": {
@@ -1642,19 +1674,23 @@
         "type": "array"
       },
       "from_version": {
+        "description": "<present>",
         "type": "number"
       },
       "full_restart": {
+        "description": "<present>",
         "type": "boolean"
       },
       "gate_configuration": {
         "additionalProperties": {},
+        "description": "<present>",
         "propertyNames": {
           "type": "string"
         },
         "type": "object"
       },
       "gate_type": {
+        "description": "<present>",
         "enum": [
           "framework",
           "category",
@@ -1664,25 +1700,31 @@
       },
       "gates": {
         "additionalProperties": {},
+        "description": "<present>",
         "propertyNames": {
           "type": "string"
         },
         "type": "object"
       },
       "goal": {
+        "description": "<present>",
         "type": "string"
       },
       "guidance": {
+        "description": "<present>",
         "type": "string"
       },
       "id": {
+        "description": "<present>",
         "type": "string"
       },
       "include_legacy": {
+        "description": "<present>",
         "type": "boolean"
       },
       "injection": {
         "additionalProperties": false,
+        "description": "<present>",
         "properties": {
           "gate-guidance": {
             "additionalProperties": false,
@@ -1805,12 +1847,15 @@
         "type": "object"
       },
       "judge_prompt": {
+        "description": "<present>",
         "type": "string"
       },
       "limit": {
+        "description": "<present>",
         "type": "number"
       },
       "mcp_prompt_mode": {
+        "description": "<present>",
         "enum": [
           "expand",
           "launch"
@@ -1818,9 +1863,11 @@
         "type": "string"
       },
       "name": {
+        "description": "<present>",
         "type": "string"
       },
       "pass_criteria": {
+        "description": "<present>",
         "items": {
           "additionalProperties": false,
           "properties": {
@@ -1942,6 +1989,7 @@
         "type": "array"
       },
       "patch": {
+        "description": "<present>",
         "items": {
           "additionalProperties": false,
           "properties": {
@@ -1974,10 +2022,12 @@
         "type": "array"
       },
       "phases": {
+        "description": "<present>",
         "items": {},
         "type": "array"
       },
       "preview_action": {
+        "description": "<present>",
         "enum": [
           "update",
           "delete",
@@ -1986,6 +2036,7 @@
         "type": "string"
       },
       "processing_steps": {
+        "description": "<present>",
         "items": {
           "additionalProperties": false,
           "properties": {
@@ -2074,18 +2125,22 @@
       },
       "quality_indicators": {
         "additionalProperties": {},
+        "description": "<present>",
         "propertyNames": {
           "type": "string"
         },
         "type": "object"
       },
       "reason": {
+        "description": "<present>",
         "type": "string"
       },
       "register_with_mcp": {
+        "description": "<present>",
         "type": "boolean"
       },
       "resource_type": {
+        "description": "<present>",
         "enum": [
           "prompt",
           "gate",
@@ -2096,15 +2151,18 @@
       },
       "retry_config": {
         "additionalProperties": {},
+        "description": "<present>",
         "propertyNames": {
           "type": "string"
         },
         "type": "object"
       },
       "search_query": {
+        "description": "<present>",
         "type": "string"
       },
       "severity": {
+        "description": "<present>",
         "enum": [
           "critical",
           "high",
@@ -2114,13 +2172,16 @@
         "type": "string"
       },
       "skip_version": {
+        "description": "<present>",
         "type": "boolean"
       },
       "source_workspace": {
+        "description": "<present>",
         "minLength": 1,
         "type": "string"
       },
       "subagent_model": {
+        "description": "<present>",
         "enum": [
           "heavy",
           "standard",
@@ -2129,17 +2190,21 @@
         "type": "string"
       },
       "subject": {
+        "description": "<present>",
         "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
         "type": "string"
       },
       "system_message": {
+        "description": "<present>",
         "type": "string"
       },
       "system_prompt_guidance": {
+        "description": "<present>",
         "type": "string"
       },
       "template_enhancements": {
         "additionalProperties": false,
+        "description": "<present>",
         "properties": {
           "contextualHints": {
             "items": {
@@ -2163,6 +2228,7 @@
         "type": "object"
       },
       "template_suggestions": {
+        "description": "<present>",
         "items": {
           "additionalProperties": false,
           "properties": {
@@ -2208,16 +2274,19 @@
         "type": "array"
       },
       "to_version": {
+        "description": "<present>",
         "type": "number"
       },
       "tool_descriptions": {
         "additionalProperties": {},
+        "description": "<present>",
         "propertyNames": {
           "type": "string"
         },
         "type": "object"
       },
       "tool_ids": {
+        "description": "<present>",
         "items": {
           "minLength": 1,
           "type": "string"
@@ -2225,6 +2294,7 @@
         "type": "array"
       },
       "tool_operation": {
+        "description": "<present>",
         "enum": [
           "add",
           "remove"
@@ -2232,10 +2302,12 @@
         "type": "string"
       },
       "tools": {
+        "description": "<present>",
         "items": {},
         "type": "array"
       },
       "type": {
+        "description": "<present>",
         "enum": [
           "validation",
           "guidance"
@@ -2243,6 +2315,7 @@
         "type": "string"
       },
       "unset": {
+        "description": "<present>",
         "items": {
           "minLength": 1,
           "type": "string"
@@ -2250,9 +2323,11 @@
         "type": "array"
       },
       "user_message_template": {
+        "description": "<present>",
         "type": "string"
       },
       "version": {
+        "description": "<present>",
         "type": "number"
       }
     },

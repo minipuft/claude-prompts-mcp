@@ -291,7 +291,7 @@ system_control(action: "framework", operation: "switch", framework: "CAGEERF")
 
 1. Check `frameworks.enabled: true` in your config file
 2. Remove `%clean` or `%lean` modifiers from command
-3. Use `%guided` to force injection
+3. Use `%framework` to force framework injection
 
 > [!NOTE]
 > For injection frequency tuning and modifier details, see the [Injection Control Guide](./injection-control.md).

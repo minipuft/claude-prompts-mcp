@@ -177,7 +177,7 @@ Choose the path that matches your change:
 
 ### Prompt & Chain Contributions
 
-All prompt/chain changes flow through MCP tools -- never edit files under `server/prompts/` directly.
+All prompt/chain changes flow through MCP tools -- never edit files under `server/resources/prompts/` directly.
 
 - **Create/update/delete**: Use `resource_manager` with `resource_type:"prompt"`
 - **Schema**: Follow [Prompt YAML Schema](docs/reference/prompt-yaml-schema.md)

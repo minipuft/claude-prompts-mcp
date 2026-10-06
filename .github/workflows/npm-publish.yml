@@ -75,6 +75,13 @@ jobs:
         working-directory: server
         run: npm ci
 
+      # `test:ci` runs `pr:check:self-test`, which lints a title with the root `commitlint`;
+      # without this install it reports the title as unchecked and fails before publish.
+      # `--ignore-scripts` skips the root husky prepare step.
+      - name: Install dependencies (root workspace)
+        working-directory: .
+        run: npm ci --ignore-scripts --no-audit
+
       - name: Build
         working-directory: server
         run: npm run build:prod
