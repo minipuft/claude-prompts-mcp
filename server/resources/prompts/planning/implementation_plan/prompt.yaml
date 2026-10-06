@@ -63,7 +63,6 @@ arguments:
     required: false
 gateConfiguration:
   include:
-    - code-quality
     - plan-quality
 chainSteps:
   - promptId: implementation_plan/discovery

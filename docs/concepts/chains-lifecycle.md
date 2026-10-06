@@ -314,8 +314,8 @@ names.
 itself declares (the prompt that owns `chainSteps`: what its `gateConfiguration.include` names and
 what its category activates, less its `exclude`) grade the chain's finished output. They are held
 in the final step's review together with that step's own gates, in one review, and appear on no
-other step. The bundled `implementation_plan` includes `code-quality` and `plan-quality`: its fifth
-step's review holds both beside its own gates, and its first four steps review neither. The final
+other step. The bundled `implementation_plan` includes `plan-quality`: its fifth
+step's review holds it beside its own gates, and its first four steps do not review it. The final
 step is the run's last node when it is reached: a `remainder` that appends nodes moves them to the
 new last node, an investigation step inserted before the final step does not take them, and a step
 whose prompt is itself a chain inside a chain prompt is one step that holds that chain's gates. The
