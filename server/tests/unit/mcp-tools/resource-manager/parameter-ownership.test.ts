@@ -13,7 +13,10 @@ import {
   PARAMETER_OWNERS,
   describeParameterRefusal,
 } from '../../../../src/mcp/tools/resource-manager/core/parameter-ownership.js';
-import { resource_managerCommands } from '../../../../src/mcp/contracts/schemas/_generated/resource_manager.generated.js';
+import {
+  resource_managerCommands,
+  resource_managerParameters,
+} from '../../../../src/mcp/contracts/schemas/_generated/resource_manager.generated.js';
 import { resourceManagerInputSchema } from '../../../../src/mcp/tools/schemas/resource-manager.schema.js';
 import { MockLogger } from '../../../helpers/test-helpers.js';
 
@@ -191,6 +194,24 @@ describe('resource_manager parameter ownership', () => {
         .map(([name]) => name);
 
       expect(miscounted).toEqual([]);
+    });
+
+    test('every owned parameter names all its owners in its description tag', () => {
+      // The published description is the only place a client learns which resource types read a
+      // parameter, so its leading `[Gate | Framework]` tag has to agree with this table. The tag
+      // is read from the generated contract metadata, the text `tools/list` serves; `enabled_only`
+      // was published untagged while only gate and framework listings read it.
+      const descriptionOf = new Map(
+        resource_managerParameters.map((parameter) => [parameter.name, parameter.description])
+      );
+      const missing = Object.entries(PARAMETER_OWNERS).flatMap(([name, owners]) => {
+        const tag = (/^\[([^\]]+)\]/.exec(descriptionOf.get(name) ?? '')?.[1] ?? '').toLowerCase();
+        return owners
+          .filter((owner) => !tag.includes(owner))
+          .map((owner) => `${name}: owner "${owner}" absent from tag "${tag}"`);
+      });
+
+      expect(missing).toEqual([]);
     });
   });
 

@@ -10,25 +10,6 @@ Canonical behavior:
 - Continuity scope precedence is `workspaceId -> organizationId -> default`.
 - `tenant_id` remains a storage column for state table keys, but the legacy alias is not part of request identity contracts.
 
-## Backfill + Integrity Checks
-
-Run the verification script from `server/`:
-
-```bash
-npm run validate:identity-backfill
-```
-
-Strict mode (fails if any legacy-only rows remain):
-
-```bash
-npm run validate:identity-backfill -- --strict
-```
-
-Verification guarantees:
-
-- Fails if any rows are missing all identity fields.
-- Reports legacy fallback footprint (`legacy-only`) per state table.
-
 ## Rollout + Removal Timeline
 
 - Compatibility window: two release cycles after canonical identity rollout.

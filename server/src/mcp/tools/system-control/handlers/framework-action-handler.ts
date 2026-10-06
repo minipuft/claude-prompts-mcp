@@ -71,6 +71,7 @@ export class FrameworkActionHandler extends ActionHandler {
     if (!result.success) {
       throw new Error(result.error || 'Framework switch failed');
     }
+    await this.refreshToolSurface();
 
     const framework = result.framework!;
     let response = `🔄 **Framework Switch Successful**\n\n`;
@@ -267,6 +268,19 @@ export class FrameworkActionHandler extends ActionHandler {
     return this.createMinimalSystemResponse(response, 'list_frameworks');
   }
 
+  /**
+   * Re-advertise the tool surface after the active framework or the framework system moved.
+   *
+   * Every tool's description, and some parameter descriptions, carry the active framework's
+   * guidance. Over STDIO one server instance serves the whole connection, so without this the
+   * next `tools/list` still shows the previous framework's text until the client reconnects.
+   * The refresh is best-effort by construction (it logs and never throws), so a switch that took
+   * effect is never reported as failed because the surface could not be redrawn.
+   */
+  private async refreshToolSurface(): Promise<void> {
+    await this.context.onToolSurfaceChanged?.();
+  }
+
   private async enableFrameworkSystem(args: {
     reason?: string;
     persist?: boolean;
@@ -298,6 +312,7 @@ export class FrameworkActionHandler extends ActionHandler {
       args.reason || 'User requested to enable framework system',
       this.requestScope
     );
+    await this.refreshToolSurface();
 
     const persistence = describeTogglePersistence({
       persist: args.persist,
@@ -344,6 +359,7 @@ export class FrameworkActionHandler extends ActionHandler {
       args.reason || 'User requested to disable framework system',
       this.requestScope
     );
+    await this.refreshToolSurface();
 
     const persistence = describeTogglePersistence({
       persist: args.persist,

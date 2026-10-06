@@ -180,7 +180,7 @@ system_control(action: "analytics")
 |  `::`  | **Gate**      | Add quality criteria          |
 |  `%`   | **Modifier**  | Control execution mode        |
 
-**Modifiers**: `%clean` (skip all injection), `%lean` (gates only), `%guided` (force injection), `%judge` (auto-select resources)
+**Modifiers**: `%clean` (skip all injection), `%lean` (gates only), `%framework` (force framework injection), `%judge` (auto-select resources)
 
 ---
 

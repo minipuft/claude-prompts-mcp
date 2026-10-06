@@ -16,10 +16,11 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { cageerfAnswer } from './helpers/cageerf-answer.js';
 import {
   getAvailablePort,
   killServer,
@@ -51,6 +52,8 @@ describe.each([
   let proc: ChildProcess;
   let client: ModernMcpClient;
   let projectParent: string;
+  let verifyScript: string;
+  let verifyRunLog: string;
   let nextId = 1;
 
   const call = async (
@@ -97,10 +100,16 @@ describe.each([
     // otherwise land in the package's resource tree.
     const workspace = path.join(projectParent, 'workspace');
     mkdirSync(workspace, { recursive: true });
+    // An inline `:: verify:` command whose only effect is one line per run, so a test can count
+    // whether it executed. Allowlisted exactly: the gate master switch is the variable under test.
+    verifyRunLog = path.join(projectParent, 'verify-runs.log');
+    verifyScript = path.join(projectParent, 'verify.sh');
+    writeFileSync(verifyScript, `echo run >> "${verifyRunLog}"\n`);
     proc = startServerWithHttp(port, {
       env: {
         CLAUDE_PROJECT_DIR: path.join(projectParent, 'launch-project'),
         MCP_WORKSPACE: workspace,
+        MCP_SHELL_VERIFY_ALLOWLIST: `sh ${verifyScript}`,
       },
     });
     await waitForHealth(baseUrl, { timeout: 20000, interval: 200 });
@@ -221,5 +230,47 @@ describe.each([
     expect(underB.length).toBeGreaterThan(0);
     expect(underB.filter((id) => underA.includes(id))).toEqual([]);
     expect(await list({ 'x-workspace-id': 'ws-c' })).toContain('No Active Sessions');
+  });
+
+  it('a workspace that turned gates off runs no shell verification; another workspace still does', async () => {
+    // Two fresh workspaces, so neither the framework switched under A above nor the launch
+    // workspace's gate switch takes part: the only difference between them is the gate switch.
+    const gatesOff = { 'x-workspace-id': 'ws-gates-off' };
+    const gatesOn = { 'x-workspace-id': 'ws-gates-on' };
+    const runs = (): number =>
+      existsSync(verifyRunLog)
+        ? readFileSync(verifyRunLog, 'utf8').split('\n').filter(Boolean).length
+        : 0;
+    /** Start a run carrying the inline check, then answer its first step. */
+    const answerVerifiedStep = async (headers: Record<string, string>): Promise<string> => {
+      const start = await callAs(
+        'prompt_engine',
+        { command: `>>quick_decision topic:"pick a database" :: verify:"sh ${verifyScript}"` },
+        headers
+      );
+      const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(start)?.[1];
+      if (chainId === undefined) throw new Error(`no chain id in: ${start.slice(0, 400)}`);
+      return callAs(
+        'prompt_engine',
+        { chain_id: chainId, user_response: cageerfAnswer('Step 1') },
+        headers
+      );
+    };
+
+    const disabled = await call({ action: 'gates', operation: 'disable' }, gatesOff);
+    expect(disabled.isError ?? false).toBe(false);
+    // The switch is scoped: off under the workspace that turned it off, on under the other.
+    const gateState = async (headers: Record<string, string>): Promise<string> =>
+      textOf(await call({ action: 'gates', operation: 'status' }, headers));
+    expect(await gateState(gatesOff)).toContain('**System State**: Disabled');
+    expect(await gateState(gatesOn)).toContain('**System State**: Enabled');
+
+    const before = runs();
+    await answerVerifiedStep(gatesOff);
+    expect(runs()).toBe(before);
+
+    // Positive control: the same command and answer under a workspace with gates on runs once.
+    await answerVerifiedStep(gatesOn);
+    expect(runs()).toBe(before + 1);
   });
 });

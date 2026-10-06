@@ -66,9 +66,17 @@ interface ToolOutcome {
   text: string;
 }
 
+/** One entry of a `tools/list` result, narrowed to what the description twin reads. */
+interface ListedTool {
+  name: string;
+  description?: string;
+  inputSchema?: { properties?: Record<string, { description?: string }> };
+}
+
 interface McpSession {
   callTool(name: string, args: Record<string, unknown>): Promise<ToolOutcome>;
   countTools(): Promise<number | string>;
+  listTools(): Promise<ListedTool[]>;
   stop(): Promise<void>;
 }
 
@@ -105,6 +113,8 @@ async function startHttpSession(env: Record<string, string>): Promise<McpSession
         (result) => result.tools?.length ?? 0,
         (error: unknown) => failedOutcome(error).text
       ),
+    listTools: async () =>
+      request('tools/list', {}).then((result) => (result.tools ?? []) as ListedTool[]),
     stop: async () => {
       await client.close();
       await killServer(proc);
@@ -171,6 +181,8 @@ async function startStdioSession(env: Record<string, string>): Promise<McpSessio
         (result) => result.tools?.length ?? 0,
         (error: unknown) => failedOutcome(error).text
       ),
+    listTools: async () =>
+      request('tools/list', {}).then((result) => (result.tools ?? []) as ListedTool[]),
     stop: async () => {
       try {
         if (proc.exitCode === null) {
@@ -407,6 +419,69 @@ describe.each([
     expect(await session.countTools()).toBe(3);
   }, 150000);
 });
+
+/**
+ * C.8 / B.66. MEASURED 2026-10-05 on `8d2c77e7a` (both transports, radiant then a
+ * `system_control` switch to react): over Streamable HTTP every listed text named ReACT after the
+ * switch; over STDIO all four still named RADIANT, because that switch never redrew the surface and
+ * the redraw, where it ran, rewrote only `prompt_engine`'s input schema. Each tool's description
+ * carries the active framework's guidance, and so do `prompt_engine`'s `command` parameter and
+ * `system_control`'s `action` parameter. Over STDIO one server instance lives for the whole
+ * connection, so a change reaches what a connected client lists only if that instance is
+ * reshaped; over Streamable HTTP each request builds a fresh one. The twin reads which framework
+ * each listed text names, through a switch and then a disable, as one value per transport.
+ */
+const labelsIn = (text: string | undefined): string =>
+  [...(text ?? '').matchAll(/ACTIVE FRAMEWORK \[([^\]]+)\]/g)]
+    .map((match) => match[1])
+    .join(' and ') || 'none';
+
+async function listedFrameworks(session: McpSession): Promise<Record<string, string>> {
+  const tools = new Map((await session.listTools()).map((tool) => [tool.name, tool]));
+  const parameter = (tool: string, name: string): string | undefined =>
+    tools.get(tool)?.inputSchema?.properties?.[name]?.description;
+  return {
+    prompt_engine: labelsIn(tools.get('prompt_engine')?.description),
+    'prompt_engine command': labelsIn(parameter('prompt_engine', 'command')),
+    resource_manager: labelsIn(tools.get('resource_manager')?.description),
+    system_control: labelsIn(tools.get('system_control')?.description),
+    'system_control action': labelsIn(parameter('system_control', 'action')),
+  };
+}
+
+describe.each([
+  ['Streamable HTTP', startHttpSession],
+  ['STDIO', startStdioSession],
+] as const)(
+  'C.8: a framework change reaches every listed tool description (%s)',
+  (_transport, starter) => {
+    it('the next tools/list names the switched framework, then none once the system is off', async () => {
+      const session = await start(starter, await newWorkspace());
+      const started = await listedFrameworks(session);
+      await switchTo(session, 'react');
+      const switched = await listedFrameworks(session);
+      const disabled = await session.callTool('system_control', {
+        action: 'framework',
+        operation: 'disable',
+      });
+      expect(disabled.isError).toBe(false);
+      const systemOff = await listedFrameworks(session);
+
+      const everyText = (label: string): Record<string, string> => ({
+        prompt_engine: label,
+        'prompt_engine command': label,
+        resource_manager: label,
+        system_control: label,
+        'system_control action': label,
+      });
+      expect({ started, switched, systemOff }).toEqual({
+        started: everyText('RADIANT'),
+        switched: everyText('ReACT'),
+        systemOff: everyText('none'),
+      });
+    }, 90000);
+  }
+);
 
 describe('framework selection when the selected framework goes away (Streamable HTTP)', () => {
   it('deleting the active framework selects the configured default', async () => {

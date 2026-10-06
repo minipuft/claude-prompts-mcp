@@ -28,7 +28,6 @@ export interface GateSystemState {
   enabled: boolean;
   enabledAt: Date;
   enableReason: string;
-  isHealthy: boolean;
   validationMetrics: {
     totalValidations: number;
     successfulValidations: number;
@@ -91,7 +90,6 @@ export interface GateStateStoreOptions {
 export interface GateSystemEvents {
   'system-enabled': [reason: string];
   'system-disabled': [reason: string];
-  'health-changed': [health: GateSystemHealth];
   'validation-completed': [success: boolean, executionTime: number];
 }
 
@@ -104,7 +102,6 @@ export class GateStateStore extends EventEmitter {
   /** The server's `state.db`; undefined exactly when a `stateStore` was injected instead. */
   private readonly stateDbPath: string | undefined;
   private stateStore?: SqliteStateStore<PersistedGateSystemState>;
-  private healthCheckInterval?: NodeJS.Timeout;
   private readonly defaultScope?: StateStoreOptions;
 
   /**
@@ -139,7 +136,6 @@ export class GateStateStore extends EventEmitter {
       enabled: true,
       enabledAt: new Date(),
       enableReason: 'System initialization (default enabled)',
-      isHealthy: true,
       validationMetrics: {
         totalValidations: 0,
         successfulValidations: 0,
@@ -170,9 +166,6 @@ export class GateStateStore extends EventEmitter {
     try {
       // Load persisted state if available
       await this.loadPersistedStates();
-
-      // Start health monitoring
-      this.startHealthMonitoring();
 
       const launchState = this.getOrCreateScopedState(this.defaultScope);
       this.logger.info(
@@ -377,12 +370,10 @@ export class GateStateStore extends EventEmitter {
     currentState.enabled = true;
     currentState.enabledAt = new Date();
     currentState.enableReason = reason;
-    currentState.isHealthy = true;
 
     await this.saveStateToFile(scope);
 
     this.emit('system-enabled', reason);
-    this.emit('health-changed', this.getSystemHealth(scope));
 
     this.logger.info(`🟢 Gate System enabled: ${reason}`);
   }
@@ -406,7 +397,6 @@ export class GateStateStore extends EventEmitter {
     await this.saveStateToFile(scope);
 
     this.emit('system-disabled', reason);
-    this.emit('health-changed', this.getSystemHealth(scope));
 
     this.logger.info(`🔴 Gate System disabled: ${reason}`);
   }
@@ -460,6 +450,11 @@ export class GateStateStore extends EventEmitter {
    * `20-gate-review-stage.ts`, which now knows every verification outcome and their durations).
    * Delete instead if that is judged not worth wiring — but do it together with the health
    * fields, so no reader is left describing a number nothing computes.
+   *
+   * Reviving it also needs a flush at teardown, because this is the only writer here that
+   * batches: up to nine recorded validations sit in memory unpersisted. {@link cleanup} no
+   * longer saves, and the save it used to make covered the wrong scope anyway — restore one
+   * that iterates `scopedStates`, not one that takes no argument.
    */
   recordValidation(success: boolean, executionTime: number, scope?: StateStoreOptions): void {
     const currentState = this.getOrCreateScopedState(scope);
@@ -500,40 +495,26 @@ export class GateStateStore extends EventEmitter {
   }
 
   /**
-   * Start health monitoring
-   */
-  private startHealthMonitoring(): void {
-    // Check system health every 30 seconds (default scope only)
-    this.healthCheckInterval = setInterval(() => {
-      const health = this.getSystemHealth();
-      const defaultState = this.getOrCreateScopedState();
-
-      // Only emit health changes if status actually changed
-      const previousStatus = defaultState.isHealthy;
-      const currentlyHealthy = health.status === 'healthy';
-
-      if (previousStatus !== currentlyHealthy) {
-        defaultState.isHealthy = currentlyHealthy;
-        this.emit('health-changed', health);
-
-        if (!currentlyHealthy) {
-          this.logger.warn(`🚨 Gate system health degraded: ${health.issues.join(', ')}`);
-        }
-      }
-    }, 30000);
-  }
-
-  /**
-   * Cleanup resources
+   * Cleanup resources. This store currently holds none, and the method is the lifecycle
+   * hook its two callers invoke rather than work it has to do.
+   *
+   * It deliberately persists nothing, for the reason
+   * `FrameworkStateStore.shutdown` gives: `enableGateSystem` and `disableGateSystem`
+   * each await `saveStateToFile(scope)` before returning, so no toggle reaches here
+   * unpersisted. The final save that used to sit here took no scope, so it resolved to the
+   * literal `default` key — the pre-isolation bucket that nothing reads for gates except
+   * {@link adoptLegacyGlobalState}. It therefore wrote unchanged default state into the one
+   * key a later start reads as "an operator's pre-isolation choice".
+   *
+   * The one writer a final flush could have served is `recordValidation`, which
+   * batches every tenth call — and it has no caller. Reviving it means restoring a flush
+   * that covers every scope in `scopedStates`, not the `default` one.
+   *
+   * It also used to clear a 30-second health-polling interval. That interval emitted
+   * `health-changed` to nobody and is gone (B.97); anything scheduled here in future must
+   * be cleared here, which is why the hook stays.
    */
   async cleanup(): Promise<void> {
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-    }
-
-    // Final state save
-    await this.saveStateToFile();
-
     this.logger.debug('GateStateStore cleanup completed');
   }
 }

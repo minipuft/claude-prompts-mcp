@@ -97,7 +97,6 @@ Modifiers override config.jsonc settings for a single execution:
 | ------------ | ------------------------------------------------------------------ | ---------------------------------- |
 | `%clean`     | Disable ALL injection                                              | Bare prompt, minimal tokens        |
 | `%lean`      | Disable system-prompt and style-guidance, keep non-framework gates | Token-efficient with quality gates |
-| `%guided`    | Force ALL injection                                                | Maximum guidance                   |
 | `%framework` | Force system-prompt injection                                      | Framework reinforcement            |
 
 **Usage**: Prefix the command:

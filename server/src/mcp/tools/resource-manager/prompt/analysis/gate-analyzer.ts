@@ -216,9 +216,12 @@ export class GateAnalyzer {
       gates.push('content-structure');
     }
 
-    // Category-based recommendations
-    const categoryGates = this.getCategoryGateMapping()[context.category] || [];
-    gates.push(...categoryGates);
+    // No category-based recommendations, on purpose. Which gates go with a category is the gate
+    // registry's answer (`activation.prompt_categories` in each gate.yaml), and a run already
+    // attaches those gates on its own, so suggesting them would ask the author to add what the
+    // category already supplies. A literal category-to-gate map stood here and drifted from that
+    // answer: five of its eight keys named no category directory (`general` is only the fallback),
+    // so six of the nine shipped categories got no suggestion from it at all.
 
     // Remove duplicates
     return [...new Set(gates)];
@@ -381,21 +384,5 @@ export class GateAnalyzer {
     }
 
     return keywords;
-  }
-
-  /**
-   * Get category-based gate mapping
-   */
-  private getCategoryGateMapping(): Record<string, string[]> {
-    return {
-      analysis: ['research-quality', 'technical-accuracy'],
-      education: ['educational-clarity', 'content-structure'],
-      development: ['code-quality', 'security-awareness'],
-      research: ['research-quality', 'technical-accuracy'],
-      debugging: ['technical-accuracy', 'code-quality'],
-      documentation: ['content-structure', 'educational-clarity'],
-      content_processing: ['content-structure'],
-      general: ['content-structure'],
-    };
   }
 }

@@ -132,7 +132,7 @@ We implemented a custom parser for symbolic commands:
 **Why a DSL?**
 
 1. **Developer Experience**: JSON payloads break flow. Symbolic syntax reads naturally.
-2. **Composability**: Operators combine: `#lean >>a --> >>b :: "quality" @ReACT`
+2. **Composability**: Operators combine: `#analytical >>a --> >>b :: "quality" @ReACT`
 3. **Discoverability**: Syntax is self-documenting in tool descriptions.
 
 ### Meta-Prompts (Self-Authoring UX)

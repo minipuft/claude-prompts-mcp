@@ -372,6 +372,12 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:documented-tool-actions',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked'],
+    converse: 'unexamined',
+  },
+  {
     script: 'validate:required-contexts',
     io: 'read',
     reads: ['file', 'walk'],
@@ -443,7 +449,7 @@ export const SUITE = [
     io: 'read',
     reads: ['file', 'walk'],
     converse:
-      'CHECKED — falsified 2026-09-22 by removing the scope from the prompt-guidance selectFramework call and the gate-enhancement provider in pipeline-builder; the gate reported both. Run against the pre-fix tree (acaf76c6) it reports 19 unscoped reads across 10 files, the P4.129 class. It fails closed below 15 scoped calls. Blind spots stated in the header: presence not value, options built across statements',
+      'CHECKED — falsified 2026-09-22 by removing the scope from the prompt-guidance selectFramework call and the gate-enhancement provider in pipeline-builder; the gate reported both. Run against the pre-fix tree (acaf76c6) it reports 19 unscoped reads across 10 files, the P4.129 class. It fails closed below 15 scoped calls. Gate reads CHECKED — falsified 2026-10-05 (row C.6) by dropping the scope at the shell executor switch resolver, stage 17, runGateReviewEvidence and runGateShellVerifications, and by a planted unscoped GateStateStore read; the gate reported all five. It fails closed below 8 scoped gate calls. Blind spots stated in the header: presence not value, options built across statements, calls through a function value',
   },
   {
     script: 'validate:review-by-node',
@@ -639,6 +645,13 @@ export const SUITE = [
     io: 'read',
     reads: ['file', 'spawn', 'tracked'],
     converse: 'unexamined',
+  },
+  {
+    script: 'validate:category-enumerations',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked', 'walk'],
+    converse:
+      "CHECKED both ways against the live tree on 2026-09-20. Reporting direction: replanting the deleted eight-name allow-list into category-extractor.ts reported it by file and line range, naming all eight — that is B.91's motivating instance, restored as a positive control. Silent direction: the self-test's accepted cases each differ from a reported one in ONE property — two names instead of three, one name repeated three times, the same list on comment lines, the same names nested inside a JSON example string, the same three names spread past the twelve-line window, and three strings that merely CONTAIN a category name. Exception direction: neutering filter-parser.ts's categoryIntentMap reported its accepted entry as `satisfied` rather than passing; the same verdict fired for real on 2026-10-05, after #342 deleted that map, and the entry was removed. The vocabulary is derived from disk and a run that derives none exits rather than passing, so the scan cannot report cleanliness from an empty pattern. NOT checked: a list of names that are categories nowhere on disk (invisible by construction — see the header), and whether a list that survives is actually READ by a code path.",
   },
   {
     script: 'plans:retire:check',

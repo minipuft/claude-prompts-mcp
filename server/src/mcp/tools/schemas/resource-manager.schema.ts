@@ -11,11 +11,21 @@
  * order to refuse it by name, before dispatch, saying which tool it is not a parameter of. A
  * `.strict()` object here would reject the same key one layer earlier with a zod message that
  * names neither — and would put a second refusal path above the one that owns this class.
+ *
+ * Descriptions come from `tooling/contracts/resource-manager.json`, the same way
+ * `system-control.schema.ts` reads its own: each top-level field is described by its generated
+ * contract parameter name, so a field the contract does not list is a type error here. Before
+ * this the schema was registered bare, and a client reading `tools/list` saw a name and a type
+ * per parameter while the contract held a description for every one.
  */
 
 import { z } from 'zod/v4';
 
 import { workflowBudgetSchema, workflowEdgeSchema } from './workflow-ir.schema.js';
+import {
+  resource_managerParameters,
+  type resource_managerParamName,
+} from '../../contracts/schemas/_generated/resource_manager.generated.js';
 import { PATCH_TARGET_FIELDS } from '../resource-manager/prompt/operations/template-patch.js';
 import { PREVIEWABLE_ACTIONS } from '../shared/preview-action.js';
 
@@ -29,6 +39,18 @@ import {
   PromptInjectionConfigSchema,
 } from '#modules/prompts/prompt-schema.js';
 import { refuseUndeclaredKey } from '#shared/utils/nested-key-refusal.js';
+
+/**
+ * Contract description per parameter. `includeInDescription: false` governs a different surface,
+ * the tool's top-level prose (`tool-descriptions.contracts.json`); every parameter publishes its
+ * own description here regardless of it. No framework overlays a resource_manager parameter
+ * description, so this is a plain lookup rather than prompt_engine's `DescriptionResolver`.
+ */
+const CONTRACT_DESCRIPTIONS = Object.fromEntries(
+  resource_managerParameters.map((parameter) => [parameter.name, parameter.description])
+) as Record<resource_managerParamName, string>;
+
+const describe = (name: resource_managerParamName): string => CONTRACT_DESCRIPTIONS[name];
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -235,9 +257,9 @@ export const gatePassCriteriaSchema = z.strictObject(
 /**
  * Resource Manager input schema.
  *
- * Unlike prompt_engine/system_control, resource_manager descriptions come from
- * the contract JSON and are not rebuilt per-framework at registration time.
- * The ToolDescriptionLoader handles framework overlay for the tool-level description.
+ * Every top-level field carries `.describe(describe('<name>'))` from `CONTRACT_DESCRIPTIONS`.
+ * Unlike prompt_engine, the schema is not rebuilt per framework at registration time; the
+ * ToolDescriptionLoader handles framework overlay for the tool-level description.
  */
 export const resourceManagerInputSchema = z
   .object({
@@ -249,54 +271,58 @@ export const resourceManagerInputSchema = z
      * CLAUDE.md §Public API Contract — the contract is the union of every reachable shape, and
      * adding a member widens it.
      */
-    resource_type: z.enum(['prompt', 'gate', 'framework', 'category']),
+    resource_type: z
+      .enum(['prompt', 'gate', 'framework', 'category'])
+      .describe(describe('resource_type')),
     /** Operation to perform. */
-    action: z.enum([
-      'create',
-      'update',
-      'delete',
-      'reload',
-      'list',
-      'inspect',
-      'validate',
-      'preview',
-      'analyze_type',
-      'analyze_gates',
-      'guide',
-      'switch',
-      'history',
-      'rollback',
-      'compare',
-    ]),
+    action: z
+      .enum([
+        'create',
+        'update',
+        'delete',
+        'reload',
+        'list',
+        'inspect',
+        'validate',
+        'preview',
+        'analyze_type',
+        'analyze_gates',
+        'guide',
+        'switch',
+        'history',
+        'rollback',
+        'compare',
+      ])
+      .describe(describe('action')),
     /** Resource identifier. Required for create, update, delete, inspect, reload, switch. */
-    id: z.string().optional(),
+    id: z.string().optional().describe(describe('id')),
     /** Human-friendly name for the resource (create/update). */
-    name: z.string().optional(),
+    name: z.string().optional().describe(describe('name')),
     /** Resource description explaining its purpose (create/update). */
-    description: z.string().optional(),
+    description: z.string().optional().describe(describe('description')),
     /** Filter list to enabled resources only. Default: true. */
-    enabled_only: z.boolean().optional(),
+    enabled_only: z.boolean().optional().describe(describe('enabled_only')),
     /**
      * Required `true` for destructive actions: `delete` and `rollback`. Both refuse without it.
      * Delete cannot be undone — rollback cannot restore a deleted prompt.
      */
-    confirm: z.boolean().optional(),
+    confirm: z.boolean().optional().describe(describe('confirm')),
     /** Audit reason for reload/delete/switch operations. */
-    reason: z.string().trim().optional(),
+    reason: z.string().trim().optional().describe(describe('reason')),
     /** [Prompt] reload, create, update and delete restart the server instead of hot-reloading. */
-    full_restart: z.boolean().optional(),
+    full_restart: z.boolean().optional().describe(describe('full_restart')),
     /** [Prompt guide] What the caller is trying to do; ranks the suggested actions. */
-    goal: z.string().optional(),
+    goal: z.string().optional().describe(describe('goal')),
     /** [Prompt guide] Include full details for actions that are not marked working. */
-    include_legacy: z.boolean().optional(),
+    include_legacy: z.boolean().optional().describe(describe('include_legacy')),
 
     // ── Prompt parameters ────────────────────────────────────────────────
     /** [Prompt] Category tag for the prompt. */
-    category: z.string().optional(),
+    category: z.string().optional().describe(describe('category')),
     /** [Prompt] Prompt body/template with Nunjucks placeholders. */
-    user_message_template: z.string().optional(),
+    user_message_template: z.string().optional().describe(describe('user_message_template')),
     /** [Prompt] Optional system message for the prompt. */
-    system_message: z.string().optional(),
+    system_message: z.string().optional().describe(describe('system_message')),
     /**
      * [Prompt] Argument definitions for the prompt.
      *
@@ -321,9 +347,9 @@ export const resourceManagerInputSchema = z
      * tier-b-settability-proposal §2) via `promptArgumentSchema` — `name` is required in both
      * uses (authored identity here, match key there) and every other field is optional in both.
      */
-    arguments: z.array(promptArgumentSchema).optional(),
+    arguments: z.array(promptArgumentSchema).optional().describe(describe('arguments')),
     /** [Prompt] Explicit mapping from a client composer draft to a declared text argument. */
-    composer: PromptComposerMetadataSchema.optional(),
+    composer: PromptComposerMetadataSchema.optional().describe(describe('composer')),
     /**
      * [Prompt] Update-only structured per-field overlay onto EXISTING arguments, addressed by
      * `name` (Fix D, tier-b-settability-proposal §2 / P6-F16). `name` must match an argument this
@@ -334,7 +360,10 @@ export const resourceManagerInputSchema = z
      * evaluation order the caller cannot see. Rejected on `create` (nothing exists yet to overlay
      * onto). `action:"preview"` with `preview_action:"update"` previews it like any other update.
      */
-    argument_updates: z.array(promptArgumentSchema).optional(),
+    argument_updates: z
+      .array(promptArgumentSchema)
+      .optional()
+      .describe(describe('argument_updates')),
     /**
      * [Prompt] Anchored replacements applied server-side to a prompt's text bodies (P7 Tier 3).
      *
@@ -356,7 +385,8 @@ export const resourceManagerInputSchema = z
           { error: refuseUndeclaredKey }
         )
       )
-      .optional(),
+      .optional()
+      .describe(describe('patch')),
     /**
      * What `action: 'preview'` would do — required with that action, and refused without it.
      *
@@ -370,7 +400,7 @@ export const resourceManagerInputSchema = z
      * prompt supports all three, gate and framework support `delete` and `rollback` only. The
      * router refuses the rest by name rather than accepting a preview that would write.
      */
-    preview_action: z.enum(PREVIEWABLE_ACTIONS).optional(),
+    preview_action: z.enum(PREVIEWABLE_ACTIONS).optional().describe(describe('preview_action')),
     /**
      * [Prompt] Update-only: CLEAR these fields, naming them as the tool parameters you would use
      * to set them. The missing "remove" verb (P2.1, owner ruling D1).
@@ -386,7 +416,7 @@ export const resourceManagerInputSchema = z
      * A field both supplied and unset in the same call is refused rather than resolved in an
      * order the caller cannot see.
      */
-    unset: z.array(z.string().min(1)).optional(),
+    unset: z.array(z.string().min(1)).optional().describe(describe('unset')),
     /**
      * Read version history belonging to a DIFFERENT workspace.
      *
@@ -396,22 +426,36 @@ export const resourceManagerInputSchema = z
      * another workspace describes files that may not exist here, and silently scoping the
      * parameter back to local would leave the caller believing they had restored it.
      */
-    source_workspace: z.string().min(1).optional(),
+    source_workspace: z.string().min(1).optional().describe(describe('source_workspace')),
     /** [Prompt] Chain steps definition for multi-step prompts. */
-    chain_steps: z.array(ChainStepSchema.passthrough()).optional(),
+    chain_steps: z
+      .array(ChainStepSchema.passthrough())
+      .optional()
+      .describe(describe('chain_steps')),
     /**
      * [Prompt] Step-level operation for chain updates. Omit it to replace the entire array —
      * which is what the removed `'replace'` member spelled as a second way of saying the same
      * thing (P2.4). `'update'` overlays `chain_step_data` onto the step at `chain_step_index`,
      * the per-step analogue of `argument_updates`.
      */
-    chain_step_operation: z.enum(['add', 'remove', 'reorder', 'update']).optional(),
+    chain_step_operation: z
+      .enum(['add', 'remove', 'reorder', 'update'])
+      .optional()
+      .describe(describe('chain_step_operation')),
     /** [Prompt] Target index for add (insertion point), remove, or update (step to edit). */
-    chain_step_index: z.number().int().nonnegative().optional(),
+    chain_step_index: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe(describe('chain_step_index')),
     /** [Prompt] Step definition for add (whole step) or update (fields to overlay). */
-    chain_step_data: ChainStepSchema.passthrough().optional(),
+    chain_step_data: ChainStepSchema.passthrough().optional().describe(describe('chain_step_data')),
     /** [Prompt] New index order for reorder operation (permutation of [0..n-1]). */
-    chain_step_order: z.array(z.number().int().nonnegative()).optional(),
+    chain_step_order: z
+      .array(z.number().int().nonnegative())
+      .optional()
+      .describe(describe('chain_step_order')),
     /**
      * [Prompt] Dependency edges between this chain's steps, addressed by minted node id.
      *
@@ -426,7 +470,7 @@ export const resourceManagerInputSchema = z
      * edit of the YAML, which this project forbids. An update carrying both is validated as ONE
      * state by the post-write verification, which reads the file the write produced.
      */
-    edges: z.array(workflowEdgeSchema).optional(),
+    edges: z.array(workflowEdgeSchema).optional().describe(describe('edges')),
     /**
      * [Prompt] Run-level budget for a chain (P4.82).
      *
@@ -437,7 +481,7 @@ export const resourceManagerInputSchema = z
      * It is `.strict()`, so a misspelled budget key is refused at the boundary rather than dropped
      * into a declaration that then silently does nothing.
      */
-    budget: workflowBudgetSchema.optional(),
+    budget: workflowBudgetSchema.optional().describe(describe('budget')),
     /**
      * [Prompt] What this prompt's run touches, in the fixed `ArtifactKind` vocabulary (P4.82).
      *
@@ -448,9 +492,9 @@ export const resourceManagerInputSchema = z
      * declared argument) is not expressible at this boundary, because an update need not carry
      * `arguments`; the post-write verification reads the produced FILE and refuses there.
      */
-    artifacts: PromptArtifactsSchema.optional(),
+    artifacts: PromptArtifactsSchema.optional().describe(describe('artifacts')),
     /** [Prompt] Script tools to create with the prompt. */
-    tools: z.array(z.unknown()).optional(),
+    tools: z.array(z.unknown()).optional().describe(describe('tools')),
     /**
      * [Prompt] Update-only: how a `tools` change relates to the current binding (P2.3).
      *
@@ -460,11 +504,14 @@ export const resourceManagerInputSchema = z
      * `tool_ids` and DELETES their directories, so it requires `confirm: true`: it is the only
      * `update` that destroys a file the caller did not send a replacement for.
      */
-    tool_operation: z.enum(['add', 'remove']).optional(),
+    tool_operation: z.enum(['add', 'remove']).optional().describe(describe('tool_operation')),
     /** [Prompt] Tool ids to unbind and delete. Required by `tool_operation: 'remove'`. */
-    tool_ids: z.array(z.string().min(1)).optional(),
+    tool_ids: z.array(z.string().min(1)).optional().describe(describe('tool_ids')),
     /** [Prompt] Gate configuration: include, exclude, framework_gates. */
-    gate_configuration: z.record(z.string(), z.unknown()).optional(),
+    gate_configuration: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe(describe('gate_configuration')),
     // ── Prompt parameters the writer preserves rather than builds (OQ-P7-8) ─────
     //
     // Tier 1 made these five SURVIVE an update by reading them off the on-disk `prompt.yaml`
@@ -484,7 +531,7 @@ export const resourceManagerInputSchema = z
      * declaration about itself outranks the chain or category it runs inside. Omitting this leaves
      * whatever the file declares untouched.
      */
-    injection: PromptInjectionConfigSchema.optional(),
+    injection: PromptInjectionConfigSchema.optional().describe(describe('injection')),
     /**
      * [Prompt | Category] Whether prompts register as native MCP prompts.
      *
@@ -499,7 +546,7 @@ export const resourceManagerInputSchema = z
      * category inherits unless it declares its own. `loader.ts` has read that key since long
      * before anything could write it.
      */
-    register_with_mcp: z.boolean().optional(),
+    register_with_mcp: z.boolean().optional().describe(describe('register_with_mcp')),
     /**
      * [Prompt | Category] Native MCP prompt behaviour: 'expand' (plain template text) or
      * 'launch' (route through prompt_engine).
@@ -512,19 +559,22 @@ export const resourceManagerInputSchema = z
      * ON `resource_type: 'category'` (P4.7) — writes `mcpPromptMode` into `category.yaml`, the
      * default every prompt in the category inherits.
      */
-    mcp_prompt_mode: z.enum(['expand', 'launch']).optional(),
+    mcp_prompt_mode: z.enum(['expand', 'launch']).optional().describe(describe('mcp_prompt_mode')),
     /** [Prompt] Client-agnostic capability hint for `==>` delegated steps. */
-    subagent_model: z.enum(['heavy', 'standard', 'fast']).optional(),
+    subagent_model: z
+      .enum(['heavy', 'standard', 'fast'])
+      .optional()
+      .describe(describe('subagent_model')),
     /** [Prompt] Default host agent for this prompt's `==>` delegated steps (a step may override). */
-    agent_type: z.string().min(1).optional(),
+    agent_type: z.string().min(1).optional().describe(describe('agent_type')),
 
     /** [Prompt] Hint for execution type on creation. */
     /** [Prompt] List filter query. */
-    filter: z.string().optional(),
+    filter: z.string().optional().describe(describe('filter')),
     /** [Prompt] Detail level for list/inspect. */
-    detail: z.enum(['summary', 'full']).optional(),
+    detail: z.enum(['summary', 'full']).optional().describe(describe('detail')),
     /** [Prompt] Search query for filtering (list action). */
-    search_query: z.string().optional(),
+    search_query: z.string().optional().describe(describe('search_query')),
 
     // ── Gate parameters ──────────────────────────────────────────────────
     /**
@@ -536,14 +586,17 @@ export const resourceManagerInputSchema = z
      * snake_case spelling of the gate.yaml key it writes, and these two were the only pair where
      * that was false.
      */
-    type: z.enum(['validation', 'guidance']).optional(),
+    type: z.enum(['validation', 'guidance']).optional().describe(describe('type')),
     /**
      * [Gate] Gate classification, writing the gate.yaml key `gate_type`. `framework` is the
      * load-bearing value: `gate-loader.ts` filters those gates out when framework gates are
      * disabled, and `isGateActiveForContext` requires BOTH category and framework to match for
      * them. Absent, the loader defaults to `custom`.
      */
-    gate_type: z.enum(['framework', 'category', 'custom']).optional(),
+    gate_type: z
+      .enum(['framework', 'category', 'custom'])
+      .optional()
+      .describe(describe('gate_type')),
     /**
      * [Gate] Free kebab-case tag naming what this gate reminds about (e.g. `code-quality`).
      * An installation's `gates.harnessCovers` (config.jsonc, or config.json) suppresses
@@ -556,52 +609,62 @@ export const resourceManagerInputSchema = z
         /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
         'subject must be kebab-case: lowercase letters, digits, and hyphens only, e.g. "code-quality"'
       )
-      .optional(),
+      .optional()
+      .describe(describe('subject')),
     /**
      * [Gate] Severity for prioritization. Omitting it leaves an existing gate's value
      * untouched; a new gate takes the loader default `medium`.
      */
-    severity: z.enum(['critical', 'high', 'medium', 'low']).optional(),
+    severity: z
+      .enum(['critical', 'high', 'medium', 'low'])
+      .optional()
+      .describe(describe('severity')),
     /**
      * [Gate] What a FAIL does: `blocking` holds the chain step, `advisory` advances and names the
      * failure, `informational` advances silently. Absent, the gate holds. A FAIL naming gates in
      * `per_gate` is decided by those gates, otherwise by the strictest gate on the step
      * (`resolveEnforcementMode`).
      */
-    enforcement_mode: z.enum(['blocking', 'advisory', 'informational']).optional(),
+    enforcement_mode: z
+      .enum(['blocking', 'advisory', 'informational'])
+      .optional()
+      .describe(describe('enforcement_mode')),
     /**
      * [Gate] Withhold the step output when this gate is marked FAIL, returning the gate review
      * in its place. Same preservation class as `severity`/`enforcement_mode`: omitted on update
      * the existing value is carried forward, and an explicit `false` clears it.
      */
-    block_response_on_fail: z.boolean().optional(),
+    block_response_on_fail: z.boolean().optional().describe(describe('block_response_on_fail')),
     /**
      * [Gate] Who reviews this gate — see `gateEvaluationSchema` above. Written to `gate.yaml`
      * whole: a supplied block replaces the existing one, an omitted one is carried forward.
      */
-    evaluation: gateEvaluationSchema.optional(),
+    evaluation: gateEvaluationSchema.optional().describe(describe('evaluation')),
     /** [Gate] Gate guidance content. */
-    guidance: z.string().optional(),
+    guidance: z.string().optional().describe(describe('guidance')),
     /** [Gate] Structured pass criteria definitions — see `gatePassCriteriaSchema` above. */
-    pass_criteria: z.array(gatePassCriteriaSchema).optional(),
+    pass_criteria: z.array(gatePassCriteriaSchema).optional().describe(describe('pass_criteria')),
     /** [Gate] Activation rules. */
-    activation: z.record(z.string(), z.unknown()).optional(),
+    activation: z.record(z.string(), z.unknown()).optional().describe(describe('activation')),
     /** [Gate] Retry configuration. */
-    retry_config: z.record(z.string(), z.unknown()).optional(),
+    retry_config: z.record(z.string(), z.unknown()).optional().describe(describe('retry_config')),
 
     // ── Framework parameters ─────────────────────────────────────────────
     /** [Framework] Framework type identifier (e.g. 'CAGEERF', 'ReACT'). */
-    framework: z.string().optional(),
+    framework: z.string().optional().describe(describe('framework')),
     /** [Framework] System prompt guidance injected when active. */
-    system_prompt_guidance: z.string().optional(),
+    system_prompt_guidance: z.string().optional().describe(describe('system_prompt_guidance')),
     /** [Framework] Phase definitions. */
-    phases: z.array(z.unknown()).optional(),
+    phases: z.array(z.unknown()).optional().describe(describe('phases')),
     /** [Framework] Gate configuration: include, exclude arrays. */
-    gates: z.record(z.string(), z.unknown()).optional(),
+    gates: z.record(z.string(), z.unknown()).optional().describe(describe('gates')),
     /** [Framework] Tool description overlays when active. */
-    tool_descriptions: z.record(z.string(), z.unknown()).optional(),
+    tool_descriptions: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe(describe('tool_descriptions')),
     /** [Framework] Whether the framework is enabled. */
-    enabled: z.boolean().optional(),
+    enabled: z.boolean().optional().describe(describe('enabled')),
 
     // ── Framework advanced parameters (P4.1 / P4.5) ──────────────────────
     // Settable before they were declared; see the element-shape block above for why.
@@ -614,9 +677,12 @@ export const resourceManagerInputSchema = z
      * and element shape is checked at the same time, so `[{id, description}]` is rejected for
      * missing `name` rather than written and rolled back at load.
      */
-    framework_gates: z.array(frameworkGateSchema).optional(),
+    framework_gates: z.array(frameworkGateSchema).optional().describe(describe('framework_gates')),
     /** [Framework] Prompt-enhancement suggestions surfaced when active → `framework.yaml`. */
-    template_suggestions: z.array(templateSuggestionSchema).optional(),
+    template_suggestions: z
+      .array(templateSuggestionSchema)
+      .optional()
+      .describe(describe('template_suggestions')),
     /**
      * [Framework] Section structure this framework expects of a prompt → `framework.yaml`
      * (as `frameworkElements`). Read by `generic-framework-guide.ts` to build creation guidance.
@@ -630,7 +696,8 @@ export const resourceManagerInputSchema = z
         },
         { error: refuseUndeclaredKey }
       )
-      .optional(),
+      .optional()
+      .describe(describe('framework_elements')),
     /**
      * [Framework] Arguments this framework suggests a prompt declare → `framework.yaml`
      * (as `argumentSuggestions`).
@@ -648,15 +715,22 @@ export const resourceManagerInputSchema = z
           { error: refuseUndeclaredKey }
         )
       )
-      .optional(),
+      .optional()
+      .describe(describe('argument_suggestions')),
     /** [Framework] Judge-prompt body, written to the file `judgePromptFile` names. */
-    judge_prompt: z.string().optional(),
+    judge_prompt: z.string().optional().describe(describe('judge_prompt')),
     /** [Framework] Ordered template-processing steps → `phases.yaml`. */
-    processing_steps: z.array(processingStepSchema).optional(),
+    processing_steps: z
+      .array(processingStepSchema)
+      .optional()
+      .describe(describe('processing_steps')),
     /** [Framework] Execution steps with dependencies → `phases.yaml`. */
-    execution_steps: z.array(executionStepSchema).optional(),
+    execution_steps: z.array(executionStepSchema).optional().describe(describe('execution_steps')),
     /** [Framework] Per-execution-type step overlays (chain vs single) → `phases.yaml`. */
-    execution_type_enhancements: z.record(z.string(), z.unknown()).optional(),
+    execution_type_enhancements: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe(describe('execution_type_enhancements')),
     /** [Framework] System/user prompt additions and contextual hints → `phases.yaml`. */
     template_enhancements: z
       .strictObject(
@@ -667,7 +741,8 @@ export const resourceManagerInputSchema = z
         },
         { error: refuseUndeclaredKey }
       )
-      .optional(),
+      .optional()
+      .describe(describe('template_enhancements')),
     /** [Framework] Pre/post/validation hooks around execution → `phases.yaml`. */
     execution_flow: z
       .strictObject(
@@ -678,23 +753,32 @@ export const resourceManagerInputSchema = z
         },
         { error: refuseUndeclaredKey }
       )
-      .optional(),
+      .optional()
+      .describe(describe('execution_flow')),
     /** [Framework] Per-phase keywords and patterns for compliance scoring → `phases.yaml`. */
-    quality_indicators: z.record(z.string(), z.unknown()).optional(),
+    quality_indicators: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe(describe('quality_indicators')),
 
     // ── Versioning parameters ────────────────────────────────────────────
     /** [Versioning] Target version number for rollback action. */
-    version: z.number().optional(),
+    version: z.number().optional().describe(describe('version')),
     /** [Versioning] Starting version number for compare action. */
-    from_version: z.number().optional(),
+    from_version: z.number().optional().describe(describe('from_version')),
     /** [Versioning] Ending version number for compare action. */
-    to_version: z.number().optional(),
+    to_version: z.number().optional().describe(describe('to_version')),
     /** [Versioning] Max versions to return in history. */
-    limit: z.number().optional(),
+    limit: z.number().optional().describe(describe('limit')),
     /** [Versioning] Skip auto-versioning on update. */
-    skip_version: z.boolean().optional(),
+    skip_version: z.boolean().optional().describe(describe('skip_version')),
     /** [Prompt update] Refuse a stale write unless the current version matches. */
-    expected_version: z.number().int().nonnegative().optional(),
+    expected_version: z
+      .number()
+      .int()
+      .nonnegative()
+      .optional()
+      .describe(describe('expected_version')),
   })
   .passthrough();
 

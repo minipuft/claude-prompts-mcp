@@ -1,4 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
+import { readdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { GateLoader } from '../../../../../src/engine/gates/core/gate-loader.js';
 import { GateAnalyzer } from '../../../../../src/mcp/tools/resource-manager/prompt/analysis/gate-analyzer.js';
@@ -141,9 +144,10 @@ describe('gate suggestions resolve through the gate registry', () => {
 
   // `GateAnalyzer` is the second, separate gate-suggesting channel a create-prompt reply calls
   // (`prompt-lifecycle-processor.ts`, "Suggested Gates: Consider adding these gates"). Driven
-  // across every content signal `analyzePromptContent` branches on, plus every category
-  // `getCategoryGateMapping` maps, so the union of `recommendedGates` collected here is the full
-  // set the analyzer can ever produce — not just whatever one prompt happens to trigger.
+  // across every content signal `analyzePromptContent` branches on, so the union of
+  // `recommendedGates` collected here is the full set the analyzer can ever produce — not just
+  // whatever one prompt happens to trigger. A prompt's category adds nothing to it; the next test
+  // pins that.
   test('GateAnalyzer never recommends a gate id the registry cannot resolve', async () => {
     const dependencies = { logger: createLogger() } as unknown as PromptResourceDependencies;
     const gateAnalyzer = new GateAnalyzer(dependencies);
@@ -156,26 +160,13 @@ describe('gate suggestions resolve through the gate registry', () => {
       'This covers technical specification, implementation, and architecture',
       'Please structure and organize this; outline the steps',
     ];
-    const categories = [
-      'analysis',
-      'education',
-      'development',
-      'research',
-      'debugging',
-      'documentation',
-      'content_processing',
-      'general',
-    ];
-
     const recommended = new Set<string>();
     for (const userMessageTemplate of contentTriggerTemplates) {
-      for (const category of categories) {
-        const result = await gateAnalyzer.analyzePromptForGates(
-          createPrompt({ userMessageTemplate, category })
-        );
-        for (const gateId of result.recommendedGates) {
-          recommended.add(gateId);
-        }
+      const result = await gateAnalyzer.analyzePromptForGates(
+        createPrompt({ userMessageTemplate })
+      );
+      for (const gateId of result.recommendedGates) {
+        recommended.add(gateId);
       }
     }
 
@@ -184,6 +175,38 @@ describe('gate suggestions resolve through the gate registry', () => {
     expect(recommended.size).toBeGreaterThan(0);
     for (const gateId of recommended) {
       expect(availableGates.has(gateId)).toBe(true);
+    }
+  });
+
+  // Which gates go with a category is the registry's answer (`activation.prompt_categories`), and
+  // a run attaches those gates itself, so the analyzer suggests none on a category's account. A
+  // hardcoded category-to-gate map used to answer it here instead, and drifted: five of its eight
+  // keys named no category directory. Every shipped category is read off disk, plus the
+  // `general` fallback, so a tenth category is covered the day it is added.
+  test('GateAnalyzer recommends no gate for a prompt on the strength of its category', async () => {
+    const dependencies = { logger: createLogger() } as unknown as PromptResourceDependencies;
+    const gateAnalyzer = new GateAnalyzer(dependencies);
+    const promptsRoot = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '../../../../../resources/prompts'
+    );
+    const categories = readdirSync(promptsRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+      .map((entry) => entry.name);
+    expect(categories.length).toBeGreaterThan(0);
+
+    // Control: the same analyzer, the same prompt shape, one content signal — it does recommend.
+    const control = await gateAnalyzer.analyzePromptForGates(
+      createPrompt({ userMessageTemplate: 'Please structure and organize this' })
+    );
+    expect(control.recommendedGates).toContain('content-structure');
+
+    for (const category of [...categories, 'general']) {
+      const result = await gateAnalyzer.analyzePromptForGates(createPrompt({ category }));
+      expect({ category, recommended: result.recommendedGates }).toEqual({
+        category,
+        recommended: [],
+      });
     }
   });
 });
