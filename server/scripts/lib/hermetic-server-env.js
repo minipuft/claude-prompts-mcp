@@ -53,7 +53,7 @@
  * a caller given one without the other leaks through whichever it was not given.
  */
 
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -140,6 +140,35 @@ function assertIsolatedHome(home) {
 }
 
 /**
+ * Pids of processes other than this one whose environment names either of the two roots.
+ *
+ * The harness does not spawn the server, so it never holds a pid; the environment the spawner
+ * handed over is the one place the child still names its roots. `/proc` carries it on Linux, where
+ * CI runs. Elsewhere there is nothing to read, so the check reports no process rather than guess.
+ * An exited process leaves no `environ`, so a child that has been stopped never matches.
+ *
+ * @param {{ home: string, runtimeRoot: string }} roots
+ * @returns {number[]}
+ */
+function liveProcessesUsing(roots) {
+  if (!existsSync('/proc/self/environ')) return [];
+  const needles = new Set([`HOME=${roots.home}`, `MCP_RUNTIME_ROOT=${roots.runtimeRoot}`]);
+  const pids = [];
+  for (const entry of readdirSync('/proc')) {
+    const pid = Number(entry);
+    if (!Number.isInteger(pid) || pid === process.pid) continue;
+    let environ;
+    try {
+      environ = readFileSync(`/proc/${pid}/environ`, 'utf8');
+    } catch {
+      continue; // exited between the listing and the read, or owned by another user
+    }
+    if (environ.split('\0').some((line) => needles.has(line))) pids.push(pid);
+  }
+  return pids;
+}
+
+/**
  * A temp `HOME` and a temp runtime root, created together.
  *
  * They are returned as one `env` object rather than two fields because they fail as a pair: a
@@ -165,6 +194,18 @@ export function createHermeticRoots(label = 'hermetic-server') {
     runtimeRoot,
     env: { HOME: home, MCP_RUNTIME_ROOT: runtimeRoot },
     cleanup() {
+      // Removing a tree a live server still writes into races its log flush: the removal throws
+      // ENOTEMPTY on some runs and passes on others. `maxRetries` below only narrows that window,
+      // so the ordering — stop the server, then remove its roots — is enforced here, loudly.
+      const alive = liveProcessesUsing({ home, runtimeRoot });
+      if (alive.length > 0) {
+        throw new Error(
+          `[hermetic-server-env] cleanup() of ${root} refused: process ${alive.join(', ')} is ` +
+            'still running against these roots. Stop the server first. A teardown list that runs ' +
+            'in reverse needs the roots pushed BEFORE the stop: ' +
+            'cleanup.push(roots.cleanup, () => session.stop()).'
+        );
+      }
       rmSync(root, { recursive: true, force: true, maxRetries: 5 });
     },
   };

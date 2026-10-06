@@ -76,7 +76,7 @@ describe('Streamable HTTP: a gate review states one state', () => {
     const port = await getAvailablePort();
     const baseUrl = `http://127.0.0.1:${port}`;
     const proc = startServerWithHttp(port, { env: roots.env });
-    cleanup.push(() => killServer(proc), roots.cleanup);
+    cleanup.push(roots.cleanup, () => killServer(proc));
     await waitForHealth(baseUrl, { timeout: 45000, interval: 200 });
     const client = new ModernMcpClient(baseUrl, 'gate-review-truth-e2e');
     let nextId = 1;

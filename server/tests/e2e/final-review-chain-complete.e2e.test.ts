@@ -73,7 +73,7 @@ describe('Streamable HTTP: chain/complete waits for the final review (P4.157)', 
   /** Drive `quick_decision` to its final step, answering steps 1 and 2 in sections with a PASS. */
   async function atFinalStep(): Promise<(args: Record<string, unknown>) => Promise<ToolOutcome>> {
     const s = await startSession();
-    teardown.push(s.stop, s.cleanup);
+    teardown.push(s.cleanup, s.stop);
     const start = await s.call({ command: '>>quick_decision topic:"pick a database"' });
     const chainId = chainIdOf(start.text);
     const call = (args: Record<string, unknown>) => s.call({ chain_id: chainId, ...args });

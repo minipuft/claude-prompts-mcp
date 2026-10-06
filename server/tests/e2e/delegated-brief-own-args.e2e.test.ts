@@ -69,7 +69,7 @@ describe('Streamable HTTP: a delegated brief states its own node args (P6.41)', 
     const proc = startServerWithHttp(port, {
       env: { HOME: roots.home, MCP_WORKSPACE: workspace, MCP_RUNTIME_ROOT: roots.runtimeRoot },
     });
-    teardown.push(() => killServer(proc), roots.cleanup);
+    teardown.push(roots.cleanup, () => killServer(proc));
     await waitForHealth(baseUrl, { timeout: 45000, interval: 200 });
     const client = new ModernMcpClient(baseUrl, name);
     let nextId = 1;
