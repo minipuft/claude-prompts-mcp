@@ -85,8 +85,6 @@ const createMockGateManager = (registryGuides?: Record<string, GateGuide>): Gate
       .mockReturnValue({ getGuide: (gateId: string) => (registryGuides ?? {})[gateId] }),
     getRegistryStats: jest.fn().mockReturnValue({ totalGates: 0 }),
     getStatus: jest.fn(),
-    isGateSystemEnabled: jest.fn().mockReturnValue(true),
-    setStateManager: jest.fn(),
     initialize: jest.fn(),
   } as unknown as GateManager;
 };

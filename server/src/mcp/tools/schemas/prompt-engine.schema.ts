@@ -273,11 +273,15 @@ const identity: DescriptionResolver = (_name, fallback) => fallback;
  */
 export interface ToolSurfaceState {
   /**
-   * The gate system master switch (`GateManager.isGateSystemEnabled()`).
+   * The gate system runtime master switch (`GateStateStore.isGateSystemEnabled(scope)`,
+   * moved by `system_control gates enable|disable`).
    *
-   * When it is off, `GateService` short-circuits both `getGuidanceText` and
-   * `validateContent` for every gate id regardless of which source contributed
-   * it, so the three gate parameters have no reachable effect and are omitted.
+   * When it is off, nothing reads the three gate parameters: shell verification refuses
+   * to run and no gate a client names can reach an executor, so they have no effect and
+   * are omitted. It does NOT stop gate guidance being rendered — that is the separate
+   * `gates.enabled` config value read by the gate-enhancement stage. This comment named
+   * `GateManager` and a `GateService.getGuidanceText`/`validateContent` pair for both
+   * facts; neither symbol exists, and the guidance half was never true of this switch.
    *
    * Deliberately NOT the `gatesConfig.enableFrameworkGates` switch. That one is
    * a veto over the `framework-guide` rank only: it withholds gates the server
