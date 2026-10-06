@@ -31,6 +31,11 @@ name: PR Conventions
 # titles are machine-owned surface — which removes the known false-positive sources; a wrong
 # failure after this is a defect to fix, not a count to reset.
 #
+# The Bot exemption never covered release-please: it opens its PR with the owner's token, so the
+# PR's author is the owner (a `User`), and the check read release-please's "too large to preview"
+# stub as an authored body (measured 2026-10-05, release PR #232). Its branch name is the stable
+# marker — `release-please--` — so the four authored-body steps are exempt on either condition.
+#
 # This workflow also asserts the merge-settings contract by its EFFECT (the newest squash on
 # main carries a PR-shaped body): the settings are invisible to any file-based gate AND to the
 # workflow token, and the two-register body design depends on them — the collapsed appendix
@@ -179,7 +184,7 @@ jobs:
           node-version-file: .node-version
 
       - name: Prove the body check can fail (positive control)
-        if: github.event.pull_request.user.type != 'Bot'
+        if: github.event.pull_request.user.type != 'Bot' && !startsWith(github.head_ref, 'release-please--')
         run: node scripts/validate-pr-body.mjs --self-test
 
       # The self-test above drives the plan rules off fixtures, so it proves the RULES and says
@@ -188,18 +193,18 @@ jobs:
       # plan against itself and reports "closes no rows" for every PR. Asserted on every PR, not
       # only ones carrying a footer, because the configuration is repository-wide.
       - name: Prove the checkout can measure plan progress (positive control)
-        if: github.event.pull_request.user.type != 'Bot'
+        if: github.event.pull_request.user.type != 'Bot' && !startsWith(github.head_ref, 'release-please--')
         run: node scripts/validate-pr-body.mjs --assert-base-measurable
 
       - name: Check the body against the template (scripts/validate-pr-body.mjs)
-        if: github.event.pull_request.user.type != 'Bot'
+        if: github.event.pull_request.user.type != 'Bot' && !startsWith(github.head_ref, 'release-please--')
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: node scripts/validate-pr-body.mjs
 
       - name: Lint the title with the repo's commitlint config
-        if: github.event.pull_request.user.type != 'Bot'
+        if: github.event.pull_request.user.type != 'Bot' && !startsWith(github.head_ref, 'release-please--')
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         # Root package.json holds only commitlint + husky; `--ignore-scripts` skips the husky
