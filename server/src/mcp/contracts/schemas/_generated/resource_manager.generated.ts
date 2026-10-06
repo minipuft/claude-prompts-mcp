@@ -142,7 +142,7 @@ export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'enabled_only',
     type: 'boolean',
-    description: 'Filter list to enabled resources only. Default: true.',
+    description: '[Gate | Framework] Filter list to enabled resources only. Default: true.',
     status: 'working',
     compatibility: 'canonical',
   },

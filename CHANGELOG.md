@@ -800,7 +800,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
 
+- **`resource_manager` now describes every parameter in `tools/list`.** Its 75 parameters were published with a name and a type and nothing else, so a client had to guess what `subject`, `unset` or `chain_step_order` meant. Each one now carries the description its contract already held.
 
 ## [4.0.1](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.0...v4.0.1) (2026-08-16)
 
