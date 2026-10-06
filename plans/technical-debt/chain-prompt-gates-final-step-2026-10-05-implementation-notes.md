@@ -2,7 +2,7 @@
 title: "A chain prompt's own gates run once, on the chain's final step: implementation notes"
 plan: chain-prompt-gates-final-step-2026-10-05.md
 date: 2026-10-05
-status: active
+status: reference
 tags: [gates, chains]
 ---
 
@@ -13,6 +13,8 @@ tags: [gates, chains]
 - DEV-1 (rows 1.1 to 1.3): the source change is about 140 lines against a 60-line bound, half of it docblocks; recording the chain's gates before the walk reordered gate lists on every step and turned two unrelated pins red, so they are recorded at the final step instead. `gate-enhancement-service.ts` reached 1,072 lines and the `max-lines` ceiling for that one file was raised with the ratchet's own override, reason logged in the baseline. The pin that asserted the old absence was rewritten in row 1.1, not 1.2. Ruling R4 was left as measured: a chain prompt named in an arrow-chain or workflow segment expands, and its own gates reach no expanded node, before and after; carrying the segment's prompt id through the parser, the blueprint and the walk is well beyond the size allowed. Row 1.3 was added on the worker's finding (R6). Only `implementation_plan` was driven in the bundled survey; the other chains were read from their YAML.
 
 - DEV-2-1 (row 2.1): the brief said #445's row 1.2 had left a pin naming both gates on `implementation_plan`'s fifth step; no test drives the bundled chain (`rg -l implementation_plan server/tests/e2e` is empty), so the worker added a unit pin over the shipped file instead, with a control on `tech_evaluation_chain`. The brief should have measured that first. The #445 changelog bullet, which stated both gates and "neither declares an `enforcement_mode`", was corrected in the same commit.
+
+- DEV-2-2 (row 2.2): the brief's "state: none" was wrong for `filterGatesForTarget`, which calls the service's temporary-gate target check (registry and logger); it moved with that check as a fifth parameter rather than moving the check. `chainPromptGates` moved as a function taking the resolver, not as a thin service method, so the final-step choice and the resolution stay in one file. `inheritedReviewGateIdsNow` reuses the resolver it already holds instead of constructing a second one. The split brief should have carried the probe `rg -n "this\."` over the bodies being moved.
 
 ## Findings
 
