@@ -277,11 +277,11 @@ export interface ToolSurfaceState {
    * moved by `system_control gates enable|disable`).
    *
    * When it is off, nothing reads the three gate parameters: shell verification refuses
-   * to run and no gate a client names can reach an executor, so they have no effect and
-   * are omitted. It does NOT stop gate guidance being rendered — that is the separate
-   * `gates.enabled` config value read by the gate-enhancement stage. This comment named
-   * `GateManager` and a `GateService.getGuidanceText`/`validateContent` pair for both
-   * facts; neither symbol exists, and the guidance half was never true of this switch.
+   * to run, and the gate-enhancement stage selects no gates and renders no guidance for the
+   * request's scope, so the parameters have no reachable effect and are omitted. The stage
+   * also honors the separate `gates.enabled` config value; either switch being off skips it.
+   * This comment once named `GateManager` and a `GateService.getGuidanceText`/
+   * `validateContent` pair; neither symbol exists.
    *
    * Deliberately NOT the `gatesConfig.enableFrameworkGates` switch. That one is
    * a veto over the `framework-guide` rank only: it withholds gates the server

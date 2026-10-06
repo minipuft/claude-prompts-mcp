@@ -467,17 +467,16 @@ export class McpToolRouter {
    * Read the runtime state the `prompt_engine` parameter shape depends on.
    *
    * `GateStateStore.isGateSystemEnabled(scope)` is the runtime master switch. With it
-   * off, `LightweightGateSystem.isGateSystemEnabled()` reports false, and the two things
-   * that read it stop: shell verification refuses to run, and the three gate parameters
-   * are withheld here.
+   * off, `LightweightGateSystem.isGateSystemEnabled()` reports false, and the three things
+   * that read it stop: shell verification refuses to run, the gate-enhancement stage selects
+   * no gates and renders no guidance for the request's scope (P6.292), and the three gate
+   * parameters are withheld here.
    *
-   * It is NOT the switch that stops gate GUIDANCE being rendered into a prompt. That is
-   * the separate `gates.enabled` config value, read by the gate-enhancement stage —
-   * `system_control gates disable` reaches it only with `persist: true`. Two switches
-   * answer "are gates on?", and this one answers the narrower question. Do not widen this
-   * comment back into "guidance and validation are short-circuited": an earlier revision
-   * said so while naming a `GateService.getGuidanceText`/`validateContent` pair that no
-   * longer exists, which is how the claim survived the code it described.
+   * The stage also honors the separate `gates.enabled` config value, which
+   * `system_control gates disable` reaches only with `persist: true`. Either switch being off
+   * skips gate enhancement. An earlier revision of this comment claimed guidance and
+   * validation were short-circuited while naming a `GateService.getGuidanceText`/
+   * `validateContent` pair that no longer exists; the claim now names the stage that does it.
    *
    * The adjacent `gatesConfig.enableFrameworkGates` switch is deliberately not
    * consulted. It vetoes only the `framework-guide` rank — gates the server

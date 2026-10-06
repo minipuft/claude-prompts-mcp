@@ -98,10 +98,10 @@ export class LightweightGateSystem {
    * unreached-methods baseline, 2026-09-17); the field and the check that read it
    * followed (B.95).
    *
-   * This switch does not reach gate guidance. A prompt still renders its
-   * `## Inline Gates` block with the switch off — the gate-enhancement stage gates that
-   * on the `gates.enabled` CONFIG value instead, which is a different switch with a
-   * different write path.
+   * This switch also reaches gate guidance: with it off for a request's scope, the
+   * gate-enhancement stage selects no gates and renders no `## Inline Gates` block (P6.292).
+   * The stage checks the `gates.enabled` CONFIG value first; that is a second switch with a
+   * different write path, and either one being off skips the stage.
    */
   isGateSystemEnabled(scope?: StateStoreOptions): boolean {
     // If no gate system manager is set, default to enabled for backwards compatibility
