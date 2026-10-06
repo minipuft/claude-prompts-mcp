@@ -126,6 +126,8 @@ folder, which changes when the plugin updates.
 
 ## 3. Run your prompt
 
+<!-- illustrative-prompts: release_note -->
+
 Send:
 
 ```text
@@ -174,6 +176,8 @@ If you mistype the id, the hook replies with the closest matching prompt ids
 and does not ask Claude to call a tool.
 
 ## 4. Change your prompt
+
+<!-- illustrative-prompts: release_note -->
 
 Send:
 
