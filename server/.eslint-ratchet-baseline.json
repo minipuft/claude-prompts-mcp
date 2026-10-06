@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-06T01:38:51.192Z",
+  "generatedAt": "2026-10-06T04:14:29.630Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2457,
+    "errors": 2455,
     "warnings": 718
   },
   "byRule": {
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 1654,
+      "errors": 1652,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
