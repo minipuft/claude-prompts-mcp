@@ -20,6 +20,7 @@
  */
 
 import { describe, expect, it } from '@jest/globals';
+import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -110,6 +111,73 @@ describe('createHermeticRoots', () => {
       expect(Object.keys(roots.env).sort()).toEqual(['HOME', 'MCP_RUNTIME_ROOT']);
     } finally {
       roots.cleanup();
+    }
+  });
+});
+
+/**
+ * Removing the roots of a server that is still running races its log flush, so the same teardown
+ * passed on some runs and threw `ENOTEMPTY` on others (release PR #232, E2E on Node 22). The order
+ * is enforced at `cleanup()`, which reads `/proc` and therefore only exists on Linux.
+ */
+const describeOnLinux = existsSync('/proc/self/environ') ? describe : describe.skip;
+
+describeOnLinux('createHermeticRoots cleanup kills and reports a server that still runs', () => {
+  const startChild = async (roots: ReturnType<typeof createHermeticRoots>) => {
+    const child = spawn(
+      process.execPath,
+      ['-e', "console.log('up'); setInterval(() => {}, 1000);"],
+      {
+        env: buildServerEnv({ ...roots.env }),
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }
+    );
+    await new Promise<void>((resolve, reject) => {
+      child.once('error', reject);
+      child.stdout.once('data', () => resolve());
+    });
+    const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    return { child, exited };
+  };
+
+  it('kills the child, removes the roots, then throws naming the pid', async () => {
+    const roots = createHermeticRoots('hermetic-roots-live-child');
+    const { child, exited } = await startChild(roots);
+    const pid = child.pid;
+
+    // The probe fires: the order the e2e teardown lists once had (remove, then stop).
+    expect(() => roots.cleanup()).toThrow(new RegExp(`process ${pid} was still running`));
+
+    // The throw must not leave a server or a directory behind: the reversed teardown list the
+    // caller walks is aborted by it, so nothing after this call would stop the child.
+    await exited;
+    expect(child.signalCode).toBe('SIGKILL');
+    expect(existsSync(`/proc/${pid}`)).toBe(false);
+    expect(existsSync(roots.root)).toBe(false);
+  });
+
+  it('passes once the server has been stopped first', async () => {
+    const roots = createHermeticRoots('hermetic-roots-stopped-child');
+    const { child, exited } = await startChild(roots);
+    child.kill();
+    await exited;
+
+    // Negative control: the same call passes once the server is stopped, so the refusal is about
+    // the live process and not about every call.
+    expect(() => roots.cleanup()).not.toThrow();
+    expect(existsSync(roots.root)).toBe(false);
+  });
+
+  it('is not tripped by a child that runs against different roots', async () => {
+    const mine = createHermeticRoots('hermetic-roots-mine');
+    const theirs = createHermeticRoots('hermetic-roots-theirs');
+    const { child, exited } = await startChild(theirs);
+    try {
+      expect(() => mine.cleanup()).not.toThrow();
+    } finally {
+      child.kill();
+      await exited;
+      theirs.cleanup();
     }
   });
 });

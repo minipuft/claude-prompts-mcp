@@ -83,7 +83,7 @@ describe('a gate-shipped shell_verify script resolves from the gate directory (P
         MCP_SHELL_VERIFY_ALLOWLIST: 'sh *',
       },
     });
-    cleanup.push(() => killServer(proc), roots.cleanup);
+    cleanup.push(roots.cleanup, () => killServer(proc));
     await waitForHealth(baseUrl, { timeout: 45000, interval: 200 });
 
     const client = new ModernMcpClient(baseUrl, 'gate-shipped-script-e2e');

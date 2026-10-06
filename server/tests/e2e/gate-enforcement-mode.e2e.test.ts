@@ -158,7 +158,7 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
       MCP_WORKSPACE: workspace,
       MCP_RUNTIME_ROOT: roots.runtimeRoot,
     });
-    cleanup.push(() => session.stop(), roots.cleanup);
+    cleanup.push(roots.cleanup, () => session.stop());
 
     for (const [id, mode] of [
       [BLOCK_GATE, 'blocking'],

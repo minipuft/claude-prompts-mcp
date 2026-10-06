@@ -138,8 +138,9 @@ async function sendRequest(
 describe('MCP Server Smoke Tests', () => {
   afterEach(async () => {
     // Clean up STDIO server
-    if (serverProcess && !serverProcess.killed) {
-      serverProcess.kill();
+    if (serverProcess) {
+      // Awaited: `kill()` only signals, and the roots drained below are removed straight after.
+      await killServer(serverProcess);
       serverProcess = null;
     }
     // Clean up HTTP server

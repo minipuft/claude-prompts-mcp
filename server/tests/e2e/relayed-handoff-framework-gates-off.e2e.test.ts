@@ -54,7 +54,7 @@ describe('Streamable HTTP: a relayed strategic_worker handoff (shipped defaults,
     const proc = startServerWithHttp(port, {
       env: { HOME: roots.home, MCP_WORKSPACE: workspace, MCP_RUNTIME_ROOT: roots.runtimeRoot },
     });
-    teardown.push(() => killServer(proc), roots.cleanup);
+    teardown.push(roots.cleanup, () => killServer(proc));
     await waitForHealth(baseUrl, { timeout: 45000, interval: 200 });
     const client = new ModernMcpClient(baseUrl, 'relayed-handoff-e2e');
     let nextId = 1;
