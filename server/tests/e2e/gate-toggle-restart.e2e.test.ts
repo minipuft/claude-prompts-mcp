@@ -11,10 +11,16 @@
  * processes over one runtime root: disable in the first, observe the narrowed schema in the
  * second and re-enable there, observe the full schema in the third. Each process starts where
  * the previous one's `state.db` left off, which is the only thing a restart can carry.
+ *
+ * The same sessions answer a second question about `tools/list`: every `resource_manager`
+ * parameter publishes a description. The schema was registered bare, so a client saw a name and a
+ * type per parameter and nothing of what it meant, while `tooling/contracts/resource-manager.json`
+ * held a description for each one.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,12 +39,22 @@ const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
 
 const ALL_GATE_PARAMS = ['gate_action', 'gate_verdict', 'gates'];
 
+/** Every parameter the `resource_manager` contract declares, read from the contract itself. */
+const RESOURCE_MANAGER_CONTRACT_PARAMS = (
+  JSON.parse(
+    readFileSync(path.join(SERVER_ROOT, 'tooling', 'contracts', 'resource-manager.json'), 'utf8')
+  ) as { parameters: Array<{ name: string }> }
+).parameters
+  .map((parameter) => parameter.name)
+  .sort();
+
 type ToolsList = {
   tools: Array<{ name: string; inputSchema?: { properties?: Record<string, unknown> } }>;
 };
 
-/** One server process: list the gate parameters, toggle gates, stop. */
+/** One server process: list the tools or the gate parameters, toggle gates, stop. */
 interface ServerSession {
+  listTools(): Promise<ToolsList>;
   gateParams(): Promise<string[]>;
   setGates(operation: 'enable' | 'disable'): Promise<void>;
   stop(): Promise<void>;
@@ -86,6 +102,7 @@ async function startHttpSession(scenario: Scenario): Promise<ServerSession> {
   let nextId = 1;
 
   return {
+    listTools: async () => (await client.request('tools/list', {}, nextId++)) as ToolsList,
     gateParams: async () =>
       gateParamsOf((await client.request('tools/list', {}, nextId++)) as ToolsList),
     setGates: async (operation) => {
@@ -156,6 +173,7 @@ async function startStdioSession(scenario: Scenario): Promise<ServerSession> {
   proc.stdin?.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
 
   return {
+    listTools: async () => (await request('tools/list', {})) as ToolsList,
     gateParams: async () => gateParamsOf((await request('tools/list', {})) as ToolsList),
     setGates: async (operation) => {
       const response = (await request('tools/call', {
@@ -215,4 +233,23 @@ describe.each([
       await third.stop();
     }
   }, 120000);
+
+  it('every resource_manager parameter publishes a description', async () => {
+    const session = await startSession(scenario);
+    try {
+      const listed = await session.listTools();
+      const properties = (listed.tools.find((tool) => tool.name === 'resource_manager')?.inputSchema
+        ?.properties ?? {}) as Record<string, { description?: unknown }>;
+      // Positive control: the probe reads the published parameters, all of the contract's.
+      expect(Object.keys(properties).sort()).toEqual(RESOURCE_MANAGER_CONTRACT_PARAMS);
+      const undescribed = Object.entries(properties)
+        .filter(
+          ([, schema]) => typeof schema.description !== 'string' || schema.description.trim() === ''
+        )
+        .map(([name]) => name);
+      expect(undescribed).toEqual([]);
+    } finally {
+      await session.stop();
+    }
+  }, 60000);
 });
