@@ -43,6 +43,12 @@ const PR_CHECK = path.join(REPO_ROOT, 'scripts/pr-check.mjs');
 /** The guard that marks a step as judging the AUTHOR's pull request rather than the checkout. */
 const NON_BOT_GUARD = "github.event.pull_request.user.type != 'Bot'";
 
+/**
+ * release-please opens its PR with the owner's token, so the Bot guard never fires for it; its
+ * branch name is the marker. Every authored-body step must carry this beside the Bot guard.
+ */
+const RELEASE_PLEASE_EXEMPTION = "!startsWith(github.head_ref, 'release-please--')";
+
 interface WorkflowStep {
   name?: string;
   run?: string;
@@ -53,11 +59,15 @@ interface WorkflowFile {
   jobs: Record<string, { steps: WorkflowStep[] }>;
 }
 
-function gatingStepNames(): string[] {
+function gatingSteps(): WorkflowStep[] {
   const workflow = parseYamlOrThrow<WorkflowFile>(readFileSync(WORKFLOW, 'utf8'));
   return Object.values(workflow.jobs)
     .flatMap((job) => job.steps)
-    .filter((step) => typeof step.run === 'string' && (step.if ?? '').includes(NON_BOT_GUARD))
+    .filter((step) => typeof step.run === 'string' && (step.if ?? '').includes(NON_BOT_GUARD));
+}
+
+function gatingStepNames(): string[] {
+  return gatingSteps()
     .map((step) => step.name ?? '(unnamed step)')
     .sort();
 }
@@ -83,6 +93,13 @@ describe('pr:check mirrors the PR Conventions workflow', () => {
 
   it('claims a mirror for every gating step, and no step that is not one', () => {
     expect(mirroredStepNames).toEqual(gatingStepNames());
+  });
+
+  it('exempts a release-please pull request from every authored-body step', () => {
+    const unexempt = gatingSteps()
+      .filter((step) => !(step.if ?? '').includes(RELEASE_PLEASE_EXEMPTION))
+      .map((step) => step.name ?? '(unnamed step)');
+    expect(unexempt).toEqual([]);
   });
 
   it('gives every mirrored step a distinct id', () => {
