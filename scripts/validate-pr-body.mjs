@@ -104,9 +104,10 @@ const REPO_ROOT = path.resolve(
 );
 
 // ---------------------------------------------------------------------------------------------
-// Plan row lifecycle primitive — vendored from the plan-row-tracking gate rather than imported
-// across repositories (see header). This is the ONE definition of "what counts as a row" and
-// "what counts as closed"; a second parser here would drift from that gate silently.
+// Plan row lifecycle primitive. This template is the ONE definition of "what counts as a row" and
+// "what counts as closed". A consumer's own plan-row gate that reads the same tables must agree
+// with it rather than carry a second parser. It is not imported across repositories because the
+// managed copy is what ships: every consumer receives this file byte-identical.
 // ---------------------------------------------------------------------------------------------
 
 /** Rows are markdown table rows; ✓ may sit in any cell, usually the status column. */
