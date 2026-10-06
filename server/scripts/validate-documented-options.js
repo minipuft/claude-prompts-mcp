@@ -79,6 +79,10 @@ const NOT_OUR_OPTIONS = new Set([
   '--body-file', // gh pr create --body-file; the form CONTRIBUTING tells you to use instead
   '--squash', // gh pr merge --squash; the only form CONTRIBUTING permits for landing a PR
   '--subject', // gh pr merge --subject; CONTRIBUTING warns it overrides the PR_BODY squash setting
+  '--no', // npx --no; refuses to install a binary the tree does not already have
+  '--grep', // git log --grep; how a plan's PRs are listed by their `Plan:` footer
+  '--repo', // delivery-contract --repo; a flag of the managed upstream tool this repo does not own
+  '--initiative', // scripts/adr.mjs new --initiative; a flag of a managed script this repo does not own
 ]);
 
 /** Read a file relative to the repo root, empty string when absent. */

@@ -38,7 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
 
+- **Contributors: the PR scripts, the `PR Conventions` workflow and the commitlint rules are now installed from the fleet delivery contract, and drift from it fails validation.** `npm run validate:delivery-contract`, part of `validate:all`, fails when any managed file differs from the installed version; after a version bump, `npx --no -- delivery-contract update --repo ..` from `server/` brings them back in line (`CONTRIBUTING.md` §Pull Request Process). The `Plan:` footer stays the only plan mention a PR body makes, and it is the join key across a multi-PR initiative: `git log --grep='Plan: .*<slug>'` lists every PR of one plan. A `Decision: ADR-NNNN` trailer must name an ADR that exists under `docs/adr/`, or the body check fails.
 
 ## [5.0.0](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.1...v5.0.0) (2026-10-06)
 

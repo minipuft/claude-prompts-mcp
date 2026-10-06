@@ -286,6 +286,18 @@ export const SUITE = [
       'CHECKED both ways — a reference naming a different version is reported, and finding NO reference at all is reported rather than passing vacuously; `plans/` and `CHANGELOG.md` are excluded as historical records and proven excluded',
   },
   {
+    // Beside the standards pins because it is their consequence: a Renovate bump of the tarball
+    // pin changes the installed delivery-contract template, and this step fails until
+    // `delivery-contract update` brings the managed PR scripts, workflow and commitlint rules
+    // to that version. The command runs the upstream package's own binary, so the substrate is
+    // its process, not a file of this repository.
+    script: 'validate:delivery-contract',
+    io: 'read',
+    reads: ['spawn'],
+    converse:
+      "CHECKED one way — a managed file that differs from the installed template, or a missing `.delivery-contract.json`, fails (positive control 2026-10-06: one appended line in scripts/pr-check.mjs fails naming it; reverting passes). UNCHECKED and known — seeded files (`commitlint.config.mjs`, the PR template, the ADR template) are this repository's own and are never compared",
+  },
+  {
     script: 'validate:readme',
     io: 'read',
     reads: ['file', 'index', 'spawn', 'tracked', 'walk'],

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/minipuft/repository-standards/main/contracts/delivery-contract.schema.json",
+  "templateVersion": "1.9.0",
+  "answers": {
+    "scopes": [
+      "server",
+      "cli",
+      "runtime",
+      "pipeline",
+      "gates",
+      "frameworks",
+      "prompts",
+      "chains",
+      "styles",
+      "scripts",
+      "hooks",
+      "resources",
+      "mcp-tools",
+      "contracts",
+      "parsers",
+      "ci",
+      "deps",
+      "config",
+      "logging",
+      "metrics",
+      "docs",
+      "tests",
+      "semantic",
+      "execution"
+    ],
+    "adrDir": "docs/adr",
+    "defaultBranch": "main",
+    "packageManager": "npm",
+    "nodeVersionFile": ".node-version"
+  }
+}

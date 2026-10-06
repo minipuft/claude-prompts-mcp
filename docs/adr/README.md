@@ -33,4 +33,19 @@ Use one of:
 
 ## Template
 
-Start with `0000-template.md` and fill it in.
+Start with `0000-template.md` and fill it in, or run `node scripts/adr.mjs new "<title>"` from the
+repository root: it writes the next number with the template's front matter and re-indexes.
+`node scripts/adr.mjs check` lists any inconsistency between the files and the index below.
+
+## Index
+
+<!-- adr-index:start -->
+
+| #    | Title                                                                                                                                                       | Status   | Date       | Supersedes | Superseded by | Initiative        |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------- | ---------- | ------------- | ----------------- |
+| 0001 | [Gate Resolution Precedence](0001-gate-resolution-precedence.md)                                                                                            | accepted | 2026-07-29 |            |               |                   |
+| 0002 | [Refuse Schema Downgrades During Initialization](0002-schema-downgrade-refusal.md)                                                                          | proposed | 2026-09-30 |            |               |                   |
+| 0003 | [The Plan footer is the join key between a PR and its initiative](0003-the-plan-footer-is-the-join-key-between-a-pr-and-its.md)                             | accepted | 2026-10-06 |            |               | delivery-contract |
+| 0004 | [A plan ruling a consumer can observe becomes an ADR in the pull request that ships it](0004-a-plan-ruling-a-consumer-can-observe-becomes-an-adr-in-the.md) | accepted | 2026-09-28 |            |               | delivery-contract |
+
+<!-- adr-index:end -->
