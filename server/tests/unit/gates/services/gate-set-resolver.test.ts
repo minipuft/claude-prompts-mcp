@@ -394,6 +394,9 @@ describe('GateSetResolver — fixes delivered by routing enhancement through one
     const sourceOf = (id: string) => result.accepted.find((gate) => gate.id === id)?.source;
     expect(sourceOf('category-gate')).toBe('registry-auto');
     expect(sourceOf('code-quality')).toBe('prompt-config');
+    // The attribution moves, the place does not: gate order is the rendered guidance order and the
+    // numbering a verdict's per-gate coverage answers against.
+    expect(result.gateIds).toEqual(['category-gate', 'code-quality']);
   });
 
   test("a re-derived planned id is still vetoed by the prompt's exclude", async () => {

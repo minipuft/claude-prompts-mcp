@@ -878,15 +878,16 @@ export class GateEnhancementService {
 
   /** Record a resolution's accepted gates in the accumulator, with their registry enrichment. */
   private recordIntoAccumulator(context: ExecutionContext, resolution: GateResolutionResult): void {
-    const registryGateIds: string[] = [];
+    // In resolution order, one gate at a time: the accumulator's order is the rendered guidance
+    // order and the per-gate numbering a verdict answers against, so a planned gate the registry
+    // derived again keeps its planned place rather than moving behind every other source.
     for (const gate of resolution.accepted) {
       if (gate.source === 'registry-auto') {
-        registryGateIds.push(gate.id);
+        this.addRegistryGatesWithRetryConfig(context, [gate.id]);
       } else {
         this.addGatesToAccumulator(context, [gate.id], gate.source);
       }
     }
-    this.addRegistryGatesWithRetryConfig(context, registryGateIds);
 
     if (resolution.vetoed.size > 0) {
       context.diagnostics.info('GateEnhancement', 'Gates removed by veto', {

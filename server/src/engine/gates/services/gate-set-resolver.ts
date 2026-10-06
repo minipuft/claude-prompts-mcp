@@ -283,15 +283,15 @@ export class GateSetResolver {
 
     this.addAll(accumulated, input.inlineOperatorGateIds, 'inline-operator');
     this.addAll(accumulated, input.callerGateIds, 'temporary-request');
-    this.addAll(
-      accumulated,
-      [
-        ...collectPromptConfigGateIds(input),
-        ...withoutReDerived(input.plannedGateIds, registryIds),
-        ...(input.inlineDefinitionGateIds ?? []),
-      ],
-      'prompt-config'
-    );
+    // One pass in this order, so a planned id keeps its place in the rendered gate order whichever
+    // source it is attributed to; only the attribution of a re-derived one differs.
+    const promptConfigIds = collectPromptConfigGateIds(input);
+    this.addAll(accumulated, promptConfigIds, 'prompt-config');
+    const reDerived = reDerivedPlannedIds(input.plannedGateIds, promptConfigIds, registryIds);
+    for (const id of input.plannedGateIds ?? []) {
+      this.addAll(accumulated, [id], reDerived.has(id) ? 'registry-auto' : 'prompt-config');
+    }
+    this.addAll(accumulated, input.inlineDefinitionGateIds, 'prompt-config');
     this.addAll(accumulated, input.chainGateIds, 'chain-level');
     this.addAll(accumulated, input.frameworkGateIds, 'framework-guide');
     this.addAll(accumulated, registryIds, 'registry-auto');
@@ -568,21 +568,28 @@ export class GateSetResolver {
 // ============================================================================
 
 /**
- * The planned ids this resolution does not derive again from the registry.
+ * The planned ids this resolution derives again from the registry, and from nothing the author
+ * declared.
  *
  * A planned id is one the planner already resolved, so it carries no source of its own: entering
  * every one at `prompt-config` relabelled a gate the planner got from the registry's category
  * activation as the prompt author's, and the accumulator reads a gate's `retry_config` and
  * `blockResponseOnFail` only for a `registry-auto` entry, so its review fell back to the built-in
- * budget of 2. A planned id the registry selects again here enters at `registry-auto` instead.
- * Every veto binds at `prompt-config` or above, so the lower rank removes nothing a veto spared.
+ * budget of 2. Such an id enters at `registry-auto` instead, in its planned position. Every veto
+ * binds at `prompt-config` or above, so the lower rank removes nothing a veto spared.
  */
-function withoutReDerived(
+function reDerivedPlannedIds(
   plannedGateIds: readonly string[] | undefined,
+  promptConfigIds: readonly string[],
   registryIds: readonly string[]
-): string[] {
-  const reDerived = new Set(registryIds.map((id) => id.trim()));
-  return (plannedGateIds ?? []).filter((id) => typeof id !== 'string' || !reDerived.has(id.trim()));
+): ReadonlySet<string> {
+  const declared = new Set(promptConfigIds.map((id) => (typeof id === 'string' ? id.trim() : id)));
+  const fromRegistry = new Set(registryIds.map((id) => (typeof id === 'string' ? id.trim() : id)));
+  return new Set(
+    (plannedGateIds ?? []).filter(
+      (id) => typeof id === 'string' && fromRegistry.has(id.trim()) && !declared.has(id.trim())
+    )
+  );
 }
 
 /**
