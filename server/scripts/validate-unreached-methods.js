@@ -32,7 +32,9 @@
  *      `implements` clause (`ApiRouterPort`, `FrameworkStateAccessor`), which a language-service
  *      reference search cannot see — measured: 12 false findings without this pass. A method is
  *      reached when a referenced same-named member lives on a type the class is assignable to.
- *   3. LANGUAGE-SERVICE REFERENCES, only for what survived 1 and 2. `findReferences` cascades
+ *   3. LANGUAGE-SERVICE REFERENCES, only for what survived 1 and 2. A reference inside a JSDoc
+ *      comment (`{@link Class.method}`) does not count: it documents the method, it never calls it.
+ *      `findReferences` cascades
  *      through explicit `implements`/`extends` including generic ones, which the assignability
  *      check in 2 misses (an uninstantiated `Registry<T>` is not assignable-from). Measured:
  *      running it alone on every candidate costs ~11 s and misses the structural ports; running
@@ -186,11 +188,22 @@ function isReachedByLanguageService(candidate) {
     .findReferencesAsNodes()
     .some(
       (ref) =>
+        !isInsideJsDoc(ref) &&
         !(
           ref.getSourceFile() === method.getSourceFile() &&
           isInside(ref.compilerNode, method.compilerNode)
         )
     );
+}
+
+/**
+ * A `{@link Class.method}` in a doc comment is a reference to the language service and to nobody
+ * else: it never runs. The reference node's ancestors include a `JSDoc` node (measured with
+ * `JSDocLink` and `JSDocSeeTag` parents, 2026-10-05); pass 1 never sees it because
+ * `forEachDescendant` does not enter doc comments.
+ */
+function isInsideJsDoc(node) {
+  return node.getFirstAncestorByKind(SyntaxKind.JSDoc) !== undefined;
 }
 
 /**
@@ -427,6 +440,9 @@ export class Subject implements DeclaredPort {
   static calledStatic(): void {}
   static make(): Subject { return new Subject(); }
   private static hiddenStatic(): void {}
+  linkedOnly(): void {}
+  tagLinkedOnly(): void {}
+  linkedAndCalled(): void {}
 }
 
 export class Homonym { shadowed(): void {} }
@@ -442,8 +458,15 @@ function drive(port: StructuralPort, declared: DeclaredPort, generic: GenericPor
   generic.take();
 }
 
+/**
+ * Documents {@link Subject.linkedOnly} and {@link Subject.linkedAndCalled}.
+ * @see {@link Subject.tagLinkedOnly}
+ */
+function documented(): void {}
+
 const subject = new Subject();
 subject.oneCaller();
+subject.linkedAndCalled();
 Subject.calledStatic();
 const factory: SubjectFactory = Subject;
 factory.make();
@@ -498,6 +521,18 @@ function runSelfTest() {
   check(
     'HOMONYM: a call on another class with the same method name does not reach this one',
     keys.has('Subject.shadowed') && !keys.has('Homonym.shadowed')
+  );
+  check(
+    'JSDOC: a method cited only by a {@link} in a doc comment is reported',
+    keys.has('Subject.linkedOnly')
+  );
+  check(
+    'JSDOC: a method cited only by a {@link} inside an @see tag is reported',
+    keys.has('Subject.tagLinkedOnly')
+  );
+  check(
+    'TWIN: a method with a {@link} AND a real call is not reported',
+    !keys.has('Subject.linkedAndCalled')
   );
   check(
     'a finding names its file and line',
