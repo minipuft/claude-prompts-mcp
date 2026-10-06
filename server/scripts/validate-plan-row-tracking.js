@@ -115,19 +115,6 @@ const OPEN_MARK = '☐';
 /** Closed, no change required — settled but produced no edit. Rule 3 makes it carry a stamp too. */
 const CLOSED_MARK = '⊘';
 
-/** Killed — the work was judged not worth its cost. A terminal state, like ✓ and ⊘. */
-const KILLED_MARK = '✗';
-
-/**
- * The three MARKED states. A row carrying any of them has been spoken for; `☐` has not.
- *
- * Kept as one list because every consumer that asks "is this row still open" must ask about all
- * three. Enumerating two of them is the bug it exists to prevent: `⊘` was added after `✓` and `✗`,
- * so a check written against the older pair reads a settled row as pending and reports a plan as
- * unfinished forever.
- */
-const TERMINAL_MARKS = [DONE_MARK, CLOSED_MARK, KILLED_MARK];
-
 /**
  * The stamp that turns an open marker into something re-checkable.
  *
@@ -283,8 +270,8 @@ function fencedLineMask(lines) {
  *
  * `statusColumnByLine` only recognises a table when a `|`-line is immediately followed by a
  * separator row (`| --- | ... |`); every line in between two such openings — or before the first
- * one — that it cannot attach to a header gets no status column, and `planRowStates` then drops
- * it outright rather than misreading it. Two distinct real-world shapes produce exactly that:
+ * one — that it cannot attach to a header gets no status column, and the row rules here (and the
+ * same parse in the managed `planRowStates`) then drop it outright rather than misreading it. Two distinct real-world shapes produce exactly that:
  *
  *  1. A blank line inserted MID-TABLE (rather than after the table's last row). This is the
  *     original P4.50 defect: a writeback inserted new rows before the paragraph following the
@@ -369,7 +356,7 @@ const STATUS_HEADER = /^(?:st|status)$/i;
  * silent gap.
  *
  * Fenced lines (`fencedLineMask`) are skipped outright rather than treated as table-ending —
- * `planRowStates` reads this same map, and a fenced shell pipeline should not register as a row
+ * rules 2 and 3 read this map, and a fenced shell pipeline should not register as a row
  * OR silently close whatever real table happens to sit on either side of it.
  */
 function statusColumnByLine(lines) {
@@ -408,66 +395,13 @@ function statusTextOf(line, column) {
   return cellsOf(line)[column] ?? '';
 }
 
-/**
- * Every gradable plan row, as `{ id, state }`, where `state` is `open` or `terminal`.
- *
- * This is the row-lifecycle primitive the other consumers of plan state share, so that "what
- * counts as a row" and "what counts as closed" have ONE answer. `scripts/validate-pr-body.mjs`
- * reads it to decide whether a PR advances the plan its footer names; keeping that logic here
- * rather than reimplementing it there is the difference between a second parser and a second
- * caller — a second parser drifts, and the drift is silent because both sides still return rows.
- *
- * `☐` wins over a terminal mark when a row somehow carries both. A row that is ambiguous about
- * whether it is finished is not finished, and the conservative reading is the one that cannot
- * report a plan as further along than it is.
- *
- * THREE DELIBERATE EXCLUSIONS, all of which cost coverage rather than correctness:
- *
- * A row is skipped when its table declares no status column (`statusColumnByLine` yields
- * `undefined`). `auditOpenRows` falls back to scanning the whole line in that case; here the
- * fallback would be worse than the gap, because this function's answer is compared ACROSS two
- * revisions — a whole-line scan makes any prose edit that mentions a glyph look like a lifecycle
- * transition. A plan whose tables carry no `St` column simply yields no rows, and the caller is
- * responsible for saying so rather than reading the empty list as "nothing left to do".
- *
- * A row is skipped when its first cell is empty, because the id is what lets the same row be
- * recognised on both sides of a diff. Rows are matched by id and never by position: a plan grows
- * rows between two revisions, so line numbers name different rows in each.
- *
- * A row is skipped when it sits inside a fenced code block — `statusColumnByLine` skips fenced
- * lines outright (`fencedLineMask`), the same lines `auditTableContiguity` treats as invisible to
- * table structure, so a shell pipeline shown for illustration inside ``` ``` never reads as a row.
- *
- * @param {string} content
- * @returns {{ id: string, state: 'open' | 'terminal', line: number }[]}
- */
-export function planRowStates(content) {
-  const lines = content.split('\n');
-  const statusColumn = statusColumnByLine(lines);
-  const rows = [];
-
-  for (const [index, line] of lines.entries()) {
-    if (!line.trim().startsWith('|')) continue;
-    if (isSeparatorRow(line)) continue;
-
-    const column = statusColumn[index];
-    if (column === undefined) continue;
-
-    const id = (cellsOf(line)[0] ?? '').replace(/[*`]/g, '').trim();
-    if (!id) continue;
-
-    const status = statusTextOf(line, column);
-    const state = status.includes(OPEN_MARK)
-      ? 'open'
-      : TERMINAL_MARKS.some((mark) => status.includes(mark))
-        ? 'terminal'
-        : 'unmarked';
-
-    rows.push({ id, state, line: index + 1 });
-  }
-
-  return rows;
-}
+// The row-lifecycle primitive (`planRowStates`: "what counts as a row", "what counts as closed")
+// is not defined here. Its one definition is the managed `scripts/validate-pr-body.mjs`, the
+// delivery-contract copy that `validate:delivery-contract` keeps byte-identical to the installed
+// template, which reads it to decide whether a PR advances the plan its `Plan:` footer names. This
+// file used to hold a second definition that nothing called once that validator vendored its own;
+// a second parser drifts silently, because both sides still return rows. The table helpers above
+// (`cellsOf`, `statusColumnByLine`, `fencedLineMask`) remain this gate's own, for rules 2 to 4.
 
 /**
  * Rule 2 — an open row in an ACTIVE plan must carry `as of <date> · flips when <observation>`.
