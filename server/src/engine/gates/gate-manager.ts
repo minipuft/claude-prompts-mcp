@@ -7,13 +7,19 @@
  *
  * Coordinates between:
  * - GateRegistry: Lifecycle management for gate guides
- * - GateStateStore: Runtime enable/disable state
  * - Gate selection and activation logic
+ *
+ * It does NOT hold the gate master switch. That switch is
+ * `GateStateStore.isGateSystemEnabled(scope)`, read per continuity scope by
+ * `LightweightGateSystem` and by the `prompt_engine` surface builder. This class once
+ * carried a `stateManager` field intended to mirror it, with no writer anywhere in `src/`,
+ * so the check it fed answered `true` however the switch was set. Do not re-add one: a
+ * mirror here would have no request scope to read, and an unscoped read is the shape that
+ * let one workspace's toggle answer for every other (2026-08-27).
  */
 
 import { GateRegistry, createGateRegistry, type GateRegistryConfig } from './registry/index.js';
 
-import type { GateStateStore } from './gate-state-store.js';
 import type {
   GateGuide,
   GateActivationContext,
@@ -61,7 +67,6 @@ export class GateManager
   implements IGateManager
 {
   private registry: GateRegistry | null = null;
-  private stateManager: GateStateStore | null = null;
 
   constructor(logger: Logger, config: GateManagerConfig = {}) {
     super(logger, config);
@@ -123,13 +128,6 @@ export class GateManager
 
   protected getResourceStats(): GateRegistryStats {
     return this.registry!.getRegistryStats();
-  }
-
-  protected override isSystemEnabled(): boolean {
-    if (!this.stateManager) {
-      return true; // Default to enabled if no state manager
-    }
-    return this.stateManager.isGateSystemEnabled();
   }
 
   // ============================================================================
@@ -282,13 +280,11 @@ export class GateManager
     enabled: boolean;
     initialized: boolean;
     registryStats: GateRegistryStats | null;
-    stateManagerConnected: boolean;
   } {
     return {
       enabled: this.isSystemEnabled(),
       initialized: this.initialized,
       registryStats: this.initialized ? this.registry!.getRegistryStats() : null,
-      stateManagerConnected: this.stateManager !== null,
     };
   }
 }
