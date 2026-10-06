@@ -267,7 +267,7 @@ To keep all iterations in-context (no spawning):
 1. **Use for long loops**: Isolation shines when you expect 5+ iterations
 2. **Monitor budget**: Each spawn costs up to `maxBudgetPerIteration`
 3. **Review spawned output**: The parent session reports what the isolated instance tried
-4. **Checkpoint before isolation**: Use `resource_manager checkpoint` for safety
+4. **Checkpoint before isolation**: Commit the working tree first so a failed loop can be undone
 
 ## Escalation and Gate Actions
 
@@ -342,17 +342,17 @@ prompt_engine(chain_id:"chain-abc", gate_action:"abort")
 
 ## Checkpoint and Rollback
 
-For checkpoint and rollback functionality (git stash before verification, restore on failure), use the `resource_manager` tool:
+The server keeps no snapshot of your working tree. A failed verification leaves the files as the last attempt wrote them, so take the restore point with git before the loop starts:
 
 ```bash
-# Create a checkpoint before risky changes
-resource_manager(resource_type:"checkpoint", action:"create", name:"pre-refactor")
+# Commit the working tree as a restore point before risky changes
+git add -A && git commit -m "checkpoint: pre-refactor"
 
 # Run verification
 >>refactor :: verify:"npm test" :full
 
-# If something goes wrong, rollback
-resource_manager(resource_type:"checkpoint", action:"rollback", name:"pre-refactor")
+# If something goes wrong, discard everything the loop changed since the checkpoint
+git restore . && git clean -fd
 ```
 
 ## Best Practices
