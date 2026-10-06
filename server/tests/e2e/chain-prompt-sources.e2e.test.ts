@@ -1768,12 +1768,12 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
    * 2 — the verdict path passed no budget, so the review took the built-in default. Now both paths
    * read `GateEnforcementAuthority.resolveReviewMaxAttempts`.
    *
-   * PIN (as of 2026-09-29 · flips when a gate's `retry_config` is read for a gate that re-enters a
-   * resumed call as `prompt-config`): the verdict path still exhausts that single prompt after 2.
-   * On the call that opens its review the prompt's persisted gate list re-enters as planned
-   * (`prompt-config`), and the accumulator carries a gate's retry limit only for a `registry-auto`
-   * entry, so the one resolver has no gate limit to read there. The limit-2 twin cannot tell the
-   * two apart (the default is 2); the limit-3 control is what says the probe reads a limit.
+   * The pin this block carried until 2026-10-05 (the verdict path exhausting a resumed single
+   * prompt after 2 under a limit of 3) flipped as its own condition said it would. A planned gate
+   * re-entered every resolution as `prompt-config`, and the accumulator reads a gate's retry limit
+   * only for a `registry-auto` entry. `GateSetResolver` now keeps `registry-auto` for a planned id
+   * the registry selects again, so both paths read the gate's limit. The limit-2 twin cannot tell
+   * a read limit from the built-in default of 2; the two limit-3 tests are what say it is read.
    */
   describe('P6.87: a review exhausts after the same FAILs on the step and the verdict path', () => {
     const review = (chainId: string): [number, number, string] | undefined => {
@@ -1900,12 +1900,13 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       });
     }, 180000);
 
-    test('pin: the verdict path still reads no gate limit for a resumed single prompt', async () => {
+    test('a gate limit of 3 exhausts a resumed single prompt on the verdict path after 3 FAILs', async () => {
       expect(await failUntilExhausted('>>p87_single3')).toEqual({
         openedAtStart: false,
         trail: [
-          [1, 2, 'awaiting-verdict'],
-          [2, 2, 'exhausted'],
+          [1, 3, 'awaiting-verdict'],
+          [2, 3, 'awaiting-verdict'],
+          [3, 3, 'exhausted'],
         ],
       });
     }, 180000);
