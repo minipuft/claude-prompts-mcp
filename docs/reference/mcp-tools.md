@@ -6,6 +6,8 @@ Execute prompts, build workflows, and manage your resource library — all throu
 
 ## Quick Start
 
+<!-- illustrative-prompts: summary -->
+
 ```bash
 # Discover prompts (use resources for token efficiency)
 ReadMcpResourceTool uri="resource://prompt/"
@@ -177,6 +179,8 @@ The workhorse. Takes a command, resolves the prompt, applies frameworks/gates, r
 
 ### Command Syntax
 
+<!-- illustrative-prompts: synthesis report -->
+
 ```bash
 prompt_engine(command:"[modifiers] [framework] prompt_id [args] [gates]")
 ```
@@ -198,6 +202,8 @@ prompt_engine(command:"@ReACT analysis --> synthesis --> report :: 'include data
 ```
 
 #### JSON command form
+
+<!-- illustrative-prompts: a b -->
 
 `command` also accepts a JSON object, `{"command": "<command>", "args": {…}}`: the inner
 `command` runs exactly as it would typed directly, operators included. The outer `args` fill the
@@ -229,6 +235,8 @@ the legacy/execution-hint channel. Resolution precedence is: explicit inline arg
 → `options` → prompt default.
 
 ### Operators Quick Reference
+
+<!-- illustrative-prompts: step2 prompt brainstorm analyze summarize research compare validate synthesize p -->
 
 | Operator     | Syntax         | Example                    | Purpose                                 |
 | ------------ | -------------- | -------------------------- | --------------------------------------- |
@@ -336,6 +344,8 @@ prompt_engine(command:"%judge analysis_report")
 
 ### Chain Execution
 
+<!-- illustrative-prompts: step1 step2 analysis recommendations -->
+
 For step schemas, input mapping, and retries, see the [Chain Schema Reference](./chain-schema.md).
 
 Each step is addressed internally by a stable node id, not by its position. A YAML step may set
@@ -440,6 +450,8 @@ skipped with a logged warning naming the id, and the run keeps the canonical gat
 
 ### Chain Step Targeting
 
+<!-- illustrative-prompts: draft polish -->
+
 A full gate definition may target one chain step by 1-based position (`target_step_number`) or by
 its stable node id (`target_step_id`) — supply whichever you have. A position target is
 cross-resolved to a node id once, at gate registration, against the node list as it exists at
@@ -505,6 +517,8 @@ Policy](../concepts/chains-lifecycle.md#visibility-policy) for full semantics, t
 meaning, and its honest ceiling.
 
 ### Workflow Submission
+
+<!-- illustrative-prompts: chain -->
 
 `prompt_engine` accepts a **third command source** beside a command string and a chain resume: a
 structured Workflow IR on the `workflow` parameter. It expresses what the string grammar cannot —
@@ -578,6 +592,8 @@ model plus effort.
 
 ### Shell Verification Gates (Ralph Mode)
 
+<!-- illustrative-prompts: implement fix-bug refactor feature bugfix -->
+
 Ground-truth validation via shell command exit codes. Exit 0 = PASS, non-zero = FAIL.
 
 ```bash
@@ -625,6 +641,8 @@ prompt_engine(command:">>bugfix :: verify:'npm test' :full loop:true")
 See [Ralph Loops Guide](../guides/ralph-loops.md) for advanced patterns including context isolation and checkpoints.
 
 ### Built-in Commands
+
+<!-- illustrative-prompts: listprompts help status gates guide -->
 
 These work without defining prompts:
 
@@ -1771,6 +1789,8 @@ prompt_engine(
 
 ### Blocking-unknown interrupt
 
+<!-- illustrative-prompts: write_summary -->
+
 A `blocking:true` discovery does more than insert an investigation step: the response carries a
 structured account of what the unknown affects and what you may do about it. Two variants, chosen
 by the run's `budget.pauseOnBlocking` (Workflow IR budget, or a YAML chain's chain-level
@@ -1922,6 +1942,8 @@ resource_manager(resource_type:"prompt", action:"update", id:"my_prompt", ...)
 ```
 
 ### Run a Multi-Step Analysis
+
+<!-- illustrative-prompts: analysis report -->
 
 ```bash
 # 1. Start chain with framework
