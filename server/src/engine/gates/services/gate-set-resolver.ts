@@ -45,7 +45,8 @@ export interface GateResolutionInput {
   /**
    * Rank 60 — gate ids the planner already resolved into the execution plan. Unioned with the
    * ids derived from the prompt itself; resolution is idempotent, so re-deriving and re-vetoing
-   * an already-resolved plan yields the same set.
+   * an already-resolved plan yields the same set. A planned id the registry selects again in
+   * this resolution keeps rank 20, `registry-auto`, so its registry execution config is read.
    */
   readonly plannedGateIds?: readonly string[] | undefined;
   /**
@@ -278,24 +279,22 @@ export class GateSetResolver {
 
   private accumulate(input: GateResolutionInput): Map<string, ResolvedGate> {
     const accumulated = new Map<string, ResolvedGate>();
+    const registryIds = input.autoAssignCategoryGates !== false ? this.registryGateIds(input) : [];
 
     this.addAll(accumulated, input.inlineOperatorGateIds, 'inline-operator');
     this.addAll(accumulated, input.callerGateIds, 'temporary-request');
-    this.addAll(
-      accumulated,
-      [
-        ...collectPromptConfigGateIds(input),
-        ...(input.plannedGateIds ?? []),
-        ...(input.inlineDefinitionGateIds ?? []),
-      ],
-      'prompt-config'
-    );
+    // One pass in this order, so a planned id keeps its place in the rendered gate order whichever
+    // source it is attributed to; only the attribution of a re-derived one differs.
+    const promptConfigIds = collectPromptConfigGateIds(input);
+    this.addAll(accumulated, promptConfigIds, 'prompt-config');
+    const reDerived = reDerivedPlannedIds(input.plannedGateIds, promptConfigIds, registryIds);
+    for (const id of input.plannedGateIds ?? []) {
+      this.addAll(accumulated, [id], reDerived.has(id) ? 'registry-auto' : 'prompt-config');
+    }
+    this.addAll(accumulated, input.inlineDefinitionGateIds, 'prompt-config');
     this.addAll(accumulated, input.chainGateIds, 'chain-level');
     this.addAll(accumulated, input.frameworkGateIds, 'framework-guide');
-
-    if (input.autoAssignCategoryGates !== false) {
-      this.addAll(accumulated, this.registryGateIds(input), 'registry-auto');
-    }
+    this.addAll(accumulated, registryIds, 'registry-auto');
 
     return accumulated;
   }
@@ -567,6 +566,31 @@ export class GateSetResolver {
 // ============================================================================
 // Pure helpers
 // ============================================================================
+
+/**
+ * The planned ids this resolution derives again from the registry, and from nothing the author
+ * declared.
+ *
+ * A planned id is one the planner already resolved, so it carries no source of its own: entering
+ * every one at `prompt-config` relabelled a gate the planner got from the registry's category
+ * activation as the prompt author's, and the accumulator reads a gate's `retry_config` and
+ * `blockResponseOnFail` only for a `registry-auto` entry, so its review fell back to the built-in
+ * budget of 2. Such an id enters at `registry-auto` instead, in its planned position. Every veto
+ * binds at `prompt-config` or above, so the lower rank removes nothing a veto spared.
+ */
+function reDerivedPlannedIds(
+  plannedGateIds: readonly string[] | undefined,
+  promptConfigIds: readonly string[],
+  registryIds: readonly string[]
+): ReadonlySet<string> {
+  const declared = new Set(promptConfigIds.map((id) => (typeof id === 'string' ? id.trim() : id)));
+  const fromRegistry = new Set(registryIds.map((id) => (typeof id === 'string' ? id.trim() : id)));
+  return new Set(
+    (plannedGateIds ?? []).filter(
+      (id) => typeof id === 'string' && fromRegistry.has(id.trim()) && !declared.has(id.trim())
+    )
+  );
+}
 
 /**
  * The veto that removes `gateId` at `rank`, or `undefined` when none does — an existential test
