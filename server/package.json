@@ -197,6 +197,8 @@
     "validate:standards-pins:self-test": "node scripts/validate-standards-pins.js --self-test",
     "validate:renovate-preset-agreement": "node scripts/validate-renovate-preset-agreement.js",
     "validate:renovate-preset-agreement:self-test": "node scripts/validate-renovate-preset-agreement.js --self-test",
+    "validate:delivery-contract": "delivery-contract check --repo ..",
+    "validate:delivery-contract:self-test": "delivery-contract --self-test",
     "validate:renovate-extraction": "node scripts/validate-renovate-extraction.js",
     "validate:renovate-extraction:self-test": "node scripts/validate-renovate-extraction.js --self-test",
     "validate:push-scope:self-test": "node ../scripts/classify-validation-scope.js --self-test",

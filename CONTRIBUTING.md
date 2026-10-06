@@ -389,10 +389,23 @@ judged separately -- the script that checks the body says outright that it "does
 title beyond its type" -- so following these instructions exactly still shipped an unchecked
 title, which is how #283 failed on `subject-case` after passing locally._
 
+**These scripts are installed, not written here.** `scripts/pr-check.mjs`, `scripts/pr-body.mjs`,
+`scripts/validate-pr-body.mjs`, `scripts/adr.mjs`, `commitlint.rules.mjs`, `.husky/commit-msg` and
+`.github/workflows/pr-conventions.yml` are managed copies of the fleet delivery contract
+(`minipuft/repository-standards`), at the version `.delivery-contract.json` records; this
+repository stays on the latest version. Change them upstream, never in place:
+`npm run validate:delivery-contract` (inside `validate:all`) fails on any byte of drift. When
+Renovate bumps the `@minipuft/repository-standards-validation` pin, that check fails on the bump's
+own pull request until the managed files follow it: on that branch, with a clean tree, run
+`npx --no -- delivery-contract update --repo ..` from `server/`, review the diff, and commit it
+beside the bump. `commitlint.config.mjs` (the scope list), the PR template and the ADR template are
+seeded, not managed: they are this repository's own and are edited here.
+
 The `PR Conventions` workflow is a **required** context (since 2026-09-02) on every non-bot PR;
 bot PRs (renovate, release-please) are exempt from the authored-body checks because their bodies
 are machine-owned. The body check fails on surviving `___` placeholders, unfilled verification
-rows, and a non-finalized `Plan:` footer. CI also auto-comments a validation summary and the
+rows, a non-finalized `Plan:` footer, and a `Decision: ADR-NNNN` trailer naming an ADR that has no
+file under `docs/adr/`. CI also auto-comments a validation summary and the
 changed-file list -- never maintain those by hand.
 
 **The body is a two-register document.** Reader voice above the fold (the 400-word budget counts
@@ -433,6 +446,12 @@ _Until 2026-09-06 the single rule was "finalize the plan in this PR". It was rea
 plans short enough to finish in one PR: #262 named a six-phase umbrella whose open rows spanned an
 unbuilt resource type and a four-repository rename arc, so the gate was red with no green available
 to it -- a gate that cannot be retired, which `cleanup-standards.md` prices as a bug._
+
+**The footer is also the join key across a multi-PR initiative.** Every PR of one plan carries the
+same footer, so `git log --grep='Plan: .*<slug>'` lists the whole arc on `main`; there is no
+separate initiative trailer ([ADR 0003](docs/adr/0003-the-plan-footer-is-the-join-key-between-a-pr-and-its.md)).
+A PR that adds or changes an ADR names it with one `Decision: ADR-NNNN` line per ADR, which
+`npm run pr:body` emits for you.
 
 **The squash-merge commit carries the PR title and body, verbatim.** That is a repository setting
 (`squash_merge_commit_title: PR_TITLE`, `squash_merge_commit_message: PR_BODY`, set 2026-09-01;
