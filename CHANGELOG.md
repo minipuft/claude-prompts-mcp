@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.0](https://github.com/minipuft/claude-prompts-mcp/compare/v5.0.0...v5.1.0) (2026-10-06)
+
+
+### Added
+
+* **scripts:** a doc naming an unknown tool action fails validation ([#460](https://github.com/minipuft/claude-prompts-mcp/issues/460)) ([221229f](https://github.com/minipuft/claude-prompts-mcp/commit/221229fc354837ef59413b9eec4761fe2f1bd8e5))
+
+
+### Fixed
+
+* **gates:** refuse shell verification in a workspace that turned gates off ([#452](https://github.com/minipuft/claude-prompts-mcp/issues/452)) ([b87b749](https://github.com/minipuft/claude-prompts-mcp/commit/b87b7498bad5b57608a0fc73214e7b96368e792a))
+* **gates:** render the gates a prompt's category activates on the run that selected them ([#449](https://github.com/minipuft/claude-prompts-mcp/issues/449)) ([02e012c](https://github.com/minipuft/claude-prompts-mcp/commit/02e012ce6351bba6b88e0e5ecda53bd33688e911))
+* **mcp-tools:** a framework switch refreshes every tool description over STDIO ([#456](https://github.com/minipuft/claude-prompts-mcp/issues/456)) ([b03ca9e](https://github.com/minipuft/claude-prompts-mcp/commit/b03ca9e02dc5f9bd8c0bf2d91e8be92d5db0f1e7))
+* **mcp-tools:** publish a description for every resource_manager parameter ([#451](https://github.com/minipuft/claude-prompts-mcp/issues/451)) ([db2eafe](https://github.com/minipuft/claude-prompts-mcp/commit/db2eafe672b61fae2bab9e01b6b1731394f9862c))
+* **scripts:** a doc comment no longer counts as a reference in the unreached-methods check ([#454](https://github.com/minipuft/claude-prompts-mcp/issues/454)) ([8e80741](https://github.com/minipuft/claude-prompts-mcp/commit/8e80741b60721b597859c78d3acc95b31c6c93cb))
+
+
+### Changed
+
+* **runtime:** delete the state store event, seam and unscoped save nothing used ([#450](https://github.com/minipuft/claude-prompts-mcp/issues/450)) ([c2e63f0](https://github.com/minipuft/claude-prompts-mcp/commit/c2e63f0832658bd4ac850ede9ff6c9afaf652ec4))
+
+
+### Documentation
+
+* the changelog has one Unreleased section, above the latest release ([#462](https://github.com/minipuft/claude-prompts-mcp/issues/462)) ([9daaefc](https://github.com/minipuft/claude-prompts-mcp/commit/9daaefc0aa7b565bea1cfb63d01a08f4bdf77d71))
+* the first-prompt tutorial on main is the author-first rewrite ([#461](https://github.com/minipuft/claude-prompts-mcp/issues/461)) ([dbd7deb](https://github.com/minipuft/claude-prompts-mcp/commit/dbd7debbf8b4c69eb52d2c6b5fe95206cf4fedf0))
+* the guides describe the bundle the server ships ([#455](https://github.com/minipuft/claude-prompts-mcp/issues/455)) ([49dbc2f](https://github.com/minipuft/claude-prompts-mcp/commit/49dbc2fcafd651a89fdad4295b0dbb72733c340c))
+
 ## [Unreleased]
 
 ### Fixed
