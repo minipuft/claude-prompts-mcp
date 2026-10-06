@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`resource_manager` now describes every parameter in `tools/list`.** Its 75 parameters were published with a name and a type and nothing else, so a client had to guess what `subject`, `unset` or `chain_step_order` meant. Each one now carries the description its contract already held.
+- **A workspace that turned the gate system off runs no shell verification over Streamable HTTP.** With several workspaces on one HTTP server, `system_control` `gates disable` sent under a workspace header switched gates off for that workspace, yet an inline `:: verify:"…"` command and a gate's `shell_verify` criterion still ran, because the check that refuses them read the switch of the workspace the server was launched in. It now reads the switch of the workspace that sent the request, so the command is refused there and still runs in a workspace that keeps gates on. STDIO, which serves one workspace, is unchanged.
+- **A connected STDIO client now sees the new framework in every tool description after a framework switch.** Each tool's description, and some of its parameter descriptions, carry the active framework's guidance. Over STDIO, `system_control` `framework switch`, `enable` and `disable` left all three tools listing the previous framework's text until the client reconnected, and a switch through `resource_manager` redrew only `prompt_engine`'s parameters. The next `tools/list` now shows the current framework on all three tools, or none once the framework system is off, and clients that listen for tool list changes are told. Streamable HTTP already rebuilt the list on every request and is unchanged.
+- **`system_control` declares the `execution_history` `steps` operation.** The tool already answered `operation:"steps"` with one line per step of a run, but its published contract listed only `list`, so a client reading the contract never saw it.
+- **A gate your prompt's category activates now reviews with its own retry budget.** When the planner had already picked such a gate, it reached the review as if the prompt had named it, and a gate's `retry_config.max_attempts` is only read for a gate the category activated, so the review fell back to the built-in 2 attempts. Bundled gates this reaches include `research-quality`, `technical-accuracy` and `test-suite`, which declare 3 attempts, and `workflow-growth`, which declares 1. The gate's own budget is now read, on a single prompt and on a chain step.
+- **A gate the server chose for your prompt's category now shows you its guidance, instead of asking you to attest text it never printed.** A gate scoped with `activation.prompt_categories` was selected correctly and listed in the `**Gates**:` line at the bottom of a response, and then its `### <gate name>` section was dropped from that same response. The cause was an eight-name list of "recognised" categories compiled into the server (`analysis, education, development, research, debugging, documentation, content_processing, general`), which shared only three names with the nine categories actually shipped: a prompt in any other category — `workflow`, `examples`, `planning`, `guidance`, `knowledge-capture`, `codebase-setup` — was relabelled `general` before the guidance was rendered. The category a prompt declares is now used as it stands, so the same category decides selection and rendering. Two consequences to expect: a gate scoped to one of those six categories starts appearing, and a prompt in one of them no longer picks up gates scoped to `general`, which it was only ever receiving because of the relabelling. A prompt id is also no longer scanned for words like `debug` or `readme` to guess a category it did not declare.
+
+### Changed
+
+- **Gate suggestions no longer recommend a gate because of a prompt's category.** The `Suggested Gates` list in a `create` reply and the list `analyze_gates` returns used to add gates from a category-to-gate table compiled into the server, which matched only three of the nine shipped categories and disagreed with the gates those categories actually activate. A gate whose `activation.prompt_categories` names a prompt's category is already attached to every run of that prompt, so suggesting it asked you to add something you already had. Suggestions now come from the prompt's text alone.
+
 ## [5.0.0](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.1...v5.0.0) (2026-10-06)
 
 ### Added
@@ -798,21 +813,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **execution:** the rendered ==> handoff text — a client-observable prompt surface — changes shape entirely (brief-at-resume replaces CTA-at-preview).
 * **mcp-tools:** `system_control(action:"session", operation:"cancel")` is removed; call `prompt_engine(chain_id:"...", cancel:true)` instead. The removed operation now refuses with a message naming the replacement rather than reporting an unknown operation. `resource_manager` additionally accepts `source_workspace`. Both alter the reachable-shape union of the MCP tool surface, which this repository's Public API Contract prices as breaking.
 
-## [Unreleased]
-
-### Fixed
-
-- **`resource_manager` now describes every parameter in `tools/list`.** Its 75 parameters were published with a name and a type and nothing else, so a client had to guess what `subject`, `unset` or `chain_step_order` meant. Each one now carries the description its contract already held.
-- **A workspace that turned the gate system off runs no shell verification over Streamable HTTP.** With several workspaces on one HTTP server, `system_control` `gates disable` sent under a workspace header switched gates off for that workspace, yet an inline `:: verify:"…"` command and a gate's `shell_verify` criterion still ran, because the check that refuses them read the switch of the workspace the server was launched in. It now reads the switch of the workspace that sent the request, so the command is refused there and still runs in a workspace that keeps gates on. STDIO, which serves one workspace, is unchanged.
-- **A connected STDIO client now sees the new framework in every tool description after a framework switch.** Each tool's description, and some of its parameter descriptions, carry the active framework's guidance. Over STDIO, `system_control` `framework switch`, `enable` and `disable` left all three tools listing the previous framework's text until the client reconnected, and a switch through `resource_manager` redrew only `prompt_engine`'s parameters. The next `tools/list` now shows the current framework on all three tools, or none once the framework system is off, and clients that listen for tool list changes are told. Streamable HTTP already rebuilt the list on every request and is unchanged.
-- **`system_control` declares the `execution_history` `steps` operation.** The tool already answered `operation:"steps"` with one line per step of a run, but its published contract listed only `list`, so a client reading the contract never saw it.
-- **A gate your prompt's category activates now reviews with its own retry budget.** When the planner had already picked such a gate, it reached the review as if the prompt had named it, and a gate's `retry_config.max_attempts` is only read for a gate the category activated, so the review fell back to the built-in 2 attempts. Bundled gates this reaches include `research-quality`, `technical-accuracy` and `test-suite`, which declare 3 attempts, and `workflow-growth`, which declares 1. The gate's own budget is now read, on a single prompt and on a chain step.
-- **A gate the server chose for your prompt's category now shows you its guidance, instead of asking you to attest text it never printed.** A gate scoped with `activation.prompt_categories` was selected correctly and listed in the `**Gates**:` line at the bottom of a response, and then its `### <gate name>` section was dropped from that same response. The cause was an eight-name list of "recognised" categories compiled into the server (`analysis, education, development, research, debugging, documentation, content_processing, general`), which shared only three names with the nine categories actually shipped: a prompt in any other category — `workflow`, `examples`, `planning`, `guidance`, `knowledge-capture`, `codebase-setup` — was relabelled `general` before the guidance was rendered. The category a prompt declares is now used as it stands, so the same category decides selection and rendering. Two consequences to expect: a gate scoped to one of those six categories starts appearing, and a prompt in one of them no longer picks up gates scoped to `general`, which it was only ever receiving because of the relabelling. A prompt id is also no longer scanned for words like `debug` or `readme` to guess a category it did not declare.
-
-### Changed
-
-- **Gate suggestions no longer recommend a gate because of a prompt's category.** The `Suggested Gates` list in a `create` reply and the list `analyze_gates` returns used to add gates from a category-to-gate table compiled into the server, which matched only three of the nine shipped categories and disagreed with the gates those categories actually activate. A gate whose `activation.prompt_categories` names a prompt's category is already attached to every run of that prompt, so suggesting it asked you to add something you already had. Suggestions now come from the prompt's text alone.
-
 ## [4.0.1](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.0...v4.0.1) (2026-08-16)
 
 ### Fixed
@@ -1029,8 +1029,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **release:** target 3.3.0 ([91d7bc1](https://github.com/minipuft/claude-prompts-mcp/commit/91d7bc1819893c6de24c951e0927258c041117d5))
 - target 4.0.0 for the breaking release ([2d00cd6](https://github.com/minipuft/claude-prompts-mcp/commit/2d00cd641fcbd18e6931d4b0ac8d22cd3d0ab0e6))
-
-## [Unreleased]
 
 ## [3.2.1](https://github.com/minipuft/claude-prompts-mcp/compare/v3.2.0...v3.2.1) (2026-08-07)
 
