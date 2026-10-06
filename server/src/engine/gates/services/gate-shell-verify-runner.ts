@@ -19,6 +19,7 @@ import {
 } from '../constants.js';
 import { formatCommandForDisplay } from '../shell/shell-command-allowlist.js';
 
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { ShellVerifyExecutor } from '../shell/shell-verify-executor.js';
 import type { GateShellVerifyResult } from '../shell/shell-verify-message-formatter.js';
@@ -151,13 +152,16 @@ function resolveResponseInjection(
  *   for. Passing it also converges this path and the inline `:: verify:` path on
  *   ONE instance, so a control added to the executor cannot cover one and miss
  *   the other — which is exactly what row 1.5 measured.
+ * @param scope - The request's continuity scope, handed to the executor for its gate
+ *   master-switch read. Omitted, the switch answers for the launch workspace.
  * @returns Results for each gate that had shell_verify criteria (may be empty)
  */
 export async function runGateShellVerifications(
   gateIds: string[],
   gateDefinitionProvider: GateDefinitionProvider,
   runContext: GateShellVerifyRunContext | undefined,
-  executor: ShellVerifyExecutor | undefined
+  executor: ShellVerifyExecutor | undefined,
+  scope?: StateStoreOptions
 ): Promise<GateShellVerifyResult[]> {
   const results: GateShellVerifyResult[] = [];
 
@@ -183,7 +187,7 @@ export async function runGateShellVerifications(
       // a silent pass is not.
       const result =
         executor !== undefined
-          ? await executor.execute(gateConfig)
+          ? await executor.execute(gateConfig, scope)
           : {
               passed: false,
               exitCode: -1,
