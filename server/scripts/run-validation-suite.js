@@ -641,6 +641,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:category-enumerations',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked', 'walk'],
+    converse:
+      "CHECKED both ways against the live tree on 2026-09-20. Reporting direction: replanting the deleted eight-name allow-list into category-extractor.ts reported it by file and line range, naming all eight — that is B.91's motivating instance, restored as a positive control. Silent direction: the self-test's accepted cases each differ from a reported one in ONE property — two names instead of three, one name repeated three times, the same list on comment lines, the same names nested inside a JSON example string, the same three names spread past the twelve-line window, and three strings that merely CONTAIN a category name. Exception direction: neutering filter-parser.ts's categoryIntentMap reported its accepted entry as `satisfied` rather than passing; the same verdict fired for real on 2026-10-05, after #342 deleted that map, and the entry was removed. The vocabulary is derived from disk and a run that derives none exits rather than passing, so the scan cannot report cleanliness from an empty pattern. NOT checked: a list of names that are categories nowhere on disk (invisible by construction — see the header), and whether a list that survives is actually READ by a code path.",
+  },
+  {
     script: 'plans:retire:check',
     io: 'read',
     reads: ['spawn'],

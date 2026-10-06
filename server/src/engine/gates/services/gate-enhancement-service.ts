@@ -126,6 +126,27 @@ interface StepWalkOutcome {
 const NOTHING_WALKED: StepWalkOutcome = { applied: 0, accepted: [] };
 
 /**
+ * The ONE category a single-prompt run asks with — selection and render both read this (B.91).
+ *
+ * A free function rather than a method: the answer reads two strings and nothing else, so it is
+ * answerable without an ExecutionContext (`architecture.md`), the same reasoning
+ * `stepResolutionInput` carries below.
+ *
+ * The prompt's own category wins because the loader stamps it from the category directory the
+ * prompt was discovered in, which is the registry entry's id. The plan's value is the fallback for
+ * a prompt object carrying none, never an override: until B.91 the render context read the plan
+ * and the selection read the prompt, so any coercion between them selected a gate at rank 20 and
+ * then dropped its guidance, leaving the model asked to attest text it was never shown.
+ */
+function resolveRunCategory(
+  promptCategory: string | undefined,
+  planCategory: string | undefined
+): string {
+  const declared = (promptCategory ?? '').trim();
+  return declared.length > 0 ? declared : (planCategory ?? '');
+}
+
+/**
  * Core gate enhancement logic extracted from GateEnhancementStage.
  *
  * Handles gate selection, framework coordination, accumulator management,
@@ -284,9 +305,14 @@ export class GateEnhancementService {
       context.parsedCommand?.promptArgs
     );
 
+    // B.91: one value, read by both the selection below and the render context further down. The
+    // chain-step path (`stepResolutionInput` / its gate context) already reads `prompt.category`
+    // on both sides; this is that shape.
+    const gateCategory = resolveRunCategory(prompt.category, executionPlan.category);
+
     const resolution = await this.resolveIntoAccumulator(context, {
       prompt,
-      category: prompt.category ?? '',
+      category: gateCategory,
       modifiers: executionPlan.modifiers,
       frameworkId: activeFrameworkId,
       frameworkInjected,
@@ -342,8 +368,10 @@ export class GateEnhancementService {
       if (activeFrameworkId !== undefined) {
         gateCtx.framework = activeFrameworkId;
       }
-      if (executionPlan.category !== undefined) {
-        gateCtx.category = executionPlan.category;
+      // B.91: the same value the selection above asked with. Absent when the run has no category
+      // at all, which `isGateActiveForContext` reads as "this run declared none".
+      if (gateCategory.length > 0) {
+        gateCtx.category = gateCategory;
       }
       // Assigned unconditionally: an empty list and an absent one mean the same thing to
       // `isGateActiveForContext` ("this run declared nothing"), so a guard here would buy a
