@@ -654,6 +654,13 @@ export const SUITE = [
       "CHECKED both ways against the live tree on 2026-09-20. Reporting direction: replanting the deleted eight-name allow-list into category-extractor.ts reported it by file and line range, naming all eight — that is B.91's motivating instance, restored as a positive control. Silent direction: the self-test's accepted cases each differ from a reported one in ONE property — two names instead of three, one name repeated three times, the same list on comment lines, the same names nested inside a JSON example string, the same three names spread past the twelve-line window, and three strings that merely CONTAIN a category name. Exception direction: neutering filter-parser.ts's categoryIntentMap reported its accepted entry as `satisfied` rather than passing; the same verdict fired for real on 2026-10-05, after #342 deleted that map, and the entry was removed. The vocabulary is derived from disk and a run that derives none exits rather than passing, so the scan cannot report cleanliness from an empty pattern. NOT checked: a list of names that are categories nowhere on disk (invisible by construction — see the header), and whether a list that survives is actually READ by a code path.",
   },
   {
+    script: 'validate:activation-categories',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      "CHECKED both ways against the live tree on 2026-10-06. Reporting direction: appending `nonsense_category` to one bundled gate's activation list reported it by file and value; the self-test plants the same shape. Silent direction: a style naming a real directory, a gate naming a declared vocabulary name and a gate with no activation list each pass. Exception direction: a declared entry whose name is a directory reports `satisfied`, one no bundled file names reports `subject-missing`, one with no flips_when reports a missing closedBy. The directories are read from disk, and a run that finds none exits rather than passing. NOT checked: a workspace library's gates or prompts, and whether a workspace actually provides a declared name.",
+  },
+  {
     script: 'plans:retire:check',
     io: 'read',
     reads: ['spawn'],
