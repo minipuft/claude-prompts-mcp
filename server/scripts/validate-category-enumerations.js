@@ -36,8 +36,9 @@
  * WHAT COUNTS AS NAMING A CATEGORY
  *   - a whole quoted string literal equal to a category name: `'analysis'`, `"workflow"`
  *   - an object key at the start of a line: `content_processing: ['content-structure'],`
- * Both shapes were live in the tree: the allow-list used the first, the category->gate mapping in
- * `gate-analyzer.ts` and a category->intent mapping in `filter-parser.ts` the second.
+ * Both shapes were live in the tree when this gate was written: the allow-list used the first, a
+ * category->gate map in `gate-analyzer.ts` and a category->intent map in `filter-parser.ts` the
+ * second.
  *
  * WHAT IT DOES NOT CLAIM
  *   - Comment lines are skipped, so a list written in prose is not seen. Prose cannot be read by
@@ -76,21 +77,13 @@ const ENUMERATION_SIZE = 3;
 /**
  * Files that hold a hardcoded category enumeration this gate has not yet closed.
  *
- * Each names what it maps categories TO, which is why it is a separate fix rather than a rename:
- * the replacement has to come from somewhere, and for both of these the source is a registry read
- * that does not exist yet. `closedBy` names the observation that retires the entry — an entry
+ * Empty since 2026-10-05: the last two entries, a category-to-intent map in `filter-parser.ts` and
+ * a category-to-gate map in `gate-analyzer.ts`, were both deleted. An entry added here names what
+ * its file maps categories TO, a `reason`, and a `closedBy` observation that retires it — an entry
  * whose file stops holding an enumeration is `satisfied` and fails this gate rather than sitting
  * here forever.
  */
-const ACCEPTED_ENUMERATIONS = [
-  {
-    file: 'src/mcp/tools/resource-manager/prompt/analysis/gate-analyzer.ts',
-    reason:
-      "getCategoryGateMapping() suggests gate ids per category for `resource_manager prompt analyze`. It is a suggestion surface, not the execution path — nothing it returns decides which gates a run attaches — so it cannot reproduce B.91's silent drop. Its eight keys are the pre-B.91 allow-list verbatim, including four names (education, research, debugging, content_processing) that name no category directory, so the suggestions for six of the nine real categories are empty.",
-    closedBy:
-      "the mapping is derived from the gate registry's own `activation.prompt_categories` instead of a literal, at which point no three category names remain within twelve lines of each other in this file",
-  },
-];
+const ACCEPTED_ENUMERATIONS = [];
 
 // ---------------------------------------------------------------------------------------------
 // Vocabulary — derived from disk, never typed here
