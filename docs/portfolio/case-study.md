@@ -29,7 +29,7 @@ prompt_engine(command:">>analyze_code @CAGEERF")     # Run with framework
 | -------------------------------- | ------------------------------ |
 | Edit → restart → test (5-10 min) | Edit → test instantly (<1 min) |
 | Scattered prompt files           | Git-versioned Markdown library |
-| Variable reasoning quality       | 4 frameworks enforce structure |
+| Variable reasoning quality       | 8 frameworks enforce structure |
 | Manual quality checks            | Quality gates auto-validate    |
 
 ---
