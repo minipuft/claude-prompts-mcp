@@ -1,6 +1,12 @@
 #!/usr/bin/env node
-// validate-readme.js — enforce docs/portfolio/readme-charter.md rules on README.md
+// validate-readme.js — enforce docs/portfolio/readme-charter.md rules on README.md, and check that
+// the prompt ids named by commands on the pages where ids must be real resolve to shipped prompts
 // Usage: node server/scripts/validate-readme.js [--mode=block|warn] [--path=README.md]
+// Scope: the charter checks and the shipped-prompt count read README.md only. The prompt-operand
+//   check reads README.md, every `*.md` under docs/tutorials/, and docs/reference/mcp-tools.md;
+//   the guides keep illustrative ids and are out of scope. The tutorial pages are measured from
+//   disk, so a new tutorial is covered the day it is added. `--path=<file>` runs every check on
+//   that one file and no other page.
 // Exit: 0 = clean (or warn-only mode), 1 = block-mode violations, 2 = invalid args
 
 import { execFileSync } from 'node:child_process';
@@ -12,6 +18,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const DEFAULT_README = path.join(REPO_ROOT, 'README.md');
 const CHARTER_PATH = path.join(REPO_ROOT, 'docs/portfolio/readme-charter.md');
+const TUTORIALS_DIR = path.join(REPO_ROOT, 'docs/tutorials');
+const TOOLS_REFERENCE = path.join(REPO_ROOT, 'docs/reference/mcp-tools.md');
 
 // Budgets — charter §4 (sync manually when charter changes)
 const MAX_LINES = 400;
@@ -45,10 +53,13 @@ function escapeRegExp(str) {
 }
 
 function parseArgs(argv) {
-  const args = { mode: 'block', readme: DEFAULT_README };
+  const args = { mode: 'block', readme: DEFAULT_README, singleFile: false };
   for (const a of argv.slice(2)) {
     if (a.startsWith('--mode=')) args.mode = a.slice(7);
-    else if (a.startsWith('--path=')) args.readme = path.resolve(a.slice(7));
+    else if (a.startsWith('--path=')) {
+      args.readme = path.resolve(a.slice(7));
+      args.singleFile = true;
+    }
   }
   return args;
 }
@@ -411,7 +422,8 @@ function checkShippedPromptCount(lines) {
 }
 
 /**
- * Every prompt a README command names must be one the package ships.
+ * Every prompt a command names on the README, the tutorials or the tools reference must be one the
+ * package ships.
  *
  * WHY: until 2026-09-13 all three install paths ended with a command naming a prompt that lived
  * only in the author's personal store. The author's shell exports `MCP_RESOURCES_PATH` at that
@@ -419,7 +431,7 @@ function checkShippedPromptCount(lines) {
  * This is the same author-machine blind spot `checkShippedPromptCount` closes for the count.
  *
  * A reader cannot tell a grammar illustration from a command, so neither can this check unless the
- * README says which is which: `<!-- illustrative-prompts: a b -->` declares named placeholders for
+ * page says which is which: `<!-- illustrative-prompts: a b -->` declares named placeholders for
  * the section it sits in, heading to heading. A declared id the section no longer names, or one
  * that now ships, is reported — a declaration that has stopped being true reads as coverage.
  *
@@ -512,8 +524,27 @@ function checkPromptOperands(lines) {
   return [...unresolved, ...stale];
 }
 
+/** Every `*.md` under `dir`, recursively, sorted so reports are stable. */
+function markdownFilesUnder(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) return markdownFilesUnder(full);
+      return entry.name.endsWith('.md') ? [full] : [];
+    })
+    .sort();
+}
+
+/** The pages whose prompt operands are checked; the README is always first. */
+function operandPages(readme, singleFile) {
+  if (singleFile) return [readme];
+  return [readme, ...markdownFilesUnder(TUTORIALS_DIR), TOOLS_REFERENCE];
+}
+
 function main() {
-  const { mode, readme } = parseArgs(process.argv);
+  const { mode, readme, singleFile } = parseArgs(process.argv);
   if (!['block', 'warn'].includes(mode)) {
     process.stderr.write(`Unknown mode "${mode}". Use --mode=block or --mode=warn.\n`);
     process.exit(2);
@@ -529,6 +560,12 @@ function main() {
 
   const lines = fs.readFileSync(readme, 'utf8').split('\n');
   const readmeDir = path.dirname(readme);
+  const pages = operandPages(readme, singleFile);
+  const missingPage = pages.find((page) => !fs.existsSync(page));
+  if (missingPage) {
+    process.stderr.write(`Operand page not found at ${missingPage}\n`);
+    process.exit(1);
+  }
 
   const violations = [
     ...checkLineBudget(lines),
@@ -540,19 +577,29 @@ function main() {
     ...checkInternalLinks(lines, readmeDir),
     ...checkClaimCoverage(lines),
     ...checkShippedPromptCount(lines),
-    ...checkPromptOperands(lines),
-  ];
+  ].map((v) => ({ ...v, file: 'README.md' }));
+
+  let operandCount = 0;
+  let declaredCount = 0;
+  for (const page of pages) {
+    const pageLines = page === readme ? lines : fs.readFileSync(page, 'utf8').split('\n');
+    const label = page === readme ? 'README.md' : path.relative(REPO_ROOT, page);
+    const scan = scanPromptOperands(pageLines);
+    operandCount += scan.operands.length;
+    declaredCount += scan.declarations.length;
+    violations.push(...checkPromptOperands(pageLines).map((v) => ({ ...v, file: label })));
+  }
 
   if (violations.length === 0) {
-    const declared = scanPromptOperands(lines).declarations.length;
     process.stdout.write(
-      `README.md: charter checks passed (${lines.length} lines, ${declared} declared illustrative prompt(s))\n`
+      `README.md: charter checks passed (${lines.length} lines); prompt operands: ` +
+        `${pages.length} page(s), ${operandCount} operand(s), ${declaredCount} declared illustrative prompt(s)\n`
     );
     process.exit(0);
   }
 
   for (const v of violations) {
-    process.stderr.write(`README.md:${v.line}: ${v.category}: ${v.detail}\n`);
+    process.stderr.write(`${v.file}:${v.line}: ${v.category}: ${v.detail}\n`);
   }
   process.stderr.write(`\n${violations.length} charter violation(s) found (mode=${mode})\n`);
   process.stderr.write(`Charter: docs/portfolio/readme-charter.md\n`);

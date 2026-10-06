@@ -117,3 +117,17 @@ describe('validate-readme prompt operands', () => {
     expect(findings[0]).toContain('but ships');
   });
 });
+
+describe('validate-readme operand pages', () => {
+  test('the default run reads the README, every tutorial and the tools reference', () => {
+    const result = spawnSync(process.execPath, [VALIDATOR, '--mode=block'], {
+      encoding: 'utf8',
+    });
+
+    if (result.error) throw result.error;
+    expect(result.status).toBe(0);
+    const pages = Number(result.stdout.match(/(\d+) page\(s\)/)?.[1]);
+    // README.md + at least one tutorial + docs/reference/mcp-tools.md
+    expect(pages).toBeGreaterThanOrEqual(3);
+  });
+});
