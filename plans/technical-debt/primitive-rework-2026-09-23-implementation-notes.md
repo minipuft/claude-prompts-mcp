@@ -1,7 +1,7 @@
 ---
 title: "Primitive rework — implementation notes"
 date: 2026-09-23
-status: active
+status: reference
 plan: plans/technical-debt/primitive-rework-2026-09-23.md
 tags: [gates, chains, execution, mcp-tools]
 ---
@@ -442,3 +442,41 @@ shape only).
 - DEV-T3-12 (3.10): twin (a)'s control did not reproduce on `c67708e5` (the old hold already stopped on any open review; the eviction is unreachable in the harness; the run stands on N+1 when N's phase-guard review opens); the row's real defect was the unnamed clear-after-answer, found by twin (b); `gate-verdict-processor.ts` edited out of list and `clearReview` added to the store. DEV-T3-13 (3.11): the brief's expected result ("`chain/complete` on the call that clears the bounce") cannot occur — stage 13 ends every call once the run is past its last node; stage 16's two asks kept; comment-only edits in `overview.md`, `chain-session.ts`, `manager.ts`, one e2e and one mock.
 - DEV-T3-8 (3.8): stage 19 never runs on the call that lands a late report (`landDetachedReport` sets the response; the pipeline stops at the first response), so `gradeLateReport` is called from stage 16 and stage 19 is built first in `pipeline-builder.ts`; `withoutStructuralFinding` lives in stage 19 beside `PHASE_GUARD_GATE_ID`. DEV-T3-9 (3.9): the completion point is stage 20, not 22 (stage 21 always sets the response); `18-execution-stage.ts` doc comment corrected; the capture hold was NOT flipped (R13/R14). DEV-T3-10 (3.6): the validator keys exceptions by file + enclosing function/type + kind; `run-registry.ts`, `manager.ts` and `sqlite-engine.ts` were edited because the validator's first run listed them; the `PendingGateReview` alias stays (20 files); two `@deprecated` markers that waited on an impossible condition now flip when `setPendingGateReview` has no `src` caller. DEV-T3-11 (3.7): the new e2e drives 3 of 4 flows (the detached flow stays in `detached-review-at-report.e2e`); the `gate_action` table cell in mcp-tools is unchanged (table reflow); `docs/guides/gates.md` §Escalation replacement is in the handoff, not applied. Slice-2 workflow: run #1 cancelled after 3.4/3.5 (delegated-node deadlock, P6.15–P6.17); run #2 carried 3.8 → 3.9 → 3.6 → 3.7.
 - DEV-T1-1 (R6): row 1.2 premise false; re-cut. DEV-T2-1 (R7): both adapter boundaries differ from the brief, measured. DEV-T2-2: `validate:tool-parameter-reads` is 1,391 lines (row 2.6). DEV-T3-1: `PendingGateReview` is `Omit<GateReview, identity> & Partial<identity>`, not a plain alias (five sites build it without identity). DEV-T3-2: the `pendingGateReview` view is the run's one non-detached review, not the literal `reviews[currentNodeId]` (phase-guard and final-step reviews grade a node the run left). DEV-T3-3: `detachedGateReviews` stays as a stamped read-only view until 3.5. DEV-T3-4: no barrel export for the 3.2 decisions (knip). DEV-T3-5: `resolveReviewTarget` takes `nodeIds`; outcomes add `reopened`/`refused`. DEV-T3-6: the one answering path lives in the processor (R11). DEV-T3-7: `authority.resolveAction` deleted; two e2e-found defects fixed inside 3.3 (a PASS carrying N+1's answer did not advance N+1; stage 13 opened a review on a run held past its last node).
+
+## Live drive (row 5.2, 2026-10-05, #446)
+
+Plugin server (STDIO) started 19:21 local from the `dist` built at 17:02 from `main` at `016e16a21`. The T3 Code client spawns a fresh `claude` process, and so a fresh plugin server, per thread turn, so no restart was needed.
+
+### Call 1: `>>drv52_chain`
+
+Reply: step A rendered under CAGEERF with Inline Gates content-structure + framework-compliance, "Gate Review Required (attempt 1/2)", required sections Context/Analysis/Goals/Execution, note that step 2 is delegated; Progress 1/3. PostToolUse hook: `<GATE-REVIEW>chain_id="chain-drv52_chain#1" gates="review"`.
+
+### Call 2: `chain_id`, `user_response="A done"`, structured PASS verdict for the step's gates
+
+Reply: step A re-rendered with "Improvements Needed" naming the missing `## Context`, `## Analysis`, `## Goals` sections, then "**Structural Review Required** (attempt 1/3)" / "phase guards", verdict template with `per_gate[{index:1, rationale:"__phase_guard__: …"}]`; Progress still 1/3; the delegated-step note repeated. Hook: `<GATE-REVIEW>… gates="review"`. → a structural review opened on step A, distinct from the gate review (attempt counter 1/3, not 1/2).
+
+### Call 3: `chain_id`, sectioned answer for A, structured PASS verdict with `per_gate[{__phase_guard__}]`
+
+Reply: the structural review closed; step B rendered as an EXECUTION BRIEF with the result contract "HANDOFF RESULT / node: b-detached", handoff instructions (Task, general-purpose, sonnet, run_in_background true, "resume now with chain_id and no user_response", "The run cannot complete until this step has reported"); Progress 2/3. Hook: `<CALL-TOOL> prompt_engine | chain_id … Continue active chain (step 2/3)`. The worker was spawned in the background with the brief verbatim.
+
+### Call 4: `chain_id` alone (no `user_response`)
+
+Reply: the run moved past the detached step: step C rendered ("Reply with exactly one line: C done"), Progress 3/3, no gate list on the first render (as documented for the final step), no review pending.
+
+### Detached worker report (background Task, 6.8 s): "CHANGELOG lines: 1469 … HANDOFF RESULT / node: b-detached"
+
+### Call 5: `chain_id`, `user_response="C done"`
+
+Reply: step C's review opened holding **Plan Quality Standards** (`plan-quality`), the gate the CHAIN PROMPT declares and no step does (`drv52_c` excludes content-structure and has framework gates off); "Gate Review Required (attempt 1/2)"; footer "Final step 3/3 — awaiting gate verdict". Hook: `<GATE-REVIEW>`. → the chain prompt's own gate is reviewed on the final step (#445), and the run did not complete while a detached report is still owed.
+
+### Call 6: `chain_id`, structured PASS verdict with `reminders.satisfied=["plan-quality"]`
+
+Reply: "⏸ Every step has run, but the run stays open until its detached node(s) report: b-detached (step 2)"; Progress 3/3.
+
+### Call 7: `chain_id`, `user_response` = the worker's report ending "HANDOFF RESULT / node: b-detached"
+
+Reply: "✓ Detached node b-detached (step 2) reported; its result is recorded on that step. ✅ Chain complete — every step, including the detached ones, has reported."
+
+### `system_control execution_history` after completion
+
+Run `chain-drv52_chain#1`: step 1 `drv52_a` completed with `content-structure` PASS and `framework-compliance` PASS (attested), then completed again with `__phase_guard__` PASS; step 2 `drv52_b` working, then completed at the detached report (01:35:57, after step 3's records); step 3 `drv52_c` completed with `plan-quality` PASS (attested). Reviews are listed per node; the detached step's result landed on step 2 while the run sat at step 3. No review opened on step 2 (its prompt declares no gates), as documented.

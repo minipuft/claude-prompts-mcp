@@ -1,7 +1,7 @@
 ---
 title: A chain prompt's own gates run once, on the chain's final step
 type: implementation
-status: done
+status: active
 date: 2026-10-05
 tags: [gates, chains]
 initiative_branch: fix/chain-prompt-gates-final-step
@@ -16,11 +16,14 @@ tracking_reason: one-slice fix
 
 ## Now
 
-_Rewritten 2026-10-05 (#445)._ **Done.** A chain prompt's own gates are reviewed once, on the
-chain's final step, over both transports, and its launcher message says so. Every row is terminal.
-**Next decision, the owner's:** whether `implementation_plan` should keep declaring `code-quality`,
-a gate about generated code, now that it is reviewed on a step that produces a plan; and whether
-the chain walk is split out of `gate-enhancement-service.ts`, which crossed 1,000 lines here.
+_Rewritten 2026-10-05 (row 2.1, #446)._ **Tier 2 in flight: the two owner decisions, ruled yes.**
+Row 2.1 landed in #446: `implementation_plan` declares `plan-quality` only, pinned on the shipped
+file. Row 2.2, the chain walk moved out of `gate-enhancement-service.ts` with the `max-lines`
+ceiling lowered back, is dispatched in its own worktree and lands in its own PR; the plan is done
+when it does.
+
+- **Constraint in force:** behavior-preserving on 2.2; the e2e twins from #445 are its pin.
+- **Operating facts (R198):** CI owns the full test suite; workers run their row's checks only.
 
 ## Scope
 
@@ -47,6 +50,7 @@ have no chain prompt.
 | R3  | 2026-10-05 | Planner: "the final step" is the last node of the run's node order at the time that node is rendered and reviewed, resolved by node id, never by position. If a `remainder` replaces or extends the tail, the gates follow to the new last node. An inserted investigation node is never the final step unless it is last.                                                                      |
 | R4  | 2026-10-05 | Planner: a step whose prompt is itself a chain follows the same rule for its own expansion (its gates land on the last node it expands to) if the existing expansion makes that a small change; otherwise the nested case is reported and left as measured.                                                                                                                                     |
 | R5  | 2026-10-05 | Planner: the final step's review holds the union of its own gates and the chain prompt's gates in one review, as a step with several gates does today. No new review kind.                                                                                                                                                                                                                      |
+| R7  | 2026-10-05 | **OWNER**, in chat, on the two questions the `Now` block of #445 left open: yes to both. `implementation_plan` drops `code-quality` and keeps `plan-quality` (its final step produces a plan, and a code gate graded the wrong artifact); the chain walk is split out of `gate-enhancement-service.ts`. Both delegated to workers.                                                              |
 | R6  | 2026-10-05 | Planner, on the worker's finding: the launcher message stopped listing a chain prompt's gates when they were never enforced; now that they are, it lists them again and says where they are reviewed. It reads the include list less the exclude, not the resolver's answer, because the prompt module holds no gate manager; gates only a chain's category activates are therefore not listed. |
 
 ## Tasks
@@ -57,8 +61,17 @@ have no chain prompt.
 | 1.2 | ✓ DONE (2026-10-05 · #445 · `97437279e`: `>>implementation_plan` driven before and after, steps 1 to 4 unchanged, step 5's review gains `code-quality` and `plan-quality`; the lifecycle page and the prompt schema reference corrected; one pin that asserted the absence rewritten)                 | `CHANGELOG.md`; `docs/concepts/chains-lifecycle.md`; existing tests that pinned the old absence                       | drive the bundled chain before and after; rewrite pins that asserted no chain-level gate; changelog entry under Changed; the reach paragraph in the lifecycle page | ≤ 4 files                   | 1.1     | the before and after run values; each rewritten pin named with its reason                                                                                                                | same worker                                                                                                                    |
 | 1.3 | ✓ DONE (2026-10-05 · #445 · `b0709e350`: a chain prompt's launcher message lists its included gates less its excludes and says they are reviewed on the chain's final step; a gateless chain prompt carries no list; the stale changelog entry is replaced)                                           | `server/src/modules/prompts/launcher-envelope.ts`; its unit test; `chain-prompt-sources.e2e.test.ts`                  | the launcher message is a consumer of the changed fact (R6)                                                                                                        | ≤ 4 files                   | 1.1     | unit and e2e pins red before, green after; an exclude-ignoring mutation red                                                                                                              | same worker                                                                                                                    |
 
+### Tier 2 — the two owner decisions (R7)
+
+| ID  | Status                                                                                                                                                                                                                                                                                                          | Files                                                                                                                                                                                             | Change                                                                                                                                                                                                                   | Bound            | Depends | Verification                                                                                                                                                                                                     | Tier                                                                |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 2.1 | ✓ DONE (2026-10-05 · #446 · `40a4bb514`: the include line deleted; the lifecycle sentence and the #445 changelog bullet corrected; a unit pin reads the shipped `prompt.yaml` and expects `plan-quality` without `code-quality`, with `tech_evaluation_chain` as the control; restoring the line turned it red) | `server/resources/prompts/planning/implementation_plan/prompt.yaml`; `docs/concepts/chains-lifecycle.md`; `CHANGELOG.md`; `server/tests/unit/resources/bundled-implementation-plan-gates.test.ts` | `implementation_plan` declares `plan-quality` only                                                                                                                                                                       | ≤ 5 files        | —       | the shipped file read by a pin, red with the line restored                                                                                                                                                       | sonnet · high (`worker-high`) · wrong output on a bounded edit      |
+| 2.2 | ☐ (as of 2026-10-05 · flips when the chain walk lives in its own `gates/services` module, the service shrinks by what the module gains, the #445 e2e twins stay green, and `byRule.max-lines.warnings` is back to 1 in the ratchet baseline)                                                                    | `server/src/engine/gates/services/gate-enhancement-service.ts`; one new module beside it; `server/.eslint-ratchet-baseline.json`; `docs/reference/module-catalog.md`                              | move `chainPromptGates`, `filterGatesForTarget`, `withStepGates`, `chainPromptBindings`, `finalWalkedStep`, `isBoundToTarget` and the types only they use into one module named for what it decides; behavior-preserving | ≤ 4 source files | —       | `git diff --color-moved` shows moves; a mutation making `finalWalkedStep` return the first step turns the final-step pin red; `validate:step-lookup-by-node`, `validate:arch`, `validate:domain-ownership` green | opus · high (`worker-high`) · wrong approach on the module boundary |
+
 ## Dispatch
 
-| Rows    | Tier | Effort                                                              | Failure shape  | Branch mode                                                                   |
-| ------- | ---- | ------------------------------------------------------------------- | -------------- | ----------------------------------------------------------------------------- |
-| 1.1+1.2 | opus | high (the `worker-high` agent definition, model overridden to opus) | wrong approach | shared-tree (`fix/chain-prompt-gates-final-step`), one worker commits per row |
+| Rows    | Tier   | Effort                                                              | Failure shape  | Branch mode                                                                   |
+| ------- | ------ | ------------------------------------------------------------------- | -------------- | ----------------------------------------------------------------------------- |
+| 1.1+1.2 | opus   | high (the `worker-high` agent definition, model overridden to opus) | wrong approach | shared-tree (`fix/chain-prompt-gates-final-step`), one worker commits per row |
+| 2.1     | sonnet | high (`worker-high`)                                                | wrong output   | own worktree `-pr-cq`, branch `fix/implementation-plan-gates`, one PR         |
+| 2.2     | opus   | high (`worker-high`, model overridden to opus)                      | wrong approach | own worktree `-pr-cw`, branch `refactor/chain-gate-walk-module`, one PR       |
