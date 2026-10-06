@@ -7,12 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [5.1.1](https://github.com/minipuft/claude-prompts-mcp/compare/v5.1.0...v5.1.1) (2026-10-06)
 
-
 ### Added
 
 * **scripts:** a bundled gate naming a category no prompt directory has fails validation ([#463](https://github.com/minipuft/claude-prompts-mcp/issues/463)) ([a2cb7a3](https://github.com/minipuft/claude-prompts-mcp/commit/a2cb7a383e5f385a052b6e00302ed3898beec7f8))
 * **scripts:** the prompt-operand check covers the tutorials and the tools reference ([#468](https://github.com/minipuft/claude-prompts-mcp/issues/468)) ([7d30784](https://github.com/minipuft/claude-prompts-mcp/commit/7d30784e8fd308ab98e8cae0fa2cd9bbbf6a6bea))
 
+### Changed
+
+- **Contributors: the PR scripts, the `PR Conventions` workflow and the commitlint rules are now installed from the fleet delivery contract, and drift from it fails validation.** `npm run validate:delivery-contract`, part of `validate:all`, fails when any managed file differs from the installed version; after a version bump, `npx --no -- delivery-contract update --repo ..` from `server/` brings them back in line (`CONTRIBUTING.md` §Pull Request Process). The `Plan:` footer stays the only plan mention a PR body makes, and it is the join key across a multi-PR initiative: `git log --grep='Plan: .*<slug>'` lists every PR of one plan. A `Decision: ADR-NNNN` trailer must name an ADR that exists under `docs/adr/`, or the body check fails.
 
 ### Documentation
 
@@ -20,7 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * the first-prompt tutorial shows what surrounds the rendered template ([#467](https://github.com/minipuft/claude-prompts-mcp/issues/467)) ([4adcbc4](https://github.com/minipuft/claude-prompts-mcp/commit/4adcbc4b2b72f68538f940ab8c0b0df2b719ab94))
 * the gate-findings ideas are re-planned on main as five rows ([#470](https://github.com/minipuft/claude-prompts-mcp/issues/470)) ([c08ae03](https://github.com/minipuft/claude-prompts-mcp/commit/c08ae03d413d6e03d9368797fe82b45b2e887a6d))
 * the tutorial-rework plan is reference after the owner's walk of the page ([#466](https://github.com/minipuft/claude-prompts-mcp/issues/466)) ([b3133a7](https://github.com/minipuft/claude-prompts-mcp/commit/b3133a7adaceec58914ec3ba92219f510053498e))
-
 
 ### Maintenance
 
@@ -59,9 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
 
-- **Contributors: the PR scripts, the `PR Conventions` workflow and the commitlint rules are now installed from the fleet delivery contract, and drift from it fails validation.** `npm run validate:delivery-contract`, part of `validate:all`, fails when any managed file differs from the installed version; after a version bump, `npx --no -- delivery-contract update --repo ..` from `server/` brings them back in line (`CONTRIBUTING.md` §Pull Request Process). The `Plan:` footer stays the only plan mention a PR body makes, and it is the join key across a multi-PR initiative: `git log --grep='Plan: .*<slug>'` lists every PR of one plan. A `Decision: ADR-NNNN` trailer must name an ADR that exists under `docs/adr/`, or the body check fails.
 
 ## [5.0.0](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.1...v5.0.0) (2026-10-06)
 
