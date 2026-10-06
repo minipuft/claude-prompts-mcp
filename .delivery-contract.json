@@ -1,6 +1,6 @@
 {
-  "$schema": "https://raw.githubusercontent.com/minipuft/repository-standards/main/contracts/delivery-contract.schema.json",
-  "templateVersion": "1.9.0",
+  "$schema": "https://raw.githubusercontent.com/minipuft/repository-standards/v1.9.1/contracts/delivery-contract.schema.json",
+  "templateVersion": "1.9.1",
   "answers": {
     "scopes": [
       "server",
