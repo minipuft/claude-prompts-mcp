@@ -146,7 +146,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **`resource_manager` now describes every parameter in `tools/list`.** Its 75 parameters were published with a name and a type and nothing else, so a client had to guess what `subject`, `unset` or `chain_step_order` meant. Each one now carries the description its contract already held.
 - **The judge's resource menu recognises a framework defined in your workspace as a framework.** It matched four built-in framework ids by name, so a workspace framework's prompt was offered as an ordinary style and a guidance prompt whose id merely contained one of those names was dropped. It now asks the framework registry.
 - **`config.schema.json` describes the default of `hooks.expandedOutput` correctly.** The description said an absent value resolves to `false`; the server and the hooks both resolve it to `true`, as the schema's own default already stated.
 - **A gate written on one chain step now stays on that step.** In `>>a :: "cite sources" --> >>b --> >>c`, the criterion used to appear again in step b's and step c's Inline Gates and held each of their reviews ("These inline gates triggered the review"), so a later step was graded against a gate its author wrote for an earlier one. The same held for a named `:: id:"…"` on a segment and for a chain prompt step's `inlineGateIds`. Each such gate now renders and is reviewed on the step that wrote it only. A registered gate a request names in `gates` and framework gates still reach every step, and a gate with `target_step_id`, `target_step_number` or `apply_to_steps` still reaches the steps it names. An investigation step inserted for a blocking unknown now inherits a step's own gates only from the step the unknown names in `target_step_id`; an unknown naming no step passes on no step's own gates.
@@ -801,7 +800,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
 
+- **`resource_manager` now describes every parameter in `tools/list`.** Its 75 parameters were published with a name and a type and nothing else, so a client had to guess what `subject`, `unset` or `chain_step_order` meant. Each one now carries the description its contract already held.
 
 ## [4.0.1](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.0...v4.0.1) (2026-08-16)
 
