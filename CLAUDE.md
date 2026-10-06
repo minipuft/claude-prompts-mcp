@@ -126,8 +126,13 @@ The template requires `## Demonstration` (consumer-observable before/after, or `
 `## How it was verified` TABLE (claim · probe · baseline -> measured · the mutation that fails it --
 a count with no baseline is noise), and `## Notes for Reviewers`, under a 400-word above-the-fold
 budget that fenced blocks, tables and `<details>` do not count against. The `Plan:` footer is the
-ONLY sanctioned plan mention and the gate FAILS while that plan's `status:` is non-final, so a PR
-executing one step of a multi-step plan omits the footer entirely.
+ONLY sanctioned plan mention and it asserts that this PR advances the plan it names: the gate FAILS
+when the PR closes none of that plan's open rows, when it closes the last row without retiring the
+plan in the same PR, or when the file does not exist. The footer is also the join key a reader greps
+to assemble a multi-PR initiative (ADR 0003); a `Decision: ADR-NNNN` trailer must name an existing
+ADR. The scripts that enforce this are managed by the fleet delivery contract
+(`.delivery-contract.json`); `validate:delivery-contract` fails on any local edit to them, and a
+newer contract is adopted with `delivery-contract update` (CONTRIBUTING.md §Pull Request Process).
 
 Parity is enforced rather than documented: `scripts/pr-check.mjs` names each workflow step it
 mirrors and `server/tests/unit/scripts/pr-check-ci-parity.test.ts` reads `pr-conventions.yml` and
