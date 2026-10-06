@@ -1,0 +1,30 @@
+# Example script tool definition — the CONFIRM-GATED half of the demo.
+#
+# Its sibling `word_count` sets `confirm: false` and runs automatically. This one
+# sets `confirm: true`, so it demonstrates the approval path on BOTH invocation
+# routes: declared in `tools:` it reports as awaiting confirmation, and referenced
+# inline as {{script:text_digest}} it refuses until the invocation names it.
+# Together the two tools show that `confirm` is a per-tool setting and means the
+# same thing whichever route reaches the tool.
+id: text_digest
+name: Text Digest
+description: Computes a stable SHA-256 digest of the supplied text
+runtime: python
+script: script.py
+timeout: 5000
+enabled: true
+
+execution:
+  # trigger: schema_match | explicit | always | never
+  trigger: schema_match
+
+  # confirm: true | false (default: true)
+  #   - false: Execute immediately when triggered
+  #   - true: Require approval — `tool:text_digest` in the invocation arguments
+  #
+  # Set true here to demonstrate the gate. A digest is read-only; a real tool
+  # would set this because it writes, spends, or sends something.
+  confirm: true
+
+  # strict: true | false (default: false)
+  strict: false

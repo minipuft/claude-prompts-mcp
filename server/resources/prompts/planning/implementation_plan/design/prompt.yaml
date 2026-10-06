@@ -1,0 +1,21 @@
+id: design
+name: Design & Pre-flight (Step 2)
+category: planning
+description: >-
+  Step 2 of the implementation planning chain. Runs the pre-flight checklist
+  against the discovery findings, produces compound diagnosis if needed, defines
+  interface contracts, and identifies files to read before implementing.
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: feature
+    required: true
+    description: The feature or functionality to implement
+    type: string
+  - name: constraints
+    required: false
+    description: Hard limits — bundle size, no new deps, backwards compat
+    type: string
+  - name: non_goals
+    required: false
+    description: What this plan explicitly does NOT cover
+    type: string

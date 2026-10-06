@@ -1,0 +1,20 @@
+id: deep_investigation
+name: Deep Investigation
+category: analysis
+description: >-
+  Thorough research with sources, evidence, and expert perspectives.
+  Step 2 of the research chain. BLOCKING gate requires citations.
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: topic
+    type: string
+    description: The topic being researched
+    required: true
+  - name: focus_areas
+    type: string
+    description: Prioritized areas from the initial scan
+    required: false
+  - name: purpose
+    type: string
+    description: Research purpose for context
+    required: false

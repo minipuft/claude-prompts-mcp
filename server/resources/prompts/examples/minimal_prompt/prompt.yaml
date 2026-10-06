@@ -1,0 +1,9 @@
+id: minimal_prompt
+name: Minimal Prompt
+category: examples
+description: >-
+  The smallest valid prompt: no arguments, no script tools, no {{ref:}}
+  includes, no template variables. Intentionally inert — it is the conformance
+  corpus fixture, so its only failure mode is the claim under test. Do not add
+  arguments, tools, or references to it; create a new prompt instead.
+userMessageTemplateFile: user-message.md

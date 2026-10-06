@@ -1,0 +1,56 @@
+id: strategic_implement
+name: Strategic Implementation
+description: >-
+  Planner-mode entry point (single-shot). Classifies the work type, binds the
+  session to its plan file (arming the plan-hygiene hooks), rules the plan's
+  open questions before any task is cut, then cuts a slice of 3–8 task rows with
+  numeric bounds and dispatches each to a worker under >>strategic_worker — row
+  ids become node ids, the Depends column becomes the dependency edges, per-row
+  gate ids fire on their own node instead of batching to end-of-tier. Every
+  dispatch row declares tier, effort, and the failure shape that justifies them,
+  and names the surface that binds them. Owns tier re-measurement, handoff
+  acceptance, branch merges, plan writeback, and the PR boundary; it never edits
+  source, and adds no thresholds of its own, since the dev loop lives in
+  ~/.claude/rules/dev-workflow.md and the skills it dispatches. Vocabulary:
+  master plans have phases, phase plans have tiers, tiers have task rows, a
+  compiled row is a node, a dispatched row is a worker's brief.
+category: development
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: task
+    type: string
+    description: What to implement — describe the feature, test, fix, refactor, or change
+    required: true
+  - name: plan_path
+    type: string
+    description: Path to existing plan document (for plan-driven implementation)
+    required: false
+  - name: work_type
+    type: string
+    description: 'Override auto-detection: test, bug_fix, feature, refactor, optimize'
+    required: false
+  - name: design_mode
+    type: string
+    description: >-
+      Design Enrichment routing: auto | on | off. Default auto — detects
+      visual/creative surfaces (styles, .scss/.css, shaders/.glsl, UI, theme,
+      animation, layout, palette/colour, art direction) in the task and routes
+      design direction through >>design_muse plus the surface's creative skills.
+      'on' forces it; 'off' emits nothing.
+    required: false
+  - name: worker_cap
+    type: number
+    description: >-
+      Live workers this planner may run at once. Default 2–4 (the plan's
+      worker_cap frontmatter wins when present); hard max 8. A slice that wants
+      more opens a subplanner session instead of widening fan-out.
+    required: false
+artifacts:
+  produces:
+    - plan
+gateConfiguration:
+  include:
+    - workflow-preflight
+    - workflow-integration
+  framework_gates: false

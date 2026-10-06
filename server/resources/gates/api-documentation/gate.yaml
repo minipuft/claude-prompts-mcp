@@ -1,0 +1,15 @@
+id: api-documentation
+name: API Documentation Standards
+type: validation
+description: >-
+  Ensures API documentation includes all required sections and follows best
+  practices
+subject: api-docs
+guidanceFile: guidance.md
+pass_criteria:
+  - type: inline_guidance
+activation:
+  artifacts:
+    - docs
+    - readme
+  explicit_request: false

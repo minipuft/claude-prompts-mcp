@@ -1,0 +1,33 @@
+id: github_repo_setup
+name: GitHub Repository Setup
+category: workflow
+description: >-
+  Sets up GitHub repository with branch protection, CI workflows, release
+  automation, and optional npm publishing
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: repo
+    type: string
+    description: Repository in owner/name format
+    required: true
+  - name: package_manager
+    type: string
+    description: 'Package manager: npm | bun | pnpm | none'
+    required: false
+    defaultValue: npm
+  - name: publish_npm
+    type: boolean
+    description: Include npm publishing workflow
+    required: false
+    defaultValue: false
+  - name: ci_jobs
+    type: string
+    description: Comma-separated CI job names to require (e.g., 'lint,build,test')
+    required: false
+    defaultValue: build
+  - name: downstream_repos
+    type: string
+    description: >-
+      Comma-separated downstream repos to notify on release (e.g.,
+      'owner/repo1,owner/repo2')
+    required: false

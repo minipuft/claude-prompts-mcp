@@ -1,0 +1,158 @@
+# CAGEERF Framework Definition
+# This YAML file is the source of truth for the CAGEERF framework (runtime-loaded; no build artifacts).
+
+id: cageerf
+name: C.A.G.E.E.R.F Framework
+type: CAGEERF
+version: 2.0.0
+enabled: true
+
+# System prompt guidance injected when framework is active
+systemPromptGuidance: |
+  Apply the C.A.G.E.E.R.F framework systematically:
+
+  **Context**: Establish comprehensive situational awareness and environmental factors
+  **Analysis**: Apply structured, systematic examination of the problem or opportunity
+  **Goals**: Define specific, measurable, actionable objectives with clear success criteria
+  **Execution**: Develop practical, implementable approach with detailed action steps
+  **Evaluation**: Create robust success metrics and assessment methods
+  **Refinement**: Enable continuous improvement and iteration processes
+
+  Ensure each phase builds logically on the previous phases while maintaining focus on practical, actionable outcomes. Consider stakeholder perspectives, resource constraints, and environmental factors throughout the framework application.
+
+# Reference to phases file (inlined at build time)
+phasesFile: phases.yaml
+
+# Reference to judge prompt (inlined at build time)
+judgePromptFile: judge-prompt.md
+
+# Gate configurations
+gates:
+  include:
+    - framework-compliance
+
+# Framework-specific quality gates
+frameworkGates:
+  - id: context_completeness
+    name: Context Completeness
+    description: Verify comprehensive situational context is established
+    frameworkArea: Context
+    priority: high
+    validationCriteria:
+      - Environmental factors identified
+      - Stakeholders and constraints defined
+      - Background information sufficient
+
+  - id: analysis_depth
+    name: Analysis Depth
+    description: Ensure systematic and thorough analytical approach
+    frameworkArea: Analysis
+    priority: high
+    validationCriteria:
+      - Multiple perspectives considered
+      - Root cause analysis performed
+      - Data and evidence evaluated
+
+  - id: goal_specificity
+    name: Goal Specificity
+    description: Validate goals are specific, measurable, and actionable
+    frameworkArea: Goals
+    priority: high
+    validationCriteria:
+      - Goals are quantifiable
+      - Success criteria defined
+      - Timeline established
+
+  - id: execution_feasibility
+    name: Execution Feasibility
+    description: Assess practical implementability of proposed approach
+    frameworkArea: Execution
+    priority: medium
+    validationCriteria:
+      - Resources and capabilities considered
+      - Risk factors identified
+      - Implementation steps detailed
+
+# Template enhancement suggestions
+templateSuggestions:
+  - section: system
+    type: addition
+    description: Add CAGEERF framework guidance
+    content: |
+      Apply the C.A.G.E.E.R.F framework: establish Context, perform systematic Analysis, define clear Goals, plan Execution, create Evaluation criteria, and enable Refinement.
+    frameworkJustification: Ensures systematic application of CAGEERF principles
+    impact: high
+
+  - section: user
+    type: structure
+    description: Structure response using CAGEERF phases
+    content: |
+      Please structure your response addressing: 1) Context establishment, 2) Systematic analysis, 3) Specific goals, 4) Execution approach, 5) Success evaluation, 6) Refinement opportunities.
+    frameworkJustification: Guides comprehensive thinking through all CAGEERF phases
+    impact: medium
+
+# Framework elements for prompt creation guidance
+frameworkElements:
+  requiredSections:
+    - Context
+    - Analysis
+    - Goals
+    - Execution
+  optionalSections:
+    - Evaluation
+    - Refinement
+    - Framework
+  sectionDescriptions:
+    Context: Establish situational awareness and environmental factors
+    Analysis: Systematic examination of the problem or opportunity
+    Goals: Clear, specific, measurable objectives
+    Execution: Actionable steps and implementation approach
+    Evaluation: Success criteria and measurement methods
+    Refinement: Iteration and improvement processes
+    Framework: Overarching framework and principles
+
+# Argument suggestions for prompt creation
+argumentSuggestions:
+  - name: context
+    type: string
+    description: Situational context and background information
+    frameworkReason: CAGEERF Context phase requires clear situational awareness
+    examples:
+      - business context
+      - technical environment
+      - user scenario
+
+  - name: analysis_focus
+    type: string
+    description: Specific analytical focus areas
+    frameworkReason: CAGEERF Analysis phase needs defined scope
+    examples:
+      - performance analysis
+      - risk assessment
+      - opportunity identification
+
+  - name: goals
+    type: array
+    description: Specific, measurable objectives
+    frameworkReason: CAGEERF Goals phase requires clear, actionable targets
+    examples:
+      - increase efficiency by 20%
+      - reduce errors
+      - improve user satisfaction
+
+# Tool description overlays when this framework is active
+toolDescriptions:
+  prompt_engine:
+    description: >-
+      Prepared prompts carry CAGEERF phase instructions (Context → Analysis → Goals → Execution →
+      Evaluation → Refinement). Execute each phase yourself using the returned structure.
+    parameters:
+      command: The resulting prompt includes CAGEERF phase guidance for you to apply.
+  resource_manager:
+    description: >-
+      Use action:"guide" with resource_type:"prompt" and your current CAGEERF phase as the goal for
+      phase-appropriate recommendations.
+  system_control:
+    description: Status shows the current CAGEERF phase context.
+    parameters:
+      action: "Use 'guide' with topic:'framework' for phase-specific operation guidance."

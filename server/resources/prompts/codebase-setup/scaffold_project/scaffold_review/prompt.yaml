@@ -1,0 +1,12 @@
+id: scaffold_review
+name: Scaffold Review
+category: codebase-setup
+userMessageTemplateFile: user-message.md
+description: >-
+  Step 3 of project scaffolding. Summarizes the generated files, highlights
+  key decisions, and asks for user confirmation before implementation.
+arguments:
+  - name: generated_files
+    type: string
+    description: The generated file contents from scaffold_generate
+    required: true

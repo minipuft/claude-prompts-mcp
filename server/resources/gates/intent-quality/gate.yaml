@@ -1,0 +1,10 @@
+id: intent-quality
+name: Intent Declaration Quality
+type: validation
+description: >-
+  Validates that Intent Declaration is complete, properly formatted for
+  workflow routing, and extracts acceptance criteria when a source spec exists
+subject: intent
+guidanceFile: guidance.md
+pass_criteria:
+  - type: inline_guidance

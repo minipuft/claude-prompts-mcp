@@ -1,0 +1,19 @@
+id: verification
+name: Verify-Paths (Step 3)
+category: planning
+description: >-
+  Step 3 of the implementation planning chain. Sits between Design and
+  Plan-Table. For every file the plan will reference, produces a verified_paths
+  block with empirical evidence (wc -l, grep for symbols, shim detection).
+  Forces revision of design before the plan table emits when drift is found.
+  Catches the deviation classes documented in RC1 (paths/line numbers drifted
+  from plan-author's mental model).
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: feature
+    required: true
+    description: The feature or functionality to implement
+    type: string
+gateConfiguration:
+  include:
+    - path-verification

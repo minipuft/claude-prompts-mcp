@@ -1,0 +1,5 @@
+id: synthesis
+name: Synthesis
+category: examples
+description: Integrate findings into coherent understanding
+userMessageTemplateFile: user-message.md

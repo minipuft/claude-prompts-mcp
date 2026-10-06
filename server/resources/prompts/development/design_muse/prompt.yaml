@@ -1,0 +1,42 @@
+id: design_muse
+name: Design Muse
+description: >-
+  Reference-grounded creative direction for visual and interaction work.
+  Retrieves a small goal-relative Practice Library set, separates observed
+  properties from interpretation, compares distinct directions, and proposes
+  controlled visual evidence before any durable taste capture.
+category: development
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: challenge
+    required: false
+    description: >-
+      The design question or surface in play (e.g. 'how should now-playing
+      progress read as ambient mana while staying glanceable + scrubbable').
+    type: string
+  - name: constraints
+    required: false
+    description: >-
+      The hard feasibility envelope — codebase/client limits, what the
+      renderer/worklet can/can't do, the no-per-frame-:root rule, etc. The
+      direction must stay inside this.
+    type: string
+  - name: moodboard
+    required: false
+    description: >-
+      Optional path or URL to a reference image to READ and extract visual
+      vocabulary from (e.g. img/visualGuide.png).
+    type: string
+  - name: seed_refs
+    required: false
+    description: >-
+      Optional artists/works/songs the user already has in mind, to anchor the
+      sourcing.
+    type: string
+  - name: mode
+    required: false
+    description: >-
+      Type: brainstorm | recommend. brainstorm = diverge + invite back-and-forth
+      (default); recommend = converge on a grounded pick + next step.
+    type: string

@@ -1,0 +1,24 @@
+id: content-structure
+name: Content Structure Guidelines
+type: validation
+description: Ensures well-organized, readable content with clear structure
+subject: content-structure
+guidanceFile: guidance.md
+
+pass_criteria:
+  - type: inline_guidance
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - documentation
+    - content_processing
+    - education
+    - analysis
+    - research
+    - general
+  explicit_request: false

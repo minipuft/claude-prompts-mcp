@@ -1,0 +1,294 @@
+# RADIANT Phase Definitions
+# Processing steps (section guards) and execution steps for the RADIANT design framework.
+
+# Phase summary
+phases:
+  - id: reference_vision
+    name: Reference the Vision
+    description: Anchor the idea to CloudySky's album-adaptive atmospheric north star — recolor through Spotify's own tokens, atmosphere over flat paint.
+  - id: articulate_goals
+    name: Articulate Goals
+    description: Name the specific design goals and the feeling the idea evokes, each with an observable success criterion.
+  - id: draw_palette
+    name: Draw the Palette
+    description: Honor the OKLCH scene-linear color philosophy — chroma-unbounded master, album-sourced, identity by light not pigment, display transform applied last.
+  - id: infuse_atmosphere_motion
+    name: Infuse Atmosphere & Motion
+    description: Treat the scene as a linear-light radiance field; audio drives motion and chroma, never luminance; beat is a ripple, not a brightness pop.
+  - id: anchor_surfaces
+    name: Anchor to Surfaces
+    description: Route bulk color through the bridge onto Encore/spice tokens; selectors reserved for effects, transparency, and focal zones.
+  - id: navigate_constraints
+    name: Navigate Constraints
+    description: Respect Spicetify/CEF reality, performance budgets, and the unified HDR/SDR color-volume operator.
+  - id: test_living_client
+    name: Test in the Living Client
+    description: Validate against color truth and the live CDP bridge; judge from colors()/gradientInputs, never CSS tokens.
+
+# Processing steps used in template processing (deterministic section guards)
+processingSteps:
+  - id: reference_vision_processing
+    name: Reference the Vision
+    description: Restate the atmospheric album-adaptive vision and the recolor-through-tokens principle the idea honors.
+    frameworkBasis: RADIANT Reference the Vision phase
+    order: 1
+    required: true
+    section_header: '## Reference the Vision'
+    guards:
+      required: true
+      min_length: 80
+      contains_any: ['album', 'atmosphere', 'atmospheric', 'recolor', 'token', 'vision']
+      forbidden_terms: ['TODO', 'TBD', 'placeholder', 'to be determined', 'will be added']
+
+  - id: articulate_goals_processing
+    name: Articulate Goals
+    description: State specific design goals and the feeling with observable success criteria.
+    frameworkBasis: RADIANT Articulate Goals phase
+    order: 2
+    required: true
+    section_header: '## Articulate Goals'
+    guards:
+      required: true
+      min_length: 60
+      contains_any: ['goal', 'feeling', 'mood', 'success', 'criterion', 'criteria']
+      forbidden_terms: ['TODO', 'TBD', 'placeholder', 'to be determined', 'will be added']
+
+  - id: draw_palette_processing
+    name: Draw the Palette
+    description: Reason color in OKLCH scene-linear terms with identity-by-light considered.
+    frameworkBasis: RADIANT Draw the Palette phase
+    order: 3
+    required: true
+    section_header: '## Draw the Palette'
+    guards:
+      required: true
+      min_length: 80
+      contains_any: ['OKLCH', 'scene-linear', 'chroma', 'light', 'album', 'pigment']
+      forbidden_terms: ['TODO', 'TBD', 'placeholder', 'to be determined', 'will be added']
+
+  - id: infuse_atmosphere_motion_processing
+    name: Infuse Atmosphere & Motion
+    description: Describe audio-driven motion/chroma while reserving luminance for legibility.
+    frameworkBasis: RADIANT Infuse Atmosphere & Motion phase
+    order: 4
+    required: true
+    section_header: '## Infuse Atmosphere & Motion'
+    guards:
+      required: true
+      min_length: 60
+      contains_any: ['motion', 'audio', 'beat', 'energy', 'luminance', 'ripple']
+      forbidden_terms: ['TODO', 'TBD', 'placeholder', 'to be determined', 'will be added']
+
+  - id: anchor_surfaces_processing
+    name: Anchor to Surfaces
+    description: Specify bridge token routing vs effect/transparency selectors.
+    frameworkBasis: RADIANT Anchor to Surfaces phase
+    order: 5
+    required: true
+    section_header: '## Anchor to Surfaces'
+    guards:
+      required: true
+      min_length: 60
+      contains_any: ['bridge', 'token', 'Encore', 'spice', 'selector', 'focal']
+      forbidden_terms: ['TODO', 'TBD', 'placeholder', 'to be determined', 'will be added']
+
+  - id: navigate_constraints_processing
+    name: Navigate Constraints
+    description: Acknowledge Spicetify/CEF limits, performance budgets, and the unified operator.
+    frameworkBasis: RADIANT Navigate Constraints phase
+    order: 6
+    required: false
+    section_header: '## Navigate Constraints'
+    guards:
+      min_length: 40
+      contains_any: ['Spicetify', 'CEF', 'performance', 'HDR', 'SDR', 'budget']
+      forbidden_terms: ['TODO', 'TBD', 'placeholder', 'to be determined', 'will be added']
+
+  - id: test_living_client_processing
+    name: Test in the Living Client
+    description: Define verification via color truth and a named live CDP tool.
+    frameworkBasis: RADIANT Test in the Living Client phase
+    order: 7
+    required: true
+    section_header: '## Test in the Living Client'
+    guards:
+      required: true
+      min_length: 50
+      contains_any: ['CDP', 'colors()', 'gradientInputs', 'verify', 'live', 'cdp']
+      forbidden_terms: ['TODO', 'TBD', 'placeholder', 'to be determined', 'will be added']
+
+# Execution steps used in step guidance
+executionSteps:
+  - id: reference_vision_execution
+    name: Reference the Vision
+    action: Restate CloudySky's album-adaptive atmospheric vision and confirm the idea recolors through Spotify's own tokens.
+    frameworkPhase: ReferenceVision
+    dependencies: []
+    expected_output: A one-paragraph anchor tying the idea to the atmospheric, recolor-through-tokens vision plus the intended feeling.
+
+  - id: articulate_goals_execution
+    name: Articulate Goals
+    action: Enumerate specific design goals and the mood, each with an observable success criterion.
+    frameworkPhase: ArticulateGoals
+    dependencies:
+      - reference_vision_execution
+    expected_output: A short list of design goals, each paired with a live-observable success criterion.
+
+  - id: draw_palette_execution
+    name: Draw the Palette
+    action: Reason the color in OKLCH scene-linear terms — chroma-unbounded master, album-sourced, identity by light, display transform last.
+    frameworkPhase: DrawPalette
+    dependencies:
+      - articulate_goals_execution
+    expected_output: A palette/light description in OKLCH terms with a dark-album survivability note.
+
+  - id: infuse_atmosphere_motion_execution
+    name: Infuse Atmosphere & Motion
+    action: Describe how the radiance scene moves with audio (motion/chroma) and how the beat reads as a ripple, keeping luminance for legibility.
+    frameworkPhase: InfuseAtmosphereMotion
+    dependencies:
+      - draw_palette_execution
+    expected_output: A motion/reactivity description that never couples audio to luminance.
+
+  - id: anchor_surfaces_execution
+    name: Anchor to Surfaces
+    action: Specify where color is routed (bridge onto Encore/spice tokens) and which effect/transparency/focal selectors are touched.
+    frameworkPhase: AnchorSurfaces
+    dependencies:
+      - draw_palette_execution
+    expected_output: A layer map — bridge token changes vs effect/transparency selectors, with no per-element repaint.
+
+  - id: navigate_constraints_execution
+    name: Navigate Constraints
+    action: Acknowledge Spicetify/CEF reality, performance budgets, and the unified HDR/SDR operator the idea must fit within.
+    frameworkPhase: NavigateConstraints
+    dependencies:
+      - anchor_surfaces_execution
+      - infuse_atmosphere_motion_execution
+    expected_output: A constraints note covering CEF limits, performance budget, and operator unity.
+
+  - id: test_living_client_execution
+    name: Test in the Living Client
+    action: Define the verification using color truth (colors()/gradientInputs) and a named tools/cdp tool.
+    frameworkPhase: TestLivingClient
+    dependencies:
+      - navigate_constraints_execution
+    expected_output: A verification plan naming the CDP tool and the color-truth source to check.
+
+# Execution type-specific step enhancements
+executionTypeEnhancements:
+  chain:
+    advancedChain:
+      anchor_surfaces_execution:
+        - Map each token change to its Encore/spice variable in bridge.scss
+        - Separate effect/transparency selector edits from bulk color
+        - Flag any selector that risks breaking on a Spotify UI update
+    simpleChain:
+      anchor_surfaces_execution:
+        - List bridge token edits in order
+        - Note the single effect/focal selector touched, if any
+
+# Template enhancements for processing guidance
+templateEnhancements:
+  systemPromptAdditions:
+    - Restate the RADIANT pillars before proposing or building any visual idea
+    - Recolor through Spotify's own tokens; never repaint content elements
+    - Reason color in OKLCH scene-linear terms; clamp to a display only as the last step
+
+  userPromptModifications:
+    - Structure the response under the RADIANT section headers
+    - Anchor the idea to a concrete album_context and a named design_intent
+
+  contextualHints:
+    - Identity comes from light, not pigment — survive dark albums via floored OKLCH light
+    - Audio drives motion and chroma; luminance is reserved for legibility
+    - Color truth is colors()/gradientInputs, never --cs-* CSS tokens or paletteFallback
+
+# Execution flow hooks
+executionFlow:
+  preProcessingSteps:
+    - Confirm an album_context and design_intent are provided
+    - Confirm the surface_scope (bridge vs effect) is identified
+
+  postProcessingSteps:
+    - Review that every RADIANT section is covered
+    - Confirm no per-element repaint or premature clamp was introduced
+
+  validationSteps:
+    - Palette reasoned in OKLCH scene-linear terms
+    - Audio reactivity decoupled from luminance
+    - Verification plan uses color truth and a named CDP tool
+
+# Quality assessment indicators for compliance validation
+qualityIndicators:
+  reference_vision:
+    keywords:
+      - vision
+      - atmosphere
+      - album-adaptive
+      - recolor
+      - token
+    patterns:
+      - album.{0,12}adaptive
+      - recolor|atmospher(e|ic)
+      - spotify.{0,12}token
+
+  articulate_goals:
+    keywords:
+      - goal
+      - feeling
+      - mood
+      - success
+      - criterion
+    patterns:
+      - success.{0,12}criteri(on|a)
+      - feeling|mood|atmosphere
+      - observable|measurable|confirm
+
+  draw_palette:
+    keywords:
+      - OKLCH
+      - scene-linear
+      - chroma
+      - light
+      - pigment
+    patterns:
+      - okl(ch|ab)
+      - scene.?linear|chroma.?unbounded
+      - light.{0,12}not.{0,12}pigment
+
+  infuse_atmosphere_motion:
+    keywords:
+      - motion
+      - audio
+      - beat
+      - ripple
+      - luminance
+    patterns:
+      - audio.{0,12}(motion|chroma)
+      - beat.{0,12}(ripple|pop|impulse)
+      - not.{0,12}luminance|luminance.{0,12}legibility
+
+  anchor_surfaces:
+    keywords:
+      - bridge
+      - Encore
+      - spice
+      - selector
+      - focal
+    patterns:
+      - bridge\.scss|--spice|--background
+      - focal.?zone
+      - no.{0,12}(per-element|enumerated).{0,12}repaint
+
+  test_living_client:
+    keywords:
+      - CDP
+      - colors()
+      - gradientInputs
+      - verify
+      - live
+    patterns:
+      - tools/cdp|cdp
+      - colors\(\)|gradientInputs
+      - color.{0,8}truth

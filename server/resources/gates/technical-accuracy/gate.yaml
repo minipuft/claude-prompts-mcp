@@ -1,0 +1,21 @@
+id: technical-accuracy
+name: Technical Accuracy Standards
+type: validation
+description: Ensures technical correctness, fact-checking, and precision in technical content
+subject: technical-accuracy
+guidanceFile: guidance.md
+
+pass_criteria:
+  - type: inline_guidance
+
+retry_config:
+  max_attempts: 3
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - development
+    - analysis
+    - research
+  explicit_request: true

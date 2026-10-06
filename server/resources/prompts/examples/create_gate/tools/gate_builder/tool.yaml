@@ -1,0 +1,13 @@
+id: gate_builder
+name: Gate Builder Adapter
+description: Maps complete gate authoring fields to a non-executing
+  resource_manager create draft. valid means adapter readiness only; canonical
+  resource validation remains server-owned.
+script: script.py
+runtime: python
+timeout: 30000
+enabled: true
+execution:
+  trigger: schema_match
+  confirm: false
+  strict: true

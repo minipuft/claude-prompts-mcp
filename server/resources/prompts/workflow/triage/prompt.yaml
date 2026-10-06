@@ -1,0 +1,33 @@
+id: triage
+name: 'Triage: Intent Discovery'
+category: workflow
+description: >-
+  Analyze ambiguous requests to produce structured Intent Declaration.
+  Determines work type (bug_fix, feature, refactor, explore, optimize) and
+  routes to appropriate next phase.
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: request
+    type: string
+    description: The user's original request to analyze
+    required: true
+  - name: context
+    type: string
+    description: Additional context (error messages, logs, observations)
+    required: false
+  - name: files
+    type: string
+    description: Relevant file paths if known
+    required: false
+gateConfiguration:
+  include:
+    - intent-quality
+  inline:
+    - Intent Declaration includes Work Type and Secondary Type
+    - Scope identifies at least one file or system
+    - Source Spec is declared (none or reference)
+    - Acceptance Criteria extracted when Source Spec exists
+    - Problem Statement follows Current → Desired format
+    - Next Phase matches Work Type routing rules
+    - Compound routing applied when secondary type is declared

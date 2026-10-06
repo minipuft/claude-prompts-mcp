@@ -1,0 +1,12 @@
+id: information-placement
+name: Information Placement
+type: validation
+description: >-
+  Blocks documentation changes that place content in the wrong reader journey or
+  Diátaxis category.
+subject: doc-placement
+guidanceFile: guidance.md
+activation:
+  artifacts:
+    - docs
+    - readme

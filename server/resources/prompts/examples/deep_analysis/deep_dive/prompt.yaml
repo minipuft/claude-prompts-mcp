@@ -1,0 +1,5 @@
+id: deep_dive
+name: Deep Dive
+category: examples
+description: Thorough investigation of key themes
+userMessageTemplateFile: user-message.md

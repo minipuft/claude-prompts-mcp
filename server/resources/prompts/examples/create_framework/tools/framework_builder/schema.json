@@ -1,0 +1,92 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Framework Authoring Draft",
+  "description": "Adapter input shape only; resource validity is decided by resource_manager. Nested definitions pass through unchanged.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable authored resource identifier"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable resource name"
+    },
+    "description": {
+      "type": "string",
+      "description": "What the resource does and when to use it"
+    },
+    "system_prompt_guidance": {
+      "type": "string",
+      "description": "[Framework] System prompt guidance injected when active."
+    },
+    "phases": {
+      "type": "array",
+      "description": "[Framework] Phase definitions: id, name, description, prompts. The advanced fields this description used to fold in are declared as their own parameters below. Element shape is not constrained at this boundary; the framework loader rejects a malformed entry when phases.yaml is read back.",
+      "items": {}
+    },
+    "gates": {
+      "type": "object",
+      "description": "[Framework] Gate configuration: include, exclude arrays."
+    },
+    "tool_descriptions": {
+      "type": "object",
+      "description": "[Framework] Tool description overlays when active."
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "[Framework] Whether the framework is enabled."
+    },
+    "framework_gates": {
+      "type": "array",
+      "description": "[Framework] Quality gates for this framework, written to framework.yaml. REQUIRED to create a framework. Each entry: id and name (both required), description, frameworkArea, priority (critical|high|medium|low), validationCriteria (array<string>), criteria, severity.",
+      "items": {}
+    },
+    "template_suggestions": {
+      "type": "array",
+      "description": "[Framework] Prompt-enhancement suggestions, written to framework.yaml. Each entry: section (system|user) and type (addition|structure|modification) required; description, content, frameworkJustification, impact (high|medium|low).",
+      "items": {}
+    },
+    "framework_elements": {
+      "type": "object",
+      "description": "[Framework] Section structure expected of a prompt, written to framework.yaml as frameworkElements: requiredSections (array<string>), optionalSections, sectionDescriptions (object)."
+    },
+    "argument_suggestions": {
+      "type": "array",
+      "description": "[Framework] Arguments this framework suggests a prompt declare, written to framework.yaml as argumentSuggestions. Each entry: name, type (string|array|object|boolean|number), description, frameworkReason, examples.",
+      "items": {}
+    },
+    "judge_prompt": {
+      "type": "string",
+      "description": "[Framework] Judge-prompt body, written to the file judgePromptFile names."
+    },
+    "processing_steps": {
+      "type": "array",
+      "description": "[Framework] Ordered template-processing steps, written to phases.yaml. Each entry: id, name, description, frameworkBasis, order (positive int), required (boolean); optional section_header and guards.",
+      "items": {}
+    },
+    "execution_steps": {
+      "type": "array",
+      "description": "[Framework] Execution steps with dependencies, written to phases.yaml. Each entry: id, name, action, frameworkPhase, expected_output; optional dependencies (array<string>).",
+      "items": {}
+    },
+    "execution_type_enhancements": {
+      "type": "object",
+      "description": "[Framework] Per-execution-type step overlays (chain vs single), written to phases.yaml."
+    },
+    "template_enhancements": {
+      "type": "object",
+      "description": "[Framework] Written to phases.yaml: systemPromptAdditions, userPromptModifications, contextualHints (each array<string>)."
+    },
+    "execution_flow": {
+      "type": "object",
+      "description": "[Framework] Hooks around execution, written to phases.yaml: preProcessingSteps, postProcessingSteps, validationSteps (each array<string>)."
+    },
+    "quality_indicators": {
+      "type": "object",
+      "description": "[Framework] Per-phase keywords and patterns for compliance scoring, written to phases.yaml."
+    }
+  },
+  "required": ["id", "name", "description"],
+  "additionalProperties": false
+}

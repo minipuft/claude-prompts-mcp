@@ -1,0 +1,9 @@
+id: shared_intro
+name: Shared Introduction Template
+description: A reusable introduction block demonstrating the {{ref:id}} prompt reference syntax. Reference this prompt from other templates using {{ref:shared_intro}}
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: topic
+    description: The topic for the introduction
+    required: false
+    type: string

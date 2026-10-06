@@ -1,0 +1,72 @@
+id: tech_evaluation_chain
+name: Technology Evaluation Chain
+category: development
+description: >-
+  Complete library/framework evaluation workflow: overview, deep dive, integration
+  assessment, and final recommendation. Demonstrates blocking vs advisory gates.
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: library
+    type: string
+    description: The library or framework to evaluate (e.g., 'zod', 'react-query', 'prisma')
+    required: true
+  - name: context
+    type: string
+    description: Your project context and what problem you're solving
+    required: true
+  - name: current_stack
+    type: string
+    description: Current tech stack for compatibility assessment
+    required: false
+
+gateConfiguration:
+  include:
+    - technical-accuracy
+    - code-quality
+  framework_gates: true
+  inline_gate_definitions:
+    - name: Verified Claims
+      type: validation
+      scope: step
+      severity: high
+      description: >-
+        Ensures all technical claims are backed by verifiable sources.
+        BLOCKING on Step 2 (Technical Deep Dive).
+      guidance: |-
+        - Every performance claim must cite a source (bundlephobia, benchmarks, docs)
+        - Security assessments must reference CVE databases or audit reports
+        - Version compatibility must be verified against actual package.json
+      pass_criteria:
+        - All performance metrics include source citations
+        - Security assessment references actual vulnerability databases
+        - No unverified superlatives (fastest, best, most popular without data)
+    - name: Actionable Output
+      type: validation
+      scope: step
+      severity: medium
+      description: >-
+        Ensures the final recommendation includes concrete next steps.
+        Applied to Step 4.
+      guidance: |-
+        - Must include at least 3 specific next steps
+        - Each step should have code or commands
+        - Success metrics must be measurable
+      pass_criteria:
+        - Includes working code examples
+        - Next steps are specific and numbered
+        - Success metrics have concrete targets
+
+chainSteps:
+  - promptId: library_overview
+    stepName: Library Overview (Step 1 of 4)
+  - promptId: technical_deep_dive
+    stepName: Technical Deep Dive (Step 2 of 4)
+    inlineGateIds:
+      - Verified Claims
+  - promptId: integration_assessment
+    stepName: Integration Assessment (Step 3 of 4)
+  - promptId: tech_recommendation
+    stepName: Final Recommendation (Step 4 of 4)
+    inlineGateIds:
+      - Actionable Output

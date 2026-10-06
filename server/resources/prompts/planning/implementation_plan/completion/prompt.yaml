@@ -1,0 +1,13 @@
+id: completion
+name: Validation & Completion (Step 5)
+category: planning
+description: >-
+  Step 5 of the implementation planning chain. Defines testing strategy, done
+  criteria, documentation updates, risks with rollback, and release plan. Writes
+  the complete plan to a persistent file.
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: feature
+    required: true
+    description: The feature or functionality to implement
+    type: string

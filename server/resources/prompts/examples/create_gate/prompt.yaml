@@ -1,0 +1,107 @@
+id: create_gate
+name: Create Gate
+description: Designs current gate resources with canonical server validation and
+  non-executing drafts before authorized creation.
+category: gate-authoring
+userMessageTemplateFile: user-message.md
+
+tools:
+  - gate_builder
+
+arguments:
+  - name: id
+    type: string
+    description: Stable authored resource identifier
+    required: false
+  - name: name
+    type: string
+    description: Human-readable resource name
+    required: false
+  - name: type
+    type: string
+    description: "[Gate] Gate type: validation (pass/fail) or guidance (advisory).
+      Default: validation. Writes the gate.yaml key 'type'."
+    required: false
+  - name: gate_type
+    type: string
+    description: "[Gate] Gate classification. Default: custom. Writes the gate.yaml
+      key 'gate_type'; 'framework' marks a gate that requires an active
+      framework and is filtered out when framework gates are disabled."
+    required: false
+  - name: description
+    type: string
+    description: What the resource does and when to use it
+    required: false
+  - name: guidance
+    type: string
+    description: '[Gate] Gate guidance content - the criteria or instructions.'
+    required: false
+  - name: pass_criteria
+    type: array
+    description: "[Gate] Structured pass criteria definitions. Each entry is an
+      object, not a bare string: optional type
+      (inline_guidance|framework_compliance|shell_verify|script_tool) plus the
+      fields that type reads — framework compliance's
+      framework/min_compliance_score/severity/quality_indicators, shell
+      verification's
+      shell_command/shell_timeout/shell_working_dir/shell_env/shell_max_attempt\
+      s/shell_preset/shell_stdin_source/shell_response_env_var, or script tool's
+      script_tool_id/script_tool_input/script_tool_timeout/script_tool_working_\
+      dir."
+    required: false
+  - name: activation
+    type: object
+    description: '[Gate] Activation rules: prompt_categories, frameworks, explicit_request.'
+    required: false
+  - name: retry_config
+    type: object
+    description: '[Gate] Retry configuration: max_attempts, improvement_hints.'
+    required: false
+  - name: subject
+    type: string
+    description: "[Gate] Free kebab-case tag naming what this gate reminds about
+      (e.g. 'code-quality'). An installation's `gates.harnessCovers`
+      (config.jsonc, or config.json) suppresses reminder-tier gates whose
+      subject it lists; check-tier gates (shell_verify, script_tool) are never
+      suppressed. Lowercase letters, digits and hyphens only."
+    required: false
+  - name: severity
+    type: string
+    description: '[Gate] Severity for prioritization. Default: medium. Omitted on
+      update, an existing gate keeps its current value.'
+    required: false
+  - name: enforcement_mode
+    type: string
+    description: '[Gate] What a FAIL does: blocking holds the chain step, advisory
+      advances and names the failure in the reply, informational advances
+      silently. Absent, the gate holds a chain step. When a FAIL verdict names
+      gates in per_gate, only those gates decide; otherwise the strictest gate
+      on the step does.'
+    required: false
+  - name: block_response_on_fail
+    type: boolean
+    description: "[Gate] Withhold the step output when this gate is marked FAIL,
+      returning the gate review in its place. Writes the gate.yaml key
+      'blockResponseOnFail'. Omitted on update, an existing gate keeps its
+      current value; send `false` to clear it."
+    required: false
+  - name: evaluation
+    type: object
+    description: '[Gate] Who reviews this gate: `mode: "self"` (the model that
+      wrote the output) or `mode: "judge"` (a context-isolated reviewer that
+      sees only the output and the criteria). `model` is a hint for which model
+      the judge runs on; `strict` asks for failures first, and defaults to true
+      under `judge`. Writes the gate.yaml key ''evaluation'' whole, so a supplied
+      block replaces the existing one. Omitted on update, an existing gate keeps
+      its current block; send `{"mode": "self"}` to return the gate to
+      self-review. An unrecognized key inside the block is refused by path.'
+    required: false
+  - name: enforcementMode
+    type: string
+    description: Legacy alias for enforcement_mode; canonical value wins when both
+      are supplied
+    required: false
+  - name: purpose
+    type: string
+    description: Core purpose in one or two sentences
+    required: false

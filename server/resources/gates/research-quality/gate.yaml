@@ -1,0 +1,20 @@
+id: research-quality
+name: Research Quality Guidelines
+type: validation
+description: Ensures thorough research with proper citations and credible sources
+subject: research
+guidanceFile: guidance.md
+
+pass_criteria:
+  - type: inline_guidance
+
+retry_config:
+  max_attempts: 3
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  prompt_categories:
+    - research
+    - analysis
+  explicit_request: true

@@ -1,0 +1,259 @@
+phases:
+  - id: voice_load
+    name: Voice Load
+    description: >-
+      Load bio.md voice table and establish candidate speaking register for
+      sentence-level testing
+  - id: evidence_check
+    name: Evidence Check
+    description: >-
+      Verify every claim, skill, experience, and metric against bio.md
+      documented facts
+  - id: resonance_map
+    name: Resonance Map
+    description: >-
+      Align content to target JD requirements, values, keywords, and culture
+      signals
+  - id: inspect_patterns
+    name: Inspect Patterns
+    description: >-
+      Scan for AI detection flags and verify voice authenticity at sentence
+      level
+  - id: field_isolation
+    name: Field Isolation
+    description: Verify distinct coverage across sections with no content overlap
+  - id: yield_present
+    name: Yield
+    description: >-
+      Present changes with before/after, rationale, and per-section gate
+      validation table
+processingSteps:
+  - id: voice_load_step
+    name: Voice Load
+    description: Read bio.md voice table and establish candidate register
+    frameworkBasis: VERIFY Voice phase
+    order: 1
+    required: true
+    marker: '## Voice'
+    assertions:
+      required: true
+      min_length: 30
+      contains_any:
+        - bio.md
+        - voice
+        - says
+        - register
+        - say-it-out-loud
+  - id: evidence_check_step
+    name: Evidence Check
+    description: Verify all claims against bio.md claimability
+    frameworkBasis: VERIFY Evidence phase
+    order: 2
+    required: true
+    marker: '## Evidence'
+    assertions:
+      required: true
+      min_length: 50
+      contains_any:
+        - claim
+        - bio.md
+        - verified
+        - documented
+        - claimable
+      forbids:
+        - assumed
+        - probably can claim
+  - id: resonance_map_step
+    name: Resonance Map
+    description: Map content to JD requirements and values
+    frameworkBasis: VERIFY Resonance phase
+    order: 3
+    required: true
+    marker: '## Resonance'
+    assertions:
+      required: true
+      min_length: 50
+      contains_any:
+        - JD
+        - requirement
+        - keyword
+        - alignment
+        - coverage
+  - id: inspect_patterns_step
+    name: Inspect Patterns
+    description: Scan for AI detection flags and voice violations
+    frameworkBasis: VERIFY Inspect phase
+    order: 4
+    required: true
+    marker: '## Inspect'
+    assertions:
+      required: true
+      min_length: 30
+      contains_any:
+        - em-dash
+        - gerund
+        - across
+        - detection
+        - flag
+        - pattern
+  - id: field_isolation_step
+    name: Field Isolation
+    description: Check for content overlap between sections
+    frameworkBasis: VERIFY Field Isolation phase
+    order: 5
+    required: true
+    marker: '## Isolation'
+    assertions:
+      required: true
+      min_length: 30
+      contains_any:
+        - overlap
+        - distinct
+        - coverage
+        - unique
+        - separate
+  - id: yield_step
+    name: Yield
+    description: Present changes with before/after and gate tables
+    frameworkBasis: VERIFY Yield phase
+    order: 6
+    required: true
+    marker: '## Yield'
+    assertions:
+      required: true
+      min_length: 100
+      contains_any:
+        - before
+        - after
+        - change
+        - gate
+        - status
+        - Pass
+        - Fail
+executionSteps:
+  - id: load_voice_reference
+    name: Load Voice Reference
+    action: >-
+      Read bio.md Voice Reference section including says/doesn't-say table,
+      structural decisions, and register patterns
+    frameworkPhase: Voice Load
+    dependencies: []
+    expected_output: Voice register established with specific patterns to match and avoid
+  - id: verify_claims
+    name: Verify Claims
+    action: >-
+      Cross-reference every claim in content against bio.md Can Claim and Cannot
+      Claim sections
+    frameworkPhase: Evidence Check
+    dependencies:
+      - load_voice_reference
+    expected_output: Per-claim verification with PASS or FAIL or ADJUST status
+  - id: map_jd_alignment
+    name: Map JD Alignment
+    action: >-
+      Extract JD requirements and values then map each to content coverage and
+      identify gaps
+    frameworkPhase: Resonance Map
+    dependencies:
+      - verify_claims
+    expected_output: Coverage map showing which JD requirements are addressed where
+  - id: scan_ai_patterns
+    name: Scan AI Patterns
+    action: >-
+      Check for em-dashes, gerund chains, triple-noun lists, across overuse,
+      tool-name leading, and staccato patterns
+    frameworkPhase: Inspect Patterns
+    dependencies:
+      - load_voice_reference
+    expected_output: Flag list with specific instances and fix recommendations
+  - id: check_overlap
+    name: Check Overlap
+    action: >-
+      Compare all sections or answers for content duplication including same
+      achievements, same phrasing, and same ground covered
+    frameworkPhase: Field Isolation
+    dependencies:
+      - verify_claims
+      - map_jd_alignment
+    expected_output: Overlap matrix showing what each section covers uniquely
+  - id: present_changes
+    name: Present Changes
+    action: >-
+      Show before/after for each changed section with rationale and per-section
+      gate validation table
+    frameworkPhase: Yield
+    dependencies:
+      - scan_ai_patterns
+      - check_overlap
+    expected_output: Final content with gate tables showing PASS status across all phases
+templateEnhancements:
+  systemPromptAdditions:
+    - Apply V.E.R.I.F.Y framework to all resume and application content
+    - bio.md is the source of truth for voice and claimability
+    - Every section must pass all 5 gates before presentation
+  userPromptModifications:
+    - Structure output using VERIFY phases
+    - Include per-section gate tables in Yield phase
+  contextualHints:
+    - Check bio.md says/doesn't-say table at sentence level not word level
+    - GitHub stars are not the same as active users
+    - JD values section reveals what the company actually prioritizes
+executionFlow:
+  preProcessingSteps:
+    - Read bio.md voice reference and claimability sections
+    - Read target JD and extract requirements and values and keywords
+    - Read existing content to be audited
+  postProcessingSteps:
+    - Verify all gate tables show PASS
+    - Confirm no em-dashes remain in prose
+    - Confirm overlap matrix shows distinct coverage per section
+  validationSteps:
+    - Say-it-out-loud test on each section
+    - Cross-reference final content against bio.md Cannot Claim section
+    - Count across usage and confirm max 1
+qualityIndicators:
+  voice:
+    keywords:
+      - voice
+      - register
+      - says
+      - sounds like
+      - say-it-out-loud
+    patterns:
+      - bio\.md|voice.table|says.*doesn't.say
+  evidence:
+    keywords:
+      - claim
+      - verified
+      - documented
+      - bio.md
+      - claimable
+    patterns:
+      - can.claim|cannot.claim|overclaim|underclaim
+  resonance:
+    keywords:
+      - JD
+      - requirement
+      - keyword
+      - alignment
+      - coverage
+    patterns:
+      - keyword.match|JD.alignment|coverage.map
+  inspect:
+    keywords:
+      - em-dash
+      - gerund
+      - across
+      - detection
+      - flag
+    patterns:
+      - em.dash|triple.noun|gerund.chain|AI.detection
+  isolation:
+    keywords:
+      - overlap
+      - distinct
+      - unique
+      - separate
+      - coverage
+    patterns:
+      - no.overlap|distinct.ground|unique.value

@@ -1,0 +1,24 @@
+id: integration_assessment
+name: Integration Assessment
+category: development
+description: >-
+  Assess integration effort: compatibility, migration path, breaking changes.
+  Step 3 of the tech evaluation chain.
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: library
+    type: string
+    description: The library or framework being evaluated
+    required: true
+  - name: context
+    type: string
+    description: Your project context
+    required: true
+  - name: current_stack
+    type: string
+    description: Current tech stack for compatibility assessment
+    required: false
+  - name: technical_findings
+    type: string
+    description: Key findings from the technical deep dive
+    required: false
