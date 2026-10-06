@@ -7,33 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [5.1.0](https://github.com/minipuft/claude-prompts-mcp/compare/v5.0.0...v5.1.0) (2026-10-06)
 
-
 ### Added
 
 * **scripts:** a doc naming an unknown tool action fails validation ([#460](https://github.com/minipuft/claude-prompts-mcp/issues/460)) ([221229f](https://github.com/minipuft/claude-prompts-mcp/commit/221229fc354837ef59413b9eec4761fe2f1bd8e5))
 
-
-### Fixed
-
-* **gates:** refuse shell verification in a workspace that turned gates off ([#452](https://github.com/minipuft/claude-prompts-mcp/issues/452)) ([b87b749](https://github.com/minipuft/claude-prompts-mcp/commit/b87b7498bad5b57608a0fc73214e7b96368e792a))
-* **gates:** render the gates a prompt's category activates on the run that selected them ([#449](https://github.com/minipuft/claude-prompts-mcp/issues/449)) ([02e012c](https://github.com/minipuft/claude-prompts-mcp/commit/02e012ce6351bba6b88e0e5ecda53bd33688e911))
-* **mcp-tools:** a framework switch refreshes every tool description over STDIO ([#456](https://github.com/minipuft/claude-prompts-mcp/issues/456)) ([b03ca9e](https://github.com/minipuft/claude-prompts-mcp/commit/b03ca9e02dc5f9bd8c0bf2d91e8be92d5db0f1e7))
-* **mcp-tools:** publish a description for every resource_manager parameter ([#451](https://github.com/minipuft/claude-prompts-mcp/issues/451)) ([db2eafe](https://github.com/minipuft/claude-prompts-mcp/commit/db2eafe672b61fae2bab9e01b6b1731394f9862c))
-* **scripts:** a doc comment no longer counts as a reference in the unreached-methods check ([#454](https://github.com/minipuft/claude-prompts-mcp/issues/454)) ([8e80741](https://github.com/minipuft/claude-prompts-mcp/commit/8e80741b60721b597859c78d3acc95b31c6c93cb))
-
-
 ### Changed
 
+- **Gate suggestions no longer recommend a gate because of a prompt's category.** The `Suggested Gates` list in a `create` reply and the list `analyze_gates` returns used to add gates from a category-to-gate table compiled into the server, which matched only three of the nine shipped categories and disagreed with the gates those categories actually activate. A gate whose `activation.prompt_categories` names a prompt's category is already attached to every run of that prompt, so suggesting it asked you to add something you already had. Suggestions now come from the prompt's text alone.
 * **runtime:** delete the state store event, seam and unscoped save nothing used ([#450](https://github.com/minipuft/claude-prompts-mcp/issues/450)) ([c2e63f0](https://github.com/minipuft/claude-prompts-mcp/commit/c2e63f0832658bd4ac850ede9ff6c9afaf652ec4))
-
-
-### Documentation
-
-* the changelog has one Unreleased section, above the latest release ([#462](https://github.com/minipuft/claude-prompts-mcp/issues/462)) ([9daaefc](https://github.com/minipuft/claude-prompts-mcp/commit/9daaefc0aa7b565bea1cfb63d01a08f4bdf77d71))
-* the first-prompt tutorial on main is the author-first rewrite ([#461](https://github.com/minipuft/claude-prompts-mcp/issues/461)) ([dbd7deb](https://github.com/minipuft/claude-prompts-mcp/commit/dbd7debbf8b4c69eb52d2c6b5fe95206cf4fedf0))
-* the guides describe the bundle the server ships ([#455](https://github.com/minipuft/claude-prompts-mcp/issues/455)) ([49dbc2f](https://github.com/minipuft/claude-prompts-mcp/commit/49dbc2fcafd651a89fdad4295b0dbb72733c340c))
-
-## [Unreleased]
 
 ### Fixed
 
@@ -43,10 +24,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`system_control` declares the `execution_history` `steps` operation.** The tool already answered `operation:"steps"` with one line per step of a run, but its published contract listed only `list`, so a client reading the contract never saw it.
 - **A gate your prompt's category activates now reviews with its own retry budget.** When the planner had already picked such a gate, it reached the review as if the prompt had named it, and a gate's `retry_config.max_attempts` is only read for a gate the category activated, so the review fell back to the built-in 2 attempts. Bundled gates this reaches include `research-quality`, `technical-accuracy` and `test-suite`, which declare 3 attempts, and `workflow-growth`, which declares 1. The gate's own budget is now read, on a single prompt and on a chain step.
 - **A gate the server chose for your prompt's category now shows you its guidance, instead of asking you to attest text it never printed.** A gate scoped with `activation.prompt_categories` was selected correctly and listed in the `**Gates**:` line at the bottom of a response, and then its `### <gate name>` section was dropped from that same response. The cause was an eight-name list of "recognised" categories compiled into the server (`analysis, education, development, research, debugging, documentation, content_processing, general`), which shared only three names with the nine categories actually shipped: a prompt in any other category — `workflow`, `examples`, `planning`, `guidance`, `knowledge-capture`, `codebase-setup` — was relabelled `general` before the guidance was rendered. The category a prompt declares is now used as it stands, so the same category decides selection and rendering. Two consequences to expect: a gate scoped to one of those six categories starts appearing, and a prompt in one of them no longer picks up gates scoped to `general`, which it was only ever receiving because of the relabelling. A prompt id is also no longer scanned for words like `debug` or `readme` to guess a category it did not declare.
+* **gates:** refuse shell verification in a workspace that turned gates off ([#452](https://github.com/minipuft/claude-prompts-mcp/issues/452)) ([b87b749](https://github.com/minipuft/claude-prompts-mcp/commit/b87b7498bad5b57608a0fc73214e7b96368e792a))
+* **gates:** render the gates a prompt's category activates on the run that selected them ([#449](https://github.com/minipuft/claude-prompts-mcp/issues/449)) ([02e012c](https://github.com/minipuft/claude-prompts-mcp/commit/02e012ce6351bba6b88e0e5ecda53bd33688e911))
+* **mcp-tools:** a framework switch refreshes every tool description over STDIO ([#456](https://github.com/minipuft/claude-prompts-mcp/issues/456)) ([b03ca9e](https://github.com/minipuft/claude-prompts-mcp/commit/b03ca9e02dc5f9bd8c0bf2d91e8be92d5db0f1e7))
+* **mcp-tools:** publish a description for every resource_manager parameter ([#451](https://github.com/minipuft/claude-prompts-mcp/issues/451)) ([db2eafe](https://github.com/minipuft/claude-prompts-mcp/commit/db2eafe672b61fae2bab9e01b6b1731394f9862c))
+* **scripts:** a doc comment no longer counts as a reference in the unreached-methods check ([#454](https://github.com/minipuft/claude-prompts-mcp/issues/454)) ([8e80741](https://github.com/minipuft/claude-prompts-mcp/commit/8e80741b60721b597859c78d3acc95b31c6c93cb))
 
-### Changed
+### Documentation
 
-- **Gate suggestions no longer recommend a gate because of a prompt's category.** The `Suggested Gates` list in a `create` reply and the list `analyze_gates` returns used to add gates from a category-to-gate table compiled into the server, which matched only three of the nine shipped categories and disagreed with the gates those categories actually activate. A gate whose `activation.prompt_categories` names a prompt's category is already attached to every run of that prompt, so suggesting it asked you to add something you already had. Suggestions now come from the prompt's text alone.
+* the changelog has one Unreleased section, above the latest release ([#462](https://github.com/minipuft/claude-prompts-mcp/issues/462)) ([9daaefc](https://github.com/minipuft/claude-prompts-mcp/commit/9daaefc0aa7b565bea1cfb63d01a08f4bdf77d71))
+* the first-prompt tutorial on main is the author-first rewrite ([#461](https://github.com/minipuft/claude-prompts-mcp/issues/461)) ([dbd7deb](https://github.com/minipuft/claude-prompts-mcp/commit/dbd7debbf8b4c69eb52d2c6b5fe95206cf4fedf0))
+* the guides describe the bundle the server ships ([#455](https://github.com/minipuft/claude-prompts-mcp/issues/455)) ([49dbc2f](https://github.com/minipuft/claude-prompts-mcp/commit/49dbc2fcafd651a89fdad4295b0dbb72733c340c))
+
+## [Unreleased]
+
+
 
 ## [5.0.0](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.1...v5.0.0) (2026-10-06)
 
