@@ -128,15 +128,6 @@ const ACCEPTED = [
     closedBy:
       'Delete when the description cache is keyed by scope (or removed in favour of the per-call overlay).',
   },
-  {
-    subject: 'src/engine/gates/gate-manager.ts',
-    fn: 'isSystemEnabled',
-    reason:
-      'Overrides `BaseResourceHandler.isSystemEnabled()`, the same zero-argument protocol method ' +
-      "as `FrameworkManager`'s; no execution-path caller reaches it (stage 11 and the shell " +
-      'executor read `LightweightGateSystem.isGateSystemEnabled(scope)`).',
-    closedBy: 'Delete when the base protocol method takes a scope.',
-  },
 ];
 
 /** Below these, per family, the scan is not reaching the code it governs. */
