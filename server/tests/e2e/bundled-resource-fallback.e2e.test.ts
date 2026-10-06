@@ -79,14 +79,20 @@ async function bootAndCapture(workspace: string): Promise<Startup> {
 
   // Resolve on the process's own exit (the crash case) or once it has stayed up long enough to
   // have written its inventory (the healthy case). A crash must not be reported as a timeout.
+  // The healthy case resolves on the EXIT that follows the kill, never on the kill itself:
+  // `roots.cleanup()` below removes directories the server is still flushing logs into until then.
   const exitCode = await new Promise<number | null>((resolve) => {
+    let settled = false;
+    let escalate: NodeJS.Timeout | undefined;
     const settle = setTimeout(() => {
+      settled = true;
       proc.kill();
-      resolve(0);
+      escalate = setTimeout(() => proc.kill('SIGKILL'), 5_000);
     }, 45_000);
     proc.on('exit', (code) => {
       clearTimeout(settle);
-      resolve(code);
+      clearTimeout(escalate);
+      resolve(settled ? 0 : code);
     });
   });
 
