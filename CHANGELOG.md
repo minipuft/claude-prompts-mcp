@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
 ## [5.1.1](https://github.com/minipuft/claude-prompts-mcp/compare/v5.1.0...v5.1.1) (2026-10-06)
 
 ### Added
@@ -57,10 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * the changelog has one Unreleased section, above the latest release ([#462](https://github.com/minipuft/claude-prompts-mcp/issues/462)) ([9daaefc](https://github.com/minipuft/claude-prompts-mcp/commit/9daaefc0aa7b565bea1cfb63d01a08f4bdf77d71))
 * the first-prompt tutorial on main is the author-first rewrite ([#461](https://github.com/minipuft/claude-prompts-mcp/issues/461)) ([dbd7deb](https://github.com/minipuft/claude-prompts-mcp/commit/dbd7debbf8b4c69eb52d2c6b5fe95206cf4fedf0))
 * the guides describe the bundle the server ships ([#455](https://github.com/minipuft/claude-prompts-mcp/issues/455)) ([49dbc2f](https://github.com/minipuft/claude-prompts-mcp/commit/49dbc2fcafd651a89fdad4295b0dbb72733c340c))
-
-## [Unreleased]
-
-
 
 ## [5.0.0](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.1...v5.0.0) (2026-10-06)
 
