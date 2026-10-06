@@ -296,7 +296,8 @@ export class GateReviewStage extends BasePipelineStage {
           pendingReview.gateIds,
           this.gateDefinitionProvider,
           context.mcpRequest?.user_response,
-          this.collaborators
+          this.collaborators,
+          context.getScopeOptions()
         );
         const { shellResults, scriptResults } = evidence;
         shellSection = evidence.section;
