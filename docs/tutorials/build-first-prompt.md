@@ -145,9 +145,30 @@ Write one release-note bullet for this change, in words a user of the software w
 Search results now load in pages of 50
 ```
 
-Around that section, the server can add guidance from its active reasoning
-framework and a set of review criteria called gates. Claude writes the bullet,
-reviews it against the gates, and sends its verdict back to the server.
+The server wraps that section in guidance from its active reasoning framework
+and a set of review criteria called gates. Trimmed, the whole reply reads:
+
+```text
+You are operating under the C.A.G.E.E.R.F Framework for Release Note.
+...
+## Task Context
+...
+## Inline Gates
+...
+Required Sections (emit these headers verbatim; they are graded structurally):
+- ## Context
+- ## Analysis
+- ## Goals
+- ## Execution
+...
+Continue: chain_id="chain-release_note#1", user_response="<your output>"
+```
+
+Claude answers under the required headers, with the bullet under `## Execution`,
+reviews it against the gates, and sends the answer and its verdict back with the
+`Continue` line's `chain_id`. The server replies `Execution complete`, so a bullet
+wrapped in `## Context`, `## Analysis`, `## Goals` and `## Execution` headers is
+the expected answer, not a mistake.
 
 If you mistype the id, the hook replies with the closest matching prompt ids
 and does not ask Claude to call a tool.
@@ -165,7 +186,10 @@ Claude calls `resource_manager` with `action:"preview"` and
 writes nothing, and records no version. Claude shows you the change. Once you
 approve it, Claude sends the same change with `action:"update"`. The server
 writes it, saves a new version in the prompt's history, and reloads the prompt
-before it replies.
+before it replies. Claude may send the `expected_version` it read from `inspect`
+(here `1`) with the preview and the update, and the server refuses an update
+whose version no longer matches the prompt's current one, before it writes
+anything.
 
 Run the prompt again:
 
@@ -267,7 +291,8 @@ you can match them to the files above. You do not type them:
 ```
 
 The server wrote `user_message_template` to `user-message.md` and the other
-prompt fields to `prompt.yaml`.
+prompt fields to `prompt.yaml`. This call created version 1 with the original
+template; the files above show version 2, the 20-word template step 4 saved.
 
 ## Next: write a gate
 
