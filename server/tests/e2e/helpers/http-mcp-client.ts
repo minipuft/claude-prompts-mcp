@@ -658,7 +658,10 @@ export async function killServer(proc: ChildProcess, timeout = 5000): Promise<vo
     HERMETIC_ROOTS.delete(proc);
   };
 
-  if (proc.killed) {
+  // `proc.killed` only records that a signal was SENT, so a caller that signalled the process
+  // itself and a process that has actually exited look the same through it. Removing the roots
+  // of a process that is still exiting is the race `cleanup()` refuses; the exit is what counts.
+  if (proc.exitCode !== null || proc.signalCode !== null) {
     removeRoots();
     return;
   }

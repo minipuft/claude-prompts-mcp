@@ -231,7 +231,7 @@ describe.each([
       MCP_WORKSPACE: workspace,
       MCP_RUNTIME_ROOT: roots.runtimeRoot,
     });
-    cleanup.push(() => session.stop(), roots.cleanup);
+    cleanup.push(roots.cleanup, () => session.stop());
     return session;
   };
 
@@ -393,7 +393,7 @@ describe.each([
       MCP_WORKSPACE: workspace,
       MCP_RUNTIME_ROOT: roots.runtimeRoot,
     });
-    cleanup.push(() => session.stop(), roots.cleanup);
+    cleanup.push(roots.cleanup, () => session.stop());
 
     const created = await session.callTool('resource_manager', {
       resource_type: 'gate',

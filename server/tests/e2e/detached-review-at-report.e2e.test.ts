@@ -101,7 +101,7 @@ describe('Streamable HTTP: a detached step is reviewed at its late report (row 4
       MCP_WORKSPACE: workspace,
       MCP_RUNTIME_ROOT: roots.runtimeRoot,
     });
-    cleanup.push(() => session.stop(), roots.cleanup);
+    cleanup.push(roots.cleanup, () => session.stop());
     const optOut = defaults ? {} : { gate_configuration: OPT_OUT };
 
     const gate = await session.callTool('resource_manager', {

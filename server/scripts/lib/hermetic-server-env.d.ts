@@ -22,7 +22,14 @@ export interface HermeticRoots {
    * caller that can take `HOME` without `MCP_RUNTIME_ROOT` will eventually do exactly that.
    */
   env: { HOME: string; MCP_RUNTIME_ROOT: string };
-  /** Remove `root`. Safe to call more than once. */
+  /**
+   * Remove `root`. Safe to call more than once.
+   *
+   * While a process whose environment names these roots is still running (read from `/proc`,
+   * so Linux only), it is SIGKILLed with its descendants, the roots are removed, and then this
+   * throws naming the pid. The wrong order stays a failing test but leaves no server or directory
+   * behind. Stop the server first.
+   */
   cleanup(): void;
 }
 
