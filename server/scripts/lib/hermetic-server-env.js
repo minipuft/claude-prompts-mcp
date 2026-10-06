@@ -168,6 +168,65 @@ function liveProcessesUsing(roots) {
   return pids;
 }
 
+/** Parent pid of every process `/proc` lists, for the ones whose `stat` can be read. */
+function parentPids() {
+  const parents = new Map();
+  for (const entry of readdirSync('/proc')) {
+    const pid = Number(entry);
+    if (!Number.isInteger(pid)) continue;
+    try {
+      // `pid (comm) state ppid ...`; `comm` may hold spaces and parentheses, so split after the last ')'.
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+      parents.set(pid, Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]));
+    } catch {
+      continue; // exited between the listing and the read
+    }
+  }
+  return parents;
+}
+
+/** `pids` and every descendant of theirs that `/proc` shows. */
+function withDescendants(pids) {
+  const parents = parentPids();
+  const found = new Set(pids);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [pid, parent] of parents) {
+      if (!found.has(pid) && found.has(parent)) {
+        found.add(pid);
+        grew = true;
+      }
+    }
+  }
+  return [...found];
+}
+
+/** Block this thread for `ms`. A zombie is not reaped while it blocks, so callers poll `environ`, not `/proc/<pid>`. */
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * SIGKILL the processes and their descendants, then wait up to `timeoutMs` for the matching
+ * processes to stop naming the roots. An exited process, zombie included, has an empty `environ`,
+ * so the same property that found them says when they are gone.
+ *
+ * @param {number[]} pids
+ * @param {{ home: string, runtimeRoot: string }} roots
+ * @param {number} timeoutMs
+ */
+function killAndAwaitExit(pids, roots, timeoutMs) {
+  for (const pid of withDescendants(pids)) {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      continue; // already gone
+    }
+  }
+  const deadline = Date.now() + timeoutMs;
+  while (liveProcessesUsing(roots).length > 0 && Date.now() < deadline) sleepSync(20);
+}
+
 /**
  * A temp `HOME` and a temp runtime root, created together.
  *
@@ -197,13 +256,26 @@ export function createHermeticRoots(label = 'hermetic-server') {
       // Removing a tree a live server still writes into races its log flush: the removal throws
       // ENOTEMPTY on some runs and passes on others. `maxRetries` below only narrows that window,
       // so the ordering — stop the server, then remove its roots — is enforced here, loudly.
+      //
+      // The error is still thrown, so a wrong order stays a red test. But a throw alone aborts
+      // the reversed teardown list the caller is walking, so the stop behind it never runs and
+      // the server and its directories leak. The live process is therefore killed and the roots
+      // removed BEFORE the throw: the tree is clean, and only the verdict is red.
       const alive = liveProcessesUsing({ home, runtimeRoot });
       if (alive.length > 0) {
+        killAndAwaitExit(alive, { home, runtimeRoot }, 2000);
+        let removalFailure;
+        try {
+          rmSync(root, { recursive: true, force: true, maxRetries: 5 });
+        } catch (error) {
+          removalFailure = error;
+        }
         throw new Error(
-          `[hermetic-server-env] cleanup() of ${root} refused: process ${alive.join(', ')} is ` +
-            'still running against these roots. Stop the server first. A teardown list that runs ' +
-            'in reverse needs the roots pushed BEFORE the stop: ' +
-            'cleanup.push(roots.cleanup, () => session.stop()).'
+          `[hermetic-server-env] cleanup() of ${root}: process ${alive.join(', ')} was still ` +
+            'running against these roots. It was killed (SIGKILL) and the roots removed, but the ' +
+            'server must be stopped first. A teardown list that runs in reverse needs the roots ' +
+            'pushed BEFORE the stop: cleanup.push(roots.cleanup, () => session.stop()).',
+          { cause: removalFailure }
         );
       }
       rmSync(root, { recursive: true, force: true, maxRetries: 5 });

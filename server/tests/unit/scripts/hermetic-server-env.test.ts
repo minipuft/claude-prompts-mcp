@@ -122,7 +122,7 @@ describe('createHermeticRoots', () => {
  */
 const describeOnLinux = existsSync('/proc/self/environ') ? describe : describe.skip;
 
-describeOnLinux('createHermeticRoots cleanup refuses while a server still runs', () => {
+describeOnLinux('createHermeticRoots cleanup kills and reports a server that still runs', () => {
   const startChild = async (roots: ReturnType<typeof createHermeticRoots>) => {
     const child = spawn(
       process.execPath,
@@ -140,17 +140,27 @@ describeOnLinux('createHermeticRoots cleanup refuses while a server still runs',
     return { child, exited };
   };
 
-  it('throws naming the pid while the child runs, and removes the roots once it has exited', async () => {
+  it('kills the child, removes the roots, then throws naming the pid', async () => {
     const roots = createHermeticRoots('hermetic-roots-live-child');
     const { child, exited } = await startChild(roots);
-    try {
-      // The probe fires: the order the e2e teardown lists once had (remove, then stop).
-      expect(() => roots.cleanup()).toThrow(new RegExp(`process ${child.pid} is still running`));
-      expect(existsSync(roots.root)).toBe(true);
-    } finally {
-      child.kill();
-      await exited;
-    }
+    const pid = child.pid;
+
+    // The probe fires: the order the e2e teardown lists once had (remove, then stop).
+    expect(() => roots.cleanup()).toThrow(new RegExp(`process ${pid} was still running`));
+
+    // The throw must not leave a server or a directory behind: the reversed teardown list the
+    // caller walks is aborted by it, so nothing after this call would stop the child.
+    await exited;
+    expect(child.signalCode).toBe('SIGKILL');
+    expect(existsSync(`/proc/${pid}`)).toBe(false);
+    expect(existsSync(roots.root)).toBe(false);
+  });
+
+  it('passes once the server has been stopped first', async () => {
+    const roots = createHermeticRoots('hermetic-roots-stopped-child');
+    const { child, exited } = await startChild(roots);
+    child.kill();
+    await exited;
 
     // Negative control: the same call passes once the server is stopped, so the refusal is about
     // the live process and not about every call.
