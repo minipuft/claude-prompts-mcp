@@ -321,7 +321,7 @@ export class PipelineBuilder {
     // row 1.5's control could have covered one and silently missed the other.
     const shellVerifyExecutor = createShellVerifyExecutor({
       debug: false,
-      gateSystemEnabled: () => deps.lightweightGateSystem.isGateSystemEnabled(),
+      gateSystemEnabled: (scope) => deps.lightweightGateSystem.isGateSystemEnabled(scope),
     });
     const gateVerdictProcessor = new GateVerdictProcessor(
       deps.chainSessionStore,
@@ -330,13 +330,14 @@ export class PipelineBuilder {
       deps.notificationEmitter,
       // A detached node's review runs its gates' checks against the node's recorded output
       // (row 4.8, R10.3) through the same runners and executor stage 20 uses.
-      async (gateIds, agentResponse) =>
+      async (gateIds, agentResponse, scope) =>
         (
           await runGateReviewEvidence(
             gateIds,
             deps.lightweightGateSystem.gateLoader,
             agentResponse,
-            { shellVerifyExecutor, scriptToolRuntime: deps.scriptToolRuntime }
+            { shellVerifyExecutor, scriptToolRuntime: deps.scriptToolRuntime },
+            scope
           )
         ).checkResults
     );

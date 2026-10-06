@@ -803,6 +803,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **`resource_manager` now describes every parameter in `tools/list`.** Its 75 parameters were published with a name and a type and nothing else, so a client had to guess what `subject`, `unset` or `chain_step_order` meant. Each one now carries the description its contract already held.
+- **A workspace that turned the gate system off runs no shell verification over Streamable HTTP.** With several workspaces on one HTTP server, `system_control` `gates disable` sent under a workspace header switched gates off for that workspace, yet an inline `:: verify:"…"` command and a gate's `shell_verify` criterion still ran, because the check that refuses them read the switch of the workspace the server was launched in. It now reads the switch of the workspace that sent the request, so the command is refused there and still runs in a workspace that keeps gates on. STDIO, which serves one workspace, is unchanged.
 
 ## [4.0.1](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.0...v4.0.1) (2026-08-16)
 
