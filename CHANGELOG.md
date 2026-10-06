@@ -802,6 +802,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`resource_manager` now describes every parameter in `tools/list`.** Its 75 parameters were published with a name and a type and nothing else, so a client had to guess what `subject`, `unset` or `chain_step_order` meant. Each one now carries the description its contract already held.
 - **A connected STDIO client now sees the new framework in every tool description after a framework switch.** Each tool's description, and some of its parameter descriptions, carry the active framework's guidance. Over STDIO, `system_control` `framework switch`, `enable` and `disable` left all three tools listing the previous framework's text until the client reconnected, and a switch through `resource_manager` redrew only `prompt_engine`'s parameters. The next `tools/list` now shows the current framework on all three tools, or none once the framework system is off, and clients that listen for tool list changes are told. Streamable HTTP already rebuilt the list on every request and is unchanged.
 
 ## [4.0.1](https://github.com/minipuft/claude-prompts-mcp/compare/v4.0.0...v4.0.1) (2026-08-16)

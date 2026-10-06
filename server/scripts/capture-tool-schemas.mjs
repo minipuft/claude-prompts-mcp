@@ -28,6 +28,21 @@
  *
  * `--check` prints a structural diff. That diff is the deliverable of the zod 4
  * migration: empty means the bump is a minor, non-empty means it is a major.
+ *
+ * Size ceiling (B.87)
+ * -------------------
+ * The structural snapshot replaces every description with a marker, so it cannot see the one
+ * cost a description carries: bytes every client spends context on at each `tools/list`. When
+ * `resource_manager` started publishing a description per parameter, its `inputSchema` grew from
+ * 15,341 to 33,620 bytes (measured 2026-10-05), and nothing would have noticed it doubling again. So both modes also measure each tool's published `inputSchema` as compact JSON, with
+ * the description text as served, and compare it against a ceiling.
+ *
+ * The canonical home of each ceiling is `tests/snapshots/mcp-input-schema-sizes.json`
+ * (`SIZE_BASELINE` below), one `{ bytes, ceiling }` entry per tool. `bytes` is the measurement
+ * the last capture recorded; `ceiling` is set by hand and never written by this script, because
+ * raising it is the decision this check exists to make visible in a diff. A tool over its
+ * ceiling, or a tool with no entry, fails both modes. A capture rewrites `bytes` only. The
+ * ceilings were first set at the measurement plus 10%, rounded up to the next 1,000 bytes.
  */
 
 import { spawn } from 'node:child_process';
@@ -45,6 +60,7 @@ const SERVER_ROOT = path.resolve(__dirname, '..');
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
 const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');
 const DEFAULT_SNAPSHOT = path.join(SERVER_ROOT, 'tests', 'snapshots', 'mcp-input-schemas.json');
+const SIZE_BASELINE = path.join(SERVER_ROOT, 'tests', 'snapshots', 'mcp-input-schema-sizes.json');
 
 const HEALTH_TIMEOUT_MS = 30_000;
 const RPC_TIMEOUT_MS = 20_000;
@@ -242,6 +258,46 @@ function extractSchemas(toolsListResponse) {
 }
 
 /**
+ * Each tool's published `inputSchema` size in bytes: compact JSON of what `tools/list` served,
+ * descriptions included, since those are the bytes a client reads.
+ */
+function measureSchemaBytes(toolsListResponse) {
+  const sizes = {};
+  for (const tool of toolsListResponse.result.tools) {
+    sizes[tool.name] = Buffer.byteLength(JSON.stringify(tool.inputSchema), 'utf8');
+  }
+  return sizes;
+}
+
+/**
+ * Compare measured sizes against the hand-set ceilings. Returns one line per failure: a tool
+ * over its ceiling, or a tool the baseline has no ceiling for.
+ */
+function checkSchemaSizes(measured, baseline) {
+  const failures = [];
+  for (const [tool, bytes] of Object.entries(measured)) {
+    const entry = baseline[tool];
+    if (typeof entry?.ceiling !== 'number') {
+      failures.push(`${tool}: ${bytes} bytes, and no ceiling in ${path.basename(SIZE_BASELINE)}`);
+    } else if (bytes > entry.ceiling) {
+      failures.push(`${tool}: ${bytes} bytes, over its ceiling of ${entry.ceiling}`);
+    }
+  }
+  return failures;
+}
+
+/** Print every tool's size against its recorded measurement and ceiling. */
+function reportSchemaSizes(measured, baseline) {
+  for (const [tool, bytes] of Object.entries(measured)) {
+    const entry = baseline[tool] ?? {};
+    const recorded = typeof entry.bytes === 'number' ? entry.bytes : 'none';
+    console.log(
+      `  ${tool}: ${bytes} bytes (recorded ${recorded}, ceiling ${entry.ceiling ?? 'none'})`
+    );
+  }
+}
+
+/**
  * Flatten to `path -> JSON value` so two schemas can be compared leaf by leaf.
  *
  * An empty object must still emit a leaf. `additionalProperties: {}` (zod 4's way of
@@ -316,10 +372,34 @@ async function main() {
     const listed = await client.send('tools/list', {});
     const captured = extractSchemas(listed);
     const serialized = `${JSON.stringify(captured, null, 2)}\n`;
+    const sizes = measureSchemaBytes(listed);
+    const sizeBaseline = existsSync(SIZE_BASELINE)
+      ? JSON.parse(readFileSync(SIZE_BASELINE, 'utf-8'))
+      : {};
+    console.log('Published inputSchema sizes:');
+    reportSchemaSizes(sizes, sizeBaseline);
+    const sizeFailures = checkSchemaSizes(sizes, sizeBaseline);
+    for (const failure of sizeFailures) {
+      console.error(`  over budget: ${failure}`);
+    }
+    if (sizeFailures.length > 0) {
+      console.error(
+        `\nA ceiling is raised by hand in ${path.relative(SERVER_ROOT, SIZE_BASELINE)}, ` +
+          'which makes the growth a reviewed change rather than a drift.'
+      );
+      process.exitCode = 1;
+    }
 
     if (!checkMode) {
       mkdirSync(path.dirname(snapshotPath), { recursive: true });
       writeFileSync(snapshotPath, serialized);
+      const recorded = Object.fromEntries(
+        Object.entries(sizes).map(([tool, bytes]) => [
+          tool,
+          { ...sizeBaseline[tool], bytes, ceiling: sizeBaseline[tool]?.ceiling ?? null },
+        ])
+      );
+      writeFileSync(SIZE_BASELINE, `${JSON.stringify(recorded, null, 2)}\n`);
       console.log(
         `Captured ${Object.keys(captured).length} tool schemas -> ${path.relative(SERVER_ROOT, snapshotPath)}`
       );
@@ -336,7 +416,10 @@ async function main() {
     const changes = diffSchemas(baseline, captured);
 
     if (changes.length === 0) {
-      console.log(`OK: published inputSchema identical for ${Object.keys(captured).length} tools`);
+      const verdict = sizeFailures.length === 0 ? 'OK' : 'FAIL (size)';
+      console.log(
+        `${verdict}: published inputSchema structure identical for ${Object.keys(captured).length} tools`
+      );
       return;
     }
 
