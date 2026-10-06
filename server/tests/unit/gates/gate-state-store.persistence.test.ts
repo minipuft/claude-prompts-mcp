@@ -51,8 +51,10 @@ describe('GateStateStore (persistence)', () => {
 
   /**
    * Every store a test opens, cleaned up whether or not the test reached its own `cleanup()`.
-   * `initialize()` starts a 30s health interval that only `cleanup()` clears, so an assertion
-   * throwing before that call left the interval running and jest never exited.
+   * `initialize()` used to start a 30s health interval that only `cleanup()` cleared, so an
+   * assertion throwing before that call left the interval running and jest never exited. That
+   * interval emitted to nobody and was deleted (B.97), so the leak it caused cannot recur —
+   * the sweep stays because `cleanup()` remains the hook anything scheduled later releases.
    */
   const openStores: GateStateStore[] = [];
   const openStore = (...args: ConstructorParameters<typeof GateStateStore>): GateStateStore => {
