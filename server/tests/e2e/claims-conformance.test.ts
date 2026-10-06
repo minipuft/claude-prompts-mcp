@@ -370,10 +370,21 @@ async function buildIsolatedWorkspace(): Promise<string> {
   // the shared corpus asserts; the READ surface can only be exercised with it enabled. Patching
   // the package config rather than writing a fresh one keeps every other setting at its shipped
   // value, so a mutating row still runs against the configuration users get.
+  // Bake one fixed `gates.harnessCovers` entry, same precedent as `resources.registerWithMcp`
+  // above: the suppression `subject` claims (GateGuidanceRenderer dropping a reminder-tier gate
+  // whose `subject` is covered) can only be observed by comparing two executions against a
+  // config that differs, and `system_control config` refuses arbitrary writes over MCP by design
+  // (cpm-only, rulings R27/R35) — no scenario can toggle this mid-run. `conformance-harness-subject`
+  // is not used by any bundled gate (`rg '^subject:' resources/gates/*/gate.yaml`, checked
+  // 2026-09-20), so baking it here cannot suppress a bundled reminder some OTHER scenario in this
+  // file depends on seeing. The two scenarios in workspace-and-mutations.yaml this unblocks tag a
+  // gate with this exact string (suppressed) and a different, uncovered string (shown).
   const cfg = JSON.parse(await fs.readFile(path.join(serverRoot, 'config.json'), 'utf8')) as {
     resources?: Record<string, unknown>;
+    gates?: Record<string, unknown>;
   };
   cfg.resources = { ...(cfg.resources ?? {}), registerWithMcp: true };
+  cfg.gates = { ...(cfg.gates ?? {}), harnessCovers: ['conformance-harness-subject'] };
   await fs.writeFile(path.join(ws, 'config.json'), JSON.stringify(cfg, null, 2), 'utf8');
 
   // The overlay fixture. `overlay_probe` exists ONLY here — never in the bundled tree — so a
