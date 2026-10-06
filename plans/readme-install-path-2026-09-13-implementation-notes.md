@@ -1,7 +1,7 @@
 ---
 title: "README install path — implementation notes"
 date: 2026-09-13
-status: active
+status: reference
 tags: [docs, readme, resources, adoption]
 ---
 
