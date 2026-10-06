@@ -2,8 +2,8 @@ name: PR Conventions
 
 # Checks that a pull request body was written FOR A READER, that its title is a conventional commit
 # the repo's own commitlint accepts, and supplies the parts a machine can derive. Companion to
-# CONTRIBUTING.md §Pull Request Process, .github/pull_request_template.md, and
-# scripts/validate-pr-body.mjs (which owns the body rules — this file only calls it).
+# the delivery contract, .github/pull_request_template.md, and scripts/validate-pr-body.mjs
+# (which owns the body rules — this file only calls it).
 #
 # WHY IT EXISTS. Measured 2026-08-28: `gh pr create --body "..."` bypasses the template silently,
 # and PR #249 opened with invented headings, no verification section, and none of the 18 available
@@ -22,19 +22,15 @@ name: PR Conventions
 #   It does NOT judge prose quality, and it deliberately does not gate labels: the type label is
 #   derived here automatically, and a gate you satisfy automatically is theatre.
 #
-# REQUIRED SINCE 2026-09-02 (listed in `.github/required-contexts.json`). The original flip
-# condition — five consecutive clean PRs, zero false positives — was dropped by an operator
-# ruling: it had no counter and no detector (the exact "retirability without detection" failure
-# cleanup-standards.md names), and it was unsatisfiable anyway, because every renovate and
-# release-please PR failed the body check from the day the gate existed (#252, #253 probed
-# FAILURE 2026-09-01). Bot PRs are now exempt from the authored-body checks — their bodies and
-# titles are machine-owned surface — which removes the known false-positive sources; a wrong
-# failure after this is a defect to fix, not a count to reset.
+# Bot PRs are exempt from the authored-body checks — their bodies and titles are machine-owned
+# surface — which removes the known false-positive sources; a wrong failure after this is a
+# defect to fix, not a count to reset.
 #
-# The Bot exemption never covered release-please: it opens its PR with the owner's token, so the
-# PR's author is the owner (a `User`), and the check read release-please's "too large to preview"
-# stub as an authored body (measured 2026-10-05, release PR #232). Its branch name is the stable
-# marker — `release-please--` — so the four authored-body steps are exempt on either condition.
+# The Bot exemption never covered release-please. It opens its release PR with the repository
+# owner's token, so the author is a human, `user.type` is not 'Bot', and the checks ran against
+# its "This release is too large to preview" stub, which has none of the template's sections —
+# measured 2026-10-06, every consumer failing its first release PR. The only stable marker of
+# that PR is its branch name, `release-please--…`, so the four guarded steps also skip on it.
 #
 # This workflow also asserts the merge-settings contract by its EFFECT (the newest squash on
 # main carries a PR-shaped body): the settings are invisible to any file-based gate AND to the

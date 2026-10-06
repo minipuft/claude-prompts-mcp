@@ -33,4 +33,17 @@ Use one of:
 
 ## Template
 
-Start with `0000-template.md` and fill it in.
+Start with `0000-template.md` and fill it in, or run `node scripts/adr.mjs new "<title>"` from the
+repository root: it writes the next number with the template's front matter and re-indexes.
+`node scripts/adr.mjs check` lists any inconsistency between the files and the index below.
+
+## Index
+
+<!-- adr-index:start -->
+
+| #    | Title                                                                              | Status   | Date       | Supersedes | Superseded by | Initiative |
+| ---- | ---------------------------------------------------------------------------------- | -------- | ---------- | ---------- | ------------- | ---------- |
+| 0001 | [Gate Resolution Precedence](0001-gate-resolution-precedence.md)                   | accepted | 2026-07-29 |            |               |            |
+| 0002 | [Refuse Schema Downgrades During Initialization](0002-schema-downgrade-refusal.md) | proposed | 2026-09-30 |            |               |            |
+
+<!-- adr-index:end -->

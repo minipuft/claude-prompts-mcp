@@ -42,6 +42,8 @@ PLAN FOOTER CONTRACT. If this PR executes a plan, end the body with exactly one 
   Plan: `plans/<path>.md`
 The gate FAILS while that plan's `status:` is non-final — finalize (every row terminal,
 retired) in this same PR. No other plan mention belongs in the body.
+The `Plan:` footer is the only plan mention and the join key (`git log --grep='Plan: .*<slug>'`);
+`Decision: ADR-NNNN` must name an ADR that exists.
 
 Generate this skeleton pre-filled: `npm run pr:body -- --out /tmp/pr-body.md` (repo root).
 Check before opening -- every gate CI runs, body AND title:

@@ -19,7 +19,6 @@
  *   How it was verified table header + one row per changed test file as a candidate claim
  *   Notes for Reviewers the three largest diffs on the branch, as distrust candidates
  *   Still open         the plan's `☐` rows, one line each
- *   README Charter     "Not applicable" unless README.md is in the diff
  *
  * The template file is the SSOT for headings and guidance: this script reads it and inserts
  * under each heading, so it cannot disagree with what the validator checks.
@@ -31,18 +30,21 @@
  *   npm run pr:check -- --body-file <file> --title "<title>"   # every gate CI runs, body AND title
  */
 
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-import { checkBody } from './validate-pr-body.mjs';
+import { checkBody, DEFAULT_ADR_DIR } from "./validate-pr-body.mjs";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const TEMPLATE = path.join(REPO_ROOT, '.github', 'pull_request_template.md');
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
+const TEMPLATE = path.join(REPO_ROOT, ".github", "pull_request_template.md");
 
 function git(...args) {
-  return execFileSync('git', args, { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+  return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8" }).trim();
 }
 
 function readArg(flag, fallback) {
@@ -53,99 +55,165 @@ function readArg(flag, fallback) {
 /** Ranges are `base...HEAD` so a stale local base still measures only this branch. */
 function branchFacts(base) {
   const range = `${base}...HEAD`;
-  const subjects = git('log', '--no-merges', '--format=%s', range).split('\n').filter(Boolean);
-  const files = git('diff', '--name-only', range).split('\n').filter(Boolean);
-  const numstat = git('diff', '--numstat', range)
-    .split('\n')
+  const subjects = git("log", "--no-merges", "--format=%s", range)
+    .split("\n")
+    .filter(Boolean);
+  const files = git("diff", "--name-only", range).split("\n").filter(Boolean);
+  const numstat = git("diff", "--numstat", range)
+    .split("\n")
     .filter(Boolean)
     .map((line) => {
-      const [added, deleted, file] = line.split('\t');
+      const [added, deleted, file] = line.split("\t");
       return { file, churn: Number(added) + Number(deleted) || 0 };
     })
     .sort((a, b) => b.churn - a.churn);
-  return { subjects, files, numstat };
+  /** Files this branch adds or modifies — a rename's new path counts, a deletion does not. */
+  const addedOrModified = git("diff", "--name-status", range)
+    .split("\n")
+    .filter(Boolean)
+    .filter((line) => /^[AM]|^R\d*/.test(line))
+    .map((line) => line.split("\t").pop());
+  return { subjects, files, numstat, addedOrModified };
 }
 
 /** The plan is the first changed `plans/**` file that is not implementation notes. */
 function detectPlan(files, explicit) {
   if (explicit) return explicit;
-  return files.find((f) => f.startsWith('plans/') && f.endsWith('.md') && !f.includes('implementation-notes'));
+  return files.find(
+    (f) =>
+      f.startsWith("plans/") &&
+      f.endsWith(".md") &&
+      !f.includes("implementation-notes"),
+  );
+}
+
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** `.delivery-contract.json` → `answers.adrDir`, or `DEFAULT_ADR_DIR` when absent or unset. */
+function resolveAdrDir() {
+  const answersPath = path.join(REPO_ROOT, ".delivery-contract.json");
+  if (!existsSync(answersPath)) return DEFAULT_ADR_DIR;
+  try {
+    const parsed = JSON.parse(readFileSync(answersPath, "utf8"));
+    return parsed?.answers?.adrDir || DEFAULT_ADR_DIR;
+  } catch {
+    return DEFAULT_ADR_DIR;
+  }
+}
+
+/** `ADR-NNNN` for every added/modified `<adrDir>/NNNN-*.md`, `0000` excluded, sorted ascending. */
+function adrDecisions(addedOrModified, adrDir) {
+  const pattern = new RegExp(`^${escapeRegExp(adrDir)}/(\\d{4})-[^/]+\\.md$`);
+  const numbers = new Set();
+  for (const f of addedOrModified) {
+    const match = pattern.exec(f);
+    if (match && match[1] !== "0000") numbers.add(match[1]);
+  }
+  return [...numbers].sort().map((n) => `ADR-${n}`);
 }
 
 /** `☐` rows of a plan's markdown tables → `id — first words`. */
 function openRows(planPath) {
   if (!planPath || !existsSync(path.join(REPO_ROOT, planPath))) return [];
-  const text = readFileSync(path.join(REPO_ROOT, planPath), 'utf8');
+  const text = readFileSync(path.join(REPO_ROOT, planPath), "utf8");
   return text
-    .split('\n')
-    .filter((line) => line.startsWith('|') && line.includes('☐'))
+    .split("\n")
+    .filter((line) => line.startsWith("|") && line.includes("☐"))
     .map((line) => {
-      const cells = line.split('|').map((c) => c.trim()).filter(Boolean);
-      return `${cells[0]} — ${(cells[1] || '').slice(0, 80)}`;
+      const cells = line
+        .split("|")
+        .map((c) => c.trim())
+        .filter(Boolean);
+      return `${cells[0]} — ${(cells[1] || "").slice(0, 80)}`;
     });
 }
 
 function summary({ subjects }) {
-  const lines = ['After this merges, ___.', ''];
+  const lines = ["After this merges, ___.", ""];
   for (const s of subjects) lines.push(`- ${s}`);
   return lines;
 }
 
 function demonstration({ files }) {
   const drives = files.filter((f) => /verify-.*\.mjs$/.test(f));
-  const lines = ['**Before**', '', '```', '___', '```', '', '**After**', '', '```', '___', '```'];
+  const lines = [
+    "**Before**",
+    "",
+    "```",
+    "___",
+    "```",
+    "",
+    "**After**",
+    "",
+    "```",
+    "___",
+    "```",
+  ];
   if (drives.length > 0) {
-    lines.push('', 'Capture from:', ...drives.map((d) => `- \`node ${d.replace(/^server\//, '')}\``));
+    lines.push("", "Capture from:", ...drives.map((d) => `- \`node ${d}\``));
   }
   return lines;
 }
 
 function verified({ files }) {
-  const tests = files.filter((f) => /\.(test|spec)\.[cm]?[jt]s$/.test(f) || /^server\/scripts\/validate-/.test(f));
-  const rows = tests.length > 0 ? tests : ['<claim>'];
+  const tests = files.filter(
+    (f) =>
+      /\.(test|spec)\.[cm]?[jt]s$/.test(f) ||
+      /(^|\/)scripts\/validate-/.test(f),
+  );
+  const rows = tests.length > 0 ? tests : ["<claim>"];
   return [
-    '| Claim | Probe | Baseline → measured | Mutation that fails it |',
-    '| --- | --- | --- | --- |',
+    "| Claim | Probe | Baseline → measured | Mutation that fails it |",
+    "| --- | --- | --- | --- |",
     ...rows.map((t) => `| \`${t}\` | | | |`),
   ];
 }
 
 function notes({ numstat }) {
-  return numstat.slice(0, 3).map((n) => `- \`${n.file}\` (${n.churn} lines changed) — distrust because ___`);
+  return numstat
+    .slice(0, 3)
+    .map(
+      (n) =>
+        `- \`${n.file}\` (${n.churn} lines changed) — distrust because ___`,
+    );
 }
 
 function stillOpen(plan) {
   const rows = openRows(plan);
-  if (rows.length === 0) return ['None'];
+  if (rows.length === 0) return ["None"];
   return [
-    '___',
-    '',
-    '<!-- open rows at generation time — the Plan footer gate refuses to merge until the plan is',
-    '     finalized, so close or kill these in this PR:',
+    "___",
+    "",
+    "<!-- open rows at generation time — the Plan footer gate refuses to merge until the plan is",
+    "     finalized, so close or kill these in this PR:",
     ...rows.map((r) => `       ${r}`),
-    '-->',
+    "-->",
   ];
-}
-
-function readme({ files }) {
-  return files.includes('README.md') ? [] : ['Not applicable'];
 }
 
 /** The collapsed archive register: Deviations excerpts from any implementation-notes in the diff. */
 function appendix({ files }) {
-  const notes = files.filter((f) => f.endsWith('implementation-notes.md'));
-  const parts = ['<details>', '<summary>Appendix — session archive (not review material)</summary>', ''];
+  const notes = files.filter((f) => f.endsWith("implementation-notes.md"));
+  const parts = [
+    "<details>",
+    "<summary>Appendix — session archive (not review material)</summary>",
+    "",
+  ];
   for (const n of notes) {
     const notePath = path.join(REPO_ROOT, n);
     if (!existsSync(notePath)) continue;
-    const deviations = /## Deviations[\s\S]*?(?=\n## |$)/.exec(readFileSync(notePath, 'utf8'));
-    if (deviations) parts.push(`From \`${n}\`:`, '', deviations[0].trim(), '');
+    const deviations = /## Deviations[\s\S]*?(?=\n## |$)/.exec(
+      readFileSync(notePath, "utf8"),
+    );
+    if (deviations) parts.push(`From \`${n}\`:`, "", deviations[0].trim(), "");
   }
   parts.push(
-    '<!-- captured drive transcripts, extended verification, deviation detail — collapsed content',
-    '     is exempt from the word budget and lands greppable on main via the squash body -->',
-    '',
-    '</details>'
+    "<!-- captured drive transcripts, extended verification, deviation detail — collapsed content",
+    "     is exempt from the word budget and lands greppable on main via the squash body -->",
+    "",
+    "</details>",
   );
   return parts;
 }
@@ -153,7 +221,7 @@ function appendix({ files }) {
 /** Insert derived lines under each heading, after the template's own comment block. */
 function fill(template, sections) {
   const out = [];
-  const lines = template.split('\n');
+  const lines = template.split("\n");
   let pending = null;
   let inComment = false;
   for (const line of lines) {
@@ -163,45 +231,53 @@ function fill(template, sections) {
       pending = sections[heading[1]] ?? null;
       continue;
     }
-    if (line.includes('<!--')) inComment = !line.includes('-->');
-    else if (inComment && line.includes('-->')) inComment = false;
+    if (line.includes("<!--")) inComment = !line.includes("-->");
+    else if (inComment && line.includes("-->")) inComment = false;
     else continue;
     if (!inComment && pending) {
-      out.push('', ...pending);
+      out.push("", ...pending);
       pending = null;
     }
   }
-  return out.join('\n');
+  return out.join("\n");
 }
 
 function main() {
-  const base = readArg('--base', 'origin/main');
+  const base = readArg("--base", "origin/main");
   const facts = branchFacts(base);
-  const plan = detectPlan(facts.files, readArg('--plan'));
-  const body = fill(readFileSync(TEMPLATE, 'utf8'), {
+  const plan = detectPlan(facts.files, readArg("--plan"));
+  const body = fill(readFileSync(TEMPLATE, "utf8"), {
     Summary: summary(facts),
     Demonstration: demonstration(facts),
-    'How it was verified': verified(facts),
-    'Notes for Reviewers': notes(facts),
-    'Still open': stillOpen(plan),
-    'README Charter Compliance': readme(facts),
+    "How it was verified": verified(facts),
+    "Notes for Reviewers": notes(facts),
+    "Still open": stillOpen(plan),
   });
-  const tail = [''];
-  if (plan) tail.push(`Plan: \`${plan}\``, '');
-  tail.push(...appendix(facts), '');
-  tail.push(`<!-- derived: ${facts.subjects.length} commits · ${facts.files.length} files · base ${base} -->`);
-  const result = `${body.trimEnd()}\n${tail.join('\n')}\n`;
+  const decisions = adrDecisions(facts.addedOrModified, resolveAdrDir());
+  const trailers = [];
+  if (plan) trailers.push(`Plan: \`${plan}\``);
+  trailers.push(...decisions.map((d) => `Decision: ${d}`));
 
-  const out = readArg('--out');
+  const tail = [""];
+  if (trailers.length > 0) tail.push(...trailers, "");
+  tail.push(...appendix(facts), "");
+  tail.push(
+    `<!-- derived: ${facts.subjects.length} commits · ${facts.files.length} files · base ${base} -->`,
+  );
+  const result = `${body.trimEnd()}\n${tail.join("\n")}\n`;
+
+  const out = readArg("--out");
   if (out) {
     writeFileSync(out, result);
     console.error(`wrote ${out}`);
   } else {
     process.stdout.write(result);
   }
-  const { warnings } = checkBody(result, facts.subjects[0] ?? '');
+  const { warnings } = checkBody(result, facts.subjects[0] ?? "");
   for (const w of warnings) console.error(`note: ${w}`);
-  console.error('Fill every ___ and empty table cell; then: npm run pr:check -- --body-file <file> --title "<title>"');
+  console.error(
+    'Fill every ___ and empty table cell; then: npm run pr:check -- --body-file <file> --title "<title>"',
+  );
 }
 
 main();

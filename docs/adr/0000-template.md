@@ -1,8 +1,14 @@
-# ADR NNNN: Title
+---
+number: NNNN
+title: "<title>"
+status: proposed
+date: YYYY-MM-DD
+initiative:
+supersedes:
+superseded_by:
+---
 
-- Status: proposed
-- Date: YYYY-MM-DD
-- Owners: @handle (or team)
+# ADR NNNN: <title>
 
 ## Context
 
@@ -10,7 +16,7 @@ What problem are we solving? What forces and constraints apply?
 
 - Current behavior and pain points
 - Requirements (functional, non-functional)
-- Constraints (compatibility, Node versions, MCP protocol, transports, CI)
+- Constraints (compatibility, supported runtime versions, CI)
 
 ## Decision
 
@@ -18,7 +24,7 @@ What are we doing, specifically?
 
 - The decision, stated as a clear commitment
 - Scope of change (what is in / out)
-- Interfaces/contracts impacted (tool params, schema, runtime state)
+- Interfaces/contracts impacted (public APIs, schemas, runtime state)
 - Migration plan (if applicable) and the “remove legacy” criteria
 
 ## Alternatives considered
@@ -49,9 +55,9 @@ What changes after this decision?
 
 How do we prove this decision works?
 
-- Commands to run (typecheck/lint/tests/validate:all)
-- Runtime checks (STDIO/Streamable HTTP smoke)
-- Compatibility notes (CI matrix)
+- Commands to run (typecheck/lint/tests/validate)
+- Runtime checks (smoke tests against the changed surface)
+- Compatibility notes (supported environment matrix)
 
 ## References
 
