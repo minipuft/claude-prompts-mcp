@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -108,6 +108,43 @@ describe('validate-readme prompt operands', () => {
     );
     expect(findings).toHaveLength(1);
     expect(findings[0]).toContain('no longer names it');
+  });
+
+  test('skips the words the parser lists as built-in commands', () => {
+    const parserSource = readFileSync(
+      path.resolve(process.cwd(), 'src/engine/execution/parsers/command-parser.ts'),
+      'utf8'
+    );
+    const listed = [
+      ...(parserSource.match(/const builtinCommands = \[([^\]]*)\]/)?.[1] ?? '').matchAll(
+        /'([^']+)'/g
+      ),
+    ].map((m) => m[1]);
+    expect(listed.length).toBeGreaterThan(0);
+    expect(operandFindings(`${listed.map((word) => `\`>>${word}\``).join(' ')}\n`)).toEqual([]);
+  });
+
+  test('skips the words the routing patterns answer, including the optional-letter spellings', () => {
+    const words = [
+      'listprompt',
+      'listprompts',
+      'help',
+      'status',
+      'framework',
+      'analytic',
+      'guide',
+      'gate',
+    ];
+    expect(operandFindings(`${words.map((word) => `\`>>${word}\``).join(' ')}\n`)).toEqual([]);
+  });
+
+  test('still rejects a word that is not built in', () => {
+    expect(operandFindings('Run `>>helpful_ghost`.\n')).toHaveLength(1);
+  });
+
+  test('reports a built-in word declared illustrative', () => {
+    const findings = operandFindings('## One\n\n<!-- illustrative-prompts: help -->\n\n`>>help`\n');
+    expect(findings).toHaveLength(1);
   });
 
   test('reports a declared placeholder that actually ships', () => {

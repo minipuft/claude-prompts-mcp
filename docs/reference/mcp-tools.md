@@ -642,8 +642,6 @@ See [Ralph Loops Guide](../guides/ralph-loops.md) for advanced patterns includin
 
 ### Built-in Commands
 
-<!-- illustrative-prompts: listprompts help status gates guide -->
-
 These work without defining prompts:
 
 ```bash

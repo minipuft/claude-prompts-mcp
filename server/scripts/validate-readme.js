@@ -439,7 +439,9 @@ function checkShippedPromptCount(lines) {
  * turns a table cell holding `>>` and the next cell's text into an operand nobody wrote. Ids are
  * normalised as `normalizePromptId` (src/shared/utils/resource-ids.ts) does, keeping `/` for nested
  * steps, and a shipped id drops its category directory — `examples/deep_analysis/initial_scan`
- * serves as `deep_analysis/initial_scan`.
+ * serves as `deep_analysis/initial_scan`. Built-in command words (`>>help`, `>>gates`) are skipped:
+ * see `builtinCommandWords`. A built-in word declared illustrative is reported stale, since the
+ * section no longer names it as an operand the check examines.
  */
 const PROMPT_OPERAND = /(?:>>|-->|==>)\s*([a-zA-Z][a-zA-Z0-9_/-]*)/g;
 const ILLUSTRATIVE_PROMPTS = /<!--\s*illustrative-prompts:\s*([^>]*?)\s*-->/;
@@ -454,6 +456,44 @@ function normalizePromptId(id) {
     .replace(/[\s-]+/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '');
+}
+
+const COMMAND_PARSER_SOURCE = path.join(
+  REPO_ROOT,
+  'server/src/engine/execution/parsers/command-parser.ts'
+);
+const TOOL_ROUTING_SOURCE = path.join(
+  REPO_ROOT,
+  'server/src/engine/execution/pipeline/routing/tool-routing.ts'
+);
+
+/**
+ * The words the server answers itself, which are neither shipped prompts nor placeholders.
+ *
+ * Read from the two source files that decide them on every run, so the set cannot drift from the
+ * server: the `builtinCommands` array in `isBuiltinCommand` (command-parser.ts) and the leading
+ * word of every `*_PATTERN` routing regex that opens with `(>>|\/)?` (tool-routing.ts), where a
+ * trailing `?` makes the final letter optional (`gates?` names `gate` and `gates`). Either source
+ * yielding nothing throws: an empty set would turn every built-in on the page into a violation, or
+ * worse, hide that the parse stopped matching.
+ */
+function builtinCommandWords() {
+  const parser = fs.readFileSync(COMMAND_PARSER_SOURCE, 'utf8');
+  const routing = fs.readFileSync(TOOL_ROUTING_SOURCE, 'utf8');
+
+  const list = parser.match(/const builtinCommands = \[([^\]]*)\]/);
+  const parserWords = list ? [...list[1].matchAll(/'([^']+)'/g)].map((m) => m[1]) : [];
+  const routingWords = [
+    ...routing.matchAll(/^const \w+_PATTERN = \/\^\(>>\|\\\/\)\?([a-z]+)(\??)/gm),
+  ].flatMap((m) => (m[2] ? [m[1], m[1].slice(0, -1)] : [m[1]]));
+
+  if (parserWords.length === 0 || routingWords.length === 0) {
+    throw new Error(
+      `built-in command words could not be read: ${parserWords.length} from ${COMMAND_PARSER_SOURCE}, ` +
+        `${routingWords.length} from ${TOOL_ROUTING_SOURCE}`
+    );
+  }
+  return new Set([...parserWords, ...routingWords].map(normalizePromptId));
 }
 
 function shippedPromptIds(paths) {
@@ -498,7 +538,9 @@ function checkPromptOperands(lines) {
   const paths = shippedPromptPaths();
   if (paths === null) return [];
   const shipped = shippedPromptIds(paths);
-  const { operands, declarations } = scanPromptOperands(lines);
+  const builtins = builtinCommandWords();
+  const { operands: allOperands, declarations } = scanPromptOperands(lines);
+  const operands = allOperands.filter((op) => !builtins.has(op.id) || shipped.has(op.id));
   const sameSection = (a, b) => a.section === b.section && a.id === b.id;
 
   const unresolved = operands
