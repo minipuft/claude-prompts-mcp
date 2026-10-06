@@ -16,6 +16,7 @@ import { runGateShellVerifications } from './gate-shell-verify-runner.js';
 import { formatGateShellVerifySection } from '../shell/shell-verify-message-formatter.js';
 
 import type { GateCheckResult } from '#shared/types/chain-execution.js';
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { GateScriptToolResult } from './gate-script-tool-runner.js';
 import type { ScriptToolRuntimeProvider } from './script-tool-criterion-runner.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
@@ -48,18 +49,23 @@ export interface GateReviewEvidence {
  * `script_tool` criteria run beside `shell_verify` rather than instead of it: a gate may declare
  * both, and the two answer different questions — an exit code versus a structured verdict the
  * script can explain.
+ *
+ * `scope` is the request's: the shell executor reads the gate master switch for it, so a
+ * workspace that disabled gates runs none of their commands.
  */
 export async function runGateReviewEvidence(
   gateIds: string[],
   provider: GateDefinitionProvider,
   agentResponse: string | undefined,
-  runners: GateReviewCheckRunners
+  runners: GateReviewCheckRunners,
+  scope?: StateStoreOptions
 ): Promise<GateReviewEvidence> {
   const shellResults = await runGateShellVerifications(
     gateIds,
     provider,
     agentResponse !== undefined ? { agentResponse } : undefined,
-    runners.shellVerifyExecutor
+    runners.shellVerifyExecutor,
+    scope
   );
   const scriptResults = await runGateScriptToolVerifications(
     gateIds,

@@ -24,6 +24,7 @@ import {
 import { isWorkingDirAllowed, loadShellVerifyAllowedDirs } from './shell-working-dir-policy.js';
 import { SHELL_OUTPUT_MAX_CHARS } from './types.js';
 
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { ShellVerifyGate, ShellVerifyResult, ShellVerifyExecutorConfig } from './types.js';
 
 import { executeProcess, findUnsafeEnvironmentKeys } from '#shared/utils/process.js';
@@ -56,7 +57,7 @@ export class ShellVerifyExecutor {
   private readonly debug: boolean;
   private readonly allowlist: readonly string[] | undefined;
   private readonly allowedDirs: readonly string[] | undefined;
-  private readonly gateSystemEnabled: (() => boolean) | undefined;
+  private readonly gateSystemEnabled: ShellVerifyExecutorConfig['gateSystemEnabled'];
 
   constructor(config: ShellVerifyExecutorConfig = {}) {
     this.defaultTimeout = config.defaultTimeout ?? SHELL_VERIFY_DEFAULT_TIMEOUT;
@@ -89,9 +90,12 @@ export class ShellVerifyExecutor {
    * Execute a shell verification command.
    *
    * @param gate - Shell verification gate configuration
+   * @param scope - The caller's continuity scope, for the master-switch read below. A request
+   *   that has one must pass it (`context.getScopeOptions()`); omitted, the switch answers for
+   *   the launch workspace, so a workspace that disabled gates would still have its commands run.
    * @returns Verification result with pass/fail status and output
    */
-  async execute(gate: ShellVerifyGate): Promise<ShellVerifyResult> {
+  async execute(gate: ShellVerifyGate, scope?: StateStoreOptions): Promise<ShellVerifyResult> {
     const { command, workingDir, timeout, env, stdin } = gate;
 
     // One rendered form for every message and every result, so a refusal names the
@@ -113,7 +117,7 @@ export class ShellVerifyExecutor {
     // different questions: whether the gate subsystem runs at all, versus what a
     // running gate may execute. They compose with AND, and an operator who
     // disabled the system is entitled to have that mean it.
-    if (this.gateSystemEnabled?.() === false) {
+    if (this.gateSystemEnabled?.(scope) === false) {
       return {
         passed: false,
         refused: true,
