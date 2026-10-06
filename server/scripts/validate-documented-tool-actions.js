@@ -62,18 +62,10 @@ const EXCLUDED_DOCS = new Map([
  * Doc sites that name a value the contract lacks and are already being corrected. Keyed by
  * file, tool, key and value (never a line number, which drifts under unrelated edits), each
  * naming what retires it. The audit fails an entry that stops matching, so the entry cannot
- * outlive the doc line that earned it.
+ * outlive the doc line that earned it. Empty: there is no legitimate reason to document a value
+ * the contract lacks, and an entry added later must carry a `closedBy`.
  */
-const DOCUMENTED_VALUE_EXCEPTIONS = [
-  {
-    file: 'docs/guides/ralph-loops.md',
-    tool: 'resource_manager',
-    key: 'resource_type',
-    value: 'checkpoint',
-    reason: 'removed by the docs-currency slice (row C.10), which is on its own branch',
-    closedBy: 'the docs-currency slice merging to main: delete this entry in the same merge',
-  },
-];
+const DOCUMENTED_VALUE_EXCEPTIONS = [];
 
 const TOOL_HEAD = /\b(system_control|resource_manager)\b/g;
 const BARE_KEY_AFTER_HEAD = /^[ \t]+["']?(?:action|resource_type)["']?[ \t]*:/;
