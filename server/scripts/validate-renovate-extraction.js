@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 const ACTION_FILES = [
   '.github/actions/setup-node-install/action.yml',
   '.github/workflows/ci.yml',
+  '.github/workflows/evaluations.yml',
   // `downstream-sync.yml` was removed here 2026-08-13 with the workflow itself. `fileCount` below
   // is a FILE count and line 159 asserts this exact set, so the two move together — 8 → 7.
   '.github/workflows/extension-publish.yml',
@@ -17,13 +18,18 @@ const ACTION_FILES = [
   '.github/workflows/release-please.yml',
   '.github/workflows/renovate-config-validator.yml',
 ];
-const PACKAGE_FILES = ['cli/package.json', 'package.json', 'server/package.json'];
+const PACKAGE_FILES = [
+  'cli/package.json',
+  'package.json',
+  'server/package.json',
+  'evaluations/package.json',
+];
 // `regex` fell 5 -> 1 and `pip_requirements` appeared on 2026-08-19: the four Python pins moved
 // from `run: pip install x==y` lines in ci.yml into requirements-dev.txt, so a built-in manager
 // reads them and they became installable locally. These are FILE counts, so the four deps arrive
 // as one pip_requirements file — REQUIREMENTS_FILES below asserts which, and the dep identities
 // are asserted in validateExtraction.
-const EXPECTED_COUNTS = { 'github-actions': 8, nodenv: 1, npm: 3, pip_requirements: 1, regex: 1 };
+const EXPECTED_COUNTS = { 'github-actions': 9, nodenv: 1, npm: 4, pip_requirements: 1, regex: 1 };
 const REQUIREMENTS_FILES = ['requirements-dev.txt'];
 const EXPECTED_PIP_IDENTITIES = [
   ['PyYAML', 'requirements-dev.txt'],
@@ -312,6 +318,24 @@ function fixtureRows() {
   ];
 }
 
+function verifyInventoryNegativeControls() {
+  for (const [manager, packageFile] of [
+    ['github-actions', '.github/workflows/evaluations.yml'],
+    ['npm', 'evaluations/package.json'],
+  ]) {
+    const missingInventory = fixtureRows();
+    missingInventory[2].packageFiles[manager] = missingInventory[2].packageFiles[manager].filter(
+      (entry) => entry.packageFile !== packageFile
+    );
+    if (validateRows(missingInventory).length === 0)
+      throw new Error(`${manager} missing inventory passed`);
+    const wrongCount = fixtureRows();
+    wrongCount[1].stats.managers[manager].fileCount -= 1;
+    if (validateRows(wrongCount).length === 0)
+      throw new Error(`${manager} wrong file count passed`);
+  }
+}
+
 function main() {
   if (process.argv.includes('--self-test')) {
     const fixture = fixtureRows();
@@ -324,6 +348,7 @@ function main() {
       }
     }
     if (validateRows(fixture).length) throw new Error('healthy extraction fixture failed');
+    verifyInventoryNegativeControls();
     if (!validateRows([...fixture, { level: 40, msg: 'warning' }]).length)
       throw new Error('warning passed');
     const updatedDependency = fixtureRows();

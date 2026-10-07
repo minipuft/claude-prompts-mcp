@@ -7,6 +7,7 @@ import type {
   PinnedSemanticEvaluationContext,
   SemanticCriterion,
   SemanticEvaluationBinding,
+  SemanticEvaluationReport,
   SemanticObservation,
   SemanticObservationState,
 } from '#shared/types/gate-evaluation.js';
@@ -49,7 +50,21 @@ const contextSchema = z.strictObject({
     content: z.string(),
   }),
 });
-const reportSchema = z.strictObject({ binding: bindingSchema, observations: z.array(z.unknown()) });
+// Reviewer identity is an unverified client claim. Parse its shape, but do not use it as authority.
+const reviewerSchema: z.ZodType<NonNullable<SemanticEvaluationReport['reviewer']>> = z.strictObject(
+  {
+    provenance: z.enum(['client_reported', 'unknown']),
+    provider: text.optional(),
+    model: text.optional(),
+    revision: text.optional(),
+    context: z.enum(['self', 'separate_pass', 'isolated_judge', 'unknown']).optional(),
+  }
+);
+const reportSchema = z.strictObject({
+  binding: bindingSchema,
+  observations: z.array(z.unknown()),
+  reviewer: reviewerSchema.optional(),
+});
 const observationSchema: z.ZodType<SemanticObservation> = z.strictObject({
   criterion_id: text,
   state: z.enum(['met', 'unmet', 'insufficient_evidence', 'not_applicable']),
@@ -64,6 +79,17 @@ const observationSchema: z.ZodType<SemanticObservation> = z.strictObject({
   ),
   rationale: z.string(),
 });
+
+/** Defensive syntax only; acceptance still requires independently pinned criteria and target. */
+export function isSemanticEvaluationReport(report: unknown): report is SemanticEvaluationReport {
+  const parsed = reportSchema.safeParse(report);
+  return (
+    parsed.success &&
+    parsed.data.observations.every(
+      (observation) => observationSchema.safeParse(observation).success
+    )
+  );
+}
 
 function issue(code: string, message: string, criterion_id?: string): SemanticEvaluationIssue {
   return { code, message, ...(criterion_id === undefined ? {} : { criterion_id }) };

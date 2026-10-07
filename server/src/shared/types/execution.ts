@@ -7,6 +7,7 @@
  */
 
 import type { RemainderSubmission, WorkflowIR } from '#modules/workflow-ir/types.js';
+import type { GateVerdictSubmission } from '#shared/types/gate-evaluation.js';
 import type { UnknownObservation } from './chain-session.js';
 
 /** Scope for gate validation application */
@@ -114,8 +115,8 @@ export interface McpToolRequest {
   /** Chain identifier for resuming executions. Format owned by `shared/utils/chain-id-codec`. */
   readonly chain_id?: string;
 
-  /** Gate review verdict for resuming from pending validation */
-  readonly gate_verdict?: string;
+  /** Gate review for pending validation; structured reports stay separate from legacy text. */
+  readonly gate_verdict?: string | GateVerdictSubmission;
 
   /**
    * The verb a caller uses to resolve a run that is holding. Two disjoint vocabularies share one

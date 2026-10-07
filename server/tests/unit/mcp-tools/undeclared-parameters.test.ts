@@ -42,6 +42,8 @@ import {
   resourceManagerInputSchema,
 } from '../../../src/mcp/tools/schemas/resource-manager.schema.js';
 
+import type { SemanticEvaluationReport } from '../../../src/shared/types/gate-evaluation.js';
+
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const CONTRACT_FILE: Readonly<Record<ContractToolName, string>> = {
   prompt_engine: 'prompt-engine.json',
@@ -188,7 +190,19 @@ describe('nested key refusal (P4.103)', () => {
     const result = schema.safeParse({ command: '>>demo', gate_verdict: value });
     return {
       ok: result.success,
-      message: result.success ? '' : (result.error.issues[0]?.message ?? ''),
+      // The SDK prefixes each top-level issue with its path. Refinements may report directly,
+      // while union failures already carry nested paths inside their message.
+      message: result.success
+        ? ''
+        : result.error.issues
+            .map((issue) => {
+              const path = issue.path.filter(
+                (segment): segment is string | number =>
+                  typeof segment === 'string' || typeof segment === 'number'
+              );
+              return `${formatKeyPath(path)}: ${issue.message}`;
+            })
+            .join('\n'),
     };
   };
 
@@ -213,6 +227,7 @@ describe('nested key refusal (P4.103)', () => {
         'index',
         'passed',
         'rationale',
+        'evaluation',
       ]);
     });
 
@@ -339,6 +354,164 @@ describe('nested key refusal (P4.103)', () => {
       expect(declared).toContain('type');
       expect(declared).toContain('shell_command');
       expect(declared).not.toContain('description');
+    });
+  });
+
+  describe('semantic reports through the registered schema', () => {
+    const evaluation: SemanticEvaluationReport = {
+      binding: {
+        gate_id: 'semantic-gate',
+        node_id: 'node-1',
+        attempt_id: 'attempt-1',
+        definition_digest: 'definition-digest',
+        target_digest: 'target-digest',
+      },
+      observations: [
+        {
+          criterion_id: 'preserves-contract',
+          state: 'met',
+          value: true,
+          evidence: [{ target_digest: 'target-digest', start: 0, end: 3, quote: 'The' }],
+          rationale: 'Evidence supports the result.\nReport rationale may span lines.',
+        },
+      ],
+    };
+    const verdict = (report: unknown) => ({
+      overall: 'PASS',
+      rationale: 'Reviewed',
+      per_gate: [{ index: 1, passed: true, rationale: 'Criterion met', evaluation: report }],
+    });
+
+    it.each([
+      undefined,
+      { provenance: 'unknown' as const },
+      { provenance: 'client_reported' as const },
+      {
+        provenance: 'client_reported' as const,
+        provider: ' claimed-provider ',
+        model: 'claimed-model',
+        revision: 'claimed-revision',
+        context: 'isolated_judge' as const,
+      },
+      ...(['self', 'separate_pass', 'unknown'] as const).map((context) => ({
+        provenance: 'unknown' as const,
+        context,
+      })),
+    ])('retains the rich report with optional reviewer %j', (reviewer) => {
+      const report = { ...evaluation, ...(reviewer === undefined ? {} : { reviewer }) };
+      const schema = buildPromptEngineSchema((value) => /^GATE_REVIEW:/.test(value), 'Bad verdict');
+      const parsed = schema.parse({ command: '>>demo', gate_verdict: verdict(report) });
+      expect(parsed['gate_verdict']).toEqual(verdict(report));
+      if (reviewer === undefined)
+        expect(parsed).not.toHaveProperty('gate_verdict.per_gate.0.evaluation.reviewer');
+    });
+
+    it('rejects submitted host_verified reviewer provenance with its addressed path', () => {
+      const result = parse(verdict({ ...evaluation, reviewer: { provenance: 'host_verified' } }));
+
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain('gate_verdict.per_gate[0].evaluation.reviewer.provenance');
+    });
+
+    it.each([
+      null,
+      [],
+      'unknown',
+      {},
+      { provenance: 'other' },
+      { provenance: 'client_reported', provider: ' \t\n' },
+      { provenance: 'client_reported', model: '' },
+      { provenance: 'unknown', revision: ' ' },
+      { provenance: 'client_reported', provider: 42 },
+      { provenance: 'client_reported', model: null },
+      { provenance: 'unknown', revision: [] },
+      { provenance: 'client_reported', context: 'host' },
+      { provenance: 'client_reported', extra: 'authority' },
+    ])('rejects malformed reviewer shape %j', (reviewer) => {
+      const result = parse(verdict({ ...evaluation, reviewer }));
+
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain('gate_verdict.per_gate[0].evaluation.reviewer');
+    });
+
+    it.each([
+      ['report', { ...evaluation, extra: true }, 'extra'],
+      [
+        'binding',
+        { ...evaluation, binding: { ...evaluation.binding, extra: true } },
+        'binding.extra',
+      ],
+      [
+        'observation',
+        { ...evaluation, observations: [{ ...evaluation.observations[0], extra: true }] },
+        'observations[0].extra',
+      ],
+      [
+        'evidence',
+        {
+          ...evaluation,
+          observations: [
+            {
+              ...evaluation.observations[0],
+              evidence: [{ target_digest: 'target-digest', start: 0, end: 3, extra: true }],
+            },
+          ],
+        },
+        'observations[0].evidence[0].extra',
+      ],
+      [
+        'reviewer',
+        { ...evaluation, reviewer: { provenance: 'unknown', extra: true } },
+        'reviewer.extra',
+      ],
+    ])('strictly rejects an undeclared %s key with its addressed path', (_name, report, path) => {
+      const result = parse(verdict(report));
+
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain(
+        `'gate_verdict.per_gate[0].evaluation.${path}' is not a declared key`
+      );
+    });
+
+    it.each([
+      null,
+      {},
+      { ...evaluation, binding: { ...evaluation.binding, attempt_id: ' ' } },
+      { ...evaluation, observations: [{ ...evaluation.observations[0], state: 'PASS' }] },
+      ...[NaN, Infinity, -Infinity, null].map((value) => ({
+        ...evaluation,
+        observations: [{ ...evaluation.observations[0], value }],
+      })),
+      ...[
+        { start: -1, end: 3 },
+        { start: 0.5, end: 3 },
+        { start: 0, end: -1 },
+        { start: 0, end: Infinity },
+        { start: 0, end: 3, quote: 5 },
+      ].map((span) => ({
+        ...evaluation,
+        observations: [
+          {
+            ...evaluation.observations[0],
+            evidence: [{ target_digest: 'target-digest', ...span }],
+          },
+        ],
+      })),
+    ])('rejects malformed semantic report %j', (report) => {
+      expect(parse(verdict(report)).ok).toBe(false);
+    });
+
+    it.each([
+      { state: 'met', value: true },
+      { state: 'unmet', value: 'poor' },
+      { state: 'met', value: 3.5 },
+      { state: 'insufficient_evidence' },
+      { state: 'not_applicable' },
+    ])('accepts the declared observation vocabulary %j without adjudicating it', (fields) => {
+      const { value: _value, ...withoutValue } = evaluation.observations[0] ?? {};
+      expect(
+        parse(verdict({ ...evaluation, observations: [{ ...withoutValue, ...fields }] })).ok
+      ).toBe(true);
     });
   });
 });

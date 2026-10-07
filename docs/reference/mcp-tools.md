@@ -330,7 +330,7 @@ prompt_engine(command:"%judge analysis_report")
 | `command`       | string  | Prompt ID with operators and arguments                                                                                                                                                                                                                           |
 | `chain_id`      | string  | Resume token for continuing chains                                                                                                                                                                                                                               |
 | `user_response` | string  | Your output from previous step (for chain resume)                                                                                                                                                                                                                |
-| `gate_verdict`  | string  | Gate review verdict. Preferred: `GATE_REVIEW: PASS/FAIL - reason`. Also accepts `GATE PASS/FAIL - reason` or minimal `PASS/FAIL - reason` (minimal only via `gate_verdict`, not parsed from `user_response`). Rationale required.                                |
+| `gate_verdict`  | union   | Structured review object or legacy verdict string. Optional `per_gate[].evaluation` retains typed custody through the processor; live semantic criteria remain refused. See [Gate Verdict Formats](#gate-verdict-formats). Rationale required.                   |
 | `gate_action`   | enum    | Your move on a run that is waiting for one. After a FAILED GATE with retries exhausted: `retry`, `skip`, `abort`. On a run PAUSED by a blocking unknown: `resume`, `accept_alternative`, `abort`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt). |
 | `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                                                           |
 | `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                                                        |
@@ -1667,16 +1667,28 @@ prompt_engine(command:"%lean code_review file:'api.ts'")
 
 ## Gate Verdict Formats
 
-When a chain pauses for gate review, respond with a verdict:
+When a chain pauses for gate review, prefer a structured verdict:
 
 ```bash
 prompt_engine(
   chain_id:"chain-analysis#2",
-  gate_verdict:"GATE_REVIEW: PASS - All criteria met"
+  gate_verdict:{
+    overall:"PASS",
+    rationale:"All recorded checks passed",
+    per_gate:[{index:1, passed:true, rationale:"Check passed"}]
+  }
 )
 ```
 
-**Accepted formats** (case-insensitive):
+`overall` and `rationale` are required. `per_gate` is optional; each ordinary entry carries a
+1-based `index`, boolean `passed` and rationale for a check-tier gate advertised by the review.
+Reminder-tier gates are attested once through optional
+`reminders:{satisfied:["id"],not_applicable:[{id:"id",reason:"..."}]}` rather than per-gate entries.
+Both reminder arrays default to empty when omitted inside a supplied `reminders` object. See
+[Verdicts and reminders](../guides/gates.md#verdicts-and-reminders) for attestation rules.
+
+Overall and per-gate rationales are trimmed, nonempty and single-line. The formatted-string
+branch remains accepted, with these case-insensitive formats:
 
 | Format       | Example                      |
 | ------------ | ---------------------------- |
@@ -1690,7 +1702,77 @@ prompt_engine(
 **Requirements:**
 
 - Rationale is always required
-- `gate_verdict` takes precedence over parsed `user_response`
+- Verdicts are read only from `gate_verdict`; `user_response` carries the actual step output.
+
+### Semantic report schema (staged)
+
+The boundary schema accepts an optional report at `per_gate[i].evaluation` within the same
+`gate_verdict` object/string union. Registration, request, parsing and processor paths preserve
+the original typed submission and report. **Runtime activation is pending:** live
+`semantic_evaluation` resource criteria are still refused, and server-issued binding and runtime
+adjudication remain pending activation work. Keep reports structured; do not encode JSON in a
+rationale or submit a separate `findings` field.
+
+The following illustrates the report shape inside one entry; the binding values are placeholders:
+
+```json
+{
+  "index": 1,
+  "passed": true,
+  "rationale": "Criterion reviewed",
+  "evaluation": {
+    "binding": {
+      "gate_id": "contract-gate",
+      "node_id": "n1",
+      "attempt_id": "attempt-1",
+      "definition_digest": "sha256:<pinned definition digest>",
+      "target_digest": "sha256:<captured target digest>"
+    },
+    "observations": [
+      {
+        "criterion_id": "preserves-contract",
+        "state": "met",
+        "value": true,
+        "evidence": [
+          {
+            "target_digest": "sha256:<captured target digest>",
+            "start": 0,
+            "end": 3,
+            "quote": "The"
+          }
+        ],
+        "rationale": "The cited target supports this observation."
+      }
+    ],
+    "reviewer": {
+      "provenance": "client_reported",
+      "provider": "claimed-provider",
+      "model": "claimed-model",
+      "revision": "claimed-revision",
+      "context": "separate_pass"
+    }
+  }
+}
+```
+
+| Report field                | Boundary contract                                                                                                                                                                                                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `binding`                   | Required object with nonempty string `gate_id`, `node_id`, `attempt_id`, `definition_digest` and `target_digest`.                                                                                                                                                                           |
+| `observations`              | Required array. Each entry requires nonempty string `criterion_id`, `state`, `evidence` array and string `rationale`. States are `met`, `unmet`, `insufficient_evidence` and `not_applicable`; optional `value` is boolean, string or finite number. Observation rationales may span lines. |
+| `observations[].evidence[]` | Nonempty string `target_digest`, integer `start` and `end` >=0, and optional string `quote`.                                                                                                                                                                                                |
+| `reviewer`                  | Optional object. Required `provenance` is `client_reported` or `unknown`; optional `provider`, `model` and `revision` are nonempty strings. Optional `context` is `self`, `separate_pass`, `isolated_judge` or `unknown`.                                                                   |
+
+All nested report objects reject undeclared keys. Identity strings are retained verbatim;
+whitespace-only identities are refused. Absent `reviewer` means unknown provenance. Submitted
+`host_verified` provenance is rejected; provider/model/revision/context are client claims, separate
+from requested routing metadata, and do not affect semantic acceptance.
+
+The standalone acceptance kernel validates reports against independently pinned execution and
+definition identities. `target_digest` uses `hashBytes` over the actual captured UTF-8 content,
+with the `sha256:<hex>` prefix. Evidence uses half-open JavaScript UTF-16 spans `[start,end)`,
+not UTF-8 byte offsets. The kernel checks span bounds, target digest, optional quote and criterion
+predicates; schema validation alone does not establish acceptance. Server-issued binding and runtime
+adjudication remain pending activation work.
 
 ---
 

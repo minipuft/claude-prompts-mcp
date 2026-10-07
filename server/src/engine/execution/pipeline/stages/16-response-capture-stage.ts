@@ -471,7 +471,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       mode: this.resolveEvidenceMode(),
       reviewPending: this.stepReviewOf(session) !== undefined,
       submits: {
-        verdict: (context.getGateVerdict() ?? '').length > 0,
+        verdict: context.getGateVerdict() !== undefined,
         action: context.mcpRequest.gate_action !== undefined,
       },
       current:

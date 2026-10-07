@@ -109,7 +109,8 @@ function canonicalObject(value: object, path: string): Record<string, unknown> {
   if ('toJSON' in value) throw refuse(path, 'an object with toJSON');
 
   const record = value as Record<string, unknown>;
-  const canonical: Record<string, unknown> = {};
+  // An own JSON key named __proto__ is data, not the inherited prototype setter.
+  const canonical = Object.create(null) as Record<string, unknown>;
   // Sorted by the default comparator — ASCII-ascending by code unit, deliberately NOT
   // `localeCompare`, which is locale-dependent and would make the hash machine-dependent.
   // `JSON.stringify` emits in insertion order, so sorting here IS the canonical key order.

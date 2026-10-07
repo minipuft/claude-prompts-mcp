@@ -94,6 +94,110 @@ function expectInvalid(
 }
 
 describe('evaluateSemanticEvaluation', () => {
+  test.each([
+    undefined,
+    { provenance: 'unknown' as const },
+    { provenance: 'client_reported' as const },
+    {
+      provenance: 'client_reported' as const,
+      provider: 'claimed-provider',
+      model: 'claimed-model',
+      revision: 'claimed-revision',
+      context: 'isolated_judge' as const,
+    },
+    ...(['self', 'separate_pass', 'unknown'] as const).map((context) => ({
+      provenance: 'unknown' as const,
+      context,
+    })),
+  ])('accepts optional client reviewer shape %j without altering acceptance', (reviewer) => {
+    const pinned = context();
+    const submitted = {
+      ...report(pinned),
+      ...(reviewer === undefined ? {} : { reviewer }),
+    };
+    const before = structuredClone(submitted);
+
+    expect(evaluateSemanticEvaluation(pinned, submitted)).toEqual(
+      evaluateSemanticEvaluation(pinned, report(pinned))
+    );
+    expect(submitted).toEqual(before);
+    if (reviewer === undefined) expect(submitted).not.toHaveProperty('reviewer');
+  });
+
+  test('arbitrary provider/model claims cannot change passing or failing semantic results', () => {
+    const pinned = context();
+    for (const overrides of [
+      { value: true, state: 'met' as const },
+      { value: false, state: 'unmet' as const },
+    ]) {
+      const submitted = report(pinned, [observation(pinned, overrides)]);
+      const baseline = evaluateSemanticEvaluation(pinned, submitted);
+      expect(baseline.passed).toBe(overrides.value);
+      for (const [provider, model] of [
+        ['provider-one', 'model-one'],
+        ['unrelated-provider', 'unrelated-model'],
+      ]) {
+        expect(
+          evaluateSemanticEvaluation(pinned, {
+            ...submitted,
+            reviewer: { provenance: 'client_reported', provider, model },
+          })
+        ).toEqual(baseline);
+      }
+    }
+  });
+
+  test('rejects submitted host_verified reviewer provenance', () => {
+    const pinned = context();
+    expectInvalid(
+      pinned,
+      { ...report(pinned), reviewer: { provenance: 'host_verified' } },
+      'invalid_report'
+    );
+  });
+
+  test.each([
+    null,
+    [],
+    'unknown',
+    {},
+    { provenance: 'other' },
+    { provenance: 'client_reported', provider: ' \t\n' },
+    { provenance: 'client_reported', model: '' },
+    { provenance: 'unknown', revision: ' ' },
+    { provenance: 'client_reported', provider: 42 },
+    { provenance: 'client_reported', model: null },
+    { provenance: 'unknown', revision: [] },
+    { provenance: 'client_reported', context: 'host' },
+    { provenance: 'client_reported', extra: 'authority' },
+  ])('rejects malformed reviewer shape %j', (reviewer) => {
+    const pinned = context();
+    expectInvalid(pinned, { ...report(pinned), reviewer }, 'invalid_report');
+  });
+
+  test('reviewer claims cannot be inserted into the strict pinned authority context', () => {
+    const pinned = context();
+    const injected = { ...pinned, reviewer: { provenance: 'client_reported' } };
+    expectInvalid(injected, report(pinned), 'invalid_context');
+  });
+
+  test('rejects undeclared report, binding and evidence keys at the defensive kernel', () => {
+    const pinned = context();
+    const submitted = report(pinned);
+    expectInvalid(pinned, { ...submitted, extra: 'authority' }, 'invalid_report');
+    expectInvalid(
+      pinned,
+      { ...submitted, binding: { ...submitted.binding, extra: 'authority' } },
+      'invalid_report'
+    );
+    const injectedEvidence = { ...evidence(pinned), extra: 'authority' };
+    expectInvalid(
+      pinned,
+      report(pinned, [observation(pinned, { evidence: [injectedEvidence] })]),
+      'invalid_observation'
+    );
+  });
+
   test('accepts a complete grounded boolean report without changing its inputs', () => {
     const pinned = context();
     const submitted = report(pinned);

@@ -28,13 +28,7 @@
       },
       "gate_action": {
         "description": "<present>",
-        "enum": [
-          "retry",
-          "skip",
-          "abort",
-          "resume",
-          "accept_alternative"
-        ],
+        "enum": ["retry", "skip", "abort", "resume", "accept_alternative"],
         "type": "string"
       },
       "gate_verdict": {
@@ -43,16 +37,146 @@
             "additionalProperties": false,
             "properties": {
               "overall": {
-                "enum": [
-                  "PASS",
-                  "FAIL"
-                ],
+                "enum": ["PASS", "FAIL"],
                 "type": "string"
               },
               "per_gate": {
                 "items": {
                   "additionalProperties": false,
                   "properties": {
+                    "evaluation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "binding": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "attempt_id": {
+                              "type": "string"
+                            },
+                            "definition_digest": {
+                              "type": "string"
+                            },
+                            "gate_id": {
+                              "type": "string"
+                            },
+                            "node_id": {
+                              "type": "string"
+                            },
+                            "target_digest": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "gate_id",
+                            "node_id",
+                            "attempt_id",
+                            "definition_digest",
+                            "target_digest"
+                          ],
+                          "type": "object"
+                        },
+                        "observations": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "criterion_id": {
+                                "type": "string"
+                              },
+                              "evidence": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "end": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "quote": {
+                                      "type": "string"
+                                    },
+                                    "start": {
+                                      "maximum": 9007199254740991,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    },
+                                    "target_digest": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["target_digest", "start", "end"],
+                                  "type": "object"
+                                },
+                                "type": "array"
+                              },
+                              "rationale": {
+                                "type": "string"
+                              },
+                              "state": {
+                                "enum": [
+                                  "met",
+                                  "unmet",
+                                  "insufficient_evidence",
+                                  "not_applicable"
+                                ],
+                                "type": "string"
+                              },
+                              "value": {
+                                "anyOf": [
+                                  {
+                                    "type": "boolean"
+                                  },
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "number"
+                                  }
+                                ]
+                              }
+                            },
+                            "required": [
+                              "criterion_id",
+                              "state",
+                              "evidence",
+                              "rationale"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "reviewer": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "context": {
+                              "enum": [
+                                "self",
+                                "separate_pass",
+                                "isolated_judge",
+                                "unknown"
+                              ],
+                              "type": "string"
+                            },
+                            "model": {
+                              "type": "string"
+                            },
+                            "provenance": {
+                              "enum": ["client_reported", "unknown"],
+                              "type": "string"
+                            },
+                            "provider": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["provenance"],
+                          "type": "object"
+                        }
+                      },
+                      "required": ["binding", "observations"],
+                      "type": "object"
+                    },
                     "index": {
                       "exclusiveMinimum": 0,
                       "maximum": 9007199254740991,
@@ -67,11 +191,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "index",
-                    "passed",
-                    "rationale"
-                  ],
+                  "required": ["index", "passed", "rationale"],
                   "type": "object"
                 },
                 "type": "array"
@@ -107,10 +227,7 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "id",
-                        "reason"
-                      ],
+                      "required": ["id", "reason"],
                       "type": "object"
                     },
                     "type": "array"
@@ -128,10 +245,7 @@
                 "type": "object"
               }
             },
-            "required": [
-              "overall",
-              "rationale"
-            ],
+            "required": ["overall", "rationale"],
             "type": "object"
           },
           {
@@ -160,10 +274,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "name",
-                "description"
-              ],
+              "required": ["name", "description"],
               "type": "object"
             },
             {
@@ -212,29 +323,15 @@
                   "type": "array"
                 },
                 "scope": {
-                  "enum": [
-                    "execution",
-                    "session",
-                    "chain",
-                    "step"
-                  ],
+                  "enum": ["execution", "session", "chain", "step"],
                   "type": "string"
                 },
                 "severity": {
-                  "enum": [
-                    "critical",
-                    "high",
-                    "medium",
-                    "low"
-                  ],
+                  "enum": ["critical", "high", "medium", "low"],
                   "type": "string"
                 },
                 "source": {
-                  "enum": [
-                    "manual",
-                    "automatic",
-                    "analysis"
-                  ],
+                  "enum": ["manual", "automatic", "analysis"],
                   "type": "string"
                 },
                 "target_step_id": {
@@ -251,10 +348,7 @@
                   "type": "string"
                 },
                 "type": {
-                  "enum": [
-                    "validation",
-                    "guidance"
-                  ],
+                  "enum": ["validation", "guidance"],
                   "type": "string"
                 }
               },
@@ -304,11 +398,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type",
-                "id",
-                "statement"
-              ],
+              "required": ["type", "id", "statement"],
               "type": "object"
             },
             {
@@ -320,10 +410,7 @@
                   "type": "string"
                 },
                 "resolution": {
-                  "enum": [
-                    "answered",
-                    "irrelevant"
-                  ],
+                  "enum": ["answered", "irrelevant"],
                   "type": "string"
                 },
                 "statement": {
@@ -335,12 +422,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "type",
-                "id",
-                "statement",
-                "resolution"
-              ],
+              "required": ["type", "id", "statement", "resolution"],
               "type": "object"
             }
           ]
@@ -374,19 +456,13 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "from",
-                "to"
-              ],
+              "required": ["from", "to"],
               "type": "object"
             },
             "type": "array"
           },
           "mode": {
-            "enum": [
-              "replace",
-              "append"
-            ],
+            "enum": ["replace", "append"],
             "type": "string"
           },
           "nodes": {
@@ -405,10 +481,7 @@
                   "type": "object"
                 },
                 "await": {
-                  "enum": [
-                    "node",
-                    "run"
-                  ],
+                  "enum": ["node", "run"],
                   "type": "string"
                 },
                 "delegated": {
@@ -469,11 +542,7 @@
                   "type": "string"
                 },
                 "subagentModel": {
-                  "enum": [
-                    "heavy",
-                    "standard",
-                    "fast"
-                  ],
+                  "enum": ["heavy", "standard", "fast"],
                   "type": "string"
                 },
                 "visibility": {
@@ -505,10 +574,7 @@
                   "type": "object"
                 }
               },
-              "required": [
-                "id",
-                "promptId"
-              ],
+              "required": ["id", "promptId"],
               "type": "object"
             },
             "maxItems": 32,
@@ -516,10 +582,7 @@
             "type": "array"
           }
         },
-        "required": [
-          "mode",
-          "nodes"
-        ],
+        "required": ["mode", "nodes"],
         "type": "object"
       },
       "user_response": {
@@ -574,10 +637,7 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "from",
-                "to"
-              ],
+              "required": ["from", "to"],
               "type": "object"
             },
             "type": "array"
@@ -601,10 +661,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "name",
-                    "description"
-                  ],
+                  "required": ["name", "description"],
                   "type": "object"
                 },
                 {
@@ -653,29 +710,15 @@
                       "type": "array"
                     },
                     "scope": {
-                      "enum": [
-                        "execution",
-                        "session",
-                        "chain",
-                        "step"
-                      ],
+                      "enum": ["execution", "session", "chain", "step"],
                       "type": "string"
                     },
                     "severity": {
-                      "enum": [
-                        "critical",
-                        "high",
-                        "medium",
-                        "low"
-                      ],
+                      "enum": ["critical", "high", "medium", "low"],
                       "type": "string"
                     },
                     "source": {
-                      "enum": [
-                        "manual",
-                        "automatic",
-                        "analysis"
-                      ],
+                      "enum": ["manual", "automatic", "analysis"],
                       "type": "string"
                     },
                     "target_step_id": {
@@ -692,10 +735,7 @@
                       "type": "string"
                     },
                     "type": {
-                      "enum": [
-                        "validation",
-                        "guidance"
-                      ],
+                      "enum": ["validation", "guidance"],
                       "type": "string"
                     }
                   },
@@ -721,10 +761,7 @@
                   "type": "object"
                 },
                 "await": {
-                  "enum": [
-                    "node",
-                    "run"
-                  ],
+                  "enum": ["node", "run"],
                   "type": "string"
                 },
                 "delegated": {
@@ -785,11 +822,7 @@
                   "type": "string"
                 },
                 "subagentModel": {
-                  "enum": [
-                    "heavy",
-                    "standard",
-                    "fast"
-                  ],
+                  "enum": ["heavy", "standard", "fast"],
                   "type": "string"
                 },
                 "visibility": {
@@ -821,10 +854,7 @@
                   "type": "object"
                 }
               },
-              "required": [
-                "id",
-                "promptId"
-              ],
+              "required": ["id", "promptId"],
               "type": "object"
             },
             "maxItems": 32,
@@ -836,10 +866,7 @@
             "type": "number"
           }
         },
-        "required": [
-          "version",
-          "nodes"
-        ],
+        "required": ["version", "nodes"],
         "type": "object"
       }
     },
@@ -905,21 +932,11 @@
               "type": "string"
             },
             "type": {
-              "enum": [
-                "string",
-                "array",
-                "object",
-                "boolean",
-                "number"
-              ],
+              "enum": ["string", "array", "object", "boolean", "number"],
               "type": "string"
             }
           },
-          "required": [
-            "name",
-            "type",
-            "description"
-          ],
+          "required": ["name", "type", "description"],
           "type": "object"
         },
         "type": "array"
@@ -940,13 +957,7 @@
               "type": "boolean"
             },
             "type": {
-              "enum": [
-                "string",
-                "number",
-                "boolean",
-                "object",
-                "array"
-              ],
+              "enum": ["string", "number", "boolean", "object", "array"],
               "type": "string"
             },
             "validation": {
@@ -985,9 +996,7 @@
               "type": "object"
             }
           },
-          "required": [
-            "name"
-          ],
+          "required": ["name"],
           "type": "object"
         },
         "type": "array"
@@ -1008,13 +1017,7 @@
               "type": "boolean"
             },
             "type": {
-              "enum": [
-                "string",
-                "number",
-                "boolean",
-                "object",
-                "array"
-              ],
+              "enum": ["string", "number", "boolean", "object", "array"],
               "type": "string"
             },
             "validation": {
@@ -1053,9 +1056,7 @@
               "type": "object"
             }
           },
-          "required": [
-            "name"
-          ],
+          "required": ["name"],
           "type": "object"
         },
         "type": "array"
@@ -1143,10 +1144,7 @@
             "type": "object"
           },
           "await": {
-            "enum": [
-              "node",
-              "run"
-            ],
+            "enum": ["node", "run"],
             "type": "string"
           },
           "delegated": {
@@ -1207,11 +1205,7 @@
             "type": "string"
           },
           "subagentModel": {
-            "enum": [
-              "heavy",
-              "standard",
-              "fast"
-            ],
+            "enum": ["heavy", "standard", "fast"],
             "type": "string"
           },
           "visibility": {
@@ -1243,10 +1237,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "promptId",
-          "stepName"
-        ],
+        "required": ["promptId", "stepName"],
         "type": "object"
       },
       "chain_step_index": {
@@ -1257,12 +1248,7 @@
       },
       "chain_step_operation": {
         "description": "<present>",
-        "enum": [
-          "add",
-          "remove",
-          "reorder",
-          "update"
-        ],
+        "enum": ["add", "remove", "reorder", "update"],
         "type": "string"
       },
       "chain_step_order": {
@@ -1291,10 +1277,7 @@
               "type": "object"
             },
             "await": {
-              "enum": [
-                "node",
-                "run"
-              ],
+              "enum": ["node", "run"],
               "type": "string"
             },
             "delegated": {
@@ -1355,11 +1338,7 @@
               "type": "string"
             },
             "subagentModel": {
-              "enum": [
-                "heavy",
-                "standard",
-                "fast"
-              ],
+              "enum": ["heavy", "standard", "fast"],
               "type": "string"
             },
             "visibility": {
@@ -1391,10 +1370,7 @@
               "type": "object"
             }
           },
-          "required": [
-            "promptId",
-            "stepName"
-          ],
+          "required": ["promptId", "stepName"],
           "type": "object"
         },
         "type": "array"
@@ -1408,9 +1384,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "inputArgument"
-        ],
+        "required": ["inputArgument"],
         "type": "object"
       },
       "confirm": {
@@ -1423,10 +1397,7 @@
       },
       "detail": {
         "description": "<present>",
-        "enum": [
-          "summary",
-          "full"
-        ],
+        "enum": ["summary", "full"],
         "type": "string"
       },
       "edges": {
@@ -1445,10 +1416,7 @@
               "type": "string"
             }
           },
-          "required": [
-            "from",
-            "to"
-          ],
+          "required": ["from", "to"],
           "type": "object"
         },
         "type": "array"
@@ -1463,11 +1431,7 @@
       },
       "enforcement_mode": {
         "description": "<present>",
-        "enum": [
-          "blocking",
-          "advisory",
-          "informational"
-        ],
+        "enum": ["blocking", "advisory", "informational"],
         "type": "string"
       },
       "evaluation": {
@@ -1475,10 +1439,7 @@
         "description": "<present>",
         "properties": {
           "mode": {
-            "enum": [
-              "self",
-              "judge"
-            ],
+            "enum": ["self", "judge"],
             "type": "string"
           },
           "model": {
@@ -1488,9 +1449,7 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "mode"
-        ],
+        "required": ["mode"],
         "type": "object"
       },
       "execution_flow": {
@@ -1609,10 +1568,7 @@
             "type": "object"
           }
         },
-        "required": [
-          "requiredSections",
-          "sectionDescriptions"
-        ],
+        "required": ["requiredSections", "sectionDescriptions"],
         "type": "object"
       },
       "framework_gates": {
@@ -1641,21 +1597,11 @@
               "type": "string"
             },
             "priority": {
-              "enum": [
-                "critical",
-                "high",
-                "medium",
-                "low"
-              ],
+              "enum": ["critical", "high", "medium", "low"],
               "type": "string"
             },
             "severity": {
-              "enum": [
-                "critical",
-                "high",
-                "medium",
-                "low"
-              ],
+              "enum": ["critical", "high", "medium", "low"],
               "type": "string"
             },
             "validationCriteria": {
@@ -1665,10 +1611,7 @@
               "type": "array"
             }
           },
-          "required": [
-            "id",
-            "name"
-          ],
+          "required": ["id", "name"],
           "type": "object"
         },
         "type": "array"
@@ -1691,11 +1634,7 @@
       },
       "gate_type": {
         "description": "<present>",
-        "enum": [
-          "framework",
-          "category",
-          "custom"
-        ],
+        "enum": ["framework", "category", "custom"],
         "type": "string"
       },
       "gates": {
@@ -1741,25 +1680,15 @@
                     "type": "integer"
                   },
                   "mode": {
-                    "enum": [
-                      "every",
-                      "first-only",
-                      "never"
-                    ],
+                    "enum": ["every", "first-only", "never"],
                     "type": "string"
                   }
                 },
-                "required": [
-                  "mode"
-                ],
+                "required": ["mode"],
                 "type": "object"
               },
               "target": {
-                "enum": [
-                  "steps",
-                  "gates",
-                  "both"
-                ],
+                "enum": ["steps", "gates", "both"],
                 "type": "string"
               }
             },
@@ -1780,25 +1709,15 @@
                     "type": "integer"
                   },
                   "mode": {
-                    "enum": [
-                      "every",
-                      "first-only",
-                      "never"
-                    ],
+                    "enum": ["every", "first-only", "never"],
                     "type": "string"
                   }
                 },
-                "required": [
-                  "mode"
-                ],
+                "required": ["mode"],
                 "type": "object"
               },
               "target": {
-                "enum": [
-                  "steps",
-                  "gates",
-                  "both"
-                ],
+                "enum": ["steps", "gates", "both"],
                 "type": "string"
               }
             },
@@ -1819,25 +1738,15 @@
                     "type": "integer"
                   },
                   "mode": {
-                    "enum": [
-                      "every",
-                      "first-only",
-                      "never"
-                    ],
+                    "enum": ["every", "first-only", "never"],
                     "type": "string"
                   }
                 },
-                "required": [
-                  "mode"
-                ],
+                "required": ["mode"],
                 "type": "object"
               },
               "target": {
-                "enum": [
-                  "steps",
-                  "gates",
-                  "both"
-                ],
+                "enum": ["steps", "gates", "both"],
                 "type": "string"
               }
             },
@@ -1856,10 +1765,7 @@
       },
       "mcp_prompt_mode": {
         "description": "<present>",
-        "enum": [
-          "expand",
-          "launch"
-        ],
+        "enum": ["expand", "launch"],
         "type": "string"
       },
       "name": {
@@ -1922,10 +1828,7 @@
               "type": "string"
             },
             "severity": {
-              "enum": [
-                "warn",
-                "fail"
-              ],
+              "enum": ["warn", "fail"],
               "type": "string"
             },
             "shell_command": {
@@ -1950,20 +1853,14 @@
               "type": "integer"
             },
             "shell_preset": {
-              "enum": [
-                "fast",
-                "full",
-                "extended"
-              ],
+              "enum": ["fast", "full", "extended"],
               "type": "string"
             },
             "shell_response_env_var": {
               "type": "string"
             },
             "shell_stdin_source": {
-              "enum": [
-                "agent_response"
-              ],
+              "enum": ["agent_response"],
               "type": "string"
             },
             "shell_timeout": {
@@ -2012,11 +1909,7 @@
               "type": "boolean"
             }
           },
-          "required": [
-            "field",
-            "old_string",
-            "new_string"
-          ],
+          "required": ["field", "old_string", "new_string"],
           "type": "object"
         },
         "type": "array"
@@ -2028,11 +1921,7 @@
       },
       "preview_action": {
         "description": "<present>",
-        "enum": [
-          "update",
-          "delete",
-          "rollback"
-        ],
+        "enum": ["update", "delete", "rollback"],
         "type": "string"
       },
       "processing_steps": {
@@ -2141,12 +2030,7 @@
       },
       "resource_type": {
         "description": "<present>",
-        "enum": [
-          "prompt",
-          "gate",
-          "framework",
-          "category"
-        ],
+        "enum": ["prompt", "gate", "framework", "category"],
         "type": "string"
       },
       "retry_config": {
@@ -2163,12 +2047,7 @@
       },
       "severity": {
         "description": "<present>",
-        "enum": [
-          "critical",
-          "high",
-          "medium",
-          "low"
-        ],
+        "enum": ["critical", "high", "medium", "low"],
         "type": "string"
       },
       "skip_version": {
@@ -2182,11 +2061,7 @@
       },
       "subagent_model": {
         "description": "<present>",
-        "enum": [
-          "heavy",
-          "standard",
-          "fast"
-        ],
+        "enum": ["heavy", "standard", "fast"],
         "type": "string"
       },
       "subject": {
@@ -2242,33 +2117,19 @@
               "type": "string"
             },
             "impact": {
-              "enum": [
-                "high",
-                "medium",
-                "low"
-              ],
+              "enum": ["high", "medium", "low"],
               "type": "string"
             },
             "section": {
-              "enum": [
-                "system",
-                "user"
-              ],
+              "enum": ["system", "user"],
               "type": "string"
             },
             "type": {
-              "enum": [
-                "addition",
-                "structure",
-                "modification"
-              ],
+              "enum": ["addition", "structure", "modification"],
               "type": "string"
             }
           },
-          "required": [
-            "section",
-            "type"
-          ],
+          "required": ["section", "type"],
           "type": "object"
         },
         "type": "array"
@@ -2295,10 +2156,7 @@
       },
       "tool_operation": {
         "description": "<present>",
-        "enum": [
-          "add",
-          "remove"
-        ],
+        "enum": ["add", "remove"],
         "type": "string"
       },
       "tools": {
@@ -2308,10 +2166,7 @@
       },
       "type": {
         "description": "<present>",
-        "enum": [
-          "validation",
-          "guidance"
-        ],
+        "enum": ["validation", "guidance"],
         "type": "string"
       },
       "unset": {
@@ -2331,10 +2186,7 @@
         "type": "number"
       }
     },
-    "required": [
-      "resource_type",
-      "action"
-    ],
+    "required": ["resource_type", "action"],
     "type": "object"
   },
   "system_control": {
@@ -2375,20 +2227,14 @@
             "type": "string"
           },
           "operation": {
-            "enum": [
-              "validate",
-              "get"
-            ],
+            "enum": ["validate", "get"],
             "type": "string"
           },
           "value": {
             "type": "string"
           }
         },
-        "required": [
-          "key",
-          "operation"
-        ],
+        "required": ["key", "operation"],
         "type": "object"
       },
       "confirm": {
@@ -2453,10 +2299,7 @@
       },
       "preview_detail": {
         "description": "<present>",
-        "enum": [
-          "summary",
-          "diff"
-        ],
+        "enum": ["summary", "diff"],
         "type": "string"
       },
       "prune": {
@@ -2469,23 +2312,12 @@
       },
       "resource_type": {
         "description": "<present>",
-        "enum": [
-          "prompt",
-          "gate",
-          "framework",
-          "style"
-        ],
+        "enum": ["prompt", "gate", "framework", "style"],
         "type": "string"
       },
       "scope": {
         "description": "<present>",
-        "enum": [
-          "user",
-          "project",
-          "session",
-          "chain",
-          "step"
-        ],
+        "enum": ["user", "project", "session", "chain", "step"],
         "type": "string"
       },
       "scope_id": {
@@ -2510,11 +2342,7 @@
       },
       "source": {
         "description": "<present>",
-        "enum": [
-          "filesystem",
-          "mcp-tool",
-          "external"
-        ],
+        "enum": ["filesystem", "mcp-tool", "external"],
         "type": "string"
       },
       "topic": {
@@ -2523,17 +2351,11 @@
       },
       "type": {
         "description": "<present>",
-        "enum": [
-          "system-prompt",
-          "gate-guidance",
-          "style-guidance"
-        ],
+        "enum": ["system-prompt", "gate-guidance", "style-guidance"],
         "type": "string"
       }
     },
-    "required": [
-      "action"
-    ],
+    "required": ["action"],
     "type": "object"
   }
 }

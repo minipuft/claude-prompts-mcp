@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- An optional evaluation evidence archive preserves immutable records and blobs outside disposable runtime state, with explicit unknown usage/cost and verified content references.
+
 ## [5.1.1](https://github.com/minipuft/claude-prompts-mcp/compare/v5.1.0...v5.1.1) (2026-10-06)
 
 ### Added

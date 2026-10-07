@@ -4,9 +4,11 @@ import { ExecutionContext } from '../../../src/engine/execution/context/executio
 import { FrameworkDecisionAuthority } from '../../../src/engine/execution/pipeline/decisions/index.js';
 import { DiagnosticAccumulator } from '../../../src/engine/execution/pipeline/state/accumulators/diagnostic-accumulator.js';
 import { GateAccumulator } from '../../../src/engine/execution/pipeline/state/accumulators/gate-accumulator.js';
+import { hashBytes } from '../../../src/shared/utils/hash.js';
 
 import type { ChainStepPrompt } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import type { ConvertedPrompt } from '../../../src/shared/types/index.js';
+import type { GateVerdictSubmission } from '../../../src/shared/types/gate-evaluation.js';
 
 const baseRequest = { command: '>>demo' };
 
@@ -27,6 +29,80 @@ const samplePrompt: ConvertedPrompt = {
 };
 
 describe('ExecutionContext helpers', () => {
+  test('getGateVerdict retains a rich Unicode report and reviewer object intact', () => {
+    const targetDigest = hashBytes('A😀e\u0301 Z');
+    const submission: GateVerdictSubmission = {
+      overall: 'PASS',
+      rationale: 'Reviewed',
+      per_gate: [
+        {
+          index: 1,
+          passed: true,
+          rationale: 'Evidence supplied',
+          evaluation: {
+            binding: {
+              gate_id: 'contract-gate',
+              node_id: 'n1',
+              attempt_id: 'attempt-1',
+              definition_digest: hashBytes('frozen definition'),
+              target_digest: targetDigest,
+            },
+            observations: [
+              {
+                criterion_id: 'preserves-contract',
+                state: 'met',
+                value: true,
+                evidence: [{ target_digest: targetDigest, start: 1, end: 5, quote: '😀e\u0301' }],
+                rationale: 'Unicode citation.\nReport rationale remains multiline.',
+              },
+            ],
+            reviewer: {
+              provenance: 'client_reported',
+              provider: 'claimed-provider',
+              model: 'claimed-model',
+              revision: 'claimed-revision',
+              context: 'isolated_judge',
+            },
+          },
+        },
+      ],
+    };
+    const before = structuredClone(submission);
+    const context = new ExecutionContext({ ...baseRequest, gate_verdict: submission });
+
+    expect(context.getGateVerdict()).toBe(submission);
+    expect(context.getGateVerdict()).toEqual(before);
+    expect(submission).toEqual(before);
+  });
+
+  test.each(['PASS', 'FAIL'] as const)(
+    'getGateVerdict retains an ordinary structured %s',
+    (overall) => {
+      const submission: GateVerdictSubmission = { overall, rationale: 'Reviewed' };
+      const context = new ExecutionContext({ ...baseRequest, gate_verdict: submission });
+
+      expect(context.getGateVerdict()).toBe(submission);
+    }
+  );
+
+  test('getGateVerdict trims the legacy string branch', () => {
+    const context = new ExecutionContext({
+      ...baseRequest,
+      gate_verdict: ' \nGATE_REVIEW: PASS - checked\t ',
+    });
+
+    expect(context.getGateVerdict()).toBe('GATE_REVIEW: PASS - checked');
+  });
+
+  test.each([undefined, '', ' \t\n '])(
+    'getGateVerdict treats absent/blank text %j as absent',
+    (gate_verdict) => {
+      const context = new ExecutionContext({ ...baseRequest, gate_verdict });
+
+      expect(context.getGateVerdict()).toBeUndefined();
+    }
+  );
+
   test('getSessionId prefers resume metadata value', () => {
     const context = new ExecutionContext({ ...baseRequest, chain_id: 'chain-demo' });
     context.state.session.resumeSessionId = 'metadata-session';
