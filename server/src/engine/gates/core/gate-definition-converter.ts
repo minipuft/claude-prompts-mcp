@@ -30,6 +30,7 @@ const COPIED_KEYS = {
   type: true,
   description: true,
   subject: true,
+  calibration_suite_id: true,
   severity: true,
   enforcementMode: true,
   guidanceFile: true,

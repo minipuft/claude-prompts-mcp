@@ -493,6 +493,15 @@ export const GateDefinitionSchema = z
       )
       .optional(),
 
+    /** Opaque evaluation-suite association only; runtime never resolves an archive or path. */
+    calibration_suite_id: z
+      .string()
+      .refine(
+        (value) => !isBlank(value),
+        'calibration_suite_id must be a nonempty opaque identifier'
+      )
+      .optional(),
+
     // Optional severity and enforcement
     /** Severity level for prioritization */
     severity: z.enum(['critical', 'high', 'medium', 'low']).default('medium'),
