@@ -65,6 +65,8 @@ export interface GateManagerInput {
    * it lists; checks (`shell_verify`/`script_tool`) are never suppressed.
    */
   subject?: string;
+  /** Opaque suite association; supplied replaces the value, omission preserves the YAML. */
+  calibration_suite_id?: string;
   guidance?: string;
   /**
    * The gate schema's write-side shape — what a caller supplies when building a criterion.
@@ -150,6 +152,8 @@ export interface GateCreationData {
   gate_type?: GateManagerInput['gate_type'];
   /** Same class as `severity`/`enforcementMode` above — settable half of `PRESERVED_GATE_YAML_KEYS`. */
   subject?: GateManagerInput['subject'];
+  /** Preserved gate.yaml metadata only; never resolved as an archive or private path. */
+  calibration_suite_id?: GateManagerInput['calibration_suite_id'];
   /** Same class again (P4.100): the key that makes a gate withhold the step output on a FAIL. */
   blockResponseOnFail?: GateManagerInput['blockResponseOnFail'];
   /** Same class again (P4.121): the judge-routing block, the last gate.yaml key with no parameter. */

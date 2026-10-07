@@ -32,7 +32,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { GateDefinitionSchema } from '../../../../src/engine/gates/core/gate-schema.js';
-import { GateFileWriter } from '../../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
+import {
+  callerSuppliedGateKeys,
+  GateFileWriter,
+} from '../../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
 import { parseYamlOrThrow } from '../../../../src/shared/utils/yaml/yaml-parser.js';
 
 import type { GateCreationData } from '../../../../src/mcp/tools/gate-manager/core/types.js';
@@ -154,9 +157,9 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
    * The class, not the instance: every key `GateDefinitionSchema` accepts survives an update that
    * did not name it, plus one key the schema only passes through. `guidance` is excluded by
    * design (`GATE_YAML_EXCLUDED_KEYS`) — it lives in `guidance.md`, and a stale inline value is
-   * deliberately superseded rather than preserved. `blockResponseOnFail` and `evaluation` have no
-   * field in `GateCreationData` at all, so they can only ever survive via the on-disk fallback —
-   * exactly what this file checks.
+   * deliberately superseded rather than preserved. A preserved field omitted from this call
+   * survives via the on-disk fallback even when `GateCreationData` can supply it — exactly what
+   * this file checks.
    */
   describe('every key the schema accepts', () => {
     const id = 'every_key';
@@ -171,6 +174,7 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
       type: 'type: validation',
       description: 'description: Original description.',
       subject: 'subject: code-quality',
+      calibration_suite_id: 'calibration_suite_id: suite:opaque-v1',
       severity: 'severity: critical',
       enforcementMode: 'enforcementMode: blocking',
       gate_type: 'gate_type: framework',
@@ -231,5 +235,80 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
         }
       }
     );
+  });
+
+  describe('opaque calibration suite metadata uses the generic writer route', () => {
+    const id = 'association_probe';
+    const data: GateCreationData = {
+      id,
+      name: 'Association Probe',
+      type: 'validation',
+      description: 'Original description.',
+      guidance: 'Guidance.\n',
+    };
+
+    it('creates an opaque identifier and reads back the exact YAML value', async () => {
+      const opaque = '  suite:opaque/id?revision=1  ';
+      const result = await writer.writeGateFiles({ ...data, calibration_suite_id: opaque });
+      expect(result.success).toBe(true);
+      expect(readYaml(id)['calibration_suite_id']).toBe(opaque);
+    });
+
+    it('replaces an existing identifier with a metadata-only write', async () => {
+      expect(
+        (await writer.writeGateFiles({ ...data, calibration_suite_id: 'suite:original' })).success
+      ).toBe(true);
+      const guidanceBefore = readFileSync(join(gateDir(id), 'guidance.md'));
+      const opaque = '../opaque/id:replacement';
+      const result = await writer.writeGateFiles(
+        { ...data, calibration_suite_id: opaque },
+        callerSuppliedGateKeys({ action: 'update', id, calibration_suite_id: opaque })
+      );
+      expect(result.success).toBe(true);
+      expect(readYaml(id)['calibration_suite_id']).toBe(opaque);
+      expect(readFileSync(join(gateDir(id), 'guidance.md'))).toEqual(guidanceBefore);
+    });
+
+    it('preserves the existing identifier when the update omits it', async () => {
+      const opaque = 'suite:keep/exact#revision';
+      writeFixture(
+        id,
+        [
+          'id: association_probe',
+          'name: Association Probe',
+          'type: validation',
+          'description: Original description.',
+          `calibration_suite_id: ${JSON.stringify(opaque)}`,
+          'guidanceFile: guidance.md',
+          '',
+        ].join('\n')
+      );
+      const result = await writer.writeGateFiles(
+        { ...data, description: 'Changed description.' },
+        callerSuppliedGateKeys({ action: 'update', id, description: 'Changed description.' })
+      );
+      expect(result.success).toBe(true);
+      expect(readYaml(id)['description']).toBe('Changed description.');
+      expect(readYaml(id)['calibration_suite_id']).toBe(opaque);
+    });
+
+    it('plans a metadata-only YAML change and applies the same value on disk', async () => {
+      expect((await writer.writeGateFiles(data)).success).toBe(true);
+      const opaque = 'suite:metadata-only';
+      const keys = callerSuppliedGateKeys({ action: 'update', id, calibration_suite_id: opaque });
+      const changes = await writer.projectGateWrite(
+        { ...data, calibration_suite_id: opaque },
+        keys
+      );
+      expect(changes.map((change) => change.path)).toEqual([`${id}/gate.yaml`]);
+      expect(
+        parseYamlOrThrow<Record<string, unknown>>(changes[0]!.after!)['calibration_suite_id']
+      ).toBe(opaque);
+      expect(readYaml(id)['calibration_suite_id']).toBeUndefined();
+      const result = await writer.writeGateFiles({ ...data, calibration_suite_id: opaque }, keys);
+      expect(result.success).toBe(true);
+      expect(readYaml(id)['calibration_suite_id']).toBe(opaque);
+      expect(readFileSync(yamlPath(id), 'utf8')).toBe(changes[0]!.after);
+    });
   });
 });

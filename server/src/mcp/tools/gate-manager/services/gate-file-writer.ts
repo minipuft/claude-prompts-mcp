@@ -101,6 +101,7 @@ export function callerSuppliedGateKeys(args: GateManagerInput): ReadonlySet<stri
     enforcementMode: args.enforcementMode,
     gate_type: args.gate_type,
     subject: args.subject,
+    calibration_suite_id: args.calibration_suite_id,
     blockResponseOnFail: args.blockResponseOnFail,
     evaluation: args.evaluation,
   };
