@@ -19,10 +19,10 @@ tags: [gates, semantic, evaluation, tests]
 
 Goal: finish every row and verify the complete semantic-gate workflow against a frozen baseline.
 Slice: PR #475 foundation merged with green full CI; only unpublished frozen-authority/capture/opaque-association concerns integrated into the new activation parent.
-Next decision: accept pure4.3, then apply canonical renewal in4.5/4.6; independently prepare opaque writer8.4. Native freeze waits actual candidate authoring and runtime activation.
+Next decision: fresh planner accepts clean activation checkpoint f5849c09d; implement checked-tool DTO rows5.5/5.7 and strict same-body5.6, then derived summaries/classification/render/history/activation. Parallel registered metadata inspect8.9; native freeze follows actual candidate authoring.
 Constraint: owner authorized reviewed push+merge and full completion; no global framework changes or release.
 Dependencies: reuse existing isolated Codex/code-quality collectors; preserve one gate/resource/archive authority.
-State: T1 six rows complete; later runtime/calibration/docs rows remain open until verified.
+State: T1 complete and foundation PR #475 merged; child46 rows measured25 done/2 killed/19 open. Runtime semantic loader union stays refused; native pilot remains draft/inference disabled.
 
 ## Intent and completion criteria
 
