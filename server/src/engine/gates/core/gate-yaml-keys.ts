@@ -20,7 +20,7 @@ export const GATE_YAML_DECLARED_KEYS: readonly string[] = Object.keys(GateDefini
 /**
  * gate.yaml keys `buildGateYaml` writes directly from `GateCreationData` — always
  * (`id`/`name`/`type`/`description`/`guidanceFile`) or conditionally when the caller/fallback
- * supplied a value (`pass_criteria`/`activation`/`retry_config`). Never candidates for the
+ * supplied a value (`pass_criteria`/`activation`/`retry_config`/`calibration_suite_id`). Never candidates for the
  * generic carry-forward below — `GateFileWriter` already decides their fate.
  */
 export const GATE_YAML_PROJECTED_KEYS = [
@@ -32,6 +32,7 @@ export const GATE_YAML_PROJECTED_KEYS = [
   'pass_criteria',
   'activation',
   'retry_config',
+  'calibration_suite_id',
 ] as const;
 
 /**

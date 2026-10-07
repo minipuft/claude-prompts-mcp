@@ -17,14 +17,14 @@
  * it can only prove idempotence. The fixture below is written as YAML text with a key order the
  * writer would not produce, plus a key the schema never declares.
  *
- * WHY THE UPDATE CALL SUPPLIES `pass_criteria`/`activation`/`retry_config`/`name`/`type` EXPLICITLY
- * `buildGateYaml` decides these five PROJECTED keys from `GateCreationData` alone — never from the
+ * WHY THE UPDATE CALL RE-SUPPLIES PROJECTED VALUES EXPLICITLY
+ * `buildGateYaml` decides these six PROJECTED keys from `GateCreationData` alone — never from the
  * file on disk. In production `GateLifecycleProcessor.handleUpdate` re-supplies each one from
  * `existingGate.getDefinition()` before calling the writer (`pass_criteria: pass_criteria ??
  * existingDefinition.pass_criteria`, and so on) precisely so an update that does not mention them
  * does not lose them. This test calls `GateFileWriter` directly, one layer under that processor, so
  * it reproduces the same re-supply by hand rather than asserting a survival the writer itself never
- * promises for these five keys.
+ * promises for these six keys, including the authored `calibration_suite_id` association.
  */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -32,6 +32,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { GateDefinitionSchema } from '../../../../src/engine/gates/core/gate-schema.js';
+import {
+  GATE_YAML_PROJECTED_KEYS,
+  PRESERVED_GATE_YAML_KEYS,
+} from '../../../../src/engine/gates/core/gate-yaml-keys.js';
+import { GATE_SNAPSHOT_PROJECTED_KEYS } from '../../../../src/modules/versioning/projections/gate-snapshot.js';
 import {
   callerSuppliedGateKeys,
   GateFileWriter,
@@ -189,18 +194,19 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
     /** The schema is `.passthrough()`, so an unknown key loads — and must survive a write too. */
     const PASSTHROUGH_SEED = 'x-authorNote: kept by whoever wrote it';
 
-    // The five keys `buildGateYaml` decides from `GateCreationData` alone (never from disk) — the
+    // The six keys `buildGateYaml` decides from `GateCreationData` alone (never from disk) — the
     // update below has to re-supply matching values for these, exactly as
     // `GateLifecycleProcessor.handleUpdate` does from `existingGate.getDefinition()`.
     const PROJECTED_UPDATE_DATA: Pick<
       GateCreationData,
-      'name' | 'type' | 'pass_criteria' | 'activation' | 'retry_config'
+      'name' | 'type' | 'pass_criteria' | 'activation' | 'retry_config' | 'calibration_suite_id'
     > = {
       name: 'Every Key',
       type: 'validation',
       pass_criteria: [{ type: 'inline_guidance' }],
       activation: { prompt_categories: ['code'] },
       retry_config: { max_attempts: 3 },
+      calibration_suite_id: 'suite:opaque-v1',
     };
 
     it('seeds every schema key, or says why it cannot', () => {
@@ -269,7 +275,7 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
       expect(readFileSync(join(gateDir(id), 'guidance.md'))).toEqual(guidanceBefore);
     });
 
-    it('preserves the existing identifier when the update omits it', async () => {
+    it('preserves a scoped omission when its caller re-supplies the loaded association', async () => {
       const opaque = 'suite:keep/exact#revision';
       writeFixture(
         id,
@@ -284,7 +290,11 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
         ].join('\n')
       );
       const result = await writer.writeGateFiles(
-        { ...data, description: 'Changed description.' },
+        {
+          ...data,
+          description: 'Changed description.',
+          calibration_suite_id: readYaml(id)['calibration_suite_id'] as string,
+        },
         callerSuppliedGateKeys({ action: 'update', id, description: 'Changed description.' })
       );
       expect(result.success).toBe(true);
@@ -309,6 +319,23 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
       expect(result.success).toBe(true);
       expect(readYaml(id)['calibration_suite_id']).toBe(opaque);
       expect(readFileSync(yamlPath(id), 'utf8')).toBe(changes[0]!.after);
+    });
+
+    it('derives authored snapshot membership from the canonical YAML partition', () => {
+      expect(GATE_YAML_PROJECTED_KEYS).toContain('calibration_suite_id');
+      expect(PRESERVED_GATE_YAML_KEYS).not.toContain('calibration_suite_id');
+      expect(GATE_SNAPSHOT_PROJECTED_KEYS).toContain('calibration_suite_id');
+    });
+
+    it('a whole-state write without the association removes the current identifier', async () => {
+      expect(
+        (await writer.writeGateFiles({ ...data, calibration_suite_id: 'suite:current' })).success
+      ).toBe(true);
+      expect(readYaml(id)['calibration_suite_id']).toBe('suite:current');
+      const result = await writer.writeGateFiles(data);
+      expect(result.success).toBe(true);
+      expect(Object.hasOwn(readYaml(id), 'calibration_suite_id')).toBe(false);
+      expect(readYaml(id)['description']).toBe(data.description);
     });
   });
 });

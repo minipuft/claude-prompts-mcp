@@ -377,6 +377,11 @@ export class GateFileWriter {
       yamlData['retry_config'] = data.retry_config;
     }
 
+    // Authored revision content: absent in a full-state write means remove, not carry forward.
+    if (data.calibration_suite_id !== undefined) {
+      yamlData['calibration_suite_id'] = data.calibration_suite_id;
+    }
+
     // Carry forward the fields this writer builds no value for. Without this, every update
     // silently strips them back to loader defaults (severity, enforcementMode, gate_type, ...).
     Object.assign(
