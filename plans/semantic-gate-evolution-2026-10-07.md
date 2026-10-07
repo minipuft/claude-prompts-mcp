@@ -17,12 +17,12 @@ tags: [gates, semantic, evaluation, tests]
 
 ## Now (2026-10-07)
 
-Goal: finish every master/child row, actual registered semantic workflow, matched native baseline/pilot, evidence inventory and reviewed green-CI delivery.
-Slice: registered metadata8.9 committed d291a82ac; checked-tool5.5 finishing and structural producer5.8 active; cold5.9 precedes caller5.7.
-Next decision: accept checked DTO execution before caller wiring5.7 and strict same-body5.6, then all remaining runtime consumers/activation and native freeze.
-Constraint: /root/semantic_calibration_contract owns main HEAD/plans/integration/publication; root observes; two workers/global4slots; R6 reviewed push+merge persists.
-Dependencies: one gate/resource/archive authority; native freeze requires current source/runtime/candidate plus root independent receipt review before inference.
-State: child48 rows26 done/2 killed/20 open; semantic loader refused; no native inference, release, global edits, automatic promotion or liveDB cutover.
+Goal: finish all master/child rows, actual registered semantic workflow, matched native baseline/pilot, evidence/rollback and reviewed green-CI delivery.
+Slice: metadata8.9/checked-tools5.5/structural5.8 committed; cold/remap5.9 accepted; caller5.7 and canonical-empty custody prerequisite5.10 ready.
+Next decision: complete body/trailer address classification and strictsame-body5.6 before summaries/render/history/activation; nativefreeze follows actual candidate authoring.
+Constraint: planner /root/semantic_calibration_contract owns HEAD/plans/publication; root observes;2workers/global4slots; R6 reviewedpush+merge persists.
+Dependencies: one gate/resource/archive authority; current source/runtime/candidate+private materials freeze requires root independentreceipt review before inference.
+State: child48 rows29done2killed17open before producer/parser recut; semantic loader refused/nativeinference0; no release/globaledits/autopromotion/liveDBcutover.
 
 ## Intent and completion criteria
 

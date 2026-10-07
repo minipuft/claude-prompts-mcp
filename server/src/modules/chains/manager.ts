@@ -57,6 +57,7 @@ import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.
 // the rules cannot drift between the capture seam that validates and the store that persists.
 import { computeUnknownLedger } from '#engine/execution/capture/unknown-observation-processor.js';
 import { resolveShownReview } from '#engine/execution/pipeline/decisions/gates/review-target.js';
+import { PHASE_GUARD_GATE_ID } from '#engine/execution/pipeline/decisions/gates/structural-review-composition.js';
 import { investigatedUnknownIds } from '#engine/execution/pipeline/decisions/mutation/mutation-policy.js';
 import {
   nodesHoldingRunOpen,
@@ -2258,6 +2259,7 @@ export class ChainSessionStore implements ChainSessionService {
     // R69: the run carries the map an earlier claimer applied, and its reviews name that
     // claimer's ids, so this process's map composes onto it rather than replacing it.
     const { applied, rewrite } = composeGateRemap(session.gateRemap ?? {}, remap);
+    assertNoStructuralGateRemapCollision(Object.values(session.reviews ?? {}), rewrite);
     const mapChanged = !sameGateRemap(session.gateRemap ?? {}, applied);
     const snapshot = this.snapshotRun(session);
     if (Object.keys(applied).length > 0) session.gateRemap = applied;
@@ -3276,6 +3278,29 @@ function reviewGateIds(review: GateReview): string[] {
   ];
 }
 
+/** Refuse a collapse onto existing server structural membership before changing any run state. */
+function assertNoStructuralGateRemapCollision(
+  reviews: readonly GateReview[],
+  rewrite: ReadonlyMap<string, string>
+): void {
+  for (const review of reviews) {
+    if (
+      review.structuralGateIds?.includes(PHASE_GUARD_GATE_ID) !== true ||
+      !review.gateIds.includes(PHASE_GUARD_GATE_ID)
+    )
+      continue;
+    const collapsed = reviewGateIds(review).find(
+      (id) => id !== PHASE_GUARD_GATE_ID && rewrite.get(id) === PHASE_GUARD_GATE_ID
+    );
+    if (collapsed !== undefined) {
+      throw new Error(
+        `Gate remap '${collapsed}' -> '${PHASE_GUARD_GATE_ID}' would collapse a required gate ` +
+          `onto existing server structural membership for node '${review.nodeId}'`
+      );
+    }
+  }
+}
+
 /**
  * A copy of `review` naming each gate through `remap` (R60 amended) wherever the render and the
  * verdict read a gate id. `history` and `checkResults` stay as recorded: they are what happened.
@@ -3310,6 +3335,9 @@ function cloneReview(review: GateReview): GateReview {
   return {
     ...review,
     gateIds: [...review.gateIds],
+    ...(review.structuralGateIds !== undefined && {
+      structuralGateIds: [...review.structuralGateIds],
+    }),
     prompts: review.prompts.map((prompt) => {
       const mappedPrompt: GateReviewPrompt = { ...prompt };
       if (prompt.explicitInstructions !== undefined) {

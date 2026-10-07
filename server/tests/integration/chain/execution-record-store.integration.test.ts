@@ -22,6 +22,11 @@ import { UnknownObservationProcessor } from '../../../src/engine/execution/captu
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import {
+  composeStructuralReview,
+  PHASE_GUARD_GATE_ID,
+  selectToolReviewGateIds,
+} from '../../../src/engine/execution/pipeline/decisions/gates/structural-review-composition.js';
+import {
   bindSemanticReviewTarget,
   createSemanticReviewContext,
 } from '../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
@@ -258,7 +263,206 @@ function detachedContext(f: ReviewFixture, output: string, verdict?: GateVerdict
   return context;
 }
 
+function addStructuralFinding(review: GateReview): GateReview {
+  return {
+    ...composeStructuralReview(review, {
+      gateId: PHASE_GUARD_GATE_ID,
+      feedback: 'Missing declared context',
+      retryHints: ['Add context'],
+      failedPhases: ['context'],
+      mode: 'enforce',
+      previousResponse: REVIEW_OUTPUT,
+      reviewedStep: { nodeId: review.nodeId, stepNumber: 1 },
+      maxAttempts: 3,
+      createdAt: 42,
+    }),
+    nodeId: review.nodeId,
+    kind: review.kind,
+    phase: review.phase,
+  };
+}
+
+function currentReview(f: ReviewFixture): GateReview {
+  const review = f.store.getReview('review-session', 'reviewed-node');
+  if (review === undefined) throw new Error('Missing stored review');
+  return review;
+}
+
+function remapDecisionState(f: ReviewFixture) {
+  const session = f.store.getSession('review-session', REVIEW_SCOPE);
+  if (session === undefined) throw new Error('Missing stored session');
+  // Session lookup touches lastActivity; compare the complete node/review decision state instead.
+  return structuredClone({
+    state: session.state,
+    reviews: session.reviews,
+    gateRemap: session.gateRemap,
+    runStatus: session.runStatus,
+    telemetry: f.store.getRunTelemetry('review-session'),
+  });
+}
+
 describe('issued review capture and cold custody (real SQLite)', () => {
+  test.each(['gate', 'detached'] as const)(
+    '%s mixed structural marker survives input/getter mutation and real SQLite cold reopen',
+    async (kind) => {
+      const f = await reviewFixture();
+      try {
+        const opened = await openReview(f, kind);
+        const bound = f.authority().bindReviewOutput(
+          {
+            ...opened,
+            attemptCount: 2,
+            maxAttempts: 5,
+            metadata: {
+              ...opened.metadata,
+              source: kind === 'detached' ? 'worker-report' : 'gate-enforcement',
+            },
+          },
+          REVIEW_OUTPUT
+        );
+        const markers = [PHASE_GUARD_GATE_ID];
+        const submitted = { ...addStructuralFinding(bound), structuralGateIds: markers };
+        const expected = structuredClone(submitted);
+        await f.store.setReview('review-session', submitted);
+        markers.splice(0, 1, 'caller-replaced-marker');
+        expect(currentReview(f)).toEqual(expected);
+        const getterCopy = currentReview(f);
+        if (getterCopy.structuralGateIds === undefined) throw new Error('Missing server marker');
+        Reflect.set(getterCopy.structuralGateIds, '0', 'getter-replaced-marker');
+        expect(currentReview(f)).toEqual(expected);
+        // Persist again after both mutation attempts, so cold proof observes current owned state.
+        await f.store.setReview('review-session', currentReview(f));
+        await f.cold();
+        const cold = currentReview(f);
+        expect(cold).toEqual(expected);
+        expect(cold.gateIds).toEqual([REVIEW_GATE.id, PHASE_GUARD_GATE_ID]);
+        expect(selectToolReviewGateIds(cold)).toEqual([REVIEW_GATE.id]);
+        expect(cold.semanticContext?.target?.content).toBe(REVIEW_OUTPUT);
+        if (cold.structuralGateIds === undefined) throw new Error('Missing cold marker');
+        Reflect.set(cold.structuralGateIds, '0', 'cold-getter-replaced-marker');
+        expect(currentReview(f).structuralGateIds).toEqual([PHASE_GUARD_GATE_ID]);
+      } finally {
+        await f.close();
+      }
+    }
+  );
+
+  test('cold authored canonical collision retains marker, full requirement and frozen authority', async () => {
+    const f = await reviewFixture();
+    try {
+      const opened = await openReview(f, 'detached');
+      if (opened.semanticContext === undefined) throw new Error('Missing issued attempt');
+      const collision: GateReview = {
+        ...opened,
+        gateIds: [PHASE_GUARD_GATE_ID],
+        prompts: opened.prompts.map((prompt) => ({ ...prompt, gateId: PHASE_GUARD_GATE_ID })),
+        gateTiers: { [PHASE_GUARD_GATE_ID]: opened.gateTiers?.[REVIEW_GATE.id] ?? 'reminder' },
+        attemptCount: 2,
+        maxAttempts: 5,
+        metadata: { ...opened.metadata, source: 'worker-report' },
+        semanticContext: bindSemanticReviewTarget(
+          createSemanticReviewContext(opened.nodeId, opened.semanticContext.attemptId, [
+            { ...REVIEW_GATE, id: PHASE_GUARD_GATE_ID },
+          ]),
+          REVIEW_OUTPUT
+        ),
+      };
+      const composed = addStructuralFinding(collision);
+      await f.store.setReview('review-session', composed);
+      await f.cold();
+      const cold = currentReview(f);
+      expect(cold).toEqual(composed);
+      expect(cold.structuralGateIds).toEqual([PHASE_GUARD_GATE_ID]);
+      expect(selectToolReviewGateIds(cold)).toEqual([PHASE_GUARD_GATE_ID]);
+      expect(cold.gateIds).toEqual([PHASE_GUARD_GATE_ID]);
+    } finally {
+      await f.close();
+    }
+  });
+
+  test('reverse remap onto existing structural membership refuses before all node/review/pin state changes', async () => {
+    const f = await reviewFixture();
+    try {
+      const opened = await openReview(f, 'detached');
+      const mixed = addStructuralFinding(opened);
+      await f.store.setReview('review-session', mixed);
+      await f.store.setReview('review-session', {
+        ...opened,
+        nodeId: 'current-node',
+        kind: 'gate',
+        semanticContext: createSemanticReviewContext('current-node', 'sibling-attempt', [
+          REVIEW_GATE,
+        ]),
+      });
+      const before = remapDecisionState(f);
+      await expect(
+        f.store.remapRunGates('review-session', new Map([[REVIEW_GATE.id, PHASE_GUARD_GATE_ID]]))
+      ).rejects.toThrow(/retention-gate.*__phase_guard__.*existing server structural membership/);
+      expect(remapDecisionState(f)).toEqual(before);
+      expect(currentReview(f)).toEqual(mixed);
+      expect(selectToolReviewGateIds(currentReview(f))).toEqual([REVIEW_GATE.id]);
+      await f.cold();
+      expect(remapDecisionState(f)).toEqual(before);
+      expect(currentReview(f)).toEqual(mixed);
+    } finally {
+      await f.close();
+    }
+  });
+
+  test('ordinary and forward structural remaps preserve behavior without creating an authored-ID exemption', async () => {
+    const f = await reviewFixture();
+    try {
+      const mixed = addStructuralFinding(await openReview(f, 'detached'));
+      await f.store.setReview('review-session', mixed);
+      await f.store.remapRunGates('review-session', new Map([[REVIEW_GATE.id, 'ordinary-alias']]));
+      const ordinary = currentReview(f);
+      expect(ordinary.gateIds).toEqual(['ordinary-alias', PHASE_GUARD_GATE_ID]);
+      expect(ordinary.structuralGateIds).toEqual([PHASE_GUARD_GATE_ID]);
+      expect(selectToolReviewGateIds(ordinary)).toEqual(['ordinary-alias']);
+      expect(ordinary.semanticContext).toEqual(mixed.semanticContext);
+      await f.store.remapRunGates(
+        'review-session',
+        new Map([
+          [REVIEW_GATE.id, 'ordinary-alias'],
+          [PHASE_GUARD_GATE_ID, 'structural-alias'],
+        ])
+      );
+      const forward = currentReview(f);
+      expect(forward.gateIds).toEqual(['ordinary-alias', 'structural-alias']);
+      expect(forward.structuralGateIds).toEqual([PHASE_GUARD_GATE_ID]);
+      expect(selectToolReviewGateIds(forward)).toEqual(['ordinary-alias', 'structural-alias']);
+      expect(forward.semanticContext).toEqual(mixed.semanticContext);
+      await f.cold();
+      expect(currentReview(f)).toEqual(forward);
+      expect(selectToolReviewGateIds(currentReview(f))).toEqual([
+        'ordinary-alias',
+        'structural-alias',
+      ]);
+    } finally {
+      await f.close();
+    }
+  });
+
+  test('ordinary authored remap onto the canonical ID remains allowed when no structural member exists', async () => {
+    const f = await reviewFixture();
+    try {
+      const opened = await openReview(f);
+      await f.store.remapRunGates(
+        'review-session',
+        new Map([[REVIEW_GATE.id, PHASE_GUARD_GATE_ID]])
+      );
+      const remapped = currentReview(f);
+      expect(remapped.gateIds).toEqual([PHASE_GUARD_GATE_ID]);
+      expect(remapped.structuralGateIds).toBeUndefined();
+      expect(selectToolReviewGateIds(remapped)).toEqual([PHASE_GUARD_GATE_ID]);
+      expect(remapped.semanticContext).toEqual(opened.semanticContext);
+      await f.cold();
+      expect(currentReview(f)).toEqual(remapped);
+    } finally {
+      await f.close();
+    }
+  });
+
   test('cold reopened review retains pins and getter copies cannot mutate stored authority', async () => {
     const f = await reviewFixture();
     try {
