@@ -245,3 +245,19 @@ Parent read the complete five-line diff. Both gate-schema shared imports now use
 Affected source gates now pass: architecture zero errors with 20 pre-existing warnings; Knip ratchet 1070 findings/no regressions. All three named test files passed together (183 tests), focused strict types passed, formatting/whitespace passed. Jest's tracked-tree digest remained identical across 1949 files. The repository plan-row gate passes after table contiguity correction and reads all five T1 rows.
 
 The repair's compiled run chain-strategic_worker#3 returned complete (1/1). A fresh local repair commit will carry source plus ledger/table fixes. Build/current-snapshot validation will be repeated because source changed; there is no full test-suite rerun. Runtime capability remains deliberately unavailable until later complete consumer wiring.
+
+### Import grouping follow-up
+
+Repair commit 7ec97f514 captured row 1.5 plus ledger/table corrections. Rebuild passed, but current-snapshot lint:ratchet found import-x/order baseline4 ->6. Exact focused diagnostics at gate-schema.ts:43 require the new #shared/utils value import to occur after the #shared/types type import and in a separate group. Row 1.6 owns that one import-order fix; baseline remains unchanged. The earlier architecture/Knip checks passed but were not a replacement for source lint after changing imports (DEV-T1-6).
+
+A direct source API probe on this snapshot produced:
+complete -> valid=true, passed=true, issues=[];
+missing evidence -> valid=false, passed=false, evidence_required;
+different attempt -> valid=false, passed=false, binding_mismatch.
+This is a standalone API integrity demonstration, not a model judgment experiment. The origin/main search found no evaluator, with validateGateSchema as the positive retrieval control. The API transcript is /tmp/semantic-gate-t1-api-demo.txt.
+
+### H-T1-6: accepted import-only lint closure
+
+Parent inspected the complete +2/-1 diff: the shared utility import follows the shared type block, separated as the configured rule requires. No runtime logic, symbols or definitions changed. Focused ESLint has only four existing legacy boolean errors; whole lint ratchet returns to 2449 errors/710 warnings with no regressions, focused strict source types pass, and formatting/whitespace pass. No broad test rerun was needed for ordering alone. Compiled chain-strategic_worker#4 returned complete (1/1).
+
+Import layout adds one line: current standalone schema anchor160 and live pass-criteria anchor199. The plan is corrected; the earlier198 anchor in H-T1-1 is the historical post-definition-insertion observation. Six T1 rows now close the first slice; 24 later rows remain open. Runtime report routing, calibration/archive integration and promotion are still unimplemented, not inferred from the internal API probe.

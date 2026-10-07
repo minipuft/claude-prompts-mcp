@@ -40,7 +40,6 @@
 
 import { z } from 'zod/v4';
 
-import { refuseUndeclaredKey } from '#shared/utils/nested-key-refusal.js';
 import { ARTIFACT_KINDS } from '../utils/artifact-kinds.js';
 
 import type {
@@ -49,6 +48,8 @@ import type {
   SemanticCriterionInput,
   SemanticResultDomain,
 } from '#shared/types/gate-evaluation.js';
+
+import { refuseUndeclaredKey } from '#shared/utils/nested-key-refusal.js';
 
 // ============================================
 // Standalone Semantic Criterion Schema
