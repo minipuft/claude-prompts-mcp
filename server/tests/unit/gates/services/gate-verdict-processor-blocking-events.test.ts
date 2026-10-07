@@ -22,6 +22,10 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { GateVerdictProcessor } from '../../../../src/engine/gates/services/gate-verdict-processor.js';
 import { GateEnforcementAuthority } from '../../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
+import {
+  bindSemanticReviewTarget,
+  createSemanticReviewContext,
+} from '../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { hashBytes } from '../../../../src/shared/utils/hash.js';
 
@@ -128,7 +132,10 @@ const sessionWith = (attemptCount: number) =>
     state: { currentNodeId: 'node-1', nodes: [{ id: 'node-1' }, { id: 'node-2' }] },
   }) as unknown as ChainSession;
 
-function structuredReview(indexes: readonly number[] = [1]): GateVerdictSubmission {
+function structuredReview(
+  indexes: readonly number[] = [1],
+  definitionDigest = hashBytes('frozen definition')
+): GateVerdictSubmission {
   const targetDigest = hashBytes('A😀e\u0301 Z');
   return {
     overall: 'FAIL',
@@ -142,7 +149,7 @@ function structuredReview(indexes: readonly number[] = [1]): GateVerdictSubmissi
           gate_id: 'gate-a',
           node_id: 'node-1',
           attempt_id: 'attempt-1',
-          definition_digest: hashBytes('frozen definition'),
+          definition_digest: definitionDigest,
           target_digest: targetDigest,
         },
         observations: [
@@ -216,6 +223,218 @@ function custodyFixture(kind: 'ordinary' | 'detached', verdict: McpToolRequest['
       : processor.processReviewVerdict(context, session, sessionContext, 'A😀e\u0301 Z');
   return { authority, context, session, store, submit };
 }
+
+/** Draft authority fixture; this does not load or activate live semantic resource criteria. */
+function draftSemanticContext() {
+  return createSemanticReviewContext('node-1', 'attempt-1', [
+    {
+      id: 'gate-a',
+      name: 'Draft gate',
+      type: 'validation',
+      description: 'Frozen draft rubric',
+      pass_criteria: [
+        {
+          type: 'semantic_evaluation',
+          id: 'preserves-contract',
+          target: { kind: 'step_output' },
+          question: 'Does the output preserve the contract?',
+          evidence_requirements: { min_items: 1 },
+          result: { kind: 'boolean' },
+          acceptance: { kind: 'equals', value: true },
+        },
+      ],
+    },
+  ]);
+}
+
+function pinReview(fixture: ReturnType<typeof custodyFixture>) {
+  const review = fixture.session.reviews?.['node-1'];
+  if (review === undefined) throw new Error('Review fixture missing');
+  const issued = draftSemanticContext();
+  review.semanticContext = bindSemanticReviewTarget(issued, 'A😀e\u0301 Z');
+  return review;
+}
+
+describe('GateVerdictProcessor attempt renewal', () => {
+  test('ordinary FAIL persists one fresh attempt without its old target or rubric mutation', async () => {
+    const snapshot = draftSemanticContext().definitions['gate-a'];
+    if (snapshot === undefined) throw new Error('Draft rubric missing');
+    const submission = structuredReview([1], snapshot.definitionDigest);
+    const originalSubmission = structuredClone(submission);
+    const fixture = custodyFixture('ordinary', submission);
+    const originalReview = pinReview(fixture);
+    const pins = originalReview.semanticContext;
+    const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
+    expect(submission.per_gate?.[0]?.evaluation?.binding.definition_digest).toBe(
+      pins?.definitions['gate-a']?.definitionDigest
+    );
+    expect(submission.per_gate?.[0]?.evaluation?.binding.target_digest).toBe(pins?.target?.digest);
+
+    await fixture.submit();
+
+    expect(renew).toHaveBeenCalledTimes(1);
+    expect(fixture.store.setReview).toHaveBeenCalledTimes(1);
+    const persisted = fixture.store.setReview.mock.calls[0]?.[1];
+    expect(persisted?.semanticContext?.attemptId).not.toBe(pins?.attemptId);
+    expect(persisted?.semanticContext?.attemptId).toEqual(expect.any(String));
+    expect(persisted?.semanticContext).not.toHaveProperty('target');
+    expect(persisted?.semanticContext?.definitions).toBe(pins?.definitions);
+    expect(persisted?.attemptCount).toBe(1);
+    expect(persisted?.previousResponse).toEqual(expect.any(String));
+    expect(fixture.context.sessionContext?.pendingReview).toBe(persisted);
+    expect(originalReview.semanticContext).toBe(pins);
+    expect(pins?.target?.digest).toBe(hashBytes('A😀e\u0301 Z'));
+    expect(submission).toEqual(originalSubmission);
+    expect(fixture.context.state.gates.perGateVerdicts?.[0]?.evaluation).toBe(
+      submission.per_gate?.[0]?.evaluation
+    );
+    expect(submission.per_gate?.[0]?.evaluation?.binding.attempt_id).not.toBe(
+      persisted?.semanticContext?.attemptId
+    );
+  });
+
+  test('exhausted ordinary retry persists the renewed review returned to its caller', async () => {
+    const fixture = custodyFixture('ordinary', 'GATE_REVIEW: FAIL - Retry');
+    const original = pinReview(fixture);
+    original.phase = 'exhausted';
+    original.attemptCount = 2;
+    const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
+    const processor = new GateVerdictProcessor(
+      fixture.store as unknown as ChainSessionService,
+      createLogger()
+    );
+    const sessionContext = fixture.context.sessionContext;
+    if (sessionContext === undefined) throw new Error('Session fixture missing');
+
+    await processor.handleGateAction(fixture.context, fixture.session, 'retry', sessionContext);
+
+    expect(renew).toHaveBeenCalledTimes(1);
+    const persisted = fixture.store.setReview.mock.calls[0]?.[1];
+    expect(persisted?.semanticContext?.attemptId).not.toBe(original.semanticContext?.attemptId);
+    expect(persisted?.semanticContext).not.toHaveProperty('target');
+    expect(persisted?.semanticContext?.definitions).toBe(original.semanticContext?.definitions);
+    expect(sessionContext.pendingReview).toBe(persisted);
+    expect(persisted?.attemptCount).toBe(0);
+  });
+
+  test('detached FAIL defers renewal until replacement and returns exactly the persisted pins', async () => {
+    const fixture = custodyFixture('detached', structuredReview());
+    const original = pinReview(fixture);
+    const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
+    await fixture.submit();
+    expect(renew).not.toHaveBeenCalled();
+    const waiting = fixture.store.setReview.mock.calls.at(-1)?.[1];
+    if (waiting === undefined) throw new Error('Waiting review missing');
+    expect(waiting.semanticContext).toBe(original.semanticContext);
+    fixture.session.reviews = { 'node-1': waiting };
+    fixture.store.setReview.mockClear();
+    const processor = new GateVerdictProcessor(
+      fixture.store as unknown as ChainSessionService,
+      createLogger()
+    );
+
+    const reopened = await processor.applyReplacementReport(
+      fixture.context,
+      fixture.session,
+      'node-1',
+      'replacement'
+    );
+
+    expect(renew).toHaveBeenCalledTimes(1);
+    expect(fixture.store.setReview).toHaveBeenCalledTimes(1);
+    expect(reopened).toBe(fixture.store.setReview.mock.calls[0]?.[1]);
+    expect(reopened?.semanticContext?.attemptId).not.toBe(original.semanticContext?.attemptId);
+    expect(reopened?.semanticContext).not.toHaveProperty('target');
+    expect(reopened?.semanticContext?.definitions).toBe(original.semanticContext?.definitions);
+  });
+
+  test.each(['passed', 'cleared', 'exhausted'] as const)(
+    '%s verdict outcomes never renew semantic pins',
+    async (outcome) => {
+      const fixture = custodyFixture(
+        'ordinary',
+        outcome === 'passed' ? 'GATE_REVIEW: PASS - Reviewed' : structuredReview()
+      );
+      const original = pinReview(fixture);
+      if (outcome === 'cleared') fixture.context.state.gates.enforcementMode = 'advisory';
+      if (outcome === 'exhausted') original.attemptCount = 1;
+      const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
+      await fixture.submit();
+      expect(renew).not.toHaveBeenCalled();
+      if (outcome === 'exhausted') {
+        expect(fixture.store.setReview.mock.calls.at(-1)?.[1]?.semanticContext).toBe(
+          original.semanticContext
+        );
+      } else expect(fixture.store.clearReview).toHaveBeenCalled();
+    }
+  );
+
+  test('detached exhausted retry waits for replacement without renewing twice', async () => {
+    const fixture = custodyFixture('detached', structuredReview());
+    const original = pinReview(fixture);
+    original.phase = 'exhausted';
+    original.attemptCount = 2;
+    const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
+    const processor = new GateVerdictProcessor(
+      fixture.store as unknown as ChainSessionService,
+      createLogger()
+    );
+    await processor.processDetachedReviewAction(
+      fixture.context,
+      fixture.session,
+      'node-1',
+      'retry'
+    );
+    expect(renew).not.toHaveBeenCalled();
+    expect(fixture.store.setReview.mock.calls.at(-1)?.[1]).toMatchObject({
+      phase: 'awaiting-replacement',
+      attemptCount: 0,
+    });
+    expect(fixture.store.setReview.mock.calls.at(-1)?.[1]?.semanticContext).toBe(
+      original.semanticContext
+    );
+  });
+
+  test('missing authority refuses semantic renewal before counters or review writes', async () => {
+    const fixture = custodyFixture('ordinary', structuredReview());
+    pinReview(fixture);
+    fixture.context.gateEnforcement = undefined;
+    await expect(fixture.submit()).rejects.toThrow('retry requires gate enforcement authority');
+    expect(fixture.store.setReview).not.toHaveBeenCalled();
+    expect(fixture.store.recordGateReviewOutcome).not.toHaveBeenCalled();
+    expect(fixture.store.advanceStep).not.toHaveBeenCalled();
+  });
+
+  test('refused and terminal replacement attempts do not renew or write', async () => {
+    const fixture = custodyFixture('detached', structuredReview());
+    const original = pinReview(fixture);
+    const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
+    const processor = new GateVerdictProcessor(
+      fixture.store as unknown as ChainSessionService,
+      createLogger()
+    );
+    expect(
+      await processor.applyReplacementReport(
+        fixture.context,
+        fixture.session,
+        'node-1',
+        'replacement'
+      )
+    ).toBeNull();
+    fixture.session.reviews = {};
+    expect(
+      await processor.applyReplacementReport(
+        fixture.context,
+        fixture.session,
+        'node-1',
+        'replacement'
+      )
+    ).toBeNull();
+    expect(renew).not.toHaveBeenCalled();
+    expect(fixture.store.setReview).not.toHaveBeenCalled();
+    expect(original.semanticContext?.attemptId).toBe('attempt-1');
+  });
+});
 
 describe('GateVerdictProcessor typed report custody', () => {
   test.each(['ordinary', 'detached'] as const)(
@@ -354,7 +573,8 @@ describe('GateVerdictProcessor typed report custody', () => {
 
       expect(joined.gateIds).toEqual(['gate-a', 'new-gate']);
       expect(joined.attemptCount).toBe(review.attemptCount);
-      expect(fixture.store.setReview).toHaveBeenCalledWith('session-1', joined);
+      expect(fixture.store.setReview.mock.calls[0]?.[0]).toBe('session-1');
+      expect(fixture.store.setReview.mock.calls[0]?.[1]).toBe(joined);
     }
   );
 });

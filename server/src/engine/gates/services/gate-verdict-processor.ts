@@ -774,12 +774,16 @@ export class GateVerdictProcessor {
     const event = this.markUnanswered(entry, review.nodeId, session);
     const failedGateIds =
       event.type === 'verdict' ? this.recordPerGateVerdicts(context, event.verdict, review) : [];
-    // Structured index refusal must happen before persisting a freshly graded review.
-    if (review !== found) {
+    const enforcement = await this.resolveFailEnforcement(context, review, failedGateIds);
+    const advance = this.applyReviewAttemptIntent(
+      context,
+      advanceReview(review, event, enforcement)
+    );
+    // Validate structured indexes and renewal authority before any freshly graded review write.
+    // A renewed review is persisted below once; the original stays available to failed capture.
+    if (review !== found && advance.renewAttempt !== true) {
       await this.chainSessionStore.setReview(session.sessionId, review);
     }
-    const enforcement = await this.resolveFailEnforcement(context, review, failedGateIds);
-    const advance = advanceReview(review, event, enforcement);
     if (advance.outcome === 'refused') {
       return { kind: 'refused', message: describeRefusal(advance.reason, review) };
     }
@@ -794,6 +798,22 @@ export class GateVerdictProcessor {
       await this.chainSessionStore.setReview(session.sessionId, advance.review);
     }
     return { kind: 'answered', review, advance, enforcement, failedGateIds };
+  }
+
+  /** Apply lifecycle intent through the existing authority before announcing or persisting it. */
+  private applyReviewAttemptIntent(
+    context: ExecutionContext,
+    advance: ReturnType<typeof advanceReview>
+  ): ReturnType<typeof advanceReview> {
+    if (advance.renewAttempt !== true || advance.review === null) return advance;
+    const authority = context.gateEnforcement;
+    if (authority === undefined) {
+      if (advance.review.semanticContext !== undefined) {
+        throw new Error('Semantic review retry requires gate enforcement authority');
+      }
+      return advance;
+    }
+    return { ...advance, review: authority.renewReviewAttempt(advance.review) };
   }
 
   /** The entry's event, flagged `unanswered` when neither the call nor the node holds an answer. */
