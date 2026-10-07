@@ -1,6 +1,8 @@
 // @lifecycle test - Registered STDIO/HTTP custody of ordinary verdicts and staged report carriers.
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -23,6 +25,46 @@ import type { SemanticEvaluationReport } from '../../../src/shared/types/gate-ev
 const SERVER_ROOT = path.join(PROJECT_ROOT, 'server');
 const GATE = 'registered-custody-check';
 const OUTPUT = 'A😀e\u0301 Z';
+
+interface ContextObservation {
+  chainId: string | null;
+  supplied: boolean;
+  userResponse?: string;
+}
+
+/** Test-only child preload: observe the real context and always run the original stage. */
+function contextObserverOptions(tracePath: string): string {
+  const bootstrap = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
+  const stage = pathToFileURL(
+    path.join(SERVER_ROOT, 'src/engine/execution/pipeline/stages/01-request-normalization-stage.ts')
+  ).href;
+  const source = `
+    await import(${JSON.stringify(bootstrap)});
+    const { appendFileSync } = await import('node:fs');
+    const { RequestNormalizationStage } = await import(${JSON.stringify(stage)});
+    const original = RequestNormalizationStage.prototype.execute;
+    RequestNormalizationStage.prototype.execute = async function(context) {
+      const request = context.mcpRequest;
+      appendFileSync(${JSON.stringify(tracePath)}, JSON.stringify({
+        chainId: request.chain_id ?? null,
+        supplied: Object.prototype.hasOwnProperty.call(request, 'user_response'),
+        userResponse: request.user_response
+      }) + String.fromCharCode(10));
+      return await original.call(this, context);
+    };
+  `;
+  return `--import=data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
+}
+
+function observedContexts(tracePath: string, chainId: string): ContextObservation[] {
+  if (!existsSync(tracePath)) return [];
+  return readFileSync(tracePath, 'utf8')
+    .trim()
+    .split(String.fromCharCode(10))
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as ContextObservation)
+    .filter((entry) => entry.chainId === chainId);
+}
 
 interface ToolReply {
   text: string;
@@ -145,14 +187,21 @@ describe.each(['stdio', 'http'] as const)(
       for (const dispose of cleanup.splice(0).reverse()) await dispose();
     });
 
-    async function fixture(): Promise<{ call: Call; chainId: string; runtimeRoot: string }> {
+    async function fixture(): Promise<{
+      call: Call;
+      chainId: string;
+      runtimeRoot: string;
+      contextTrace: string;
+    }> {
       const roots = createHermeticRoots(`registered-custody-${transport}`);
       const workspace = path.join(roots.root, 'workspace');
       mkdirSync(workspace);
       cleanup.push(roots.cleanup);
+      const contextTrace = path.join(roots.root, 'context-custody.jsonl');
       const overrides = {
         ...roots.env,
         MCP_WORKSPACE: workspace,
+        NODE_OPTIONS: contextObserverOptions(contextTrace),
         MCP_SHELL_VERIFY_ALLOWLIST: `${process.execPath} *`,
       };
       let call: Call;
@@ -216,7 +265,7 @@ describe.each(['stdio', 'http'] as const)(
       expect(started.isError).toBe(false);
       const chainId = /chain_id="(chain-[A-Za-z0-9_#-]+)"/.exec(started.text)?.[1];
       if (chainId === undefined) throw new Error(`No registered chain id: ${started.text}`);
-      return { call, chainId, runtimeRoot: roots.runtimeRoot };
+      return { call, chainId, runtimeRoot: roots.runtimeRoot, contextTrace };
     }
     function captured(runtimeRoot: string, chainId: string): GateVerdictSummary[] {
       const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state/state.db'), {
@@ -233,6 +282,76 @@ describe.each(['stdio', 'http'] as const)(
         db.close();
       }
     }
+
+    function answeredNodes(
+      runtimeRoot: string,
+      chainId: string
+    ): { nodes: number; answered: number } {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state/state.db'), {
+        readOnly: true,
+      });
+      try {
+        return db
+          .prepare(
+            'SELECT COUNT(*) AS nodes, COUNT(n.responded_at) AS answered FROM chain_run_nodes n JOIN chain_runs r ON r.session_id = n.session_id WHERE r.chain_id = ?'
+          )
+          .get(chainId) as unknown as { nodes: number; answered: number };
+      } finally {
+        db.close();
+      }
+    }
+
+    test('supplied whitespace reaches the real context as empty while report-only omission stays absent', async () => {
+      const { call, chainId, runtimeRoot, contextTrace } = await fixture();
+      const before = answeredNodes(runtimeRoot, chainId);
+      expect(before.nodes).toBeGreaterThan(0);
+      expect(before.answered).toBe(0);
+      const whitespace = await call('prompt_engine', {
+        chain_id: chainId,
+        user_response: String.fromCharCode(32, 9, 10, 32),
+        gate_verdict: 'GATE_REVIEW: FAIL - No replacement output',
+      });
+      expect(whitespace.isError).toBe(false);
+      const supplied = observedContexts(contextTrace, chainId).at(-1);
+      expect(supplied).toMatchObject({ supplied: true, userResponse: '' });
+      expect(answeredNodes(runtimeRoot, chainId)).toEqual(before);
+      const omitted = await call('prompt_engine', {
+        chain_id: chainId,
+        gate_verdict: 'GATE_REVIEW: FAIL - Report-only review',
+      });
+      expect(omitted.isError).toBe(false);
+      const absent = observedContexts(contextTrace, chainId).at(-1);
+      expect(absent).toMatchObject({ supplied: false });
+      expect(absent).not.toHaveProperty('userResponse');
+      expect(answeredNodes(runtimeRoot, chainId)).toEqual(before);
+    }, 90000);
+
+    test('the SDK refuses literal empty response before context while nonempty Unicode retains canonical bytes', async () => {
+      const { call, chainId, runtimeRoot, contextTrace } = await fixture();
+      const before = observedContexts(contextTrace, chainId).length;
+      const invalid = {
+        chain_id: chainId,
+        user_response: '',
+        gate_verdict: 'GATE_REVIEW: FAIL - Empty input',
+      };
+      const refused = await call('prompt_engine', invalid);
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain('User response cannot be empty');
+      expect(observedContexts(contextTrace, chainId)).toHaveLength(before);
+      expect(answeredNodes(runtimeRoot, chainId).answered).toBe(0);
+      const unicode = String.fromCodePoint(0x41, 0x1f600, 0x65, 0x301, 0x20, 0x5a);
+      const accepted = await call('prompt_engine', {
+        chain_id: chainId,
+        user_response: `  ${unicode}${String.fromCharCode(10)}`,
+        gate_verdict: 'GATE_REVIEW: FAIL - Unicode output supplied',
+      });
+      expect(accepted.isError).toBe(false);
+      expect(observedContexts(contextTrace, chainId).at(-1)).toMatchObject({
+        supplied: true,
+        userResponse: unicode,
+      });
+      expect(answeredNodes(runtimeRoot, chainId).answered).toBe(1);
+    }, 90000);
 
     test('rich carrier survives actual registration, capture and persisted history', async () => {
       const { call, chainId, runtimeRoot } = await fixture();

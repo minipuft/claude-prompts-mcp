@@ -971,7 +971,7 @@ export class McpToolRouter {
             );
             if (undeclared !== null) return undeclared;
 
-            // Normalize and validate string inputs (trim whitespace, filter empty values)
+            // Trim strings while preserving supplied response presence, including canonical empty text.
             const trimmedCommand = args.command?.trim();
             const trimmedChainId = args.chain_id?.trim();
             const trimmedUserResponse = args.user_response?.trim();
@@ -985,11 +985,11 @@ export class McpToolRouter {
               : undefined;
             const requestExtras = extraPayload != null ? { extra: extraPayload } : {};
 
-            // Build normalized args, only including non-empty values
+            // Keep empty response text distinct from omission; other optional strings remain non-empty.
             const normalizedArgs: Parameters<PromptExecutor['executePromptCommand']>[0] = {
               ...(trimmedCommand ? { command: trimmedCommand } : {}),
               ...(trimmedChainId ? { chain_id: trimmedChainId } : {}),
-              ...(trimmedUserResponse ? { user_response: trimmedUserResponse } : {}),
+              ...(args.user_response !== undefined ? { user_response: trimmedUserResponse } : {}),
               ...(normalizedGateVerdict ? { gate_verdict: normalizedGateVerdict } : {}),
               ...(trimmedGateAction
                 ? {
