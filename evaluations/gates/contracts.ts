@@ -109,6 +109,12 @@ function text(value: unknown): asserts value is string {
   if (typeof value !== "string" || !value.trim())
     fail("expected nonempty identifier/reason");
 }
+function literalString(
+  value: unknown,
+  choices: readonly string[],
+): value is string {
+  return typeof value === "string" && choices.includes(value);
+}
 function list(value: unknown): unknown[] {
   if (!Array.isArray(value) || value.length === 0)
     fail("expected nonempty list");
@@ -140,7 +146,7 @@ function review(value: unknown): LabelReview {
     shape(entry, ["state", "authority", "reviewer_id", "evidence_refs"]);
     if (
       entry["state"] !== "reviewed" ||
-      !["agent", "human"].includes(String(entry["authority"]))
+      !literalString(entry["authority"], ["agent", "human"])
     )
       fail("invalid label review authority");
     text(entry["reviewer_id"]);
@@ -229,7 +235,7 @@ function validateCase(
   if (item["expected_acceptance"] !== accepted)
     fail("expected acceptance disagrees with complete criterion states");
   if (
-    ["positive", "valid_alternative"].includes(String(item["family"])) &&
+    literalString(item["family"], ["positive", "valid_alternative"]) &&
     !accepted
   )
     fail("positive/valid-alternative labels must accept");
