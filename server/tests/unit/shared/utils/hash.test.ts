@@ -14,12 +14,14 @@
  *      it would make two different states collide silently.
  */
 
+import { GatePassCriteriaSchema } from '../../../../src/engine/gates/core/gate-schema.js';
 import {
   canonicalJson,
   computeContentHash,
   hashBytes,
   hashCanonical,
   hashFileSet,
+  hashString,
 } from '../../../../src/shared/utils/hash.js';
 
 describe('canonicalJson', () => {
@@ -54,6 +56,73 @@ describe('canonicalJson', () => {
     expect(hashCanonical({ n: -0 })).toBe(hashCanonical({ n: 0 }));
   });
 
+  it('preserves literal own __proto__ data without changing the source prototype', () => {
+    const input: unknown = JSON.parse('{"__proto__":{"x":1},"id":"g"}');
+    const encoded = canonicalJson(input);
+    expect(encoded).toBe('{"__proto__":{"x":1},"id":"g"}');
+    expect(hashCanonical(input)).not.toBe(hashCanonical({ id: 'g' }));
+    expect(Object.getPrototypeOf(input)).toBe(Object.prototype);
+    const decoded: Record<string, unknown> = JSON.parse(encoded);
+    expect(Object.hasOwn(decoded, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(decoded)).toBe(Object.prototype);
+    expect(decoded['__proto__']).toEqual({ x: 1 });
+    expect(Object.hasOwn(Object.prototype, 'x')).toBe(false);
+  });
+
+  it.each([null, 1, 'data', true, ['nested'], { x: 1 }])(
+    'retains an own __proto__ member with JSON value %p',
+    (value) => {
+      const input = { ['__proto__']: value, id: 'g' };
+      expect(canonicalJson(input)).toBe(JSON.stringify(input));
+      expect(hashCanonical(input)).not.toBe(hashCanonical({ id: 'g' }));
+    }
+  );
+
+  it('preserves nested own __proto__ members in objects and arrays', () => {
+    const input: unknown = JSON.parse('{"outer":[{"nested":{"__proto__":{"x":1}}}]}');
+    expect(canonicalJson(input)).toBe('{"outer":[{"nested":{"__proto__":{"x":1}}}]}');
+    expect(hashCanonical(input)).not.toBe(hashCanonical({ outer: [{ nested: {} }] }));
+  });
+
+  it('preserves own __proto__ data on null-prototype inputs', () => {
+    const input = Object.assign(
+      Object.create(null) as Record<string, unknown>,
+      JSON.parse('{"id":"g","__proto__":{"x":1}}') as Record<string, unknown>
+    );
+    expect(Object.getPrototypeOf(input)).toBeNull();
+    expect(canonicalJson(input)).toBe('{"__proto__":{"x":1},"id":"g"}');
+    expect(hashCanonical(input)).not.toBe(hashCanonical({ id: 'g' }));
+    expect(Object.getPrototypeOf(input)).toBeNull();
+  });
+
+  it('keeps own __proto__ data key-order independent and distinguishes changed values', () => {
+    const first: unknown = JSON.parse('{"id":"g","__proto__":{"b":2,"a":1}}');
+    const reordered: unknown = JSON.parse('{"__proto__":{"a":1,"b":2},"id":"g"}');
+    const changed: unknown = JSON.parse('{"id":"g","__proto__":{"b":3,"a":1}}');
+    expect(canonicalJson(first)).toBe('{"__proto__":{"a":1,"b":2},"id":"g"}');
+    expect(hashCanonical(first)).toBe(hashCanonical(reordered));
+    expect(hashCanonical(first)).not.toBe(hashCanonical(changed));
+  });
+
+  it('binds schema-loaded nested script_tool_input data into the complete gate digest', () => {
+    const criterion = GatePassCriteriaSchema.parse({
+      type: 'script_tool',
+      script_tool_id: 'tool',
+      script_tool_input: JSON.parse('{"nested":{"__proto__":{"x":1}}}') as unknown,
+    });
+    const without = GatePassCriteriaSchema.parse({
+      type: 'script_tool',
+      script_tool_id: 'tool',
+      script_tool_input: { nested: {} },
+    });
+    expect(JSON.stringify(criterion)).toContain('"__proto__":{"x":1}');
+    expect(canonicalJson(criterion)).toContain('"__proto__":{"x":1}');
+    expect(hashCanonical(criterion)).not.toBe(hashCanonical(without));
+    expect(hashCanonical({ id: 'g', guidance: 'public', pass_criteria: [criterion] })).not.toBe(
+      hashCanonical({ id: 'g', guidance: 'public', pass_criteria: [without] })
+    );
+  });
+
   it.each([
     ['undefined, alone', undefined],
     ['undefined in an array', [1, undefined]],
@@ -76,6 +145,15 @@ describe('canonicalJson', () => {
 });
 
 describe('hashCanonical / hashBytes', () => {
+  it('keeps ordinary canonical and persisted legacy digests unchanged', () => {
+    expect(hashCanonical({ b: 1, a: 2 })).toBe(
+      'sha256:d3626ac30a87e6f7a6428233b3c68299976865fa5508e4267c5415c76af7a772'
+    );
+    const legacy = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
+    expect(hashString('abc')).toBe(legacy);
+    expect(computeContentHash(['ab', 'c'])).toBe(legacy);
+    expect(hashBytes('abc')).toBe(`sha256:${legacy}`);
+  });
   it('carries the sha256: prefix an operator already reads', () => {
     expect(hashCanonical({ a: 1 })).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(hashBytes('abc')).toMatch(/^sha256:[0-9a-f]{64}$/);
