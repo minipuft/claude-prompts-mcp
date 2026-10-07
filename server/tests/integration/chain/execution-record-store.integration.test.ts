@@ -13,11 +13,491 @@
 import { afterEach, beforeEach, describe, expect, test, jest } from '@jest/globals';
 
 import { DatabaseSync } from 'node:sqlite';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
+import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
+import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
+import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
+import {
+  bindSemanticReviewTarget,
+  createSemanticReviewContext,
+} from '../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
+import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
+import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
+import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
+import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
+import { hashBytes } from '../../../src/shared/utils/hash.js';
 
+import type { GateDefinitionProvider } from '../../../src/engine/gates/core/gate-loader.js';
+import type { LightweightGateDefinition } from '../../../src/engine/gates/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
+import type { GateReview } from '../../../src/shared/types/chain-execution.js';
+import type { GateVerdictSubmission } from '../../../src/shared/types/gate-evaluation.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
+
+const REVIEW_SCOPE = { continuityScopeId: 'semantic-capture-scope' };
+const REVIEW_OUTPUT = 'A😀e\u0301 Z';
+const REVIEW_GATE: LightweightGateDefinition = {
+  id: 'retention-gate',
+  name: 'Retention gate',
+  type: 'validation',
+  description: 'Ordinary gate carrying a staged rich report',
+  guidance: 'Review the actual output',
+  enforcementMode: 'blocking',
+  pass_criteria: [{ type: 'inline_guidance' }],
+};
+
+/** Real persistence/capture collaborators; only the gate loader's filesystem is substituted. */
+async function reviewFixture() {
+  const root = await mkdtemp(path.join(tmpdir(), 'review-capture-cold-'));
+  const logger = createLogger();
+  const dbPath = path.join(root, 'state.db');
+  let engine = await SqliteEngine.getInstance(logger, { dbPath });
+  await engine.initialize();
+  const createStore = async () => {
+    const store = new ChainSessionStore(
+      logger,
+      new TextReferenceStore(logger),
+      { cleanupIntervalMs: 60_000, defaultScope: REVIEW_SCOPE },
+      engine
+    );
+    // Await the constructor's real load, as sibling cold-storage tests do.
+    await (store as unknown as { initPromise: Promise<void> }).initPromise;
+    return store;
+  };
+  let store = await createStore();
+  const provider = {
+    loadGate: async (id: string) => (id === REVIEW_GATE.id ? REVIEW_GATE : null),
+    loadGates: async (ids: string[]) => (ids.includes(REVIEW_GATE.id) ? [REVIEW_GATE] : []),
+  } as unknown as GateDefinitionProvider;
+  return {
+    logger,
+    get store() {
+      return store;
+    },
+    get records() {
+      return new ExecutionRecordStore(engine, logger);
+    },
+    authority: () => new GateEnforcementAuthority(store, logger, provider),
+    async cold() {
+      await store.cleanup();
+      await engine.shutdown();
+      engine = await SqliteEngine.getInstance(logger, { dbPath });
+      await engine.initialize();
+      store = await createStore();
+    },
+    async close() {
+      await store.cleanup();
+      await engine.shutdown();
+      await rm(root, { recursive: true, force: true });
+    },
+  };
+}
+
+type ReviewFixture = Awaited<ReturnType<typeof reviewFixture>>;
+
+async function openReview(f: ReviewFixture, kind: 'gate' | 'detached' = 'gate') {
+  await f.store.createSession(
+    'review-session',
+    'review-chain#1',
+    2,
+    {},
+    {
+      ...REVIEW_SCOPE,
+      nodes: [
+        { id: 'reviewed-node', promptId: 'draft', stepName: 'Draft' },
+        { id: 'current-node', promptId: 'next', stepName: 'Next' },
+      ],
+    }
+  );
+  return f.authority().createReview('review-session', kind, 'reviewed-node', {
+    gateIds: [REVIEW_GATE.id],
+    instructions: 'Review',
+    maxAttempts: 3,
+    ...(kind === 'detached' ? { reviewedOutput: REVIEW_OUTPUT } : {}),
+  });
+}
+
+function retainedVerdict(review: GateReview): GateVerdictSubmission {
+  const issued = review.semanticContext;
+  const definition = issued?.definitions[REVIEW_GATE.id];
+  if (issued === undefined || definition === undefined) throw new Error('Missing issued context');
+  return {
+    overall: 'FAIL',
+    rationale: 'The ordinary review failed',
+    per_gate: [
+      {
+        index: 1,
+        passed: false,
+        rationale: 'Retain this failed attempt',
+        evaluation: {
+          binding: {
+            gate_id: REVIEW_GATE.id,
+            node_id: issued.nodeId,
+            attempt_id: issued.attemptId,
+            definition_digest: definition.definitionDigest,
+            target_digest: hashBytes(REVIEW_OUTPUT),
+          },
+          observations: [
+            {
+              criterion_id: 'staged-carrier',
+              state: 'unmet',
+              value: false,
+              evidence: [
+                {
+                  target_digest: hashBytes(REVIEW_OUTPUT),
+                  start: 0,
+                  end: REVIEW_OUTPUT.length,
+                  quote: REVIEW_OUTPUT,
+                },
+              ],
+              rationale: 'Exact Unicode carrier, not live semantic adjudication',
+            },
+          ],
+          reviewer: {
+            provenance: 'client_reported',
+            model: 'declared-reviewer',
+            context: 'separate_pass',
+          },
+        },
+      },
+    ],
+  };
+}
+
+function reviewContext(f: ReviewFixture, userResponse?: string, verdict?: GateVerdictSubmission) {
+  const context = new ExecutionContext(
+    {
+      chain_id: 'review-chain#1',
+      ...(userResponse !== undefined ? { user_response: userResponse } : {}),
+      ...(verdict !== undefined ? { gate_verdict: verdict } : {}),
+    },
+    f.logger
+  );
+  context.state.identity.continuityScopeId = REVIEW_SCOPE.continuityScopeId;
+  const session = f.store.getSession('review-session', REVIEW_SCOPE);
+  if (session === undefined) throw new Error('Missing review session');
+  context.sessionContext = {
+    sessionId: session.sessionId,
+    chainId: session.chainId,
+    isChainExecution: true,
+    currentNodeId: session.state.currentNodeId,
+    totalSteps: 2,
+  };
+  context.gateEnforcement = f.authority();
+  return context;
+}
+
+function reviewStage(f: ReviewFixture) {
+  return new StepResponseCaptureStage(
+    new GateVerdictProcessor(f.store, f.logger),
+    new StepCaptureService(f.store, f.logger, f.records),
+    f.store,
+    new UnknownObservationProcessor(f.store, f.logger),
+    f.logger
+  );
+}
+
+describe('issued review capture and cold custody (real SQLite)', () => {
+  test('cold reopened review retains pins and getter copies cannot mutate stored authority', async () => {
+    const f = await reviewFixture();
+    try {
+      const opened = await openReview(f);
+      const bound = f.authority().bindReviewOutput(opened, `  ${REVIEW_OUTPUT}\n`);
+      await f.store.setReview('review-session', bound);
+      await f.cold();
+      const copy = f.store.getReview('review-session', 'reviewed-node');
+      expect(copy?.semanticContext).toEqual(bound.semanticContext);
+      const copied = copy?.semanticContext;
+      if (copied === undefined) throw new Error('Missing cold authority');
+      Reflect.set(copied, 'attemptId', 'caller-replacement');
+      Reflect.set(copied.definitions[REVIEW_GATE.id]!.definition, 'guidance', 'caller rewrite');
+      Reflect.set(copied.target!, 'content', 'caller target');
+      expect(f.store.getReview('review-session', 'reviewed-node')?.semanticContext).toEqual(
+        bound.semanticContext
+      );
+      expect(
+        f.store.getSession('review-session', { continuityScopeId: 'another-scope' })
+      ).toBeUndefined();
+    } finally {
+      await f.close();
+    }
+  });
+
+  test('same-call ordinary capture retains exact failed report and canonical target through cold load', async () => {
+    const f = await reviewFixture();
+    try {
+      const opened = await openReview(f);
+      const verdict = retainedVerdict(opened);
+      const context = reviewContext(f, `  ${REVIEW_OUTPUT}\n`, verdict);
+      await reviewStage(f).execute(context);
+      const records = f.records.queryBySession('review-session', REVIEW_SCOPE);
+      expect(records).toHaveLength(1);
+      expect(records[0]?.gateVerdicts[0]?.evaluation).toEqual(verdict.per_gate?.[0]?.evaluation);
+      expect(records[0]?.gateVerdicts[0]?.attempt).toBe(0);
+      expect(records[0]?.nodeId).toBe('reviewed-node');
+      const pins = f.store.getReview('review-session', 'reviewed-node')?.semanticContext;
+      expect(pins?.target).toEqual({
+        kind: 'step_output',
+        content: REVIEW_OUTPUT,
+        digest: hashBytes(REVIEW_OUTPUT),
+      });
+      await f.cold();
+      expect(f.store.getReview('review-session', 'reviewed-node')?.semanticContext).toEqual(pins);
+      expect(f.records.queryBySession('review-session', REVIEW_SCOPE)[0]?.gateVerdicts).toEqual(
+        records[0]?.gateVerdicts
+      );
+      expect(
+        f.records.queryBySession('review-session', { continuityScopeId: 'another-scope' })
+      ).toEqual([]);
+    } finally {
+      await f.close();
+    }
+  });
+
+  test('capture-first then verdict-only append keeps the output row and exact failed attempt separately', async () => {
+    const f = await reviewFixture();
+    try {
+      await openReview(f);
+      await reviewStage(f).execute(reviewContext(f, REVIEW_OUTPUT));
+      const captured = f.store.getReview('review-session', 'reviewed-node');
+      if (captured === undefined) throw new Error('Missing captured review');
+      expect(captured.semanticContext?.target).toEqual({
+        kind: 'step_output',
+        content: REVIEW_OUTPUT,
+        digest: hashBytes(REVIEW_OUTPUT),
+      });
+      const verdict = retainedVerdict(captured);
+      await reviewStage(f).execute(reviewContext(f, undefined, verdict));
+      const records = f.records.queryBySession('review-session', REVIEW_SCOPE);
+      expect(records).toHaveLength(2);
+      expect(records[0]?.gateVerdicts).toEqual([]);
+      expect(records[1]?.gateVerdicts[0]?.evaluation).toEqual(verdict.per_gate?.[0]?.evaluation);
+      expect(records[1]?.gateVerdicts[0]?.attempt).toBe(0);
+      await f.cold();
+      expect(
+        f.records.queryBySession('review-session', REVIEW_SCOPE).map((row) => row.gateVerdicts)
+      ).toEqual(records.map((row) => row.gateVerdicts));
+    } finally {
+      await f.close();
+    }
+  });
+
+  test('actual detached stage appends rich verdict on reviewed node while run stands elsewhere', async () => {
+    const f = await reviewFixture();
+    try {
+      const opened = await openReview(f, 'detached');
+      await f.store.markNodeSpawned('review-session', 'reviewed-node');
+      await f.store.updateSessionState('review-session', 'reviewed-node', REVIEW_OUTPUT, {
+        isPlaceholder: false,
+      });
+      await f.store.completeStep('review-session', 'reviewed-node');
+      await f.store.advanceStep('review-session', 'reviewed-node');
+      const verdict = retainedVerdict(opened);
+      const context = reviewContext(f, 'HANDOFF RESULT\nnode: reviewed-node', verdict);
+      context.parsedCommand = {
+        commandType: 'chain',
+        promptId: 'draft',
+        rawArgs: '',
+        format: 'symbolic',
+        confidence: 1,
+        metadata: {
+          originalCommand: '>>draft --> >>next',
+          parseStrategy: 'fixture',
+          detectedFormat: 'symbolic',
+          warnings: [],
+        },
+        chainId: 'review-chain#1',
+        steps: [
+          { stepNumber: 1, nodeId: 'reviewed-node', promptId: 'draft', args: {}, await: 'run' },
+          { stepNumber: 2, nodeId: 'current-node', promptId: 'next', args: {} },
+        ],
+        promptArgs: {},
+      };
+      await reviewStage(f).execute(context);
+      const records = f.records.queryBySession('review-session', REVIEW_SCOPE);
+      expect(records).toHaveLength(1);
+      expect(records[0]?.nodeId).toBe('reviewed-node');
+      expect(records[0]?.stepNumber).toBe(1);
+      expect(records[0]?.gateVerdicts[0]?.evaluation).toEqual(verdict.per_gate?.[0]?.evaluation);
+      expect(f.store.getSession('review-session')?.state.currentNodeId).toBe('current-node');
+      await f.cold();
+      expect(f.records.queryBySession('review-session', REVIEW_SCOPE)[0]?.gateVerdicts).toEqual(
+        records[0]?.gateVerdicts
+      );
+    } finally {
+      await f.close();
+    }
+  });
+
+  test.each([false, true])(
+    'changed output replacement preserves the semantic attempt guard (semantic=%s)',
+    async (semantic) => {
+      const f = await reviewFixture();
+      try {
+        const opened = await openReview(f, 'detached');
+        const issued = opened.semanticContext;
+        if (issued === undefined) throw new Error('Missing issued review');
+        const bound = semantic
+          ? {
+              ...opened,
+              semanticContext: bindSemanticReviewTarget(
+                createSemanticReviewContext(opened.nodeId, issued.attemptId, [
+                  {
+                    ...REVIEW_GATE,
+                    pass_criteria: [
+                      {
+                        type: 'semantic_evaluation',
+                        id: 'draft',
+                        target: { kind: 'step_output' },
+                        question: 'Is the captured output complete?',
+                        evidence_requirements: { min_items: 1 },
+                        result: { kind: 'boolean' },
+                        acceptance: { kind: 'equals', value: true },
+                      },
+                    ],
+                  },
+                ]),
+                REVIEW_OUTPUT
+              ),
+            }
+          : opened;
+        await f.store.setReview('review-session', bound);
+        await f.store.updateSessionState('review-session', 'reviewed-node', REVIEW_OUTPUT, {
+          isPlaceholder: false,
+        });
+        await f.store.completeStep('review-session', 'reviewed-node');
+        const before = f.store.getChainContext('review-session')['step_results']?.[1];
+        expect(before).toBe(REVIEW_OUTPUT);
+        const context = reviewContext(f, 'replacement');
+        const capture = new StepCaptureService(f.store, f.logger, f.records);
+        const session = f.store.getSession('review-session');
+        if (session === undefined) throw new Error('Missing capture session');
+        const replace = () =>
+          capture.recordDetachedReport(
+            context,
+            'review-session',
+            session,
+            { ordinal: 1, nodeId: 'reviewed-node' },
+            'replacement'
+          );
+        if (semantic) {
+          await expect(replace()).rejects.toThrow('fresh semantic review attempt');
+          expect(f.store.getChainContext('review-session')['step_results']?.[1]).toBe(before);
+          expect(f.store.getReview('review-session', 'reviewed-node')?.semanticContext).toEqual(
+            bound.semanticContext
+          );
+          expect(f.records.queryBySession('review-session', REVIEW_SCOPE)).toEqual([]);
+        } else {
+          await replace();
+          expect(f.store.getChainContext('review-session')['step_results']?.[1]).toBe(
+            'replacement'
+          );
+          expect(
+            f.store.getReview('review-session', 'reviewed-node')?.semanticContext?.target?.content
+          ).toBe('replacement');
+        }
+      } finally {
+        await f.close();
+      }
+    }
+  );
+
+  test('target binding persistence failure propagates without a successful capture ledger', async () => {
+    const f = await reviewFixture();
+    try {
+      await openReview(f);
+      const persist = jest
+        .spyOn(f.store, 'setReview')
+        .mockRejectedValueOnce(new Error('binding persistence failed'));
+      await expect(reviewStage(f).execute(reviewContext(f, REVIEW_OUTPUT))).rejects.toThrow(
+        'binding persistence failed'
+      );
+      persist.mockRestore();
+      expect(
+        f.store.getReview('review-session', 'reviewed-node')?.semanticContext?.target
+      ).toBeUndefined();
+      expect(f.records.queryBySession('review-session', REVIEW_SCOPE)).toEqual([]);
+    } finally {
+      await f.close();
+    }
+  });
+
+  test.each(['updateSessionState', 'completeStep'] as const)(
+    'false %s result cannot create ordinary capture authority, success ledger or advancement',
+    async (method) => {
+      const f = await reviewFixture();
+      try {
+        await openReview(f);
+        const refuse = jest.spyOn(f.store, method).mockResolvedValueOnce(false);
+        await expect(reviewStage(f).execute(reviewContext(f, REVIEW_OUTPUT))).rejects.toThrow(
+          'refused'
+        );
+        expect(refuse.mock.calls[0]?.slice(0, 2)).toEqual(['review-session', 'reviewed-node']);
+        refuse.mockRestore();
+        expect(
+          f.store.getReview('review-session', 'reviewed-node')?.semanticContext?.target
+        ).toBeUndefined();
+        expect(f.records.queryBySession('review-session', REVIEW_SCOPE)).toEqual([]);
+        expect(f.store.getSession('review-session')?.state.currentNodeId).toBe('reviewed-node');
+      } finally {
+        await f.close();
+      }
+    }
+  );
+
+  test.each(['updateSessionState', 'completeStep'] as const)(
+    'false %s result cannot rebind a detached node while another node is current',
+    async (method) => {
+      const f = await reviewFixture();
+      try {
+        const opened = await openReview(f, 'detached');
+        await f.store.updateSessionState('review-session', 'reviewed-node', REVIEW_OUTPUT, {
+          isPlaceholder: false,
+        });
+        await f.store.completeStep('review-session', 'reviewed-node');
+        await f.store.advanceStep('review-session', 'reviewed-node');
+        const refuse = jest.spyOn(f.store, method).mockResolvedValueOnce(false);
+        const context = reviewContext(f, 'replacement');
+        const session = f.store.getSession('review-session');
+        if (session === undefined) throw new Error('Missing detached session');
+        await expect(
+          new StepCaptureService(f.store, f.logger, f.records).recordDetachedReport(
+            context,
+            'review-session',
+            session,
+            { ordinal: 1, nodeId: 'reviewed-node' },
+            'replacement'
+          )
+        ).rejects.toThrow('refused');
+        expect(refuse.mock.calls[0]?.slice(0, 2)).toEqual(['review-session', 'reviewed-node']);
+        refuse.mockRestore();
+        expect(f.store.getReview('review-session', 'reviewed-node')?.semanticContext).toEqual(
+          opened.semanticContext
+        );
+        expect(f.records.queryBySession('review-session', REVIEW_SCOPE)).toEqual([]);
+        expect(f.store.getSession('review-session')?.state.currentNodeId).toBe('current-node');
+        if (method === 'completeStep') {
+          // The output write completed before the refused completion. No atomic rollback claim.
+          expect(f.store.getChainContext('review-session')['step_results']?.[1]).toBe(
+            'replacement'
+          );
+        } else {
+          expect(f.store.getChainContext('review-session')['step_results']?.[1]).toBe(
+            REVIEW_OUTPUT
+          );
+        }
+      } finally {
+        await f.close();
+      }
+    }
+  );
+});
 
 const createLogger = (): Logger =>
   ({

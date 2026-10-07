@@ -3325,5 +3325,8 @@ function cloneReview(review: GateReview): GateReview {
       history: review.history.map((entry) => ({ ...entry })),
     }),
     ...(review.metadata !== undefined && { metadata: { ...review.metadata } }),
+    ...(review.semanticContext !== undefined && {
+      semanticContext: structuredClone(review.semanticContext),
+    }),
   };
 }

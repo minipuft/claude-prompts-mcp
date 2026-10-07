@@ -2,6 +2,7 @@
 
 import { handoffNodeToken, resolveHandoffEvidenceReason } from '../delegation/handoff-contract.js';
 import { planNodeDrivenRender } from '../operators/node-step-projection.js';
+import { readSemanticReviewCriteria } from '../pipeline/decisions/gates/semantic-review-context.js';
 import { buildPipelineHookContext } from '../pipeline/hook-context.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -202,15 +203,24 @@ export class StepCaptureService {
     target: StepTarget,
     reply: string
   ): Promise<void> {
-    await this.chainSessionStore.updateSessionState(sessionId, target.nodeId, reply, {
-      isPlaceholder: false,
-      source: 'detached_report',
-      capturedAt: Date.now(),
-      outputMapping: this.getStepOutputMapping(context, session, target),
-    });
-    await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
+    const review = this.reviewForCapture(context, sessionId, target.nodeId, reply);
+    const recorded = await this.chainSessionStore.updateSessionState(
+      sessionId,
+      target.nodeId,
+      reply,
+      {
+        isPlaceholder: false,
+        source: 'detached_report',
+        capturedAt: Date.now(),
+        outputMapping: this.getStepOutputMapping(context, session, target),
+      }
+    );
+    if (!recorded) throw new Error(`Output capture refused for node '${target.nodeId}'`);
+    const completed = await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
       preservePlaceholder: false,
     });
+    if (!completed) throw new Error(`Output completion refused for node '${target.nodeId}'`);
+    await this.bindCapturedReview(context, sessionId, review, reply);
     this.ledgerCapturedStep(context, sessionId, session.chainId, target, reply, {
       holdable: false,
     });
@@ -269,20 +279,28 @@ export class StepCaptureService {
     responseContent: string,
     outputMapping?: Record<string, string>
   ): Promise<void> {
+    const review = this.reviewForCapture(context, sessionId, target.nodeId, responseContent);
     this.logger.debug(
       `Capturing real response for step ${target.ordinal} (${target.nodeId}) in chain ${chainId}: ${responseContent.substring(0, 50)}...`
     );
 
-    await this.chainSessionStore.updateSessionState(sessionId, target.nodeId, responseContent, {
-      isPlaceholder: false,
-      source: 'user_response',
-      capturedAt: Date.now(),
-      outputMapping,
-    });
-
-    await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
+    const recorded = await this.chainSessionStore.updateSessionState(
+      sessionId,
+      target.nodeId,
+      responseContent,
+      {
+        isPlaceholder: false,
+        source: 'user_response',
+        capturedAt: Date.now(),
+        outputMapping,
+      }
+    );
+    if (!recorded) throw new Error(`Output capture refused for node '${target.nodeId}'`);
+    const completed = await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
       preservePlaceholder: false,
     });
+    if (!completed) throw new Error(`Output completion refused for node '${target.nodeId}'`);
+    await this.bindCapturedReview(context, sessionId, review, responseContent);
 
     this.ledgerCapturedStep(context, sessionId, chainId, target, responseContent, {
       holdable: true,
@@ -296,6 +314,44 @@ export class StepCaptureService {
     context.state.session.capturedStep = { nodeId: target.nodeId, ordinal: target.ordinal };
 
     this.logger.debug(`Step ${target.ordinal} (${target.nodeId}) completed with real response`);
+  }
+
+  /** Refuse retargeting before any output mutation; only renewal may replace a semantic target. */
+  private reviewForCapture(
+    context: ExecutionContext,
+    sessionId: string,
+    nodeId: string,
+    response: string
+  ): GateReview | undefined {
+    const review = this.chainSessionStore.getReview(sessionId, nodeId);
+    const issued = review?.semanticContext;
+    if (issued === undefined) return review;
+    if (context.gateEnforcement === undefined) {
+      throw new Error('Captured review output requires the server review authority');
+    }
+    if (
+      issued.target !== undefined &&
+      issued.target.content !== response.trim() &&
+      Object.values(issued.definitions).some(
+        (definition) => readSemanticReviewCriteria(definition).length > 0
+      )
+    ) {
+      throw new Error('A fresh semantic review attempt is required before replacing its target');
+    }
+    return review;
+  }
+
+  /** Only persisted capture content enters the existing binding authority. */
+  private async bindCapturedReview(
+    context: ExecutionContext,
+    sessionId: string,
+    review: GateReview | undefined,
+    response: string
+  ): Promise<void> {
+    if (review?.semanticContext === undefined) return;
+    const authority = context.gateEnforcement;
+    if (authority === undefined) throw new Error('Server review authority is unavailable');
+    await this.chainSessionStore.setReview(sessionId, authority.bindReviewOutput(review, response));
   }
 
   /**

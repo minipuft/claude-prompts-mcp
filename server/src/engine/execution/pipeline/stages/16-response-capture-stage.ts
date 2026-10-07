@@ -612,6 +612,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       context.setResponse(this.buildErrorResponse(result.message));
       return;
     }
+    this.stepCaptureService.ledgerSubmittedVerdict(context, sessionId, session);
     const runCompleted = await this.chainSessionStore.completeHeldRun(sessionId);
     const after =
       this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session;
