@@ -169,8 +169,10 @@ function structuredReview(indexes: readonly number[] = [1]): GateVerdictSubmissi
 function custodyFixture(kind: 'ordinary' | 'detached', verdict: McpToolRequest['gate_verdict']) {
   const logger = createLogger();
   const store = {
-    recordGateReviewOutcome: jest.fn(async () => undefined),
-    setReview: jest.fn(async () => undefined),
+    recordGateReviewOutcome: jest.fn<ChainSessionService['recordGateReviewOutcome']>(
+      async (_sessionId, _outcome) => undefined
+    ),
+    setReview: jest.fn<ChainSessionService['setReview']>(async (_sessionId, _review) => undefined),
     clearReview: jest.fn(async () => undefined),
     advanceStep: jest.fn(async () => false),
     isStepComplete: jest.fn(() => true),
