@@ -13,9 +13,9 @@ tags: [gates, semantic, evaluation]
 ## Now (2026-10-07)
 
 Goal: retain evidence and decisions for the semantic-gate/calibration initiative.
-Slice: contract/kernel T1 rows 1.1-1.5 implemented and accepted; current snapshot validation is next.
-Next: commit bounded repairs, verify the built slice, and prepare its PR before seeking publication authorization.
-Constraint: no live semantic activation, model calibration, runtime database cutover or public delivery yet.
+Slice: first contract/kernel slice completed and validated; six rows closed, 24 remain open.
+Next: obtain the missing GitHub publication ruling for the prepared PR, then continue runtime integration.
+Constraint: no live semantic activation, model calibration, resource promotion, push, PR or merge yet.
 
 ## Planning receipts
 
@@ -261,3 +261,17 @@ This is a standalone API integrity demonstration, not a model judgment experimen
 Parent inspected the complete +2/-1 diff: the shared utility import follows the shared type block, separated as the configured rule requires. No runtime logic, symbols or definitions changed. Focused ESLint has only four existing legacy boolean errors; whole lint ratchet returns to 2449 errors/710 warnings with no regressions, focused strict source types pass, and formatting/whitespace pass. No broad test rerun was needed for ordering alone. Compiled chain-strategic_worker#4 returned complete (1/1).
 
 Import layout adds one line: current standalone schema anchor160 and live pass-criteria anchor199. The plan is corrected; the earlier198 anchor in H-T1-1 is the historical post-definition-insertion observation. Six T1 rows now close the first slice; 24 later rows remain open. Runtime report routing, calibration/archive integration and promotion are still unimplemented, not inferred from the internal API probe.
+
+## Ready-to-review slice receipt (2026-10-07)
+
+Source snapshot f7949ff46 includes the feature and both narrow hygiene fixes. Final source build exit0; all85 repository validation steps passed (215.5seconds of step time). This includes the test type ratchet, architectural/Knip gates, generated metadata and contiguous plan row tracking. Latest whole lint ratchet reports2449errors/710warnings and no regressions; test type ratchet reports341existing errors/no regressions. Existing debt is not reported as a clean lint/test-type baseline.
+
+Focused semantic/legacy checks: 183tests across three named suites passed after the source alias/export correction. Final import ordering only preserved symbols/logic and passed strict compiler/lint checks; no unnecessary broad test rerun. Domain, missing-evidence and real-loader-refusal mutations each failed the designated control and were restored.
+
+Read-only built MCP verification exit0,20/20checks with isolated runtime roots; server/resources remained untouched. This proves legacy product-surface health, not semantic runtime routing or model accuracy. Actual standalone API probe: complete report true/true; missing evidence false/false evidence_required; different attempt false/false binding_mismatch.
+
+Logs: /tmp/semantic-gate-t1-ready-validation.log, /tmp/semantic-gate-t1-ready-build.log, /tmp/semantic-gate-t1-ready-mcp.log, /tmp/semantic-gate-t1-api-demo.txt. Root pr:body generated the skeleton and the edited local draft /tmp/semantic-gate-t1-pr-body.md passes all four pr:check controls with title feat(gates): validate standalone semantic evaluation reports. It names the internal-only scope and remaining runtime/calibration work.
+
+GitHub read-only repository check confirms minipuft/claude-prompts-mcp is public and default branch main. No PR has been created; no T3 linking operation is applicable yet. Publication remains ungranted. The first implementation request authorizes this local delegated work and commits, not a publish field.
+
+Growth: confirmed the existing measured-claim/negative-control boundary. Source import/export policy and Markdown row contiguity are owned by executable gates, and their observed failures were repaired rather than waived or converted into baseline exceptions. No memory/rule/skill edits, deployed plugin changes, paid calibration or global default changes.

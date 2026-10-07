@@ -17,11 +17,11 @@ tags: [gates, semantic, evaluation, tests]
 ## Now (2026-10-07)
 
 Goal: make semantic gates explicit evaluations whose judgments can be inspected and tested.
-Slice: T1 rows 1.1-1.6 accepted; current-snapshot build, validation and PR checks are the remaining boundary.
-Next decision: accept the complete boundary receipt, then obtain the missing publication ruling for the prepared slice.
-Constraint: source edits delegate; cap two workers; local commits only; no publication or live resource activation.
-Dependencies: canonical benchmark archive and generic findings work remain separate owners.
-State: O1 ruled by planner on activation; T1 contract spelling is frozen in implementation notes.
+Slice: T1 rows 1.1-1.6 complete; 183 focused tests, all 85 validators, build and 20 MCP smoke checks passed.
+Next decision: authorize GitHub delivery of the prepared slice; then recut complete runtime wiring before live type activation.
+Constraint: no publish ruling yet; live semantic criteria remain refused; no model calibration or resource promotion.
+Dependencies: canonical benchmark archive and generic findings work retain their owners.
+State: six closed rows, 24 open rows; local PR draft passes all four convention checks.
 
 ## Intent and completion criteria
 
