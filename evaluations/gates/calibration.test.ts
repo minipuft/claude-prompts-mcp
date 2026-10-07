@@ -13,6 +13,7 @@ import { test } from "node:test";
 import {
   canonicalJson,
   hashBytes,
+  hashCanonical,
 } from "../../server/src/shared/utils/hash.ts";
 import { EvaluationArchive } from "../core/archive.ts";
 import { createArchiveRecord, parseContentRef } from "../core/contracts.ts";
@@ -185,6 +186,9 @@ function requested(caseId: string, index: number): CalibrationAttempt {
     },
   };
 }
+function wrongJsonTypes(literal: string): unknown[] {
+  return [[literal], { value: literal }, 1, true, null];
+}
 function softwareReport(
   input: CalibrationAdapterInput,
   first: "met" | "unmet" | "insufficient_evidence" = "met",
@@ -348,6 +352,51 @@ test("duplicate/malformed identities refuse before callbacks; distinct retries a
       }),
       /unknown requested case/,
     );
+    for (const key of ["id", "revision"])
+      for (const value of wrongJsonTypes("evaluator")) {
+        await assert.rejects(
+          runGateCalibration({
+            ...archiveInput,
+            evaluator: Object.assign(
+              { ...archiveInput.evaluator },
+              { [key]: value },
+            ),
+            adapter,
+            attempts: [attempt],
+          }),
+          /identifier/,
+        );
+      }
+    for (const configuration of [[], 1, true, null, "invalid"]) {
+      const key: string = "configuration";
+      await assert.rejects(
+        runGateCalibration({
+          ...archiveInput,
+          evaluator: Object.assign(
+            { ...archiveInput.evaluator },
+            { [key]: configuration },
+          ),
+          adapter,
+          attempts: [attempt],
+        }),
+        /object/,
+      );
+    }
+    for (const authority of wrongJsonTypes("agent")) {
+      const badSuite = structuredClone(archiveInput.suite);
+      Object.assign(badSuite.payload.cases[0]!.label_review, { authority });
+      const { record_id: _id, ...body } = badSuite;
+      Object.assign(badSuite, { record_id: hashCanonical(body) });
+      await assert.rejects(
+        runGateCalibration({
+          ...archiveInput,
+          suite: badSuite,
+          adapter,
+          attempts: [attempt],
+        }),
+        /authority/,
+      );
+    }
     assert.equal(calls, 0);
     const retry = {
       ...attempt,
@@ -594,6 +643,10 @@ test("snapshot binding checks refuse stale rubric/gate/private paths and noncano
       { ...definition, guidance: 1 },
       { ...definition, sourceRoot: "/private-path" },
       { ...definition, evaluation: { mode: "unknown" } },
+      ...wrongJsonTypes("self").map((mode) => ({
+        ...definition,
+        evaluation: { mode },
+      })),
       {
         ...definition,
         pass_criteria: definition.pass_criteria.map((item) => ({
@@ -641,6 +694,60 @@ test("snapshot binding checks refuse stale rubric/gate/private paths and noncano
         adapter: async () => null,
       }),
       /digest mismatch/,
+    );
+  }));
+
+test("callback enum wrong types become sanitized replayable invalid-adapter grades", async () =>
+  withCalibration(async ({ archive, archiveInput }) => {
+    const controls = [
+      ["state", "incomplete"],
+      ["code", "timeout"],
+      ["provenance", "client_reported"],
+      ["context", "self"],
+    ].flatMap(([field, literal]) =>
+      wrongJsonTypes(literal!).map((value) => ({ field, value })),
+    );
+    let index = 0;
+    const run = await runGateCalibration({
+      ...archiveInput,
+      attempts: controls.map((_, at) => requested("synthetic-positive", at)),
+      adapter: async (input) => {
+        const control = controls[index++]!;
+        if (control.field === "state" || control.field === "code")
+          return {
+            state: "incomplete",
+            code: "timeout",
+            [control.field]: control.value,
+          };
+        return {
+          state: "completed",
+          report: softwareReport(input),
+          observed: {
+            provenance: "client_reported",
+            context: "self",
+            [control.field!]: control.value,
+          },
+        };
+      },
+    });
+    const grades = await Promise.all(
+      run.attempts.map(
+        async (attempt) => (await archive.getRecord(attempt.grade_ref)).payload,
+      ),
+    );
+    assert.deepEqual(
+      grades.map((grade) => grade["status"]),
+      controls.map(() => "error"),
+    );
+    for (const grade of grades)
+      assert.deepEqual(grade["error"], {
+        code: "invalid_adapter_result",
+        message: "calibration attempt failed",
+      });
+    assert.equal(
+      (await replayGateCalibration(archive, run.invocation_ref)).attempts
+        .length,
+      controls.length,
     );
   }));
 

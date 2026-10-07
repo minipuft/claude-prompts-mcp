@@ -130,6 +130,12 @@ function nonempty(value: unknown): void {
   if (typeof value !== "string" || !value.trim())
     fail("expected nonempty identifier");
 }
+function literalString(
+  value: unknown,
+  choices: readonly string[],
+): value is string {
+  return typeof value === "string" && choices.includes(value);
+}
 // The archive's lossless JSON validation and detached recursive freeze remain the authority.
 function frozen<T>(value: T): T {
   const record = createArchiveRecord({
@@ -228,7 +234,7 @@ async function evaluateSnapshot(
   )
     fail("resolved public gate snapshot mismatch");
   const evaluation = object(gate["evaluation"]);
-  if (!["self", "judge"].includes(String(evaluation["mode"])))
+  if (!literalString(evaluation["mode"], ["self", "judge"]))
     fail("effective evaluation mode required");
   if (
     (Object.hasOwn(evaluation, "model") &&
@@ -318,15 +324,18 @@ function observed(value: unknown): ObservedEvaluator {
     ["provenance"],
     ["provider", "model", "revision", "context"],
   );
-  if (!["unknown", "client_reported"].includes(String(data["provenance"])))
+  if (!literalString(data["provenance"], ["unknown", "client_reported"]))
     fail("observed evaluator must be unknown or client_reported");
   for (const key of ["provider", "model", "revision"])
     if (Object.hasOwn(data, key)) nonempty(data[key]);
   if (
     Object.hasOwn(data, "context") &&
-    !["self", "separate_pass", "isolated_judge", "unknown"].includes(
-      String(data["context"]),
-    )
+    !literalString(data["context"], [
+      "self",
+      "separate_pass",
+      "isolated_judge",
+      "unknown",
+    ])
   )
     fail("invalid observed context");
   return value as ObservedEvaluator;
@@ -339,14 +348,14 @@ function adapterResult(value: unknown): CalibrationAdapterResult {
     ["state", data["state"] === "completed" ? "report" : "code"],
     ["observed", "artifact_refs"],
   );
-  if (!["completed", "incomplete", "error"].includes(String(data["state"])))
+  if (!literalString(data["state"], ["completed", "incomplete", "error"]))
     fail("invalid adapter state");
   if (data["state"] !== "completed") {
     const codes =
       data["state"] === "incomplete"
         ? ["timeout", "cancelled", "no_report"]
         : ["client_error", "timeout"];
-    if (!codes.includes(String(data["code"])))
+    if (!literalString(data["code"], codes))
       fail("invalid adapter outcome code");
   }
   observed(data["observed"]);

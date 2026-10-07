@@ -585,3 +585,19 @@ test("suite specialization lifts private dependencies into the canonical real ar
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("review authority requires a literal string even in a rehashed suite envelope", () => {
+  for (const authority of [
+    ["agent"],
+    ["human"],
+    { value: "agent" },
+    1,
+    true,
+    null,
+  ]) {
+    refuses((record) => {
+      (firstCase(record)["label_review"] as JsonObject)["authority"] =
+        authority;
+    }, /authority/);
+  }
+});
