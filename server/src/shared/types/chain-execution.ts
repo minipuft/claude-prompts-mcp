@@ -432,6 +432,33 @@ export type GateReviewKind = 'gate' | 'structural' | 'detached';
 /** Where a review stands. A PASS, a skip or an abort deletes the review, so none is a phase. */
 export type GateReviewPhase = 'awaiting-verdict' | 'awaiting-replacement' | 'exhausted';
 
+/** Serializable public definition content; engine readers narrow the persisted JSON. */
+export type GateReviewJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly GateReviewJsonValue[]
+  | { readonly [key: string]: GateReviewJsonValue };
+
+export interface GateReviewDefinitionSnapshot {
+  readonly definition: Readonly<Record<string, GateReviewJsonValue>>;
+  readonly definitionDigest: string;
+}
+
+/** Server-issued authority, separate from any client's evaluation report. */
+export interface GateReviewSemanticContext {
+  readonly nodeId: string;
+  readonly attemptId: string;
+  readonly definitions: Readonly<Record<string, GateReviewDefinitionSnapshot>>;
+  /** Absent until owned capture binds canonical step output. Spans use half-open UTF-16 code units. */
+  readonly target?: {
+    readonly kind: 'step_output';
+    readonly content: string;
+    readonly digest: string;
+  };
+}
+
 /**
  * A gate review, keyed by the node it reviews: `ChainSession.reviews[nodeId]` is the one store.
  *
@@ -484,6 +511,8 @@ export interface GateReview {
    * call that answers the review. Absent on a current-step review, whose output is the call's.
    */
   reviewedOutput?: string;
+  /** Frozen public definitions and server pins; legacy reviews may predate this authority. */
+  semanticContext?: GateReviewSemanticContext;
 }
 
 /**

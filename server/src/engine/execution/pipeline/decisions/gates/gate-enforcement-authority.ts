@@ -1,6 +1,13 @@
 // @lifecycle canonical - Single source of truth for gate enforcement decisions.
 
+import { randomUUID } from 'node:crypto';
+
 import { resolveEnforcementMode } from './enforcement-mode.js';
+import {
+  bindSemanticReviewTarget,
+  createSemanticReviewContext,
+  renewSemanticReviewAttempt,
+} from './semantic-review-context.js';
 import {
   loadVerdictPatterns,
   isPatternRestrictedToSource,
@@ -27,6 +34,7 @@ import type {
   VerdictSource,
 } from './gate-enforcement-types.js';
 import type { GateDefinitionProvider } from '../../../../gates/core/gate-loader.js';
+import type { JudgeEvaluationDefaults } from '../../../../gates/judge/types.js';
 import type { LightweightGateDefinition } from '../../../../gates/types.js';
 import type { ExecutionContext, SessionContext } from '../../../context/index.js';
 
@@ -51,6 +59,8 @@ export class GateEnforcementAuthority {
   private readonly logger: Logger;
   private readonly chainSessionStore: ChainSessionService;
   private readonly gateLoader: GateDefinitionProvider | undefined;
+  private readonly gatesConfigProvider:
+    (() => { evaluation?: Partial<JudgeEvaluationDefaults> } | undefined) | undefined;
 
   // Verdict patterns loaded from YAML configuration
   private verdictPatterns: VerdictPattern[] | null = null;
@@ -58,11 +68,13 @@ export class GateEnforcementAuthority {
   constructor(
     chainSessionStore: ChainSessionService,
     logger: Logger,
-    gateLoader?: GateDefinitionProvider
+    gateLoader?: GateDefinitionProvider,
+    gatesConfigProvider?: () => { evaluation?: Partial<JudgeEvaluationDefaults> } | undefined
   ) {
     this.chainSessionStore = chainSessionStore;
     this.logger = logger;
     this.gateLoader = gateLoader;
+    this.gatesConfigProvider = gatesConfigProvider;
   }
 
   /**
@@ -314,13 +326,21 @@ export class GateEnforcementAuthority {
    * @returns Created pending review with enriched gate prompts
    */
   async createPendingReview(options: CreateReviewOptions): Promise<PendingGateReview> {
+    const definitions = await this.loadReviewDefinitions(options.gateIds);
+    return this.buildPendingReview(options, definitions);
+  }
+
+  private buildPendingReview(
+    options: CreateReviewOptions,
+    definitions: readonly LightweightGateDefinition[]
+  ): PendingGateReview {
     const { gateIds, instructions, maxAttempts = DEFAULT_RETRY_LIMIT, metadata } = options;
 
-    const prompts = await this.buildReviewPrompts(gateIds);
+    const prompts = this.buildReviewPrompts(definitions);
 
     const pendingReview: PendingGateReview = {
       combinedPrompt: instructions,
-      gateIds,
+      gateIds: [...gateIds],
       prompts,
       createdAt: Date.now(),
       attemptCount: 0,
@@ -352,23 +372,40 @@ export class GateEnforcementAuthority {
     options: CreateReviewOptions & Pick<GateReview, 'reviewedOutput' | 'gateTiers'>
   ): Promise<GateReview> {
     const { reviewedOutput, gateTiers, ...reviewOptions } = options;
-    const unclassifiedGateIds = reviewOptions.gateIds.filter(
-      (gateId) => gateTiers?.[gateId] === undefined
-    );
+    const defaults = { ...this.gatesConfigProvider?.()?.evaluation };
+    const definitions = await this.loadReviewDefinitions(reviewOptions.gateIds);
     const resolvedGateTiers = {
-      ...(await this.deriveGateTiers(unclassifiedGateIds)),
+      ...this.deriveGateTiers(definitions),
       ...gateTiers,
     };
+    const issued = createSemanticReviewContext(nodeId, randomUUID(), definitions, defaults);
     const review: GateReview = {
-      ...(await this.createPendingReview(reviewOptions)),
+      ...this.buildPendingReview(reviewOptions, definitions),
       nodeId,
       kind,
       phase: 'awaiting-verdict',
       ...(reviewedOutput !== undefined ? { reviewedOutput } : {}),
       gateTiers: resolvedGateTiers,
+      semanticContext:
+        reviewedOutput === undefined ? issued : bindSemanticReviewTarget(issued, reviewedOutput),
     };
     await this.chainSessionStore.setReview(sessionId, review);
     return review;
+  }
+
+  /** Later capture wiring supplies actual output; submitted evaluation reports never enter here. */
+  bindReviewOutput(review: GateReview, actualResponse: string): GateReview {
+    const authority = review.semanticContext;
+    if (authority === undefined) return review;
+    if (authority.nodeId !== review.nodeId) throw new Error('Review authority names another node');
+    return { ...review, semanticContext: bindSemanticReviewTarget(authority, actualResponse) };
+  }
+
+  /** Retry wiring calls this once: fresh server attempt, same rubric, no prior target. */
+  renewReviewAttempt(review: GateReview): GateReview {
+    const authority = review.semanticContext;
+    if (authority === undefined) return review;
+    return { ...review, semanticContext: renewSemanticReviewAttempt(authority, randomUUID()) };
   }
 
   /**
@@ -477,13 +514,29 @@ export class GateEnforcementAuthority {
     if (added.length === 0) {
       return review;
     }
+    const defaults = { ...this.gatesConfigProvider?.()?.evaluation };
+    const definitions = await this.loadReviewDefinitions(added);
+    const issued = createSemanticReviewContext(
+      review.nodeId,
+      review.semanticContext?.attemptId ?? randomUUID(),
+      definitions,
+      defaults
+    );
     const joined: GateReview = {
       ...review,
       gateIds: [...review.gateIds, ...added],
-      prompts: [...review.prompts, ...(await this.buildReviewPrompts(added))],
+      prompts: [...review.prompts, ...this.buildReviewPrompts(definitions)],
       ...(review.gateTiers !== undefined
-        ? { gateTiers: { ...review.gateTiers, ...(await this.deriveGateTiers(added)) } }
+        ? { gateTiers: { ...review.gateTiers, ...this.deriveGateTiers(definitions) } }
         : {}),
+      semanticContext: Object.freeze({
+        ...issued,
+        ...review.semanticContext,
+        definitions: Object.freeze({
+          ...review.semanticContext?.definitions,
+          ...issued.definitions,
+        }),
+      }),
     };
     await this.chainSessionStore.setReview(sessionId, joined);
     return joined;
@@ -524,10 +577,22 @@ export class GateEnforcementAuthority {
    * the review. The run's current step is another node, so its published mode says nothing here.
    */
   async resolveReviewEnforcement(
-    review: Pick<GateReview, 'gateIds'>,
+    review: Pick<GateReview, 'gateIds' | 'semanticContext'>,
     failedGateIds: readonly string[]
   ): Promise<EnforcementMode> {
-    const definitions = this.gateLoader ? await this.gateLoader.loadGates(review.gateIds) : [];
+    const definitions =
+      review.semanticContext === undefined
+        ? await this.loadReviewDefinitions(review.gateIds)
+        : review.gateIds.map((id): Pick<LightweightGateDefinition, 'id' | 'enforcementMode'> => {
+            const mode = review.semanticContext?.definitions[id]?.definition['enforcementMode'];
+            return {
+              id,
+              enforcementMode:
+                mode === 'blocking' || mode === 'advisory' || mode === 'informational'
+                  ? mode
+                  : undefined,
+            };
+          });
     const gateSet = {
       declared: new Map(definitions.map((def) => [def.id, def.enforcementMode] as const)),
       undeclared: 'blocking' as const,
@@ -540,30 +605,22 @@ export class GateEnforcementAuthority {
   }
 
   /** Tier per gate (`deriveGateTier`); a gate the loader cannot load contributes no entry. */
-  private async deriveGateTiers(gateIds: string[]): Promise<Record<string, 'check' | 'reminder'>> {
-    const definitions =
-      this.gateLoader !== undefined && gateIds.length > 0
-        ? await this.gateLoader.loadGates(gateIds)
-        : [];
+  private deriveGateTiers(
+    definitions: readonly LightweightGateDefinition[]
+  ): Record<string, 'check' | 'reminder'> {
     return Object.fromEntries(definitions.map((def) => [def.id, deriveGateTier(def)]));
   }
 
   /**
-   * Build GateReviewPrompt objects from gate definitions.
-   * Falls back to empty array if gate loader is unavailable or loading fails.
+   * Load once at the review boundary; legacy missing/loading failures retain empty prompts.
    */
-  private async buildReviewPrompts(gateIds: string[]): Promise<GateReviewPrompt[]> {
+  private async loadReviewDefinitions(gateIds: string[]): Promise<LightweightGateDefinition[]> {
     if (!this.gateLoader || gateIds.length === 0) {
       return [];
     }
 
     try {
-      const definitions = await this.gateLoader.loadGates(gateIds);
-      return definitions.map((def) => ({
-        gateId: def.id,
-        gateName: def.name,
-        criteriaSummary: this.buildCriteriaSummary(def),
-      }));
+      return await this.gateLoader.loadGates(gateIds);
     } catch (error) {
       this.logger.warn('[GateEnforcementAuthority] Failed to load gate definitions for prompts', {
         error,
@@ -571,6 +628,16 @@ export class GateEnforcementAuthority {
       });
       return [];
     }
+  }
+
+  private buildReviewPrompts(
+    definitions: readonly LightweightGateDefinition[]
+  ): GateReviewPrompt[] {
+    return definitions.map((def) => ({
+      gateId: def.id,
+      gateName: def.name,
+      criteriaSummary: this.buildCriteriaSummary(def),
+    }));
   }
 
   /**

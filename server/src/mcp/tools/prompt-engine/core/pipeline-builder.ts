@@ -121,7 +121,8 @@ export class PipelineBuilder {
     const gateEnforcement = new GateEnforcementAuthority(
       deps.chainSessionStore,
       deps.logger,
-      deps.lightweightGateSystem.gateLoader
+      deps.lightweightGateSystem.gateLoader,
+      () => deps.configManager.getConfig().gates
     );
 
     const lifecycleStage = new ExecutionLifecycleStage(temporaryGateRegistry, deps.logger);
