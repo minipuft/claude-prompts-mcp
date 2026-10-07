@@ -127,6 +127,12 @@ export class GateDiscoveryProcessor {
         ? `\n  - Blocks Response On Fail: ${String(definition.blockResponseOnFail)}`
         : '';
     const evaluationLine = formatEvaluationLine(definition.evaluation);
+    // JSON quoting preserves the opaque value, including whitespace/newlines, as one detail line.
+    // The association is metadata only: inspect does not resolve cases, paths or archives.
+    const calibrationSuiteLine =
+      definition.calibration_suite_id !== undefined
+        ? `\n  - Calibration Suite ID: ${JSON.stringify(definition.calibration_suite_id)}`
+        : '';
 
     // Announce the fallback. The served definition is correct and the operator asked about it —
     // but if a file for the same id failed to load, their edit to that file is inert, and nothing
@@ -144,7 +150,7 @@ export class GateDiscoveryProcessor {
         `  - ID: ${gate.gateId}\n` +
         `  - Type: ${typeIcon} ${gate.type}\n` +
         `  - Description: ${gate.description}` +
-        `${severityLine}${enforcementModeLine}${gateTypeLine}${blockResponseLine}${evaluationLine}\n\n` +
+        `${severityLine}${enforcementModeLine}${gateTypeLine}${blockResponseLine}${evaluationLine}${calibrationSuiteLine}\n\n` +
         `📝 Guidance:\n${guidancePreview}` +
         shadowedNote
     );

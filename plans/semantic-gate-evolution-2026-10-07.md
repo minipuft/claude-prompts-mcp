@@ -7,7 +7,7 @@ initiative_branch: feat/semantic-gate-activation
 branch_mode: worktree
 worker_cap: 2
 publish: "push+merge (2026-10-07, owner approval in chat R6; reviewed PRs track the initiative)"
-planner_session: semantic-gate-evolution-plan
+planner_session: semantic_calibration_contract
 tracking: none
 tracking_reason: operator-opt-out
 tags: [gates, semantic, evaluation, tests]
@@ -17,12 +17,12 @@ tags: [gates, semantic, evaluation, tests]
 
 ## Now (2026-10-07)
 
-Goal: finish every row and verify the complete semantic-gate workflow against a frozen baseline.
-Slice: PR #475 foundation merged with green full CI; only unpublished frozen-authority/capture/opaque-association concerns integrated into the new activation parent.
-Next decision: fresh planner accepts clean activation checkpoint f5849c09d; implement checked-tool DTO rows5.5/5.7 and strict same-body5.6, then derived summaries/classification/render/history/activation. Parallel registered metadata inspect8.9; native freeze follows actual candidate authoring.
-Constraint: owner authorized reviewed push+merge and full completion; no global framework changes or release.
-Dependencies: reuse existing isolated Codex/code-quality collectors; preserve one gate/resource/archive authority.
-State: T1 complete and foundation PR #475 merged; child46 rows measured25 done/2 killed/19 open. Runtime semantic loader union stays refused; native pilot remains draft/inference disabled.
+Goal: finish every master/child row, actual registered semantic workflow, matched native baseline/pilot, evidence inventory and reviewed green-CI delivery.
+Slice: activation parent f6f1d1186; checked-tool row5.5 and registered metadata8.9 dispatched through existing source workers.
+Next decision: accept checked DTO execution before caller wiring5.7 and strict same-body5.6, then all remaining runtime consumers/activation and native freeze.
+Constraint: /root/semantic_calibration_contract owns main HEAD/plans/integration/publication; root observes; two workers/global4slots; R6 reviewed push+merge persists.
+Dependencies: one gate/resource/archive authority; native freeze requires current source/runtime/candidate plus root independent receipt review before inference.
+State: child46 rows25 done/2 killed/19 open; semantic loader still refused; no native inference, release, global edits, automatic promotion or liveDB cutover.
 
 ## Intent and completion criteria
 

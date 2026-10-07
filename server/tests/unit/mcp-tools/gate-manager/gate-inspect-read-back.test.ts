@@ -50,6 +50,29 @@ const baseDefinition: GateDefinitionYaml = {
 };
 
 describe('GateDiscoveryProcessor.handleInspect — P4.11 severity/enforcementMode rendering', () => {
+  it.each(['suite-opaque', '  unresolved:../fixture.json #opaque  ', 'Ω\nidentifier'])(
+    'renders the exact declared opaque association %j as a JSON string',
+    async (value) => {
+      const processor = buildProcessor(
+        new Map([['test-gate', { ...baseDefinition, calibration_suite_id: value }]])
+      );
+      const result = await processor.handleInspect({ action: 'inspect', id: 'test-gate' });
+      const text = (result.content[0] as { text: string }).text;
+      expect(result.isError).toBe(false);
+      const line = text.split('\n').find((entry) => entry.startsWith('  - Calibration Suite ID: '));
+      expect(line).toBe(`  - Calibration Suite ID: ${JSON.stringify(value)}`);
+      expect(JSON.parse(line!.slice('  - Calibration Suite ID: '.length))).toBe(value);
+    }
+  );
+
+  it('omits the association detail when the definition has no association', async () => {
+    const processor = buildProcessor(new Map([['test-gate', baseDefinition]]));
+    const result = await processor.handleInspect({ action: 'inspect', id: 'test-gate' });
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain('ID: test-gate');
+    expect(text).not.toContain('Calibration Suite ID:');
+  });
+
   it('renders severity and enforcementMode when the definition sets them', async () => {
     const processor = buildProcessor(
       new Map([['test-gate', { ...baseDefinition, severity: 'low', enforcementMode: 'blocking' }]])
