@@ -8,12 +8,9 @@
  * reasoning and using strict (failure-first) framing.
  */
 
-/**
- * Evaluation mode for a gate.
- * - 'self': Current default — LLM evaluates its own output (same context)
- * - 'judge': Context-isolated evaluation via delegation to a sub-agent
- */
-export type JudgeEvaluationMode = 'self' | 'judge';
+import type { JudgeEvaluationMode } from '#shared/types/gate-evaluation.js';
+
+export type { JudgeEvaluationMode, ResolvedJudgeConfig } from '#shared/types/gate-evaluation.js';
 
 /**
  * Per-gate judge evaluation configuration.
@@ -66,14 +63,4 @@ export interface JudgeEvaluationDefaults {
   defaultModel?: string;
   /** Default strict setting */
   strict: boolean;
-}
-
-/**
- * Resolved judge config after merging gate-level and global defaults.
- * All fields are required (defaults applied).
- */
-export interface ResolvedJudgeConfig {
-  readonly mode: JudgeEvaluationMode;
-  readonly model: string | undefined;
-  readonly strict: boolean;
 }

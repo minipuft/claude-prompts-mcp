@@ -7,6 +7,11 @@ import {
   describeUnansweredStep,
 } from './gate-review-refusal.js';
 import {
+  failedReviewGateIds,
+  projectGateVerdictSummaries,
+  projectVerdictDetection,
+} from './gate-verdict-summary.js';
+import {
   projectCurrentResponseTarget,
   recordedStep,
 } from '../../execution/capture/step-capture-service.js';
@@ -39,6 +44,7 @@ import type {
   GateCheckResult,
   GateReview,
   GateReviewSemanticContext,
+  GateVerdictSummary,
 } from '#shared/types/chain-execution.js';
 import type { McpToolRequest } from '#shared/types/execution.js';
 import type {
@@ -49,6 +55,7 @@ import type {
   PipelineHookContext,
 } from '#shared/types/index.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
+import type { SemanticGateSummaryFacts } from './gate-verdict-summary.js';
 import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
 import type { HandoffEvidenceMode } from '../../execution/delegation/handoff-contract.js';
 import type { ReviewEvent } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
@@ -142,8 +149,8 @@ type ReviewAnswer =
     };
 
 type SemanticGateDecision =
-  | { readonly kind: 'passed' }
-  | { readonly kind: 'failed'; readonly gateId: string; readonly hint: string }
+  | ({ readonly kind: 'passed' } & SemanticGateSummaryFacts)
+  | ({ readonly kind: 'failed'; readonly hint: string } & SemanticGateSummaryFacts)
   | { readonly kind: 'refused'; readonly message: string };
 
 type AdjudicatedReviewEvent =
@@ -152,6 +159,7 @@ type AdjudicatedReviewEvent =
       readonly event: ReviewEvent;
       readonly review: GateReview;
       readonly failedGateIds: readonly string[];
+      readonly semantic?: readonly SemanticGateSummaryFacts[];
     }
   | { readonly kind: 'refused'; readonly message: string };
 
@@ -861,9 +869,10 @@ export class GateVerdictProcessor {
     );
     if (adjudicated.kind === 'refused') return adjudicated;
     const { event } = adjudicated;
-    const reportedFailures =
-      event.type === 'verdict' ? this.recordPerGateVerdicts(context, event.verdict, review) : [];
-    const failedGateIds = [...new Set([...reportedFailures, ...adjudicated.failedGateIds])];
+    const original = entry.event.type === 'verdict' ? entry.event.verdict : undefined;
+    const reported =
+      original === undefined ? [] : this.readPerGateVerdicts(context, original, review);
+    const failedGateIds = failedReviewGateIds(review, reported, adjudicated.failedGateIds);
     const enforcement = await this.resolveFailEnforcement(context, review, failedGateIds);
     const advance = this.applyReviewAttemptIntent(
       context,
@@ -887,6 +896,15 @@ export class GateVerdictProcessor {
     } else {
       await this.chainSessionStore.setReview(session.sessionId, advance.review);
     }
+    context.state.gates.perGateVerdicts = projectGateVerdictSummaries({
+      reported,
+      semantic: adjudicated.semantic ?? [],
+      review,
+      original,
+      outcome: advance.outcome,
+      enforcement,
+      timestamp: Date.now(),
+    });
     return {
       kind: 'answered',
       review,
@@ -943,7 +961,9 @@ export class GateVerdictProcessor {
     const refused = decisions.find((decision) => decision.kind === 'refused');
     if (refused !== undefined) return refused;
     const failed = decisions.filter((decision) => decision.kind === 'failed');
-    if (failed.length === 0) return { kind: 'accepted', event, review, failedGateIds: [] };
+    const semantic = decisions.filter((decision) => decision.kind !== 'refused');
+    if (failed.length === 0)
+      return { kind: 'accepted', event, review, failedGateIds: [], semantic };
     const hints = failed.map((decision) => decision.hint);
     const verdict: ParsedGateVerdict = {
       ...event.verdict,
@@ -955,6 +975,7 @@ export class GateVerdictProcessor {
       event: { ...event, verdict },
       review: { ...review, retryHints: [...new Set([...(review.retryHints ?? []), ...hints])] },
       failedGateIds: failed.map((decision) => decision.gateId),
+      semantic,
     };
   }
 
@@ -972,7 +993,8 @@ export class GateVerdictProcessor {
       };
     }
     const expected = resolvePinnedSemanticContext(issued, gateId);
-    const report = verdict.submission?.per_gate?.find((entry) => entry.index === index)?.evaluation;
+    const claim = verdict.submission?.per_gate?.find((entry) => entry.index === index);
+    const report = claim?.evaluation;
     const result = evaluateSemanticEvaluation(expected, report);
     const faults = semanticAttributionFaults(result);
     if (faults.length > 0) {
@@ -981,11 +1003,14 @@ export class GateVerdictProcessor {
         message: `Semantic report for '${gateId}' refused: ${faults.map((entry) => entry.message).join('; ')}. Capture the current attempt before reviewing it.`,
       };
     }
-    if (result.passed) return { kind: 'passed' };
+    const facts = { gateId, result, binding: expected.binding };
+    if (result.passed && claim?.passed !== false) return { kind: 'passed', ...facts };
     return {
       kind: 'failed',
-      gateId,
-      hint: `Semantic gate '${gateId}' failed: ${semanticFailureReasons(result).join('; ')}`,
+      ...facts,
+      hint: result.passed
+        ? `Semantic gate '${gateId}' held by explicit per-gate FAIL: ${claim?.rationale ?? verdict.rationale}`
+        : `Semantic gate '${gateId}' failed: ${semanticFailureReasons(result).join('; ')}`,
     };
   }
 
@@ -1207,25 +1232,15 @@ export class GateVerdictProcessor {
   }
 
   /**
-   * Read the submission's per-gate verdicts against the gates `review` advertised, and return the
-   * ones it failed BY NAME (R107).
-   *
-   * The authority owns the parse because it owns the `index → gateId` join; this method owns only
-   * WHEN it happens and WHERE the result lands, which is the processor's domain (verdict
-   * processing) under the ownership matrix. A step review's entries land on request state, where
-   * the assembler names the failing gates and the capture service persists them. Detached
-   * review entries use the same request-state custody slot for their own later capture.
-   *
-   * Nothing is written when the submission carried no per-gate block — an overall-only verdict
-   * is valid and leaving the field undefined is what tells the assembler and the capture
-   * service there is nothing extra to say. The field is never set to `[]`, so "the reviewer
-   * said nothing per-gate" and "the reviewer failed gate X" stay distinguishable.
+   * The authority owns the index-to-gate join and validates it before transition writes.
+   * These are original client claims; accepted transitions project them with retained kernel
+   * and tool facts before publishing request state for response and capture consumers.
    */
-  private recordPerGateVerdicts(
+  private readPerGateVerdicts(
     context: ExecutionContext,
     verdict: ParsedGateVerdict,
     review: GateReview
-  ): readonly string[] {
+  ): GateVerdictSummary[] {
     const authority = context.gateEnforcement;
     const entries =
       authority === undefined
@@ -1235,15 +1250,7 @@ export class GateVerdictProcessor {
             review.gateIds,
             review.attemptCount
           );
-    const failed = entries.filter((entry) => entry.verdict === 'FAIL').map((entry) => entry.gateId);
-    if (entries.length > 0) {
-      context.state.gates.perGateVerdicts = entries;
-      context.diagnostics.info('GateVerdictProcessor', 'Per-gate verdicts recorded', {
-        failed,
-        total: entries.length,
-      });
-    }
-    return failed;
+    return entries;
   }
 
   /**
@@ -1263,17 +1270,7 @@ export class GateVerdictProcessor {
     outcome: string,
     nodeId: string
   ): void {
-    const verdictDetection: NonNullable<typeof context.state.gates.verdictDetection> = {
-      verdict: verdictPayload.verdict,
-      source: verdictPayload.source,
-      nodeId,
-    };
-    verdictDetection.rationale = verdictPayload.rationale;
-    if (verdictPayload.detectedPattern !== undefined) {
-      verdictDetection.pattern = verdictPayload.detectedPattern;
-    }
-    verdictDetection.outcome = outcome === 'passed' ? 'cleared' : 'pending';
-    context.state.gates.verdictDetection = verdictDetection;
+    context.state.gates.verdictDetection = projectVerdictDetection(verdictPayload, outcome, nodeId);
   }
 
   /**

@@ -7,7 +7,12 @@
  * to shared/ to respect the dependency direction: shared → engine → modules → mcp.
  */
 
-import type { SemanticEvaluationReport } from '#shared/types/gate-evaluation.js';
+import type {
+  SemanticEvaluationReport,
+  SemanticEvaluationResult,
+  SemanticEvaluationBinding,
+  ResolvedJudgeConfig,
+} from '#shared/types/gate-evaluation.js';
 // The handoff evidence reason's ONE definition lives with the contract that produces it, so the
 // record shape and the resolver cannot drift. Type-only, like `execution.ts`'s
 // `#modules/workflow-ir` import — no value crosses the layer.
@@ -115,6 +120,17 @@ export interface GateVerdictSummary {
   attempt?: number;
   /** Original client report retained for later adjudication; custody alone grants no authority. */
   evaluation?: SemanticEvaluationReport;
+  /** Raw validated per-gate claim, distinct from effective acceptance. */
+  reportedVerdict?: 'PASS' | 'FAIL';
+  reportedRationale?: string;
+  reportedReview?: { readonly overall: 'PASS' | 'FAIL'; readonly rationale: string };
+  /** Full canonical result from the one adjudication, never inferred from the client flag. */
+  semanticResult?: SemanticEvaluationResult;
+  toolChecks?: readonly GateCheckResult[];
+  /** Expected pins from the server review, independent of evaluation.binding. */
+  reviewBinding?: SemanticEvaluationBinding;
+  requestedEvaluation?: ResolvedJudgeConfig;
+  disposition?: 'passed' | 'held' | 'advisory-cleared' | 'informational-cleared';
   /**
    * Which kind of gate produced this verdict, so a self-declared attestation is never counted
    * as a graded result.

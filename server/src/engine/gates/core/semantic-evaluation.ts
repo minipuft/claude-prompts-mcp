@@ -6,32 +6,15 @@ import { SemanticCriterionSchema } from './gate-schema.js';
 import type {
   PinnedSemanticEvaluationContext,
   SemanticCriterion,
+  SemanticCriterionResult,
+  SemanticEvaluationIssue,
+  SemanticEvaluationResult,
   SemanticEvaluationBinding,
   SemanticEvaluationReport,
   SemanticObservation,
-  SemanticObservationState,
 } from '#shared/types/gate-evaluation.js';
 
 import { hashBytes } from '#shared/utils/hash.js';
-
-interface SemanticEvaluationIssue {
-  readonly code: string;
-  readonly message: string;
-  readonly criterion_id?: string;
-}
-interface SemanticCriterionResult {
-  readonly criterion_id: string;
-  readonly state: SemanticObservationState | 'invalid';
-  readonly valid: boolean;
-  readonly passed: boolean;
-  readonly issues: readonly SemanticEvaluationIssue[];
-}
-interface SemanticEvaluationResult {
-  readonly valid: boolean;
-  readonly passed: boolean;
-  readonly issues: readonly SemanticEvaluationIssue[];
-  readonly criteria: readonly SemanticCriterionResult[];
-}
 
 /** Canonical faults that cannot be attributed to a report's current review attempt. */
 const ATTRIBUTION_FAULTS = new Set([
