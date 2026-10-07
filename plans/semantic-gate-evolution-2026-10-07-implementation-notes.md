@@ -4,7 +4,7 @@ date: 2026-10-07
 type: implementation-notes
 status: active
 tracking: none
-tracking_reason: local-only
+tracking_reason: operator-opt-out
 tags: [gates, semantic, evaluation]
 ---
 
@@ -14,8 +14,8 @@ tags: [gates, semantic, evaluation]
 
 Goal: retain evidence and decisions for the semantic-gate/calibration initiative.
 Slice: first contract/kernel slice completed and validated; six rows closed, 24 remain open.
-Next: obtain the missing GitHub publication ruling for the prepared PR, then continue runtime integration.
-Constraint: no live semantic activation, model calibration, resource promotion, push, PR or merge yet.
+Next: publish the prepared PR, verify required CI and review, then merge under R6.
+Constraint: reviewed GitHub delivery authorized; live activation, model budget and resource promotion retain their independent gates.
 
 ## Planning receipts
 
@@ -275,3 +275,9 @@ Logs: /tmp/semantic-gate-t1-ready-validation.log, /tmp/semantic-gate-t1-ready-bu
 GitHub read-only repository check confirms minipuft/claude-prompts-mcp is public and default branch main. No PR has been created; no T3 linking operation is applicable yet. Publication remains ungranted. The first implementation request authorizes this local delegated work and commits, not a publish field.
 
 Growth: confirmed the existing measured-claim/negative-control boundary. Source import/export policy and Markdown row contiguity are owned by executable gates, and their observed failures were repaired rather than waived or converted into baseline exceptions. No memory/rule/skill edits, deployed plugin changes, paid calibration or global default changes.
+
+## R6: initiative publication authorized (2026-10-07)
+
+Owner answered the publication question: Push and merge reviewed slices (Recommended). Authorization is push+merge for this semantic-gate initiative, using reviewed PRs as trackers. Record the grant once in the plan and do not request it again per slice. tracking:none with operator-opt-out reflects the explicit PR-as-tracker choice, not a missing Issue. This grants no release/tag/npm publication, unreviewed resource promotion, paid calibration budget, or global framework change.
+
+First publication preparation: fetched origin and verified there is no existing PR on the initiative branch. The source/tests/projection remain the previously validated snapshot; this commit records only authorization/current delivery state. Required checks and independent review must resolve before merge.

@@ -6,9 +6,10 @@ status: active
 initiative_branch: feat/semantic-gate-evaluations
 branch_mode: worktree
 worker_cap: 2
+publish: "push+merge (2026-10-07, owner approval in chat R6; reviewed PRs track the initiative)"
 planner_session: semantic-gate-evolution-plan
 tracking: none
-tracking_reason: local-only
+tracking_reason: operator-opt-out
 tags: [gates, semantic, evaluation, tests]
 ---
 
@@ -18,8 +19,8 @@ tags: [gates, semantic, evaluation, tests]
 
 Goal: make semantic gates explicit evaluations whose judgments can be inspected and tested.
 Slice: T1 rows 1.1-1.6 complete; 183 focused tests, all 85 validators, build and 20 MCP smoke checks passed.
-Next decision: authorize GitHub delivery of the prepared slice; then recut complete runtime wiring before live type activation.
-Constraint: no publish ruling yet; live semantic criteria remain refused; no model calibration or resource promotion.
+Next decision: publish and merge the prepared first slice after CI/review, then recut complete runtime wiring.
+Constraint: GitHub push+merge authorized for reviewed slices; live semantic criteria stay refused until wiring and calibration/promotion gates remain separate.
 Dependencies: canonical benchmark archive and generic findings work retain their owners.
 State: six closed rows, 24 open rows; local PR draft passes all four convention checks.
 
