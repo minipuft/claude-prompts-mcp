@@ -12,7 +12,10 @@ tags: [gates, semantic, evaluation, runtime]
 
 ## Now (2026-10-07)
 
-Parent released baseline hold on 2026-10-07 after fresh native C8 coding trial and source/toolchain/namespace receipts. One active source worker is permitted. Child worktree `feat/semantic-gate-flow` began clean at merged PR #474 / 2b8805aa3; planner remains source-read-only and delegates production.
+Goal: complete all runtime consumers before activation and the full master/native objective.
+Slice: root-read accepted5.5/8.9/5.8/5.9/5.12; active seven-file5.7 and three-file5.10.
+Next: fresh planner accepts handoffs, rules parser5.11 and earliest admission/address guard5.6; master notes checkpoint3 carries exact custody.
+Constraint: two shared-tree workers/global four slots, planner source-read-only; workers never stage/commit/move refs. Main ownership transfers after plan-only checkpoint commit.
 
 ## Classify RESULT
 
@@ -362,3 +365,15 @@ New5.12 exact3files purecoverage+inputtypes+existingcoverage control introduces 
 Parent/root readexactpurecoverage+inputtypes+ownedcontrol. Optionalinternalserver structuralPendingtrue makes satisfiedfalse withhonest pendingstructural reason after retainingactualverifiedGateIds, fullrequiredIDs andpassingtoolfacts. Omitted/false inputretainsordinarytooloutcome; existingsemantic/mixed/failure/priorIDconditionsunchanged. Caller5.7mustderivefactonlycanonicalhasStructuralFinding(review), no rawid/clientfield/privateStage policy. Actualcomposedauthoredcanonicalcollision+servermarkerrunsREALoperatorallowedtrue shellverification, producingpassingcheckResults butcoveragehold; no-marker positiveclears.
 
 Owned37tests pass(34prior+3new); guarddropdesignated1failure, exactsourcerestoration37green. Ownedstrict0; sourceESLint0/0unchanged;threefileformat/diff0; sizes98/103/740,+8/+2/+83 only. Sourcecounterfactsvalidnotnative/fullpipelineclaim. Originalfivefilecallerblueprint#3cancelledbeforeedits; sixfile5.7resumesafterthis acceptedsharedpiece. Producer5.10parallelpreservesexistingbodycarrier; legacyverificationIO mapsdefinedemptytoundefined at5.7TOOLARGONLY, neveroverwritescontextpresence (rootrule).
+
+## R42: measured effective source size requires same-domain refusal extraction (2026-10-07)
+
+Minimal5.7fieldthreading adds13processorphysical lines(1385→1398) within authored15estimate, butactual ESLint effectivebody now1010>1000 addsone NEWmax-lines warning. Preliminary100oldcontrolsgreen isnotpermission towaive/readabilitycompress. Recut6→7 exactfiles MOVESexisting~35linepuredescribeRefusal to services/gate-review-refusal.ts, directcanonicalimport/SharedGateReview vocabulary, exactwordbehavior/no newpolicy/evaluator/shim. Same3owningmodules. Workerprobesallsymbolconsumers; strictrowregressions andactualnewcaller controls/mutations required. ExistingStage20C16 unchanged/error10→9 legitimate baseline decrease;builder10unchanged. Rootindependentrecutaccepted, max-lineswarningmustreturnzero.
+
+5.10observerseam remains3files: test-onlydataURLNodepreload inownedregisteredRPCfixture, hermeticchildNODE_OPTIONS/tempJSONtrace, importsrealRequestNormalizationStage andrecordsminimalrequestpresence/value thenoriginalexecuteunchanged. Observerneveradds/reconstructsbody. Realregistration/executor/pipeline andsourceSTDIO/HTTPremain; SDKliteralemptyrefusesbeforenormalization/observer, omitted+whitespace/nativeUnicode positivesmeasure actualcarrier. No globalhelper/config/nativepatchorresource-supplied envoptout. Independentproducer-dropmutations must failactualcontextvalues. Rootread will verifyactualpreload source.
+
+## R43: parser prerequisite and unresolved earliest admission scope (2026-10-07)
+
+Read-only canonical parser/router probe fixes new5.11 at exactly handoff-contract.ts plus its existing unit test (two files). Current parser returns node/proposed verdict/findings without work-body ranges; canonical/fenced trailers, prefix work and unknown suffix work route alike. Complete validated envelope grammar/span interface remains UNRULED; do not silently invent which findings/suffix count as metadata. Unknown surrounding content must remain work.
+
+Strict5.6 depends5.7/5.10/5.11. Ordinary verdict address can name an earlier review while actual capture address stays currentStepAtStart. Detached trimempty+verdict admission can advance before processor; Stage16 unknown/mutation handling also precedes it. Thus old <=3 processor-only sketch is not an executable full no-write proof: fresh planner must bound earliest admission/address ownership and distinguish review-decision writes from a global no-write promise before source dispatch. Guard precedes entry.grade, charge/renew/clear/capture/advance for same-addressed required semantic PASS OR FAIL with different supplied canonical bytes. Expected bytes are server capture, never report.binding. Preserve omitted/trailer-only, identical/other-node, legacy and separate report-only FAILA→renew→captureB chronology.

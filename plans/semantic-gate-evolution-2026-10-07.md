@@ -17,12 +17,12 @@ tags: [gates, semantic, evaluation, tests]
 
 ## Now (2026-10-07)
 
-Goal: finish all master/child rows, actual registered semantic workflow, matched native baseline/pilot, evidence/rollback and reviewed green-CI delivery.
-Slice: metadata8.9/checked-tools5.5/structural5.8 committed; cold/remap5.9 accepted; caller5.7 and canonical-empty custody prerequisite5.10 ready.
-Next decision: complete body/trailer address classification and strictsame-body5.6 before summaries/render/history/activation; nativefreeze follows actual candidate authoring.
-Constraint: planner /root/semantic_calibration_contract owns HEAD/plans/publication; root observes;2workers/global4slots; R6 reviewedpush+merge persists.
-Dependencies: one gate/resource/archive authority; current source/runtime/candidate+private materials freeze requires root independentreceipt review before inference.
-State: child48 rows29done2killed17open before producer/parser recut; semantic loader refused/nativeinference0; no release/globaledits/autopromotion/liveDBcutover.
+Goal: finish every master/child row, actual registered semantic workflow, matched native baseline/pilot, evidence/rollback and reviewed green-CI delivery.
+Slice: accepted source through coverage5.12 at 4efbb353b; seven-file caller5.7 and three-file canonical-empty producer5.10 remain active in parallel.
+Next decision: fresh planner accepts worker handoffs, rules complete-envelope parser5.11 and earliest admission/address guard5.6, then completes all remaining rows.
+Constraint: semantic_calibration_contract releases HEAD/plans/publication after the checkpoint commit; root assigns archive_boundary_review as fresh owner. Two source workers continue, global four slots. R6 reviewed push+merge persists.
+Dependencies: actual current source/runtime/candidate plus private materials require root independent freeze-receipt review BEFORE inference.
+State: child51 rows30done2killed19open; semantic loader REFUSED/native inference0. Checkpoint3 in sibling notes is authoritative. No release/global edits/autopromotion/liveDB cutover.
 
 ## Intent and completion criteria
 
