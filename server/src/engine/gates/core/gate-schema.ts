@@ -42,6 +42,149 @@ import { z } from 'zod/v4';
 
 import { ARTIFACT_KINDS } from '../utils/artifact-kinds.js';
 
+import type {
+  SemanticAcceptance,
+  SemanticCriterion,
+  SemanticCriterionInput,
+  SemanticResultDomain,
+} from '#shared/types/gate-evaluation.js';
+
+import { refuseUndeclaredKey } from '#shared/utils/nested-key-refusal.js';
+
+// ============================================
+// Standalone Semantic Criterion Schema
+// ============================================
+
+const semanticTextSchema = z.string().refine((value) => value.trim().length > 0, {
+  message: 'Must contain non-whitespace text',
+});
+const semanticStrictOptions = { error: refuseUndeclaredKey };
+const semanticLabelsSchema = z
+  .array(semanticTextSchema)
+  .min(1)
+  .refine((values) => new Set(values).size === values.length, {
+    message: 'Labels must be unique',
+  });
+
+const semanticResultSchema = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('boolean') }, semanticStrictOptions),
+  z.strictObject(
+    { kind: z.literal('category'), options: semanticLabelsSchema },
+    semanticStrictOptions
+  ),
+  z
+    .strictObject(
+      {
+        kind: z.literal('score'),
+        min: z.number(),
+        max: z.number(),
+        anchors: z
+          .array(
+            z.strictObject(
+              { value: z.number(), description: semanticTextSchema },
+              semanticStrictOptions
+            )
+          )
+          .min(2),
+      },
+      semanticStrictOptions
+    )
+    .refine((result) => result.min < result.max, {
+      path: ['max'],
+      message: 'Score maximum must exceed minimum',
+    })
+    .refine(
+      (result) =>
+        result.anchors.every((anchor, index) => {
+          const previous = result.anchors[index - 1];
+          return (
+            anchor.value >= result.min &&
+            anchor.value <= result.max &&
+            (previous === undefined || previous.value < anchor.value)
+          );
+        }),
+      { path: ['anchors'], message: 'Score anchors must be ordered, unique and within bounds' }
+    )
+    .refine(
+      (result) =>
+        result.anchors[0]?.value === result.min &&
+        result.anchors[result.anchors.length - 1]?.value === result.max,
+      { path: ['anchors'], message: 'Score anchors must cover both endpoints' }
+    ),
+]);
+
+const semanticAcceptanceSchema = z.discriminatedUnion('kind', [
+  z.strictObject(
+    { kind: z.literal('equals'), value: z.union([z.boolean(), semanticTextSchema]) },
+    semanticStrictOptions
+  ),
+  z.strictObject(
+    { kind: z.literal('one_of'), values: semanticLabelsSchema },
+    semanticStrictOptions
+  ),
+  z.strictObject({ kind: z.literal('gte'), value: z.number() }, semanticStrictOptions),
+  z.strictObject({ kind: z.literal('lte'), value: z.number() }, semanticStrictOptions),
+]);
+
+/** Domain checks belong to definition parsing, before any model observations exist. */
+function isSemanticAcceptanceCompatible(
+  result: SemanticResultDomain,
+  acceptance: SemanticAcceptance
+): boolean {
+  switch (result.kind) {
+    case 'boolean':
+      return acceptance.kind === 'equals' && typeof acceptance.value === 'boolean';
+    case 'category':
+      if (acceptance.kind === 'equals') {
+        return typeof acceptance.value === 'string' && result.options.includes(acceptance.value);
+      }
+      return (
+        acceptance.kind === 'one_of' &&
+        acceptance.values.every((value) => result.options.includes(value))
+      );
+    case 'score':
+      return (
+        (acceptance.kind === 'gte' || acceptance.kind === 'lte') &&
+        acceptance.value >= result.min &&
+        acceptance.value <= result.max
+      );
+  }
+}
+
+/**
+ * Contract-first draft parser, deliberately excluded from live GatePassCriteriaSchema until
+ * runtime evaluation is wired. Every new branch is strict: executable predicate extensions
+ * and misspelled keys are refused at their containing path, not stripped or interpreted.
+ * Zod v4 numbers are finite; input/output contracts differ only in the defaulted N/A policy.
+ */
+export const SemanticCriterionSchema: z.ZodType<SemanticCriterion, SemanticCriterionInput> = z
+  .strictObject(
+    {
+      type: z.literal('semantic_evaluation'),
+      id: semanticTextSchema,
+      target: z.discriminatedUnion('kind', [
+        z.strictObject({ kind: z.literal('step_output') }, semanticStrictOptions),
+        z.strictObject(
+          { kind: z.literal('artifact'), id: semanticTextSchema },
+          semanticStrictOptions
+        ),
+      ]),
+      question: semanticTextSchema,
+      evidence_requirements: z.strictObject(
+        { min_items: z.number().int().positive() },
+        semanticStrictOptions
+      ),
+      result: semanticResultSchema,
+      acceptance: semanticAcceptanceSchema,
+      allow_not_applicable: z.boolean().default(false),
+    },
+    semanticStrictOptions
+  )
+  .refine((criterion) => isSemanticAcceptanceCompatible(criterion.result, criterion.acceptance), {
+    path: ['acceptance'],
+    message: 'Acceptance must match the result domain, declared category labels and score bounds',
+  });
+
 // ============================================
 // Pass Criteria Schema
 // ============================================

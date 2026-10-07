@@ -8,7 +8,12 @@ import { load as loadYaml } from 'js-yaml';
 
 import { GateDefinitionLoader } from '../../../../src/engine/gates/core/gate-definition-loader.js';
 import { GateLoader } from '../../../../src/engine/gates/core/gate-loader.js';
-import { validateGateSchema } from '../../../../src/engine/gates/core/gate-schema.js';
+import {
+  SemanticCriterionSchema,
+  validateGateSchema,
+} from '../../../../src/engine/gates/core/gate-schema.js';
+
+import type { SemanticCriterionInput } from '../../../../src/shared/types/gate-evaluation.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +33,294 @@ function minimalGate(overrides: Record<string, unknown> = {}): Record<string, un
     ...overrides,
   };
 }
+
+describe('standalone SemanticCriterionSchema draft contract', () => {
+  const booleanDraft = {
+    type: 'semantic_evaluation',
+    id: 'supports-claim',
+    target: { kind: 'step_output' },
+    question: 'Does the output support its claim with evidence?',
+    evidence_requirements: { min_items: 1 },
+    result: { kind: 'boolean' },
+    acceptance: { kind: 'equals', value: true },
+  } satisfies SemanticCriterionInput;
+  const category = { kind: 'category', options: ['supported', 'unsupported'] } as const;
+  const score = {
+    kind: 'score',
+    min: 0,
+    max: 2,
+    anchors: [
+      { value: 0, description: 'No support' },
+      { value: 1, description: 'Partial support' },
+      { value: 2, description: 'Complete support' },
+    ],
+  } as const;
+
+  test.each([
+    ['boolean true', booleanDraft],
+    ['boolean false', { ...booleanDraft, acceptance: { kind: 'equals', value: false } }],
+    [
+      'category equals',
+      { ...booleanDraft, result: category, acceptance: { kind: 'equals', value: 'supported' } },
+    ],
+    [
+      'category one_of',
+      {
+        ...booleanDraft,
+        result: category,
+        acceptance: { kind: 'one_of', values: ['supported', 'unsupported'] },
+      },
+    ],
+    ['score gte', { ...booleanDraft, result: score, acceptance: { kind: 'gte', value: 1 } }],
+    ['score lte', { ...booleanDraft, result: score, acceptance: { kind: 'lte', value: 1 } }],
+    ['score minimum', { ...booleanDraft, result: score, acceptance: { kind: 'gte', value: 0 } }],
+    ['score maximum', { ...booleanDraft, result: score, acceptance: { kind: 'lte', value: 2 } }],
+    ['artifact target', { ...booleanDraft, target: { kind: 'artifact', id: 'report' } }],
+  ])('accepts %s with a defaulted N/A policy', (_name, draft) => {
+    expect(SemanticCriterionSchema.parse(draft)).toEqual({ ...draft, allow_not_applicable: false });
+  });
+
+  test('preserves explicit N/A permission', () => {
+    expect(
+      SemanticCriterionSchema.parse({ ...booleanDraft, allow_not_applicable: true })
+        .allow_not_applicable
+    ).toBe(true);
+  });
+
+  test('live gate schema refuses even a valid semantic draft until runtime wiring', () => {
+    expect(SemanticCriterionSchema.safeParse(booleanDraft).success).toBe(true);
+    const result = validateGateSchema(minimalGate({ pass_criteria: [booleanDraft] }), 'probe');
+    expect(result.valid).toBe(false);
+    expect(result.errors.join('\n')).toContain('pass_criteria.0.type');
+  });
+
+  test.each([
+    ['missing id', { id: undefined }, ['id']],
+    ['blank id', { id: ' ' }, ['id']],
+    ['missing question', { question: undefined }, ['question']],
+    ['blank question', { question: '\n' }, ['question']],
+    ['missing target', { target: undefined }, ['target']],
+    ['artifact missing id', { target: { kind: 'artifact' } }, ['target', 'id']],
+    ['artifact blank id', { target: { kind: 'artifact', id: ' ' } }, ['target', 'id']],
+    [
+      'missing evidence requirements',
+      { evidence_requirements: undefined },
+      ['evidence_requirements'],
+    ],
+    [
+      'missing evidence minimum',
+      { evidence_requirements: {} },
+      ['evidence_requirements', 'min_items'],
+    ],
+    [
+      'zero evidence',
+      { evidence_requirements: { min_items: 0 } },
+      ['evidence_requirements', 'min_items'],
+    ],
+    [
+      'negative evidence',
+      { evidence_requirements: { min_items: -1 } },
+      ['evidence_requirements', 'min_items'],
+    ],
+    [
+      'fractional evidence',
+      { evidence_requirements: { min_items: 1.5 } },
+      ['evidence_requirements', 'min_items'],
+    ],
+    [
+      'infinite evidence',
+      { evidence_requirements: { min_items: Infinity } },
+      ['evidence_requirements', 'min_items'],
+    ],
+    ['missing result', { result: undefined }, ['result']],
+    ['missing acceptance', { acceptance: undefined }, ['acceptance']],
+    ['wrong N/A type', { allow_not_applicable: 'true' }, ['allow_not_applicable']],
+    ['empty categories', { result: { kind: 'category', options: [] } }, ['result', 'options']],
+    ['blank category', { result: { kind: 'category', options: [' '] } }, ['result', 'options', 0]],
+    [
+      'duplicate categories',
+      { result: { kind: 'category', options: ['supported', 'supported'] } },
+      ['result', 'options'],
+    ],
+    [
+      'string predicate for boolean',
+      { acceptance: { kind: 'equals', value: 'true' } },
+      ['acceptance'],
+    ],
+    ['numeric predicate for boolean', { acceptance: { kind: 'gte', value: 1 } }, ['acceptance']],
+    [
+      'one_of for boolean',
+      { acceptance: { kind: 'one_of', values: ['supported'] } },
+      ['acceptance'],
+    ],
+    ['boolean predicate for category', { result: category }, ['acceptance']],
+    [
+      'unknown category equals',
+      { result: category, acceptance: { kind: 'equals', value: 'invented' } },
+      ['acceptance'],
+    ],
+    [
+      'unknown category one_of',
+      { result: category, acceptance: { kind: 'one_of', values: ['supported', 'invented'] } },
+      ['acceptance'],
+    ],
+    [
+      'duplicate one_of labels',
+      { result: category, acceptance: { kind: 'one_of', values: ['supported', 'supported'] } },
+      ['acceptance', 'values'],
+    ],
+    [
+      'empty one_of labels',
+      { result: category, acceptance: { kind: 'one_of', values: [] } },
+      ['acceptance', 'values'],
+    ],
+    [
+      'blank one_of label',
+      { result: category, acceptance: { kind: 'one_of', values: [' '] } },
+      ['acceptance', 'values', 0],
+    ],
+    [
+      'score predicate for category',
+      { result: category, acceptance: { kind: 'lte', value: 1 } },
+      ['acceptance'],
+    ],
+    ['equals for score', { result: score }, ['acceptance']],
+    [
+      'one_of for score',
+      { result: score, acceptance: { kind: 'one_of', values: ['supported'] } },
+      ['acceptance'],
+    ],
+    [
+      'numeric equals for score',
+      { result: score, acceptance: { kind: 'equals', value: 1 } },
+      ['acceptance', 'value'],
+    ],
+    [
+      'score below range',
+      { result: score, acceptance: { kind: 'gte', value: -1 } },
+      ['acceptance'],
+    ],
+    ['score above range', { result: score, acceptance: { kind: 'lte', value: 3 } }, ['acceptance']],
+    [
+      'infinite score predicate',
+      { result: score, acceptance: { kind: 'gte', value: Infinity } },
+      ['acceptance', 'value'],
+    ],
+    [
+      'NaN score predicate',
+      { result: score, acceptance: { kind: 'lte', value: NaN } },
+      ['acceptance', 'value'],
+    ],
+    [
+      'executable predicate',
+      { acceptance: { kind: 'expression', expression: 'value === true' } },
+      ['acceptance', 'kind'],
+    ],
+  ])('rejects %s at the affected path', (_name, overrides, path) => {
+    const result = SemanticCriterionSchema.safeParse({ ...booleanDraft, ...overrides });
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('Malformed draft unexpectedly parsed');
+    expect(result.error.issues.map((issue) => issue.path)).toContainEqual(path);
+  });
+
+  test.each([
+    ['nonfinite minimum', { min: -Infinity }, ['result', 'min']],
+    ['nonfinite maximum', { max: Infinity }, ['result', 'max']],
+    ['NaN minimum', { min: NaN }, ['result', 'min']],
+    ['NaN maximum', { max: NaN }, ['result', 'max']],
+    ['equal bounds', { max: 0 }, ['result', 'max']],
+    ['reversed bounds', { min: 3 }, ['result', 'max']],
+    ['missing anchors', { anchors: undefined }, ['result', 'anchors']],
+    ['empty anchors', { anchors: [] }, ['result', 'anchors']],
+    ['one anchor', { anchors: [score.anchors[0]] }, ['result', 'anchors']],
+    ['reversed anchors', { anchors: [...score.anchors].reverse() }, ['result', 'anchors']],
+    [
+      'duplicate anchors',
+      { anchors: [score.anchors[0], score.anchors[0], score.anchors[2]] },
+      ['result', 'anchors'],
+    ],
+    [
+      'missing minimum anchor',
+      { anchors: [score.anchors[1], score.anchors[2]] },
+      ['result', 'anchors'],
+    ],
+    [
+      'missing maximum anchor',
+      { anchors: [score.anchors[0], score.anchors[1]] },
+      ['result', 'anchors'],
+    ],
+    [
+      'out-of-bounds anchor',
+      { anchors: [score.anchors[0], { value: 3, description: 'Outside' }, score.anchors[2]] },
+      ['result', 'anchors'],
+    ],
+    [
+      'nonfinite anchor',
+      {
+        anchors: [score.anchors[0], { value: Infinity, description: 'Outside' }, score.anchors[2]],
+      },
+      ['result', 'anchors', 1, 'value'],
+    ],
+    [
+      'NaN anchor',
+      { anchors: [score.anchors[0], { value: NaN, description: 'Unknown' }, score.anchors[2]] },
+      ['result', 'anchors', 1, 'value'],
+    ],
+    [
+      'blank anchor description',
+      { anchors: [score.anchors[0], { value: 1, description: ' ' }, score.anchors[2]] },
+      ['result', 'anchors', 1, 'description'],
+    ],
+    [
+      'missing anchor description',
+      { anchors: [score.anchors[0], { value: 1 }, score.anchors[2]] },
+      ['result', 'anchors', 1, 'description'],
+    ],
+  ])('rejects malformed score: %s', (_name, overrides, path) => {
+    const result = SemanticCriterionSchema.safeParse({
+      ...booleanDraft,
+      result: { ...score, ...overrides },
+      acceptance: { kind: 'gte', value: 1 },
+    });
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('Malformed score unexpectedly parsed');
+    expect(result.error.issues.map((issue) => issue.path)).toContainEqual(path);
+  });
+
+  test.each([
+    ['expression', { expression: 'run()' }],
+    ['target.expression', { target: { kind: 'step_output', expression: 'run()' } }],
+    ['target.id', { target: { kind: 'step_output', id: 'undeclared' } }],
+    [
+      'evidence_requirements.expression',
+      { evidence_requirements: { min_items: 1, expression: 'run()' } },
+    ],
+    ['result.expression', { result: { kind: 'boolean', expression: 'run()' } }],
+    ['result.extra', { result: { ...category, extra: true } }],
+    [
+      'result.anchors[0].expression',
+      {
+        result: {
+          ...score,
+          anchors: [{ ...score.anchors[0], expression: 'run()' }, score.anchors[2]],
+        },
+      },
+    ],
+    ['acceptance.expression', { acceptance: { kind: 'equals', value: true, expression: 'run()' } }],
+    ['acceptance.extra', { acceptance: { kind: 'one_of', values: ['supported'], extra: true } }],
+    ['acceptance.extra', { acceptance: { kind: 'gte', value: 1, extra: true } }],
+    ['acceptance.extra', { acceptance: { kind: 'lte', value: 1, extra: true } }],
+  ])('refuses unknown key %s with its address', (path, overrides) => {
+    const result = SemanticCriterionSchema.safeParse({ ...booleanDraft, ...overrides });
+    expect(result.success).toBe(false);
+    if (result.success) throw new Error('Unknown key unexpectedly parsed');
+    expect(
+      result.error.issues.some(
+        (issue) => issue.code === 'unrecognized_keys' && issue.message.includes(path)
+      )
+    ).toBe(true);
+  });
+});
 
 /**
  * Root-cause coverage for the guidance.md trailing-newline defect
