@@ -1,0 +1,58 @@
+name: Optional Evaluations
+
+# Path-filtered optional context; do not require it for every pull request.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "evaluations/**"
+      - "server/src/shared/utils/hash.ts"
+      - "server/package.json"
+      - "server/package-lock.json"
+      - ".github/workflows/evaluations.yml"
+      - ".node-version"
+  push:
+    branches: [main]
+    paths:
+      - "evaluations/**"
+      - "server/src/shared/utils/hash.ts"
+      - "server/package.json"
+      - "server/package-lock.json"
+      - ".github/workflows/evaluations.yml"
+      - ".node-version"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evaluations-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-controls:
+    name: Offline contract and archive controls
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      # CI has a fresh standalone checkout, never shared worktree dependency symlinks.
+      - name: Install locked server development tools
+        run: npm ci --prefix server --include=dev --ignore-scripts
+
+      - name: Native offline controls
+        run: npm --prefix evaluations test
+
+      - name: Strict optional package types
+        run: npm --prefix evaluations run typecheck
