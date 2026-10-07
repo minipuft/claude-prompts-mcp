@@ -1,3 +1,13 @@
+---
+title: Semantic gate runtime slice implementation notes
+date: 2026-10-07
+type: implementation-notes
+status: active
+tracking: none
+tracking_reason: operator-opt-out
+tags: [gates, semantic, evaluation, runtime]
+---
+
 # Semantic gate runtime slice implementation notes
 
 ## Now (2026-10-07)
@@ -79,6 +89,40 @@ Spot-read canonical prompt-engine contract and reference: full report/reviewer s
 
 F10: Stage16 passes user_response.trim() into processor/capture. Bind the exact canonical captured string; do not assume raw request-body bytes equal capture. Capture-first envelope is default; same-call needs actual same canonical string and whitespace/Unicode controls. Normal legacy trimming behavior stays unchanged.
 
+R5 (parent R13): Bind EXACT actual canonical captured string, preserving existing trim behavior. Public capture-first envelope exposes exact target text/digest and UTF-16 half-open span convention so whitespace/Unicode controls can reproduce hashes. Same-call compares server canonical capture; report does not supply expected context. No raw-body assumption or additional public API.
+
+Commit receipt: 9682255d0, metadata/reference and generated projections plus child writeback. Plan source paths now backticked so canonical validator observes child done-path state; real tracked-plan CLI passes with737tracked paths repo-wide. Current request-custody tier compiled as chain-strategic_worker#10, t2-1 -> t2-2; one worker owns row2.1.
+
 DEV-P0-3: Plan file cells initially named source files without code ticks, so canonical done-path tracking could not observe child source rows. Backticked exact path cells before subsequent gate/commit. St stamp validation alone was not done-path validation. Added existing executor forwarding test to row2.1 ownership so its own artifact check reads request forwarding rather than only type declarations.
+
+DEV-B-1: Engine request validator must call canonical parsed-verdict owner for structured fields; shallow renderer discrimination is not unknown-input validation. Move gate-verdict-contract.ts ownership to row2.2 and separate B-engine submission (five files, two owning source modules). Authority summary reader remains row3.1. This recut closes the parser/getter dependency before dispatch rather than letting an engine validator import public MCP Zod schema or duplicating acceptance logic.
+
+## H2.1: entry/executor typed custody accepted (2026-10-07)
+
+Spot-read actual registration/executor/shared request diff: no render-to-text normalization, strings alone trim, blank strings omitted. Executor argument references canonical request property. Focused executor tests12baseline ->18passing; two resume spellings retain rich Unicode report/reviewer; report-to-text mutation2failures then exact restoration. Owned transitive compiler: exactly execution-context.ts162 TS2339 on .trim() over widened union; next reader row owns it. Not committed or claimed globally green. Compiled node t2-1 accepted; stale t2-2 cancelled before dispatch due parser-owner recut.
+
+F11: Authority summaries need optional typed evaluation on shared GateVerdictSummary as their actual writer. Added shared chain-execution.ts to row3.1; existing whole-object JSON captures/store already retain this field, later history/acceptance rows explicitly read it. Final public metadata row10.4 now replaces staged wording only after actual activation/control evidence; no stale caveat survives final slice.
+
+R6 (parent R14): Definition digest pins full serializable public resolved snapshot, loaded guidance, criterion definitions and relevant effective requested evaluation route/config via existing hashCanonical. Unknown/nonserializable fields require a ruling; no unsafe JSON elision or timestamp-only digest. Existing hash.ts canonical serializer rejects invalid roundtrip shapes. Internal sourceRoot path is not public review material; external tool/script file dependency capture still needs exact owned-capability audit.
+
+R7: Parent resolved snapshot excludes sourceRoot and pins public resolved data/loaded guidance/effective route/config. Existing owned resource file capability may capture declared shipped scripts; never arbitrary external reads. External command/binary/environment dependencies remain explicitly unobserved; mixed checks execute current operator-authorized code with actual results recorded. No full-host snapshot or promotion eligibility from missing code provenance. Semantic-only pilot avoids that dependency boundary.
+
+R8: Worker pre-flight identified private canonical report/observation syntax schemas already owned by semantic-evaluation.ts. Row2.2 grows from five to six files, adding only a consumed pure isSemanticEvaluationReport guard that reuses existing root + per-observation schemas. Gate-verdict-contract consumes it to prove optional report shape for unknown engine inputs. No duplicate schema, acceptance math change, unused export or engine MCP dependency. This ruling occurs before source edits. MCP node t2-2 compiled five-file bounds was supplemented by this explicit row ownership ruling; no semantic task change.
+
+F12: Stage16 gate_action skip exits before ledgerSubmittedVerdict; existing ledger also requires verdictDetection. Thus no operational bypass record currently exists. Added bounded row5.4 with processor/context/capture/stage/shared summary owner paths, two focused controls; later row7.1 metrics/history must discriminate it rather than count an else branch as failure.
+
+R9 (parent R15): Operational summary verdict BYPASS, disposition bypassed for existing no-judgment bypass action. Authored gate_verdict overall remains PASS|FAIL; client cannot submit BYPASS grade. Explicit union, no DDL. Fold/stat/history/export readers must exclude it from graded PASS/FAIL tallies. Use context/service setter facades and immutable array replacements, not direct mutations. Actual skip capture and cold/history controls required. Alternative/override are recorded only where existing owned actions support them; no invented new action surface.
+
+F13: Parent PR boundary identified schema import-x/order and unnecessary reverse-reviewer assertion diagnostics. Added row1.4 one-source hygiene repair, no runtime/schema behavior change or baseline waiver. Parent separately owns derived module catalog/legitimate Knip decrease. Parent also identified missing child plan tags/notes frontmatter; corrected both canonical metadata contracts in planner-owned artifacts.
+
+Isolation receipt: custody-only ten source/test paths saved in immutable stash45c9daeaa3d4f18acd4152c258caef593955dbd7 before one-file repair so its hook/source gate can run on complete schema base. Child plan/notes remain present. Restore by exact OID after schema repair commit, never global stash@0. Current source worker idle at isolation; no other worktree or source touched.
+
+## H2.2: parser/getter/validator artifact controls accepted (2026-10-07)
+
+Canonical parser retains original submission; raw is display only. Getter/validator keep objects and trim only strings; defensive syntax reuses kernel report/observation schemas. Focused engine reader tests34baseline ->99passing; getter flattening and parsed-submission drop each failed one retention control then restored; four-source cognitive probe0violations at15; formatting/diff green. Additional structured-source control failed before guard, passed after: object only from gate_verdict, legacy string source handling retained. Five downstream authority/processor/temp-registrar/stage type errors remain explicitly owned by next rows3.1/3.2. This is artifact acceptance pending coherent custody commit, not source boundary acceptance.
+
+## H1.4: independent schema hygiene accepted (2026-10-07)
+
+Spot-read exact one-file diff: canonical type-import ordering fixed; redundant optional-reviewer cast replaced with conditional subtype proof assigned true and consumed by void. No runtime validation behavior change. Exact schema ESLint two diagnostics ->0; npm run typecheck exit0 on complete preserved schema base; formatter/diff green. Parent-requested child metadata corrected: tags plus implementation-notes canonical frontmatter. Custody row2.1 remains OPEN until restored artifact joins coherent consumer commit, avoiding done code claims in the independently delivered repair snapshot.
 
 DEV-P0-2: Parent corrected plan-row hygiene. Replaced letter task IDs with 25 numeric-dotted rows, added explicit St stamps, removed previous-tier entries from Depends, and recorded previous-tier gate entry requirements. tracking_reason corrected to operator-opt-out. Actual canonical auditPlanText/auditOpenRows/auditClosedRows/auditTableContiguity functions run against child plan: no violations; 25 stamped open rows; no done paths yet. The untracked plan was passed directly to audit functions because the ordinary command scans tracked files only.
