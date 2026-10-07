@@ -58,8 +58,8 @@ a hosted workflow ran successfully.
 The [gate specialization](gates/contracts.ts) validates public criteria through the
 canonical server schema, using the shared criterion types. It specializes the existing
 `suite` archive payload rather than creating a second archive or gate-definition authority.
-It currently supplies suite contracts, readiness checks and an adapter-facing projection;
-there is no live calibration runner or calibration report yet. Committed gate tests are
+It supplies suite contracts, readiness checks, an adapter-facing projection, explicit
+callback invocation, verified replay and a pure report projection. Committed gate tests are
 synthetic development controls, not actual private pilot cases or evidence of model accuracy.
 
 Each suite binds its ID/revision aliases, gate ID/definition digest and exact ordered
@@ -85,6 +85,100 @@ Those references and reviewer identifiers represent supplied authority, not veri
 identity or proof that the review occurred. Agent review cannot establish human calibration,
 and readiness alone grants no automatic promotion authority. Suite targets and review receipts
 are lifted into the canonical archive's dependency references so publication resolves them.
+
+## Explicit calibration invocation and reports
+
+[`runGateCalibration`](gates/calibration.ts) takes an opened archive, private suite,
+public rubric, canonical resolved gate snapshot blob, evaluator metadata, an explicit
+attempt inventory and an asynchronous callback. There is no provider integration or
+automatic client selection. The caller owns client execution, deadlines, cancellation
+and globally unique attempt identities. Each attempt uses all seven canonical identity
+fields: `experiment_id`, `task_id`, `variant_id`, `client`, `arm`, `repetition` and
+`attempt_id`. Duplicate identities within a request and an identical already-started
+trial are refused; the existing-start check is not an atomic global identity registry.
+Allocate a fresh identity for every retry and coordinate concurrent callers yourself.
+
+The callback receives only target content/reference, public rubric and an independently
+pinned report binding. It returns `{ state: "completed", report }`,
+`{ state: "incomplete", code: "timeout" | "cancelled" | "no_report" }`, or
+`{ state: "error", code: "client_error" | "timeout" }`, with optional `observed`
+and `artifact_refs`. A callback exception becomes an error outcome; malformed reports
+remain invalid outcomes. Archive failures propagate. Reserved cases and currently
+unsupported artifact targets are recorded as unattempted without calling the adapter.
+Every accepted request archives its immutable trial starts before invoking callbacks.
+
+Use the existing server `tsx` loader for a checkout script importing these `.ts` APIs:
+
+```typescript
+import {
+  runGateCalibration,
+  replayGateCalibration,
+} from "./gates/calibration.ts";
+import {
+  projectGateCalibration,
+  compareGateCalibrationReports,
+} from "./gates/report.ts";
+
+// invocationOptions supplies archive, suite, public_rubric, gate_snapshot,
+// evaluator, attempts and the caller's adapter implementation.
+const run = await runGateCalibration(invocationOptions);
+const verified = await replayGateCalibration(
+  invocationOptions.archive,
+  run.invocation_ref,
+);
+const report = projectGateCalibration(verified);
+// Optional planned inventory may include attempts absent from this verified invocation.
+const withMissing = projectGateCalibration(verified, {
+  requested: plannedAttempts,
+});
+const comparison = compareGateCalibrationReports(report, otherVerifiedReport);
+```
+
+`replayGateCalibration` resolves immutable gate, suite, rubric, evaluator, target, report,
+trial and grade references, verifies their dependency closure and re-adjudicates report
+bytes against independent bindings. Disposable runtime history is not needed. The
+canonical raw-report blob is the callback's report JSON; it is not a native execution
+trace. Actual client trace/receipt references must be supplied separately through
+`artifact_refs`. Supplied evaluator revisions and adapter/source metadata do not prove
+which native provider or code revision executed.
+
+[`projectGateCalibration`](gates/report.ts) performs no I/O and requires verified replay
+output. Its default inventory is the verified replay manifest. Optional `requested`
+inventory is explicitly `caller_declared`, validates the canonical identity/case bindings
+and rejects duplicates, unknown cases, extraneous grades or mismatched bindings. Suite
+cases outside that inventory are unrequested cases, not missing attempts. Reserved
+material receives no grade. The projection assesses `semantic_components`; full gate
+acceptance remains `not_assessed` because runtime enforcement and other components
+are outside these records.
+
+Only valid, complete accepted/rejected outcomes with reviewed expected labels enter
+TP/FP/TN/FN counts. False acceptance is `FP / (FP + TN)` and false rejection is
+`FN / (TP + FN)`; a zero denominator yields `null`. Insufficient evidence, invalid
+reports, errors, incomplete, unattempted and missing outcomes each retain the total
+requested-attempt denominator. Unreviewed labels are separately counted. Criterion
+matches/mismatches, including correct abstentions, describe expected-state agreement;
+they are not binary accuracy. Repeat summaries compare valid binary outcome signatures
+(acceptance and criterion states), retain abstentions and other outcomes separately,
+and show distinct cases plus extra requested attempts. Repeated outputs do not supply
+new independent task evidence. Timing, usage and cost remain explicitly unknown.
+
+Complete `client_reported` provider/model/revision/known-context tuples group reported
+configurations. Cross-configuration disagreement describes differing binary signatures
+on shared cases; within-configuration instability can contribute to it. These groups
+are not reviewer instances. Reviewer disagreement remains unavailable because the
+contract carries no instance IDs or independently verified native identities. Omitted
+revisions/context stay unknown; requested evaluator metadata and `identity.client`
+are never substituted for observations.
+
+`compareGateCalibrationReports` permits comparison only for identical gate, suite,
+rubric and evaluator/configuration references plus identical selected case/target
+coverage. It returns explicit incompatible binding names, without pooling records.
+Compatibility alone establishes neither independent judgments nor model quality. A
+future matched pilot must freeze both presentation templates in one experiment
+configuration up front, selecting the treatment by canonical `arm` identity; changing
+configuration between arms makes those reports incompatible. Software controls do
+not establish live client integration, human calibration, native provider identity,
+promotion eligibility or hosted CI success.
 
 ## Records and references
 
