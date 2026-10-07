@@ -39,7 +39,7 @@ export interface SemanticCriterion {
 
 /** Authoring input permits omission of the policy whose default is false. */
 export type SemanticCriterionInput = Omit<SemanticCriterion, 'allow_not_applicable'> & {
-  readonly allow_not_applicable?: boolean;
+  readonly allow_not_applicable?: boolean | undefined;
 };
 
 /** Half-open span in the captured target; the kernel validates bounds and optional quote. */
