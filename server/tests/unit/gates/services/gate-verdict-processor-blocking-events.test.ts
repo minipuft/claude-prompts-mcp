@@ -25,8 +25,10 @@ import { GateEnforcementAuthority } from '../../../../src/engine/execution/pipel
 import {
   bindSemanticReviewTarget,
   createSemanticReviewContext,
+  resolvePinnedSemanticContext,
 } from '../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { evaluateSemanticEvaluation } from '../../../../src/engine/gates/core/semantic-evaluation.js';
 import { hashBytes } from '../../../../src/shared/utils/hash.js';
 
 import type { Logger } from '../../../../src/infra/logging/index.js';
@@ -204,6 +206,19 @@ function custodyFixture(kind: 'ordinary' | 'detached', verdict: McpToolRequest['
         ...held,
         kind: kind === 'detached' ? 'detached' : 'gate',
         reviewedOutput: 'A😀e\u0301 Z',
+        semanticContext: bindSemanticReviewTarget(
+          createSemanticReviewContext('node-1', 'ordinary-attempt', [
+            {
+              id: 'gate-a',
+              name: 'Carrier gate',
+              type: 'guidance',
+              description: 'Ordinary report custody',
+              enforcementMode: 'blocking',
+              pass_criteria: [{ type: 'inline_guidance' }],
+            },
+          ]),
+          'A😀e\u0301 Z'
+        ),
       },
     },
   };
@@ -253,6 +268,41 @@ function pinReview(fixture: ReturnType<typeof custodyFixture>) {
   const issued = draftSemanticContext();
   review.semanticContext = bindSemanticReviewTarget(issued, 'A😀e\u0301 Z');
   return review;
+}
+
+/** A report whose pins match the server fixture; client flags remain separate claims. */
+function semanticSubmission(issue = 'valid'): GateVerdictSubmission {
+  const snapshot = draftSemanticContext().definitions['gate-a'];
+  if (snapshot === undefined) throw new Error('Draft rubric missing');
+  const base = structuredReview([1], snapshot.definitionDigest);
+  const entry = base.per_gate?.[0];
+  const evaluation = entry?.evaluation;
+  if (entry === undefined || evaluation === undefined) throw new Error('Report fixture missing');
+  const binding = { ...evaluation.binding };
+  if (issue === 'stale-attempt') binding.attempt_id = 'old-attempt';
+  if (issue === 'stale-definition') binding.definition_digest = 'different-definition';
+  if (issue === 'wrong-node') binding.node_id = 'node-2';
+  if (issue === 'wrong-target') binding.target_digest = hashBytes('client substitute');
+  const observations = evaluation.observations.map((observation) => ({
+    ...observation,
+    criterion_id: issue === 'unknown-criterion' ? 'undeclared' : observation.criterion_id,
+    state: issue === 'unmet' ? ('unmet' as const) : ('met' as const),
+    value: issue !== 'unmet',
+    evidence: issue === 'missing-evidence' ? [] : observation.evidence,
+  }));
+  return {
+    ...base,
+    overall: 'PASS',
+    per_gate: [
+      {
+        ...entry,
+        passed: true,
+        ...(issue === 'missing-report'
+          ? { evaluation: undefined }
+          : { evaluation: { ...evaluation, binding, observations } }),
+      },
+    ],
+  };
 }
 
 describe('GateVerdictProcessor attempt renewal', () => {
@@ -318,7 +368,7 @@ describe('GateVerdictProcessor attempt renewal', () => {
   });
 
   test('detached FAIL defers renewal until replacement and returns exactly the persisted pins', async () => {
-    const fixture = custodyFixture('detached', structuredReview());
+    const fixture = custodyFixture('detached', semanticSubmission('unmet'));
     const original = pinReview(fixture);
     const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
     await fixture.submit();
@@ -353,7 +403,7 @@ describe('GateVerdictProcessor attempt renewal', () => {
     async (outcome) => {
       const fixture = custodyFixture(
         'ordinary',
-        outcome === 'passed' ? 'GATE_REVIEW: PASS - Reviewed' : structuredReview()
+        outcome === 'passed' ? semanticSubmission() : semanticSubmission('unmet')
       );
       const original = pinReview(fixture);
       if (outcome === 'cleared') fixture.context.state.gates.enforcementMode = 'advisory';
@@ -370,7 +420,7 @@ describe('GateVerdictProcessor attempt renewal', () => {
   );
 
   test('detached exhausted retry waits for replacement without renewing twice', async () => {
-    const fixture = custodyFixture('detached', structuredReview());
+    const fixture = custodyFixture('detached', semanticSubmission('unmet'));
     const original = pinReview(fixture);
     original.phase = 'exhausted';
     original.attemptCount = 2;
@@ -396,7 +446,7 @@ describe('GateVerdictProcessor attempt renewal', () => {
   });
 
   test('missing authority refuses semantic renewal before counters or review writes', async () => {
-    const fixture = custodyFixture('ordinary', structuredReview());
+    const fixture = custodyFixture('ordinary', semanticSubmission('unmet'));
     pinReview(fixture);
     fixture.context.gateEnforcement = undefined;
     await expect(fixture.submit()).rejects.toThrow('retry requires gate enforcement authority');
@@ -406,7 +456,7 @@ describe('GateVerdictProcessor attempt renewal', () => {
   });
 
   test('refused and terminal replacement attempts do not renew or write', async () => {
-    const fixture = custodyFixture('detached', structuredReview());
+    const fixture = custodyFixture('detached', semanticSubmission('unmet'));
     const original = pinReview(fixture);
     const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
     const processor = new GateVerdictProcessor(
@@ -434,6 +484,241 @@ describe('GateVerdictProcessor attempt renewal', () => {
     expect(fixture.store.setReview).not.toHaveBeenCalled();
     expect(original.semanticContext?.attemptId).toBe('attempt-1');
   });
+});
+
+describe('GateVerdictProcessor pinned semantic adjudication', () => {
+  test.each(['ordinary', 'detached'] as const)(
+    'accepts a complete met report on a %s review',
+    async (kind) => {
+      const submission = semanticSubmission();
+      const fixture = custodyFixture(kind, submission);
+      pinReview(fixture);
+      const result = await fixture.submit();
+      expect(fixture.store.clearReview).toHaveBeenCalled();
+      if (kind === 'ordinary') expect(result).toMatchObject({ passClearedThisCall: true });
+      else expect(result).toMatchObject({ kind: 'recorded', result: 'passed' });
+      expect(fixture.context.state.gates.perGateVerdicts?.[0]?.evaluation).toBe(
+        submission.per_gate?.[0]?.evaluation
+      );
+    }
+  );
+
+  test.each(
+    (['ordinary', 'detached'] as const).flatMap((kind) =>
+      [
+        'unmet',
+        'missing-report',
+        'stale-attempt',
+        'stale-definition',
+        'wrong-node',
+        'wrong-target',
+        'unknown-criterion',
+        'missing-evidence',
+      ].map((issue) => ({ kind, issue }))
+    )
+  )(
+    'client PASS cannot clear $issue evidence on a $kind semantic review',
+    async ({ kind, issue }) => {
+      const submission = semanticSubmission(issue);
+      const original = structuredClone(submission);
+      const fixture = custodyFixture(kind, submission);
+      const held = pinReview(fixture);
+      const before = structuredClone(held);
+      const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
+      const enforcement = jest.spyOn(fixture.authority, 'resolveReviewEnforcement');
+      const result = await fixture.submit();
+      const stale = ['stale-attempt', 'stale-definition', 'wrong-node', 'wrong-target'].includes(
+        issue
+      );
+      if (stale) {
+        expect(fixture.store.recordGateReviewOutcome).not.toHaveBeenCalled();
+        expect(fixture.store.setReview).not.toHaveBeenCalled();
+        expect(renew).not.toHaveBeenCalled();
+        expect(held).toEqual(before);
+        if (kind === 'detached') expect(result).toMatchObject({ kind: 'refused' });
+      } else {
+        expect(fixture.store.recordGateReviewOutcome).toHaveBeenCalledWith('session-1', {
+          verdict: 'FAIL',
+        });
+        expect(fixture.store.setReview.mock.calls.at(-1)?.[1]?.retryHints?.join(' ')).toContain(
+          'Semantic gate'
+        );
+        if (issue === 'missing-report')
+          expect(fixture.store.setReview.mock.calls.at(-1)?.[1]?.retryHints?.join(' ')).toContain(
+            'structured per_gate'
+          );
+        if (kind === 'detached') expect(enforcement.mock.calls[0]?.[1]).toEqual(['gate-a']);
+        expect(fixture.context.state.gates.verdictDetection?.verdict).toBe('FAIL');
+        expect(fixture.context.state.gates.perGateVerdicts?.[0]?.verdict).toBe('PASS');
+        expect(fixture.context.state.gates.perGateVerdicts?.[0]?.evaluation).toBe(
+          submission.per_gate?.[0]?.evaluation
+        );
+      }
+      expect(fixture.store.clearReview).not.toHaveBeenCalled();
+      expect(fixture.store.advanceStep).not.toHaveBeenCalled();
+      if (kind === 'ordinary') expect(result).toMatchObject({ passClearedThisCall: false });
+      else expect(result).not.toMatchObject({ result: 'passed' });
+      expect(submission).toEqual(original);
+    }
+  );
+
+  test.each(['ordinary', 'detached'] as const)(
+    'refuses a %s same-call report until actual prior capture supplies a target',
+    async (kind) => {
+      const fixture = custodyFixture(kind, semanticSubmission());
+      const held = pinReview(fixture);
+      held.semanticContext = draftSemanticContext();
+      const before = structuredClone(held);
+      const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
+      const result = await fixture.submit();
+      expect(fixture.store.setReview).not.toHaveBeenCalled();
+      expect(fixture.store.recordGateReviewOutcome).not.toHaveBeenCalled();
+      expect(fixture.store.clearReview).not.toHaveBeenCalled();
+      expect(renew).not.toHaveBeenCalled();
+      expect(held).toEqual(before);
+      if (kind === 'detached') expect(result).toMatchObject({ kind: 'refused' });
+      else expect(result).toMatchObject({ earlyExit: true, passClearedThisCall: false });
+    }
+  );
+
+  test.each(
+    (['ordinary', 'detached'] as const).flatMap((kind) =>
+      [true, false].map((issued) => ({ kind, issued }))
+    )
+  )(
+    'ordinary legacy PASS remains supported on $kind reviews (issued=$issued)',
+    async ({ kind, issued }) => {
+      const fixture = custodyFixture(kind, 'GATE_REVIEW: PASS - Ordinary gate satisfied');
+      const held = fixture.session.reviews?.['node-1'];
+      if (held === undefined) throw new Error('Missing ordinary review');
+      if (!issued) delete held.semanticContext;
+      await fixture.submit();
+      expect(fixture.store.clearReview).toHaveBeenCalled();
+      expect(fixture.store.recordGateReviewOutcome).toHaveBeenCalledWith('session-1', {
+        verdict: 'PASS',
+      });
+    }
+  );
+
+  test('canonical kernel distinguishes malformed attribution from a captured missing report', () => {
+    const fixture = custodyFixture('ordinary', semanticSubmission());
+    const held = pinReview(fixture);
+    if (held.semanticContext === undefined) throw new Error('Missing server context');
+    const expected = resolvePinnedSemanticContext(held.semanticContext, 'gate-a');
+    const report = semanticSubmission().per_gate?.[0]?.evaluation;
+    const malformed = evaluateSemanticEvaluation(expected, { ...report, binding: null });
+    expect(malformed.issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(['invalid_binding', 'invalid_report'])
+    );
+    const absent = evaluateSemanticEvaluation(expected, undefined);
+    expect(absent.issues.map((issue) => issue.code)).toContain('missing_report');
+    expect(absent.issues.map((issue) => issue.code)).not.toContain('invalid_binding');
+    const corrupt = evaluateSemanticEvaluation(
+      {
+        ...expected,
+        binding: { ...expected.binding, target_digest: hashBytes('wrong persisted bytes') },
+      },
+      undefined
+    );
+    expect(corrupt.issues.map((issue) => issue.code)).toContain('target_digest_mismatch');
+    expect(corrupt.issues.map((issue) => issue.code)).not.toContain('missing_report');
+  });
+
+  test.each(
+    (['ordinary', 'detached'] as const).flatMap((kind) =>
+      ['missing-context', 'corrupt-target', 'duplicate-criteria'].map((issue) => ({ kind, issue }))
+    )
+  )(
+    'refuses $issue server authority on a $kind review without charging or changing it',
+    async ({ kind, issue }) => {
+      const fixture = custodyFixture(kind, semanticSubmission());
+      const held = pinReview(fixture);
+      const issued = held.semanticContext;
+      if (issued === undefined || issued.target === undefined)
+        throw new Error('Missing fixture authority');
+      if (issue === 'missing-context') delete held.semanticContext;
+      if (issue === 'corrupt-target')
+        held.semanticContext = {
+          ...issued,
+          target: { ...issued.target, digest: hashBytes('bad persisted target') },
+        };
+      if (issue === 'duplicate-criteria') {
+        const snapshot = issued.definitions['gate-a'];
+        const criteria = snapshot?.definition['pass_criteria'];
+        if (snapshot === undefined || !Array.isArray(criteria)) throw new Error('Missing rubric');
+        held.semanticContext = {
+          ...issued,
+          definitions: {
+            ...issued.definitions,
+            'gate-a': {
+              ...snapshot,
+              definition: { ...snapshot.definition, pass_criteria: [...criteria, ...criteria] },
+            },
+          },
+        };
+      }
+      const before = structuredClone(held);
+      const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
+      const result = await fixture.submit();
+      if (issue === 'missing-context') {
+        if (kind === 'detached')
+          expect(result).toMatchObject({
+            kind: 'refused',
+            message: expect.stringContaining(
+              'Open a fresh server-issued review, then capture the node'
+            ),
+          });
+        else
+          expect(fixture.context.response).toMatchObject({
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: expect.stringContaining(
+                  'Open a fresh server-issued review, then capture the node'
+                ),
+              },
+            ],
+          });
+      }
+      expect(fixture.store.setReview).not.toHaveBeenCalled();
+      expect(fixture.store.clearReview).not.toHaveBeenCalled();
+      expect(fixture.store.recordGateReviewOutcome).not.toHaveBeenCalled();
+      expect(renew).not.toHaveBeenCalled();
+      expect(held).toEqual(before);
+    }
+  );
+
+  test.each(['ordinary', 'detached'] as const)(
+    'preserves conservative client FAIL with otherwise met evidence on a %s review',
+    async (kind) => {
+      const passed = semanticSubmission();
+      const submission: GateVerdictSubmission = {
+        ...passed,
+        overall: 'FAIL',
+        per_gate: passed.per_gate?.map((entry) => ({ ...entry, passed: false })),
+      };
+      const fixture = custodyFixture(kind, submission);
+      pinReview(fixture);
+      await fixture.submit();
+      expect(fixture.store.clearReview).not.toHaveBeenCalled();
+      expect(fixture.store.recordGateReviewOutcome).toHaveBeenCalledWith('session-1', {
+        verdict: 'FAIL',
+      });
+    }
+  );
+
+  test.each(['ordinary', 'detached'] as const)(
+    'legacy PASS cannot stand in for a required semantic report on a %s review',
+    async (kind) => {
+      const fixture = custodyFixture(kind, 'GATE_REVIEW: PASS - Trust the reviewer');
+      pinReview(fixture);
+      const result = await fixture.submit();
+      expect(fixture.store.clearReview).not.toHaveBeenCalled();
+      if (kind === 'ordinary') expect(result).toMatchObject({ passClearedThisCall: false });
+      else expect(result).not.toMatchObject({ result: 'passed' });
+    }
+  );
 });
 
 describe('GateVerdictProcessor typed report custody', () => {

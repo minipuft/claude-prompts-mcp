@@ -2,11 +2,20 @@
 import { advanceReview } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
 import { resolveReviewTarget } from '../../execution/pipeline/decisions/gates/review-target.js';
 import {
+  readSemanticReviewCriteria,
+  resolvePinnedSemanticContext,
+} from '../../execution/pipeline/decisions/gates/semantic-review-context.js';
+import {
   isUnknownInterruptPending,
   resolveEnforcementMode,
 } from '../../execution/pipeline/decisions/index.js';
 import { buildPipelineHookContext } from '../../execution/pipeline/hook-context.js';
 import { parseGateVerdict } from '../core/gate-verdict-contract.js';
+import {
+  evaluateSemanticEvaluation,
+  semanticAttributionFaults,
+  semanticFailureReasons,
+} from '../core/semantic-evaluation.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateCheckResult, GateReview } from '#shared/types/chain-execution.js';
@@ -106,7 +115,22 @@ type ReviewAnswer =
       readonly enforcement: EnforcementMode;
       /** The gates the verdict failed BY NAME (R107); empty for any other event. */
       readonly failedGateIds: readonly string[];
+      readonly verdict?: ParsedGateVerdict;
     };
+
+type SemanticGateDecision =
+  | { readonly kind: 'passed' }
+  | { readonly kind: 'failed'; readonly gateId: string; readonly hint: string }
+  | { readonly kind: 'refused'; readonly message: string };
+
+type AdjudicatedReviewEvent =
+  | {
+      readonly kind: 'accepted';
+      readonly event: ReviewEvent;
+      readonly review: GateReview;
+      readonly failedGateIds: readonly string[];
+    }
+  | { readonly kind: 'refused'; readonly message: string };
 
 /** One event reaching the one review path, and how to find — or open — the review it answers. */
 interface ReviewEntry {
@@ -210,13 +234,14 @@ export class GateVerdictProcessor {
       return answer;
     }
     const { review, advance } = answer;
-    this.recordVerdictDetection(context, payload, advance.outcome, review.nodeId);
+    const effectiveVerdict = answer.verdict ?? payload;
+    this.recordVerdictDetection(context, effectiveVerdict, advance.outcome, review.nodeId);
     const passed = advance.outcome === 'passed';
     await this.emitGateEvents(
       context,
       passed ? 'passed' : 'failed',
       [...review.gateIds],
-      payload.rationale
+      effectiveVerdict.rationale
     );
     return {
       kind: 'recorded',
@@ -593,7 +618,8 @@ export class GateVerdictProcessor {
     }
 
     const { review, advance } = answer;
-    this.recordVerdictDetection(context, verdictPayload, advance.outcome, review.nodeId);
+    const effectiveVerdict = answer.verdict ?? verdictPayload;
+    this.recordVerdictDetection(context, effectiveVerdict, advance.outcome, review.nodeId);
     let deferredAdvance: DeferredAdvance | undefined;
     if (advance.outcome === 'passed') {
       deferredAdvance = {
@@ -609,11 +635,16 @@ export class GateVerdictProcessor {
       if (review.gateIds.includes('__phase_guard__')) {
         context.state.gates.phaseGuardReviewClearedNodeId = review.nodeId;
       }
-      await this.emitGateEvents(context, 'passed', [...review.gateIds], verdictPayload.rationale);
+      await this.emitGateEvents(context, 'passed', [...review.gateIds], effectiveVerdict.rationale);
     } else if (advance.review !== null && answer.enforcement === 'blocking') {
-      await this.handleBlockingFail(context, advance, verdictPayload);
+      await this.handleBlockingFail(context, advance, effectiveVerdict);
     } else {
-      deferredAdvance = await this.handleNonBlockingFail(context, session, answer, verdictPayload);
+      deferredAdvance = await this.handleNonBlockingFail(
+        context,
+        session,
+        answer,
+        effectiveVerdict
+      );
     }
 
     if (advance.review === null) {
@@ -758,12 +789,7 @@ export class GateVerdictProcessor {
     const { trailerNodeId } = entry;
     const target = addressedReview(session, trailerNodeId);
     const currentNodeId = session.state.currentNodeId;
-    const found =
-      target.kind === 'review'
-        ? session.reviews?.[target.nodeId]
-        : target.reason === 'no-review' && trailerNodeId === undefined && currentNodeId !== null
-          ? await entry.open?.(currentNodeId)
-          : undefined;
+    const found = await this.findAddressedReview(session, entry, target);
     if (found === undefined) {
       const ordinal = currentNodeId === null ? -1 : ordinalOf(session.state.nodes, currentNodeId);
       const message = describeMissingReview(target, trailerNodeId, ordinal);
@@ -771,13 +797,19 @@ export class GateVerdictProcessor {
     }
     const review = entry.grade === undefined ? found : await entry.grade(found);
 
-    const event = this.markUnanswered(entry, review.nodeId, session);
-    const failedGateIds =
+    const adjudicated = this.adjudicateReviewEvent(
+      review,
+      this.markUnanswered(entry, review.nodeId, session)
+    );
+    if (adjudicated.kind === 'refused') return adjudicated;
+    const { event } = adjudicated;
+    const reportedFailures =
       event.type === 'verdict' ? this.recordPerGateVerdicts(context, event.verdict, review) : [];
+    const failedGateIds = [...new Set([...reportedFailures, ...adjudicated.failedGateIds])];
     const enforcement = await this.resolveFailEnforcement(context, review, failedGateIds);
     const advance = this.applyReviewAttemptIntent(
       context,
-      advanceReview(review, event, enforcement)
+      advanceReview(adjudicated.review, event, enforcement)
     );
     // Validate structured indexes and renewal authority before any freshly graded review write.
     // A renewed review is persisted below once; the original stays available to failed capture.
@@ -797,7 +829,106 @@ export class GateVerdictProcessor {
     } else {
       await this.chainSessionStore.setReview(session.sessionId, advance.review);
     }
-    return { kind: 'answered', review, advance, enforcement, failedGateIds };
+    return {
+      kind: 'answered',
+      review,
+      advance,
+      enforcement,
+      failedGateIds,
+      ...(event.type === 'verdict' ? { verdict: event.verdict } : {}),
+    };
+  }
+
+  private async findAddressedReview(
+    session: ChainSession,
+    entry: ReviewEntry,
+    target: ReturnType<typeof addressedReview>
+  ): Promise<GateReview | undefined> {
+    const currentNodeId = session.state.currentNodeId;
+    return target.kind === 'review'
+      ? session.reviews?.[target.nodeId]
+      : target.reason === 'no-review' && entry.trailerNodeId === undefined && currentNodeId !== null
+        ? entry.open?.(currentNodeId)
+        : undefined;
+  }
+
+  /** One adjudication seam for ordinary and detached verdicts; report data supplies no authority. */
+  private adjudicateReviewEvent(review: GateReview, event: ReviewEvent): AdjudicatedReviewEvent {
+    if (event.type !== 'verdict') return { kind: 'accepted', event, review, failedGateIds: [] };
+    const issued = review.semanticContext;
+    if (issued === undefined) {
+      return event.verdict.submission?.per_gate?.some((entry) => entry.evaluation !== undefined) ===
+        true
+        ? {
+            kind: 'refused',
+            message: 'Open a fresh server-issued review, then capture the node.',
+          }
+        : { kind: 'accepted', event, review, failedGateIds: [] };
+    }
+    if (issued.nodeId !== review.nodeId) {
+      return {
+        kind: 'refused',
+        message: 'Server review context names a different node; no attempt was charged.',
+      };
+    }
+    let decisions: SemanticGateDecision[];
+    try {
+      decisions = Object.entries(issued.definitions)
+        .filter(([, snapshot]) => readSemanticReviewCriteria(snapshot).length > 0)
+        .map(([gateId]) => this.adjudicateSemanticGate(review, event.verdict, gateId));
+    } catch (error) {
+      return {
+        kind: 'refused',
+        message: `Semantic review context unavailable: ${error instanceof Error ? error.message : 'unavailable context'}`,
+      };
+    }
+    const refused = decisions.find((decision) => decision.kind === 'refused');
+    if (refused !== undefined) return refused;
+    const failed = decisions.filter((decision) => decision.kind === 'failed');
+    if (failed.length === 0) return { kind: 'accepted', event, review, failedGateIds: [] };
+    const hints = failed.map((decision) => decision.hint);
+    const verdict: ParsedGateVerdict = {
+      ...event.verdict,
+      verdict: 'FAIL',
+      rationale: hints.join('; '),
+    };
+    return {
+      kind: 'accepted',
+      event: { ...event, verdict },
+      review: { ...review, retryHints: [...new Set([...(review.retryHints ?? []), ...hints])] },
+      failedGateIds: failed.map((decision) => decision.gateId),
+    };
+  }
+
+  private adjudicateSemanticGate(
+    review: GateReview,
+    verdict: ParsedGateVerdict,
+    gateId: string
+  ): SemanticGateDecision {
+    const issued = review.semanticContext;
+    const index = review.gateIds.indexOf(gateId) + 1;
+    if (issued === undefined || index === 0) {
+      return {
+        kind: 'refused',
+        message: `Server semantic definition '${gateId}' is not available in this review.`,
+      };
+    }
+    const expected = resolvePinnedSemanticContext(issued, gateId);
+    const report = verdict.submission?.per_gate?.find((entry) => entry.index === index)?.evaluation;
+    const result = evaluateSemanticEvaluation(expected, report);
+    const faults = semanticAttributionFaults(result);
+    if (faults.length > 0) {
+      return {
+        kind: 'refused',
+        message: `Semantic report for '${gateId}' refused: ${faults.map((entry) => entry.message).join('; ')}. Capture the current attempt before reviewing it.`,
+      };
+    }
+    if (result.passed) return { kind: 'passed' };
+    return {
+      kind: 'failed',
+      gateId,
+      hint: `Semantic gate '${gateId}' failed: ${semanticFailureReasons(result).join('; ')}`,
+    };
   }
 
   /** Apply lifecycle intent through the existing authority before announcing or persisting it. */

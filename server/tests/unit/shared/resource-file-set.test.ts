@@ -15,13 +15,18 @@
  * asserting against the mock's idea of a symlink rather than the platform's.
  */
 
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 
+import { readResourceTree } from '../../../src/cli-shared/object-store.js';
+import { writeRestoredFiles } from '../../../src/modules/versioning/byte-restore.js';
+import { projectGateSnapshot } from '../../../src/modules/versioning/projections/gate-snapshot.js';
+import { planRestore } from '../../../src/modules/versioning/restore-plan.js';
 import { resourceFileSet } from '../../../src/shared/utils/resource-file-set.js';
+import { parseYamlOrThrow } from '../../../src/shared/utils/yaml/yaml-parser.js';
 
 import type {
   ResourceFileEntry,
@@ -291,6 +296,136 @@ describe('resourceFileSet — gate', () => {
     await expect(resourceFileSet({ resourceType: 'gate', entryPath: entry })).rejects.toThrow(
       /outside its root/
     );
+  });
+});
+
+describe('passive draft semantic gate capture and restore inventory', () => {
+  // This is plain YAML data for the passive seams, not a live GateLoader acceptance claim.
+  // The path-looking association deliberately names an existing private file: treating the
+  // opaque identifier as a reference would leak its bytes into the same recorded tree.
+  const definition = {
+    id: 'draft',
+    name: 'Draft public gate',
+    type: 'validation',
+    description: 'Synthetic public definition',
+    guidanceFile: 'guidance.md',
+    calibration_suite_id: 'private-labels.json',
+    pass_criteria: [
+      {
+        type: 'semantic_evaluation',
+        id: 'public-contract',
+        target: { kind: 'step_output' },
+        question: 'Does the output preserve the public contract?',
+        evidence_requirements: { min_items: 1 },
+        result: { kind: 'boolean' },
+        acceptance: { kind: 'equals', value: true },
+        allow_not_applicable: false,
+      },
+      { type: 'shell_verify', shell_command: ['node', 'check.js'] },
+    ],
+  };
+  const publicBytes = {
+    'gate.yaml': `# synthetic public draft\n${JSON.stringify(definition, null, 2)}\n`,
+    'guidance.md': 'PUBLIC_GUIDANCE_SENTINEL\r\n',
+    'check.js': '// PUBLIC_SCRIPT_SENTINEL\nprocess.exit(0);\n',
+  };
+  const privatePaths = ['private-labels.json', 'cases/c01.json', 'sibling/gate.yaml'];
+
+  async function fixture(): Promise<string> {
+    for (const [relative, bytes] of Object.entries(publicBytes)) {
+      await write(`gates/draft/${relative}`, bytes);
+    }
+    for (const relative of privatePaths) {
+      await write(`gates/draft/${relative}`, `PRIVATE_SENTINEL:${relative}`);
+    }
+    return path.join(root, 'gates/draft/gate.yaml');
+  }
+
+  it('projects the complete public criterion and opaque ID and captures only owned files', async () => {
+    const entry = await fixture();
+    const parsed = parseYamlOrThrow<Record<string, unknown>>(await readFile(entry, 'utf8'));
+    const snapshot = projectGateSnapshot('draft', {
+      name: parsed['name'],
+      type: parsed['type'],
+      description: parsed['description'],
+      guidance: await readFile(path.join(path.dirname(entry), 'guidance.md'), 'utf8'),
+      definition: parsed,
+    });
+    expect(snapshot['pass_criteria']).toEqual(definition.pass_criteria);
+    expect(snapshot['calibration_suite_id']).toBe('private-labels.json');
+    expect(snapshot['guidance']).toBe(publicBytes['guidance.md']);
+    expect(snapshot).not.toHaveProperty('guidanceFile');
+    expect(JSON.stringify(snapshot)).not.toContain('PRIVATE_SENTINEL');
+
+    const files = await resourceFileSet({ resourceType: 'gate', entryPath: entry });
+    expect(paths(files.files)).toEqual(['gate.yaml', 'guidance.md', 'check.js']);
+    const captured = await readResourceTree(files);
+    if ('reason' in captured) throw new Error(captured.reason);
+    // Observing all three known public byte strings guards against a vacuous empty capture.
+    expect(captured.tree.entries.map((file) => file.path)).toEqual(paths(files.files));
+    for (const file of captured.tree.entries) {
+      expect(Buffer.from(file.bytes).toString('utf8')).toBe(
+        publicBytes[file.path as keyof typeof publicBytes]
+      );
+      expect(Buffer.from(file.bytes).toString('utf8')).not.toContain('PRIVATE_SENTINEL');
+    }
+
+    const absent = projectGateSnapshot('plain', {
+      name: 'Plain',
+      type: 'validation',
+      description: 'No association',
+      guidance: '',
+      definition: {},
+    });
+    expect(absent).not.toHaveProperty('calibration_suite_id');
+    expect(absent).not.toHaveProperty('pass_criteria');
+  });
+
+  it('restores recorded public bytes while private cases, labels and sibling bytes stay changed', async () => {
+    const entry = await fixture();
+    const files = await resourceFileSet({ resourceType: 'gate', entryPath: entry });
+    const captured = await readResourceTree(files);
+    if ('reason' in captured) throw new Error(captured.reason);
+    // Keep declared references present so the current inventory observes every changed file.
+    await write('gates/draft/gate.yaml', `${publicBytes['gate.yaml']}# changed public bytes\n`);
+    await write('gates/draft/guidance.md', 'changed public guidance');
+    await write('gates/draft/check.js', 'changed public script');
+    for (const relative of privatePaths) {
+      await write(`gates/draft/${relative}`, `CHANGED_PRIVATE_SENTINEL:${relative}`);
+    }
+    const currentFiles = await resourceFileSet({ resourceType: 'gate', entryPath: entry });
+    const current = await readResourceTree(currentFiles);
+    if ('reason' in current) throw new Error(current.reason);
+    const result = planRestore({
+      resourceType: 'gate',
+      resourceId: 'draft',
+      version: 1,
+      destinationRoot: files.resourceRoot,
+      destinationOrigin: files.origin,
+      recordedOrigin: files.origin,
+      target: captured.tree.entries,
+      current: current.tree.entries,
+    });
+    if (!result.ok) throw new Error(result.refusal);
+    expect(result.plan.write.map((file) => file.path)).toEqual([
+      'check.js',
+      'gate.yaml',
+      'guidance.md',
+    ]);
+    expect(result.plan.unchanged).toEqual([]);
+    expect(result.plan.leftInPlace).toEqual([]);
+    await writeRestoredFiles(
+      result.plan,
+      new Map(captured.tree.entries.map((file) => [file.hash, file.bytes]))
+    );
+    for (const [relative, bytes] of Object.entries(publicBytes)) {
+      expect(await readFile(path.join(files.resourceRoot, relative), 'utf8')).toBe(bytes);
+    }
+    for (const relative of privatePaths) {
+      expect(await readFile(path.join(files.resourceRoot, relative), 'utf8')).toBe(
+        `CHANGED_PRIVATE_SENTINEL:${relative}`
+      );
+    }
   });
 });
 
