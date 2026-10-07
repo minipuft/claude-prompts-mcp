@@ -1,4 +1,4 @@
-// @lifecycle canonical - Renders a structured gate verdict into the canonical parseable form.
+// @lifecycle canonical - Renders gate verdict display text and the legacy parseable form.
 /**
  * Structured gate verdict submission.
  *
@@ -8,15 +8,15 @@
  * sixth for the nested `GATE_VERDICTS` block. A model that got the format wrong
  * produced `null` and the review was lost.
  *
- * This module is the structured alternative: the submission is an object the
- * schema validates, and rendering turns it into the canonical `full-hyphen`
- * form the parser already accepts. Nothing downstream changes — `gate_verdict`
- * stays a `string` at `execution-context.ts` and `request-validator.ts`, both
- * of which consume a verdict that was already parsed.
+ * This module renders the submission's display fields into the canonical
+ * `full-hyphen` form the legacy parser accepts. Structured semantic evaluation
+ * data is not encoded or rendered into the rationale. Rendered text cannot
+ * preserve evaluation reports; consumers needing them must retain the typed
+ * submission separately.
  *
  * **Render-then-parse is only sound if it is lossless.** That is the property
- * the tests assert directly: for every valid submission, parsing the rendered
- * string returns exactly the submission. The constraints that make it hold are
+ * the tests assert for ordinary verdict fields: parsing the rendered string
+ * returns their original values. The constraints that make it hold are
  * enforced on the *input* rather than repaired here, because a renderer that
  * silently rewrote a rationale would lose the reviewer's words — a quieter
  * version of the bug this replaces:
@@ -33,44 +33,11 @@
  * the remainder of the line verbatim.
  */
 
-/** One gate's result within a submission. */
-export interface GateVerdictEntry {
-  /** 1-based position in the gate list the response advertised. */
-  readonly index: number;
-  readonly passed: boolean;
-  readonly rationale: string;
-}
-
-/** One reminder-tier gate the reviewer declares inapplicable, with the reason. */
-export interface GateVerdictReminderExemption {
-  readonly id: string;
-  readonly reason: string;
-}
-
-/**
- * The whole attestation for a review's reminder-tier gates — one field, not one entry per gate
- * (ruling B4).
- *
- * A reminder has no evaluator, so a per-gate rationale for one is the model grading its own
- * output: nine measured dispatches produced five "not applicable" rationales per run and caught
- * nothing. `satisfied` lists the ids the reviewer attests to; `not_applicable` carries the ids
- * that did not apply, each with its reason, because "n/a" without one is the same empty token
- * the per-gate slots were collecting.
- */
-export interface GateVerdictReminders {
-  readonly satisfied: readonly string[];
-  readonly not_applicable: readonly GateVerdictReminderExemption[];
-}
-
-/** A complete gate review, structured rather than formatted. */
-export interface GateVerdictSubmission {
-  readonly overall: 'PASS' | 'FAIL';
-  readonly rationale: string;
-  /** Omitted when the review is a single overall verdict. */
-  readonly per_gate?: readonly GateVerdictEntry[] | undefined;
-  /** Omitted when the review advertised no reminder-tier gates. */
-  readonly reminders?: GateVerdictReminders | undefined;
-}
+import type {
+  GateVerdictReminderExemption,
+  GateVerdictReminders,
+  GateVerdictSubmission,
+} from '#shared/types/gate-evaluation.js';
 
 /** Canonical prefix — the `full-hyphen` pattern, which is `primary` priority. */
 const VERDICT_PREFIX = 'GATE_REVIEW:';
@@ -90,7 +57,8 @@ function verdictWord(passed: boolean): 'PASS' | 'FAIL' {
 }
 
 /**
- * Render a submission into the canonical string the verdict parser accepts.
+ * Render ordinary verdict fields into the canonical string the legacy parser accepts.
+ * Evaluation reports remain on the typed input; this output cannot serialize them.
  *
  * The overall verdict is the first line because `parseGateVerdict` validates
  * only the first non-empty one. Per-gate lines follow under their header with

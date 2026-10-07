@@ -1,4 +1,4 @@
-// @lifecycle canonical - Dependency-free semantic gate contracts shared by runtime and calibration.
+// @lifecycle canonical - Dependency-free gate review contracts shared by runtime and calibration.
 
 /** Public result domains; score anchors describe the scale, including both endpoints. */
 export type SemanticResultDomain =
@@ -78,6 +78,55 @@ interface CapturedSemanticTarget {
 export interface SemanticEvaluationReport {
   readonly binding: SemanticEvaluationBinding;
   readonly observations: readonly SemanticObservation[];
+  /** Optional client claim; absence means unknown, and identity supplies no acceptance authority. */
+  readonly reviewer?: {
+    readonly provenance: 'client_reported' | 'unknown';
+    readonly provider?: string;
+    readonly model?: string;
+    readonly revision?: string;
+    readonly context?: 'self' | 'separate_pass' | 'isolated_judge' | 'unknown';
+  };
+}
+
+/** One gate's result within a submission. */
+export interface GateVerdictEntry {
+  /** 1-based position in the gate list the response advertised. */
+  readonly index: number;
+  readonly passed: boolean;
+  readonly rationale: string;
+  /** Structured evidence travels separately from the display rationale. */
+  readonly evaluation?: SemanticEvaluationReport;
+}
+
+/** One reminder-tier gate the reviewer declares inapplicable, with the reason. */
+export interface GateVerdictReminderExemption {
+  readonly id: string;
+  readonly reason: string;
+}
+
+/**
+ * The whole attestation for a review's reminder-tier gates — one field, not one entry per gate
+ * (ruling B4).
+ *
+ * A reminder has no evaluator, so a per-gate rationale for one is the model grading its own
+ * output: nine measured dispatches produced five "not applicable" rationales per run and caught
+ * nothing. `satisfied` lists the ids the reviewer attests to; `not_applicable` carries the ids
+ * that did not apply, each with its reason, because "n/a" without one is the same empty token
+ * the per-gate slots were collecting.
+ */
+export interface GateVerdictReminders {
+  readonly satisfied: readonly string[];
+  readonly not_applicable: readonly GateVerdictReminderExemption[];
+}
+
+/** A complete gate review, structured rather than formatted. */
+export interface GateVerdictSubmission {
+  readonly overall: 'PASS' | 'FAIL';
+  readonly rationale: string;
+  /** Omitted when the review is a single overall verdict. */
+  readonly per_gate?: readonly GateVerdictEntry[] | undefined;
+  /** Omitted when the review advertised no reminder-tier gates. */
+  readonly reminders?: GateVerdictReminders | undefined;
 }
 
 /** Caller-supplied authority; a submitted report cannot supply or replace this context. */

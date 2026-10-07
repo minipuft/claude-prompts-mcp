@@ -28,7 +28,7 @@ import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline
 import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
 
-import type { GateVerdictSubmission } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
+import type { GateVerdictSubmission } from '../../../src/shared/types/gate-evaluation.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ChainSession, ChainSessionService } from '../../../src/shared/types/index.js';
 

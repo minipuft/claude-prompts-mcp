@@ -11,13 +11,13 @@ import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline
 import type {
   GateVerdictReminders,
   GateVerdictSubmission,
-} from '../../../src/engine/gates/core/gate-verdict-renderer.js';
+  SemanticEvaluationReport,
+} from '../../../src/shared/types/gate-evaluation.js';
 
 /**
- * A structured verdict reaches the pipeline by being rendered to the canonical
- * string the existing parser reads. That is only sound if it is lossless, so
- * the round trip is asserted directly rather than assumed: for every valid
- * submission, parsing what was rendered must return exactly what was submitted.
+ * Ordinary verdict fields render to the canonical string the legacy parser reads.
+ * Their lossless round trip is asserted directly. Structured semantic reports
+ * stay on the typed submission; rendered text cannot preserve them.
  *
  * A renderer that dropped a rationale or truncated a gate list would be a
  * quieter version of the failure this replaces — the old free-text path at
@@ -68,6 +68,51 @@ function roundTrip(submission: GateVerdictSubmission): {
 }
 
 describe('renderGateVerdict round trip', () => {
+  test('leaves a semantic report intact while rendering only ordinary verdict fields', () => {
+    const evaluation: SemanticEvaluationReport = {
+      binding: {
+        gate_id: 'semantic-review',
+        node_id: 'node-1',
+        attempt_id: 'attempt-2',
+        definition_digest: 'definition-digest',
+        target_digest: 'target-digest',
+      },
+      observations: [
+        {
+          criterion_id: 'error-handling',
+          state: 'met',
+          value: true,
+          evidence: [{ target_digest: 'target-digest', start: 2, end: 9, quote: 'handled' }],
+          rationale: 'Captured output handles the error',
+        },
+        {
+          criterion_id: 'coverage',
+          state: 'unmet',
+          value: 2,
+          evidence: [],
+          rationale: 'Coverage is below the rubric threshold',
+        },
+      ],
+    };
+    const originalReport = structuredClone(evaluation);
+    const submission: GateVerdictSubmission = {
+      overall: 'FAIL',
+      rationale: 'One criterion failed',
+      per_gate: [{ index: 1, passed: false, rationale: 'Coverage is insufficient', evaluation }],
+    };
+
+    const rendered = renderGateVerdict(submission);
+
+    expect(submission.per_gate?.[0]?.evaluation).toBe(evaluation);
+    expect(evaluation).toEqual(originalReport);
+    expect(rendered).toBe(
+      'GATE_REVIEW: FAIL - One criterion failed\n\nGATE_VERDICTS:\n[1] FAIL - Coverage is insufficient'
+    );
+    expect(roundTrip(submission).perGate).toEqual([
+      { index: 1, passed: false, rationale: 'Coverage is insufficient' },
+    ]);
+  });
+
   test('preserves a PASS verdict and its rationale', () => {
     const submission: GateVerdictSubmission = {
       overall: 'PASS',

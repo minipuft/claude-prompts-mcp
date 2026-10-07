@@ -19,7 +19,10 @@ import {
   workflowNodeSchema,
 } from './workflow-ir.schema.js';
 
-import type { GateVerdictSubmission } from '#engine/gates/core/gate-verdict-renderer.js';
+import type {
+  GateVerdictSubmission,
+  SemanticEvaluationReport,
+} from '#shared/types/gate-evaluation.js';
 import type { RemainderSubmission } from '#modules/workflow-ir/types.js';
 
 import { isAppendCommand } from '#engine/execution/parsers/append-command-parser.js';
@@ -163,12 +166,79 @@ const singleLineRationale = z
   .min(1, 'Rationale cannot be empty')
   .regex(/^[^\r\n]+$/, 'Rationale must be a single line — no line breaks');
 
+/** Preserve report identities verbatim; empty or whitespace-only identities are invalid. */
+const semanticReportIdentity = z
+  .string()
+  .refine((value) => value.trim().length > 0, 'Report identity cannot be empty');
+
+/** Submitted identity is a client claim, never host-verified evidence or pass authority. */
+const semanticReviewerSchema = z.strictObject(
+  {
+    provenance: z.enum(['client_reported', 'unknown']),
+    provider: semanticReportIdentity.optional(),
+    model: semanticReportIdentity.optional(),
+    revision: semanticReportIdentity.optional(),
+    context: z.enum(['self', 'separate_pass', 'isolated_judge', 'unknown']).optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
+
+/** Boundary validation only; domain acceptance belongs to the defensive semantic kernel. */
+const semanticEvaluationReportSchema = z.strictObject(
+  {
+    binding: z.strictObject(
+      {
+        gate_id: semanticReportIdentity,
+        node_id: semanticReportIdentity,
+        attempt_id: semanticReportIdentity,
+        definition_digest: semanticReportIdentity,
+        target_digest: semanticReportIdentity,
+      },
+      { error: refuseUndeclaredKey }
+    ),
+    observations: z.array(
+      z.strictObject(
+        {
+          criterion_id: semanticReportIdentity,
+          state: z.enum(['met', 'unmet', 'insufficient_evidence', 'not_applicable']),
+          value: z.union([z.boolean(), z.string(), z.number()]).optional(),
+          evidence: z.array(
+            z.strictObject(
+              {
+                target_digest: semanticReportIdentity,
+                start: z.number().int().nonnegative(),
+                end: z.number().int().nonnegative(),
+                quote: z.string().optional(),
+              },
+              { error: refuseUndeclaredKey }
+            )
+          ),
+          rationale: z.string(),
+        },
+        { error: refuseUndeclaredKey }
+      )
+    ),
+    reviewer: semanticReviewerSchema.optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
+
+const _reportSchemaMatchesSharedType: SemanticEvaluationReport = undefined as unknown as z.infer<
+  typeof semanticEvaluationReportSchema
+>;
+// The reverse check catches incompatible reviewer claim vocabulary.
+const _sharedReviewerMatchesSchema: z.infer<typeof semanticReviewerSchema> | undefined =
+  undefined as unknown as SemanticEvaluationReport['reviewer'];
+void _reportSchemaMatchesSharedType;
+void _sharedReviewerMatchesSchema;
+
 /** One gate's result. `index` is 1-based, matching the advertised gate list. */
 export const gateVerdictEntrySchema = z.strictObject(
   {
     index: z.number().int().positive('Gate index is 1-based'),
     passed: z.boolean(),
     rationale: singleLineRationale,
+    evaluation: semanticEvaluationReportSchema.optional(),
   },
   { error: refuseUndeclaredKey }
 );
@@ -241,16 +311,14 @@ export const gateVerdictSubmissionSchema = z.strictObject(
 );
 
 /**
- * The schema and the renderer's input type must stay in step: the renderer is
- * what turns a submission into the string the parser reads, so a field the
- * schema accepted but the renderer did not know about would be dropped without
- * any error. This assignment is never executed — it exists so `tsc` fails on
- * that drift rather than a test catching it later.
+ * The boundary schema and canonical submission type must stay in step. Reports
+ * travel on typed entries separately from the rendered display text. This
+ * never-executed assignment lets `tsc` detect incompatible schema output.
  */
-const _schemaMatchesRenderer: GateVerdictSubmission = undefined as unknown as z.infer<
+const _schemaMatchesSubmission: GateVerdictSubmission = undefined as unknown as z.infer<
   typeof gateVerdictSubmissionSchema
 >;
-void _schemaMatchesRenderer;
+void _schemaMatchesSubmission;
 
 // ---------------------------------------------------------------------------
 // Tool surface resolution
