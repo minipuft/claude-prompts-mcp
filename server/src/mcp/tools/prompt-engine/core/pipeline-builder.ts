@@ -331,14 +331,15 @@ export class PipelineBuilder {
       deps.notificationEmitter,
       // A detached node's review runs its gates' checks against the node's recorded output
       // (row 4.8, R10.3) through the same runners and executor stage 20 uses.
-      async (gateIds, agentResponse, scope) =>
+      async (gateIds, agentResponse, scope, issuedDefinitions) =>
         (
           await runGateReviewEvidence(
             gateIds,
             deps.lightweightGateSystem.gateLoader,
             agentResponse,
             { shellVerifyExecutor, scriptToolRuntime: deps.scriptToolRuntime },
-            scope
+            scope,
+            issuedDefinitions
           )
         ).checkResults
     );

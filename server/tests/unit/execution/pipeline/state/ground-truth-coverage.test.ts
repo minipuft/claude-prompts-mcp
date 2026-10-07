@@ -14,6 +14,7 @@ import {
 } from '../../../../../src/engine/execution/pipeline/decisions/gates/structural-review-composition.js';
 
 import { ExecutionContext } from '../../../../../src/engine/execution/context/execution-context.js';
+import { GateEnforcementAuthority } from '../../../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import {
   bindSemanticReviewTarget,
   resolvePinnedSemanticContext,
@@ -21,6 +22,7 @@ import {
 } from '../../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
 import { GateReviewStage } from '../../../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { evaluateSemanticEvaluation } from '../../../../../src/engine/gates/core/semantic-evaluation.js';
+import { GateVerdictProcessor } from '../../../../../src/engine/gates/services/gate-verdict-processor.js';
 import { runGateReviewEvidence } from '../../../../../src/engine/gates/services/gate-review-evidence.js';
 import { ShellVerifyExecutor } from '../../../../../src/engine/gates/shell/shell-verify-executor.js';
 
@@ -31,6 +33,10 @@ import type { LightweightGateDefinition } from '../../../../../src/engine/gates/
 import type { Logger } from '../../../../../src/infra/logging/index.js';
 import type { GateReview } from '../../../../../src/shared/types/chain-execution.js';
 import type { SemanticCriterionInput } from '../../../../../src/shared/types/gate-evaluation.js';
+import type {
+  GateVerdictSubmission,
+  SemanticEvaluationReport,
+} from '../../../../../src/shared/types/gate-evaluation.js';
 import type {
   ChainSession,
   ChainSessionService,
@@ -76,14 +82,26 @@ function frozenReview(kind: ReviewKind) {
   return createSemanticReviewContext('n1', 'attempt-1', [definition]);
 }
 
-function stageFixture(kind: ReviewKind, disabled = false, legacy = false) {
+interface StageFixtureOptions {
+  review?: GateReview;
+  live?: LightweightGateDefinition[];
+  shell?: ShellVerifyExecutor;
+  body?: string;
+}
+
+function stageFixture(
+  kind: ReviewKind,
+  disabled = false,
+  legacy = false,
+  options: StageFixtureOptions = {}
+) {
   const logger = {
     debug: jest.fn(),
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
   } as unknown as Logger;
-  const review: GateReview = {
+  const review: GateReview = options.review ?? {
     nodeId: 'n1',
     kind: 'gate',
     phase: 'awaiting-verdict',
@@ -102,10 +120,18 @@ function stageFixture(kind: ReviewKind, disabled = false, legacy = false) {
     state: { currentNodeId: 'n1', nodes: [{ id: 'n1', promptId: 'draft' }] },
   } as unknown as ChainSession;
   const store = {
-    getReview: jest.fn(() => review),
+    getReview: jest.fn(() => run.reviews?.['n1'] ?? review),
     getSession: jest.fn(() => run),
     clearReview: jest.fn(async () => undefined),
-    setPendingGateReview: jest.fn(async (_sessionId: string, _review: GateReview) => undefined),
+    setPendingGateReview: jest.fn(async (_sessionId: string, stored: GateReview) => {
+      run.reviews = { ...run.reviews, [stored.nodeId]: stored };
+    }),
+    setReview: jest.fn(async (_sessionId: string, stored: GateReview) => {
+      run.reviews = { ...run.reviews, [stored.nodeId]: stored };
+    }),
+    recordGateReviewOutcome: jest.fn(async () => undefined),
+    advanceStep: jest.fn(async () => false),
+    isStepComplete: jest.fn(() => true),
     getChainContext: jest.fn(() => ({ step_results: {} })),
   };
   // Deliberately changed live catalog: semantic/mixed review snapshots retain their obligation.
@@ -113,9 +139,10 @@ function stageFixture(kind: ReviewKind, disabled = false, legacy = false) {
     kind === 'reminder'
       ? { ...TOOL_GATE, pass_criteria: [{ type: 'inline_guidance' as const }] }
       : TOOL_GATE;
+  const liveGates = options.live ?? [live];
   const provider = {
-    loadGate: jest.fn(async () => live),
-    loadGates: jest.fn(async () => [live]),
+    loadGate: jest.fn(async (id: string) => liveGates.find((gate) => gate.id === id) ?? null),
+    loadGates: jest.fn(async (ids: string[]) => liveGates.filter((gate) => ids.includes(gate.id))),
   } as unknown as GateDefinitionProvider;
   const renderStep = jest.fn(async () => ({
     stepNumber: 1,
@@ -125,18 +152,20 @@ function stageFixture(kind: ReviewKind, disabled = false, legacy = false) {
     content: 'Review the output',
     callToAction: 'Submit verdict',
   }));
-  const shell = disabled
-    ? new ShellVerifyExecutor({ gateSystemEnabled: () => false })
-    : ({
-        execute: jest.fn(async () => ({
-          passed: true,
-          exitCode: 0,
-          stdout: 'ok',
-          stderr: '',
-          durationMs: 1,
-          command: 'true',
-        })),
-      } as unknown as ShellVerifyExecutor);
+  const shell =
+    options.shell ??
+    (disabled
+      ? new ShellVerifyExecutor({ gateSystemEnabled: () => false })
+      : ({
+          execute: jest.fn(async () => ({
+            passed: true,
+            exitCode: 0,
+            stdout: 'ok',
+            stderr: '',
+            durationMs: 1,
+            command: 'true',
+          })),
+        } as unknown as ShellVerifyExecutor));
   const stage = new GateReviewStage(
     { renderStep } as unknown as ChainOperatorExecutor,
     store as unknown as ChainSessionService,
@@ -145,7 +174,10 @@ function stageFixture(kind: ReviewKind, disabled = false, legacy = false) {
     undefined,
     { shellVerifyExecutor: shell }
   );
-  const context = new ExecutionContext({ command: '>>draft' }, logger);
+  const context = new ExecutionContext(
+    { command: '>>draft', ...(options.body !== undefined ? { user_response: options.body } : {}) },
+    logger
+  );
   context.parsedCommand = {
     commandType: 'chain',
     promptId: 'draft',
@@ -169,7 +201,7 @@ function stageFixture(kind: ReviewKind, disabled = false, legacy = false) {
     isChainExecution: true,
     pendingReview: review,
   };
-  return { stage, context, store, renderStep, review };
+  return { stage, context, store, renderStep, review, run, provider, logger };
 }
 
 const pass = (gateId: string) => ({ gateId, passed: true });
@@ -487,6 +519,226 @@ const FALSE_GATE: LightweightGateDefinition = {
   ...TOOL_GATE,
   pass_criteria: [{ type: 'shell_verify', shell_command: ['false'] }],
 };
+
+function issuedToolReview(gates: SemanticReviewDefinitionInput[]): GateReview {
+  return {
+    nodeId: 'n1',
+    kind: 'gate',
+    phase: 'awaiting-verdict',
+    gateIds: gates.map((gate) => gate.id),
+    combinedPrompt: 'Review frozen output',
+    prompts: [],
+    createdAt: 1,
+    attemptCount: 0,
+    maxAttempts: 3,
+    semanticContext: bindSemanticReviewTarget(
+      createSemanticReviewContext('n1', 'attempt-1', gates),
+      'Actual output'
+    ),
+  };
+}
+
+describe('ordinary frozen tool evidence caller and legacy response I/O', () => {
+  test.each([false, true])(
+    'changed false→true holds with prior/sibling passes (semantic=%j)',
+    async (semantic) => {
+      const sibling = { ...TOOL_GATE, id: 'sibling' };
+      const review = issuedToolReview([
+        {
+          ...FALSE_GATE,
+          pass_criteria: [...(FALSE_GATE.pass_criteria ?? []), ...(semantic ? [SEMANTIC] : [])],
+        },
+        sibling,
+      ]);
+      const executor = new ShellVerifyExecutor({ allowlist: ['false', 'true'] });
+      const executed = jest.spyOn(executor, 'execute');
+      const f = stageFixture('tool', false, false, {
+        review,
+        live: [TOOL_GATE, sibling],
+        shell: executor,
+      });
+      f.context.state.gates.shellVerifyPassedForGates = ['gate-a'];
+      await f.stage.execute(f.context);
+      expect(executed.mock.calls.map(([gate]) => gate.command)).toEqual([['true']]);
+      expect(f.store.clearReview).not.toHaveBeenCalled();
+      const held = f.run.reviews?.['n1'];
+      expect(held?.checkResults?.filter((result) => result.gateId === 'gate-a')).toMatchObject([
+        { gateId: 'gate-a', passed: false, summary: expect.stringContaining('did not run') },
+      ]);
+      if (semantic && held?.semanticContext !== undefined) {
+        const expected = resolvePinnedSemanticContext(held.semanticContext, 'gate-a');
+        const report: SemanticEvaluationReport = {
+          binding: expected.binding,
+          observations: [
+            {
+              criterion_id: 'quality',
+              state: 'met',
+              value: true,
+              evidence: [
+                {
+                  target_digest: expected.binding.target_digest,
+                  start: 0,
+                  end: 6,
+                  quote: 'Actual',
+                },
+              ],
+              rationale: 'Complete evidence',
+            },
+          ],
+        };
+        expect(evaluateSemanticEvaluation(expected, report).passed).toBe(true);
+        const verdict: GateVerdictSubmission = {
+          overall: 'PASS',
+          rationale: 'Valid semantic report',
+          per_gate: [{ index: 1, passed: true, rationale: 'Met', evaluation: report }],
+        };
+        const context = new ExecutionContext(
+          { chain_id: 'chain-1', gate_verdict: verdict },
+          f.logger
+        );
+        context.gateEnforcement = new GateEnforcementAuthority(
+          f.store as unknown as ChainSessionService,
+          f.logger
+        );
+        context.sessionContext = f.context.sessionContext;
+        context.state.gates.enforcementMode = 'blocking';
+        const result = await new GateVerdictProcessor(
+          f.store as unknown as ChainSessionService,
+          f.logger
+        ).processReviewVerdict(context, f.run, context.sessionContext!, 'Actual output');
+        expect(result.passClearedThisCall).toBe(false);
+        expect(context.response?.content[0]).toMatchObject({
+          text: expect.stringContaining('did not run'),
+        });
+        expect(f.store.clearReview).not.toHaveBeenCalled();
+        expect(f.store.recordGateReviewOutcome).not.toHaveBeenCalled();
+      }
+    }
+  );
+
+  test.each([false, true])(
+    'unchanged real tool command pass=%j records the actual exit',
+    async (passed) => {
+      const gate = passed ? TOOL_GATE : FALSE_GATE;
+      const executor = new ShellVerifyExecutor({ allowlist: ['false', 'true'] });
+      const executed = jest.spyOn(executor, 'execute');
+      const f = stageFixture('tool', false, false, {
+        review: issuedToolReview([gate]),
+        live: [gate],
+        shell: executor,
+      });
+      await f.stage.execute(f.context);
+      expect(executed).toHaveBeenCalledTimes(1);
+      if (passed) expect(f.store.clearReview).toHaveBeenCalledTimes(1);
+      else {
+        expect(f.store.clearReview).not.toHaveBeenCalled();
+        expect(f.run.reviews?.['n1']?.checkResults).toMatchObject([{ passed: false }]);
+      }
+    }
+  );
+
+  test('missing issued definition cannot run a real required gate or be cleared by a prior ID', async () => {
+    const review = issuedToolReview([]);
+    review.gateIds = ['gate-a'];
+    const executor = new ShellVerifyExecutor({ allowlist: ['true'] });
+    const executed = jest.spyOn(executor, 'execute');
+    const f = stageFixture('tool', false, false, { review, live: [TOOL_GATE], shell: executor });
+    f.context.state.gates.shellVerifyPassedForGates = ['gate-a'];
+    await f.stage.execute(f.context);
+    expect(executed).not.toHaveBeenCalled();
+    expect(f.store.clearReview).not.toHaveBeenCalled();
+    expect(f.run.reviews?.['n1']?.checkResults).toMatchObject([
+      { gateId: 'gate-a', passed: false },
+    ]);
+  });
+
+  test.each(['plain', 'mixed', 'authored-collision'] as const)(
+    '%s structural route keeps its full hold',
+    async (kind) => {
+      const gate = { ...TOOL_GATE, id: PHASE_GUARD_GATE_ID };
+      const base =
+        kind === 'authored-collision'
+          ? issuedToolReview([gate])
+          : issuedToolReview(kind === 'mixed' ? [TOOL_GATE] : []);
+      const composed = composeStructuralReview(base.gateIds.length ? base : undefined, {
+        gateId: PHASE_GUARD_GATE_ID,
+        feedback: 'Missing context',
+        retryHints: [],
+        failedPhases: ['context'],
+        mode: 'enforce',
+        previousResponse: 'Actual output',
+        reviewedStep: { nodeId: 'n1', stepNumber: 1 },
+        maxAttempts: 3,
+        createdAt: 42,
+      });
+      const review = {
+        ...base,
+        ...composed,
+        nodeId: 'n1',
+        kind: 'gate' as const,
+        phase: 'awaiting-verdict' as const,
+      };
+      const executor = new ShellVerifyExecutor({ allowlist: ['true'] });
+      const executed = jest.spyOn(executor, 'execute');
+      const f = stageFixture('tool', false, false, {
+        review,
+        live: kind === 'authored-collision' ? [gate] : [TOOL_GATE],
+        shell: executor,
+      });
+      await f.stage.execute(f.context);
+      expect(f.provider.loadGates).toHaveBeenNthCalledWith(1, selectToolReviewGateIds(review));
+      expect(executed.mock.calls.map(([entry]) => entry.command)).toEqual(
+        kind === 'plain' ? [] : [['true']]
+      );
+      expect(f.store.clearReview).not.toHaveBeenCalled();
+      expect(f.run.reviews?.['n1']?.gateIds).toEqual(review.gateIds);
+      expect(f.run.reviews?.['n1']?.structuralGateIds).toEqual([PHASE_GUARD_GATE_ID]);
+    }
+  );
+
+  test.each(['', 'Payload 😀'])(
+    'legacy ordinary response %j maps only tool I/O and preserves carrier',
+    async (body) => {
+      const root = await mkdtemp(path.join(tmpdir(), 'stage-response-'));
+      try {
+        const script = path.join(root, 'observe.cjs');
+        const key = `REVIEW_BODY_${path.basename(root).replace(/-/g, '_')}`;
+        await writeFile(
+          script,
+          `let input='';process.stdin.on('data',c=>input+=c);process.stdin.on('end',()=>console.log(JSON.stringify({stdin:input,hasEnv:Object.hasOwn(process.env,${JSON.stringify(key)}),body:process.env[${JSON.stringify(key)}]})));`
+        );
+        const gate: LightweightGateDefinition = {
+          ...TOOL_GATE,
+          pass_criteria: [
+            {
+              type: 'shell_verify',
+              shell_command: ['node', script],
+              shell_stdin_source: 'agent_response',
+              shell_response_env_var: key,
+            },
+          ],
+        };
+        const executor = new ShellVerifyExecutor({ allowlist: [`node ${script}`] });
+        const executed = jest.spyOn(executor, 'execute');
+        const f = stageFixture('tool', false, true, { live: [gate], shell: executor, body });
+        await f.stage.execute(f.context);
+        expect(executed).toHaveBeenCalledTimes(1);
+        expect(executed.mock.calls[0][0].stdin).toBe(body === '' ? undefined : body);
+        expect(executed.mock.calls[0][0].env?.[key]).toBe(body === '' ? undefined : body);
+        const result = (await executed.mock.results[0].value) as Awaited<
+          ReturnType<ShellVerifyExecutor['execute']>
+        >;
+        expect(JSON.parse(result.stdout)).toEqual(
+          body === '' ? { stdin: '', hasEnv: false } : { stdin: body, hasEnv: true, body }
+        );
+        expect(f.context.mcpRequest.user_response).toBe(body);
+        expect(f.store.clearReview).toHaveBeenCalledTimes(1);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+  );
+});
 
 describe('checked declared tool identity in the existing evidence owner', () => {
   test('live true cannot verify frozen false even with a valid met semantic report', async () => {

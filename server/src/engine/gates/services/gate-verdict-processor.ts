@@ -1,10 +1,15 @@
 // @lifecycle canonical - Processes gate verdicts, actions, and hook events for chain sessions.
+import { describeRefusal } from './gate-review-refusal.js';
 import { advanceReview } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
 import { resolveReviewTarget } from '../../execution/pipeline/decisions/gates/review-target.js';
 import {
   readSemanticReviewCriteria,
   resolvePinnedSemanticContext,
 } from '../../execution/pipeline/decisions/gates/semantic-review-context.js';
+import {
+  hasStructuralFinding,
+  selectToolReviewGateIds,
+} from '../../execution/pipeline/decisions/gates/structural-review-composition.js';
 import {
   isUnknownInterruptPending,
   resolveEnforcementMode,
@@ -18,7 +23,11 @@ import {
 } from '../core/semantic-evaluation.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type { GateCheckResult, GateReview } from '#shared/types/chain-execution.js';
+import type {
+  GateCheckResult,
+  GateReview,
+  GateReviewSemanticContext,
+} from '#shared/types/chain-execution.js';
 import type { McpToolRequest } from '#shared/types/execution.js';
 import type {
   ChainSession,
@@ -183,11 +192,13 @@ export class GateVerdictProcessor {
      * its verdict arrives (row 4.8). Absent, a detached review records no check results — the
      * same outcome as a review of reminder-tier gates. `scope` is the verdict request's, for the
      * shell executor's gate master-switch read.
+     * `issuedDefinitions` is the review's own frozen authority; omitted on legacy reviews.
      */
     private readonly runReviewChecks?: (
       gateIds: string[],
       agentResponse: string,
-      scope: StateStoreOptions | undefined
+      scope: StateStoreOptions | undefined,
+      issuedDefinitions?: GateReviewSemanticContext['definitions']
     ) => Promise<GateCheckResult[]>
   ) {}
 
@@ -223,9 +234,10 @@ export class GateVerdictProcessor {
           this.runReviewChecks === undefined
             ? []
             : await this.runReviewChecks(
-                [...review.gateIds],
+                selectToolReviewGateIds(review),
                 review.reviewedOutput ?? '',
-                context.getScopeOptions()
+                context.getScopeOptions(),
+                review.semanticContext?.definitions
               );
         return checkResults.length > 0 ? { ...review, checkResults } : review;
       },
@@ -632,7 +644,7 @@ export class GateVerdictProcessor {
         'Gate PASS - advance deferred until the step is captured',
         { reviewedNodeId: review.nodeId }
       );
-      if (review.gateIds.includes('__phase_guard__')) {
+      if (hasStructuralFinding(review)) {
         context.state.gates.phaseGuardReviewClearedNodeId = review.nodeId;
       }
       await this.emitGateEvents(context, 'passed', [...review.gateIds], effectiveVerdict.rationale);
@@ -1347,39 +1359,5 @@ function describeUnansweredStep(session: ChainSession, nodeId: string): string {
   return (
     `❌ Step ${ordinal} has no answer yet, so a gate_verdict alone has nothing to grade; answer ` +
     `step ${ordinal} first (send its output as user_response with the verdict). Nothing was recorded.`
-  );
-}
-
-/**
- * The sentence a refused event reads (`advanceReview` refused it, and nothing was charged).
- *
- * - `failing-check` — a PASS over a check the engine recorded as failing (ruling B4): the stage
- *   that runs a gate's `shell_verify` / `script_tool` criteria writes `checkResults`, and a model
- *   PASS over a recorded exit code is an unnoticed contradiction. `gate_action: skip` is the
- *   operator's override, behind exhaustion; a FAIL is the submitter agreeing with the check.
- * - `phase` — the review is not waiting for this kind of call: an exhausted review answers only
- *   `gate_action` (R9), and a detached review never `abort`s — `cancel: true` stops a run.
- */
-function describeRefusal(reason: 'phase' | 'failing-check', review: GateReview): string {
-  if (reason === 'failing-check') {
-    const failed = (review.checkResults ?? []).filter((result) => !result.passed);
-    const gateIds = [...new Set(failed.map((result) => result.gateId))].join(', ');
-    const summaries = failed.map((result) => result.summary).join('; ');
-    return (
-      `❌ Gate verdict refused: ${gateIds} recorded a failing check (${summaries}). ` +
-      'Fix the cause and resubmit; the check re-runs on the next review.'
-    );
-  }
-  const waitingFor: Record<GateReview['phase'], string> = {
-    'awaiting-verdict': 'a gate_verdict',
-    'awaiting-replacement': "the worker's replacement result",
-    exhausted:
-      review.kind === 'detached'
-        ? 'gate_action "retry" or "skip", or cancel: true'
-        : 'gate_action "retry", "skip" or "abort"',
-  };
-  return (
-    `❌ The gate review of node '${review.nodeId}' (${review.attemptCount}/${review.maxAttempts} ` +
-    `attempts) is waiting for ${waitingFor[review.phase]}. Nothing was recorded.`
   );
 }

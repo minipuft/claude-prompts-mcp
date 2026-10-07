@@ -29,6 +29,7 @@ import {
 } from '../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { evaluateSemanticEvaluation } from '../../../../src/engine/gates/core/semantic-evaluation.js';
+import { PHASE_GUARD_GATE_ID } from '../../../../src/engine/execution/pipeline/decisions/gates/structural-review-composition.js';
 import { hashBytes } from '../../../../src/shared/utils/hash.js';
 
 import type { Logger } from '../../../../src/infra/logging/index.js';
@@ -238,6 +239,38 @@ function custodyFixture(kind: 'ordinary' | 'detached', verdict: McpToolRequest['
       : processor.processReviewVerdict(context, session, sessionContext, 'A😀e\u0301 Z');
   return { authority, context, session, store, submit };
 }
+
+describe('canonical structural cleared-node flag', () => {
+  test.each([false, true])(
+    'authored canonical ID sets the cleared flag only with server membership=%j',
+    async (marked) => {
+      const f = custodyFixture('ordinary', 'GATE_REVIEW: PASS - The reviewed output is accepted');
+      const review = f.session.reviews?.['node-1'];
+      if (review === undefined) throw new Error('Missing review');
+      review.gateIds = [PHASE_GUARD_GATE_ID];
+      review.semanticContext = bindSemanticReviewTarget(
+        createSemanticReviewContext('node-1', 'canonical-attempt', [
+          {
+            id: PHASE_GUARD_GATE_ID,
+            name: 'Authored collision',
+            type: 'validation',
+            description: 'Public authored fixture',
+            pass_criteria: [{ type: 'inline_guidance' }],
+          },
+        ]),
+        'A😀e\u0301 Z'
+      );
+      if (marked) review.structuralGateIds = [PHASE_GUARD_GATE_ID];
+      f.context.state.gates.reviewGateIds = [PHASE_GUARD_GATE_ID];
+      const result = await f.submit();
+      expect(result).toMatchObject({ passClearedThisCall: true });
+      expect(f.store.clearReview).toHaveBeenCalledTimes(1);
+      expect(f.context.state.gates.phaseGuardReviewClearedNodeId).toBe(
+        marked ? 'node-1' : undefined
+      );
+    }
+  );
+});
 
 /** Draft authority fixture; this does not load or activate live semantic resource criteria. */
 function draftSemanticContext() {

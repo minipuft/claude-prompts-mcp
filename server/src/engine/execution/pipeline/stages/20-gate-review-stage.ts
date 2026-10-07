@@ -10,6 +10,10 @@ import { recordedStep } from '../../capture/step-capture-service.js';
 import { planNodeDrivenRender } from '../../operators/node-step-projection.js';
 import { resolveGroundTruthCoverage } from '../decisions/gates/ground-truth-coverage.js';
 import { resolveShownReview } from '../decisions/gates/review-target.js';
+import {
+  hasStructuralFinding,
+  selectToolReviewGateIds,
+} from '../decisions/gates/structural-review-composition.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -30,6 +34,12 @@ import type { ChainOperatorExecutor } from '../../operators/chain-operator-execu
 import type { ChainStepRenderResult } from '../../operators/types.js';
 
 type GatesConfigProvider = () => GatesConfig | undefined;
+
+/** Legacy tool I/O treats an empty canonical response as absent; the request carrier is untouched. */
+function toolResponseBody(context: ExecutionContext): string | undefined {
+  const response = context.mcpRequest.user_response;
+  return response === '' ? undefined : response;
+}
 
 /** Optional collaborators for {@link GateReviewStage}. */
 export interface GateReviewCollaborators {
@@ -293,11 +303,12 @@ export class GateReviewStage extends BasePipelineStage {
       let shellSection = '';
       if (this.gateDefinitionProvider && pendingReview.gateIds.length > 0) {
         const evidence = await runGateReviewEvidence(
-          pendingReview.gateIds,
+          selectToolReviewGateIds(pendingReview),
           this.gateDefinitionProvider,
-          context.mcpRequest?.user_response,
+          toolResponseBody(context),
           this.collaborators,
-          context.getScopeOptions()
+          context.getScopeOptions(),
+          pendingReview.semanticContext?.definitions
         );
         const { shellResults, scriptResults } = evidence;
         shellSection = evidence.section;
@@ -306,12 +317,13 @@ export class GateReviewStage extends BasePipelineStage {
         // Frozen requirements retain semantic obligations when the live catalog changes.
         // The stage runs commands, supplies server facts, persists the result and returns.
         //
-        // Tool outcomes remain mechanism-agnostic; both result kinds feed it unchanged.
+        // Tool outcomes remain mechanism-agnostic; include refusals whose checks did not run.
         // Frozen definitions separately tell the owner whether semantic reports remain due.
         const coverage = resolveGroundTruthCoverage({
           requiredGateIds: pendingReview.gateIds,
           reviewDefinitions: pendingReview.semanticContext?.definitions,
-          results: [...shellResults, ...scriptResults],
+          structuralPending: hasStructuralFinding(pendingReview),
+          results: evidence.checkResults,
           priorVerifiedGateIds: context.state.gates.shellVerifyPassedForGates ?? [],
         });
 
