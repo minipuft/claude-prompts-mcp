@@ -219,6 +219,17 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     // Align pipeline session context with manager state
     this.alignSessionContext(context, sessionContext, session, currentStepAtStart);
 
+    const targetAdmission = this.verdictProcessor.admitSemanticTargetResponse(context, session, {
+      currentStepAtStart,
+      evidenceMode: this.resolveEvidenceMode(),
+      trailerNodeId: this.resolveVerdictTrailer(context, currentNodeIdAtStart, currentStepAtStart),
+    });
+    if (targetAdmission.kind === 'refused') {
+      context.setResponse(this.buildErrorResponse(targetAdmission.message));
+      this.logExit({ semanticTargetAdmission: 'refused' });
+      return;
+    }
+
     // The call that CREATES the run renders its first step and carries no resume: it is a brief,
     // not a reply, so admission has nothing to admit. Admitting it anyway refused every chain
     // whose first step is delegated with "the resume carries no worker reply" (row 4.9).

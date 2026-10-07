@@ -1,11 +1,19 @@
 // @lifecycle canonical - Frozen public review definitions and capture-bound semantic authority.
+import { resolveReviewTarget } from './review-target.js';
 import { SemanticCriterionSchema } from '../../../../gates/core/gate-schema.js';
 import { resolveJudgeConfig } from '../../../../gates/judge/judge-prompt-builder.js';
+import { resolveDetachedReport } from '../../../delegation/detached.js';
+import {
+  classifyHandoffBody,
+  handoffNodeToken,
+  resolveHandoffEvidenceMode,
+} from '../../../delegation/handoff-contract.js';
 
 import type {
   GateReviewDefinitionSnapshot,
   GateReviewJsonValue,
   GateReviewSemanticContext,
+  GateReview,
 } from '#shared/types/chain-execution.js';
 import type {
   PinnedSemanticEvaluationContext,
@@ -15,6 +23,8 @@ import type {
 import type { JudgeEvaluationDefaults } from '../../../../gates/judge/types.js';
 import type { GatePassCriteria } from '../../../../gates/types/gate-primitives.js';
 import type { LightweightGateDefinition } from '../../../../gates/types.js';
+import type { DetachedNodeFacts, RunHolds } from '../../../delegation/detached.js';
+import type { HandoffEvidenceMode } from '../../../delegation/handoff-contract.js';
 
 import { canonicalJson, hashBytes, hashCanonical } from '#shared/utils/hash.js';
 
@@ -140,4 +150,139 @@ export function resolvePinnedSemanticContext(
     }),
     target: Object.freeze({ kind: 'step_output', content: target.content }),
   });
+}
+
+export type SemanticTargetAdmission =
+  { readonly kind: 'admitted' } | { readonly kind: 'refused'; readonly message: string };
+
+/** Server-owned target admission, before a verdict can grade or mutate the review. */
+export function resolveSemanticTargetAdmission(input: {
+  readonly verdictPresent: boolean;
+  readonly review: GateReview | undefined;
+  readonly suppliedResponse: string | undefined;
+  readonly bodyNodeId: string | undefined;
+  readonly routingOnly: boolean;
+}): SemanticTargetAdmission {
+  const issued = input.review?.semanticContext;
+  if (!input.verdictPresent || issued === undefined) return { kind: 'admitted' };
+  let required: boolean;
+  try {
+    required = Object.values(issued.definitions).some(
+      (snapshot) => readSemanticReviewCriteria(snapshot).length > 0
+    );
+  } catch {
+    return {
+      kind: 'refused',
+      message:
+        'Server semantic requirements could not be read; open a fresh review. Nothing was recorded.',
+    };
+  }
+  if (!required) return { kind: 'admitted' };
+  if (issued.target === undefined) {
+    return {
+      kind: 'refused',
+      message:
+        'Capture the node output before submitting its semantic gate_verdict; a report cannot create the target. Nothing was recorded.',
+    };
+  }
+  if (
+    input.suppliedResponse !== undefined &&
+    !input.routingOnly &&
+    input.bodyNodeId === input.review?.nodeId &&
+    input.suppliedResponse.trim() !== issued.target.content
+  ) {
+    return {
+      kind: 'refused',
+      message:
+        'The supplied response differs from the server-captured semantic target. Submit the verdict without new work, or capture a separate replacement first. Nothing was recorded.',
+    };
+  }
+  return { kind: 'admitted' };
+}
+
+/** Plain host facts; routing never imports the capture service or execution context. */
+interface SemanticTargetResponseFacts {
+  readonly verdictPresent: boolean;
+  readonly suppliedResponse: string | undefined;
+  readonly currentResponseNodeId: string | undefined;
+  readonly currentNodeId: string | null;
+  readonly nodeIds: readonly string[];
+  readonly reviews: Readonly<Record<string, GateReview>>;
+  readonly currentStep:
+    | {
+        readonly nodeId?: string;
+        readonly stepNumber: number;
+        readonly delegated?: boolean;
+        readonly await?: 'node' | 'run';
+      }
+    | undefined;
+  readonly detachedNodes: readonly DetachedNodeFacts[];
+  readonly holds: RunHolds;
+  readonly evidenceMode?: HandoffEvidenceMode;
+  readonly trailerNodeId?: string;
+  readonly actionPresent: boolean;
+}
+
+/** Resolve the actual response address using the canonical review and detached routers. */
+export function resolveSemanticTargetResponseAdmission(
+  input: SemanticTargetResponseFacts
+): SemanticTargetAdmission {
+  if (!input.verdictPresent) return { kind: 'admitted' };
+  const reply = input.suppliedResponse?.trim() ?? '';
+  const addressed = resolveReviewTarget(input);
+  const current = input.currentStep;
+  const route = resolveDetachedReport({
+    reply,
+    mode: input.evidenceMode ?? resolveHandoffEvidenceMode(undefined),
+    reviewPending: addressed.kind === 'review',
+    submits: { verdict: true, action: input.actionPresent },
+    current:
+      input.currentNodeId === null || current === undefined
+        ? null
+        : {
+            token: handoffNodeToken(current),
+            delegated: current.delegated === true,
+            detached: current.await === 'run',
+          },
+    detachedNodes: input.detachedNodes,
+    holds: input.holds,
+  });
+  const routed =
+    route.kind === 'report' || route.kind === 'review-verdict' || route.kind === 'review-action'
+      ? route.node
+      : undefined;
+  const target =
+    routed === undefined || input.trailerNodeId !== undefined
+      ? addressed
+      : resolveReviewTarget({ ...input, trailerNodeId: routed.nodeId });
+  const review = target.kind === 'review' ? input.reviews[target.nodeId] : undefined;
+  const routingOnly =
+    route.kind === 'review-verdict' &&
+    routed?.nodeId === review?.nodeId &&
+    classifyHandoffBody(reply).kind === 'routing-only';
+  const standing =
+    review === undefined &&
+    input.suppliedResponse !== undefined &&
+    !routingOnly &&
+    route.kind === 'continue-past'
+      ? input.reviews[route.node.nodeId]
+      : undefined;
+  const admission = resolveSemanticTargetAdmission({
+    verdictPresent: true,
+    review: review ?? standing,
+    suppliedResponse: standing === undefined ? input.suppliedResponse : undefined,
+    bodyNodeId: routed?.nodeId ?? input.currentResponseNodeId ?? review?.nodeId,
+    routingOnly,
+  });
+  if (admission.kind === 'refused' || standing?.semanticContext === undefined) return admission;
+  const required = Object.values(standing.semanticContext.definitions).some(
+    (snapshot) => readSemanticReviewCriteria(snapshot).length > 0
+  );
+  return required
+    ? {
+        kind: 'refused',
+        message:
+          'Name the detached review node in a HANDOFF RESULT trailer before submitting its semantic verdict. Nothing was recorded.',
+      }
+    : admission;
 }

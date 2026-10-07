@@ -1,10 +1,22 @@
 // @lifecycle canonical - Processes gate verdicts, actions, and hook events for chain sessions.
-import { describeRefusal } from './gate-review-refusal.js';
+import {
+  describeRefusal,
+  describeMissingReview,
+  describeGatelessStep,
+  describeInBudgetAction,
+  describeUnansweredStep,
+} from './gate-review-refusal.js';
+import {
+  projectCurrentResponseTarget,
+  recordedStep,
+} from '../../execution/capture/step-capture-service.js';
+import { collectDetachedNodeFacts, collectRunHolds } from '../../execution/delegation/detached.js';
 import { advanceReview } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
 import { resolveReviewTarget } from '../../execution/pipeline/decisions/gates/review-target.js';
 import {
   readSemanticReviewCriteria,
   resolvePinnedSemanticContext,
+  resolveSemanticTargetResponseAdmission,
 } from '../../execution/pipeline/decisions/gates/semantic-review-context.js';
 import {
   hasStructuralFinding,
@@ -38,7 +50,9 @@ import type {
 } from '#shared/types/index.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
+import type { HandoffEvidenceMode } from '../../execution/delegation/handoff-contract.js';
 import type { ReviewEvent } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
+import type { SemanticTargetAdmission } from '../../execution/pipeline/decisions/gates/semantic-review-context.js';
 import type {
   EnforcementMode,
   GateAction,
@@ -46,7 +60,7 @@ import type {
 } from '../../execution/pipeline/decisions/index.js';
 import type { ParsedGateVerdict } from '../core/gate-verdict-contract.js';
 
-import { ordinalOf } from '#shared/utils/node-order.js';
+import { currentOrdinal, ordinalOf } from '#shared/utils/node-order.js';
 
 /**
  * Outcome of a mid-chain interrupt resolution attempt (row 2.2).
@@ -201,6 +215,36 @@ export class GateVerdictProcessor {
       issuedDefinitions?: GateReviewSemanticContext['definitions']
     ) => Promise<GateCheckResult[]>
   ) {}
+
+  /** Target admission precedes resume routing, unknown observations and direct verdict grading. */
+  admitSemanticTargetResponse(
+    context: ExecutionContext,
+    session: ChainSession,
+    options: {
+      currentStepAtStart?: number;
+      evidenceMode?: HandoffEvidenceMode;
+      trailerNodeId?: string;
+    } = {}
+  ): SemanticTargetAdmission {
+    const ordinal =
+      options.currentStepAtStart ??
+      currentOrdinal(session.state.nodes, session.state.currentNodeId);
+    return resolveSemanticTargetResponseAdmission({
+      verdictPresent: context.getGateVerdict() !== undefined,
+      suppliedResponse: context.mcpRequest.user_response,
+      currentResponseNodeId: projectCurrentResponseTarget(session, ordinal)?.nodeId,
+      currentNodeId: session.state.currentNodeId,
+      nodeIds: session.state.nodes.map((node) => node.id),
+      reviews: session.reviews ?? {},
+      currentStep: recordedStep(context, session, session.state.currentNodeId ?? undefined, ordinal)
+        .step,
+      detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, session),
+      holds: collectRunHolds(session),
+      evidenceMode: options.evidenceMode,
+      trailerNodeId: options.trailerNodeId,
+      actionPresent: context.mcpRequest.gate_action !== undefined,
+    });
+  }
 
   /**
    * Answer a detached node's gate review with this call's `gate_verdict` (row 4.8, R8/R10).
@@ -799,6 +843,8 @@ export class GateVerdictProcessor {
     entry: ReviewEntry
   ): Promise<ReviewAnswer> {
     const { trailerNodeId } = entry;
+    const admission = this.admitSemanticTargetResponse(context, session, { trailerNodeId });
+    if (admission.kind === 'refused') return admission;
     const target = addressedReview(session, trailerNodeId);
     const currentNodeId = session.state.currentNodeId;
     const found = await this.findAddressedReview(session, entry, target);
@@ -1310,54 +1356,4 @@ export class GateVerdictProcessor {
  */
 function stepReviewGateIds(context: ExecutionContext): string[] {
   return [...(context.state.gates.reviewGateIds ?? context.state.gates.accumulatedGateIds ?? [])];
-}
-
-/** The sentence a call reads when no review answers it: a name the run lacks, or no open review. */
-function describeMissingReview(
-  target: ReturnType<typeof resolveReviewTarget>,
-  trailerNodeId: string | undefined,
-  currentOrdinal: number
-): string {
-  if (target.kind === 'refuse' && target.reason === 'unknown-node') {
-    return `❌ The reply names node '${trailerNodeId}', which this run does not have. Nothing was recorded.`;
-  }
-  if (target.kind === 'refuse' && target.reason === 'ambiguous') {
-    const named = target.nodeIds.map((nodeId) => `'${nodeId}'`).join(', ');
-    return `❌ Gate reviews are open on nodes ${named}; name the one this call answers with a HANDOFF RESULT trailer (\`node: <id>\`). Nothing was recorded.`;
-  }
-  const answerFirst = currentOrdinal > 0 ? `; answer step ${currentOrdinal} first` : '';
-  return trailerNodeId === undefined
-    ? `❌ No gate review is open on this run, so there is nothing for this call to answer${answerFirst}. Nothing was recorded.`
-    : `❌ No gate review is open for node '${trailerNodeId}'. Nothing was recorded.`;
-}
-
-/** The sentence a FAIL reads on a step with no gates: there is nothing for it to fail. */
-function describeGatelessStep(ordinal: number): string {
-  return (
-    `❌ Step ${ordinal} carries no gates, so a FAIL verdict has nothing to grade; send its ` +
-    'output as user_response without a gate_verdict. Nothing was recorded.'
-  );
-}
-
-/** The sentence a `gate_action` reads on a review that still has attempts left. */
-function describeInBudgetAction(
-  action: GateAction,
-  review: GateReview,
-  session: ChainSession
-): string {
-  const ordinal = ordinalOf(session.state.nodes, review.nodeId);
-  return (
-    `❌ gate_action "${action}" is accepted only on an exhausted review; the review of step ` +
-    `${ordinal} is at ${review.attemptCount}/${review.maxAttempts} attempts — answer it or send ` +
-    'a gate_verdict. Nothing was recorded.'
-  );
-}
-
-/** The sentence a response-less PASS reads when the step its review grades has no answer. */
-function describeUnansweredStep(session: ChainSession, nodeId: string): string {
-  const ordinal = ordinalOf(session.state.nodes, nodeId);
-  return (
-    `❌ Step ${ordinal} has no answer yet, so a gate_verdict alone has nothing to grade; answer ` +
-    `step ${ordinal} first (send its output as user_response with the verdict). Nothing was recorded.`
-  );
 }

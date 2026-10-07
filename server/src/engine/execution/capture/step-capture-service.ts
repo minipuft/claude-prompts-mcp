@@ -39,6 +39,39 @@ export interface StepTarget {
   readonly nodeId: string;
 }
 
+/** Supplied response intent addresses the current step, including a defined canonical empty body. */
+export function projectCurrentResponseTarget(
+  session: ChainSession,
+  currentStepAtStart: number
+): StepTarget | undefined {
+  return resolveCaptureTarget(session, currentStepAtStart, true);
+}
+
+/**
+ * Resolve which step this call captures for, as BOTH the identity the store addresses by and
+ * the position everything else in the pipeline still speaks.
+ *
+ * - user_response present: capture for the CURRENT step (the one just rendered)
+ * - otherwise: capture a placeholder for the PREVIOUS step
+ *
+ * Returns undefined when the position falls outside the run — before its first step, past its
+ * last, or on no node at all. All three mean "nothing to capture", and collapsing them here
+ * keeps the decision in one place instead of three guards at the call site.
+ */
+function resolveCaptureTarget(
+  session: ChainSession,
+  currentStepAtStart: number,
+  hasUserResponseForCapture: boolean
+): StepTarget | undefined {
+  const ordinal = hasUserResponseForCapture ? currentStepAtStart : currentStepAtStart - 1;
+  const totalSteps = totalOf(session.state.nodes);
+  if (totalSteps > 0 && ordinal > totalSteps) {
+    return undefined;
+  }
+  const nodeId = nodeIdAt(session.state.nodes, ordinal);
+  return nodeId === null ? undefined : { ordinal, nodeId };
+}
+
 /**
  * Input from verdict processing that affects step capture behavior.
  */
@@ -97,7 +130,7 @@ export class StepCaptureService {
         : undefined;
     const hasUserResponseForCapture = captureResponse !== undefined;
 
-    const target = this.resolveTarget(session, currentStepAtStart, hasUserResponseForCapture);
+    const target = resolveCaptureTarget(session, currentStepAtStart, hasUserResponseForCapture);
     if (target === undefined) {
       return undefined;
     }
@@ -230,31 +263,6 @@ export class StepCaptureService {
       holdable: false,
     });
     await this.announceStepComplete(context, session.chainId, target, reply);
-  }
-
-  /**
-   * Resolve which step this call captures for, as BOTH the identity the store addresses by and
-   * the position everything else in the pipeline still speaks.
-   *
-   * - user_response present: capture for the CURRENT step (the one just rendered)
-   * - otherwise: capture a placeholder for the PREVIOUS step
-   *
-   * Returns undefined when the position falls outside the run — before its first step, past its
-   * last, or on no node at all. All three mean "nothing to capture", and collapsing them here
-   * keeps the decision in one place instead of three guards at the call site.
-   */
-  private resolveTarget(
-    session: ChainSession,
-    currentStepAtStart: number,
-    hasUserResponseForCapture: boolean
-  ): StepTarget | undefined {
-    const ordinal = hasUserResponseForCapture ? currentStepAtStart : currentStepAtStart - 1;
-    const totalSteps = totalOf(session.state.nodes);
-    if (totalSteps > 0 && ordinal > totalSteps) {
-      return undefined;
-    }
-    const nodeId = nodeIdAt(session.state.nodes, ordinal);
-    return nodeId === null ? undefined : { ordinal, nodeId };
   }
 
   private async capturePlaceholder(
