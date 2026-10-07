@@ -6,7 +6,8 @@ on:
     branches: [main]
     paths:
       - "evaluations/**"
-      - "server/src/shared/utils/hash.ts"
+      - "server/src/shared/**"
+      - "server/src/engine/gates/**"
       - "server/package.json"
       - "server/package-lock.json"
       - ".github/workflows/evaluations.yml"
@@ -15,7 +16,8 @@ on:
     branches: [main]
     paths:
       - "evaluations/**"
-      - "server/src/shared/utils/hash.ts"
+      - "server/src/shared/**"
+      - "server/src/engine/gates/**"
       - "server/package.json"
       - "server/package-lock.json"
       - ".github/workflows/evaluations.yml"
@@ -31,7 +33,7 @@ concurrency:
 
 jobs:
   offline-controls:
-    name: Offline contract and archive controls
+    name: Offline core and gate contract controls
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -51,8 +53,11 @@ jobs:
       - name: Install locked server development tools
         run: npm ci --prefix server --include=dev --ignore-scripts
 
-      - name: Native offline controls
-        run: npm --prefix evaluations test
+      - name: Native core contract and archive controls
+        run: npm --prefix evaluations run test:core
+
+      - name: Gate suite controls with pinned server loader
+        run: npm --prefix evaluations run test:gates
 
       - name: Strict optional package types
         run: npm --prefix evaluations run typecheck
