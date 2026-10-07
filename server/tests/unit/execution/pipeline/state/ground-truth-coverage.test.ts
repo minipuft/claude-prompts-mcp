@@ -1,11 +1,21 @@
 // @lifecycle canonical - Pins the auto-clear rule moved out of GateReviewStage in Tier 13.
 import { describe, expect, jest, test } from '@jest/globals';
 
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
 import { resolveGroundTruthCoverage } from '../../../../../src/engine/execution/pipeline/decisions/gates/ground-truth-coverage.js';
 
 import { ExecutionContext } from '../../../../../src/engine/execution/context/execution-context.js';
-import { createSemanticReviewContext } from '../../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
+import {
+  bindSemanticReviewTarget,
+  resolvePinnedSemanticContext,
+  createSemanticReviewContext,
+} from '../../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
 import { GateReviewStage } from '../../../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
+import { evaluateSemanticEvaluation } from '../../../../../src/engine/gates/core/semantic-evaluation.js';
+import { runGateReviewEvidence } from '../../../../../src/engine/gates/services/gate-review-evidence.js';
 import { ShellVerifyExecutor } from '../../../../../src/engine/gates/shell/shell-verify-executor.js';
 
 import type { SemanticReviewDefinitionInput } from '../../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
@@ -19,6 +29,11 @@ import type {
   ChainSession,
   ChainSessionService,
 } from '../../../../../src/shared/types/chain-session.js';
+
+import type { ScriptToolRuntime } from '../../../../../src/engine/gates/services/script-tool-criterion-runner.js';
+import type { LoadedScriptTool } from '../../../../../src/shared/types/automation.js';
+import type { ScriptExecutorPort } from '../../../../../src/shared/types/index.js';
+import type { ScriptLoader } from '../../../../../src/engine/execution/reference/script-reference-resolver.js';
 
 const TOOL_GATE: LightweightGateDefinition = {
   id: 'gate-a',
@@ -341,5 +356,302 @@ describe('GateReviewStage frozen coverage caller', () => {
     const fixture = stageFixture('tool', false, true);
     await fixture.stage.execute(fixture.context);
     expect(fixture.store.clearReview).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** Only provider/registered-script I/O is substituted; shell false/true controls use the real executor. */
+function evidenceProvider(gates: LightweightGateDefinition[]) {
+  const loadGates = jest.fn<GateDefinitionProvider['loadGates']>(async () => gates);
+  const provider = {
+    loadGate: async (id: string) => gates.find((gate) => gate.id === id) ?? null,
+    loadGates,
+  } as unknown as GateDefinitionProvider;
+  return { provider, loadGates };
+}
+
+function scriptRuntime() {
+  const loadScript = jest.fn<ScriptLoader['loadScript']>(
+    (id) =>
+      ({
+        id,
+        name: id,
+        description: 'Registered fixture',
+        scriptPath: 'script.py',
+        inputSchema: { type: 'object' },
+        execution: { trigger: 'schema_match', confirm: false },
+        toolDir: '/fixture',
+        absoluteScriptPath: '/fixture/script.py',
+        promptId: 'draft',
+        descriptionContent: 'Fixture',
+      }) satisfies LoadedScriptTool
+  );
+  const execute = jest.fn<ScriptExecutorPort['execute']>(async () => ({
+    success: true,
+    output: { passed: true, reason: 'Fixture result' },
+    stdout: '',
+    stderr: '',
+    exitCode: 0,
+    durationMs: 1,
+  }));
+  const runtime: ScriptToolRuntime = {
+    loader: { loadScript } as unknown as ScriptLoader,
+    executor: { execute },
+  };
+  return { runtime, loadScript, execute };
+}
+
+const FALSE_GATE: LightweightGateDefinition = {
+  ...TOOL_GATE,
+  pass_criteria: [{ type: 'shell_verify', shell_command: ['false'] }],
+};
+
+describe('checked declared tool identity in the existing evidence owner', () => {
+  test('live true cannot verify frozen false even with a valid met semantic report', async () => {
+    const issued = bindSemanticReviewTarget(
+      createSemanticReviewContext('n1', 'attempt-1', [
+        { ...FALSE_GATE, pass_criteria: [...(FALSE_GATE.pass_criteria ?? []), SEMANTIC] },
+      ]),
+      'Actual output'
+    );
+    const expected = resolvePinnedSemanticContext(issued, 'gate-a');
+    const report = {
+      binding: expected.binding,
+      observations: [
+        {
+          criterion_id: 'quality',
+          state: 'met',
+          value: true,
+          evidence: [
+            { target_digest: expected.binding.target_digest, start: 0, end: 6, quote: 'Actual' },
+          ],
+          rationale: 'Complete attributable report',
+        },
+      ],
+    };
+    expect(evaluateSemanticEvaluation(expected, report).passed).toBe(true);
+    const fixture = evidenceProvider([TOOL_GATE]);
+    const executor = new ShellVerifyExecutor({ allowlist: ['false', 'true'] });
+    const execution = jest.spyOn(executor, 'execute');
+    const evidence = await runGateReviewEvidence(
+      ['gate-a'],
+      fixture.provider,
+      'Actual output',
+      { shellVerifyExecutor: executor },
+      undefined,
+      issued.definitions
+    );
+    expect(execution).not.toHaveBeenCalled();
+    expect(fixture.loadGates).toHaveBeenCalledTimes(1);
+    expect(evidence.shellResults).toEqual([]);
+    expect(evidence.scriptResults).toEqual([]);
+    expect(evidence.checkResults).toMatchObject([
+      { gateId: 'gate-a', passed: false, summary: expect.stringContaining('did not run') },
+    ]);
+    expect(evidence.section).toContain('verification refused');
+  });
+
+  test('unchanged frozen false actually executes and records its failing exit', async () => {
+    const fixture = evidenceProvider([FALSE_GATE]);
+    const issued = createSemanticReviewContext('n1', 'attempt-1', [FALSE_GATE]);
+    const evidence = await runGateReviewEvidence(
+      ['gate-a'],
+      fixture.provider,
+      undefined,
+      { shellVerifyExecutor: new ShellVerifyExecutor({ allowlist: ['false', 'true'] }) },
+      undefined,
+      issued.definitions
+    );
+    expect(fixture.loadGates).toHaveBeenCalledTimes(1);
+    expect(evidence.shellResults).toMatchObject([{ command: 'false', passed: false, exitCode: 1 }]);
+    expect(evidence.checkResults[0]?.summary).toBe('false exit 1');
+  });
+
+  test('omitted frozen authority retains live legacy execution', async () => {
+    const fixture = evidenceProvider([TOOL_GATE]);
+    const evidence = await runGateReviewEvidence(['gate-a'], fixture.provider, undefined, {
+      shellVerifyExecutor: new ShellVerifyExecutor({ allowlist: ['true'] }),
+    });
+    expect(evidence.shellResults).toMatchObject([{ command: 'true', passed: true, exitCode: 0 }]);
+    expect(fixture.loadGates).toHaveBeenCalledTimes(1);
+  });
+
+  test('a hypothetical second provider load cannot swap the command', async () => {
+    const fixture = evidenceProvider([FALSE_GATE]);
+    fixture.loadGates.mockResolvedValueOnce([FALSE_GATE]).mockResolvedValue([TOOL_GATE]);
+    const issued = createSemanticReviewContext('n1', 'attempt-1', [FALSE_GATE]);
+    const evidence = await runGateReviewEvidence(
+      ['gate-a'],
+      fixture.provider,
+      undefined,
+      { shellVerifyExecutor: new ShellVerifyExecutor({ allowlist: ['false', 'true'] }) },
+      undefined,
+      issued.definitions
+    );
+    expect(evidence.shellResults[0]?.command).toBe('false');
+    expect(evidence.shellResults[0]?.passed).toBe(false);
+    expect(fixture.loadGates).toHaveBeenCalledTimes(1);
+  });
+
+  test.each(['shell_env', 'shell_working_dir', 'shell_preset', 'shell_stdin_source'] as const)(
+    'full declared %s changes refuse before any command runs',
+    async (field) => {
+      const values = {
+        shell_env: { REPORT_MODE: 'changed' },
+        shell_working_dir: '/changed',
+        shell_preset: 'full',
+        shell_stdin_source: 'agent_response',
+      };
+      const live: LightweightGateDefinition = {
+        ...FALSE_GATE,
+        pass_criteria: [
+          { ...FALSE_GATE.pass_criteria?.[0], type: 'shell_verify', [field]: values[field] },
+        ],
+      };
+      const fixture = evidenceProvider([live]);
+      const executor = new ShellVerifyExecutor({ allowlist: ['false', 'true'] });
+      const execution = jest.spyOn(executor, 'execute');
+      const evidence = await runGateReviewEvidence(
+        ['gate-a'],
+        fixture.provider,
+        'Reply',
+        { shellVerifyExecutor: executor },
+        undefined,
+        createSemanticReviewContext('n1', 'attempt-1', [FALSE_GATE]).definitions
+      );
+      expect(execution).not.toHaveBeenCalled();
+      expect(evidence.shellResults).toEqual([]);
+      expect(evidence.checkResults[0]?.passed).toBe(false);
+      expect(evidence.section).toContain('did not run');
+    }
+  );
+
+  test.each(['missing-declaration', 'missing-provider', 'unavailable-provider'] as const)(
+    '%s produces did-not-run evidence instead of a synthetic exit',
+    async (issue) => {
+      const fixture = evidenceProvider(issue === 'missing-provider' ? [] : [FALSE_GATE]);
+      if (issue === 'unavailable-provider')
+        fixture.loadGates.mockRejectedValue(new Error('Provider unavailable'));
+      const issued = createSemanticReviewContext('n1', 'attempt-1', [FALSE_GATE]);
+      const evidence = await runGateReviewEvidence(
+        ['gate-a'],
+        fixture.provider,
+        undefined,
+        {},
+        undefined,
+        issue === 'missing-declaration' ? {} : issued.definitions
+      );
+      expect(evidence.shellResults).toEqual([]);
+      expect(evidence.scriptResults).toEqual([]);
+      expect(evidence.checkResults).toMatchObject([{ gateId: 'gate-a', passed: false }]);
+      expect(evidence.section).toContain('did not run');
+    }
+  );
+
+  test('script runner uses the cloned checked DTO after shell execution mutates provider-owned data', async () => {
+    const gate: LightweightGateDefinition = {
+      ...FALSE_GATE,
+      pass_criteria: [
+        ...(FALSE_GATE.pass_criteria ?? []),
+        {
+          type: 'script_tool',
+          script_tool_id: 'frozen-tool',
+          script_tool_input: { approved: true },
+        },
+      ],
+    };
+    const issued = createSemanticReviewContext('n1', 'attempt-1', [gate]);
+    const fixture = evidenceProvider([gate]);
+    const scripts = scriptRuntime();
+    const executor = new ShellVerifyExecutor({ allowlist: ['false'] });
+    const actualExecute = executor.execute.bind(executor);
+    jest.spyOn(executor, 'execute').mockImplementation(async (command, scope) => {
+      const criterion = gate.pass_criteria?.find((entry) => entry.type === 'script_tool');
+      if (criterion === undefined) throw new Error('Missing script fixture');
+      criterion.script_tool_id = 'live-tool';
+      criterion.script_tool_input = { approved: false };
+      return actualExecute(command, scope);
+    });
+    const evidence = await runGateReviewEvidence(
+      ['gate-a'],
+      fixture.provider,
+      undefined,
+      { shellVerifyExecutor: executor, scriptToolRuntime: () => scripts.runtime },
+      undefined,
+      issued.definitions
+    );
+    expect(scripts.loadScript.mock.calls[0]?.[0]).toBe('frozen-tool');
+    expect(scripts.execute.mock.calls[0]?.[0]).toMatchObject({
+      toolId: 'frozen-tool',
+      inputs: { approved: true },
+    });
+    expect(evidence.scriptResults[0]?.toolId).toBe('frozen-tool');
+    expect(fixture.loadGates).toHaveBeenCalledTimes(1);
+  });
+
+  test('changed declared script ID refuses without loading or executing the registry tool', async () => {
+    const old: LightweightGateDefinition = {
+      ...TOOL_GATE,
+      pass_criteria: [
+        { type: 'script_tool', script_tool_id: 'old-tool', script_tool_input: { approved: true } },
+      ],
+    };
+    const live: LightweightGateDefinition = {
+      ...old,
+      pass_criteria: [
+        { type: 'script_tool', script_tool_id: 'new-tool', script_tool_input: { approved: true } },
+      ],
+    };
+    const fixture = evidenceProvider([live]);
+    const scripts = scriptRuntime();
+    const evidence = await runGateReviewEvidence(
+      ['gate-a'],
+      fixture.provider,
+      undefined,
+      { scriptToolRuntime: () => scripts.runtime },
+      undefined,
+      createSemanticReviewContext('n1', 'attempt-1', [old]).definitions
+    );
+    expect(scripts.loadScript).not.toHaveBeenCalled();
+    expect(scripts.execute).not.toHaveBeenCalled();
+    expect(evidence.scriptResults).toEqual([]);
+    expect(evidence.checkResults[0]?.summary).toContain('did not run');
+  });
+
+  test('the checked observed sourceRoot is retained for gate-shipped script resolution', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'checked-tool-root-'));
+    try {
+      const directory = path.join(root, 'gate-a', 'scripts');
+      await mkdir(directory, { recursive: true });
+      const scriptPath = path.join(directory, 'probe.sh');
+      await writeFile(scriptPath, 'exit 1\n');
+      const gate: LightweightGateDefinition = {
+        ...TOOL_GATE,
+        sourceRoot: root,
+        pass_criteria: [{ type: 'shell_verify', shell_command: ['sh', 'scripts/probe.sh'] }],
+      };
+      const issued = createSemanticReviewContext('n1', 'attempt-1', [gate]);
+      expect(issued.definitions['gate-a']?.definition).not.toHaveProperty('sourceRoot');
+      const fixture = evidenceProvider([gate]);
+      const executor = new ShellVerifyExecutor({ allowlist: [] });
+      const execution = jest.spyOn(executor, 'execute').mockResolvedValue({
+        passed: false,
+        exitCode: -1,
+        stdout: '',
+        stderr: 'I/O observer',
+        durationMs: 0,
+        command: 'observer',
+      });
+      await runGateReviewEvidence(
+        ['gate-a'],
+        fixture.provider,
+        undefined,
+        { shellVerifyExecutor: executor },
+        undefined,
+        issued.definitions
+      );
+      expect(execution.mock.calls[0]?.[0]?.command).toEqual(['sh', scriptPath]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

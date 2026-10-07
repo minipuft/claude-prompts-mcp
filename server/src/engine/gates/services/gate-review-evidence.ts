@@ -15,13 +15,16 @@ import {
 import { runGateShellVerifications } from './gate-shell-verify-runner.js';
 import { formatGateShellVerifySection } from '../shell/shell-verify-message-formatter.js';
 
-import type { GateCheckResult } from '#shared/types/chain-execution.js';
+import type { GateCheckResult, GateReviewSemanticContext } from '#shared/types/chain-execution.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { GateScriptToolResult } from './gate-script-tool-runner.js';
 import type { ScriptToolRuntimeProvider } from './script-tool-criterion-runner.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { ShellVerifyExecutor } from '../shell/shell-verify-executor.js';
 import type { GateShellVerifyResult } from '../shell/shell-verify-message-formatter.js';
+import type { LightweightGateDefinition } from '../types.js';
+
+import { canonicalJson, hashCanonical } from '#shared/utils/hash.js';
 
 /** One line, capped, so a recorded result stays readable in a refusal sentence. */
 const CHECK_SUMMARY_MAX_CHARS = 200;
@@ -58,23 +61,30 @@ export async function runGateReviewEvidence(
   provider: GateDefinitionProvider,
   agentResponse: string | undefined,
   runners: GateReviewCheckRunners,
-  scope?: StateStoreOptions
+  scope?: StateStoreOptions,
+  issuedDefinitions?: GateReviewSemanticContext['definitions']
 ): Promise<GateReviewEvidence> {
+  const checked = await loadCheckedDefinitions(gateIds, provider, issuedDefinitions);
   const shellResults = await runGateShellVerifications(
     gateIds,
     provider,
     agentResponse !== undefined ? { agentResponse } : undefined,
     runners.shellVerifyExecutor,
-    scope
+    scope,
+    checked.gates
   );
   const scriptResults = await runGateScriptToolVerifications(
     gateIds,
     provider,
-    runners.scriptToolRuntime?.()
+    runners.scriptToolRuntime?.(),
+    checked.gates
   );
   const section = [
     formatGateShellVerifySection(shellResults),
     formatGateScriptToolSection(scriptResults),
+    ...checked.refusals.map(
+      (refusal) => `Tool verification refused for ${refusal.gateId}: ${refusal.summary}`
+    ),
   ]
     .filter((part) => part !== '')
     .join('\n\n');
@@ -82,8 +92,93 @@ export async function runGateReviewEvidence(
     shellResults,
     scriptResults,
     section,
-    checkResults: toCheckResults(shellResults, scriptResults),
+    checkResults: [...checked.refusals, ...toCheckResults(shellResults, scriptResults)],
   };
+}
+
+interface CheckedGateDefinitions {
+  readonly gates: readonly LightweightGateDefinition[];
+  readonly refusals: readonly GateCheckResult[];
+}
+
+/** Compare declared criteria, not resolved binaries, script contents or sourceRoot. */
+function declaredToolCriteria(criteria: unknown): readonly unknown[] {
+  if (criteria === undefined) return [];
+  if (!Array.isArray(criteria)) throw new TypeError('Declared tool criteria are unavailable');
+  return criteria.filter(
+    (criterion: unknown) =>
+      typeof criterion === 'object' &&
+      criterion !== null &&
+      'type' in criterion &&
+      (criterion.type === 'shell_verify' || criterion.type === 'script_tool')
+  );
+}
+
+function checkedDefinitions(
+  gateIds: readonly string[],
+  observed: readonly LightweightGateDefinition[],
+  issued: GateReviewSemanticContext['definitions'] | undefined
+): CheckedGateDefinitions {
+  const gates: LightweightGateDefinition[] = [];
+  const refusals: GateCheckResult[] = [];
+  for (const gateId of gateIds) {
+    const gate = observed.find((candidate) => candidate.id === gateId);
+    const snapshot = issued?.[gateId];
+    try {
+      const expected = declaredToolCriteria(snapshot?.definition['pass_criteria']);
+      const actual = declaredToolCriteria(gate?.pass_criteria);
+      if (
+        gate === undefined &&
+        expected.length === 0 &&
+        (issued === undefined || snapshot !== undefined)
+      )
+        continue;
+      const unavailable = gate === undefined || (issued !== undefined && snapshot === undefined);
+      const changed = issued !== undefined && hashCanonical(expected) !== hashCanonical(actual);
+      if (unavailable || changed) {
+        refusals.push({
+          gateId,
+          passed: false,
+          summary:
+            'Declared tool criteria changed or are unavailable; verification did not run. Open a fresh server-issued review.',
+        });
+      } else {
+        gates.push(gate);
+      }
+    } catch {
+      refusals.push({
+        gateId,
+        passed: false,
+        summary: 'Declared tool criteria could not be compared; verification did not run.',
+      });
+    }
+  }
+  return { gates, refusals };
+}
+
+/** One provider read and a local clone; both runners receive these exact checked DTOs. */
+async function loadCheckedDefinitions(
+  gateIds: string[],
+  provider: GateDefinitionProvider,
+  issued: GateReviewSemanticContext['definitions'] | undefined
+): Promise<CheckedGateDefinitions> {
+  try {
+    // The provider supplies JSON DTOs; canonical cloning preserves their typed public shape
+    // and sourceRoot while sharing the snapshot's normalization of undefined optional keys.
+    const observed = JSON.parse(
+      canonicalJson(await provider.loadGates(gateIds))
+    ) as LightweightGateDefinition[];
+    return checkedDefinitions(gateIds, observed, issued);
+  } catch {
+    return {
+      gates: [],
+      refusals: gateIds.map((gateId): GateCheckResult => ({
+        gateId,
+        passed: false,
+        summary: 'Observed gate definitions are unavailable; verification did not run.',
+      })),
+    };
+  }
 }
 
 /** Collapse to a single line and cap — a summary is quoted back to the submitter verbatim. */

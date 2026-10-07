@@ -18,11 +18,11 @@ tags: [gates, semantic, evaluation, tests]
 ## Now (2026-10-07)
 
 Goal: finish every master/child row, actual registered semantic workflow, matched native baseline/pilot, evidence inventory and reviewed green-CI delivery.
-Slice: activation parent f6f1d1186; checked-tool row5.5 and registered metadata8.9 dispatched through existing source workers.
+Slice: registered metadata8.9 committed d291a82ac; checked-tool5.5 finishing and structural producer5.8 active; cold5.9 precedes caller5.7.
 Next decision: accept checked DTO execution before caller wiring5.7 and strict same-body5.6, then all remaining runtime consumers/activation and native freeze.
 Constraint: /root/semantic_calibration_contract owns main HEAD/plans/integration/publication; root observes; two workers/global4slots; R6 reviewed push+merge persists.
 Dependencies: one gate/resource/archive authority; native freeze requires current source/runtime/candidate plus root independent receipt review before inference.
-State: child46 rows25 done/2 killed/19 open; semantic loader still refused; no native inference, release, global edits, automatic promotion or liveDB cutover.
+State: child48 rows26 done/2 killed/20 open; semantic loader refused; no native inference, release, global edits, automatic promotion or liveDB cutover.
 
 ## Intent and completion criteria
 

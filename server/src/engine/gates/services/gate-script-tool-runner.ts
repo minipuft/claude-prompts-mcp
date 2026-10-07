@@ -19,6 +19,7 @@ import { runScriptToolCriterion } from './script-tool-criterion-runner.js';
 
 import type { ScriptToolRuntime } from './script-tool-criterion-runner.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
+import type { LightweightGateDefinition } from '../types.js';
 
 /** One gate's `script_tool` verification result, shaped for review feedback. */
 export interface GateScriptToolResult {
@@ -45,10 +46,11 @@ export interface GateScriptToolResult {
 export async function runGateScriptToolVerifications(
   gateIds: string[],
   gateDefinitionProvider: GateDefinitionProvider,
-  runtime: ScriptToolRuntime | undefined
+  runtime: ScriptToolRuntime | undefined,
+  checkedDefinitions?: readonly LightweightGateDefinition[]
 ): Promise<GateScriptToolResult[]> {
   const results: GateScriptToolResult[] = [];
-  const gates = await gateDefinitionProvider.loadGates(gateIds);
+  const gates = checkedDefinitions ?? (await gateDefinitionProvider.loadGates(gateIds));
 
   for (const gate of gates) {
     const criteria = gate.pass_criteria?.filter((c) => c.type === 'script_tool') ?? [];

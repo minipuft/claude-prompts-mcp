@@ -609,3 +609,7 @@ Actual canonical composition probe and root independent review require server-on
 ## H-child8.9: source SDK-server metadata readback accepted (2026-10-07)
 
 Actual registered source STDIO/HTTP metadata controls8/8 and inspect omission mutation5red/restored; root/parent readaccepted. Opaque bytes preserved inactual inspect/disk; published optionalstring field observed; semantic-create/no-directory refusal remains. Source proof is protocol-wire against SDK-server registration, not official SDK client, installed plugin, compiledbuild or modelquality. Reader caveat: final activation workflow requires initialize/initialized handshake. Child8.9 closes preparatory metadata only; master2.2/3.2/publicsemantic consumers remain open. Structural-membership recut makes child48 rows26 done/2 killed/20 open.
+
+## Compiled structural workflow recut (2026-10-07)
+
+Connected MCP chain-strategic_worker#1 (two structural nodes) was cancelled explicitly when R38 changed current5.8 ownership4->5 and added actualStage19 reader controls; no fabricated PASS or local simulated progression. Replacement chain-strategic_worker#2 binds t5-8→t5-9 with exact five/two file allowlists, budget2nodes/fanout1/insertions0. Existing worker continues same native source row with updated handoff marker; parent judges actualsource evidence before resuming. Whole-objective chain-strategic_implement#1 remains pending, not evidence of completion.
