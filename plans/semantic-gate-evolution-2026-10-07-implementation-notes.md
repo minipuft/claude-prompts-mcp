@@ -12,10 +12,10 @@ tags: [gates, semantic, evaluation]
 
 ## Now (2026-10-07)
 
-Goal: retain evidence and decisions for the linked semantic-gate/calibration plan.
-Slice: all five MCP planning steps complete; written-plan checks passed; no implementation row is complete.
-Next: rule on the dependent activation questions, beginning with O1 classification, before implementation.
-Constraint: local artifacts only; no feature/runtime/model-accuracy claims.
+Goal: retain evidence and decisions for the semantic-gate/calibration initiative.
+Slice: contract/kernel T1 rows 1.1-1.5 implemented and accepted; current snapshot validation is next.
+Next: commit bounded repairs, verify the built slice, and prepare its PR before seeking publication authorization.
+Constraint: no live semantic activation, model calibration, runtime database cutover or public delivery yet.
 
 ## Planning receipts
 
@@ -142,7 +142,7 @@ Definition corrections: GateDefinitionLoader:82; GateFileWriter:186; GateToolHan
 - evaluations/gates/calibration.test.ts
 - docs/guides/semantic-gate-calibration.md
 
-## Validation
+## Planning validation
 
 MCP chain-implementation_plan#1 returned Execution complete and Chain complete (5/5) after the final planning output and verdict.
 
@@ -220,3 +220,28 @@ All four T1 rows have accepted artifact-specific receipts. Source typecheck from
 npm run typecheck: exit 0. npm run lint:ratchet: exit 0, 2449 errors and 710 warnings, no regressions. npm run typecheck:tests:ratchet: exit 0, 341 existing errors in tests, no regressions. Artifact checks remain 116 schema/legacy unit tests, 62 kernel unit tests, five real integration tests, and their restored negative mutations; these software counts are not model-quality evidence.
 
 All first-slice source/test/projection changes plus the two governing plan artifacts will be committed locally by root, under the shared-tree ruling. No public-tool parameter/default behavior changes, so no user-facing changelog claim or ADR is added for runtime support that does not yet exist. The precise conventional commit subject supplies Release Please's source history; no release/publish operation is performed.
+
+### Boundary failure and re-plan (2026-10-07)
+
+Local commit 913df8d62 captured the first T1 snapshot after mandatory commit hooks. The first commit-message attempt failed body line-length lint and created no commit; a wrapped message was committed fresh, never amended/bypassed.
+
+Build exit 0, and read-only verify:mcp exit 0 with 20/20 checks on isolated runtime roots and untouched server/resources. This proves built legacy MCP surface health, not semantic runtime support.
+
+validate:all completed 85 steps: 82 passed, three failed. All failures are attributed to this slice, not another workstream:
+
+- validate:arch: gate-schema.ts uses two cross-layer relative imports, to shared/types/gate-evaluation.ts and shared/utils/nested-key-refusal.ts; canonical #shared aliases are required.
+- validate:knip-ratchet: unused type exports increased from 620 to 623; fix the unconsumed exports, not the baseline.
+- validate:plan-row-tracking: planner insertion separated rows 1.3 and 1.4 from their header by blank lines. The simpler plan consistency linter had not observed this Markdown parser failure.
+
+DEV-T1-4: Row 1.1's focused compiler and unchanged lint debt did not prove import/export architecture conformance. New mechanical repair row 1.5 owns exactly the two source files; its checks are the failed architecture/Knip gates plus unchanged schema/kernel behavior. Boundary checks remain red until repaired.
+DEV-T1-5: Row-table insertion broke parsed tracking for two rows. Planner removes only the separating blank lines and runs the repository row-tracking gate; row completion is retained because the reviewed artifacts exist, but no green-boundary claim is made.
+
+Canonical logs: /tmp/semantic-gate-t1-validation.log and /tmp/semantic-gate-t1-mcp-smoke.log. No baseline change, hook bypass, push, PR, merge or release. The next snapshot will include these repairs before publication approval is requested.
+
+### H-T1-5: accepted boundary repair
+
+Parent read the complete five-line diff. Both gate-schema shared imports now use canonical #shared paths. Exact raw Knip findings and whole-tree uses identified SemanticScoreAnchor, SemanticCriterionTarget and CapturedSemanticTarget as locally composed only; removing their export preserves data shape and avoids artificial consumers/baseline changes.
+
+Affected source gates now pass: architecture zero errors with 20 pre-existing warnings; Knip ratchet 1070 findings/no regressions. All three named test files passed together (183 tests), focused strict types passed, formatting/whitespace passed. Jest's tracked-tree digest remained identical across 1949 files. The repository plan-row gate passes after table contiguity correction and reads all five T1 rows.
+
+The repair's compiled run chain-strategic_worker#3 returned complete (1/1). A fresh local repair commit will carry source plus ledger/table fixes. Build/current-snapshot validation will be repeated because source changed; there is no full test-suite rerun. Runtime capability remains deliberately unavailable until later complete consumer wiring.

@@ -11,7 +11,7 @@ export type SemanticResultDomain =
       readonly anchors: readonly SemanticScoreAnchor[];
     };
 
-export interface SemanticScoreAnchor {
+interface SemanticScoreAnchor {
   readonly value: number;
   readonly description: string;
 }
@@ -22,7 +22,7 @@ export type SemanticAcceptance =
   | { readonly kind: 'one_of'; readonly values: readonly string[] }
   | { readonly kind: 'gte' | 'lte'; readonly value: number };
 
-export type SemanticCriterionTarget =
+type SemanticCriterionTarget =
   { readonly kind: 'step_output' } | { readonly kind: 'artifact'; readonly id: string };
 
 /** Parsed definition: the optional authored N/A policy has been defaulted. */
@@ -69,7 +69,7 @@ export interface SemanticEvaluationBinding {
   readonly target_digest: string;
 }
 
-export interface CapturedSemanticTarget {
+interface CapturedSemanticTarget {
   readonly kind: 'step_output' | 'artifact';
   readonly id?: string;
   readonly content: string;
