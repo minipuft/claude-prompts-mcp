@@ -6,6 +6,7 @@ import {
   HANDOFF_RESULT_HEADING,
   PROPOSED_GATE_REVIEW_TOKEN,
   buildHandoffResultSection,
+  classifyHandoffBody,
   handoffNodeToken,
   parseHandoffTrailer,
   resolveHandoffEvidence,
@@ -313,5 +314,216 @@ describe('resolveHandoffEvidenceReason', () => {
       expect(evidence.kind).toBe('missing');
       expect(evidence.kind === 'missing' ? evidence.missing : null).toBe(reason);
     }
+  });
+});
+
+const LF = String.fromCharCode(10);
+const CRLF = String.fromCharCode(13, 10);
+const ROUTING = [HANDOFF_RESULT_HEADING, 'node: n2'].join(LF);
+const FENCED_ROUTING = ['```', HANDOFF_RESULT_HEADING, 'node: n2', '```'].join(LF);
+
+describe('classifyHandoffBody complete-envelope evidence', () => {
+  test.each([
+    ROUTING,
+    FENCED_ROUTING,
+    ['## HANDOFF RESULT', 'node:n2'].join(LF),
+    ['  ', '```', '', HANDOFF_RESULT_HEADING, '', 'node: n2', '', '```', ' '].join(LF),
+    [
+      HANDOFF_RESULT_HEADING,
+      '',
+      'node: n2',
+      PROPOSED_GATE_REVIEW_TOKEN,
+      '- gate-one: PASS — named evidence',
+      '- gate two: FAIL — another reason',
+    ].join(LF),
+    [
+      '```',
+      HANDOFF_RESULT_HEADING,
+      'node: n2',
+      '',
+      PROPOSED_GATE_REVIEW_TOKEN,
+      '',
+      '- gate: PASS — reason',
+      '',
+      '```',
+    ].join(LF),
+  ])('exempts only complete plain/fenced/#/proposed metadata: %j', (reply) => {
+    const result = classifyHandoffBody(reply);
+    expect(result.kind).toBe('routing-only');
+    expect(result.envelope).not.toBeNull();
+    expect(result.workRanges).toEqual([]);
+    expect(reply.slice(result.envelope?.start, result.envelope?.end)).toContain(
+      HANDOFF_RESULT_HEADING
+    );
+  });
+
+  test('hidden prefix and suffix work remain original ranges outside the fenced envelope', () => {
+    const prefix = 'Actual work before metadata';
+    const suffix = 'Hidden different work after metadata';
+    const reply = [prefix, FENCED_ROUTING, suffix].join(LF);
+    const result = classifyHandoffBody(reply);
+    const start = prefix.length + LF.length;
+    const end = start + FENCED_ROUTING.length + LF.length;
+    expect(result).toEqual({
+      kind: 'work',
+      envelope: { start, end },
+      workRanges: [
+        { start: 0, end: start },
+        { start: end, end: reply.length },
+      ],
+    });
+    expect(result.workRanges.map((range) => reply.slice(range.start, range.end))).toEqual([
+      prefix + LF,
+      suffix,
+    ]);
+  });
+
+  test('hidden suffix-only work cannot become routing-only by broad suffix stripping', () => {
+    const suffix = 'Different work outside the complete envelope';
+    const reply = FENCED_ROUTING + LF + suffix;
+    const end = FENCED_ROUTING.length + LF.length;
+    expect(classifyHandoffBody(reply)).toEqual({
+      kind: 'work',
+      envelope: { start: 0, end },
+      workRanges: [{ start: end, end: reply.length }],
+    });
+  });
+
+  test('unfenced unknown suffix is whole work, not an arbitrarily stripped trailer', () => {
+    const reply = [ROUTING, 'Different work hidden after the node'].join(LF);
+    expect(classifyHandoffBody(reply)).toEqual({
+      kind: 'work',
+      envelope: null,
+      workRanges: [{ start: 0, end: reply.length }],
+    });
+  });
+
+  test('Unicode and CRLF offsets slice the untouched original input', () => {
+    const prefix = String.fromCodePoint(0x1f600, 0x65, 0x301) + ' work';
+    const suffix = 'After ' + String.fromCodePoint(0x1f30a);
+    const envelope = [
+      '```',
+      '# HANDOFF RESULT',
+      'node: 节点😀',
+      PROPOSED_GATE_REVIEW_TOKEN,
+      '- quality: PASS — citation retained',
+      '```',
+    ].join(CRLF);
+    const reply = prefix + CRLF + envelope + CRLF + suffix;
+    const result = classifyHandoffBody(reply);
+    const start = prefix.length + CRLF.length;
+    const end = start + envelope.length + CRLF.length;
+    expect(result.envelope).toEqual({ start, end });
+    expect(reply.slice(start, end)).toBe(envelope + CRLF);
+    expect(result.workRanges.map((range) => reply.slice(range.start, range.end))).toEqual([
+      prefix + CRLF,
+      suffix,
+    ]);
+  });
+
+  test('last heading owns the candidate; an earlier heading remains prefix work', () => {
+    const prefix = [HANDOFF_RESULT_HEADING, 'node: earlier', 'Earlier work'].join(LF);
+    const reply = prefix + LF + ROUTING;
+    const result = classifyHandoffBody(reply);
+    expect(result.kind).toBe('work');
+    expect(result.envelope?.start).toBe(prefix.length + LF.length);
+    expect(result.workRanges.map((range) => reply.slice(range.start, range.end))).toEqual([
+      prefix + LF,
+    ]);
+    expect(parseHandoffTrailer(reply).node).toBe('n2');
+  });
+
+  test('balanced code fences in outside work do not become candidate fences', () => {
+    const prefix = ['```typescript', 'const value = 1;', '```', ''].join(LF);
+    const suffix = ['~~~text', 'suffix work', '~~~'].join(LF);
+    const reply = prefix + FENCED_ROUTING + LF + suffix;
+    const result = classifyHandoffBody(reply);
+    expect(result.kind).toBe('work');
+    expect(result.envelope?.start).toBe(prefix.length);
+    expect(result.workRanges.map((range) => reply.slice(range.start, range.end))).toEqual([
+      prefix,
+      suffix,
+    ]);
+    const plain = classifyHandoffBody(prefix + ROUTING);
+    expect(plain.envelope?.start).toBe(prefix.length);
+  });
+
+  test.each(['', ' ', String.fromCharCode(9, 13, 10), 'body without an envelope'])(
+    'defined blank/empty/body input retains work intent: %j',
+    (reply) => {
+      expect(classifyHandoffBody(reply)).toEqual({
+        kind: 'work',
+        envelope: null,
+        workRanges: [{ start: 0, end: reply.length }],
+      });
+    }
+  );
+
+  test.each([
+    [HANDOFF_RESULT_HEADING],
+    [HANDOFF_RESULT_HEADING, 'node:'],
+    [HANDOFF_RESULT_HEADING, 'node: n2 trailing prose'],
+    [HANDOFF_RESULT_HEADING, 'node: n2', 'node: n3'],
+    [HANDOFF_RESULT_HEADING, 'node: n2', 'unknown: value'],
+    [HANDOFF_RESULT_HEADING, 'node: n2', 'findings: arbitrary work'],
+    [HANDOFF_RESULT_HEADING, 'node: n2', PROPOSED_GATE_REVIEW_TOKEN],
+    [
+      HANDOFF_RESULT_HEADING,
+      'node: n2',
+      PROPOSED_GATE_REVIEW_TOKEN + ' trailing prose',
+      '- gate: PASS — reason',
+    ],
+    [HANDOFF_RESULT_HEADING, 'node: n2', PROPOSED_GATE_REVIEW_TOKEN, '- gate: MAYBE — reason'],
+    [
+      HANDOFF_RESULT_HEADING,
+      'node: n2',
+      PROPOSED_GATE_REVIEW_TOKEN,
+      '- gate: PASS|FAIL — placeholder',
+    ],
+    [HANDOFF_RESULT_HEADING, 'node: n2', PROPOSED_GATE_REVIEW_TOKEN, '- gate: PASS — '],
+    [
+      HANDOFF_RESULT_HEADING,
+      'node: n2',
+      PROPOSED_GATE_REVIEW_TOKEN,
+      '- gate: PASS — reason',
+      'continued rationale',
+    ],
+    ['```', HANDOFF_RESULT_HEADING, 'node: n2'],
+    ['```text', HANDOFF_RESULT_HEADING, 'node: n2', '```'],
+    ['````', HANDOFF_RESULT_HEADING, 'node: n2', '```'],
+    ['```', HANDOFF_RESULT_HEADING, 'node: n2', '~~~'],
+    ['~~~', HANDOFF_RESULT_HEADING, 'node: n2', '~~~'],
+    ['```', 'cross-boundary work', HANDOFF_RESULT_HEADING, 'node: n2', '```'],
+    ['```', HANDOFF_RESULT_HEADING, 'node: n2', '```text', '```'],
+  ])('malformed/unknown/incomplete metadata never exempts work: %j', (...lines) => {
+    const reply = lines.join(LF);
+    expect(classifyHandoffBody(reply)).toEqual({
+      kind: 'work',
+      envelope: null,
+      workRanges: [{ start: 0, end: reply.length }],
+    });
+  });
+
+  test('legacy node/proposed/findings extraction remains exactly unchanged', () => {
+    const entry = '- gate: FAIL — retained reason';
+    const reply = [
+      'original work',
+      '```',
+      HANDOFF_RESULT_HEADING,
+      'node: n2 extra prose',
+      PROPOSED_GATE_REVIEW_TOKEN,
+      entry,
+      'findings: retained',
+      'continued findings',
+      '```',
+    ].join(LF);
+    const legacy = {
+      node: 'n2',
+      proposedGateReview: PROPOSED_GATE_REVIEW_TOKEN + LF + entry,
+      findingsBlock: 'findings: retained' + LF + 'continued findings',
+    };
+    expect(parseHandoffTrailer(reply)).toEqual(legacy);
+    expect(classifyHandoffBody(reply).envelope).toBeNull();
+    expect(parseHandoffTrailer(reply)).toEqual(legacy);
   });
 });
