@@ -5,12 +5,22 @@ import { dirname, join, parse, resolve } from "node:path";
 import {
   canonicalJson,
   hashBytes,
+  hashCanonical,
 } from "../../server/src/shared/utils/hash.ts";
 import { parseArchiveRecord, parseContentRef } from "./contracts.ts";
 import type { ArchiveRecord, ContentRef } from "./contracts.ts";
 
 type BlobRef = Extract<ContentRef, { type: "blob" }>;
 type RecordRef = Extract<ContentRef, { type: "record" }>;
+
+function dependencyRefs(record: ArchiveRecord): ContentRef[] {
+  return [
+    ...record.refs,
+    ...record.provenance.refs,
+    ...(record.usage.state === "known" ? [record.usage.source] : []),
+    ...(record.cost.state === "known" ? [record.cost.source] : []),
+  ];
+}
 
 function hasCode(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code;
@@ -223,11 +233,22 @@ export class EvaluationArchive {
     return record;
   }
 
+  /** Explicit read-only replay of the whole declared graph; getRecord remains one-envelope. */
+  async resolveClosure(refs: readonly ContentRef[]): Promise<void> {
+    const pending = [...refs];
+    const seen = new Set<string>();
+    while (pending.length > 0) {
+      const ref = parseContentRef(pending.pop());
+      const key = hashCanonical(ref);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (ref.type === "blob") await this.getBlob(ref);
+      else pending.push(...dependencyRefs(await this.getRecord(ref)));
+    }
+  }
+
   private async verifyDependencies(record: ArchiveRecord): Promise<void> {
-    const dependencies = [...record.refs, ...record.provenance.refs];
-    if (record.usage.state === "known") dependencies.push(record.usage.source);
-    if (record.cost.state === "known") dependencies.push(record.cost.source);
-    for (const ref of dependencies) {
+    for (const ref of dependencyRefs(record)) {
       if (ref.type === "blob") await this.getBlob(ref);
       else await this.getRecord(ref);
     }

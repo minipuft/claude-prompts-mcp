@@ -595,32 +595,6 @@ export async function runGateCalibration(input: {
   });
 }
 
-async function resolveClosure(
-  archive: EvaluationArchive,
-  refs: readonly ContentRef[],
-  seen = new Set<string>(),
-): Promise<void> {
-  for (const value of refs) {
-    const ref = parseContentRef(value);
-    const key = hashCanonical(ref);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    if (ref.type === "blob") await archive.getBlob(ref);
-    else {
-      const record = await archive.getRecord(ref);
-      await resolveClosure(
-        archive,
-        [
-          ...record.refs,
-          ...record.provenance.refs,
-          ...(record.usage.state === "known" ? [record.usage.source] : []),
-          ...(record.cost.state === "known" ? [record.cost.source] : []),
-        ],
-        seen,
-      );
-    }
-  }
-}
 function same(actual: unknown, expected: unknown): void {
   if (hashCanonical(actual) !== hashCanonical(expected))
     fail("replay identity/binding/adjudication mismatch");
@@ -758,7 +732,7 @@ async function replayAttempt(
     } else if (grade.status === "unattempted")
       fail("ordinary step output cannot be unattempted");
   }
-  await resolveClosure(archive, [
+  await archive.resolveClosure([
     request.grade_ref,
     ...pinRefs(pins),
     request.trial_ref,
@@ -818,7 +792,7 @@ export async function replayGateCalibration(
     pins,
     attempts: requested.map(({ grade_ref: _gradeRef, ...attempt }) => attempt),
   });
-  await resolveClosure(archive, [invocationRef, ...pinRefs(pins), startedRef]);
+  await archive.resolveClosure([invocationRef, ...pinRefs(pins), startedRef]);
   const attempts = [];
   for (const request of requested)
     attempts.push(

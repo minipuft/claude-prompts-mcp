@@ -180,6 +180,49 @@ configuration between arms makes those reports incompatible. Software controls d
 not establish live client integration, human calibration, native provider identity,
 promotion eligibility or hosted CI success.
 
+## Reviewed promotion evidence receipts
+
+[`createGatePromotionReceipt`](gates/promotion.ts) derives the report again from an
+archived calibration invocation and verifies that `report_ref` contains those exact
+canonical JSON bytes. It takes an explicit reviewed disposition (`accepted`, `rejected`
+or `inconclusive`), a frozen policy reference, reviewer evidence and destination/rollback
+references. Each destination and rollback descriptor names the same gate ID as the
+invocation. Optional `requested` inventory retains caller-declared missing attempts in
+the recomputed report. This API records the supplied review decision; it does not
+interpret opaque policy bytes or establish numerical threshold compliance. The frozen
+pilot policy separately rejects critical false acceptance. Agent-only pilot evidence
+cannot produce accepted promotion eligibility.
+
+The resulting detached canonical `kind:"promotion"` record binds invocation, exact
+gate/suite/rubric/evaluator pins, selected target coverage, report, policy, review,
+destination and rollback evidence. Publish it explicitly with `archive.putRecord`.
+The factory verifies the complete dependency graph before producing the receipt;
+it does not write the receipt or change a resource.
+
+Reviewer kind (`human` or `agent`), reviewer ID and review authority are supplied
+claims with `authority:"caller_declared"`. An accepted request with an agent reviewer
+or unknown human calibration has effective disposition `inconclusive`; its requested
+disposition remains recorded. Explicit rejection remains rejected when human status
+is unknown. A known human-calibration state means the suite supplied its required
+human receipts, not that this package authenticated a person or observed their review.
+A model PASS alone supplies no review authority and cannot create an eligible receipt.
+
+`replayGatePromotionReceipt(archive, receiptRef, currentBinding)` resolves the full
+receipt graph, replays calibration, recomputes the report and rechecks the stored
+binding/disposition. `currentBinding` requires current `pins`, `selected_target_coverage`,
+`policy_ref`, `destination` and `rollback`; none default to the receipt's old values.
+A changed revision, selected target, policy, destination or rollback makes applicability
+`stale`, with the changed binding names returned separately from the recorded decision.
+Current references are structurally checked; the receipt's actual archived evidence
+is resolved. This does not prove that a current external destination exists or was written.
+
+A matching accepted receipt reports a `reviewed_candidate` under caller-declared
+authority. Every result carries `automatic_promotion:false`, including accepted records.
+Actual create/update/rollback stays with separately authorized `resource_manager`
+operations and their existing confirmation/versioning rules. This API adds no promotion
+verb, mutation capability, authenticated operator identity or native provider proof.
+Missing or corrupt archive evidence throws; it does not yield a successful placeholder.
+
 ## Records and references
 
 `createArchiveRecord` creates a detached, recursively frozen envelope.
@@ -206,13 +249,15 @@ Keep raw native traces and authentication/session material out of Git.
 | `getBlob(ref)`              | Read detached bytes and verify their digest                                  |
 | `putRecord(record)`         | Resolve declared dependencies, then publish the canonical envelope           |
 | `getRecord(ref)`            | Read a frozen envelope and verify its body digest, kind, and canonical bytes |
+| `resolveClosure(refs)`      | Read and verify the entire declared reference graph without publishing       |
 
 Before publishing a record, the archive resolves its top-level references, provenance
 references, and known usage/cost source references. Missing or corrupt dependencies
-refuse publication. `getRecord` validates the envelope itself; replay must explicitly
-load every referenced blob/record through `getBlob`/`getRecord`. A missing dependency
-then fails at lookup. Reading one envelope does not recursively validate its dependency
-closure.
+refuse publication. `getRecord` validates the envelope itself; reading one envelope does
+not recursively validate its dependency closure. Explicit `resolveClosure` follows record
+references, provenance references and known usage/cost sources at every level, deduplicates
+visited references and refuses missing or corrupt dependencies. Calibration and promotion
+replay use this shared archive authority.
 
 The flat layout is `blobs/<64-hex-digest>` and `records/<64-hex-digest>.json`. Roots and
 archive directories require mode `0700`, final files require `0600`, and ownership is
