@@ -1,0 +1,14 @@
+{
+  "name": "@claude-prompts/evaluations",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Opt-in repository-local evaluation evidence contracts and archive.",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.ts",
+    "typecheck": "node ../server/node_modules/typescript/bin/tsc --project tsconfig.json"
+  }
+}
