@@ -217,14 +217,14 @@ Tier gate: focused review/capture/history tests plus both built-server acceptanc
 
 Entry: benchmark plan E1/E2/E3 contract/archive decisions and receipts are available, or activated under their canonical rows in a coordinated slice. O2 labels/exposure, O3 provenance and O4 promotion policy are ruled. TypeScript paths below are proposed under the optional package; if E1 chooses a different build/language, recut/reverify these paths before dispatch. No second archive is permitted.
 
-| #   | St                                                                                                                                                   | File                                                                                                                               | Change                                                                                                                                                                                      | ~Lines                                      | Depends       | Verify                                                                                                                                                                                                                               | Justification                                                                                                           |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| 6.1 | ☐ (as of 2026-10-07 · flips when reviewed suite revisions are independent and reserved cases stay private)                                           | **Create** evaluations/gates/contracts.ts; **Create** evaluations/gates/calibration.test.ts; canonical benchmark contracts         | Specialize suite/expected-label/exposure/coverage contracts; reference reviewed labels and public criterion IDs without embedding private cases in gate resources.                          | +120-200; <=4 files                         | —             | Positive/negative/valid-alternative/boundary/insufficient families; invalid label/revision and leakage controls; suite-only edit leaves gate bytes unchanged.                                                                        | A gate suite is a domain specialization of existing benchmark contracts, not a new catalog resource type.               |
-| 6.2 | ☐ (as of 2026-10-07 · flips when validation records bind exact revisions and survive runtime-history loss)                                           | **Create** evaluations/gates/calibration.ts; canonical benchmark archive/adapter interfaces; evaluations/gates/calibration.test.ts | One explicit calibration invocation over frozen gate/suite/target snapshots; reuse existing clients and archive; append all attempts.                                                       | +150-240; <=4 files                         | 6.1           | Deterministic fake adapter for software contract tests; incomplete/crash/stale/duplicate/missing-provenance cases; archive replay after deleting disposable runtime state.                                                           | Adapter tests prove persistence/data flow; fake grades never establish model accuracy.                                  |
-| 6.3 | ☐ (as of 2026-10-07 · flips when reports expose failures, missing evidence, disagreement and comparison limits)                                      | **Create** evaluations/gates/report.ts; canonical benchmark report/grade contracts; evaluations/gates/calibration.test.ts          | Gate-specific projection: confusion counts/rates with denominators, insufficient cases, repeat stability, reviewer disagreement, attempt overhead and provenance.                           | +100-170; <=4 files                         | 6.2           | Hand-calculated fixtures; no-success/missing cases; changed suite/evaluator marks comparisons incompatible rather than silently merging them.                                                                                        | Generic report/archive fields are reused; repeated judgments are not independent task evidence.                         |
-| 6.4 | ☐ (as of 2026-10-07 · flips when an isolated pilot has reviewed labels and discriminating measured outcomes)                                         | MCP candidate derived from plan-quality; operator-selected evaluation case pack; evaluations/gates/calibration.ts                  | Create/validate the candidate through MCP in isolated roots. Freeze suite/labels before tuning; compare current prose review with the structured candidate under matched reviewer settings. | <=1 candidate, 2 criteria, 1 reviewed suite | 6.1, 6.2, 6.3 | Offline schema/control rehearsal first; live self/second-pass/judge judgments only within explicit budget/configuration scope. Record false acceptance/rejection and abstentions; no superiority claim from synthetic adapter tests. | Small pilot establishes usefulness before catalog migration. O2 decides the reviewed sample/reserved split.             |
-| 6.5 | ☐ (as of 2026-10-07 · flips when a reviewed exact-revision disposition controls promotion eligibility)                                               | Canonical benchmark promotion-receipt seam; evaluations/gates/report.ts; existing MCP resource authority                           | Bind eligibility to reviewed gate/suite/evaluator evidence and rollback. Any actual promotion remains a separately authorized resource mutation.                                            | +60-120; <=3 files                          | 6.3, 6.4      | Revision change invalidates eligibility; rejected/inconclusive/override results cannot self-promote; archive unavailability is explicit.                                                                                             | One gate evolution consumes the same general review/promotion authority as other resources.                             |
-| 6.6 | ☐ (as of 2026-10-07 · flips when gate specialization imports the canonical server kernel through explicit pinned tooling and offline CI executes it) | `evaluations/package.json`; `evaluations/README.md`; `.github/workflows/evaluations.yml`                                           | Add explicit gate-test command using existing server tsx loader; preserve native core tests, strict types and opt-in dependency boundary.                                                   | <=3 files; no dependency install            | 6.1, 6.2, 6.3 | Actual kernel import and gate controls run under pinned loader; plain native core suite remains green; offline CI has no model calls.                                                                                                | R12 measured native Node cannot resolve server .js source specifiers; reuse server loader rather than duplicate kernel. |
+| #   | St                                                                                                              | File                                                                                                                                                                                           | Change                                                                                                                                                                                      | ~Lines                                                                                                  | Depends       | Verify                                                                                                                                                                                                                               | Justification                                                                                                           |
+| --- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| 6.1 | ✓ (2026-10-07 ·9 gate controls, privacy/family mutations and strict types;5ff43445b merged; notes H6.1)         | **Create** `evaluations/gates/contracts.ts`; **Create** `evaluations/gates/calibration.test.ts`; `server/src/shared/utils/nested-key-refusal.ts`; `server/src/shared/types/gate-evaluation.ts` | Specialize suite/expected-label/exposure/coverage contracts; reference reviewed labels and public criterion IDs without embedding private cases in gate resources.                          | <=4 files; authored +120-200 -> measured suite source390/test586; two typing-only compatibility repairs | —             | Positive/negative/valid-alternative/boundary/insufficient families; invalid label/revision and leakage controls; suite-only edit leaves gate bytes unchanged.                                                                        | A gate suite is a domain specialization of existing benchmark contracts, not a new catalog resource type.               |
+| 6.2 | ☐ (as of 2026-10-07 · flips when validation records bind exact revisions and survive runtime-history loss)      | **Create** `evaluations/gates/calibration.ts`; `evaluations/gates/calibration.test.ts`; `server/src/shared/types/gate-evaluation.ts`                                                           | One explicit calibration invocation over frozen gate/suite/target snapshots; reuse existing clients and archive; append all attempts.                                                       | <=3 files; authored +150-240 plus schema-backed optional typing compatibility                           | 6.1           | Deterministic fake adapter for software contract tests; incomplete/crash/stale/duplicate/missing-provenance cases; archive replay after deleting disposable runtime state.                                                           | Adapter tests prove persistence/data flow; fake grades never establish model accuracy.                                  |
+| 6.3 | ☐ (as of 2026-10-07 · flips when reports expose failures, missing evidence, disagreement and comparison limits) | **Create** evaluations/gates/report.ts; canonical benchmark report/grade contracts; evaluations/gates/calibration.test.ts                                                                      | Gate-specific projection: confusion counts/rates with denominators, insufficient cases, repeat stability, reviewer disagreement, attempt overhead and provenance.                           | +100-170; <=4 files                                                                                     | 6.2           | Hand-calculated fixtures; no-success/missing cases; changed suite/evaluator marks comparisons incompatible rather than silently merging them.                                                                                        | Generic report/archive fields are reused; repeated judgments are not independent task evidence.                         |
+| 6.4 | ☐ (as of 2026-10-07 · flips when an isolated pilot has reviewed labels and discriminating measured outcomes)    | MCP candidate derived from plan-quality; operator-selected evaluation case pack; evaluations/gates/calibration.ts                                                                              | Create/validate the candidate through MCP in isolated roots. Freeze suite/labels before tuning; compare current prose review with the structured candidate under matched reviewer settings. | <=1 candidate, 2 criteria, 1 reviewed suite                                                             | 6.1, 6.2, 6.3 | Offline schema/control rehearsal first; live self/second-pass/judge judgments only within explicit budget/configuration scope. Record false acceptance/rejection and abstentions; no superiority claim from synthetic adapter tests. | Small pilot establishes usefulness before catalog migration. O2 decides the reviewed sample/reserved split.             |
+| 6.5 | ☐ (as of 2026-10-07 · flips when a reviewed exact-revision disposition controls promotion eligibility)          | Canonical benchmark promotion-receipt seam; evaluations/gates/report.ts; existing MCP resource authority                                                                                       | Bind eligibility to reviewed gate/suite/evaluator evidence and rollback. Any actual promotion remains a separately authorized resource mutation.                                            | +60-120; <=3 files                                                                                      | 6.3, 6.4      | Revision change invalidates eligibility; rejected/inconclusive/override results cannot self-promote; archive unavailability is explicit.                                                                                             | One gate evolution consumes the same general review/promotion authority as other resources.                             |
+| 6.6 | ✓ (2026-10-07 ·native30 +gate9/types and workflow controls accepted; hostedCI pending boundary; notes H6.6)     | `evaluations/package.json`; `evaluations/README.md`; `.github/workflows/evaluations.yml`                                                                                                       | Add explicit gate-test command using existing server tsx loader; preserve native core tests, strict types and opt-in dependency boundary.                                                   | <=3 files; no dependency install                                                                        | 6.1           | Actual kernel import and gate controls run under pinned loader; plain native core suite remains green; offline CI has no model calls.                                                                                                | R12 measured native Node cannot resolve server .js source specifiers; reuse server loader rather than duplicate kernel. |
 
 Tier gate: offline calibration contract/metric/isolation controls. Live grader calibration is separately recorded and budgeted; incomplete or unavailable provenance limits the corresponding claim. No runtime or catalog promotion occurs from a green software test.
 
@@ -267,49 +267,64 @@ Tier gate: package-native tests and strict types, shared archive proof and offli
 | evaluations/gates/calibration.test.ts                    | Exercises suite/privacy/archive/report contracts together; server gate tests cannot prove private archive persistence or reviewer-calibration validity.                     |
 | docs/guides/semantic-gate-calibration.md                 | One owning guide for suite authoring, protected cases, validation records and reviewed promotion, linked from existing gate/judge guides.                                   |
 
+### Tier 9: publication-boundary hygiene repairs (measured 2026-10-07)
+
+Entry: source/type and focused archive checks passed; first full validator boundary measured81/85pass with four named failures. These repairs do not activate semantic gates or change grading policy.
+
+| #   | St                                                                                                             | File                                                                                                                      | Change                                                                                                                                   | ~Lines                        | Depends | Verify                                                                                               | Justification                                                                                     |
+| --- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| 9.1 | ✓ (2026-10-07 ·schema2->0 diagnostics, source types/real hooks green;0e673bcd2 merged; notes H9.1)             | `server/src/mcp/tools/schemas/prompt-engine.schema.ts`                                                                    | Child repair row1.4 orders module/shared type imports and removes redundant reviewer type assertion while preserving schema/type checks. | <=1 file; typing/import only  | —       | Focused ESLint newdiagnostics0; source types green; parent wholelint ratchet baseline.               | Boundary found two new source lint errors not visible to pre-commit source compiler.              |
+| 9.2 | ✓ (2026-10-07 ·canonical catalog check and Knip1069/unusedtypes619 pass with no category increase; notes H9.2) | `docs/reference/module-catalog.md`; `server/.knip-ratchet-baseline.json`                                                  | Regenerate canonical catalog and lower stale Knip unused-type ceiling to measured count; never allow an increase.                        | <=2 generated files           | 9.1     | Canonical generate/check commands; inspect all baseline counts, noincrease; modulecatalog bytecheck. | Moving submission vocabulary removed one unused type and changed declared dependency projections. |
+| 9.3 | ✓ (2026-10-07 ·child frontmatter repaired;retire/row validators pass;0e673bcd2 merged; notes H9.1)             | `plans/semantic-gate-runtime-slice-2026-10-07.md`; `plans/semantic-gate-runtime-slice-2026-10-07-implementation-notes.md` | Child planner adds required tags and notes frontmatter; preserve active status and all unfinished rows.                                  | <=2 plan files; planner-owned | —       | plans:retire:check and plan-row tracking; no premature retirement.                                   | Full suite found missingtags/notesfrontmatter, making lifecycle invisible.                        |
+
+Tier gate: four previously failing validator families pass on the stable publication snapshot; all85validators remain required beforepush.
+
 ## Execution dispatch
 
 Tier labels below describe failure shape under the current skill contract; they are not claims about an effective provider model. Bind the receiving client's actual model/effort controls at dispatch. All workers own their named row/files, preserve others' edits, run their row checks, and return done/concerns/deviations/findings/feedback. Own branches are local until the planner merges accepted handoffs.
 
-| Row | Tier   | Effort | Failure shape  | branch_mode |
-| --- | ------ | ------ | -------------- | ----------- |
-| 1.1 | opus   | high   | wrong approach | shared-tree |
-| 1.2 | opus   | high   | wrong approach | shared-tree |
-| 2.1 | opus   | high   | wrong approach | own-branch  |
-| 2.2 | sonnet | high   | wrong output   | own-branch  |
-| 2.3 | opus   | high   | wrong approach | own-branch  |
-| 2.4 | sonnet | high   | wrong output   | own-branch  |
-| 3.1 | opus   | high   | wrong approach | own-branch  |
-| 3.2 | opus   | high   | wrong approach | own-branch  |
-| 3.3 | sonnet | high   | wrong output   | own-branch  |
-| 3.4 | sonnet | high   | wrong output   | own-branch  |
-| 4.1 | opus   | high   | wrong approach | own-branch  |
-| 4.2 | opus   | high   | wrong approach | own-branch  |
-| 4.3 | sonnet | high   | wrong output   | own-branch  |
-| 5.1 | opus   | high   | wrong approach | own-branch  |
-| 5.2 | opus   | high   | wrong approach | own-branch  |
-| 5.3 | sonnet | high   | wrong output   | own-branch  |
-| 5.4 | sonnet | high   | wrong output   | own-branch  |
-| 5.5 | sonnet | high   | wrong output   | own-branch  |
-| 6.1 | opus   | high   | wrong approach | own-branch  |
-| 6.2 | opus   | high   | wrong approach | own-branch  |
-| 6.3 | sonnet | high   | wrong output   | own-branch  |
-| 6.4 | opus   | high   | wrong approach | own-branch  |
-| 6.5 | opus   | high   | wrong approach | own-branch  |
-| 6.6 | sonnet | high   | wrong output   | shared-tree |
-| 7.1 | sonnet | high   | wrong output   | own-branch  |
-| 7.2 | sonnet | high   | wrong output   | own-branch  |
-| 7.3 | sonnet | medium | wrong output   | own-branch  |
-| 1.3 | sonnet | high   | wrong output   | shared-tree |
-| 1.4 | haiku  | low    | wrong lookup   | shared-tree |
-| 1.5 | sonnet | high   | wrong output   | shared-tree |
-| 1.6 | sonnet | high   | wrong output   | shared-tree |
-| 0.1 | opus   | high   | wrong approach | shared-tree |
-| 0.2 | opus   | high   | wrong approach | shared-tree |
-| 8.1 | opus   | high   | wrong approach | shared-tree |
-| 8.2 | opus   | high   | wrong approach | shared-tree |
-| 8.3 | sonnet | high   | wrong output   | shared-tree |
-| 8.4 | sonnet | high   | wrong output   | shared-tree |
+| Row | Tier    | Effort | Failure shape  | branch_mode   |
+| --- | ------- | ------ | -------------- | ------------- |
+| 1.1 | opus    | high   | wrong approach | shared-tree   |
+| 1.2 | opus    | high   | wrong approach | shared-tree   |
+| 2.1 | opus    | high   | wrong approach | own-branch    |
+| 2.2 | sonnet  | high   | wrong output   | own-branch    |
+| 2.3 | opus    | high   | wrong approach | own-branch    |
+| 2.4 | sonnet  | high   | wrong output   | own-branch    |
+| 3.1 | opus    | high   | wrong approach | own-branch    |
+| 3.2 | opus    | high   | wrong approach | own-branch    |
+| 3.3 | sonnet  | high   | wrong output   | own-branch    |
+| 3.4 | sonnet  | high   | wrong output   | own-branch    |
+| 4.1 | opus    | high   | wrong approach | own-branch    |
+| 4.2 | opus    | high   | wrong approach | own-branch    |
+| 4.3 | sonnet  | high   | wrong output   | own-branch    |
+| 5.1 | opus    | high   | wrong approach | own-branch    |
+| 5.2 | opus    | high   | wrong approach | own-branch    |
+| 5.3 | sonnet  | high   | wrong output   | own-branch    |
+| 5.4 | sonnet  | high   | wrong output   | own-branch    |
+| 5.5 | sonnet  | high   | wrong output   | own-branch    |
+| 6.1 | opus    | high   | wrong approach | own-branch    |
+| 6.2 | opus    | high   | wrong approach | own-branch    |
+| 6.3 | sonnet  | high   | wrong output   | own-branch    |
+| 6.4 | opus    | high   | wrong approach | own-branch    |
+| 6.5 | opus    | high   | wrong approach | own-branch    |
+| 6.6 | sonnet  | high   | wrong output   | shared-tree   |
+| 7.1 | sonnet  | high   | wrong output   | own-branch    |
+| 7.2 | sonnet  | high   | wrong output   | own-branch    |
+| 7.3 | sonnet  | medium | wrong output   | own-branch    |
+| 1.3 | sonnet  | high   | wrong output   | shared-tree   |
+| 1.4 | haiku   | low    | wrong lookup   | shared-tree   |
+| 1.5 | sonnet  | high   | wrong output   | shared-tree   |
+| 1.6 | sonnet  | high   | wrong output   | shared-tree   |
+| 0.1 | opus    | high   | wrong approach | shared-tree   |
+| 0.2 | opus    | high   | wrong approach | shared-tree   |
+| 8.1 | opus    | high   | wrong approach | shared-tree   |
+| 8.2 | opus    | high   | wrong approach | shared-tree   |
+| 8.3 | sonnet  | high   | wrong output   | shared-tree   |
+| 8.4 | sonnet  | high   | wrong output   | shared-tree   |
+| 9.1 | sonnet  | high   | wrong output   | shared-tree   |
+| 9.2 | haiku   | low    | wrong output   | shared-tree   |
+| 9.3 | planner | high   | wrong output   | planner-owned |
 
 ## Open rulings and activation prerequisites
 

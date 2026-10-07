@@ -12,10 +12,10 @@ tags: [gates, semantic, evaluation]
 
 ## Now (2026-10-07)
 
-Goal: retain evidence and decisions for the semantic-gate/calibration initiative.
-Slice: first contract/kernel slice completed and validated; six rows closed, 24 remain open.
-Next: publish the prepared PR, verify required CI and review, then merge under R6.
-Constraint: reviewed GitHub delivery authorized; live activation, model budget and resource promotion retain their independent gates.
+Goal: finish the full initiative with frozen baseline and actual workflow testing.
+Slice: archive foundation accepted after independent array-prototype repair; parent publication boundary found four hygiene failures, child runtime source and isolated gate-suite contracts continue.
+Next: accept schema/frontmatter/derived projection repairs, recheck failed families and publish reviewed foundation; preserve full runtime/pilot completion work.
+Constraint: reviewed push+merge authorized, no release/global framework changes/automatic candidate promotion.
 
 ## Planning receipts
 
@@ -385,3 +385,31 @@ Worker first added six controls; original source failed five rejection controls 
 Actual standalone private-temp archive drive published an evidence blob/record, deleted unrelated runtime-state, reopened and recovered the record/reference. Output replay_after_state_deletion:true, cost state:unknown/reason:not recorded, blob:captured review evidence. Deliberate blob tamper produced Archive blob digest mismatch for sha256:1fc713f1528b10503408ddd9e0af86b3043a8549a56e96553bc3f4b80db14849. Temp root removed in finally. This is actual archive behavior, not MCP/model accuracy.
 
 All shared archive rows8.1-8.4 source artifacts accepted; hosted optionalCI remains a PR gate. Publication includes the introduced runtime child plan and its completed contract/metadata rows, so the generator selects that real phase plan footer; master records the shared dependency receipts and PR association. Main runtime/capture/enforcement/pilot remain open, with no live semantic criterion activation in this foundation boundary.
+
+## F9 / R16: boundary failures and exact-optional shared typing
+
+First full boundary: source typecheck passed; test type ratchet341existing/no regressions. Whole lint failed +1 importorder/+1 unnecessaryassertion both MCP report schema. validate:all measured81/85pass; the four failures were lint, Knipunusedtypes620->619 stale ceiling, generatedmodulecatalog drift and missingchildplan tags/notesfrontmatter. These are repairrows9.1-9.3; no baselineincrease or validatorwaiver. Child planner isolates its ten uncommitted custody files by immutable stashOID while producing an independently green one-file schema repair; its own planfrontmatter fixed with writeback. Parent derivedoutputs remain separate bounded row9.2.
+
+Canonical gate schema reuse in optionalstrict package exposed13transitive compiler failures:12Zod AdapterIssue.path optional fields reject explicitundefined, and SemanticCriterionInput.allow_not_applicable?:boolean rejects Zodinput boolean|undefined. Row6.1 expanded2->4files, <=3ownermodules, to repair actual shared contracts with explicitundefined typing only. No gate-schemafork/configrelaxation/castwaiver. Suite source estimate+120-200 measured388plus test526; privacy/readiness/reference controls explain scope, filecap retained. Exactimmutable suite record digest is revision authority; textualrevision alias cannot authorize comparison/promotion reuse, so no extra mutable revisionindex or previousSuite state machine.
+
+## H6.1/H9.1 and R17: source integrations, early package CI seam
+
+Read private suite contract/projection390lines and tests586 plus exact two shared typing changes. Nine gate controls pass, privacy and family mutations eachfaildesignatedcontrolthenrestored; optional/server strict types and two source ESLint files0/0. Suite creation first detaches via generic lossless factory, lifts target/review dependencyrefs into canonical envelope; ordinaryprojection refusesreservedcases and allowlists selectedtarget/publicrubric/criterionIDs. Exactrecorddigest is revisionauthority, allfivefamiliesneednonreservedreviewedcases, humanreceiptsremain suppliedcallertrust not machineverifiedidentity. Parent merged5ff43445b without source conflicts.
+
+Read child0e673bcd2: importordering and conditional reverse-type proof preserve reviewer vocabulary without redundantassertion; childtags/notesfrontmatter fixed. Parent merged exactcommit. Childsourcecustodybackup restored against immutable stashOID acrossalltenpaths with diff0, retained temporarily for cleanup; no source lost. Parent9.1/9.3accepted, wholelint/final85stillboundarywork.
+
+Recut6.6 entry to6.1-only: newlyintroducedgate suite must run in optionalCI immediately, so explicit existingservertsx loader/packagecommands precede futurecalibration/report implementation. Nativecoretests remainseparate. The firstcompiledtier#13accepted6.1 but arbitraryremainderreplacement was refused because remainder is specifically forblockingunknowns, not routineprioritychanges. No fakeunknowndeclared. Cancelledthatobsolete compiledrun retainingartifacts, thenrecompileonlyremainingfive nodes in revisedorder; productionwork remainsaccepted and initiativecontinues.
+
+## H6.6/H9.2: explicit gate tooling and derived boundary artifacts accepted
+
+Read package/workflow/README43e0ffb91 plus278399f7c correction. Parent merged them: npmtest runs nativecore30then pinnedserverloader gate9; separate commands preserve nativecore boundary. Strictoptionaltypes pass; workflow pin/command/filter controls and sixlinks pass, missinggatestep/changedpin falsifiers fail. Docs qualify runtimeassociationauthoring as pendingactivation and suppliedhumanreview authority as caller-held, not verifiedidentity. Hostedworkflow remains a PRgate, no modelcalls.
+
+Read generatedtwo-file projection: engine-gates instability0.55->0.56 only. CanonicalKnipbaseline lowers unusedtypes620->619, total1070->1069; everyothercategory/override log unchanged; generatedAt refreshexpected. Both generatedcatalog and Knipratchet checks pass. No increasewaiver or hand-editedcatalog.
+
+## R18: calibration invocation authority and exact snapshot seam
+
+Add explicit verified gate_snapshot blob, canonicalJSON of resolvedpublic LightweightGateDefinition fields id/pass_criteria/guidance/evaluation and relevantpublicmetadata, excluding sourceRoot. Its actualbytehash equals suite.definition_digest; snapshotID and canonical parsedsemanticcriteria equal publicRubric ID/criteria, loadedguidance string and effectiverouting are retained. Publicrubric/evaluatorconfigs separatelyarchived; no circular digestfield insidehashedsnapshot. Adapter seesfrozenselectedpublictarget/rubric/binding only; expectedcontext deep-frozen separately. ActualUTF8bytes decodefatally, neverreplacement. Firstpilot supports step_output; unsupported artifactcapability is expliciterror/unattempted, neverarbitraryFSaccess.
+
+Reserve requestedcase records unattempted withoutcallback; otherdevelopmentattemptscontinue. Allrequested starts archivedbeforecallbacks; everyterminalresult or sanitizederror/incomplete event retained, finalmanifestlistscompleteattemptset. Deadlines caller-held explicitoutcomes, no modelclient/timer/runner/state machine. Duplicate7partidentities refused beforecallbacks withininvocation and exactprior deterministicallyboundstart reuse whenobservable. Global uniqueidentity allocation acrossdifferentinvocations/pins iscaller-held, no newmutableindex. Replayresolvesactualsnapshots/refs and canonicalkernel results; missing/corrupt/conflicting evidence errorscannotbegradedzero orsuccess.
+
+Canonicalkernel import exposed four additional optionalstrict typing diagnostics;6.2 recut2->3files to add explicitundefined to onlyschema-backed optional provider/model/revision/context,value,quote,capturedtarget.id insharedtypes. No runtime/kernel/schemafork/configrelaxation. Parentruntimeplannerreceivedsame existingpublicsnapshot shape before its captureimplementation.
