@@ -293,6 +293,16 @@ Entry: source/type and focused archive checks passed; first full validator bound
 
 Tier gate: four previously failing validator families pass on the stable publication snapshot; all85validators remain required beforepush.
 
+### Tier 10: canonical definition identity repair
+
+Entry: real schema-loaded criterion reproduces a canonical digest collision. Publication waits exact safe-key repair and independent recheck.
+
+| #    | St                                                                                                                 | File                                                                             | Change                                                                                                                                    | ~Lines                        | Depends | Verify                                                                                                                        | Justification                                                                                                                                          |
+| ---- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 10.1 | ✓ (2026-10-07 ·old11red/fixed37controls, native real schema/wholegate independent recheck;0155ebcfc merged; H10.1) | `server/src/shared/utils/hash.ts`; `server/tests/unit/shared/utils/hash.test.ts` | Preserve literal own **proto** keys safely in canonical objects without altering prototypes, ordinary historical hashes or legacy family. | <=2 files, shared-utils owner | —       | Old-source/mutation collision controls fail, restored special-key/ordinary fixtures and real gate-schema input controls pass. | GatePassCriteriaSchema accepts nested script_tool_input key that canonicalJson currently silently drops, violating full public definition digest pins. |
+
+Tier gate: collision refused by distinct canonical identities and unchanged ordinary digest fixtures; no serializer redesign or activation implied.
+
 ## Execution dispatch
 
 Tier labels below describe failure shape under the current skill contract; they are not claims about an effective provider model. Bind the receiving client's actual model/effort controls at dispatch. All workers own their named row/files, preserve others' edits, run their row checks, and return done/concerns/deviations/findings/feedback. Own branches are local until the planner merges accepted handoffs.
