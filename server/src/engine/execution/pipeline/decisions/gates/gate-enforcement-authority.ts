@@ -8,10 +8,12 @@ import {
 } from '../../../../gates/config/index.js';
 import { DEFAULT_RETRY_LIMIT } from '../../../../gates/constants.js';
 import { deriveGateTier } from '../../../../gates/core/gate-tier.js';
+import { parseGateVerdict } from '../../../../gates/core/gate-verdict-contract.js';
 import { parseGateVerdictReminders } from '../../../../gates/core/gate-verdict-renderer.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateReview, GateReviewKind } from '#shared/types/chain-execution.js';
+import type { GateVerdictSubmission } from '#shared/types/gate-evaluation.js';
 import type {
   ChainSessionService,
   GateReviewPrompt,
@@ -74,15 +76,19 @@ export class GateEnforcementAuthority {
   }
 
   /**
-   * Parse a raw string into a structured verdict.
+   * Parse typed submissions directly, or match legacy text against cached verdict patterns.
    * Supports multiple formats for flexibility while maintaining security.
    * Patterns are loaded from YAML configuration for runtime customization.
    *
-   * @param raw - Raw verdict string from user input
+   * @param raw - Validated structured submission or legacy verdict text
    * @param source - Where the verdict came from (affects security validation)
    * @returns Parsed verdict or null if no pattern matched
    */
-  parseVerdict(raw: string | undefined, source: VerdictSource): ParsedVerdict | null {
+  parseVerdict(
+    raw: string | GateVerdictSubmission | undefined,
+    source: VerdictSource
+  ): ParsedVerdict | null {
+    if (typeof raw !== 'string') return parseGateVerdict(raw, source);
     if (!raw) {
       return null;
     }
@@ -148,17 +154,17 @@ export class GateEnforcementAuthority {
    * ever has to carry the list around to interpret a verdict — the same key `GateCheckResult`
    * already uses, so the reviewer's opinion and the engine's ground truth are joinable.
    *
-   * An index outside the advertised list is DROPPED with a diagnostic, never clamped and never
-   * guessed: attributing a FAIL to the wrong gate is worse than not recording it, and a guess
-   * would make the resulting record indistinguishable from a correct one.
+   * Structured entries resolve directly from the original submission, preserving reports.
+   * An unknown or duplicate structured index refuses the whole submission before any summaries
+   * return. Legacy strings keep their diagnostic-and-drop behavior for out-of-range indexes.
    *
-   * @param raw - Raw response containing a GATE_VERDICTS block
+   * @param raw - Validated typed submission or text containing a GATE_VERDICTS block
    * @param gateIds - The gate list this review advertised, in the order it advertised them
    * @param attempt - Review attempt this submission answers, recorded on each entry
    * @returns Gate-id-keyed summaries (empty if no block found or none resolved)
    */
   parseGateVerdicts(
-    raw: string,
+    raw: string | GateVerdictSubmission,
     gateIds: readonly string[],
     attempt?: number
   ): GateVerdictSummary[] {
@@ -167,6 +173,9 @@ export class GateEnforcementAuthority {
     }
 
     const timestamp = Date.now();
+    if (typeof raw !== 'string') {
+      return this.readStructuredVerdicts(raw, gateIds, timestamp, attempt);
+    }
     const summaries: GateVerdictSummary[] = [
       ...this.readReminderAttestation(raw, gateIds, timestamp, attempt),
     ];
@@ -206,8 +215,40 @@ export class GateEnforcementAuthority {
     return summaries;
   }
 
+  /** Resolve structured indexes once, then project reminders after every index has passed. */
+  private readStructuredVerdicts(
+    submission: GateVerdictSubmission,
+    gateIds: readonly string[],
+    timestamp: number,
+    attempt?: number
+  ): GateVerdictSummary[] {
+    const seen = new Set<number>();
+    const entries = (submission.per_gate ?? []).map((entry): GateVerdictSummary => {
+      const gateId = gateIds[entry.index - 1];
+      if (gateId === undefined || !Number.isInteger(entry.index) || entry.index < 1) {
+        throw new Error(
+          `Structured gate verdict refused: index [${entry.index}] names no advertised gate ` +
+            `(the review advertised ${gateIds.length}).`
+        );
+      }
+      if (seen.has(entry.index)) {
+        throw new Error(`Structured gate verdict refused: duplicate index [${entry.index}].`);
+      }
+      seen.add(entry.index);
+      return {
+        gateId,
+        verdict: entry.passed ? 'PASS' : 'FAIL',
+        rationale: entry.rationale,
+        timestamp,
+        ...(attempt !== undefined ? { attempt } : {}),
+        ...(entry.evaluation !== undefined ? { evaluation: entry.evaluation } : {}),
+      };
+    });
+    return [...this.readReminderAttestation(submission, gateIds, timestamp, attempt), ...entries];
+  }
+
   /**
-   * Fold the `REMINDERS:` line into the same gate-id-keyed record as the per-gate block.
+   * Fold typed reminders or a legacy `REMINDERS:` line into the same gate-id-keyed record.
    *
    * `parseGateVerdictReminders` was the render half's reader and had none of its own: the line
    * was produced, round-trip tested, and consumed by nothing (P4.78). This is where it earns a
@@ -224,12 +265,12 @@ export class GateEnforcementAuthority {
    * index is: an attestation about a gate that was not under review is not a fact about it.
    */
   private readReminderAttestation(
-    raw: string,
+    raw: string | GateVerdictSubmission,
     gateIds: readonly string[],
     timestamp: number,
     attempt?: number
   ): GateVerdictSummary[] {
-    const reminders = parseGateVerdictReminders(raw);
+    const reminders = typeof raw === 'string' ? parseGateVerdictReminders(raw) : raw.reminders;
     if (reminders === undefined) {
       return [];
     }

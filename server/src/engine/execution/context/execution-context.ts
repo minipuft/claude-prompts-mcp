@@ -154,13 +154,13 @@ export class ExecutionContext {
   }
 
   /**
-   * Type-safe getter for gate verdict with trimming
+   * Preserve typed verdict custody; trim only the legacy string branch.
    *
-   * @returns Trimmed gate verdict if present, undefined otherwise
+   * @returns Original structured verdict, nonempty trimmed text, or undefined
    */
-  getGateVerdict(): string | undefined {
-    const verdict = this.mcpRequest.gate_verdict?.trim();
-    return verdict && verdict.length > 0 ? verdict : undefined;
+  getGateVerdict(): McpToolRequest['gate_verdict'] {
+    const verdict = this.mcpRequest.gate_verdict;
+    return typeof verdict === 'string' ? verdict.trim() || undefined : verdict;
   }
 
   /**

@@ -7,6 +7,7 @@
  * to shared/ to respect the dependency direction: shared → engine → modules → mcp.
  */
 
+import type { SemanticEvaluationReport } from '#shared/types/gate-evaluation.js';
 // The handoff evidence reason's ONE definition lives with the contract that produces it, so the
 // record shape and the resolver cannot drift. Type-only, like `execution.ts`'s
 // `#modules/workflow-ir` import — no value crosses the layer.
@@ -112,6 +113,8 @@ export interface GateVerdictSummary {
   rationale?: string;
   timestamp: number;
   attempt?: number;
+  /** Original client report retained for later adjudication; custody alone grants no authority. */
+  evaluation?: SemanticEvaluationReport;
   /**
    * Which kind of gate produced this verdict, so a self-declared attestation is never counted
    * as a graded result.

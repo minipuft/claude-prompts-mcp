@@ -330,7 +330,7 @@ prompt_engine(command:"%judge analysis_report")
 | `command`       | string  | Prompt ID with operators and arguments                                                                                                                                                                                                                           |
 | `chain_id`      | string  | Resume token for continuing chains                                                                                                                                                                                                                               |
 | `user_response` | string  | Your output from previous step (for chain resume)                                                                                                                                                                                                                |
-| `gate_verdict`  | union   | Structured review object or legacy verdict string. Optional `per_gate[].evaluation` is a staged report schema; runtime custody is pending. See [Gate Verdict Formats](#gate-verdict-formats). Rationale required.                                                |
+| `gate_verdict`  | union   | Structured review object or legacy verdict string. Optional `per_gate[].evaluation` retains typed custody through the processor; live semantic criteria remain refused. See [Gate Verdict Formats](#gate-verdict-formats). Rationale required.                   |
 | `gate_action`   | enum    | Your move on a run that is waiting for one. After a FAILED GATE with retries exhausted: `retry`, `skip`, `abort`. On a run PAUSED by a blocking unknown: `resume`, `accept_alternative`, `abort`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt). |
 | `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                                                           |
 | `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                                                        |
@@ -1707,11 +1707,11 @@ branch remains accepted, with these case-insensitive formats:
 ### Semantic report schema (staged)
 
 The boundary schema accepts an optional report at `per_gate[i].evaluation` within the same
-`gate_verdict` object/string union. **Runtime custody is pending:** tool registration still
-flattens structured submissions to legacy display text, which cannot preserve reports, and live
-`semantic_evaluation` resource criteria are still refused. This is a validated input contract,
-not an enabled semantic review flow. Keep reports structured; do not encode JSON in a rationale
-or submit a separate `findings` field.
+`gate_verdict` object/string union. Registration, request, parsing and processor paths preserve
+the original typed submission and report. **Runtime activation is pending:** live
+`semantic_evaluation` resource criteria are still refused, and server-issued binding and runtime
+adjudication remain pending activation work. Keep reports structured; do not encode JSON in a
+rationale or submit a separate `findings` field.
 
 The following illustrates the report shape inside one entry; the binding values are placeholders:
 
@@ -1771,8 +1771,8 @@ The standalone acceptance kernel validates reports against independently pinned 
 definition identities. `target_digest` uses `hashBytes` over the actual captured UTF-8 content,
 with the `sha256:<hex>` prefix. Evidence uses half-open JavaScript UTF-16 spans `[start,end)`,
 not UTF-8 byte offsets. The kernel checks span bounds, target digest, optional quote and criterion
-predicates; schema validation alone does not establish acceptance. Runtime binding and enforcement
-are part of the pending activation work.
+predicates; schema validation alone does not establish acceptance. Server-issued binding and runtime
+adjudication remain pending activation work.
 
 ---
 

@@ -43,9 +43,11 @@ export class McpToolRequestValidator {
    * Type guard to check if a value is a valid gate verdict
    *
    * @param gateVerdict - Value to check
-   * @returns True if gate verdict matches required format
+   * @returns True if a legacy verdict or structured review satisfies the engine contract
    */
-  static isValidGateVerdict(gateVerdict: unknown): gateVerdict is string {
+  static isValidGateVerdict(
+    gateVerdict: unknown
+  ): gateVerdict is NonNullable<McpToolRequest['gate_verdict']> {
     return isValidGateVerdict(gateVerdict);
   }
 
@@ -78,17 +80,17 @@ export class McpToolRequestValidator {
   }
 
   /**
-   * Validates a gate verdict string specifically
+   * Validates a gate verdict while retaining structured review data.
    *
    * @param gateVerdict - Gate verdict to validate
-   * @returns Validated gate verdict string
+   * @returns Trimmed legacy string or original structured review
    * @throws {Error} If gate verdict is invalid
    */
-  static validateGateVerdict(gateVerdict: unknown): string {
+  static validateGateVerdict(gateVerdict: unknown): NonNullable<McpToolRequest['gate_verdict']> {
     if (!this.isValidGateVerdict(gateVerdict)) {
       throw new Error('Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"');
     }
-    return gateVerdict.trim();
+    return typeof gateVerdict === 'string' ? gateVerdict.trim() : gateVerdict;
   }
 
   /**

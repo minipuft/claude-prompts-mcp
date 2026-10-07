@@ -1,11 +1,46 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { GateEnforcementAuthority } from '../../../../../src/engine/execution/pipeline/decisions/index.js';
+import { parseGateVerdict } from '../../../../../src/engine/gates/core/gate-verdict-contract.js';
+import { hashBytes } from '../../../../../src/shared/utils/hash.js';
 
 import type {
   EnforcementMode,
   VerdictSource,
 } from '../../../../../src/engine/execution/pipeline/decisions/index.js';
+import type {
+  GateVerdictSubmission,
+  SemanticEvaluationReport,
+} from '../../../../../src/shared/types/gate-evaluation.js';
+
+function richEvaluation(): SemanticEvaluationReport {
+  const targetDigest = hashBytes('A😀e\u0301 Z');
+  return {
+    binding: {
+      gate_id: 'client-claimed-gate',
+      node_id: 'n1',
+      attempt_id: 'attempt-3',
+      definition_digest: hashBytes('frozen definition'),
+      target_digest: targetDigest,
+    },
+    observations: [
+      {
+        criterion_id: 'preserves-contract',
+        state: 'met',
+        value: true,
+        evidence: [{ target_digest: targetDigest, start: 1, end: 5, quote: '😀e\u0301' }],
+        rationale: 'Unicode evidence.\nReport rationale stays multiline.',
+      },
+    ],
+    reviewer: {
+      provenance: 'client_reported',
+      provider: 'claimed-provider',
+      model: 'claimed-model',
+      revision: 'claimed-revision',
+      context: 'isolated_judge',
+    },
+  };
+}
 
 const createMockLogger = () => ({
   debug: jest.fn(),
@@ -38,6 +73,22 @@ describe('GateEnforcementAuthority', () => {
   });
 
   describe('parseVerdict', () => {
+    test('delegates structured parsing to the canonical contract while retaining report custody', () => {
+      const evaluation = richEvaluation();
+      const submission: GateVerdictSubmission = {
+        overall: 'PASS',
+        rationale: 'Reviewed',
+        per_gate: [{ index: 1, passed: true, rationale: 'Evidence supplied', evaluation }],
+      };
+      const result = authority.parseVerdict(submission, 'gate_verdict');
+
+      expect(result).toEqual(parseGateVerdict(submission, 'gate_verdict'));
+      expect(result?.submission).toBe(submission);
+      expect(result?.submission?.per_gate?.[0]?.evaluation).toBe(evaluation);
+      expect(result?.detectedPattern).toBe('structured');
+      expect(authority.parseVerdict(submission, 'user_response')).toBeNull();
+    });
+
     describe('pattern 1: GATE_REVIEW: PASS|FAIL - rationale', () => {
       test('parses PASS verdict with hyphen separator', () => {
         const result = authority.parseVerdict('GATE_REVIEW: PASS - Excellent work', 'gate_verdict');
@@ -166,6 +217,181 @@ describe('GateEnforcementAuthority', () => {
         expect(typeof timestamp).toBe('number');
         return rest;
       });
+
+    describe('structured entries and reminder custody', () => {
+      test('retains the exact Unicode evaluation report under the advertised gate identity', () => {
+        const evaluation = richEvaluation();
+        const before = structuredClone(evaluation);
+        const submission: GateVerdictSubmission = {
+          overall: 'FAIL',
+          rationale: 'One gate failed',
+          per_gate: [
+            { index: 2, passed: false, rationale: 'Needs revision', evaluation },
+            { index: 1, passed: true, rationale: 'Check passed' },
+          ],
+        };
+
+        const result = authority.parseGateVerdicts(submission, ['alpha', 'beta'], 3);
+
+        expect(withoutTimestamp(result)).toEqual([
+          {
+            gateId: 'beta',
+            verdict: 'FAIL',
+            rationale: 'Needs revision',
+            attempt: 3,
+            evaluation: before,
+          },
+          { gateId: 'alpha', verdict: 'PASS', rationale: 'Check passed', attempt: 3 },
+        ]);
+        expect(result[0]?.evaluation).toBe(evaluation);
+        expect(result[0]?.gateId).not.toBe(evaluation.binding.gate_id);
+        expect(result[1]).not.toHaveProperty('evaluation');
+        expect(evaluation).toEqual(before);
+        expect(mockLogger.warn).not.toHaveBeenCalled();
+      });
+
+      test('reads typed reminders directly and preserves ordinary attestation semantics', () => {
+        const submission: GateVerdictSubmission = {
+          overall: 'PASS',
+          rationale: 'Reviewed',
+          per_gate: [{ index: 1, passed: true, rationale: 'Check passed' }],
+          reminders: {
+            satisfied: ['style-guide'],
+            not_applicable: [{ id: 'security-review', reason: 'no network code' }],
+          },
+        };
+        const result = authority.parseGateVerdicts(
+          submission,
+          ['test-coverage', 'style-guide', 'security-review'],
+          3
+        );
+
+        expect(withoutTimestamp(result)).toEqual([
+          {
+            gateId: 'style-guide',
+            verdict: 'PASS',
+            rationale: 'attested satisfied',
+            tier: 'reminder',
+            attempt: 3,
+          },
+          {
+            gateId: 'security-review',
+            verdict: 'PASS',
+            rationale: 'not applicable: no network code',
+            tier: 'reminder',
+            attempt: 3,
+          },
+          { gateId: 'test-coverage', verdict: 'PASS', rationale: 'Check passed', attempt: 3 },
+        ]);
+        expect(new Set(result.map((entry) => entry.timestamp)).size).toBe(1);
+      });
+
+      test('unknown typed reminder IDs keep the legacy diagnostic-and-drop behavior', () => {
+        const submission: GateVerdictSubmission = {
+          overall: 'PASS',
+          rationale: 'Reviewed',
+          reminders: { satisfied: ['style-guide', 'not-advertised'], not_applicable: [] },
+        };
+
+        expect(withoutTimestamp(authority.parseGateVerdicts(submission, ['style-guide']))).toEqual([
+          {
+            gateId: 'style-guide',
+            verdict: 'PASS',
+            rationale: 'attested satisfied',
+            tier: 'reminder',
+          },
+        ]);
+        expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('not-advertised'));
+      });
+
+      test.each([undefined, { satisfied: [], not_applicable: [] }])(
+        'an overall-only review with reminders %j has no summaries',
+        (reminders) => {
+          const submission: GateVerdictSubmission = {
+            overall: 'PASS',
+            rationale: 'Reviewed',
+            reminders,
+          };
+
+          expect(authority.parseGateVerdicts(submission, ['alpha'])).toEqual([]);
+        }
+      );
+
+      test.each([0, -1, 0.5, 3, 99, NaN, Infinity])(
+        'refuses structured index %s atomically before entries or reminders return',
+        (index) => {
+          const submission: GateVerdictSubmission = {
+            overall: 'PASS',
+            rationale: 'Reviewed',
+            per_gate: [
+              {
+                index: 1,
+                passed: true,
+                rationale: 'Valid first entry',
+                evaluation: richEvaluation(),
+              },
+              { index, passed: false, rationale: 'Invalid second entry' },
+            ],
+            reminders: { satisfied: ['style-guide'], not_applicable: [] },
+          };
+          const recorded: ReturnType<typeof authority.parseGateVerdicts> = [];
+
+          expect(() =>
+            recorded.push(...authority.parseGateVerdicts(submission, ['alpha', 'style-guide']))
+          ).toThrow('names no advertised gate');
+          expect(recorded).toEqual([]);
+          expect(mockLogger.warn).not.toHaveBeenCalled();
+        }
+      );
+
+      test.each([{ indexes: [1, 1] }, { indexes: [1, 2, 1] }])(
+        'refuses duplicate structured indexes %j atomically',
+        ({ indexes }) => {
+          const submission: GateVerdictSubmission = {
+            overall: 'PASS',
+            rationale: 'Reviewed',
+            per_gate: indexes.map((index) => ({ index, passed: true, rationale: `Gate ${index}` })),
+            reminders: { satisfied: ['style-guide'], not_applicable: [] },
+          };
+          const recorded: ReturnType<typeof authority.parseGateVerdicts> = [];
+
+          expect(() =>
+            recorded.push(
+              ...authority.parseGateVerdicts(submission, ['alpha', 'beta', 'style-guide'])
+            )
+          ).toThrow('duplicate index [1]');
+          expect(recorded).toEqual([]);
+        }
+      );
+
+      test('positive control: unique in-range structured indexes return every entry', () => {
+        const submission: GateVerdictSubmission = {
+          overall: 'FAIL',
+          rationale: 'Reviewed',
+          per_gate: [
+            { index: 1, passed: true, rationale: 'First passed' },
+            { index: 2, passed: false, rationale: 'Second failed' },
+          ],
+        };
+
+        expect(
+          withoutTimestamp(authority.parseGateVerdicts(submission, ['alpha', 'beta']))
+        ).toEqual([
+          { gateId: 'alpha', verdict: 'PASS', rationale: 'First passed' },
+          { gateId: 'beta', verdict: 'FAIL', rationale: 'Second failed' },
+        ]);
+      });
+
+      test('a structured entry refuses when the review advertised no gates', () => {
+        const submission: GateVerdictSubmission = {
+          overall: 'PASS',
+          rationale: 'Reviewed',
+          per_gate: [{ index: 1, passed: true, rationale: 'Reviewed' }],
+        };
+
+        expect(() => authority.parseGateVerdicts(submission, [])).toThrow('review advertised 0');
+      });
+    });
 
     describe('reminder attestations (P4.78)', () => {
       test('a REMINDERS line folds into the same record, marked as an attestation', () => {

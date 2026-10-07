@@ -465,7 +465,7 @@ export class PromptExecutor {
       handoff?: boolean;
       /** Claim a run minted elsewhere and resume it here (2A). See `handleClaim`. */
       claim_token?: string;
-      gate_verdict?: string;
+      gate_verdict?: McpToolRequest['gate_verdict'];
       gate_action?: McpToolRequest['gate_action'];
       user_response?: string;
       /** Unified gate specifications (canonical in v3.0.0+). Accepts gate IDs, simple checks, or full definitions. */
@@ -516,10 +516,11 @@ export class PromptExecutor {
     }
 
     const normalizedCommand = typeof args.command === 'string' ? args.command.trim() : '';
+    const normalizedGateVerdict =
+      typeof args.gate_verdict === 'string' ? args.gate_verdict.trim() : args.gate_verdict;
     const chainIdFromCommand = this.extractChainId(normalizedCommand);
     const hasResumePayload = Boolean(
-      (args.user_response && args.user_response.trim().length > 0) ||
-      (args.gate_verdict && args.gate_verdict.trim().length > 0)
+      (args.user_response && args.user_response.trim().length > 0) || normalizedGateVerdict
     );
     const shouldTreatAsResumeOnly =
       Boolean(chainIdFromCommand) && hasResumePayload && args.force_restart !== true;
@@ -590,7 +591,7 @@ export class PromptExecutor {
     const request = {
       ...(commandValue && { command: commandValue }),
       ...(chainIdValue && { chain_id: chainIdValue }),
-      ...(args.gate_verdict && { gate_verdict: args.gate_verdict }),
+      ...(normalizedGateVerdict && { gate_verdict: normalizedGateVerdict }),
       ...(args.gate_action && { gate_action: args.gate_action }),
       ...(args.user_response && { user_response: args.user_response }),
       ...(args.force_restart !== undefined && { force_restart: args.force_restart }),
