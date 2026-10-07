@@ -167,6 +167,70 @@ describe('advanceReview', () => {
     ]);
   });
 
+  test('ordinary FAIL and exhausted retry request renewal without changing frozen pins', () => {
+    const semanticContext = Object.freeze({
+      nodeId: 'n2',
+      attemptId: 'old-attempt',
+      definitions: Object.freeze({
+        g1: Object.freeze({ definition: Object.freeze({ id: 'g1' }), definitionDigest: 'rubric' }),
+      }),
+      target: Object.freeze({
+        kind: 'step_output' as const,
+        content: 'old output',
+        digest: 'old-target',
+      }),
+    });
+    for (const kind of ['gate', 'structural'] as const) {
+      for (const [phase, event] of [
+        ['awaiting-verdict', FAIL],
+        ['exhausted', action('retry')],
+      ] as const) {
+        const before = review({ kind, phase, semanticContext });
+        const next = advanceReview(before, event, 'blocking');
+        expect(next.renewAttempt).toBe(true);
+        expect(next.review?.semanticContext).toBe(semanticContext);
+        expect(before.semanticContext?.attemptId).toBe('old-attempt');
+        expect(before.semanticContext?.target?.digest).toBe('old-target');
+      }
+    }
+    // Legacy reviews still express retry intent without manufacturing semantic authority.
+    expect(advanceReview(review(), FAIL, 'blocking')).toMatchObject({ renewAttempt: true });
+    expect(advanceReview(review(), FAIL, 'blocking').review).not.toHaveProperty('semanticContext');
+  });
+
+  test('detached FAIL and retry wait for replacement, which requests renewal exactly once', () => {
+    for (const [phase, event] of [
+      ['awaiting-verdict', FAIL],
+      ['exhausted', action('retry')],
+    ] as const) {
+      const waiting = advanceReview(review({ kind: 'detached', phase }), event, 'blocking');
+      expect(waiting).not.toHaveProperty('renewAttempt');
+      expect(waiting.review?.phase).toBe('awaiting-replacement');
+      if (waiting.review === null) throw new Error('Detached retry must retain its review');
+      const reopened = advanceReview(waiting.review, REPLACEMENT, 'blocking');
+      expect(reopened.renewAttempt).toBe(true);
+      if (reopened.review === null) throw new Error('Replacement must retain its review');
+      expect(advanceReview(reopened.review, REPLACEMENT, 'blocking')).not.toHaveProperty(
+        'renewAttempt'
+      );
+    }
+  });
+
+  test('refused and terminal transitions never request renewal', () => {
+    for (const kind of KINDS) {
+      for (const phase of PHASES) {
+        for (const { event, enforcement, attemptCount } of EVENTS) {
+          const next = advanceReview(review({ kind, phase, attemptCount }), event, enforcement);
+          if (['refused', 'passed', 'cleared', 'aborted', 'exhausted'].includes(next.outcome)) {
+            expect(next).not.toHaveProperty('renewAttempt');
+          }
+        }
+      }
+    }
+    const failing = review({ checkResults: [{ gateId: 'g1', passed: false, summary: 'exit 1' }] });
+    expect(advanceReview(failing, PASS, 'blocking')).not.toHaveProperty('renewAttempt');
+  });
+
   test('a blocking FAIL charges exactly one attempt and records it in the history', () => {
     const before = review({ attemptCount: 1 });
     const next = advanceReview(before, FAIL, 'blocking');
@@ -197,6 +261,7 @@ describe('advanceReview', () => {
     for (const mode of ['advisory', 'informational'] as const) {
       expect(advanceReview(review({ attemptCount: 1 }), UNANSWERED, mode)).toMatchObject({
         outcome: 'failed',
+        renewAttempt: true,
         attempt: 2,
         review: { attemptCount: 2, phase: 'awaiting-verdict' },
       });

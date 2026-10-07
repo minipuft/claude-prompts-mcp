@@ -3,7 +3,7 @@ title: Evidence-backed semantic gates and attached calibration suites
 date: 2026-10-07
 type: implementation-plan
 status: active
-initiative_branch: feat/semantic-gate-runtime
+initiative_branch: feat/semantic-gate-activation
 branch_mode: worktree
 worker_cap: 2
 publish: "push+merge (2026-10-07, owner approval in chat R6; reviewed PRs track the initiative)"
@@ -18,8 +18,8 @@ tags: [gates, semantic, evaluation, tests]
 ## Now (2026-10-07)
 
 Goal: finish every row and verify the complete semantic-gate workflow against a frozen baseline.
-Slice: fresh main planner accepted ownership; archive/calibration and typed custody are staged in PR #475, with child4.1 frozen authority independently accepted.
-Next decision: diagnostic repair12.1 accepted locally; commit/push and accept fresh full hosted CI before merging PR #475; child capture4.2 remains active and opaque8.0 is accepted.
+Slice: PR #475 foundation merged with green full CI; only unpublished frozen-authority/capture/opaque-association concerns integrated into the new activation parent.
+Next decision: accept pure4.3, then apply canonical renewal in4.5/4.6; independently prepare opaque writer8.4. Native freeze waits actual candidate authoring and runtime activation.
 Constraint: owner authorized reviewed push+merge and full completion; no global framework changes or release.
 Dependencies: reuse existing isolated Codex/code-quality collectors; preserve one gate/resource/archive authority.
 State: T1 six rows complete; later runtime/calibration/docs rows remain open until verified.

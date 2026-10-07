@@ -31,6 +31,11 @@ export interface GateSetEnforcement {
  */
 export type GateAction = 'retry' | 'skip' | 'abort';
 
+/** Pure lifecycle intent; the authority issues fresh pins when the caller applies it. */
+export interface ReviewAttemptIntent {
+  readonly renewAttempt?: true;
+}
+
 /**
  * Input for verdict parsing decisions.
  */
