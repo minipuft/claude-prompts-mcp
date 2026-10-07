@@ -103,7 +103,12 @@ export class StepCaptureService {
     }
 
     const existingState = this.chainSessionStore.getStepState(sessionId, target.nodeId);
-    if (existingState?.state === 'completed' && !existingState.isPlaceholder) {
+    const issued = this.chainSessionStore.getReview(sessionId, target.nodeId)?.semanticContext;
+    const renewedCapture =
+      captureResponse !== undefined &&
+      issued?.nodeId === target.nodeId &&
+      issued.target === undefined;
+    if (existingState?.state === 'completed' && !existingState.isPlaceholder && !renewedCapture) {
       return undefined;
     }
 
@@ -405,9 +410,9 @@ export class StepCaptureService {
    * delegated — partial population BY ROW TYPE. The reason is recorded here regardless of mode
    * BECAUSE the mode decides refusal, not observation: under `required` an unacceptable resume
    * never reaches this method (stage 16 refuses first), so the rows this writes under `required`
-   * are `ok`, and the other three are what `advisory` is for. Exactly one row per captured step:
-   * gate retries re-enter `captureStep` and take its completed-non-placeholder early return
-   * before reaching this.
+   * are `ok`, and the other three are what `advisory` is for. One row per captured attempt:
+   * unchanged completed output takes the early return. A renewed, targetless authority permits
+   * a fresh captured-attempt row without rewriting prior failed-attempt evidence.
    *
    * It is also the ONLY append that fires on a call carrying a `gate_verdict`, which is why
    * `gateVerdicts` binds here (P4.76). Measured against a hermetic server on 2026-09-20, not

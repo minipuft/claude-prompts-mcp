@@ -533,6 +533,12 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     replaces = false
   ): Promise<void> {
     const sessionId = session.sessionId;
+    let opened = replaces
+      ? await this.verdictProcessor.applyReplacementReport(context, session, node.nodeId, reply)
+      : null;
+    if (replaces && opened === null) {
+      throw new Error('Detached replacement review refused before output capture');
+    }
     await this.stepCaptureService.recordDetachedReport(
       context,
       sessionId,
@@ -541,19 +547,24 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       reply
     );
     const gateIds = context.state.gates.detachedReviewGateIds?.[node.stepNumber] ?? [];
-    const opened = replaces
-      ? await this.verdictProcessor.applyReplacementReport(context, session, node.nodeId, reply)
-      : ((await context.gateEnforcement?.openDetachedReview(
+    if (!replaces) {
+      opened =
+        (await context.gateEnforcement?.openDetachedReview(
           context,
           sessionId,
           node,
           gateIds,
           reply
-        )) ?? null);
+        )) ?? null;
+    }
+    // Capture persisted fresh target pins; grading must not write the pre-capture review over them.
+    const capturedReview = this.chainSessionStore.getReview(sessionId, node.nodeId) ?? opened;
     // The structural grade of the recorded result joins that review (row 3.8).
     const grade = this.collaborators.gradeLateReport;
     const review =
-      grade === undefined ? opened : await grade(context, sessionId, node, opened, reply);
+      grade === undefined
+        ? capturedReview
+        : await grade(context, sessionId, node, capturedReview, reply);
     const runCompleted = await this.chainSessionStore.completeHeldRun(sessionId);
     const after =
       this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session;

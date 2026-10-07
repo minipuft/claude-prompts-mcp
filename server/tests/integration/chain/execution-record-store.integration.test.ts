@@ -203,6 +203,61 @@ function reviewStage(f: ReviewFixture) {
   );
 }
 
+/** Draft semantic rubric, installed directly for custody checks rather than live resource activation. */
+async function draftReview(f: ReviewFixture, review: GateReview) {
+  const issued = review.semanticContext;
+  if (issued === undefined) throw new Error('Missing issued review');
+  const context = createSemanticReviewContext(review.nodeId, issued.attemptId, [
+    {
+      ...REVIEW_GATE,
+      pass_criteria: [
+        {
+          type: 'semantic_evaluation',
+          id: 'staged-carrier',
+          target: { kind: 'step_output' },
+          question: 'Does the output preserve the contract?',
+          evidence_requirements: { min_items: 1 },
+          result: { kind: 'boolean' },
+          acceptance: { kind: 'equals', value: true },
+        },
+      ],
+    },
+  ]);
+  const drafted = {
+    ...review,
+    semanticContext:
+      issued.target === undefined
+        ? context
+        : bindSemanticReviewTarget(context, issued.target.content),
+  };
+  await f.store.setReview('review-session', drafted);
+  return drafted;
+}
+
+function detachedContext(f: ReviewFixture, output: string, verdict?: GateVerdictSubmission) {
+  const context = reviewContext(f, output, verdict);
+  context.parsedCommand = {
+    commandType: 'chain',
+    promptId: 'draft',
+    rawArgs: '',
+    format: 'symbolic',
+    confidence: 1,
+    metadata: {
+      originalCommand: '>>draft --> >>next',
+      parseStrategy: 'fixture',
+      detectedFormat: 'symbolic',
+      warnings: [],
+    },
+    chainId: 'review-chain#1',
+    steps: [
+      { stepNumber: 1, nodeId: 'reviewed-node', promptId: 'draft', args: {}, await: 'run' },
+      { stepNumber: 2, nodeId: 'current-node', promptId: 'next', args: {} },
+    ],
+    promptArgs: {},
+  };
+  return context;
+}
+
 describe('issued review capture and cold custody (real SQLite)', () => {
   test('cold reopened review retains pins and getter copies cannot mutate stored authority', async () => {
     const f = await reviewFixture();
@@ -255,6 +310,160 @@ describe('issued review capture and cold custody (real SQLite)', () => {
       expect(
         f.records.queryBySession('review-session', { continuityScopeId: 'another-scope' })
       ).toEqual([]);
+    } finally {
+      await f.close();
+    }
+  });
+
+  test('renewed ordinary completed-node capture binds fresh bytes and preserves failed attempt after cold load', async () => {
+    const f = await reviewFixture();
+    try {
+      await draftReview(f, await openReview(f));
+      await reviewStage(f).execute(reviewContext(f, REVIEW_OUTPUT));
+      const before = f.store.getReview('review-session', 'reviewed-node');
+      if (before === undefined) throw new Error('Missing captured review');
+      const submission = retainedVerdict(before);
+      await reviewStage(f).execute(reviewContext(f, undefined, submission));
+      const renewed = f.store.getReview('review-session', 'reviewed-node');
+      expect(renewed?.semanticContext?.attemptId).not.toBe(before.semanticContext?.attemptId);
+      expect(renewed?.semanticContext).not.toHaveProperty('target');
+      const replacement = 'Fresh ordinary answer 😀';
+      await reviewStage(f).execute(reviewContext(f, replacement));
+      const captured = f.store.getReview('review-session', 'reviewed-node');
+      expect(captured?.semanticContext?.attemptId).toBe(renewed?.semanticContext?.attemptId);
+      expect(captured?.semanticContext?.target).toEqual({
+        kind: 'step_output',
+        content: replacement,
+        digest: hashBytes(replacement),
+      });
+      expect(captured?.semanticContext?.definitions).toEqual(before.semanticContext?.definitions);
+      expect(f.store.getChainContext('review-session')['step_results']?.[1]).toBe(replacement);
+      const records = f.records.queryBySession('review-session', REVIEW_SCOPE);
+      expect(records).toHaveLength(3);
+      expect(records[1]?.gateVerdicts[0]?.evaluation).toEqual(submission.per_gate?.[0]?.evaluation);
+      expect(submission.per_gate?.[0]?.evaluation?.binding.attempt_id).not.toBe(
+        captured?.semanticContext?.attemptId
+      );
+      await f.cold();
+      expect(f.store.getReview('review-session', 'reviewed-node')?.semanticContext).toEqual(
+        captured?.semanticContext
+      );
+      expect(f.records.queryBySession('review-session', REVIEW_SCOPE)[1]?.gateVerdicts).toEqual(
+        records[1]?.gateVerdicts
+      );
+    } finally {
+      await f.close();
+    }
+  });
+
+  test('unchanged completed output without renewed authority keeps the ordinary early return', async () => {
+    const f = await reviewFixture();
+    try {
+      await openReview(f);
+      await reviewStage(f).execute(reviewContext(f, REVIEW_OUTPUT));
+      await reviewStage(f).execute(reviewContext(f, 'Unsolicited overwrite with bound review'));
+      expect(f.store.getChainContext('review-session')['step_results']?.[1]).toBe(REVIEW_OUTPUT);
+      expect(f.records.queryBySession('review-session', REVIEW_SCOPE)).toHaveLength(1);
+      await f.store.clearReview('review-session', 'reviewed-node');
+      await reviewStage(f).execute(reviewContext(f, 'Unsolicited overwrite'));
+      expect(f.store.getChainContext('review-session')['step_results']?.[1]).toBe(REVIEW_OUTPUT);
+      expect(f.records.queryBySession('review-session', REVIEW_SCOPE)).toHaveLength(1);
+    } finally {
+      await f.close();
+    }
+  });
+
+  test('detached replacement renews before capture and structural grading keeps persisted fresh pins after cold load', async () => {
+    const f = await reviewFixture();
+    try {
+      const before = await draftReview(f, await openReview(f, 'detached'));
+      await f.store.markNodeSpawned('review-session', 'reviewed-node');
+      await f.store.updateSessionState('review-session', 'reviewed-node', REVIEW_OUTPUT, {
+        isPlaceholder: false,
+      });
+      await f.store.completeStep('review-session', 'reviewed-node');
+      await f.store.advanceStep('review-session', 'reviewed-node');
+      const submission = retainedVerdict(before);
+      await reviewStage(f).execute(
+        detachedContext(f, 'HANDOFF RESULT\nnode: reviewed-node', submission)
+      );
+      const waiting = f.store.getReview('review-session', 'reviewed-node');
+      expect(waiting?.phase).toBe('awaiting-replacement');
+      expect(waiting?.semanticContext?.attemptId).toBe(before.semanticContext?.attemptId);
+      const replacement = 'Fresh detached answer 😀\nHANDOFF RESULT\nnode: reviewed-node';
+      const grader = jest.fn(
+        async (
+          _context: ExecutionContext,
+          sessionId: string,
+          _node: unknown,
+          review: GateReview | null
+        ) => {
+          if (review === null) throw new Error('Missing replacement review');
+          expect(review.semanticContext?.target?.content).toBe(replacement);
+          const graded = { ...review, retryHints: ['Structural finding retained'] };
+          await f.store.setReview(sessionId, graded);
+          return graded;
+        }
+      );
+      const stage = new StepResponseCaptureStage(
+        new GateVerdictProcessor(f.store, f.logger),
+        new StepCaptureService(f.store, f.logger, f.records),
+        f.store,
+        new UnknownObservationProcessor(f.store, f.logger),
+        f.logger,
+        { gradeLateReport: grader }
+      );
+      await stage.execute(detachedContext(f, replacement));
+      expect(grader).toHaveBeenCalledTimes(1);
+      const captured = f.store.getReview('review-session', 'reviewed-node');
+      expect(captured?.semanticContext?.attemptId).not.toBe(before.semanticContext?.attemptId);
+      expect(captured?.semanticContext?.target).toEqual({
+        kind: 'step_output',
+        content: replacement,
+        digest: hashBytes(replacement),
+      });
+      expect(captured?.semanticContext?.definitions).toEqual(before.semanticContext?.definitions);
+      expect(captured?.retryHints).toEqual(['Structural finding retained']);
+      expect(f.store.getSession('review-session')?.state.currentNodeId).toBe('current-node');
+      expect(f.store.getReview('review-session', 'current-node')).toBeUndefined();
+      const records = f.records.queryBySession('review-session', REVIEW_SCOPE);
+      expect(records[0]?.gateVerdicts[0]?.evaluation).toEqual(submission.per_gate?.[0]?.evaluation);
+      expect(records[1]?.nodeId).toBe('reviewed-node');
+      await f.cold();
+      expect(f.store.getReview('review-session', 'reviewed-node')?.semanticContext).toEqual(
+        captured?.semanticContext
+      );
+      expect(f.records.queryBySession('review-session', REVIEW_SCOPE)[0]?.gateVerdicts).toEqual(
+        records[0]?.gateVerdicts
+      );
+    } finally {
+      await f.close();
+    }
+  });
+
+  test('initial detached report opens a review bound to the already persisted output', async () => {
+    const f = await reviewFixture();
+    try {
+      await openReview(f, 'detached');
+      await f.store.clearReview('review-session', 'reviewed-node');
+      await f.store.markNodeSpawned('review-session', 'reviewed-node');
+      await f.store.updateSessionState('review-session', 'reviewed-node', 'Pending report', {
+        isPlaceholder: true,
+      });
+      await f.store.completeStep('review-session', 'reviewed-node', { preservePlaceholder: true });
+      await f.store.advanceStep('review-session', 'reviewed-node');
+      const output = 'Initial detached output\nHANDOFF RESULT\nnode: reviewed-node';
+      const context = detachedContext(f, output);
+      context.state.gates.detachedReviewGateIds = { 1: [REVIEW_GATE.id] };
+      await reviewStage(f).execute(context);
+      const captured = f.store.getReview('review-session', 'reviewed-node');
+      expect(captured?.semanticContext?.target).toEqual({
+        kind: 'step_output',
+        content: output,
+        digest: hashBytes(output),
+      });
+      expect(f.store.getChainContext('review-session')['step_results']?.[1]).toBe(output);
+      expect(f.store.getSession('review-session')?.state.currentNodeId).toBe('current-node');
     } finally {
       await f.close();
     }
