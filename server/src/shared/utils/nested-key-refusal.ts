@@ -227,7 +227,7 @@ interface AdapterIssue {
   readonly code?: string;
   readonly input?: unknown;
   readonly inst?: unknown;
-  readonly path?: readonly PropertyKey[];
+  readonly path?: readonly PropertyKey[] | undefined;
   readonly keys?: readonly string[];
   readonly errors?: readonly (readonly NestedSchemaIssue[])[];
 }
