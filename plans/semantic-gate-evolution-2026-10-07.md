@@ -7,7 +7,7 @@ initiative_branch: feat/semantic-gate-activation
 branch_mode: worktree
 worker_cap: 2
 publish: "push+merge (2026-10-07, owner approval in chat R6; reviewed PRs track the initiative)"
-planner_session: semantic_calibration_contract
+planner_session: archive_boundary_review
 tracking: none
 tracking_reason: operator-opt-out
 tags: [gates, semantic, evaluation, tests]
@@ -17,12 +17,11 @@ tags: [gates, semantic, evaluation, tests]
 
 ## Now (2026-10-07)
 
-Goal: finish every master/child row, actual registered semantic workflow, matched native baseline/pilot, evidence/rollback and reviewed green-CI delivery.
-Slice: accepted source through coverage5.12 at 4efbb353b; seven-file caller5.7 and three-file canonical-empty producer5.10 remain active in parallel.
-Next decision: fresh planner accepts worker handoffs, rules complete-envelope parser5.11 and earliest admission/address guard5.6, then completes all remaining rows.
-Constraint: semantic_calibration_contract releases HEAD/plans/publication after the checkpoint commit; root assigns archive_boundary_review as fresh owner. Two source workers continue, global four slots. R6 reviewed push+merge persists.
-Dependencies: actual current source/runtime/candidate plus private materials require root independent freeze-receipt review BEFORE inference.
-State: child51 rows30done2killed19open; semantic loader REFUSED/native inference0. Checkpoint3 in sibling notes is authoritative. No release/global edits/autopromotion/liveDB cutover.
+Goal: finish the entire master/child initiative, actual built workflows, matched native/quality evidence, retirement and reviewed green-CI delivery.
+Slice: receiver5.6/R48 and portable summary5.3 ROOT accepted/committedb35bc83ae/a20951188; own scoped workflows2/3 COMPLETE. Both workers idle.
+Next decision: shorter-context coordinator takes custody; dispatch5.4 BYPASS plus a ruled disjoint consumer row. 9.2 inventory is static only; version-format scope needs explicit proof/limits.
+Constraint: archive_boundary_review releases HEAD/plans/integration/publication AFTER checkpoint commit; root assigns existing idle successor. No source edits by planner, no new spawn/thread or global changes.
+State: child51 rows35done2killed14open; semantic unionOFF/native inference0. Checkpoint4 in master notes carries current custody and remaining work.
 
 ## Intent and completion criteria
 
