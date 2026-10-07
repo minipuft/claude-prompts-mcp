@@ -66,8 +66,9 @@ Each suite binds its ID/revision aliases, gate ID/definition digest and exact or
 criterion IDs. Cases carry UTF-8 target blob references, complete expected criterion
 states/acceptance, family, exposure and label-review receipts. Exact archive `record_id`
 is the revision identity: changing labels changes that digest even when an author reuses
-a revision alias. The runtime gate resource carries only an opaque suite association;
-expected labels and case material stay in the operator's private evaluation root outside Git.
+a revision alias. Gate resources must not embed expected labels or case material; private
+suite data stays in the operator-selected evaluation root outside Git. Runtime association
+authoring remains part of pending activation.
 
 Structural pilot readiness requires reviewed, nonreserved cases in all five families:
 positive, negative, valid alternative, boundary and insufficient evidence. It also requires
