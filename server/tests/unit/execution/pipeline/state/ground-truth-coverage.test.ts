@@ -6,6 +6,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { resolveGroundTruthCoverage } from '../../../../../src/engine/execution/pipeline/decisions/gates/ground-truth-coverage.js';
+import {
+  composeStructuralReview,
+  hasStructuralFinding,
+  PHASE_GUARD_GATE_ID,
+  selectToolReviewGateIds,
+} from '../../../../../src/engine/execution/pipeline/decisions/gates/structural-review-composition.js';
 
 import { ExecutionContext } from '../../../../../src/engine/execution/context/execution-context.js';
 import {
@@ -176,6 +182,83 @@ const fail = (gateId: string) => ({ gateId, passed: false });
  * advance past them.
  */
 describe('resolveGroundTruthCoverage', () => {
+  test.each([undefined, false])(
+    'omitted/false structural pending fact %j preserves ordinary tool success',
+    (structuralPending) => {
+      const input = { requiredGateIds: ['tests'], results: [pass('tests')] };
+      const withFact = structuralPending === undefined ? input : { ...input, structuralPending };
+      expect(resolveGroundTruthCoverage(withFact)).toEqual({
+        satisfied: true,
+        verifiedGateIds: ['tests'],
+        reason: 'Every required gate passed ground-truth verification',
+      });
+    }
+  );
+
+  test('actual authored canonical collision plus passing tool remains structurally held without falsifying tool facts', async () => {
+    const gate: LightweightGateDefinition = { ...TOOL_GATE, id: PHASE_GUARD_GATE_ID };
+    const review: GateReview = {
+      nodeId: 'n1',
+      kind: 'detached',
+      phase: 'awaiting-verdict',
+      gateIds: [PHASE_GUARD_GATE_ID],
+      prompts: [],
+      combinedPrompt: 'Authored criterion',
+      createdAt: 1,
+      attemptCount: 2,
+      maxAttempts: 5,
+      metadata: { source: 'worker-report' },
+      semanticContext: createSemanticReviewContext('n1', 'attempt-1', [gate]),
+    };
+    const pending = composeStructuralReview(review, {
+      gateId: PHASE_GUARD_GATE_ID,
+      feedback: 'Missing required section',
+      retryHints: ['Add context'],
+      failedPhases: ['context'],
+      mode: 'enforce',
+      previousResponse: 'one line',
+      reviewedStep: { nodeId: 'n1', stepNumber: 1 },
+      maxAttempts: 3,
+      createdAt: 42,
+    });
+    const before = structuredClone(pending);
+    const provider = evidenceProvider([gate]);
+    const executor = new ShellVerifyExecutor({ allowlist: ['true'] });
+    const executed = jest.spyOn(executor, 'execute');
+    const evidence = await runGateReviewEvidence(
+      selectToolReviewGateIds(pending),
+      provider.provider,
+      'one line',
+      { shellVerifyExecutor: executor },
+      undefined,
+      pending.semanticContext?.definitions
+    );
+    expect(executed).toHaveBeenCalledTimes(1);
+    expect(evidence.checkResults).toMatchObject([{ gateId: PHASE_GUARD_GATE_ID, passed: true }]);
+    const facts = structuredClone(evidence.checkResults);
+    const input = {
+      requiredGateIds: pending.gateIds,
+      reviewDefinitions: pending.semanticContext?.definitions,
+      results: evidence.checkResults,
+    };
+    const held = resolveGroundTruthCoverage({
+      ...input,
+      structuralPending: hasStructuralFinding(pending),
+    });
+    expect(held.satisfied).toBe(false);
+    expect(held.reason).toContain('Structural verification is still pending');
+    expect(held.reason).not.toContain('failed');
+    expect(held.verifiedGateIds).toEqual([PHASE_GUARD_GATE_ID]);
+    expect(pending.gateIds).toEqual([PHASE_GUARD_GATE_ID]);
+    expect(evidence.checkResults).toEqual(facts);
+    expect(pending).toEqual(before);
+    // Same actual tool evidence without a structural marker still satisfies the authored gate.
+    expect(
+      resolveGroundTruthCoverage({ ...input, structuralPending: hasStructuralFinding(review) })
+        .satisfied
+    ).toBe(true);
+  });
+
   test('clears the review when every required gate passed', () => {
     const coverage = resolveGroundTruthCoverage({
       requiredGateIds: ['tests', 'lint'],

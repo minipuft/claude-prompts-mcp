@@ -82,6 +82,14 @@ export function resolveGroundTruthCoverage(input: GroundTruthCoverageInput): Gro
     };
   }
 
+  if (input.structuralPending === true) {
+    return {
+      satisfied: false,
+      verifiedGateIds,
+      reason: 'Structural verification is still pending; passing tool checks do not clear it',
+    };
+  }
+
   return {
     satisfied: true,
     verifiedGateIds,

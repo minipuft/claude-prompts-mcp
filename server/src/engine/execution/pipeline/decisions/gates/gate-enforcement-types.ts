@@ -77,6 +77,8 @@ export interface GroundTruthCoverageInput {
   readonly requiredGateIds: readonly string[];
   /** Server-issued frozen definitions; tool results cannot satisfy their semantic criteria. */
   readonly reviewDefinitions?: GateReviewSemanticContext['definitions'];
+  /** Server-owned pending structural finding; tool coverage cannot settle that separate hold. */
+  readonly structuralPending?: boolean;
   /** Results produced by running this request's ground-truth criteria, of any mechanism. */
   readonly results: readonly GroundTruthOutcome[];
   /** Gate ids an earlier stage in this same request already shell-verified. */
