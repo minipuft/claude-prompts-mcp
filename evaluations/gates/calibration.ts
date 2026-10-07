@@ -750,6 +750,7 @@ async function replayAttempt(
       fail("ordinary step output cannot be unattempted");
   }
   await resolveClosure(archive, [
+    request.grade_ref,
     ...pinRefs(pins),
     request.trial_ref,
     ...grade.artifact_refs,
@@ -808,12 +809,7 @@ export async function replayGateCalibration(
     pins,
     attempts: requested.map(({ grade_ref: _gradeRef, ...attempt }) => attempt),
   });
-  await resolveClosure(archive, [
-    ...invocation.refs,
-    ...invocation.provenance.refs,
-    ...pinRefs(pins),
-    startedRef,
-  ]);
+  await resolveClosure(archive, [invocationRef, ...pinRefs(pins), startedRef]);
   const attempts = [];
   for (const request of requested)
     attempts.push(

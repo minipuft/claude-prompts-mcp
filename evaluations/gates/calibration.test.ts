@@ -773,3 +773,121 @@ test("archive publication errors remain fatal and replay survives runtime loss b
       "failed publication retained every requested start",
     );
   }));
+
+function declaredDependency(
+  record: ArchiveRecord,
+  extra: ContentRef,
+  location: "refs" | "provenance" | "usage" | "cost",
+) {
+  const { record_id: _recordId, ...body } = record;
+  return createArchiveRecord({
+    ...body,
+    ...(location === "refs" ? { refs: [...body.refs, extra] } : {}),
+    ...(location === "provenance"
+      ? {
+          provenance: {
+            ...body.provenance,
+            refs: [...body.provenance.refs, extra],
+          },
+        }
+      : {}),
+    ...(location === "usage"
+      ? {
+          usage: {
+            state: "known" as const,
+            unit: "synthetic",
+            values: { count: 1 },
+            source: extra,
+          },
+        }
+      : {}),
+    ...(location === "cost"
+      ? {
+          cost: {
+            state: "known" as const,
+            currency: "USD",
+            amount: 1,
+            source: extra,
+          },
+        }
+      : {}),
+  });
+}
+
+test("replay resolves every declared dependency of the actual selected grade envelope", async () =>
+  withCalibration(async ({ root, archive, archiveInput }) => {
+    const run = await runGateCalibration({
+      ...archiveInput,
+      attempts: [requested("synthetic-positive", 0)],
+      adapter: async (input) => ({
+        state: "completed",
+        report: softwareReport(input),
+      }),
+    });
+    const originalGrade = await archive.getRecord(run.attempts[0]!.grade_ref);
+    const { record_id: _invocationId, ...originalInvocation } =
+      await archive.getRecord(run.invocation_ref);
+    for (const location of ["refs", "provenance", "usage", "cost"] as const) {
+      const extra = await archive.putBlob(
+        Buffer.from(`synthetic selected-grade ${location}`),
+        "text/plain",
+      );
+      const selected = await archive.putRecord(
+        declaredDependency(originalGrade, extra, location),
+      );
+      // Payload selects the equivalent new grade; outer refs deliberately retain the old grade.
+      const manifest = await archive.putRecord(
+        createArchiveRecord({
+          ...originalInvocation,
+          payload: {
+            ...originalInvocation.payload,
+            attempts: [{ ...run.attempts[0]!, grade_ref: selected }],
+          },
+        }),
+      );
+      assert.equal(
+        (await replayGateCalibration(archive, manifest)).attempts[0]!.grade
+          .status,
+        "accepted",
+      );
+      await rm(join(root, "blobs", extra.digest.slice(7)));
+      await assert.rejects(
+        replayGateCalibration(archive, manifest),
+        /missing/,
+        `selected grade ${location} dependency loss must refuse replay`,
+      );
+    }
+  }));
+
+test("replay resolves root invocation known measurement sources", async () =>
+  withCalibration(async ({ root, archive, archiveInput }) => {
+    const run = await runGateCalibration({
+      ...archiveInput,
+      attempts: [requested("synthetic-positive", 0)],
+      adapter: async (input) => ({
+        state: "completed",
+        report: softwareReport(input),
+      }),
+    });
+    const originalInvocation = await archive.getRecord(run.invocation_ref);
+    for (const location of ["usage", "cost"] as const) {
+      const source = await archive.putBlob(
+        Buffer.from(`synthetic root measurement ${location}`),
+        "text/plain",
+      );
+      const manifest = await archive.putRecord(
+        declaredDependency(originalInvocation, source, location),
+      );
+      assert.equal(
+        (await replayGateCalibration(archive, manifest)).attempts[0]!.grade
+          .status,
+        "accepted",
+      );
+      await rm(join(root, "blobs", source.digest.slice(7)));
+      await assert.rejects(
+        replayGateCalibration(archive, manifest),
+        /missing/,
+        `root ${location} source loss must refuse replay`,
+      );
+    }
+  }));
