@@ -348,3 +348,71 @@ test("lossy payloads, cycles and executable object properties cannot enter the a
   }
   assert.equal(accessorCalls, 0);
 });
+
+function rejectNonstandardArray(
+  values: string[],
+  boundary: "factory" | "parser",
+): void {
+  const fields = { ...input(), payload: { values } };
+  if (boundary === "factory") {
+    assert.throws(
+      () => createArchiveRecord(fields),
+      /nonstandard array prototype/,
+    );
+    return;
+  }
+  const record = createArchiveRecord({
+    ...input(),
+    payload: { values: ["original"] },
+  });
+  assert.throws(
+    () => parseArchiveRecord({ ...record, payload: { values } }),
+    /nonstandard array prototype/,
+  );
+}
+
+for (const boundary of ["factory", "parser"] as const) {
+  test(`${boundary} refuses rewriting array subclasses before invoking entries`, () => {
+    let calls = 0;
+    class RewritingArray extends Array<string> {
+      override entries(): ArrayIterator<[number, string]> {
+        calls += 1;
+        return ["rewritten"].entries();
+      }
+    }
+    rejectNonstandardArray(new RewritingArray("original"), boundary);
+    assert.equal(calls, 0);
+  });
+
+  test(`${boundary} refuses changing array subclasses before hash and copy can disagree`, () => {
+    let calls = 0;
+    class ChangingArray extends Array<string> {
+      override entries(): ArrayIterator<[number, string]> {
+        calls += 1;
+        return [calls === 1 ? "original" : "rewritten"].entries();
+      }
+    }
+    rejectNonstandardArray(new ChangingArray("original"), boundary);
+    assert.equal(calls, 0);
+  });
+}
+
+test("factory and parser refuse custom and null prototypes on otherwise native arrays", () => {
+  for (const prototype of [Object.create(Array.prototype) as object, null]) {
+    const values = ["original"];
+    Object.setPrototypeOf(values, prototype);
+    for (const boundary of ["factory", "parser"] as const) {
+      rejectNonstandardArray(values, boundary);
+    }
+  }
+});
+
+test("ordinary native arrays retain contents and their record digest through factory and parser", () => {
+  const values = ["original", "second"];
+  const record = createArchiveRecord({
+    ...input(),
+    payload: { values, nested: [["third"]] },
+  });
+  assert.deepEqual(record.payload, { values, nested: [["third"]] });
+  assert.deepEqual(parseArchiveRecord(record), record);
+});

@@ -261,6 +261,9 @@ function validateArray(
   path: string,
   ancestors: Set<object>,
 ): void {
+  // Canonical hashing calls entries(); inherited overrides can rewrite the content.
+  if (Object.getPrototypeOf(value) !== Array.prototype)
+    fail(path, "nonstandard array prototype");
   const keys = Reflect.ownKeys(value);
   if (keys.length !== value.length + 1)
     fail(path, "sparse arrays and extra array properties are not JSON");
