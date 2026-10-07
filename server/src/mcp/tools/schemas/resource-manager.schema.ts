@@ -640,6 +640,15 @@ export const resourceManagerInputSchema = z
      * whole: a supplied block replaces the existing one, an omitted one is carried forward.
      */
     evaluation: gateEvaluationSchema.optional().describe(describe('evaluation')),
+    /** [Gate] Opaque evaluation-suite association; never resolved as a path or archive. */
+    calibration_suite_id: z
+      .string()
+      .refine(
+        (value) => value.trim() !== '',
+        'calibration_suite_id must be a nonempty opaque identifier'
+      )
+      .optional()
+      .describe(describe('calibration_suite_id')),
     /** [Gate] Gate guidance content. */
     guidance: z.string().optional().describe(describe('guidance')),
     /** [Gate] Structured pass criteria definitions — see `gatePassCriteriaSchema` above. */

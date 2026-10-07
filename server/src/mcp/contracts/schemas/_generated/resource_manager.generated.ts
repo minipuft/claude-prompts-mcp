@@ -71,6 +71,7 @@ export type resource_managerParamName =
   | 'enforcement_mode'
   | 'block_response_on_fail'
   | 'evaluation'
+  | 'calibration_suite_id'
   | 'guidance'
   | 'pass_criteria'
   | 'activation'
@@ -516,6 +517,15 @@ export const resource_managerParameters: ToolParameter[] = [
     includeInDescription: false,
   },
   {
+    name: 'calibration_suite_id',
+    type: 'string',
+    description:
+      '[Gate create/update] Nonempty opaque evaluation-suite association, preserved verbatim in gate.yaml. Omitted on update, the existing association is retained; a supplied value replaces it. This identifier does not resolve an archive, file path, calibration case or expected label.',
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
     name: 'guidance',
     type: 'string',
     description: '[Gate] Gate guidance content - the criteria or instructions.',
@@ -891,6 +901,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'enforcement_mode',
       'block_response_on_fail',
       'evaluation',
+      'calibration_suite_id',
       'skip_version',
     ],
     status: 'working',
@@ -915,6 +926,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'enforcement_mode',
       'block_response_on_fail',
       'evaluation',
+      'calibration_suite_id',
       'skip_version',
     ],
     status: 'working',

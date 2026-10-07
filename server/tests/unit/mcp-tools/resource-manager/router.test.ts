@@ -2,6 +2,11 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import {
+  resource_managerCommands,
+  resource_managerParameters,
+} from '../../../../src/mcp/contracts/schemas/_generated/resource_manager.generated.js';
+import { resourceManagerInputSchema } from '../../../../src/mcp/tools/schemas/resource-manager.schema.js';
+import {
   ResourceManagerRouter,
   createResourceManagerRouter,
 } from '../../../../src/mcp/tools/resource-manager/core/router.js';
@@ -87,6 +92,108 @@ describe('ResourceManagerRouter', () => {
         typeof createResourceManagerRouter
       >[0]['categoryManager'],
     });
+  });
+
+  describe('opaque gate calibration association boundary and custody', () => {
+    // Model the declared schema -> router boundary with the real validators and router.
+    // The downstream mock observes arguments only; these controls make no writer/SDK claim.
+    async function dispatch(raw: unknown): Promise<ToolResponse> {
+      const parsed = resourceManagerInputSchema.parse(raw);
+      return await router.handleAction(parsed as ResourceManagerInput, {});
+    }
+
+    test('publishes one optional string parameter for gate create/update only', () => {
+      const parameter = resource_managerParameters.filter(
+        (entry) => entry.name === 'calibration_suite_id'
+      );
+      expect(parameter).toHaveLength(1);
+      expect(parameter[0].type).toBe('string');
+      expect(resourceManagerInputSchema.shape.calibration_suite_id.isOptional()).toBe(true);
+      expect(resourceManagerInputSchema.shape.calibration_suite_id.description).toBe(
+        parameter[0].description
+      );
+      expect(
+        resource_managerCommands
+          .filter((command) => command.parameters?.includes('calibration_suite_id'))
+          .map((command) => command.id)
+      ).toEqual(['gate:create', 'gate:update']);
+    });
+
+    for (const action of ['create', 'update'] as const) {
+      test.each(['suite-opaque', '  suite:../c01.json #opaque  ', 'Ω\nidentifier'])(
+        `${action} forwards the exact opaque string %j`,
+        async (value) => {
+          const response = await dispatch({
+            resource_type: 'gate',
+            action,
+            id: 'target',
+            calibration_suite_id: value,
+            evaluation: { mode: 'self' },
+          });
+          expect(response.isError).toBe(false);
+          expect(mockGateManager.handleAction).toHaveBeenCalledTimes(1);
+          expect(mockGateManager.handleAction).toHaveBeenCalledWith(
+            { action, id: 'target', calibration_suite_id: value, evaluation: { mode: 'self' } },
+            {}
+          );
+        }
+      );
+
+      test(`${action} omission adds no association field to the gate handler payload`, async () => {
+        const response = await dispatch({ resource_type: 'gate', action, id: 'target' });
+        expect(response.isError).toBe(false);
+        expect(mockGateManager.handleAction).toHaveBeenCalledWith({ action, id: 'target' }, {});
+      });
+
+      test.each(['', ' \t\r\n', null, false, 42, {}, []])(
+        `${action} refuses blank or nonstring association %j before handler dispatch`,
+        async (value) => {
+          const raw = { resource_type: 'gate', action, id: 'target', calibration_suite_id: value };
+          const parsed = resourceManagerInputSchema.safeParse(raw);
+          expect(parsed.success).toBe(false);
+          if (parsed.success) throw new Error('Malformed association passed the public boundary');
+          expect(parsed.error.issues.map((issue) => issue.path)).toContainEqual([
+            'calibration_suite_id',
+          ]);
+          await expect(dispatch(raw)).rejects.toThrow(/calibration_suite_id/);
+          expect(mockGateManager.handleAction).not.toHaveBeenCalled();
+        }
+      );
+    }
+
+    test.each(['prompt', 'framework', 'category'] as const)(
+      'refuses the gate-only association for %s before any handler',
+      async (resource_type) => {
+        const response = await dispatch({
+          resource_type,
+          action: 'create',
+          id: 'target',
+          calibration_suite_id: 'opaque',
+        });
+        expect(response.isError).toBe(true);
+        expect(response.content[0]?.text).toContain('calibration_suite_id');
+        expect(mockPromptResourceHandler.handleAction).not.toHaveBeenCalled();
+        expect(mockFrameworkManager.handleAction).not.toHaveBeenCalled();
+        expect(mockCategoryManager.handleAction).not.toHaveBeenCalled();
+        expect(mockGateManager.handleAction).not.toHaveBeenCalled();
+      }
+    );
+
+    test.each(['inspect', 'list'] as const)(
+      'refuses an association ignored by gate %s before dispatch',
+      async (action) => {
+        const response = await dispatch({
+          resource_type: 'gate',
+          action,
+          id: 'target',
+          calibration_suite_id: 'opaque',
+        });
+        expect(response.isError).toBe(true);
+        expect(response.content[0]?.text).toContain('calibration_suite_id');
+        expect(response.content[0]?.text).toContain('not read');
+        expect(mockGateManager.handleAction).not.toHaveBeenCalled();
+      }
+    );
   });
 
   describe('destructive-action guard', () => {
