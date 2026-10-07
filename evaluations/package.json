@@ -8,7 +8,9 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "test": "node --test tests/*.test.ts",
+    "test": "npm run test:core && npm run test:gates",
+    "test:core": "node --test tests/*.test.ts",
+    "test:gates": "node --import ../server/node_modules/tsx/dist/loader.mjs --test gates/*.test.ts",
     "typecheck": "node ../server/node_modules/typescript/bin/tsc --project tsconfig.json"
   }
 }

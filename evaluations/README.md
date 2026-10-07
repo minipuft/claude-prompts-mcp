@@ -1,17 +1,23 @@
 # Optional evaluation evidence archive
 
 This private, repository-local Node24 TypeScript package provides immutable evaluation
-records and content-addressed evidence blobs. Use it explicitly from a checkout; it has
-no runtime dependencies and does not join the root workspace or default server startup.
-Its [contracts](core/contracts.ts) and [archive](core/archive.ts) import the existing
+records, content-addressed evidence blobs and private gate-suite contracts. Use it
+explicitly from a checkout; it does not join the root workspace or default server startup.
+Its generic [contracts](core/contracts.ts) and [archive](core/archive.ts) import the existing
 [canonical hash source](../server/src/shared/utils/hash.ts) outside this directory, so
-the package is not an independently published library.
+the package is not an independently published library. Gate specialization also uses
+the server's locked dependencies and source loader; this package adds no dependency or
+separate model-provider SDK.
 
 ## Setup and checks
 
-Use Node24 on Linux. Runtime and tests use Node's native TypeScript stripping without
-a build. Strict typechecking separately uses TypeScript and Node types from the server's
-locked development toolchain.
+Use Node24 on Linux. Core contracts/archive tests use Node's native TypeScript stripping
+without a build. Gate-suite tests import the canonical server
+[`SemanticCriterionSchema`](../server/src/engine/gates/core/gate-schema.ts) through the
+existing server-lockfile-pinned `tsx` loader: native stripping cannot resolve the server
+source graph's `.js` specifiers. Gate contracts therefore require that repository-local
+tooling when executed; they are not a standalone native-only runtime. Strict typechecking
+separately uses TypeScript and Node types from the server's locked development toolchain.
 
 From the repository root, install those tools **only in a standalone checkout with its
 own dependency directories**:
@@ -29,10 +35,56 @@ npm --prefix evaluations test
 npm --prefix evaluations run typecheck
 ```
 
-The native suite exercises generic contracts and real temporary filesystems. It makes
-no model calls and needs no provider credentials. The optional [CI workflow](../.github/workflows/evaluations.yml)
-uses a fresh Ubuntu checkout and Node24 to run these same commands; its path filters
-make it unsuitable as a required branch-protection context.
+`npm test` runs `test:core` followed by `test:gates`. To run one boundary directly from
+the repository root:
+
+```bash
+npm --prefix evaluations run test:core
+npm --prefix evaluations run test:gates
+```
+
+`test:core` runs `node --test tests/*.test.ts`; `test:gates` runs
+`node --import ../server/node_modules/tsx/dist/loader.mjs --test gates/*.test.ts` inside
+this directory. Both exercise real canonical collaborators and temporary filesystems,
+make no model calls and need no provider credentials. The optional
+[CI workflow](../.github/workflows/evaluations.yml) uses a fresh Ubuntu checkout and Node24
+to run native core controls, explicit gate-loader controls, then strict package types.
+Its path filters cover this package and the imported server gate/shared sources; it is
+unsuitable as a required branch-protection context. Local checks do not establish that
+a hosted workflow ran successfully.
+
+## Private gate-suite contracts
+
+The [gate specialization](gates/contracts.ts) validates public criteria through the
+canonical server schema, using the shared criterion types. It specializes the existing
+`suite` archive payload rather than creating a second archive or gate-definition authority.
+It currently supplies suite contracts, readiness checks and an adapter-facing projection;
+there is no live calibration runner or calibration report yet. Committed gate tests are
+synthetic development controls, not actual private pilot cases or evidence of model accuracy.
+
+Each suite binds its ID/revision aliases, gate ID/definition digest and exact ordered
+criterion IDs. Cases carry UTF-8 target blob references, complete expected criterion
+states/acceptance, family, exposure and label-review receipts. Exact archive `record_id`
+is the revision identity: changing labels changes that digest even when an author reuses
+a revision alias. Gate resources must not embed expected labels or case material; private
+suite data stays in the operator-selected evaluation root outside Git. Runtime association
+authoring remains part of pending activation.
+
+Structural pilot readiness requires reviewed, nonreserved cases in all five families:
+positive, negative, valid alternative, boundary and insufficient evidence. It also requires
+a reserved slice and refuses readiness when any labels are unreviewed. This is a structural
+coverage check, not a statistical adequacy or promotion threshold. Ordinary adapter projection
+accepts a selected development/runtime-anchor case and returns only its target reference,
+public rubric binding and criterion IDs. It excludes expected labels, family/exposure,
+review/promotion answers and sibling cases; selecting a reserved case is refused. Reserved
+cases remain private and unattempted through this projection.
+
+Label receipts explicitly distinguish agent from human review. Human calibration stays
+`unknown` with a reason unless a caller supplies human receipts and every case is human-reviewed.
+Those references and reviewer identifiers represent supplied authority, not verified human
+identity or proof that the review occurred. Agent review cannot establish human calibration,
+and readiness alone grants no automatic promotion authority. Suite targets and review receipts
+are lifted into the canonical archive's dependency references so publication resolves them.
 
 ## Records and references
 
