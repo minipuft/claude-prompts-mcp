@@ -19,11 +19,11 @@ import {
   workflowNodeSchema,
 } from './workflow-ir.schema.js';
 
+import type { RemainderSubmission } from '#modules/workflow-ir/types.js';
 import type {
   GateVerdictSubmission,
   SemanticEvaluationReport,
 } from '#shared/types/gate-evaluation.js';
-import type { RemainderSubmission } from '#modules/workflow-ir/types.js';
 
 import { isAppendCommand } from '#engine/execution/parsers/append-command-parser.js';
 import { COMMAND_SOURCE_EXCLUSIVITY_MESSAGE } from '#engine/execution/validation/schemas.js';
@@ -227,8 +227,10 @@ const _reportSchemaMatchesSharedType: SemanticEvaluationReport = undefined as un
   typeof semanticEvaluationReportSchema
 >;
 // The reverse check catches incompatible reviewer claim vocabulary.
-const _sharedReviewerMatchesSchema: z.infer<typeof semanticReviewerSchema> | undefined =
-  undefined as unknown as SemanticEvaluationReport['reviewer'];
+const _sharedReviewerMatchesSchema: SemanticEvaluationReport['reviewer'] extends
+  z.infer<typeof semanticReviewerSchema> | undefined
+  ? true
+  : false = true;
 void _reportSchemaMatchesSharedType;
 void _sharedReviewerMatchesSchema;
 
