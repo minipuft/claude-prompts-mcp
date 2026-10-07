@@ -473,6 +473,11 @@ export interface GateReview {
   phase: GateReviewPhase;
   combinedPrompt: string;
   gateIds: string[];
+  /**
+   * Server-minted structural membership; never accepted from a client verdict.
+   * Tool-runner selection may omit a known synthetic id, while gateIds retains the full hold.
+   */
+  structuralGateIds?: readonly string[];
   prompts: GateReviewPrompt[];
   createdAt: number;
   attemptCount: number;

@@ -30,7 +30,12 @@ import {
   buildPhaseGuardPassSummary,
   buildRetryHints,
 } from '../../../frameworks/phase-guards/index.js';
-import { composeStructuralReview } from '../decisions/gates/structural-review-composition.js';
+import {
+  composeStructuralReview,
+  hasStructuralFinding,
+  PHASE_GUARD_GATE_ID,
+  withoutStructuralFinding,
+} from '../decisions/gates/structural-review-composition.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -43,8 +48,7 @@ import type { ExecutionContext } from '../../context/index.js';
 
 import { isRunComplete } from '#shared/types/chain-session.js';
 
-/** Sentinel gate ID used for phase-guard-created pending reviews. */
-export const PHASE_GUARD_GATE_ID = '__phase_guard__';
+export { PHASE_GUARD_GATE_ID } from '../decisions/gates/structural-review-composition.js';
 
 type FrameworkRegistryProvider = FrameworkGuideProvider;
 
@@ -238,7 +242,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
       reviewedStep === undefined
         ? undefined
         : this.chainSessionStore.getReview(sessionId, reviewedStep.nodeId);
-    if (gradedReview?.gateIds.includes(PHASE_GUARD_GATE_ID)) {
+    if (hasStructuralFinding(gradedReview)) {
       return { kind: 'skipped', reason: 'Phase guard review already pending' };
     }
 
@@ -551,29 +555,6 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     if (typeof userResponse === 'string' && userResponse.length > 0) return userResponse;
     return undefined;
   }
-}
-
-/**
- * `review` without the structural finding a previous grade merged into it, or `review` itself
- * when it carries none. Exact for a DETACHED review only: it opens with an empty prompt and no
- * hints (`openDetachedReview`) and a verdict adds neither, so every prompt line and hint on one
- * came from a grade — which the grade of a replacement report supersedes.
- */
-function withoutStructuralFinding(review: GateReview): GateReview {
-  if (!review.gateIds.includes(PHASE_GUARD_GATE_ID)) return review;
-  const {
-    failedPhases: _phases,
-    mode: _mode,
-    source: _source,
-    ...metadata
-  } = review.metadata ?? {};
-  return {
-    ...review,
-    gateIds: review.gateIds.filter((gateId) => gateId !== PHASE_GUARD_GATE_ID),
-    combinedPrompt: '',
-    retryHints: [],
-    metadata,
-  };
 }
 
 /**
