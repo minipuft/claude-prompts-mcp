@@ -16,6 +16,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { buildServerEnv, createHermeticRoots, type HermeticRoots } from './child-env.js';
+import { buildServerEnv as buildSourceServerEnv } from '../../../scripts/lib/hermetic-server-env.js';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -57,6 +58,8 @@ export function startServerWithHttp(
     transport?: string;
     quiet?: boolean;
     debug?: boolean;
+    /** Run current source via tsx; built hosts retain the default freshness check. */
+    source?: boolean;
     /**
      * Extra environment applied AFTER the defaults below, so a caller can redirect the server's
      * writable roots. Added for the claims-conformance suite: its default of
@@ -69,7 +72,16 @@ export function startServerWithHttp(
 ): ChildProcess {
   // 'sse' was the default until the HTTP+SSE transport was removed with SDK v2.
   const transport = options.transport || 'streamable-http';
-  const args = [SERVER_PATH, `--transport=${transport}`];
+  const args =
+    options.source === true
+      ? [
+          '--import',
+          'tsx',
+          path.join(PROJECT_ROOT, 'server', 'src', 'index.ts'),
+          `--server-root=${path.join(PROJECT_ROOT, 'server')}`,
+          `--transport=${transport}`,
+        ]
+      : [SERVER_PATH, `--transport=${transport}`];
 
   if (options.quiet !== false) {
     args.push('--quiet');
@@ -119,7 +131,7 @@ export function startServerWithHttp(
 
   const proc = spawn('node', args, {
     cwd,
-    env: buildServerEnv({
+    env: (options.source === true ? buildSourceServerEnv : buildServerEnv)({
       PORT: String(port), // Server uses PORT env var for port
       ...roots.env,
       ...(callerRedirectsResources

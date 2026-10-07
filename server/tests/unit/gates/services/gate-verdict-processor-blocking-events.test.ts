@@ -21,8 +21,16 @@ import { fileURLToPath } from 'url';
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { GateVerdictProcessor } from '../../../../src/engine/gates/services/gate-verdict-processor.js';
+import { GateEnforcementAuthority } from '../../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
+import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { hashBytes } from '../../../../src/shared/utils/hash.js';
 
 import type { Logger } from '../../../../src/infra/logging/index.js';
+import type { McpToolRequest } from '../../../../src/shared/types/execution.js';
+import type {
+  GateVerdictEntry,
+  GateVerdictSubmission,
+} from '../../../../src/shared/types/gate-evaluation.js';
 import type {
   ChainSession,
   ChainSessionService,
@@ -119,6 +127,235 @@ const sessionWith = (attemptCount: number) =>
     },
     state: { currentNodeId: 'node-1', nodes: [{ id: 'node-1' }, { id: 'node-2' }] },
   }) as unknown as ChainSession;
+
+function structuredReview(indexes: readonly number[] = [1]): GateVerdictSubmission {
+  const targetDigest = hashBytes('A😀e\u0301 Z');
+  return {
+    overall: 'FAIL',
+    rationale: 'Report reviewed',
+    per_gate: indexes.map((index): GateVerdictEntry => ({
+      index,
+      passed: false,
+      rationale: 'Criterion unmet',
+      evaluation: {
+        binding: {
+          gate_id: 'gate-a',
+          node_id: 'node-1',
+          attempt_id: 'attempt-1',
+          definition_digest: hashBytes('frozen definition'),
+          target_digest: targetDigest,
+        },
+        observations: [
+          {
+            criterion_id: 'preserves-contract',
+            state: 'unmet',
+            value: false,
+            evidence: [{ target_digest: targetDigest, start: 1, end: 5, quote: '😀e\u0301' }],
+            rationale: 'Unicode evidence retained.\nReport rationale is multiline.',
+          },
+        ],
+        reviewer: {
+          provenance: 'client_reported',
+          provider: 'claimed-provider',
+          model: 'claimed-model',
+          revision: 'claimed-revision',
+          context: 'isolated_judge',
+        },
+      },
+    })),
+  };
+}
+
+function custodyFixture(kind: 'ordinary' | 'detached', verdict: McpToolRequest['gate_verdict']) {
+  const logger = createLogger();
+  const store = {
+    recordGateReviewOutcome: jest.fn(async () => undefined),
+    setReview: jest.fn(async () => undefined),
+    clearReview: jest.fn(async () => undefined),
+    advanceStep: jest.fn(async () => false),
+    isStepComplete: jest.fn(() => true),
+  };
+  const service = store as unknown as ChainSessionService;
+  const authority = new GateEnforcementAuthority(service, logger);
+  const context = new ExecutionContext(
+    { chain_id: 'chain-review#1', gate_verdict: verdict },
+    logger
+  );
+  context.gateEnforcement = authority;
+  context.state.gates.enforcementMode = 'blocking';
+  context.state.gates.reviewGateIds = ['gate-a'];
+  const base = sessionWith(0);
+  const held = base.reviews?.['node-1'];
+  if (held === undefined) throw new Error('Review fixture missing');
+  const session: ChainSession = {
+    ...base,
+    state: { ...base.state, currentNodeId: kind === 'detached' ? 'node-2' : 'node-1' },
+    reviews: {
+      'node-1': {
+        ...held,
+        kind: kind === 'detached' ? 'detached' : 'gate',
+        reviewedOutput: 'A😀e\u0301 Z',
+      },
+    },
+  };
+  const sessionContext = {
+    sessionId: session.sessionId,
+    currentStep: kind === 'detached' ? 2 : 1,
+    currentNodeId: session.state.currentNodeId ?? undefined,
+    isChainExecution: true,
+  };
+  context.sessionContext = sessionContext;
+  const processor = new GateVerdictProcessor(service, logger, undefined, undefined, async () => [
+    { gateId: 'gate-a', passed: true, summary: 'Captured check passed' },
+  ]);
+  const submit = () =>
+    kind === 'detached'
+      ? processor.processDetachedReviewVerdict(context, session, 'node-1')
+      : processor.processReviewVerdict(context, session, sessionContext, 'A😀e\u0301 Z');
+  return { authority, context, session, store, submit };
+}
+
+describe('GateVerdictProcessor typed report custody', () => {
+  test.each(['ordinary', 'detached'] as const)(
+    'retains the original rich report in %s capture state',
+    async (kind) => {
+      const verdict = structuredReview();
+      const original = structuredClone(verdict);
+      const fixture = custodyFixture(kind, verdict);
+      const currentNode = fixture.session.state.currentNodeId;
+
+      const result = await fixture.submit();
+
+      const entries = fixture.context.state.gates.perGateVerdicts;
+      expect(entries).toHaveLength(1);
+      expect(entries?.[0]?.evaluation).toBe(verdict.per_gate?.[0]?.evaluation);
+      expect(entries?.[0]?.evaluation).toEqual(original.per_gate?.[0]?.evaluation);
+      expect(entries?.[0]).toMatchObject({
+        gateId: 'gate-a',
+        verdict: 'FAIL',
+        rationale: 'Criterion unmet',
+      });
+      expect(fixture.store.recordGateReviewOutcome).toHaveBeenCalledWith('session-1', {
+        verdict: 'FAIL',
+      });
+      expect(fixture.store.advanceStep).not.toHaveBeenCalled();
+      expect(fixture.session.state.currentNodeId).toBe(currentNode);
+      expect(verdict).toEqual(original);
+      if (kind === 'detached')
+        expect(result).toMatchObject({ kind: 'recorded', result: 'failed', attempt: 1 });
+      else expect(result).toMatchObject({ passClearedThisCall: false, earlyExit: false });
+    }
+  );
+
+  test.each(['ordinary', 'detached'] as const)(
+    'keeps legacy string summaries available for %s reviews',
+    async (kind) => {
+      const fixture = custodyFixture(
+        kind,
+        'GATE_REVIEW: FAIL - Legacy review\n\nGATE_VERDICTS:\n[1] FAIL - Legacy criterion'
+      );
+
+      await fixture.submit();
+
+      expect(fixture.context.state.gates.perGateVerdicts?.[0]).toMatchObject({
+        gateId: 'gate-a',
+        verdict: 'FAIL',
+        rationale: 'Legacy criterion',
+      });
+      expect(fixture.context.state.gates.perGateVerdicts?.[0]).not.toHaveProperty('evaluation');
+      expect(fixture.store.advanceStep).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each(
+    (['ordinary', 'detached'] as const).flatMap((kind) => [
+      { kind, issue: 'unknown', indexes: [1, 7] },
+      { kind, issue: 'duplicate', indexes: [1, 1] },
+    ])
+  )(
+    'refuses $issue indexes on a $kind review before counters, writes or advancement',
+    async ({ kind, indexes }) => {
+      const fixture = custodyFixture(kind, structuredReview(indexes));
+      const before = structuredClone(fixture.session);
+
+      await expect(fixture.submit()).rejects.toThrow('Structured gate verdict refused');
+
+      expect(fixture.context.state.gates.perGateVerdicts).toBeUndefined();
+      expect(fixture.store.recordGateReviewOutcome).not.toHaveBeenCalled();
+      expect(fixture.store.setReview).not.toHaveBeenCalled();
+      expect(fixture.store.clearReview).not.toHaveBeenCalled();
+      expect(fixture.store.advanceStep).not.toHaveBeenCalled();
+      expect(fixture.session).toEqual(before);
+    }
+  );
+
+  test.each(['ordinary', 'detached'] as const)(
+    'does not record or advance malformed structured input on a %s review',
+    async (kind) => {
+      const malformed = {
+        overall: 'PASS',
+        rationale: 'Reviewed',
+        per_gate: [{ index: 1, passed: 'yes', rationale: 'Malformed' }],
+      } as unknown as GateVerdictSubmission;
+      const fixture = custodyFixture(kind, malformed);
+
+      const result = await fixture.submit();
+
+      expect(fixture.context.state.gates.perGateVerdicts).toBeUndefined();
+      expect(fixture.store.recordGateReviewOutcome).not.toHaveBeenCalled();
+      expect(fixture.store.setReview).not.toHaveBeenCalled();
+      expect(fixture.store.advanceStep).not.toHaveBeenCalled();
+      if (kind === 'detached') expect(result).toMatchObject({ kind: 'refused' });
+      else expect(result).toMatchObject({ passClearedThisCall: false });
+    }
+  );
+
+  test.each(['ordinary', 'detached'] as const)(
+    'refuses a structured index against an empty advertised list on a %s review',
+    async (kind) => {
+      const fixture = custodyFixture(kind, structuredReview());
+      const review = fixture.session.reviews?.['node-1'];
+      if (review === undefined) throw new Error('Review fixture missing');
+      review.gateIds = [];
+
+      await expect(fixture.submit()).rejects.toThrow('review advertised 0');
+
+      expect(fixture.context.state.gates.perGateVerdicts).toBeUndefined();
+      expect(fixture.store.recordGateReviewOutcome).not.toHaveBeenCalled();
+      expect(fixture.store.setReview).not.toHaveBeenCalled();
+      expect(fixture.store.advanceStep).not.toHaveBeenCalled();
+    }
+  );
+
+  test('a persistence failure propagates unchanged instead of being classified as submitted syntax', async () => {
+    const fixture = custodyFixture('ordinary', structuredReview());
+    const failure = new Error('record persistence failed');
+    fixture.store.recordGateReviewOutcome.mockRejectedValueOnce(failure);
+
+    await expect(fixture.submit()).rejects.toBe(failure);
+    expect(fixture.store.advanceStep).not.toHaveBeenCalled();
+  });
+
+  test.each(['structured', 'legacy'] as const)(
+    'authority FAIL joins accept %s verdicts through the typed getter',
+    async (form) => {
+      const fixture = custodyFixture(
+        'ordinary',
+        form === 'structured' ? structuredReview() : 'GATE_REVIEW: FAIL - Retry'
+      );
+      const review = fixture.session.reviews?.['node-1'];
+      if (review === undefined) throw new Error('Review fixture missing');
+      fixture.context.state.gates.temporaryGateIds = ['new-gate'];
+      fixture.context.state.gates.reviewGateIds = ['gate-a', 'new-gate'];
+
+      const joined = await fixture.authority.joinSentGates(fixture.context, 'session-1', review);
+
+      expect(joined.gateIds).toEqual(['gate-a', 'new-gate']);
+      expect(joined.attemptCount).toBe(review.attemptCount);
+      expect(fixture.store.setReview).toHaveBeenCalledWith('session-1', joined);
+    }
+  );
+});
 
 /** Submit a FAIL; `lastAttempt` makes it the one that exhausts the review. */
 async function submitFail(processor: GateVerdictProcessor, lastAttempt = false): Promise<void> {

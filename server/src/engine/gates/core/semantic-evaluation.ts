@@ -80,6 +80,17 @@ const observationSchema: z.ZodType<SemanticObservation> = z.strictObject({
   rationale: z.string(),
 });
 
+/** Defensive syntax only; acceptance still requires independently pinned criteria and target. */
+export function isSemanticEvaluationReport(report: unknown): report is SemanticEvaluationReport {
+  const parsed = reportSchema.safeParse(report);
+  return (
+    parsed.success &&
+    parsed.data.observations.every(
+      (observation) => observationSchema.safeParse(observation).success
+    )
+  );
+}
+
 function issue(code: string, message: string, criterion_id?: string): SemanticEvaluationIssue {
   return { code, message, ...(criterion_id === undefined ? {} : { criterion_id }) };
 }

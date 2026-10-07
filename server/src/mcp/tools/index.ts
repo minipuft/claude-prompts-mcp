@@ -78,10 +78,6 @@ import {
   isValidGateVerdict,
   GATE_VERDICT_VALIDATION_MESSAGE,
 } from '#engine/gates/core/gate-verdict-contract.js';
-import {
-  isGateVerdictSubmission,
-  renderGateVerdict,
-} from '#engine/gates/core/gate-verdict-renderer.js';
 import { GateStateStore, createGateStateStore } from '#engine/gates/gate-state-store.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 // Gate evaluator removed - now using Framework validation
@@ -979,14 +975,9 @@ export class McpToolRouter {
             const trimmedCommand = args.command?.trim();
             const trimmedChainId = args.chain_id?.trim();
             const trimmedUserResponse = args.user_response?.trim();
-            // A structured submission is rendered to the canonical form here,
-            // at the boundary, so the pipeline keeps receiving a `string`.
-            // Widening `gate_verdict` downstream would touch execution-context
-            // and request-validator for no gain — each already consumes a
-            // verdict that has been parsed.
-            const trimmedGateVerdict = isGateVerdictSubmission(args.gate_verdict)
-              ? renderGateVerdict(args.gate_verdict)
-              : args.gate_verdict?.trim();
+            // Preserve typed reports; only the legacy string branch needs trimming.
+            const normalizedGateVerdict =
+              typeof args.gate_verdict === 'string' ? args.gate_verdict.trim() : args.gate_verdict;
             const trimmedGateAction = args.gate_action?.trim();
 
             const extraPayload = trimmedUserResponse
@@ -999,7 +990,7 @@ export class McpToolRouter {
               ...(trimmedCommand ? { command: trimmedCommand } : {}),
               ...(trimmedChainId ? { chain_id: trimmedChainId } : {}),
               ...(trimmedUserResponse ? { user_response: trimmedUserResponse } : {}),
-              ...(trimmedGateVerdict ? { gate_verdict: trimmedGateVerdict } : {}),
+              ...(normalizedGateVerdict ? { gate_verdict: normalizedGateVerdict } : {}),
               ...(trimmedGateAction
                 ? {
                     gate_action: trimmedGateAction as NonNullable<

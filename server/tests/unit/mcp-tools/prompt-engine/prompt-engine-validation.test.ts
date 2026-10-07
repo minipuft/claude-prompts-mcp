@@ -1,11 +1,14 @@
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 
 import { PromptExecutor } from '../../../../src/mcp/tools/prompt-engine/core/prompt-executor.js';
+import { hashBytes } from '../../../../src/shared/utils/hash.js';
 
 import type { ConfigManager } from '../../../../src/shared/types/config-manager.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { PromptAssetManager } from '../../../../src/modules/prompts/index.js';
 import type { TextReferenceStore } from '../../../../src/modules/text-refs/index.js';
+import type { McpToolRequest } from '../../../../src/shared/types/execution.js';
+import type { GateVerdictSubmission } from '../../../../src/shared/types/gate-evaluation.js';
 
 const mockLogger: Logger = {
   debug: jest.fn(),
@@ -147,6 +150,116 @@ describe('PromptEngine Validation', () => {
     );
     const forwardedRequest = execute.mock.calls[0]?.[0] as { command: string } | undefined;
     expect(forwardedRequest?.command).not.toContain('[object Object]');
+  });
+
+  describe('gate verdict custody at the executor pipeline boundary', () => {
+    function stubPipeline() {
+      const execute = jest.fn(async (_request: McpToolRequest) => ({
+        content: [{ type: 'text' as const, text: 'ok' }],
+        isError: false,
+      }));
+      jest
+        .spyOn(
+          engine as unknown as { getPromptExecutionPipeline: () => unknown },
+          'getPromptExecutionPipeline'
+        )
+        .mockReturnValue({ execute });
+      return execute;
+    }
+
+    test.each(['chain_id', 'command'] as const)(
+      'forwards a rich report intact for a %s resume without serializing it',
+      async (source) => {
+        const execute = stubPipeline();
+        const target = 'A😀e\u0301 Z';
+        const targetDigest = hashBytes(target);
+        const verdict: GateVerdictSubmission = {
+          overall: 'PASS',
+          rationale: 'Criterion reviewed',
+          per_gate: [
+            {
+              index: 1,
+              passed: true,
+              rationale: 'Target evidence supplied',
+              evaluation: {
+                binding: {
+                  gate_id: 'contract-gate',
+                  node_id: 'n1',
+                  attempt_id: 'attempt-1',
+                  definition_digest: hashBytes('frozen definition'),
+                  target_digest: targetDigest,
+                },
+                observations: [
+                  {
+                    criterion_id: 'preserves-contract',
+                    state: 'met',
+                    value: true,
+                    evidence: [
+                      { target_digest: targetDigest, start: 1, end: 5, quote: '😀e\u0301' },
+                    ],
+                    rationale: 'Unicode evidence retained.\nThis report rationale is multiline.',
+                  },
+                ],
+                reviewer: {
+                  provenance: 'client_reported',
+                  provider: 'claimed-provider',
+                  model: 'claimed-model',
+                  revision: 'claimed-revision',
+                  context: 'isolated_judge',
+                },
+              },
+            },
+          ],
+          reminders: { satisfied: ['review-notes'], not_applicable: [] },
+        };
+        const original = structuredClone(verdict);
+
+        await engine.executePromptCommand(
+          { [source]: 'chain-contract#4', gate_verdict: verdict },
+          {}
+        );
+
+        expect(execute).toHaveBeenCalledTimes(1);
+        const request = execute.mock.calls[0]?.[0];
+        expect(request?.chain_id).toBe('chain-contract#4');
+        expect(request?.command).toBeUndefined();
+        expect(request?.gate_verdict).toBe(verdict);
+        expect(request?.gate_verdict).toEqual(original);
+        expect(typeof request?.gate_verdict).toBe('object');
+        expect(verdict).toEqual(original);
+      }
+    );
+
+    test.each(['chain_id', 'command'] as const)(
+      'trims a legacy verdict and preserves %s resume detection',
+      async (source) => {
+        const execute = stubPipeline();
+
+        await engine.executePromptCommand(
+          { [source]: 'chain-contract#4', gate_verdict: ' \nGATE_REVIEW: PASS - checked\t ' },
+          {}
+        );
+
+        const request = execute.mock.calls[0]?.[0];
+        expect(request?.chain_id).toBe('chain-contract#4');
+        expect(request?.command).toBeUndefined();
+        expect(request?.gate_verdict).toBe('GATE_REVIEW: PASS - checked');
+      }
+    );
+
+    test.each(['', ' \n\t '])(
+      'drops a blank verdict %j without triggering a command resume',
+      async (blank) => {
+        const execute = stubPipeline();
+
+        await engine.executePromptCommand({ command: 'chain-contract#4', gate_verdict: blank }, {});
+
+        const request = execute.mock.calls[0]?.[0];
+        expect(request?.command).toBe('chain-contract#4');
+        expect(request?.chain_id).toBeUndefined();
+        expect(request).not.toHaveProperty('gate_verdict');
+      }
+    );
   });
 
   /**

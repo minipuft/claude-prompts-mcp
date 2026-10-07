@@ -10,6 +10,7 @@ import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateCheckResult, GateReview } from '#shared/types/chain-execution.js';
+import type { McpToolRequest } from '#shared/types/execution.js';
 import type {
   ChainSession,
   ChainSessionService,
@@ -769,15 +770,14 @@ export class GateVerdictProcessor {
       return { kind: 'refused', message };
     }
     const review = entry.grade === undefined ? found : await entry.grade(found);
-    if (review !== found) {
-      await this.chainSessionStore.setReview(session.sessionId, review);
-    }
 
     const event = this.markUnanswered(entry, review.nodeId, session);
     const failedGateIds =
-      event.type === 'verdict'
-        ? this.recordPerGateVerdicts(context, event.verdict.raw, review)
-        : [];
+      event.type === 'verdict' ? this.recordPerGateVerdicts(context, event.verdict, review) : [];
+    // Structured index refusal must happen before persisting a freshly graded review.
+    if (review !== found) {
+      await this.chainSessionStore.setReview(session.sessionId, review);
+    }
     const enforcement = await this.resolveFailEnforcement(context, review, failedGateIds);
     const advance = advanceReview(review, event, enforcement);
     if (advance.outcome === 'refused') {
@@ -1004,8 +1004,8 @@ export class GateVerdictProcessor {
    * The authority owns the parse because it owns the `index → gateId` join; this method owns only
    * WHEN it happens and WHERE the result lands, which is the processor's domain (verdict
    * processing) under the ownership matrix. A step review's entries land on request state, where
-   * the assembler names the failing gates and the capture service persists them; a detached
-   * review's answer is no capture, so its entries decide its enforcement and land nowhere.
+   * the assembler names the failing gates and the capture service persists them. Detached
+   * review entries use the same request-state custody slot for their own later capture.
    *
    * Nothing is written when the submission carried no per-gate block — an overall-only verdict
    * is valid and leaving the field undefined is what tells the assembler and the capture
@@ -1014,16 +1014,20 @@ export class GateVerdictProcessor {
    */
   private recordPerGateVerdicts(
     context: ExecutionContext,
-    raw: string,
+    verdict: ParsedGateVerdict,
     review: GateReview
   ): readonly string[] {
     const authority = context.gateEnforcement;
     const entries =
-      authority === undefined || review.gateIds.length === 0
+      authority === undefined
         ? []
-        : authority.parseGateVerdicts(raw, review.gateIds, review.attemptCount);
+        : authority.parseGateVerdicts(
+            verdict.submission ?? verdict.raw,
+            review.gateIds,
+            review.attemptCount
+          );
     const failed = entries.filter((entry) => entry.verdict === 'FAIL').map((entry) => entry.gateId);
-    if (entries.length > 0 && review.kind !== 'detached') {
+    if (entries.length > 0) {
       context.state.gates.perGateVerdicts = entries;
       context.diagnostics.info('GateVerdictProcessor', 'Per-gate verdicts recorded', {
         failed,
@@ -1038,7 +1042,7 @@ export class GateVerdictProcessor {
    */
   private parseVerdict(
     context: ExecutionContext,
-    raw: string | undefined,
+    raw: McpToolRequest['gate_verdict'],
     source: 'gate_verdict' | 'user_response'
   ): ParsedGateVerdict | null {
     return context.gateEnforcement?.parseVerdict(raw, source) ?? parseGateVerdict(raw, source);
