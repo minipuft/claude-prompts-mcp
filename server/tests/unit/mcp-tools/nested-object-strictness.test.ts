@@ -363,6 +363,53 @@ function clientMessages(tool: string, input: unknown): string[] {
   return result.success ? [] : result.error.issues.map((issue) => issue.message);
 }
 
+describe('semantic observation value union client diagnostics', () => {
+  function submission(value: unknown): Record<string, unknown> {
+    return {
+      gate_verdict: {
+        overall: 'PASS',
+        rationale: 'structured report',
+        per_gate: [
+          {
+            index: 1,
+            passed: true,
+            rationale: 'reported',
+            evaluation: {
+              binding: {
+                gate_id: 'g',
+                node_id: 'n',
+                attempt_id: 'a',
+                definition_digest: 'd',
+                target_digest: 't',
+              },
+              observations: [
+                { criterion_id: 'c', state: 'met', value, evidence: [], rationale: 'observation' },
+              ],
+            },
+          },
+        ],
+      },
+    };
+  }
+
+  it.each([
+    ['object', { unsupported: true }],
+    ['array', ['unsupported']],
+    ['null', null],
+  ])('names the complete value path and supported kinds for %s', (kind, value) => {
+    const messages = clientMessages('prompt_engine', submission(value));
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toContain('gate_verdict.per_gate[0].evaluation.observations[0].value');
+    expect(messages[0]).toContain('boolean or string or number');
+    expect(messages[0]).toContain(`not ${kind}`);
+    expect(messages[0]).not.toContain('Invalid input');
+  });
+
+  it.each([true, false, 'category', '', 1.5, 0])('preserves supported primitive %p', (value) => {
+    expect(clientMessages('prompt_engine', submission(value))).toEqual([]);
+  });
+});
+
 describe('every nested refusal names its path and the nearest key', () => {
   const { objects, unions } = reachable();
   const strictObjects = objects.filter((entry) => !entry.open);

@@ -31,6 +31,7 @@ import { CHAIN_ID_FORMAT_MESSAGE, CHAIN_ID_PATTERN } from '#shared/utils/chain-i
 import {
   describeNestedSchemaRefusal,
   refuseUndeclaredKey,
+  refuseUnionMismatch,
   type NestedSchemaIssue,
 } from '#shared/utils/nested-key-refusal.js';
 
@@ -201,7 +202,9 @@ const semanticEvaluationReportSchema = z.strictObject(
         {
           criterion_id: semanticReportIdentity,
           state: z.enum(['met', 'unmet', 'insufficient_evidence', 'not_applicable']),
-          value: z.union([z.boolean(), z.string(), z.number()]).optional(),
+          value: z
+            .union([z.boolean(), z.string(), z.number()], { error: refuseUnionMismatch })
+            .optional(),
           evidence: z.array(
             z.strictObject(
               {

@@ -19,7 +19,7 @@ tags: [gates, semantic, evaluation, tests]
 
 Goal: finish every row and verify the complete semantic-gate workflow against a frozen baseline.
 Slice: fresh main planner accepted ownership; archive/calibration and typed custody are staged in PR #475, with child4.1 frozen authority independently accepted.
-Next decision: row11.1 repair accepted locally; commit/push PR #475 and accept hosted CI before merge, while bounded runtime4.2 resumes.
+Next decision: diagnostic repair12.1 accepted locally; commit/push and accept fresh full hosted CI before merging PR #475; child capture4.2 remains active and opaque8.0 is accepted.
 Constraint: owner authorized reviewed push+merge and full completion; no global framework changes or release.
 Dependencies: reuse existing isolated Codex/code-quality collectors; preserve one gate/resource/archive authority.
 State: T1 six rows complete; later runtime/calibration/docs rows remain open until verified.
@@ -453,3 +453,13 @@ Proposed changelog, **Added**: "Semantic gates can declare evidence-backed evalu
 - Existing tests: structured-gate-verdict-flow.test.ts, server/tests/integration/gates/gate-judge-pipeline-wiring.test.ts, server/tests/integration/mcp-tools/gate-framework-versioning.integration.test.ts, server/tests/integration/chain/execution-record-store.integration.test.ts, server/tests/e2e/gate-review-record-truth.e2e.test.ts and the HTTP client harness.
 - The two adjacent plans linked above constrain ownership and archive placement. Their future capabilities are proposals, not existing implementations.
 - [Implementation notes](semantic-gate-evolution-2026-10-07-implementation-notes.md) retain discovery/path receipts, corrections and planning-only validation.
+
+### Tier 12: hosted nested-report diagnostic parity
+
+Entry: repaired Build/Renovate are green; full Node24 unit matrix found one missing diagnostic annotation in the new bounded primitive report value union.
+
+| #    | St                                                                                                        | File                                                                                                                   | Change                                                                                                                                                                                                        | Bounds                                                                  | Depends | Verify                                                                                                      | Justification                                                                                                                         |
+| ---- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 12.1 | ✓ (2026-10-07 ·canonical diagnostics67controls/drop4red-restored/types0; H12.1; hosted tier gate pending) | `server/src/mcp/tools/schemas/prompt-engine.schema.ts`; `server/tests/unit/mcp-tools/nested-object-strictness.test.ts` | Add the existing canonical nested-refusal error override to the boolean/string/number observation value union; prove exact nested path for object/array/null refusals and unchanged accepted primitive kinds. | <=2 files; bounded output; no scanner waiver or snapshot/ceiling change | —       | Focused existing strictness suite; remove annotation mutation red then restore; hosted full matrices green. | CI351 suites/6482tests passed and one scanner test identified the actual newly bare union; never relax the scanner to ship around it. |
+
+Tier gate: all hosted full matrices green before merge; source diagnostic repair does not activate semantic resources.
