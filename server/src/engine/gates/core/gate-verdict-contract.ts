@@ -79,14 +79,12 @@ function isReminderAttestation(value: unknown): value is GateVerdictReminders {
 }
 
 function isStructuredVerdict(value: unknown): value is GateVerdictSubmission {
-  if (
-    !isGateVerdictSubmission(value) ||
-    !hasOnlyKeys(value, ['overall', 'rationale', 'per_gate', 'reminders'])
-  )
-    return false;
+  if (!hasOnlyKeys(value, ['overall', 'rationale', 'per_gate', 'reminders'])) return false;
+  const overall = value['overall'];
+  if (!isGateVerdictSubmission(value)) return false;
   const entries = value['per_gate'];
   return (
-    (value['overall'] === 'PASS' || value['overall'] === 'FAIL') &&
+    (overall === 'PASS' || overall === 'FAIL') &&
     isRationale(value['rationale']) &&
     (entries === undefined ||
       (Array.isArray(entries) && Array.from(entries).every(isVerdictEntry))) &&

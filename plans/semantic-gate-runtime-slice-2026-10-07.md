@@ -17,10 +17,10 @@ tags: [gates, semantic, evaluation, runtime]
 ## Now (2026-10-07)
 
 Goal: complete runtime source custody, frozen semantic authority, actual activation and registered parity.
-Slice: row3.3 accepted; row4.0 exact typing accepted; boundary repair3.4 precedes4.1 frozen authority.
+Slice: row3.3 accepted; row4.0 typing and3.4 boundary repair accepted; next4.1 frozen authority.
 Next decision: accept typing artifact and derive complete review-opening/capture pins before adjudication.
 Constraint: coordinator owns both plans and HEAD; one shared-tree production worker; live semantic criteria stay refused until all consumers and controls pass.
-State: eleven of34 rows accepted; full runtime/pilot remains open. Root observer, no duplicate planner.
+State: twelve of34 rows accepted; full runtime/pilot remains open. Root observer, no duplicate planner.
 
 ## Intent
 
@@ -134,7 +134,7 @@ Entry prerequisite: Tier B-engine gate accepted; cross-tier dependency does not 
 | 3.2 | ✓ (2026-10-07 ·19 processor tests; mutation2failed; full source green; H3.2)                      | 4.2,5.2 | `server/src/engine/gates/services/temporary-gate-registrar.ts`; `server/src/engine/gates/services/gate-verdict-processor.ts`; `server/tests/unit/gates/services/gate-verdict-processor-blocking-events.test.ts`; `server/src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.ts`; `server/src/engine/execution/pipeline/stages/16-response-capture-stage.ts` | Repair FAIL joins/raw length readers and BOTH processor routes using whole parsed verdict; summaries retain object; no acceptance logic in stage. Output, <=5 files; processor parse/custody only, no acceptance math; structured FAIL join and detached report control. | 3.1     |
 | 3.3 | ✓ (2026-10-07 ·5 registered controls; report-drop mutation2failed; exact index restoration; H3.3) | 4.3     | `server/tests/integration/gates/structured-gate-verdict-flow.test.ts`; `server/tests/e2e/semantic-gate-review.e2e.test.ts`; `server/tests/e2e/helpers/http-mcp-client.ts`                                                                                                                                                                                                         | Actual registered ordinary structured STDIO/HTTP twin plus legacy control; planted registration report-drop must fail. Output, <=3 test files. Semantic positive becomes available only final activation.                                                                | 3.2     |
 
-| 3.4 | ☐ (as of 2026-10-07 · flips when source lint returns to baseline and new fixture test-type errors2->0) | 4.1,4.2 | `server/src/engine/gates/core/gate-verdict-contract.ts`; `server/tests/unit/gates/services/gate-verdict-processor-blocking-events.test.ts`; `server/.eslint-ratchet-baseline.json` | Preserve literal runtime overall guard without false TypeScript narrowing; type two collaborator fixture methods to actual parameters; canonically lower legitimate strict-boolean ceiling only. Mechanical, <=3 files; focused guard tests/types/lint. | 3.3 |
+| 3.4 | ✓ (2026-10-07 ·119 controls, literal-guard mutation1failed; fixture types2->0; generated ceilings lowered; H3.4) | 4.1,4.2 | `server/src/engine/gates/core/gate-verdict-contract.ts`; `server/tests/unit/gates/services/gate-verdict-processor-blocking-events.test.ts`; `server/.eslint-ratchet-baseline.json`; `server/.knip-ratchet-baseline.json`; `docs/reference/module-catalog.md` | Preserve literal runtime overall guard without false TypeScript narrowing; type two collaborator fixture methods to actual parameters; canonically lower legitimate lint/Knip ceilings and regenerate module catalog. Mechanical, <=5 files, <=3 source owners; focused guard tests/types/lint/generated checks. | 3.3 |
 
 Tier gate: registered ordinary typed custody passes; live semantic activation remains refused.
 
