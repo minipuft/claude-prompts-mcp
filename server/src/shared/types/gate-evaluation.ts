@@ -47,7 +47,7 @@ export interface SemanticEvidenceRef {
   readonly target_digest: string;
   readonly start: number;
   readonly end: number;
-  readonly quote?: string;
+  readonly quote?: string | undefined;
 }
 
 export type SemanticObservationState = 'met' | 'unmet' | 'insufficient_evidence' | 'not_applicable';
@@ -55,7 +55,7 @@ export type SemanticObservationState = 'met' | 'unmet' | 'insufficient_evidence'
 export interface SemanticObservation {
   readonly criterion_id: string;
   readonly state: SemanticObservationState;
-  readonly value?: boolean | string | number;
+  readonly value?: boolean | string | number | undefined;
   readonly evidence: readonly SemanticEvidenceRef[];
   readonly rationale: string;
 }
@@ -71,7 +71,7 @@ export interface SemanticEvaluationBinding {
 
 interface CapturedSemanticTarget {
   readonly kind: 'step_output' | 'artifact';
-  readonly id?: string;
+  readonly id?: string | undefined;
   readonly content: string;
 }
 
@@ -81,10 +81,10 @@ export interface SemanticEvaluationReport {
   /** Optional client claim; absence means unknown, and identity supplies no acceptance authority. */
   readonly reviewer?: {
     readonly provenance: 'client_reported' | 'unknown';
-    readonly provider?: string;
-    readonly model?: string;
-    readonly revision?: string;
-    readonly context?: 'self' | 'separate_pass' | 'isolated_judge' | 'unknown';
+    readonly provider?: string | undefined;
+    readonly model?: string | undefined;
+    readonly revision?: string | undefined;
+    readonly context?: 'self' | 'separate_pass' | 'isolated_judge' | 'unknown' | undefined;
   };
 }
 
