@@ -17,10 +17,10 @@ tags: [gates, semantic, evaluation, runtime]
 ## Now (2026-10-07)
 
 Goal: complete runtime source custody, frozen semantic authority, actual activation and registered parity.
-Slice: row3.3 accepted; row4.0 typing and3.4 boundary repair accepted; next4.1 frozen authority.
-Next decision: accept typing artifact and derive complete review-opening/capture pins before adjudication.
+Slice: frozen authority4.1 independently accepted; production worker paused at4.2 preflight while repairing PR #475 CI in the parent tree.
+Next decision: accept the parent CI-repair handoff, then resume4.2 persisted capture binding and cold-load controls.
 Constraint: coordinator owns both plans and HEAD; one shared-tree production worker; live semantic criteria stay refused until all consumers and controls pass.
-State: twelve of34 rows accepted; full runtime/pilot remains open. Root observer, no duplicate planner.
+State: thirteen of34 rows accepted; full runtime/pilot remains open. /root/semantic_catalog is main planner; root remains observer.
 
 ## Intent
 

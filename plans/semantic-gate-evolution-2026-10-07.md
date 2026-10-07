@@ -18,8 +18,8 @@ tags: [gates, semantic, evaluation, tests]
 ## Now (2026-10-07)
 
 Goal: finish every row and verify the complete semantic-gate workflow against a frozen baseline.
-Slice: archive, callback/replay, report/receipt and registered typed custody accepted with repaired source/test hygiene; stable staged foundation publication while child4.1 frozen authority proceeds.
-Next decision: run stable repaired boundary and built MCP drive, then publish/link/merge staged foundation PR while completing runtime activation and private native pilot.
+Slice: fresh main planner accepted ownership; archive/calibration and typed custody are staged in PR #475, with child4.1 frozen authority independently accepted.
+Next decision: row11.1 repair accepted locally; commit/push PR #475 and accept hosted CI before merge, while bounded runtime4.2 resumes.
 Constraint: owner authorized reviewed push+merge and full completion; no global framework changes or release.
 Dependencies: reuse existing isolated Codex/code-quality collectors; preserve one gate/resource/archive authority.
 State: T1 six rows complete; later runtime/calibration/docs rows remain open until verified.
@@ -313,6 +313,16 @@ Entry: real schema-loaded criterion reproduces a canonical digest collision. Pub
 | 10.2 | ✓ (2026-10-07 ·canonical Knip1067/exports430/types618, other categories unchanged; H10.2)                          | `server/.knip-ratchet-baseline.json`                                             | Lower the legitimate unused-export ceiling after real gate schema consumption in hash tests.                                                | <=1 generated file            | 10.1    | Canonical generator/check0 and exact category comparison.                                                                     | Hash consumer proof removes one previously unused export from the inventory.                                                                           |
 
 Tier gate: collision refused by distinct canonical identities and unchanged ordinary digest fixtures; no serializer redesign or activation implied.
+
+### Tier 11: hosted CI artifact parity
+
+Entry: PR475 local85/build20/PR4 passed, hosted source build/package passed, exact inventory and published-schema snapshots are stale.
+
+| #    | St                                                                                                                       | File                                                                                                                                                    | Change                                                                                                                                                                                              | ~Lines                             | Depends | Verify                                                                                                                     | Justification                                                                                                                         |
+| ---- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 11.1 | ✓ (2026-10-07 ·exact inventory9/4, canonical17986-byte schema, guard-drop2red/restored; H11.1; hosted tier gate pending) | `server/scripts/validate-renovate-extraction.js`; `server/tests/snapshots/mcp-input-schemas.json`; `server/tests/snapshots/mcp-input-schema-sizes.json` | Add exact optional workflow/package inventory counts9/4, preserve policy checks, canonically capture the accepted per_gate.evaluation API shape and actual17986-byte size without ceiling increase. | <=3 files, scripts/snapshot owners | —       | Extractor self-test plus removal mutation red, actual fresh built capture/check, hosted Build/Renovate/full test CI green. | Local validate:all excludes built schema capture, and CI exact inventory must follow deliberately introduced opt-in package/workflow. |
+
+Tier gate: required hosted checks green, no bypass/source relaxation/release.
 
 ## Execution dispatch
 
