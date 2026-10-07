@@ -16,6 +16,8 @@
  * injecting them.
  */
 
+import { readSemanticReviewCriteria } from './semantic-review-context.js';
+
 import type { GroundTruthCoverage, GroundTruthCoverageInput } from './gate-enforcement-types.js';
 
 /**
@@ -27,9 +29,10 @@ import type { GroundTruthCoverage, GroundTruthCoverageInput } from './gate-enfor
  * ground-truth criteria has been checked by nothing, and a passing sibling does not speak
  * for it.
  *
- * **Mechanism-agnostic by construction.** It reads only `gateId` and `passed`, so
+ * **Mechanism-agnostic by construction.** It reads `gateId` and `passed` for tool outcomes, so
  * `shell_verify` exit codes and `script_tool` structured verdicts feed it unchanged and a
- * third mechanism would too. The name said "shell" until 2026-08-19 purely because shell
+ * third mechanism would too. Required semantic criteria come from frozen review definitions,
+ * independently of those results. The name said "shell" until 2026-08-19 purely because shell
  * was the only mechanism that existed.
  */
 export function resolveGroundTruthCoverage(input: GroundTruthCoverageInput): GroundTruthCoverage {
@@ -55,6 +58,18 @@ export function resolveGroundTruthCoverage(input: GroundTruthCoverageInput): Gro
       satisfied: false,
       verifiedGateIds,
       reason: `Ground-truth verification failed for ${failedGateIds.join(', ')}`,
+    };
+  }
+
+  const semanticGateIds = input.requiredGateIds.filter((id) => {
+    const snapshot = input.reviewDefinitions?.[id];
+    return snapshot !== undefined && readSemanticReviewCriteria(snapshot).length > 0;
+  });
+  if (semanticGateIds.length > 0) {
+    return {
+      satisfied: false,
+      verifiedGateIds,
+      reason: `Ground-truth verification cannot satisfy semantic reports required by ${semanticGateIds.join(', ')}`,
     };
   }
 

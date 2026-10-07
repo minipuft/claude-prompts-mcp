@@ -1,6 +1,9 @@
 // @lifecycle canonical - Type definitions for gate enforcement authority.
 
-import type { PendingGateReview } from '#shared/types/chain-execution.js';
+import type {
+  GateReviewSemanticContext,
+  PendingGateReview,
+} from '#shared/types/chain-execution.js';
 import type { GateVerdictSource } from '../../../../gates/core/gate-verdict-contract.js';
 
 export type {
@@ -72,6 +75,8 @@ export interface GroundTruthOutcome {
 export interface GroundTruthCoverageInput {
   /** Gate ids the pending review is still waiting on. */
   readonly requiredGateIds: readonly string[];
+  /** Server-issued frozen definitions; tool results cannot satisfy their semantic criteria. */
+  readonly reviewDefinitions?: GateReviewSemanticContext['definitions'];
   /** Results produced by running this request's ground-truth criteria, of any mechanism. */
   readonly results: readonly GroundTruthOutcome[];
   /** Gate ids an earlier stage in this same request already shell-verified. */

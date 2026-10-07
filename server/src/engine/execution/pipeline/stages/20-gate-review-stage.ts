@@ -302,14 +302,15 @@ export class GateReviewStage extends BasePipelineStage {
         const { shellResults, scriptResults } = evidence;
         shellSection = evidence.section;
 
-        // Whether ground truth clears the review is a gate-enforcement decision, so the
-        // authority makes it. The stage keeps what only it can do: running the commands
-        // above, writing the result, and returning early.
+        // The pure coverage owner decides whether tool results can clear this review.
+        // Frozen requirements retain semantic obligations when the live catalog changes.
+        // The stage runs commands, supplies server facts, persists the result and returns.
         //
-        // The decision reads only `gateId` and `passed`, so it is mechanism-agnostic and
-        // both result kinds feed it unchanged.
+        // Tool outcomes remain mechanism-agnostic; both result kinds feed it unchanged.
+        // Frozen definitions separately tell the owner whether semantic reports remain due.
         const coverage = resolveGroundTruthCoverage({
           requiredGateIds: pendingReview.gateIds,
+          reviewDefinitions: pendingReview.semanticContext?.definitions,
           results: [...shellResults, ...scriptResults],
           priorVerifiedGateIds: context.state.gates.shellVerifyPassedForGates ?? [],
         });
