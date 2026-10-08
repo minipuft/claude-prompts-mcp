@@ -2,7 +2,7 @@
 title: Semantic gate runtime consumer slice
 date: 2026-10-07
 type: implementation-plan
-status: active
+status: reference
 initiative_branch: feat/semantic-gate-activation
 branch_mode: shared-tree
 worker_cap: 2
@@ -16,16 +16,16 @@ tags: [gates, semantic, evaluation, runtime]
 
 ## Now (2026-10-08)
 
-Goal: finish the entire master/child initiative, actual built workflows, matched native/quality evidence, retirement and reviewed green-CI delivery.
-Slice: MAIN custody transferred explicitly at clean c64dcd6e; all58 child rows terminal (56done/2killed); finalmetadata/defaultCLI/publicpersistence limit accepted. Main commits exact concerns then actual native immutable graph; no native inference.
-Next decision: complete10.4 metadata/generated/snapshots,10.6 defaultvalidatedCLI,15.1 public dead-owner limit; finalize actualMCPcandidate/currentruntime/C8 graph/rootreview, native11calls/disposition/retirement/greenCImerge.
-Constraint: main edits plans/integration/publication only; no new threads or repeated accepted proofs. Root is independent read-only reviewer and must read actual immutable native freeze before inference.
-State: child58 rows56done2killed0open; accepted definition unionON; built report twins10.3 accepted/native inference0. Checkpoint7 and subsequent receipts are authoritative; all prior accepted source receipts remain accepted.
+Goal: retired implementation and scoped measurement; deliver the reviewed activation through green CI.
+Slice: all master/child rows terminal; source9ad69854 measured with actual11 native calls and INCONCLUSIVE disposition; public report accepted.
+Next decision: one coherent four-check boundary, then reviewed PR/CI/push+merge under R6.
+Constraint: no repeated accepted source/row/model checks; no release, promotion, global change or live DB cutover.
+State: child58terminal56done2killed; native11calls/0retry/auth0; both frames same agent-state results, no advantage; human/full accepted quality/billing unknown.
 
 ## Intent
 
 Work type: feature with contract refactor. Confidence: high on measured custody seams; medium on capture ordering and projections. Risk: false advancement, evidence loss, stale review binding, conflating model reports with ground truth.
-Current: accepted registered custody preserves typed ordinary/staged rich verdicts; frozen authority/canonical kernel are integrated, while remaining consumers and live semantic criteria stay staged/refused. Desired: one typed verdict payload reaches an immutable, server-bound review; kernel results, tool results and bypasses retain their kinds in operational history.
+At child-plan opening, typed custody was staged and live semantic criteria were refused. Completed behavior: one typed verdict payload reaches an immutable, server-bound review; kernel results, tool results and bypasses retain their kinds in operational history.
 Non-goals: evaluation archive/package, generic finding IDs, server model client, new database schema, artifact filesystem access, live installed catalogs/config, release or parent publication.
 
 ## Frozen interfaces and decisions
@@ -329,9 +329,9 @@ Parent reviews/commits/merges and publishes; child gives exact accepted file/com
 | OQ1 | RULED 2026-10-07 by parent                                                                            | `calibration_suite_id` public name; opaque association only.                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | OQ2 | RULED 2026-10-07 by coordinator R21; reopens on source control exposing incompatible capture ordering | First semantic evaluation is capture-first: initial render issues definition/node/attempt pins, capture attaches exact canonical target, later report answers it. First-output plus report without a prior server-issued target binding is refused. Same-call replacement may answer only an existing binding whose actual canonical bytes match; ordinary legacy same-call behavior stays unchanged. Artifact targets remain unavailable until an owned capture seam is proven. |
 | OQ3 | RELEASED 2026-10-07 by parent baseline receipt                                                        | One active source worker.                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| R1  | OPEN as of 2026-10-07; flips when 5.2 mixed auto-clear mutation fails                                 | Existing tool coverage keyed only by gate ID can bypass semantic component.                                                                                                                                                                                                                                                                                                                                                                                                      |
-| R2  | OPEN as of 2026-10-07; flips when 3.2/10.3 planted entry drop fails                                   | Local helper integration is insufficient proof of actual registered transport custody.                                                                                                                                                                                                                                                                                                                                                                                           |
-| R3  | OPEN as of 2026-10-07; flips when 4.1/4.3 cold+retry controls pass                                    | Mutable rubric/output/attempt can reinterpret or replay prior report.                                                                                                                                                                                                                                                                                                                                                                                                            |
+| R1  | RESOLVED 2026-10-08 · child5.2/10.3 mixed controls accepted                                           | Existing tool coverage keyed only by gate ID can bypass semantic component.                                                                                                                                                                                                                                                                                                                                                                                                      |
+| R2  | RESOLVED 2026-10-08 · registered sender-drop2red restored10.3                                         | Local helper integration is insufficient proof of actual registered transport custody.                                                                                                                                                                                                                                                                                                                                                                                           |
+| R3  | RESOLVED 2026-10-08 · frozen/cold/retry controls4.x/10.3                                              | Mutable rubric/output/attempt can reinterpret or replay prior report.                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ## Growth and handoff contract
 

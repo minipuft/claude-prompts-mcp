@@ -2,7 +2,7 @@
 title: Semantic gate runtime slice implementation notes
 date: 2026-10-07
 type: implementation-notes
-status: active
+status: reference
 tracking: none
 tracking_reason: operator-opt-out
 tags: [gates, semantic, evaluation, runtime]
@@ -10,13 +10,12 @@ tags: [gates, semantic, evaluation, runtime]
 
 # Semantic gate runtime slice implementation notes
 
-## Now (2026-10-07)
+## Now (2026-10-08)
 
-Goal: finish the entire master/child initiative, actual built workflows, matched native/quality evidence, retirement and reviewed green-CI delivery.
-Slice: receiver5.6/R48 and portable summary5.3 ROOT accepted/committedb35bc83ae/a20951188; own scoped workflows2/3 COMPLETE. Both workers idle.
-Next decision: shorter-context coordinator takes custody; dispatch5.4 BYPASS plus a ruled disjoint consumer row. 9.2 inventory is static only; version-format scope needs explicit proof/limits.
-Constraint: archive_boundary_review releases HEAD/plans/integration/publication AFTER checkpoint commit; root assigns existing idle successor. No source edits by planner, no new spawn/thread or global changes.
-State: child51 rows35done2killed14open; semantic unionOFF/native inference0. Checkpoint4 in master notes carries current custody and remaining work.
+Goal: implementation and scoped native measurement retired; final green-CI delivery pending.
+Slice: all master/child rows terminal, actual11 calls/INCONCLUSIVE/archive replay accepted.
+Next decision: coherent four-check boundary and reviewed PR push+merge under R6.
+Constraint: existing source/model/row checks remain accepted; no release/promotion/live DB cutover.
 
 ## Classify RESULT
 
@@ -758,3 +757,15 @@ User explicitly requested continue/relaunch after temporary token exhaustion and
 15.1 MAIN one-doc fullread accepted SHA256981f729022442fe71b3dc316071e3558ef3c8b23c8a0a4b7a795cbd27e986fb1.30addedlines publicdead-owner cleanup beforeload, run/token deletion, supportedreplacementinitialize whileoldowner alive→stopold→claimsingleusetoken onreplacement. Sourceanchors manager369/399/884, run-registry302/354, registeredcontrol482/617. Links3/format/diff/source-order checks pass;12tables/2views/schema35unchanged. Existingarchive/retention prose preserved, NOdurabledead-ownerrestart claim/runtimechecks repeated. Receipt /tmp/semantic-row15-1-doc-check.log.
 
 BothworkersSAFE/allleasesclosed, accepted10.6sealedhash unchanged. Child58 now56DONE2KILLED0OPEN; runtimeconsumer work complete but overall native/disposition/docs/delivery goal ACTIVE; bothplans retire together in final reviewed PR. Main owns normalcommits by explicitconcerns and private finalgraph dispatch, rootactual immutablegraph read BEFOREauth/inference.
+
+## H-native-final / terminal reconciliation (2026-10-08)
+
+ROOT actual finalgraph read accepted pendingebdfb134/freeze5a4fe7de/source9ad69854; actualMCPcandidate public568fc298/libraryv1/strictjudge/twoR11criteria/pathnegative, root-reviewed private suite5814ad89/wholecorpus61bc9e/commonconfigc162f370/C8manifest83477c52. Independentrootclosure1521/source786/runtime3696 matched; two nativevendor aliases deliberately resolved exactprivate0.159.2 executable1748767+companion5b2c075 in readonlyouter namespace afterhost0.161 drift. Officialplatformartifact integrity/exacthashes verified; boundedofflineprepare/verify+positive0/exposure1botharms; host/helpers/matrix/framework6334 untouched. Soleprivate adapter repair selects canonical7casefields, preserving private label_rationale corpus; no repo source edit. ActualROOTreview serialized8ef3a703 before ANYauth/inference.
+
+EXACT11 native calls:oneC8 +ten5development×twoframes;300seconds each/0retry/concurrency1/max2children; actual0children/timeouts/errors/policyviolations/authleft0; reservedc06 unattemptedbotharms. Both frames3accept/1reject/1insufficient +reserved1unattempted in6requestedslots; fourbinaryeligible TP3TN1FP0FN0, eachcriterion5/5agent-state matches inclcorrectabstention. Canonical reports byte-identical/compatible, NO observedpresentationadvantage; compatibility pins do not prove independence/accuracy/general benefit. Canonical usage/time/cost/identity unknown, nativecollector receipts separately measured: C8 103.633s/input198511/cached156288/output2985; prose5 134.406s/93351/22144/3750; structured5 146.144s/93652/7424/3902. Wholebilling/modelrevision/human unknown.
+
+C8 artifact/types/frozenregression pass,8/8submittedchecks/bothseededdefects killed; fullmanualacceptedquality pending/unknown. Retained nativebaseline226.629s/lint16/cognitive5/cyclomatic11 vsnew103.633s/15/5/10; commonoriginalfixture14/2/6; unused/cycles/unresolved0 both. No causal/savings/qualitysuperiority orlivegatebenefit: coding MCP/plugins/hooksdisabled.
+
+ROOT NEWmeasurement/disposition readaccepted: measurement8e8448785b337c35cb5cd92a694767d40d3797eb829229e83102562ebe1249aa; disposition0e008bd3fd56843d410ac39e39747c712e0818ce0b8f9730c1cd364ba279af2f; replay3e6be0cda29c169c9027b0f7aed0f982c8ab80c6b9a9d5600480c9ec886744ed. Actualcandidate DB/WAL/SHM deletedafterarchivecustody, bothreports+disposition replayexact/currentmatching/requestedaccepted→effectiveINCONCLUSIVE/automaticfalse; publicYAML/guidance unchanged/noresourcepromotionmutation. Root REALreview INCONCLUSIVE scopedagentonly; no false nativeMCPjoin. SummaryfileSHAf73d689c native-measurement/e0c93f42 native-disposition; allprivateevidence retained under operatorroot semantic-gate-pilot-v1.
+
+Final52line publicreport one-doc acceptedmain/root; exactprecision clause output/evidence CONTRACTS, SHA64d7da1ea84742cbb3c6c8181a385fb91d269bf59c6d9117f6a35d66db1fea3a; commit ebefd330. Own19aggregate assertions/format/diff passed before solewordclarification; no checks/source/model review replayed. All18masteropenrows reconciled to existingchild/native/docs/C1–C10 receipts, not reimplemented. Allmaster/childrows nowterminal; plans retiretogether. Final four-check/greenCI delivery remains next gate, not falsely recorded as passed.
