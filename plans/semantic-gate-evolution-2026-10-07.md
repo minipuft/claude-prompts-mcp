@@ -7,7 +7,7 @@ initiative_branch: feat/semantic-gate-activation
 branch_mode: worktree
 worker_cap: 2
 publish: "push+merge (2026-10-07, owner approval in chat R6; reviewed PRs track the initiative)"
-planner_session: archive_boundary_review
+planner_session: report_resume
 tracking: none
 tracking_reason: operator-opt-out
 tags: [gates, semantic, evaluation, tests]
@@ -18,10 +18,10 @@ tags: [gates, semantic, evaluation, tests]
 ## Now (2026-10-07)
 
 Goal: finish the entire master/child initiative, actual built workflows, matched native/quality evidence, retirement and reviewed green-CI delivery.
-Slice: receiver5.6/R48 and portable summary5.3 ROOT accepted/committedb35bc83ae/a20951188; own scoped workflows2/3 COMPLETE. Both workers idle.
-Next decision: shorter-context coordinator takes custody; dispatch5.4 BYPASS plus a ruled disjoint consumer row. 9.2 inventory is static only; version-format scope needs explicit proof/limits.
-Constraint: archive_boundary_review releases HEAD/plans/integration/publication AFTER checkpoint commit; root assigns existing idle successor. No source edits by planner, no new spawn/thread or global changes.
-State: child51 rows35done2killed14open; semantic unionOFF/native inference0. Checkpoint4 in master notes carries current custody and remaining work.
+Slice: ROOT accepted6.1 classification committed8b923f01f and8.2 public custody test-only committedbfb590fab, following accepted6.2/5.4/8.1. Normal hooks restored all source. Current main custody report_resume; next disjoint6.3 frozen-render and7.1 history reader preflights.
+Next decision: derive exact6.3 frozen renderer/target instructions and7.1 truthful BYPASS/model/tool history metrics interfaces before edits. Then close index/export/public inspect/actual CLI; semantic activation stays last.
+Constraint: planner edits plans/integration only; no new spawn/thread, source ownership remains bounded, no repeated accepted proofs. Semantic activation stays last; root independently reviews actual current native freeze before inference.
+State: child51 rows40done2killed9open; semantic unionOFF/native inference0. Checkpoint4 remains authoritative; previous scoped workflow receipts are complete only for their slices, older trackers remain unavailable.
 
 ## Intent and completion criteria
 
