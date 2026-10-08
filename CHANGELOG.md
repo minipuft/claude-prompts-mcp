@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.0](https://github.com/minipuft/claude-prompts-mcp/compare/v5.1.1...v5.2.0) (2026-10-08)
+
+
+### Added
+
+* **gates:** accept bound semantic evaluation reports ([#476](https://github.com/minipuft/claude-prompts-mcp/issues/476)) ([6889b01](https://github.com/minipuft/claude-prompts-mcp/commit/6889b0154e44eebd38cb1f622089c9650769aa1b))
+* **gates:** archive revision-bound semantic review evidence ([#475](https://github.com/minipuft/claude-prompts-mcp/issues/475)) ([9644ba2](https://github.com/minipuft/claude-prompts-mcp/commit/9644ba2712f02fb8c1b1c176403ef28a1682eba1))
+* **gates:** validate standalone semantic evaluation reports ([#474](https://github.com/minipuft/claude-prompts-mcp/issues/474)) ([2b8805a](https://github.com/minipuft/claude-prompts-mcp/commit/2b8805aa3b2466b5e264ac900b6b67169d72a4a9))
+
+
+### Fixed
+
+* **scripts:** the release workflow keeps the Unreleased changelog header above the newest release ([#472](https://github.com/minipuft/claude-prompts-mcp/issues/472)) ([54ab4f1](https://github.com/minipuft/claude-prompts-mcp/commit/54ab4f1ce04d195368eee15be14c03683c0c9af9))
+
 ## [Unreleased]
 
 ### Added
