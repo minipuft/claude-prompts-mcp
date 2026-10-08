@@ -301,6 +301,221 @@ function remapDecisionState(f: ReviewFixture) {
   });
 }
 
+describe('authorized bypass ledger custody (real SQLite)', () => {
+  test.each(['gate', 'detached'] as const)(
+    '%s skip persists BYPASS before advance/completion and retains cold server facts',
+    async (kind) => {
+      const f = await reviewFixture();
+      try {
+        const opened = await draftReview(f, await openReview(f, kind));
+        await f.store.updateSessionState('review-session', 'reviewed-node', REVIEW_OUTPUT, {
+          isPlaceholder: false,
+        });
+        await f.store.completeStep('review-session', 'reviewed-node');
+        const captured = f.authority().bindReviewOutput(opened, REVIEW_OUTPUT);
+        await f.store.setReview('review-session', captured);
+        if (kind === 'detached') {
+          await f.store.markNodeSpawned('review-session', 'reviewed-node');
+          await f.store.advanceStep('review-session', 'reviewed-node');
+        }
+        // A genuine failed attempt remains independently available before operator bypass.
+        const failure =
+          kind === 'detached'
+            ? detachedContext(f, 'HANDOFF RESULT\nnode: reviewed-node', retainedVerdict(captured))
+            : reviewContext(f, undefined, retainedVerdict(captured));
+        await reviewStage(f).execute(failure);
+        const exhausted = {
+          ...currentReview(f),
+          phase: 'exhausted' as const,
+          attemptCount: 3,
+          metadata: { serverReceipt: { value: 'original' } },
+        };
+        await f.store.setReview('review-session', exhausted);
+        const original = JSON.parse(JSON.stringify(currentReview(f))) as GateReview;
+        const context =
+          kind === 'detached'
+            ? detachedContext(f, 'HANDOFF RESULT\nnode: reviewed-node')
+            : reviewContext(f);
+        const actionContext = new ExecutionContext(
+          { ...context.mcpRequest, gate_action: 'skip' },
+          f.logger
+        );
+        actionContext.state.identity.continuityScopeId = REVIEW_SCOPE.continuityScopeId;
+        actionContext.sessionContext = context.sessionContext;
+        actionContext.parsedCommand = context.parsedCommand;
+        actionContext.gateEnforcement = f.authority();
+        const grade = jest.spyOn(f.store, 'recordGateReviewOutcome');
+        const assertRecordedBeforeMove = () => {
+          const latest = f.records.queryBySession('review-session', REVIEW_SCOPE).at(-1);
+          expect(latest?.gateVerdicts[0]).toMatchObject({
+            verdict: 'BYPASS',
+            disposition: 'bypassed',
+            source: 'gate_action',
+          });
+        };
+        const complete = f.store.completeHeldRun.bind(f.store);
+        const advance = f.store.advanceStep.bind(f.store);
+        const movement =
+          kind === 'detached'
+            ? jest.spyOn(f.store, 'completeHeldRun').mockImplementation(async (id) => {
+                assertRecordedBeforeMove();
+                return complete(id);
+              })
+            : jest.spyOn(f.store, 'advanceStep').mockImplementation(async (id, node) => {
+                assertRecordedBeforeMove();
+                return advance(id, node);
+              });
+        await reviewStage(f).execute(actionContext);
+        expect(movement).toHaveBeenCalled();
+        expect(grade).not.toHaveBeenCalled();
+        expect(f.store.getReview('review-session', 'reviewed-node')).toBeUndefined();
+        const records = f.records.queryBySession('review-session', REVIEW_SCOPE);
+        expect(records[0]?.gateVerdicts[0]?.verdict).toBe('FAIL');
+        const last = records.at(-1)!;
+        const receipt = last.gateVerdicts[0]!;
+        expect(last.nodeId).toBe('reviewed-node');
+        expect(receipt).toMatchObject({
+          verdict: 'BYPASS',
+          disposition: 'bypassed',
+          attempt: 3,
+          bypassReview: {
+            nodeId: original.nodeId,
+            phase: 'exhausted',
+            semanticContext: original.semanticContext,
+            gateIds: original.gateIds,
+            metadata: original.metadata,
+          },
+        });
+        expect(receipt).not.toHaveProperty('evaluation');
+        expect(receipt).not.toHaveProperty('semanticResult');
+        expect(receipt).not.toHaveProperty('reportedVerdict');
+        expect(receipt.bypassReview).not.toHaveProperty('prompts');
+        expect(receipt.bypassReview).not.toHaveProperty('history');
+        const saved = JSON.parse(JSON.stringify(records));
+        Reflect.set(receipt.bypassReview!.gateIds, '0', 'getter-mutated');
+        if (exhausted.metadata !== undefined)
+          exhausted.metadata['serverReceipt'] = { value: 'input-mutated' };
+        expect(f.records.queryBySession('review-session', REVIEW_SCOPE)).toEqual(saved);
+        await f.cold();
+        expect(f.records.queryBySession('review-session', REVIEW_SCOPE)).toEqual(saved);
+      } finally {
+        await f.close();
+      }
+    }
+  );
+
+  test.each(['awaiting-verdict', 'exhausted'] as const)(
+    'refused %s skip creates no bypass receipt or ledger/advance',
+    async (phase) => {
+      const f = await reviewFixture();
+      try {
+        const opened = await openReview(f);
+        await f.store.setReview('review-session', {
+          ...opened,
+          phase,
+          attemptCount: phase === 'exhausted' ? 3 : 0,
+        });
+        const base = reviewContext(f);
+        const context = new ExecutionContext({ ...base.mcpRequest, gate_action: 'skip' }, f.logger);
+        context.state.identity.continuityScopeId = REVIEW_SCOPE.continuityScopeId;
+        context.sessionContext = base.sessionContext;
+        context.gateEnforcement = f.authority();
+        const before = remapDecisionState(f);
+        const move = jest.spyOn(f.store, 'advanceStep');
+        await reviewStage(f).execute(context);
+        expect(context.response?.isError).toBe(true);
+        expect(context.state.gates.reviewActionDetection).toBeUndefined();
+        expect(f.records.queryBySession('review-session', REVIEW_SCOPE)).toEqual([]);
+        expect(move).not.toHaveBeenCalled();
+        expect(remapDecisionState(f)).toEqual(before);
+      } finally {
+        await f.close();
+      }
+    }
+  );
+
+  test('accepted skip receipt copies caller review before delayed ledger append', async () => {
+    const f = await reviewFixture();
+    try {
+      const issued = await openReview(f);
+      await f.store.updateSessionState('review-session', 'reviewed-node', REVIEW_OUTPUT, {
+        isPlaceholder: false,
+      });
+      await f.store.completeStep('review-session', 'reviewed-node');
+      await f.store.setReview('review-session', {
+        ...issued,
+        phase: 'exhausted',
+        attemptCount: 3,
+        metadata: { receipt: 'original' },
+      });
+      const base = reviewContext(f);
+      const context = new ExecutionContext({ ...base.mcpRequest, gate_action: 'skip' }, f.logger);
+      context.state.identity.continuityScopeId = REVIEW_SCOPE.continuityScopeId;
+      context.sessionContext = base.sessionContext;
+      context.gateEnforcement = f.authority();
+      const session = f.store.getSession('review-session', REVIEW_SCOPE)!;
+      const callerReview = { ...currentReview(f) };
+      session.reviews = { 'reviewed-node': callerReview };
+      await new GateVerdictProcessor(f.store, f.logger).handleGateAction(
+        context,
+        session,
+        'skip',
+        context.sessionContext!
+      );
+      Reflect.set(callerReview, 'gateIds', ['caller-mutated']);
+      Reflect.set(callerReview, 'metadata', { receipt: 'caller-mutated' });
+      new StepCaptureService(f.store, f.logger, f.records).ledgerSubmittedReviewAction(
+        context,
+        'review-session',
+        session
+      );
+      const receipt = f.records.queryBySession('review-session', REVIEW_SCOPE)[0]?.gateVerdicts[0];
+      expect(receipt).toMatchObject({
+        gateId: REVIEW_GATE.id,
+        verdict: 'BYPASS',
+        bypassReview: { gateIds: [REVIEW_GATE.id], metadata: { receipt: 'original' } },
+      });
+    } finally {
+      await f.close();
+    }
+  });
+
+  test('bypass receipt deep-copies input before clearing and append failure prevents advancement', async () => {
+    const f = await reviewFixture();
+    try {
+      const review = await openReview(f);
+      await f.store.updateSessionState('review-session', 'reviewed-node', REVIEW_OUTPUT, {
+        isPlaceholder: false,
+      });
+      await f.store.completeStep('review-session', 'reviewed-node');
+      await f.store.setReview('review-session', { ...review, phase: 'exhausted', attemptCount: 3 });
+      const base = reviewContext(f);
+      const context = new ExecutionContext({ ...base.mcpRequest, gate_action: 'skip' }, f.logger);
+      context.state.identity.continuityScopeId = REVIEW_SCOPE.continuityScopeId;
+      context.sessionContext = base.sessionContext;
+      context.gateEnforcement = f.authority();
+      const records = f.records;
+      jest.spyOn(records, 'append').mockImplementation(() => {
+        throw new Error('ledger unavailable');
+      });
+      const moved = jest.spyOn(f.store, 'advanceStep');
+      const stage = new StepResponseCaptureStage(
+        new GateVerdictProcessor(f.store, f.logger),
+        new StepCaptureService(f.store, f.logger, records),
+        f.store,
+        new UnknownObservationProcessor(f.store, f.logger),
+        f.logger
+      );
+      await expect(stage.execute(context)).rejects.toThrow('ledger unavailable');
+      expect(moved).not.toHaveBeenCalled();
+      // Review clearing already happened; no atomic rollback is promised.
+      expect(f.store.getReview('review-session', 'reviewed-node')).toBeUndefined();
+    } finally {
+      await f.close();
+    }
+  });
+});
+
 describe('issued review capture and cold custody (real SQLite)', () => {
   test.each(['gate', 'detached'] as const)(
     '%s mixed structural marker survives input/getter mutation and real SQLite cold reopen',

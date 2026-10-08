@@ -346,6 +346,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         sessionContext
       );
       if (skipped !== undefined) {
+        this.stepCaptureService.ledgerSubmittedReviewAction(context, session.sessionId, session);
         await this.verdictProcessor.applyDeferredAdvance(context, skipped);
         await this.ensurePostAdvanceReview(context);
       }
@@ -634,6 +635,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       context.setResponse(this.buildErrorResponse(result.message));
       return;
     }
+    this.stepCaptureService.ledgerSubmittedReviewAction(context, sessionId, session);
     this.stepCaptureService.ledgerSubmittedVerdict(context, sessionId, session);
     const runCompleted = await this.chainSessionStore.completeHeldRun(sessionId);
     const after =

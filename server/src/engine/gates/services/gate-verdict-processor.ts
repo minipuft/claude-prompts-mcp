@@ -10,9 +10,11 @@ import {
   failedReviewGateIds,
   projectGateVerdictSummaries,
   projectVerdictDetection,
+  projectReviewActionDetection,
 } from './gate-verdict-summary.js';
 import {
   projectCurrentResponseTarget,
+  announceAdvancedStep,
   recordedStep,
 } from '../../execution/capture/step-capture-service.js';
 import { collectDetachedNodeFacts, collectRunHolds } from '../../execution/delegation/detached.js';
@@ -52,7 +54,6 @@ import type {
   ChainSessionService,
   HookRegistryPort,
   McpNotificationEmitterPort,
-  PipelineHookContext,
 } from '#shared/types/index.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { SemanticGateSummaryFacts } from './gate-verdict-summary.js';
@@ -607,28 +608,15 @@ export class GateVerdictProcessor {
     session: ChainSession,
     advance: DeferredAdvance
   ): Promise<void> {
-    if (this.hookRegistry === undefined && this.notificationEmitter === undefined) return;
-    const stepIndex = ordinalOf(session.state.nodes, advance.nodeId);
-    try {
-      const results = this.chainSessionStore.getChainContext(
-        session.sessionId,
-        context.getScopeOptions()
-      )['step_results'] as Record<number, string> | undefined;
-      const hookContext = buildPipelineHookContext(context);
-      const output = results?.[stepIndex] ?? '';
-      await this.hookRegistry?.emitStepComplete(session.chainId, stepIndex, output, hookContext);
-      this.notificationEmitter?.emitChainStepComplete({
-        chainId: session.chainId,
-        stepIndex,
-        status: advance.reason === 'gate-skip' ? 'failed' : 'passed',
-      });
-    } catch (error) {
-      this.logger.warn(
-        `[GateVerdictProcessor] Failed to announce step ${stepIndex}: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-    }
+    await announceAdvancedStep({
+      context,
+      session,
+      advance,
+      chainSessionStore: this.chainSessionStore,
+      logger: this.logger,
+      hookRegistry: this.hookRegistry,
+      notificationEmitter: this.notificationEmitter,
+    });
   }
 
   /**
@@ -891,6 +879,7 @@ export class GateVerdictProcessor {
         verdict: event.verdict.verdict,
       });
     }
+    context.state.gates.reviewActionDetection = projectReviewActionDetection(review, event);
     if (advance.review === null) {
       await this.chainSessionStore.clearReview(session.sessionId, review.nodeId);
     } else {
@@ -1274,13 +1263,6 @@ export class GateVerdictProcessor {
   }
 
   /**
-   * Create hook execution context from the current execution state.
-   */
-  private createHookContext(context: ExecutionContext): PipelineHookContext {
-    return buildPipelineHookContext(context);
-  }
-
-  /**
    * Emit gate events via hooks and notifications.
    */
   private async emitGateEvents(
@@ -1295,7 +1277,7 @@ export class GateVerdictProcessor {
 
     if (!hooks && !notifications) return;
 
-    const hookContext = this.createHookContext(context);
+    const hookContext = buildPipelineHookContext(context);
     const chainId = context.sessionContext?.sessionId;
 
     try {

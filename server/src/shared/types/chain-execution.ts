@@ -114,7 +114,7 @@ export type InputRequiredReason =
  */
 export interface GateVerdictSummary {
   gateId: string;
-  verdict: 'PASS' | 'FAIL';
+  verdict: 'PASS' | 'FAIL' | 'BYPASS';
   rationale?: string;
   timestamp: number;
   attempt?: number;
@@ -130,7 +130,25 @@ export interface GateVerdictSummary {
   /** Expected pins from the server review, independent of evaluation.binding. */
   reviewBinding?: SemanticEvaluationBinding;
   requestedEvaluation?: ResolvedJudgeConfig;
-  disposition?: 'passed' | 'held' | 'advisory-cleared' | 'informational-cleared';
+  disposition?: 'passed' | 'held' | 'advisory-cleared' | 'informational-cleared' | 'bypassed';
+  source?: 'gate_action';
+  /** Server review at authorized bypass; no generation prompts or fabricated evaluation. */
+  bypassReview?: Pick<
+    GateReview,
+    | 'nodeId'
+    | 'kind'
+    | 'phase'
+    | 'gateIds'
+    | 'structuralGateIds'
+    | 'createdAt'
+    | 'attemptCount'
+    | 'maxAttempts'
+    | 'semanticContext'
+    | 'checkResults'
+    | 'gateTiers'
+    | 'reviewedOutput'
+    | 'metadata'
+  >;
   /**
    * Which kind of gate produced this verdict, so a self-declared attestation is never counted
    * as a graded result.

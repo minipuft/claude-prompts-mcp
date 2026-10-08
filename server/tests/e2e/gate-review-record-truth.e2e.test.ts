@@ -25,7 +25,7 @@ import { afterEach, describe, expect, test } from '@jest/globals';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import type { GateReview } from '../../src/shared/types/chain-execution.js';
+import type { GateReview, GateVerdictSummary } from '../../src/shared/types/chain-execution.js';
 
 import { createHermeticRoots } from './helpers/child-env.js';
 import {
@@ -39,6 +39,7 @@ import {
 interface Session {
   call(args: Record<string, unknown>): Promise<string>;
   review(): GateReview | undefined;
+  receipts(): Array<{ nodeId: string; gateVerdicts: GateVerdictSummary[] }>;
   stop(): Promise<void>;
 }
 
@@ -75,7 +76,7 @@ describe('Streamable HTTP: a gate review states one state', () => {
     const roots = createHermeticRoots('gate-review-truth-e2e');
     const port = await getAvailablePort();
     const baseUrl = `http://127.0.0.1:${port}`;
-    const proc = startServerWithHttp(port, { env: roots.env });
+    const proc = startServerWithHttp(port, { env: roots.env, source: true });
     cleanup.push(roots.cleanup, () => killServer(proc));
     await waitForHealth(baseUrl, { timeout: 45000, interval: 200 });
     const client = new ModernMcpClient(baseUrl, 'gate-review-truth-e2e');
@@ -98,6 +99,24 @@ describe('Streamable HTTP: a gate review states one state', () => {
             reviews?: Record<string, GateReview>;
           };
           return Object.values(state.reviews ?? {}).find((review) => review.kind !== 'detached');
+        } finally {
+          db.close();
+        }
+      },
+      receipts: () => {
+        const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'), {
+          readOnly: true,
+        });
+        try {
+          const rows = db
+            .prepare(
+              'SELECT node_id, gate_verdicts_json FROM execution_records ORDER BY execution_id'
+            )
+            .all() as Array<{ node_id: string; gate_verdicts_json: string }>;
+          return rows.map((row) => ({
+            nodeId: row.node_id,
+            gateVerdicts: JSON.parse(row.gate_verdicts_json) as GateVerdictSummary[],
+          }));
         } finally {
           db.close();
         }
@@ -187,5 +206,52 @@ describe('Streamable HTTP: a gate review states one state', () => {
     });
     expect(session.review()?.attemptCount).toBe(2);
     expect(reply).toContain('Retry Limit Reached');
+  }, 180000);
+  test('authorized skip appends server BYPASS after genuine FAILs without accepting client BYPASS', async () => {
+    const session = await startSession();
+    const chainId = chainIdOf(await session.call(gatedSinglePrompt));
+    await session.call({
+      chain_id: chainId,
+      user_response: 'review output',
+      gate_verdict: 'GATE_REVIEW: FAIL - first failure',
+    });
+    await session.call({ chain_id: chainId, gate_verdict: 'GATE_REVIEW: FAIL - second failure' });
+    const exhausted = session.review();
+    expect(exhausted?.phase).toBe('exhausted');
+    const before = session.receipts();
+    const refused = await session.call({
+      chain_id: chainId,
+      gate_verdict: { overall: 'BYPASS', rationale: 'client cannot mint bypass' },
+    });
+    expect(refused).toContain('Input validation error');
+    expect(refused).toContain('"PASS"|"FAIL"');
+    expect(session.review()?.attemptCount).toBe(exhausted?.attemptCount);
+    expect(session.receipts()).toEqual(before);
+    await session.call({ chain_id: chainId, gate_action: 'skip' });
+    const receipt = session
+      .receipts()
+      .flatMap((row) => row.gateVerdicts)
+      .filter((entry) => entry.verdict === 'BYPASS');
+    expect(receipt.map((entry) => entry.gateId)).toEqual(exhausted!.gateIds);
+    expect(receipt.map((entry) => entry.gateId)).toContain('pr-security');
+    for (const entry of receipt) {
+      expect(entry).toMatchObject({
+        verdict: 'BYPASS',
+        source: 'gate_action',
+        disposition: 'bypassed',
+        attempt: 2,
+        bypassReview: {
+          nodeId: exhausted!.nodeId,
+          phase: 'exhausted',
+          attemptCount: 2,
+          gateIds: exhausted!.gateIds,
+        },
+      });
+      expect(entry).not.toHaveProperty('semanticResult');
+      expect(entry).not.toHaveProperty('evaluation');
+      expect(entry.bypassReview).not.toHaveProperty('prompts');
+      expect(entry.bypassReview).not.toHaveProperty('history');
+    }
+    expect(session.review()).toBeUndefined();
   }, 180000);
 });

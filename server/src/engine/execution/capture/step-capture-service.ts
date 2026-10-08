@@ -1,5 +1,6 @@
 // @lifecycle canonical - Captures step results (placeholder or real) in chain sessions.
 
+import { projectBypassSummaries } from '../../gates/services/gate-verdict-summary.js';
 import { handoffNodeToken, resolveHandoffEvidenceReason } from '../delegation/handoff-contract.js';
 import { planNodeDrivenRender } from '../operators/node-step-projection.js';
 import { readSemanticReviewCriteria } from '../pipeline/decisions/gates/semantic-review-context.js';
@@ -493,6 +494,35 @@ export class StepCaptureService {
     });
   }
 
+  /** Persist authorized bypass custody before a caller may advance or complete the held run. */
+  ledgerSubmittedReviewAction(
+    context: ExecutionContext,
+    sessionId: string,
+    session: ChainSession
+  ): void {
+    const receipt = context.state.gates.reviewActionDetection;
+    if (receipt === undefined || this.executionRecordStore === null) return;
+    const ordinal = ordinalOf(session.state.nodes, receipt.nodeId);
+    if (ordinal === -1)
+      throw new Error(`Skipped review node '${receipt.nodeId}' is not in the run`);
+    const { promptId } = recordedStep(context, session, receipt.nodeId, ordinal);
+    const gateVerdicts = projectBypassSummaries(receipt);
+    this.executionRecordStore.append({
+      sessionId,
+      chainId: session.chainId,
+      nodeId: receipt.nodeId,
+      stepNumber: ordinal,
+      ...(promptId !== undefined ? { promptId } : {}),
+      status: 'completed',
+      startedAt: receipt.at,
+      completedAt: receipt.at,
+      substate: { respondedAt: receipt.at },
+      gateVerdicts,
+      scope: context.getScopeOptions(),
+    });
+    context.state.gates.perGateVerdicts = gateVerdicts;
+  }
+
   /**
    * Append the verdict-time row for a call that carried a gate verdict and captured nothing
    * (P4.86).
@@ -705,6 +735,48 @@ export class StepCaptureService {
         scopeOptions
       );
     }
+  }
+}
+
+/** Existing step-completion boundary, with the processor's injected IO ports passed explicitly. */
+export async function announceAdvancedStep(input: {
+  readonly context: ExecutionContext;
+  readonly session: ChainSession;
+  readonly advance: DeferredAdvance;
+  readonly chainSessionStore: ChainSessionService;
+  readonly logger: Logger;
+  readonly hookRegistry: HookRegistryPort | undefined;
+  readonly notificationEmitter: McpNotificationEmitterPort | undefined;
+}): Promise<void> {
+  const {
+    context,
+    session,
+    advance,
+    chainSessionStore,
+    logger,
+    hookRegistry,
+    notificationEmitter,
+  } = input;
+  if (hookRegistry === undefined && notificationEmitter === undefined) return;
+  const stepIndex = ordinalOf(session.state.nodes, advance.nodeId);
+  try {
+    const results = chainSessionStore.getChainContext(session.sessionId, context.getScopeOptions())[
+      'step_results'
+    ] as Record<number, string> | undefined;
+    const hookContext = buildPipelineHookContext(context);
+    const output = results?.[stepIndex] ?? '';
+    await hookRegistry?.emitStepComplete(session.chainId, stepIndex, output, hookContext);
+    notificationEmitter?.emitChainStepComplete({
+      chainId: session.chainId,
+      stepIndex,
+      status: advance.reason === 'gate-skip' ? 'failed' : 'passed',
+    });
+  } catch (error) {
+    logger.warn(
+      `[GateVerdictProcessor] Failed to announce step ${stepIndex}: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
   }
 }
 

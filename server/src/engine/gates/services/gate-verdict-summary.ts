@@ -5,6 +5,7 @@ import type {
   SemanticEvaluationResult,
   ResolvedJudgeConfig,
 } from '#shared/types/gate-evaluation.js';
+import type { ReviewEvent } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
 import type { ParsedGateVerdict } from '../core/gate-verdict-contract.js';
 
 /** Facts retained from the existing kernel call; this projector does not adjudicate. */
@@ -63,7 +64,10 @@ function projectGate(input: {
     rationale:
       failures.length > 0 ? failures.join('; ') : (reported?.rationale ?? original.rationale),
     ...(claim !== undefined
-      ? { reportedVerdict: claim.verdict, reportedRationale: claim.rationale }
+      ? {
+          reportedVerdict: claim.verdict === 'BYPASS' ? undefined : claim.verdict,
+          reportedRationale: claim.rationale,
+        }
       : {}),
     reportedReview: {
       overall: original.submission?.overall ?? original.verdict,
@@ -158,4 +162,90 @@ export function projectVerdictDetection(
     ...(verdict.detectedPattern !== undefined ? { pattern: verdict.detectedPattern } : {}),
     outcome: outcome === 'passed' || outcome === 'cleared' ? 'cleared' : 'pending',
   };
+}
+
+/** Only an accepted skip event creates this server-only action receipt, before review clearing. */
+export function projectReviewActionDetection(
+  review: GateReview,
+  event: ReviewEvent
+):
+  | {
+      readonly action: 'skip';
+      readonly source: 'gate_action';
+      readonly nodeId: string;
+      readonly at: number;
+      readonly review: GateReview;
+    }
+  | undefined {
+  return event.type === 'gate_action' && event.action === 'skip'
+    ? {
+        action: 'skip',
+        source: 'gate_action',
+        nodeId: review.nodeId,
+        at: event.at,
+        review: structuredClone(review),
+      }
+    : undefined;
+}
+
+/** An operational bypass carries server facts, never an evaluated PASS or FAIL. */
+export function projectBypassSummaries(
+  receipt: NonNullable<ReturnType<typeof projectReviewActionDetection>>
+): GateVerdictSummary[] {
+  const { review } = receipt;
+  const {
+    nodeId,
+    kind,
+    phase,
+    gateIds,
+    structuralGateIds,
+    createdAt,
+    attemptCount,
+    maxAttempts,
+    semanticContext,
+    checkResults,
+    gateTiers,
+    reviewedOutput,
+    metadata,
+  } = review;
+  const bypassReview = structuredClone({
+    nodeId,
+    kind,
+    phase,
+    gateIds,
+    structuralGateIds,
+    createdAt,
+    attemptCount,
+    maxAttempts,
+    semanticContext,
+    checkResults,
+    gateTiers,
+    reviewedOutput,
+    metadata,
+  });
+  return gateIds.map((gateId) => {
+    const definition = semanticContext?.definitions[gateId];
+    const target = semanticContext?.target;
+    return {
+      gateId,
+      verdict: 'BYPASS',
+      disposition: 'bypassed',
+      source: receipt.source,
+      timestamp: receipt.at,
+      attempt: attemptCount,
+      rationale: 'Operator skipped the exhausted gate review; no evaluation was performed.',
+      bypassReview,
+      ...(semanticContext !== undefined && definition !== undefined && target !== undefined
+        ? {
+            reviewBinding: {
+              gate_id: gateId,
+              node_id: semanticContext.nodeId,
+              attempt_id: semanticContext.attemptId,
+              definition_digest: definition.definitionDigest,
+              target_digest: target.digest,
+            },
+          }
+        : {}),
+    };
+  });
 }
