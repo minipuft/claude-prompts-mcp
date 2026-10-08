@@ -17,7 +17,11 @@ import {
   resolveHandoffEvidence,
   resolveHandoffEvidenceMode,
 } from '../../delegation/handoff-contract.js';
-import { buildStructuredVerdictTemplate } from '../../formatting/response-assembler.js';
+import {
+  buildStructuredVerdictTemplate,
+  describeReviewForRender,
+  semanticReviewResume,
+} from '../decisions/gates/describe-review-for-render.js';
 import {
   decideInterrupt,
   decideMutation,
@@ -596,7 +600,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 review.gateIds,
                 review.prompts,
                 new Map(Object.entries(review.gateTiers ?? {})),
-                new Map()
+                new Map(),
+                describeReviewForRender(review).protocol
               ),
               structuralHints: review.retryHints ?? [],
             }),
@@ -604,7 +609,18 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         : {}),
     });
     context.setResponse({
-      content: [{ type: 'text', text: `${text}\n\nChain: ${after.chainId}` }],
+      content: [
+        {
+          type: 'text',
+          text: [
+            text,
+            review === null ? '' : (semanticReviewResume(review, after.chainId) ?? ''),
+            `Chain: ${after.chainId}`,
+          ]
+            .filter((part) => part !== '')
+            .join('\n\n'),
+        },
+      ],
       isError: false,
     });
   }
@@ -648,7 +664,18 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       holds: collectRunHolds(after),
     });
     context.setResponse({
-      content: [{ type: 'text', text: `${text}\n\nChain: ${after.chainId}` }],
+      content: [
+        {
+          type: 'text',
+          text: [
+            text,
+            semanticReviewResume(after.reviews?.[node.nodeId], after.chainId) ?? '',
+            `Chain: ${after.chainId}`,
+          ]
+            .filter((part) => part !== '')
+            .join('\n\n'),
+        },
+      ],
       isError: false,
     });
   }

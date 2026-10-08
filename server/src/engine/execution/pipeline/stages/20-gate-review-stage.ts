@@ -8,8 +8,13 @@ import {
 import { runGateReviewEvidence } from '../../../gates/services/gate-review-evidence.js';
 import { recordedStep } from '../../capture/step-capture-service.js';
 import { planNodeDrivenRender } from '../../operators/node-step-projection.js';
+import { describeFrozenJudgeReview } from '../decisions/gates/describe-review-for-render.js';
 import { resolveGroundTruthCoverage } from '../decisions/gates/ground-truth-coverage.js';
 import { resolveShownReview } from '../decisions/gates/review-target.js';
+import {
+  projectFrozenReview,
+  assertFrozenReviewAvailable,
+} from '../decisions/gates/semantic-review-context.js';
 import {
   hasStructuralFinding,
   selectToolReviewGateIds,
@@ -183,7 +188,7 @@ export class GateReviewStage extends BasePipelineStage {
     review: GateReview,
     checkResults: GateCheckResult[]
   ): Promise<GateReview> {
-    const gateTiers = await this.deriveGateTiers(review.gateIds);
+    const gateTiers = await this.deriveGateTiers(review);
 
     if (checkResults.length === 0 && Object.keys(gateTiers).length === 0) {
       return review;
@@ -205,7 +210,14 @@ export class GateReviewStage extends BasePipelineStage {
    * treat a missing id as `check`, which keeps an unloadable gate attestable instead of
    * silently demoting it to a reminder nobody grades.
    */
-  private async deriveGateTiers(gateIds: string[]): Promise<Record<string, PendingGateTier>> {
+  private async deriveGateTiers(review: GateReview): Promise<Record<string, PendingGateTier>> {
+    const frozen = projectFrozenReview(review);
+    assertFrozenReviewAvailable(frozen);
+    if (frozen.definitions !== undefined)
+      return Object.fromEntries(
+        frozen.definitions.map((definition) => [definition.id, deriveGateTier(definition)])
+      );
+    const gateIds = review.gateIds;
     if (!this.gateDefinitionProvider || gateIds.length === 0) return {};
 
     try {
@@ -295,6 +307,7 @@ export class GateReviewStage extends BasePipelineStage {
     let reviewForRender: GateReview = pendingReview;
 
     try {
+      assertFrozenReviewAvailable(projectFrozenReview(pendingReview));
       // Run the gates' ground-truth criteria (`gate-review-evidence.ts`, shared with a detached
       // node's review). The agent's response is forwarded so gates that opt in via
       // `shell_stdin_source: 'agent_response'` can verify response-content claims (file paths,
@@ -467,6 +480,8 @@ export class GateReviewStage extends BasePipelineStage {
 
   /** Compose the existing context-isolated judge prompt for the assembler (P4.133). */
   private async renderJudgeMetadata(review: GateReview): Promise<JudgeReviewMetadata | undefined> {
+    const frozen = projectFrozenReview(review);
+    if (frozen.definitions !== undefined) return describeFrozenJudgeReview(frozen);
     if (this.gateDefinitionProvider === null || review.gateIds.length === 0) return undefined;
     const gatesConfig = this.gatesConfigProvider?.();
     const { judgeGates } = await resolveJudgeGates(

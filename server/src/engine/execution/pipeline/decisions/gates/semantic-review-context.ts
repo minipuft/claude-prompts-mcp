@@ -1,5 +1,6 @@
 // @lifecycle canonical - Frozen public review definitions and capture-bound semantic authority.
 import { resolveReviewTarget } from './review-target.js';
+import { selectToolReviewGateIds } from './structural-review-composition.js';
 import { SemanticCriterionSchema } from '../../../../gates/core/gate-schema.js';
 import { resolveJudgeConfig } from '../../../../gates/judge/judge-prompt-builder.js';
 import { resolveDetachedReport } from '../../../delegation/detached.js';
@@ -14,13 +15,17 @@ import type {
   GateReviewJsonValue,
   GateReviewSemanticContext,
   GateReview,
+  PendingGateReview,
 } from '#shared/types/chain-execution.js';
 import type {
   PinnedSemanticEvaluationContext,
   SemanticCriterion,
   SemanticCriterionInput,
 } from '#shared/types/gate-evaluation.js';
-import type { JudgeEvaluationDefaults } from '../../../../gates/judge/types.js';
+import type {
+  JudgeEvaluationDefaults,
+  SemanticReviewPromptInput,
+} from '../../../../gates/judge/types.js';
 import type { GatePassCriteria } from '../../../../gates/types/gate-primitives.js';
 import type { LightweightGateDefinition } from '../../../../gates/types.js';
 import type { DetachedNodeFacts, RunHolds } from '../../../delegation/detached.js';
@@ -150,6 +155,140 @@ export function resolvePinnedSemanticContext(
     }),
     target: Object.freeze({ kind: 'step_output', content: target.content }),
   });
+}
+
+/** Rendering observes server authority, never a client's submitted binding. */
+export interface FrozenReviewProjection {
+  readonly submission: 'legacy' | 'capture-first' | 'report' | 'unavailable';
+  readonly definitions?: readonly SemanticReviewDefinitionInput[];
+  readonly semanticReviews: readonly SemanticReviewPromptInput[];
+  readonly capturedOutput?: string;
+  readonly reason?: string;
+  readonly exhausted?: true;
+}
+
+export function assertFrozenReviewAvailable(protocol: FrozenReviewProjection): void {
+  if (protocol.submission === 'unavailable')
+    throw new Error(protocol.reason ?? 'Issued authority unavailable');
+}
+
+function readFrozenDefinition(
+  gateId: string,
+  snapshot: GateReviewDefinitionSnapshot
+): SemanticReviewDefinitionInput {
+  const definition = snapshot.definition;
+  if (hashCanonical(definition) !== snapshot.definitionDigest || definition['id'] !== gateId)
+    throw new Error(`Issued definition '${gateId}' is inconsistent`);
+  if (
+    typeof definition['name'] !== 'string' ||
+    typeof definition['description'] !== 'string' ||
+    (definition['type'] !== 'validation' && definition['type'] !== 'guidance')
+  )
+    throw new Error(`Issued definition '${gateId}' is unavailable`);
+  const evaluation = definition['evaluation'];
+  if (
+    !isJsonObject(evaluation) ||
+    (evaluation['mode'] !== 'self' && evaluation['mode'] !== 'judge') ||
+    typeof evaluation['strict'] !== 'boolean' ||
+    (evaluation['model'] !== undefined && typeof evaluation['model'] !== 'string')
+  )
+    throw new Error(`Issued evaluator for '${gateId}' is unavailable`);
+  if (definition['pass_criteria'] !== undefined && !Array.isArray(definition['pass_criteria']))
+    throw new Error(`Issued criteria for '${gateId}' are unavailable`);
+  // The snapshot creator already owns the full public DTO; the renderer has no live loader.
+  return definition as unknown as SemanticReviewDefinitionInput;
+}
+
+interface FrozenReviewEntry {
+  definition?: SemanticReviewDefinitionInput;
+  semanticReview?: SemanticReviewPromptInput;
+}
+
+function assertReviewIdentity(issued: unknown, nodeId: string | undefined): void {
+  if (
+    !isJsonObject(issued) ||
+    typeof issued['nodeId'] !== 'string' ||
+    issued['nodeId'] !== nodeId ||
+    typeof issued['attemptId'] !== 'string' ||
+    issued['attemptId'].trim().length === 0
+  )
+    throw new Error('Issued review identity is inconsistent');
+  const target = issued['target'];
+  if (
+    target !== undefined &&
+    (!isJsonObject(target) ||
+      target['kind'] !== 'step_output' ||
+      typeof target['content'] !== 'string' ||
+      typeof target['digest'] !== 'string')
+  )
+    throw new Error('Captured output authority is inconsistent');
+}
+
+function projectFrozenGate(
+  issued: GateReviewSemanticContext,
+  gateId: string,
+  structural: boolean
+): FrozenReviewEntry {
+  const snapshot = issued.definitions[gateId];
+  if (snapshot === undefined) {
+    if (structural) return {};
+    throw new Error(`No issued definition for '${gateId}'`);
+  }
+  const definition = readFrozenDefinition(gateId, snapshot);
+  const criteria = readSemanticReviewCriteria(snapshot);
+  if (criteria.length === 0) return { definition };
+  if (criteria.some((criterion) => criterion.target.kind !== 'step_output'))
+    throw new Error('Artifact semantic capture is unavailable');
+  const expected =
+    issued.target === undefined ? undefined : resolvePinnedSemanticContext(issued, gateId);
+  return {
+    definition,
+    semanticReview: {
+      gateId,
+      criteria,
+      ...(expected === undefined ? {} : { binding: expected.binding }),
+    },
+  };
+}
+
+/** Frozen public definitions, expected pins and actual captured output for every render consumer. */
+export function projectFrozenReview(review: PendingGateReview): FrozenReviewProjection {
+  const issued = review.semanticContext;
+  if (issued === undefined) return { submission: 'legacy', semanticReviews: [] };
+  try {
+    assertReviewIdentity(issued, review.nodeId);
+    const required = new Set(selectToolReviewGateIds(review));
+    const entries = review.gateIds.map((gateId) =>
+      projectFrozenGate(issued, gateId, !required.has(gateId))
+    );
+    const definitions = entries.flatMap((entry) =>
+      entry.definition === undefined ? [] : [entry.definition]
+    );
+    const semanticReviews = entries.flatMap((entry) =>
+      entry.semanticReview === undefined ? [] : [entry.semanticReview]
+    );
+    if (issued.target !== undefined && hashBytes(issued.target.content) !== issued.target.digest)
+      throw new Error('Captured output digest is inconsistent');
+    return {
+      submission:
+        semanticReviews.length === 0
+          ? 'legacy'
+          : issued.target === undefined
+            ? 'capture-first'
+            : 'report',
+      definitions,
+      semanticReviews,
+      ...(review.phase === 'exhausted' ? { exhausted: true } : {}),
+      ...(issued.target === undefined ? {} : { capturedOutput: issued.target.content }),
+    };
+  } catch (error) {
+    return {
+      submission: 'unavailable',
+      definitions: [],
+      semanticReviews: [],
+      reason: error instanceof Error ? error.message : 'Issued review authority unavailable',
+    };
+  }
 }
 
 export type SemanticTargetAdmission =
