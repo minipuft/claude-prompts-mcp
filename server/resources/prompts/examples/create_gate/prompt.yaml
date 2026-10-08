@@ -2,7 +2,7 @@ id: create_gate
 name: Create Gate
 description: Designs current gate resources with canonical server validation and
   non-executing drafts before authorized creation.
-category: gate-authoring
+category: examples
 userMessageTemplateFile: user-message.md
 
 tools:
@@ -47,7 +47,9 @@ arguments:
       shell_command/shell_timeout/shell_working_dir/shell_env/shell_max_attempt\
       s/shell_preset/shell_stdin_source/shell_response_env_var, or script tool's
       script_tool_id/script_tool_input/script_tool_timeout/script_tool_working_\
-      dir."
+      dir. Supports canonical semantic_evaluation criteria with id, target,
+      question, evidence_requirements, result, acceptance and
+      allow_not_applicable; server validation owns nested shapes."
     required: false
   - name: activation
     type: object
@@ -104,4 +106,9 @@ arguments:
   - name: purpose
     type: string
     description: Core purpose in one or two sentences
+    required: false
+  - name: calibration_suite_id
+    type: string
+    description: Opaque public calibration suite association; not a path or
+      private-case lookup.
     required: false

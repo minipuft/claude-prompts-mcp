@@ -13,6 +13,7 @@ import {
   creationFields,
   loadAuthoringResources,
   runTool,
+  semanticAuthoringInput,
   validateAuthoringContracts,
 } from '../../../scripts/validate-authoring-contracts.js';
 import type {
@@ -39,7 +40,10 @@ function resources(): AuthoringResource[] {
       name,
       type: String(field.type),
     })),
-    input: structuredClone(FIXTURES[`${type}_builder`]!.input),
+    input:
+      type === 'gate'
+        ? semanticAuthoringInput(structuredClone(FIXTURES[`${type}_builder`]!.input))
+        : structuredClone(FIXTURES[`${type}_builder`]!.input),
   }));
 }
 
@@ -82,6 +86,59 @@ describe('creation authoring contract drift guard', () => {
       const parsed = resourceManagerInputSchema.safeParse(params(output));
       expect(parsed.success ? [] : parsed.error.issues).toEqual([]);
     }
+  });
+
+  it('actual gate adapter retains semantic fields and opaque suite identity', () => {
+    const gate = loadAuthoringResources().find((resource) => resource.type === 'gate')!;
+    const output = params(runTool(gate.tool, gate.input));
+    expect(output['pass_criteria']).toEqual(gate.input['pass_criteria']);
+    expect(output['calibration_suite_id']).toBe('../opaque-public-association');
+    expect(resourceManagerInputSchema.safeParse(output).success).toBe(true);
+  });
+
+  it.each(['calibration_suite_id', 'pass_criteria'])(
+    'detects removed public semantic field %s',
+    (field) => {
+      expect(
+        check(
+          resources(),
+          FIELDS,
+          mutateOutput((output) => {
+            delete params(output)[field];
+          })
+        ).some((error) => error.includes(`${field}: adapter lost`))
+      ).toBe(true);
+    }
+  );
+
+  it('detects a lost nested semantic question', () => {
+    expect(
+      check(
+        resources(),
+        FIELDS,
+        mutateOutput((output) => {
+          const criteria = params(output)['pass_criteria'];
+          if (Array.isArray(criteria))
+            params(output)['pass_criteria'] = criteria.map((criterion) => {
+              if (criterion.type !== 'semantic_evaluation') return criterion;
+              const copy = { ...criterion };
+              delete copy.question;
+              return copy;
+            });
+        })
+      ).some((error) => error.includes('pass_criteria: adapter lost'))
+    ).toBe(true);
+  });
+
+  it('detects missing public semantic guidance in actual builder resources', () => {
+    const items = loadAuthoringResources();
+    const gate = items.find((item) => item.type === 'gate')!;
+    gate.guidance = gate.guidance!.replaceAll('calibration_suite_id', 'calibrationSuite');
+    expect(
+      validateAuthoringContracts(items, FIELDS).some((error) =>
+        error.includes('calibration_suite_id: missing public semantic guidance')
+      )
+    ).toBe(true);
   });
 
   it('reports nested base shape drift using the canonical transport owner', () => {
@@ -281,6 +338,37 @@ describe('creation authoring contract drift guard', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it.each(['calibration_suite_id', 'question'])(
+    'actual isolated gate adapter detects lost %s',
+    (field) => {
+      const items = loadAuthoringResources();
+      const gate = items.find((resource) => resource.type === 'gate')!;
+      const dir = mkdtempSync(path.join(tmpdir(), 'semantic-adapter-mutation-'));
+      try {
+        const original = readFileSync(path.join(gate.tool.dir, gate.tool.script), 'utf8');
+        const removal =
+          field === 'question'
+            ? '        for criterion in params.get("pass_criteria", []):\n            if criterion.get("type") == "semantic_evaluation": criterion.pop("question", None)\n'
+            : '        params.pop("calibration_suite_id", None)\n';
+        writeFileSync(
+          path.join(dir, 'script.py'),
+          'import json\n_original_dumps = json.dumps\ndef _mutated_dumps(value, *args, **kwargs):\n' +
+            '    if isinstance(value, dict):\n        params = value.get("draft", {}).get("params", {})\n' +
+            removal +
+            '    return _original_dumps(value, *args, **kwargs)\njson.dumps = _mutated_dumps\n' +
+            original.replace('#!/usr/bin/env python3\n', '')
+        );
+        gate.tool = { ...gate.tool, dir, script: 'script.py' };
+        const key = field === 'question' ? 'pass_criteria' : field;
+        expect(validateAuthoringContracts(items, FIELDS, runTool)).toContain(
+          `create_gate/gate_builder/${key}: adapter lost or changed mapped value for ${key}`
+        );
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  );
 
   it('checks the real bundled resources and subprocess adapters against their current owners', () => {
     expect(validateAuthoringContracts(loadAuthoringResources(), FIELDS)).toEqual([]);

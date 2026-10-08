@@ -31,3 +31,9 @@ Output the proposed create payload and unresolved decisions.
 ## Existing framework maintenance
 
 Inspect before `update`, review the proposed changes, honor existing authorization, then read the update receipt and inspect/reload the loaded framework. Framework update has no non-mutating update preview. Supported `preview` operations for frameworks are delete and rollback; they do not authorize the subsequent mutation. Public publication needs its own authorization.
+
+## Semantic gate contract
+
+Author `semantic_evaluation` through the canonical gate create/update contract, then inspect the loaded gate. Criteria declare `id`, `target`, `question`, `evidence_requirements`, `result`, `acceptance`, and `allow_not_applicable` (default false). The server validates nested shapes; builder readiness is not resource validity. A `step_output` target uses actual server-captured output. An artifact target is a valid opaque declaration, but runtime artifact capture is unavailable; do not resolve its id as a filesystem path. Unknown targets and incompatible domains are refused.
+
+Semantic report acceptance requires a structured report with evidence bound to the server-issued frozen review and captured target. Client report bytes and claimed pins are not authority. Bare PASS, stop attestation, and passing tool siblings do not replace the report. Keep requested `evaluation` configuration separate from reported reviewer identity; report acceptance does not establish model accuracy or human approval. `calibration_suite_id` is an opaque public association, not a suite path or private-case lookup. Preserve legacy tool criteria and operator shell command/directory/environment guards.

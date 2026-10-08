@@ -18,10 +18,10 @@ tags: [gates, semantic, evaluation, tests]
 ## Now (2026-10-07)
 
 Goal: finish the entire master/child initiative, actual built workflows, matched native/quality evidence, retirement and reviewed green-CI delivery.
-Slice: existing workers RUNNING after crash recovery;11.1 three-file gate prerequisite implements proven widened-overlay7→0 selective normalization/tool guards; disjoint R69 three-document implementation active.
-Next decision: accept sealed typed prerequisite/docs, then dispatch exact eight-file10.1 activation and MCP-only builders/built twins/enabled inspector+CLI follow-through; freeze actual native evidence before inference.
+Slice:10.2 actual MCP builders/guard/receiver and R74 parsed-equal mechanical format accepted; source owner SAFE. Private native draft-only preparation active; no inference.
+Next decision: commit sealed10.2, dispatch built STDIO/HTTP10.3 and enabled inspector/CLI follow-through; complete metadata10.4, then finalize actual immutable native freeze for root review.
 Constraint: main edits plans/integration/publication only; no new threads or repeated accepted proofs. Root is independent read-only reviewer and must read actual immutable native freeze before inference.
-State: child55 rows48done2killed5open; semantic unionOFF/native inference0. Checkpoint6 is authoritative; all prior accepted source receipts remain accepted.
+State: child55 rows49done2killed4open; accepted definition unionON; built report twins10.3 pending/native inference0. Checkpoint7 and subsequent receipts are authoritative; all prior accepted source receipts remain accepted.
 
 ## Intent and completion criteria
 

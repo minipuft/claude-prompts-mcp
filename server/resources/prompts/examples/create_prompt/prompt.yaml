@@ -4,7 +4,7 @@ description: >-
   Designs current prompt resources with canonical server validation and reusable
   workflow scaffolding; prepares non-mutating validation before authorized
   creation.
-category: prompt-authoring
+category: examples
 userMessageTemplateFile: user-message.md
 arguments:
   - name: id

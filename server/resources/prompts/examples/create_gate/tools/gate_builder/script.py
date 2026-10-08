@@ -20,6 +20,7 @@ CREATE_FIELDS = (
     "enforcement_mode",
     "block_response_on_fail",
     "evaluation",
+    "calibration_suite_id",
 )
 FIELD_MAP = {"enforcementMode": "enforcement_mode"}
 
