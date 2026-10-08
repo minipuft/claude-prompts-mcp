@@ -18,6 +18,7 @@ import {
   recordedStep,
 } from '../../execution/capture/step-capture-service.js';
 import { collectDetachedNodeFacts, collectRunHolds } from '../../execution/delegation/detached.js';
+import { physicalReviewDefinitionIndex } from '../../execution/pipeline/decisions/gates/frozen-review-definitions.js';
 import { advanceReview } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
 import { resolveReviewTarget } from '../../execution/pipeline/decisions/gates/review-target.js';
 import {
@@ -291,7 +292,7 @@ export class GateVerdictProcessor {
                 selectToolReviewGateIds(review),
                 review.reviewedOutput ?? '',
                 context.getScopeOptions(),
-                review.semanticContext?.definitions
+                physicalReviewDefinitionIndex(review)
               );
         return checkResults.length > 0 ? { ...review, checkResults } : review;
       },
@@ -948,7 +949,7 @@ export class GateVerdictProcessor {
     }
     let decisions: SemanticGateDecision[];
     try {
-      decisions = Object.entries(issued.definitions)
+      decisions = Object.entries(physicalReviewDefinitionIndex(review) ?? {})
         .filter(([, snapshot]) => readSemanticReviewCriteria(snapshot).length > 0)
         .map(([gateId]) => this.adjudicateSemanticGate(review, event.verdict, gateId));
     } catch (error) {

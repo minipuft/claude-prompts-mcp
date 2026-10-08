@@ -1,4 +1,5 @@
 // @lifecycle canonical - Frozen public review definitions and capture-bound semantic authority.
+import { resolveFrozenReviewDefinition } from './frozen-review-definitions.js';
 import { resolveReviewTarget } from './review-target.js';
 import { selectToolReviewGateIds } from './structural-review-composition.js';
 import { SemanticCriterionSchema } from '../../../../gates/core/gate-schema.js';
@@ -150,7 +151,7 @@ export function projectRenewedSemanticCapture(input: {
     input.responseNodeId === input.review.nodeId &&
     old.target?.content === input.userResponse?.trim() &&
     input.review.gateIds.some((gateId) => {
-      const snapshot = old.definitions[gateId];
+      const snapshot = resolveFrozenReviewDefinition(old, gateId);
       return snapshot !== undefined && readSemanticReviewCriteria(snapshot).length > 0;
     });
   const userResponse = consumed ? undefined : input.userResponse;
@@ -162,8 +163,10 @@ export function resolvePinnedSemanticContext(
   context: GateReviewSemanticContext,
   gateId: string
 ): PinnedSemanticEvaluationContext {
-  const snapshot = context.definitions[gateId];
+  const snapshot = resolveFrozenReviewDefinition(context, gateId);
   if (snapshot === undefined) throw new Error(`No issued definition for gate '${gateId}'`);
+  const logicalId = snapshot.definition['id'];
+  if (typeof logicalId !== 'string') throw new Error('Issued definition identity is inconsistent');
   const criteria = readSemanticReviewCriteria(snapshot);
   if (criteria.length === 0) throw new Error(`Gate '${gateId}' has no semantic criteria`);
   if (criteria.some((criterion) => criterion.target.kind !== 'step_output'))
@@ -173,7 +176,7 @@ export function resolvePinnedSemanticContext(
   return Object.freeze({
     criteria,
     binding: Object.freeze({
-      gate_id: gateId,
+      gate_id: logicalId,
       node_id: context.nodeId,
       attempt_id: context.attemptId,
       definition_digest: snapshot.definitionDigest,
@@ -203,8 +206,6 @@ function readFrozenDefinition(
   snapshot: GateReviewDefinitionSnapshot
 ): SemanticReviewDefinitionInput {
   const definition = snapshot.definition;
-  if (hashCanonical(definition) !== snapshot.definitionDigest || definition['id'] !== gateId)
-    throw new Error(`Issued definition '${gateId}' is inconsistent`);
   if (
     typeof definition['name'] !== 'string' ||
     typeof definition['description'] !== 'string' ||
@@ -255,12 +256,12 @@ function projectFrozenGate(
   gateId: string,
   structural: boolean
 ): FrozenReviewEntry {
-  const snapshot = issued.definitions[gateId];
+  const snapshot = resolveFrozenReviewDefinition(issued, gateId);
   if (snapshot === undefined) {
     if (structural) return {};
     throw new Error(`No issued definition for '${gateId}'`);
   }
-  const definition = readFrozenDefinition(gateId, snapshot);
+  const definition = { ...readFrozenDefinition(gateId, snapshot), id: gateId };
   const criteria = readSemanticReviewCriteria(snapshot);
   if (criteria.length === 0) return { definition };
   if (criteria.some((criterion) => criterion.target.kind !== 'step_output'))

@@ -1,4 +1,6 @@
 // @lifecycle canonical - Projects already-adjudicated gate results and original reviewer claims.
+import { resolveFrozenReviewDefinition } from '../../execution/pipeline/decisions/gates/frozen-review-definitions.js';
+
 import type { GateReview, GateVerdictSummary } from '#shared/types/chain-execution.js';
 import type {
   SemanticEvaluationBinding,
@@ -17,7 +19,10 @@ export interface SemanticGateSummaryFacts {
 }
 
 function requestedEvaluation(review: GateReview, gateId: string): ResolvedJudgeConfig | undefined {
-  const value = review.semanticContext?.definitions[gateId]?.definition['evaluation'];
+  const value =
+    review.semanticContext === undefined
+      ? undefined
+      : resolveFrozenReviewDefinition(review.semanticContext, gateId)?.definition['evaluation'];
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   const mode = 'mode' in value ? value['mode'] : undefined;
   const model = 'model' in value ? value['model'] : undefined;
@@ -224,7 +229,11 @@ export function projectBypassSummaries(
     metadata,
   });
   return gateIds.map((gateId) => {
-    const definition = semanticContext?.definitions[gateId];
+    const definition =
+      semanticContext === undefined
+        ? undefined
+        : resolveFrozenReviewDefinition(semanticContext, gateId);
+    const logicalGateId = definition?.definition['id'];
     const target = semanticContext?.target;
     return {
       gateId,
@@ -235,10 +244,13 @@ export function projectBypassSummaries(
       attempt: attemptCount,
       rationale: 'Operator skipped the exhausted gate review; no evaluation was performed.',
       bypassReview,
-      ...(semanticContext !== undefined && definition !== undefined && target !== undefined
+      ...(semanticContext !== undefined &&
+      definition !== undefined &&
+      target !== undefined &&
+      typeof logicalGateId === 'string'
         ? {
             reviewBinding: {
-              gate_id: gateId,
+              gate_id: logicalGateId,
               node_id: semanticContext.nodeId,
               attempt_id: semanticContext.attemptId,
               definition_digest: definition.definitionDigest,

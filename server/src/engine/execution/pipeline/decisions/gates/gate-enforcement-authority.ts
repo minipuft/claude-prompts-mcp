@@ -3,6 +3,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { resolveEnforcementMode } from './enforcement-mode.js';
+import { physicalReviewDefinitionIndex } from './frozen-review-definitions.js';
 import {
   bindSemanticReviewTarget,
   createSemanticReviewContext,
@@ -502,6 +503,16 @@ export class GateEnforcementAuthority {
     if (added.length === 0) {
       return review;
     }
+    const currentDefinitions = Object.entries(physicalReviewDefinitionIndex(review) ?? {});
+    const collision = added.find((id) =>
+      currentDefinitions.some(
+        ([physicalId, snapshot]) => physicalId !== id && snapshot.definition['id'] === id
+      )
+    );
+    if (collision !== undefined)
+      throw new Error(
+        `Gate '${collision}' conflicts with frozen authority; open a fresh server-issued review before joining it`
+      );
     const defaults = { ...this.gatesConfigProvider?.()?.evaluation };
     const definitions = await this.loadReviewDefinitions(added);
     const issued = createSemanticReviewContext(
@@ -568,11 +579,12 @@ export class GateEnforcementAuthority {
     review: Pick<GateReview, 'gateIds' | 'semanticContext'>,
     failedGateIds: readonly string[]
   ): Promise<EnforcementMode> {
+    const physicalDefinitions = physicalReviewDefinitionIndex(review);
     const definitions =
-      review.semanticContext === undefined
+      physicalDefinitions === undefined
         ? await this.loadReviewDefinitions(review.gateIds)
         : review.gateIds.map((id): Pick<LightweightGateDefinition, 'id' | 'enforcementMode'> => {
-            const mode = review.semanticContext?.definitions[id]?.definition['enforcementMode'];
+            const mode = physicalDefinitions[id]?.definition['enforcementMode'];
             return {
               id,
               enforcementMode:

@@ -3248,10 +3248,10 @@ function composeGateRemap(
     const registered = current.get(recorded) ?? recorded;
     if (registered !== recorded) {
       applied[recorded] = registered;
-      rewrite.set(recorded, registered);
     }
-    const earlier = earlierIds.get(recorded);
-    if (earlier !== undefined && earlier !== registered) rewrite.set(earlier, registered);
+    // Only previous physical IDs address current reviews; a recorded key may name another alias.
+    const earlier = earlierIds.get(recorded) ?? recorded;
+    if (earlier !== registered) rewrite.set(earlier, registered);
   }
   return { applied, rewrite };
 }
@@ -3308,6 +3308,10 @@ function assertNoStructuralGateRemapCollision(
 function remapReviewGateIds(review: GateReview, remap: ReadonlyMap<string, string>): GateReview {
   const to = (id: string): string => remap.get(id) ?? id;
   const copy = cloneReview(review);
+  const issued = copy.semanticContext;
+  const aliases = issued?.definitionAliases;
+  const logical = (id: string): string =>
+    aliases !== undefined && Object.hasOwn(aliases, id) ? (aliases[id] ?? id) : id;
   return {
     ...copy,
     gateIds: copy.gateIds.map(to),
@@ -3318,6 +3322,12 @@ function remapReviewGateIds(review: GateReview, remap: ReadonlyMap<string, strin
       gateTiers: Object.fromEntries(
         Object.entries(copy.gateTiers).map(([id, tier]) => [to(id), tier])
       ),
+    }),
+    ...(issued !== undefined && {
+      semanticContext: {
+        ...issued,
+        definitionAliases: Object.fromEntries(copy.gateIds.map((id) => [to(id), logical(id)])),
+      },
     }),
   };
 }

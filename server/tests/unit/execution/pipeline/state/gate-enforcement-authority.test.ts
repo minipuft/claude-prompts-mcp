@@ -6,7 +6,13 @@ import {
   bindSemanticReviewTarget,
   readSemanticReviewCriteria,
   resolvePinnedSemanticContext,
+  projectFrozenReview,
+  renewSemanticReviewAttempt,
 } from '../../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
+import {
+  resolveFrozenReviewDefinition,
+  physicalReviewDefinitionIndex,
+} from '../../../../../src/engine/execution/pipeline/decisions/gates/frozen-review-definitions.js';
 import { ExecutionContext } from '../../../../../src/engine/execution/context/execution-context.js';
 import { GateLoader } from '../../../../../src/engine/gates/core/gate-loader.js';
 import { GatePassCriteriaSchema } from '../../../../../src/engine/gates/core/gate-schema.js';
@@ -799,6 +805,56 @@ GATE_REVIEW: FAIL - Tests missing`;
         captured.target?.digest
       );
       expect(bindSemanticReviewTarget(issued, '  A😀e\u0301 Z  ').target).toEqual(captured.target);
+    });
+
+    test('physical aliases resolve once while snapshots and report pins keep issued identities', () => {
+      const issued = createSemanticReviewContext('n', 'attempt', [
+        { ...liveGate('original'), pass_criteria: [criterion] },
+        { ...liveGate('alias'), pass_criteria: [criterion] },
+      ]);
+      const captured = bindSemanticReviewTarget(
+        { ...issued, definitionAliases: { alias: 'original', current: 'alias' } },
+        'supported'
+      );
+      const review = { gateIds: ['alias', 'current'], semanticContext: captured };
+      const index = physicalReviewDefinitionIndex(review);
+      expect(Object.keys(index ?? {})).toEqual(['alias', 'current']);
+      expect(index?.['alias']).toBe(issued.definitions['original']);
+      expect(index?.['current']).toBe(issued.definitions['alias']);
+      expect(resolveFrozenReviewDefinition(captured, 'current')).toBe(issued.definitions['alias']);
+      expect(resolveFrozenReviewDefinition(captured, 'toString')).toBeUndefined();
+      expect(resolvePinnedSemanticContext(captured, 'alias').binding.gate_id).toBe('original');
+      expect(resolvePinnedSemanticContext(captured, 'current').binding.gate_id).toBe('alias');
+      const projection = projectFrozenReview({
+        ...review,
+        nodeId: 'n',
+        combinedPrompt: '',
+        prompts: [],
+        createdAt: 0,
+        attemptCount: 0,
+        maxAttempts: 2,
+      });
+      expect(projection.definitions?.map((definition) => definition.id)).toEqual([
+        'alias',
+        'current',
+      ]);
+      expect(
+        projection.semanticReviews.map(({ gateId, binding }) => [gateId, binding?.gate_id])
+      ).toEqual([
+        ['alias', 'original'],
+        ['current', 'alias'],
+      ]);
+      expect(issued.definitions['original']?.definition['id']).toBe('original');
+      expect(issued.definitions['alias']?.definition['id']).toBe('alias');
+      for (const snapshot of Object.values(issued.definitions))
+        expect(snapshot.definitionDigest).toBe(hashCanonical(snapshot.definition));
+      const renewed = renewSemanticReviewAttempt(captured, 'next-attempt');
+      expect(renewed.definitionAliases).toBe(captured.definitionAliases);
+      expect(renewed.definitions).toBe(issued.definitions);
+      expect(renewed.target).toBeUndefined();
+      expect(bindSemanticReviewTarget(renewed, 'replacement').definitionAliases).toBe(
+        captured.definitionAliases
+      );
     });
 
     test('artifact drafts cannot acquire step-output authority', () => {

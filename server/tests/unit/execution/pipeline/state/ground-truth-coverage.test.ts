@@ -644,12 +644,12 @@ describe('ordinary frozen tool evidence caller and legacy response I/O', () => {
     const executed = jest.spyOn(executor, 'execute');
     const f = stageFixture('tool', false, false, { review, live: [TOOL_GATE], shell: executor });
     f.context.state.gates.shellVerifyPassedForGates = ['gate-a'];
-    await f.stage.execute(f.context);
+    await expect(f.stage.execute(f.context)).rejects.toThrow("No issued definition for 'gate-a'");
     expect(executed).not.toHaveBeenCalled();
     expect(f.store.clearReview).not.toHaveBeenCalled();
-    expect(f.run.reviews?.['n1']?.checkResults).toMatchObject([
-      { gateId: 'gate-a', passed: false },
-    ]);
+    expect(f.store.setPendingGateReview).not.toHaveBeenCalled();
+    expect(f.store.setReview).not.toHaveBeenCalled();
+    expect(f.run.reviews?.['n1']).toBe(review);
   });
 
   test.each(['plain', 'mixed', 'authored-collision'] as const)(

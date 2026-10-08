@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 
 import { ChainSessionStore, type SessionBlueprint } from '../../../src/modules/chains/manager.js';
 import { isRunComplete } from '../../../src/shared/types/chain-session.js';
+import {
+  createSemanticReviewContext,
+  bindSemanticReviewTarget,
+} from '../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../src/shared/types/index.js';
@@ -284,6 +288,21 @@ describe('ChainSessionStore.remapRunGates (R60 amended)', () => {
         { gateId: 'g1', criteriaSummary: 'OWN' },
       ],
       gateTiers: { sv: 'reminder', g1: 'reminder' },
+      semanticContext: bindSemanticReviewTarget(
+        createSemanticReviewContext(
+          'n1',
+          'issued-attempt',
+          ['sv', 'g1'].map((id) => ({
+            id,
+            name: id,
+            type: 'validation',
+            description: 'Original public rubric',
+            guidance: `Original ${id}`,
+            evaluation: { mode: 'judge', strict: true },
+          }))
+        ),
+        'original target'
+      ),
       createdAt: 1,
       attemptCount: 0,
       maxAttempts: 2,
@@ -322,9 +341,14 @@ describe('ChainSessionStore.remapRunGates (R60 amended)', () => {
 
   test('P6.146: a second claim composes onto the map the first one persisted on the run', async () => {
     await claimedRun();
+    const original = manager.getReview('run-1', 'n1')?.semanticContext;
     await manager.remapRunGates('run-1', new Map([['g1', 'g1-2']]));
     // Positive control: the first claim's map rides the run, keyed by the recorded id.
     expect(manager.getSession('run-1')?.gateRemap).toEqual({ g1: 'g1-2' });
+    expect(manager.getReview('run-1', 'n1')?.semanticContext?.definitionAliases).toEqual({
+      sv: 'sv',
+      'g1-2': 'g1',
+    });
 
     await manager.remapRunGates('run-1', new Map([['g1', 'g1-3']]));
 
@@ -335,6 +359,67 @@ describe('ChainSessionStore.remapRunGates (R60 amended)', () => {
     expect(manager.getSession('run-1')?.gateRemap).toEqual({ g1: 'g1-3' });
     expect(inlineIdsOf(manager)).toEqual({ summary: ['g1-3', 'sv'], metadata: ['g1-3', 'sv'] });
     expect(manager.getSessionBlueprint('run-1')?.parsedCommand.inlineGateIds).toEqual(['g1']);
+    const issued = review?.semanticContext;
+    expect(issued?.definitionAliases).toEqual({ sv: 'sv', 'g1-3': 'g1' });
+    expect(issued?.definitions).toEqual(original?.definitions);
+    expect(issued?.attemptId).toBe(original?.attemptId);
+    expect(issued?.target).toEqual(original?.target);
+  });
+
+  test('two claims preserve direct issued aliases when an original key is another physical ID', async () => {
+    await claimedRun();
+    const old = manager.getReview('run-1', 'n1');
+    if (old === undefined) throw new Error('Missing review');
+    const issued = bindSemanticReviewTarget(
+      createSemanticReviewContext(
+        'n1',
+        'original-attempt',
+        ['g1', 'g1-2'].map((id) => ({
+          id,
+          name: id,
+          type: 'validation',
+          description: 'Original rubric',
+          guidance: id,
+        }))
+      ),
+      'original target'
+    );
+    const history: NonNullable<typeof old.history> = [
+      { timestamp: 1, status: 'fail', reasoning: 'Original', reviewer: 'gate_verdict' },
+    ];
+    await manager.setReview('run-1', {
+      ...old,
+      gateIds: ['g1', 'g1-2'],
+      prompts: [],
+      gateTiers: { g1: 'evaluation', 'g1-2': 'evaluation' },
+      semanticContext: issued,
+      history,
+    });
+    await manager.remapRunGates(
+      'run-1',
+      new Map([
+        ['g1', 'g1-2'],
+        ['g1-2', 'g1-3'],
+      ])
+    );
+    expect(manager.getReview('run-1', 'n1')?.semanticContext?.definitionAliases).toEqual({
+      'g1-2': 'g1',
+      'g1-3': 'g1-2',
+    });
+    await manager.remapRunGates(
+      'run-1',
+      new Map([
+        ['g1', 'g1-4'],
+        ['g1-2', 'g1-5'],
+      ])
+    );
+    const current = manager.getReview('run-1', 'n1');
+    expect(current?.gateIds).toEqual(['g1-4', 'g1-5']);
+    expect(current?.semanticContext?.definitionAliases).toEqual({ 'g1-4': 'g1', 'g1-5': 'g1-2' });
+    expect(current?.semanticContext?.definitions).toEqual(issued.definitions);
+    expect(current?.semanticContext?.attemptId).toBe(issued.attemptId);
+    expect(current?.semanticContext?.target).toEqual(issued.target);
+    expect(current?.history).toEqual(history);
   });
 
   test('P6.146: a claimer that registers the recorded id returns the review to it', async () => {

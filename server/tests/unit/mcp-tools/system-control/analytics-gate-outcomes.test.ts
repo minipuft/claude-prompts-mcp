@@ -61,11 +61,16 @@ describe('analytics reports gate outcomes from the ledger', () => {
       }),
     ]);
 
-    expect(text).toContain('**Gate Validations**: 2');
-    expect(text).toContain('- `api-documentation`: 1 passed / 0 failed');
-    expect(text).toContain('- `test-coverage`: 1 passed / 1 failed');
-    // 2 reviewed of the 2 records this workspace's ledger page holds — one population, not two.
-    expect(text).toContain('**Gate Review Coverage**: 100% of recorded steps');
+    expect(text).toContain('**Records With Gate Entries**: 2');
+    expect(text).toContain('- `api-documentation`: effective acceptance 1 passed / 0 failed');
+    expect(text).toContain('- `test-coverage`: effective acceptance 1 passed / 1 failed');
+    // Both scoped records contain gate entries; coverage measures ledger presence, not accuracy.
+    expect(text).toContain('**Gate Entry Coverage**: 100% of records on the recent page');
+    expect(text).toContain(
+      '**Per-Gate Recorded Outcomes** (recent page; acceptance is not accuracy)'
+    );
+    expect(text).toContain('Legacy unverified acceptance: 1 passed / 0 failed');
+    expect(text).toContain('Legacy unverified acceptance: 1 passed / 1 failed');
   });
 
   test('a reminder attestation is counted apart from the graded gates, never inside them', async () => {
@@ -80,8 +85,11 @@ describe('analytics reports gate outcomes from the ledger', () => {
       }),
     ]);
 
-    expect(text).toContain('- `test-coverage`: 0 passed / 1 failed');
-    expect(text).not.toContain('`style-guide`: 1 passed');
+    expect(text).toContain('- `test-coverage`: effective acceptance 0 passed / 1 failed');
+    expect(text).not.toContain('`style-guide`: effective acceptance 1 passed');
+    expect(text).toContain(
+      '`style-guide`: effective acceptance 0 passed / 0 failed\n  - Bypassed: 0; reminder attestations: 1'
+    );
     expect(text).toContain('**Reminder Attestations**: 1 (self-declared, not graded)');
   });
 
@@ -90,8 +98,8 @@ describe('analytics reports gate outcomes from the ledger', () => {
     // WITH verdicts, does render the section — the case above.
     const text = await render([record({}), record({ executionId: 'y' })]);
 
-    expect(text).toContain('**Gate Validations**: 0');
-    expect(text).not.toContain('Per-Gate Outcomes');
+    expect(text).toContain('**Records With Gate Entries**: 0');
+    expect(text).not.toContain('Per-Gate Recorded Outcomes');
   });
 
   test('no record store at all degrades to the previous output rather than throwing', async () => {
@@ -102,7 +110,7 @@ describe('analytics reports gate outcomes from the ledger', () => {
 
     const response = await new AnalyticsActionHandler(context).execute({ operation: 'view' });
 
-    expect(response.content[0]?.text).toContain('**Gate Validations**: 0');
+    expect(response.content[0]?.text).toContain('**Records With Gate Entries**: 0');
   });
 });
 
@@ -160,11 +168,11 @@ describe('one analytics reply describes one workspace', () => {
     expect(b).toContain('**Failed**: 0');
 
     // The gate section reads the same page, so the coverage ratio has one population on both
-    // sides: wsA reviewed none of its 3, wsB reviewed its only one.
-    expect(a).toContain('**Gate Review Coverage**: 0% of recorded steps');
-    expect(b).toContain('**Gate Review Coverage**: 100% of recorded steps');
-    expect(a).not.toContain('Per-Gate Outcomes');
-    expect(b).toContain('- `test-coverage`: 1 passed / 0 failed');
+    // sides: wsA has no gate entries in its 3 records; wsB has entries in its only record.
+    expect(a).toContain('**Gate Entry Coverage**: 0% of records on the recent page');
+    expect(b).toContain('**Gate Entry Coverage**: 100% of records on the recent page');
+    expect(a).not.toContain('Per-Gate Recorded Outcomes');
+    expect(b).toContain('- `test-coverage`: effective acceptance 1 passed / 0 failed');
   });
 
   test('positive control: the two replies differ, and the stub was asked with each scope', async () => {

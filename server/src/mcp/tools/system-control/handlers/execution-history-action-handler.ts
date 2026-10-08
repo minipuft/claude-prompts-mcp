@@ -5,6 +5,8 @@ import { ActionHandler } from '../core/action-handler-base.js';
 import type { ExecutionRecord, GateVerdictSummary } from '#shared/types/chain-execution.js';
 import type { ToolResponse } from '#shared/types/index.js';
 
+import { resolveFrozenReviewDefinition } from '#engine/execution/pipeline/decisions/gates/frozen-review-definitions.js';
+
 /**
  * Reader for `execution_records`, the append-only chain execution ledger.
  *
@@ -291,7 +293,10 @@ function formatReviewClaims(summary: GateVerdictSummary): string[] {
     lines.push(`    Reported binding: ${JSON.stringify(summary.evaluation.binding)}`);
   const requested =
     summary.requestedEvaluation ??
-    summary.bypassReview?.semanticContext?.definitions[summary.gateId]?.definition['evaluation'];
+    (summary.bypassReview?.semanticContext === undefined
+      ? undefined
+      : resolveFrozenReviewDefinition(summary.bypassReview.semanticContext, summary.gateId)
+          ?.definition['evaluation']);
   if (requested !== undefined) lines.push(`    Requested evaluation: ${JSON.stringify(requested)}`);
   if (
     summary.semanticResult !== undefined ||

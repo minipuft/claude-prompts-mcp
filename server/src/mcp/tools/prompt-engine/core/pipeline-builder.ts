@@ -180,7 +180,12 @@ export class PipelineBuilder {
       temporaryGateRegistry,
       deps.gateReferenceResolver,
       deps.logger,
-      deps.chainSessionStore
+      deps.chainSessionStore,
+      (runId) => {
+        const run = deps.chainSessionStore.getSession(runId);
+        if (run === undefined) throw new Error(`Run '${runId}' is unavailable for gate remapping`);
+        return run.gateRemap ?? {};
+      }
     );
     const inlineGateStage = new InlineGateExtractionStage(inlineGateProcessor, deps.logger);
     const operatorValidationStage = new OperatorValidationStage(
@@ -305,7 +310,8 @@ export class PipelineBuilder {
       temporaryGateRegistrar,
       () => deps.configManager.getGatesConfig(),
       deps.logger,
-      (scope) => deps.lightweightGateSystem.isGateSystemEnabled(scope)
+      (scope) => deps.lightweightGateSystem.isGateSystemEnabled(scope),
+      (context, registered) => inlineGateProcessor.remapRegisteredGateIds(context, registered)
     );
 
     const sessionStage = new SessionManagementStage(deps.chainSessionStore, deps.logger);

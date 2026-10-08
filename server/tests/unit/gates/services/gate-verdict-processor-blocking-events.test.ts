@@ -100,19 +100,19 @@ function createEmitters(sequence: string[]) {
 }
 
 function createContext() {
-  return {
-    getGateVerdict: () => 'GATE_REVIEW: FAIL - it did not hold',
-    gateEnforcement: undefined,
-    setResponse: jest.fn(),
-    gates: {
-      hasBlockingGates: () => true,
-      getBlockingGateIds: () => ['gate-a'],
+  const context = new ExecutionContext(
+    {
+      chain_id: 'chain-test#1',
+      gate_verdict: 'GATE_REVIEW: FAIL - it did not hold',
+      user_response: 'a response',
     },
-    frameworkAuthority: { getCachedDecision: () => undefined },
-    state: { gates: { enforcementMode: 'blocking', advisoryWarnings: [] }, session: {} },
-    diagnostics: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
-    sessionContext: { sessionId: 'session-1', isChainExecution: true, currentStep: 1 },
-  } as never;
+    createLogger()
+  );
+  context.state.gates.enforcementMode = 'blocking';
+  jest.spyOn(context.gates, 'hasBlockingGates').mockReturnValue(true);
+  jest.spyOn(context.gates, 'getBlockingGateIds').mockReturnValue(['gate-a']);
+  context.sessionContext = { sessionId: 'session-1', isChainExecution: true, currentStep: 1 };
+  return context;
 }
 
 /** A run on `node-1` whose review of it has spent `attemptCount` of its two attempts. */
@@ -582,10 +582,20 @@ describe('GateVerdictProcessor pinned semantic adjudication', () => {
           );
         if (kind === 'detached') expect(enforcement.mock.calls[0]?.[1]).toEqual(['gate-a']);
         expect(fixture.context.state.gates.verdictDetection?.verdict).toBe('FAIL');
-        expect(fixture.context.state.gates.perGateVerdicts?.[0]?.verdict).toBe('PASS');
-        expect(fixture.context.state.gates.perGateVerdicts?.[0]?.evaluation).toBe(
-          submission.per_gate?.[0]?.evaluation
+        const derived = fixture.context.state.gates.perGateVerdicts?.[0];
+        expect(derived).toMatchObject({
+          verdict: 'FAIL',
+          reportedVerdict: 'PASS',
+          reportedReview: { overall: 'PASS' },
+        });
+        if (before.semanticContext === undefined)
+          throw new Error('Missing frozen semantic fixture');
+        const expected = resolvePinnedSemanticContext(before.semanticContext, 'gate-a');
+        expect(derived?.semanticResult).toEqual(
+          evaluateSemanticEvaluation(expected, submission.per_gate?.[0]?.evaluation)
         );
+        expect(derived?.reviewBinding).toEqual(expected.binding);
+        expect(derived?.evaluation).toBe(submission.per_gate?.[0]?.evaluation);
       }
       expect(fixture.store.clearReview).not.toHaveBeenCalled();
       expect(fixture.store.advanceStep).not.toHaveBeenCalled();

@@ -485,6 +485,8 @@ export interface GateReviewSemanticContext {
   readonly nodeId: string;
   readonly attemptId: string;
   readonly definitions: Readonly<Record<string, GateReviewDefinitionSnapshot>>;
+  /** Server-owned current physical gate IDs -> original issued definition keys; one hop only. */
+  readonly definitionAliases?: Readonly<Record<string, string>>;
   /** Absent until owned capture binds canonical step output. Spans use half-open UTF-16 code units. */
   readonly target?: {
     readonly kind: 'step_output';

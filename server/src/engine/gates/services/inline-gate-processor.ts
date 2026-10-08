@@ -104,8 +104,23 @@ export class InlineGateProcessor {
     private readonly temporaryGateRegistry: TemporaryGateRegistry,
     private readonly gateReferenceResolver: GateReferenceResolver,
     private readonly logger: Logger,
-    private readonly runGateStore: Pick<ChainSessionService, 'remapRunGates'>
+    private readonly runGateStore: Pick<ChainSessionService, 'remapRunGates'>,
+    private readonly currentRunGateRemap?: (runId: string) => Readonly<Record<string, string>>
   ) {}
+
+  /** Inline declarations registered after restore share the same manager-owned remap boundary. */
+  async remapRegisteredGateIds(
+    context: ExecutionContext,
+    registered: ReadonlyMap<string, string>
+  ): Promise<void> {
+    const runId = context.getSessionId();
+    if (runId === undefined || registered.size === 0) return;
+    if (this.currentRunGateRemap === undefined)
+      throw new Error('Restored inline gates require the current run gate remap');
+    const composed = new Map(Object.entries(this.currentRunGateRemap(runId)));
+    for (const [declared, physical] of registered) composed.set(declared, physical);
+    await this.runGateStore.remapRunGates(runId, composed);
+  }
 
   /**
    * Process all inline gate criteria from a parsed command.

@@ -9,6 +9,7 @@ import { runGateReviewEvidence } from '../../../gates/services/gate-review-evide
 import { recordedStep } from '../../capture/step-capture-service.js';
 import { planNodeDrivenRender } from '../../operators/node-step-projection.js';
 import { describeFrozenJudgeReview } from '../decisions/gates/describe-review-for-render.js';
+import { physicalReviewDefinitionIndex } from '../decisions/gates/frozen-review-definitions.js';
 import { resolveGroundTruthCoverage } from '../decisions/gates/ground-truth-coverage.js';
 import { resolveShownReview } from '../decisions/gates/review-target.js';
 import {
@@ -308,6 +309,7 @@ export class GateReviewStage extends BasePipelineStage {
 
     try {
       assertFrozenReviewAvailable(projectFrozenReview(pendingReview));
+      const physicalDefinitions = physicalReviewDefinitionIndex(pendingReview);
       // Run the gates' ground-truth criteria (`gate-review-evidence.ts`, shared with a detached
       // node's review). The agent's response is forwarded so gates that opt in via
       // `shell_stdin_source: 'agent_response'` can verify response-content claims (file paths,
@@ -321,7 +323,7 @@ export class GateReviewStage extends BasePipelineStage {
           toolResponseBody(context),
           this.collaborators,
           context.getScopeOptions(),
-          pendingReview.semanticContext?.definitions
+          physicalDefinitions
         );
         const { shellResults, scriptResults } = evidence;
         shellSection = evidence.section;
@@ -334,7 +336,7 @@ export class GateReviewStage extends BasePipelineStage {
         // Frozen definitions separately tell the owner whether semantic reports remain due.
         const coverage = resolveGroundTruthCoverage({
           requiredGateIds: pendingReview.gateIds,
-          reviewDefinitions: pendingReview.semanticContext?.definitions,
+          reviewDefinitions: physicalDefinitions,
           structuralPending: hasStructuralFinding(pendingReview),
           results: evidence.checkResults,
           priorVerifiedGateIds: context.state.gates.shellVerifyPassedForGates ?? [],
