@@ -31,6 +31,7 @@ import { PREVIEWABLE_ACTIONS } from '../shared/preview-action.js';
 
 import type { JudgeEvaluationConfig } from '#engine/gates/judge/types.js';
 
+import { SemanticCriterionSchema } from '#engine/gates/core/gate-schema.js';
 import {
   ArgumentValidationSchema,
   ChainStepSchema,
@@ -652,7 +653,10 @@ export const resourceManagerInputSchema = z
     /** [Gate] Gate guidance content. */
     guidance: z.string().optional().describe(describe('guidance')),
     /** [Gate] Structured pass criteria definitions — see `gatePassCriteriaSchema` above. */
-    pass_criteria: z.array(gatePassCriteriaSchema).optional().describe(describe('pass_criteria')),
+    pass_criteria: z
+      .array(z.discriminatedUnion('type', [gatePassCriteriaSchema, SemanticCriterionSchema]))
+      .optional()
+      .describe(describe('pass_criteria')),
     /** [Gate] Activation rules. */
     activation: z.record(z.string(), z.unknown()).optional().describe(describe('activation')),
     /** [Gate] Retry configuration. */

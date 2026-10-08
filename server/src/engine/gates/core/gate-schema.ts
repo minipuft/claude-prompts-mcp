@@ -13,7 +13,7 @@
  *
  * ## Gate Enforcement Modes (taxonomy)
  *
- * Four pass-criteria types exist. They differ in WHEN and HOW enforcement
+ * Five pass-criteria types exist. They differ in WHEN and HOW enforcement
  * happens — picking the right type for a use case is critical.
  *
  * | Type                       | Enforcement                                   | When to use                                                           |
@@ -27,6 +27,8 @@
  * |                            | tool and runs it with JSON stdin, parsing     |                                                                       |
  * |                            | `{passed, reason?}`. Runs beside              |                                                                       |
  * |                            | `shell_verify`; fails closed when it cannot   |                                                                       |
+ *
+ * | `semantic_evaluation`      | Structured report contract acceptance against frozen server binding and captured evidence | Boolean, category, or anchored-score requirements; reviewer accuracy remains unknown |
  *
  * Common mistakes the taxonomy prevents:
  * - Using `inline_guidance` and expecting auto-enforcement (it's display only)
@@ -49,7 +51,7 @@ import type {
   SemanticResultDomain,
 } from '#shared/types/gate-evaluation.js';
 
-import { refuseUndeclaredKey } from '#shared/utils/nested-key-refusal.js';
+import { refuseUndeclaredKey, refuseUnionMismatch } from '#shared/utils/nested-key-refusal.js';
 
 // ============================================
 // Standalone Semantic Criterion Schema
@@ -115,7 +117,10 @@ const semanticResultSchema = z.discriminatedUnion('kind', [
 
 const semanticAcceptanceSchema = z.discriminatedUnion('kind', [
   z.strictObject(
-    { kind: z.literal('equals'), value: z.union([z.boolean(), semanticTextSchema]) },
+    {
+      kind: z.literal('equals'),
+      value: z.union([z.boolean(), semanticTextSchema], { error: refuseUnionMismatch }),
+    },
     semanticStrictOptions
   ),
   z.strictObject(
@@ -152,12 +157,11 @@ function isSemanticAcceptanceCompatible(
 }
 
 /**
- * Contract-first draft parser, deliberately excluded from live GatePassCriteriaSchema until
- * runtime evaluation is wired. Every new branch is strict: executable predicate extensions
+ * Canonical semantic criterion parser used by loaded definitions and authoring inputs. Every new branch is strict: executable predicate extensions
  * and misspelled keys are refused at their containing path, not stripped or interpreted.
  * Zod v4 numbers are finite; input/output contracts differ only in the defaulted N/A policy.
  */
-export const SemanticCriterionSchema: z.ZodType<SemanticCriterion, SemanticCriterionInput> = z
+export const SemanticCriterionSchema = z
   .strictObject(
     {
       type: z.literal('semantic_evaluation'),
@@ -183,7 +187,7 @@ export const SemanticCriterionSchema: z.ZodType<SemanticCriterion, SemanticCrite
   .refine((criterion) => isSemanticAcceptanceCompatible(criterion.result, criterion.acceptance), {
     path: ['acceptance'],
     message: 'Acceptance must match the result domain, declared category labels and score bounds',
-  });
+  }) satisfies z.ZodType<SemanticCriterion, SemanticCriterionInput>;
 
 // ============================================
 // Pass Criteria Schema
@@ -192,7 +196,7 @@ export const SemanticCriterionSchema: z.ZodType<SemanticCriterion, SemanticCrite
 /**
  * Schema for gate pass criteria definitions.
  *
- * See the file-header taxonomy table for the 4 supported types and their
+ * See the file-header taxonomy table for the 5 supported types and their
  * enforcement modes. The `type` field's JSDoc below repeats the table at the
  * point of use (LLMs picking a type at YAML-authoring time read it there).
  */
@@ -347,6 +351,16 @@ function isBlank(value: string | undefined): boolean {
   return value == null || value.trim() === '';
 }
 
+/** Combined loaded criterion authority; the legacy object stays available for strip/shape consumers. */
+export const GateCriterionSchema = z.discriminatedUnion(
+  'type',
+  [GatePassCriteriaSchema, SemanticCriterionSchema],
+  {
+    error: () =>
+      '`llm_self_check` never had a runner; use `inline_guidance` (reminder), `shell_verify`/`script_tool` (check), or `semantic_evaluation` (evaluation)',
+  }
+);
+
 /**
  * The shape of one `pass_criteria` entry as written in a `gate.yaml` — the WRITE side.
  *
@@ -357,7 +371,7 @@ function isBlank(value: string | undefined): boolean {
  * applied. Naming the two sides apart is what keeps a `?? fallback` from being written against
  * an object that cannot be missing the field.
  */
-export type GatePassCriteriaYaml = z.input<typeof GatePassCriteriaSchema>;
+export type GatePassCriteriaYaml = z.input<typeof GateCriterionSchema>;
 
 // ============================================
 // Activation Schema
@@ -523,7 +537,7 @@ export const GateDefinitionSchema = z
 
     // Validation configuration
     /** Pass/fail criteria for validation gates */
-    pass_criteria: z.array(GatePassCriteriaSchema).optional(),
+    pass_criteria: z.array(GateCriterionSchema).optional(),
     /** Retry configuration for failed validations */
     retry_config: GateRetryConfigSchema.optional(),
 

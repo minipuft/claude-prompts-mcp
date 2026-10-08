@@ -21,7 +21,7 @@ Goal: finish the entire master/child initiative, actual built workflows, matched
 Slice: existing workers RUNNING after crash recovery;11.1 three-file gate prerequisite implements proven widened-overlay7→0 selective normalization/tool guards; disjoint R69 three-document implementation active.
 Next decision: accept sealed typed prerequisite/docs, then dispatch exact eight-file10.1 activation and MCP-only builders/built twins/enabled inspector+CLI follow-through; freeze actual native evidence before inference.
 Constraint: main edits plans/integration/publication only; no new threads or repeated accepted proofs. Root is independent read-only reviewer and must read actual immutable native freeze before inference.
-State: child54 rows46done2killed6open; semantic unionOFF/native inference0. Checkpoint6 is authoritative; all prior accepted source receipts remain accepted.
+State: child55 rows48done2killed5open; semantic unionOFF/native inference0. Checkpoint6 is authoritative; all prior accepted source receipts remain accepted.
 
 ## Intent and completion criteria
 

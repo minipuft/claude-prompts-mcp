@@ -89,11 +89,11 @@ describe('standalone SemanticCriterionSchema draft contract', () => {
     ).toBe(true);
   });
 
-  test('live gate schema refuses even a valid semantic draft until runtime wiring', () => {
+  test('live gate schema accepts a valid semantic criterion', () => {
     expect(SemanticCriterionSchema.safeParse(booleanDraft).success).toBe(true);
     const result = validateGateSchema(minimalGate({ pass_criteria: [booleanDraft] }), 'probe');
-    expect(result.valid).toBe(false);
-    expect(result.errors.join('\n')).toContain('pass_criteria.0.type');
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
   });
 
   test.each([

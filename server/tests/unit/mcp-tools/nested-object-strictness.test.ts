@@ -70,6 +70,21 @@ interface ReachableUnion {
   discriminated: boolean;
 }
 
+/** Literal/enum facts select authored branches; wrappers do not change those choices. */
+function routingFacts(shape: Record<string, unknown>): Record<string, unknown> {
+  const facts: Record<string, unknown> = {};
+  for (const [key, schema] of Object.entries(shape)) {
+    let def = (schema as { _zod?: { def?: Record<string, unknown> } })._zod?.def;
+    while (def?.['innerType'] !== undefined) {
+      def = (def['innerType'] as { _zod?: { def?: Record<string, unknown> } })._zod?.def;
+    }
+    if (def?.['type'] === 'literal') facts[key] = (def['values'] as unknown[])[0];
+    if (def?.['type'] === 'enum')
+      facts[key] = Object.values(def['entries'] as Record<string, unknown>)[0];
+  }
+  return facts;
+}
+
 /**
  * Walk every schema reachable from `root`, reporting each object and its unknown-key posture.
  *
@@ -102,15 +117,7 @@ function walk(
         open: catchall !== 'never',
         adapted: def['error'] !== undefined,
         firstKey: Object.keys(shape)[0],
-        literals: Object.fromEntries(
-          Object.entries(shape)
-            .map(
-              ([key, child]) =>
-                [key, (child as { _zod?: { def?: Record<string, unknown> } })._zod?.def] as const
-            )
-            .filter(([, childDef]) => childDef?.['type'] === 'literal')
-            .map(([key, childDef]) => [key, (childDef?.['values'] as unknown[])[0]])
-        ),
+        literals: routingFacts(shape),
       });
       for (const [key, child] of Object.entries(shape)) {
         walk(child, `${path}.${key}`, seen, out, unions);
@@ -331,15 +338,20 @@ describe('posture detection', () => {
 
 /** A value that reaches `path` (as the walker spells it) and holds `leaf` there. */
 function reach(path: string, leaf: unknown): { segments: (string | number)[]; value: unknown } {
-  const tokens = [...path.matchAll(/\.([^.[|{]+)|\[\]|\|\d+|\{\}/g)].map((match) => match[0]);
+  const matches = [...path.matchAll(/\.([^.[|{]+)|\[\]|\|\d+|\{\}/g)];
+  const objects = reachableObjects();
   let value = leaf;
   const segments: (string | number)[] = [];
-  for (const token of [...tokens].reverse()) {
+  for (const match of [...matches].reverse()) {
+    const token = match[0];
     if (token === '[]') value = [value];
     else if (token === '{}') value = { k: value };
-    else if (token.startsWith('.')) value = { [token.slice(1)]: value };
+    else if (token.startsWith('.')) {
+      const parent = objects.find((entry) => entry.path === path.slice(0, match.index));
+      value = { ...parent?.literals, [token.slice(1)]: value };
+    }
   }
-  for (const token of tokens) {
+  for (const [token] of matches) {
     if (token === '[]') segments.push(0);
     else if (token === '{}') segments.push('k');
     else if (token.startsWith('.')) segments.push(token.slice(1));
@@ -410,6 +422,42 @@ describe('semantic observation value union client diagnostics', () => {
   });
 });
 
+describe('complete criterion submissions retain nested diagnostics', () => {
+  it.each([
+    [
+      'semantic target',
+      {
+        type: 'semantic_evaluation',
+        id: 'contract',
+        question: 'Does the output preserve the contract?',
+        target: { kind: 'step_output', KIND: 1 },
+        evidence_requirements: { min_items: 1 },
+        result: { kind: 'boolean' },
+        acceptance: { kind: 'equals', value: true },
+      },
+      "'pass_criteria[0].target.KIND' is not a declared key — did you mean 'kind'?",
+    ],
+    [
+      'legacy tool guidance',
+      {
+        type: 'framework_compliance',
+        framework: 'CAGEERF',
+        quality_indicators: { k: { KEYWORDS: 1 } },
+      },
+      "'pass_criteria[0].quality_indicators.k.KEYWORDS' is not a declared key — did you mean 'keywords'?",
+    ],
+  ])('%s reports the actual nested key', (_name, criterion, expected) => {
+    expect(
+      clientMessages('resource_manager', {
+        resource_type: 'gate',
+        action: 'create',
+        id: 'probe',
+        pass_criteria: [criterion],
+      })
+    ).toEqual([expected]);
+  });
+});
+
 describe('every nested refusal names its path and the nearest key', () => {
   const { objects, unions } = reachable();
   const strictObjects = objects.filter((entry) => !entry.open);
@@ -417,7 +465,19 @@ describe('every nested refusal names its path and the nearest key', () => {
   it('reaches every strict object the rows named (anti-vacuity)', () => {
     expect(strictObjects.map((entry) => entry.path)).toEqual(
       expect.arrayContaining([
-        'resource_manager.pass_criteria[]',
+        'resource_manager.pass_criteria[]|0',
+        'resource_manager.pass_criteria[]|1',
+        'resource_manager.pass_criteria[]|1.target|0',
+        'resource_manager.pass_criteria[]|1.target|1',
+        'resource_manager.pass_criteria[]|1.evidence_requirements',
+        'resource_manager.pass_criteria[]|1.result|0',
+        'resource_manager.pass_criteria[]|1.result|1',
+        'resource_manager.pass_criteria[]|1.result|2',
+        'resource_manager.pass_criteria[]|1.result|2.anchors[]',
+        'resource_manager.pass_criteria[]|1.acceptance|0',
+        'resource_manager.pass_criteria[]|1.acceptance|1',
+        'resource_manager.pass_criteria[]|1.acceptance|2',
+        'resource_manager.pass_criteria[]|1.acceptance|3',
         'resource_manager.arguments[]',
         'resource_manager.evaluation',
         // `budget` and `edges` are ONE schema each, shared with prompt_engine's workflow and

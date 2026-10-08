@@ -136,7 +136,7 @@ describe('standalone schema-to-kernel semantic contract', () => {
   });
 });
 
-describe('real gate loader keeps standalone semantic drafts inactive', () => {
+describe('real gate loader accepts canonical semantic definitions', () => {
   let gatesDir: string;
 
   beforeEach(() => {
@@ -165,7 +165,7 @@ describe('real gate loader keeps standalone semantic drafts inactive', () => {
     return path;
   }
 
-  test('loads legacy guidance, then records the valid standalone draft as a schema refusal', () => {
+  test('loads legacy guidance and a defaulted semantic criterion', () => {
     const legacyCriterion = { type: 'inline_guidance', description: 'Review the evidence.' };
     writeGate('legacy-control', [legacyCriterion]);
     const draftPath = writeGate('semantic-draft', [draft]);
@@ -180,14 +180,11 @@ describe('real gate loader keeps standalone semantic drafts inactive', () => {
     expect(legacy?.pass_criteria).toEqual([expect.objectContaining(legacyCriterion)]);
     expect(loader.getQuarantine().byId('legacy-control')).toHaveLength(0);
 
-    expect(loader.loadGate('semantic-draft')).toBeUndefined();
-    const records = loader.getQuarantine().byId('semantic-draft');
-    expect(records).toHaveLength(1);
-    expect(records[0]).toEqual(
-      expect.objectContaining({ type: 'gate', path: draftPath, root: gatesDir })
-    );
-    expect(records[0]?.error).toContain('pass_criteria.0.type');
-    expect(loader.getQuarantine().size).toBe(1);
+    expect(loader.loadGate('semantic-draft')?.pass_criteria).toEqual([
+      { ...draft, allow_not_applicable: false },
+    ]);
+    expect(loader.getQuarantine().byId('semantic-draft')).toHaveLength(0);
+    expect(loader.getQuarantine().size).toBe(0);
     expect(loader.loadGate('legacy-control')?.id).toBe('legacy-control');
   });
 });

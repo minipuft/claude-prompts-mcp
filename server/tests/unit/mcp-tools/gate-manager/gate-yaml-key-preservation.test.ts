@@ -386,7 +386,7 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
     });
   });
 
-  describe('passive staged semantic authoring remains refused by live writes', () => {
+  describe('canonical semantic authoring preserves public fields', () => {
     const id = 'staged_semantic_probe';
     const data: GateCreationData = {
       id,
@@ -487,7 +487,7 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
       expect(readFileSync(yamlPath(id))).toEqual(before);
     });
 
-    it('real live verification refuses a staged semantic write and restores existing bytes', async () => {
+    it('real live verification accepts mixed semantic criteria and preserves authored YAML', async () => {
       expect((await writer.writeGateFiles({ ...data, evaluation: { mode: 'self' } })).success).toBe(
         true
       );
@@ -499,10 +499,14 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
         pass_criteria: mixedCriteria,
         evaluation,
       });
-      expect(result.success).toBe(false);
-      expect(result.verificationFailure?.rolledBack).toBe(true);
-      expect(readFileSync(yamlPath(id))).toEqual(before);
-      expect(readFileSync(join(gateDir(id), 'guidance.md'))).toEqual(guidanceBefore);
+      expect(result.success).toBe(true);
+      expect(
+        parseYamlOrThrow<Record<string, unknown>>(readFileSync(yamlPath(id), 'utf8'))[
+          'pass_criteria'
+        ]
+      ).toEqual(mixedCriteria);
+      expect(readFileSync(yamlPath(id))).not.toEqual(before);
+      expect(readFileSync(join(gateDir(id), 'guidance.md'))).not.toEqual(guidanceBefore);
     });
   });
 });

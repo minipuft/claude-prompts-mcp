@@ -208,7 +208,7 @@ describe('settable gate fields (P4.4)', () => {
     });
 
     it.each(['step_output', 'artifact'] as const)(
-      'staged %s semantic input is refused before dispatch or gate directory creation',
+      'canonical %s semantic input creates a gate without resolving artifact references',
       async (kind) => {
         const { handler, dispatch } = await routedGate();
         const observedDispatch = jest.spyOn(handler, 'handleAction'); // observes original method
@@ -222,17 +222,18 @@ describe('settable gate fields (P4.4)', () => {
           evidence_requirements: { min_items: 1 },
         };
         expect(SemanticCriterionSchema.safeParse(criterion).success).toBe(true);
-        await expect(
-          dispatch({ ...createInput, id: 'staged-refusal', pass_criteria: [criterion] })
-        ).rejects.toThrow();
-        expect(observedDispatch).not.toHaveBeenCalled();
-        expect(existsSync(join(gatesDir, 'staged-refusal'))).toBe(false);
+        expect(
+          (await dispatch({ ...createInput, id: 'semantic-supported', pass_criteria: [criterion] }))
+            .isError
+        ).not.toBe(true);
+        expect(observedDispatch).toHaveBeenCalled();
+        expect(existsSync(join(gatesDir, 'semantic-supported'))).toBe(true);
         expect(existsSync(join(workspaceDir, 'opaque-reference-not-a-path'))).toBe(false);
         observedDispatch.mockRestore();
       }
     );
 
-    it('staged schema refusal leaves an existing gate byte-identical on update', async () => {
+    it('canonical semantic update retains the public criterion and guidance', async () => {
       const { handler, dispatch } = await routedGate();
       expect((await dispatch(createInput)).isError).not.toBe(true);
       const observedDispatch = jest.spyOn(handler, 'handleAction');
@@ -248,16 +249,19 @@ describe('settable gate fields (P4.4)', () => {
         evidence_requirements: { min_items: 1 },
       };
       expect(SemanticCriterionSchema.safeParse(criterion).success).toBe(true);
-      await expect(
-        dispatch({
-          resource_type: 'gate',
-          action: 'update',
-          id: baseGate.id,
-          pass_criteria: [criterion],
-        })
-      ).rejects.toThrow();
-      expect(observedDispatch).not.toHaveBeenCalled();
-      expect(readFileSync(join(gatesDir, baseGate.id, 'gate.yaml'))).toEqual(yamlBefore);
+      expect(
+        (
+          await dispatch({
+            resource_type: 'gate',
+            action: 'update',
+            id: baseGate.id,
+            pass_criteria: [criterion],
+          })
+        ).isError
+      ).not.toBe(true);
+      expect(observedDispatch).toHaveBeenCalled();
+      expect(readGateYaml()['pass_criteria']).toEqual([SemanticCriterionSchema.parse(criterion)]);
+      expect(readFileSync(join(gatesDir, baseGate.id, 'gate.yaml'))).not.toEqual(yamlBefore);
       expect(readFileSync(join(gatesDir, baseGate.id, 'guidance.md'))).toEqual(guidanceBefore);
       observedDispatch.mockRestore();
     });
@@ -274,10 +278,6 @@ describe('settable gate fields (P4.4)', () => {
         ).toEqual(['gate:create', 'gate:update']);
       }
       expect(resourceManagerInputSchema.safeParse(createInput).success).toBe(true);
-      expect(
-        resource_managerParameters.find((parameter) => parameter.name === 'pass_criteria')
-          ?.description
-      ).not.toContain('semantic_evaluation');
     });
   });
 
