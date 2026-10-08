@@ -180,6 +180,36 @@ under the old key. `chain_sessions` is `derived`, and `chain_runs` is `ephemeral
 `chain_runs` row older than v35 survives. That is what retired the pre-3.1 residual reader in
 `run-registry.ts`. `DROPPED_ON_THIS_BUMP` stays empty.
 
+## Live Run Ownership and Fresh-Process Handoff
+
+**Run persistence supports ownership handoff, not recovery after a dead-owner restart.**
+At startup, [ChainSessionStore](../../server/src/modules/chains/manager.ts) calls
+`cleanupStalePidRows()` before `loadSessions()`, including when the database port is
+late-bound. It removes dead owners' `chain_sessions` projections and delegates removal
+of their `chain_runs` and `chain_run_nodes` to
+[DirectChainRunRegistry.deleteRunsForOwners](../../server/src/modules/chains/run-registry.ts).
+The handoff token lives on the deleted run row, so it is removed too. This bounds
+operational storage by live owners and prevents stale hook projections; saving a run
+to SQLite does not make its token or pending review survive that startup cleanup.
+
+The supported rolling handoff uses compatible processes sharing the same database:
+
+1. While the original owner is alive, persist the run and mint its handoff token.
+2. Start and initialize the replacement process while the original owner is still alive,
+   so its startup cleanup preserves the run.
+3. Stop the original owner, then submit `prompt_engine(claim_token: token)` to the
+   initialized replacement. `claimRunByToken()` transfers `run_owner_pid`, clears the
+   single-use token in the same update, and reconstructs the run from its stored rows.
+
+The [registered transport control](../../server/tests/integration/gates/structured-gate-verdict-flow.test.ts)
+(`built rolling cold hydration retains frozen authority after private catalog changes`)
+uses this chronology on STDIO and Streamable HTTP. It checks that the fresh process
+owns the run and retains the pending review's frozen semantic context after the live
+gate definition changes. It does not establish stop-old-first restart continuity:
+initializing the replacement after the original owner dies prunes the run before a
+claim can hydrate it. The optional evaluation archive below preserves separate
+evidence; it does not restore an operational run or its token.
+
 ## Gate History and Calibration Evidence
 
 `execution_records.gate_verdicts_json` carries operational per-gate review results,
