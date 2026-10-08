@@ -21,7 +21,7 @@ Goal: finish the entire master/child initiative, actual built workflows, matched
 Slice: committed5c141a1d MCP builders;13.1 two-source semantic renewal intent repair has freshbuilt6green/types0/budgetsmet, namedmutations/baselinecheck active. Disjoint10.5 inspector test only active.
 Next decision: accept/reseal13.1, finish actualbuilt10.3 twins, then metadata10.4/enabledCLI10.6; finalize actualMCPcandidate/currentruntime/C8 immutable graph and rootreview before native11calls.
 Constraint: main edits plans/integration/publication only; no new threads or repeated accepted proofs. Root is independent read-only reviewer and must read actual immutable native freeze before inference.
-State: child57 rows51done2killed4open; accepted definition unionON; built report twins10.3 pending/native inference0. Checkpoint7 and subsequent receipts are authoritative; all prior accepted source receipts remain accepted.
+State: child57 rows52done2killed3open; accepted definition unionON; built report twins10.3 pending/native inference0. Checkpoint7 and subsequent receipts are authoritative; all prior accepted source receipts remain accepted.
 
 ## Intent and completion criteria
 

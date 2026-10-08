@@ -24,6 +24,7 @@ import { fileURLToPath } from 'url';
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { GateVerdictProcessor } from '../../../../src/engine/gates/services/gate-verdict-processor.js';
+import { announceAdvancedStep } from '../../../../src/engine/execution/capture/step-capture-service.js';
 
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ChainSession, ChainSessionService } from '../../../../src/shared/types/index.js';
@@ -56,9 +57,14 @@ function createStore() {
 }
 
 /** A context whose gate authority opens the review a verdict answers — the deferred shape. */
-function createContext() {
+function createContext(userResponse?: string) {
+  const request = {
+    gate_verdict: 'GATE_REVIEW: PASS - fine',
+    ...(userResponse === undefined ? {} : { user_response: userResponse }),
+  } satisfies Parameters<GateVerdictProcessor['processReviewVerdict']>[0]['mcpRequest'];
   return {
-    getGateVerdict: () => 'GATE_REVIEW: PASS - fine',
+    mcpRequest: request,
+    getGateVerdict: () => request.gate_verdict,
     gateEnforcement: {
       parseVerdict: () => ({
         verdict: 'PASS' as const,
@@ -106,7 +112,7 @@ describe('GateVerdictProcessor defers every advance it decides', () => {
   });
 
   test('a deferred PASS decides the advance without performing it', async () => {
-    const context = createContext();
+    const context = createContext('an answer');
 
     const result = await processor.processReviewVerdict(
       context,
@@ -130,7 +136,7 @@ describe('GateVerdictProcessor defers every advance it decides', () => {
   });
 
   test('R167: a review a verdict opens carries the budget of the one step-path resolver', async () => {
-    const context = createContext();
+    const context = createContext('an answer');
     const authority = (
       context as never as {
         gateEnforcement: {
@@ -411,7 +417,7 @@ describe('GateVerdictProcessor defers every advance it decides', () => {
     });
   });
 
-  test('step_complete has one emitter for an advance, and the capture advances nothing itself', () => {
+  test('step_complete has one delegated emitter for an advance, and the capture advances nothing itself', async () => {
     const engine = resolve(dirname(PROCESSOR_SOURCE), '../..');
     const capture = readFileSync(
       resolve(engine, 'execution/capture/step-capture-service.ts'),
@@ -419,21 +425,55 @@ describe('GateVerdictProcessor defers every advance it decides', () => {
     );
     const processor = readFileSync(PROCESSOR_SOURCE, 'utf8');
 
-    // The processor's one emitter sits in the method `applyDeferredAdvance` calls.
-    expect(processor.match(/\.emitChainStepComplete\(/g) ?? []).toHaveLength(1);
+    // The processor applies the advance, then delegates its announcement to the capture owner.
+    expect(processor.match(/\.emitChainStepComplete\(/g) ?? []).toHaveLength(0);
     expect(processor.match(/this\.announceAdvancedStep\(/g) ?? []).toHaveLength(1);
     const application = processor.slice(processor.indexOf('async applyDeferredAdvance('));
     expect(application).toContain('this.announceAdvancedStep(');
+    const delegation = processor.slice(processor.indexOf('private async announceAdvancedStep('));
+    expect(delegation.slice(0, delegation.indexOf('\n  }\n'))).toContain(
+      'await announceAdvancedStep('
+    );
 
-    // The capture service's own emitter serves a detached node's late report only, and its one
-    // store advance is passing a detached node on a placeholder, which announces nothing.
-    expect(capture.match(/\.emitChainStepComplete\(/g) ?? []).toHaveLength(1);
+    // The capture owner announces deferred advances and detached late reports separately.
+    expect(capture.match(/\.emitChainStepComplete\(/g) ?? []).toHaveLength(2);
+    const delegated = capture.slice(capture.indexOf('export async function announceAdvancedStep('));
+    expect(
+      delegated.slice(0, delegated.indexOf('\n}\n')).match(/\.emitChainStepComplete\(/g) ?? []
+    ).toHaveLength(1);
     expect(capture.match(/this\.announceStepComplete\(/g) ?? []).toHaveLength(1);
     const lateReport = capture.slice(capture.indexOf('async recordDetachedReport('));
     expect(lateReport.slice(0, lateReport.indexOf('\n  }\n'))).toContain(
       'this.announceStepComplete('
     );
     expect(capture.match(/chainSessionStore\.advanceStep\(/g) ?? []).toHaveLength(1);
+
+    // Drive the actual owner: the announced node is the one moved past, not current node-2.
+    const hooks = { emitStepComplete: jest.fn(async () => undefined) };
+    const emitter = { emitChainStepComplete: jest.fn() };
+    await announceAdvancedStep({
+      context: createContext(),
+      session: {
+        ...session,
+        chainId: 'chain-a',
+        state: { currentNodeId: 'node-2', nodes: [{ id: 'node-1' }, { id: 'node-2' }] },
+      } as ChainSession,
+      advance: { sessionId: 'session-1', nodeId: 'node-1', reason: 'gate-pass' },
+      chainSessionStore: store,
+      logger: createLogger(),
+      hookRegistry: hooks as never,
+      notificationEmitter: emitter as never,
+    });
+    expect(hooks.emitStepComplete).toHaveBeenCalledTimes(1);
+    expect(hooks.emitStepComplete.mock.calls[0]?.slice(0, 3)).toEqual([
+      'chain-a',
+      1,
+      'step one answer',
+    ]);
+    expect(emitter.emitChainStepComplete.mock.calls).toEqual([
+      [{ chainId: 'chain-a', stepIndex: 1, status: 'passed' }],
+    ]);
+    expect(store.advanceStep).not.toHaveBeenCalled();
   });
 
   test('the file performs an advance in exactly one place — the deferred application', () => {
