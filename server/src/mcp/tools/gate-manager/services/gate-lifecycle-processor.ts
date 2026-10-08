@@ -245,7 +245,7 @@ export class GateLifecycleProcessor {
       // Retain authored metadata on omission, including after it joins snapshot projection.
       calibration_suite_id: calibration_suite_id ?? existingDefinition.calibration_suite_id,
       blockResponseOnFail,
-      evaluation,
+      evaluation: evaluation ?? existingDefinition.evaluation,
     };
 
     // The union of fields THIS call actually supplied, as opposed to `gateData` above — which

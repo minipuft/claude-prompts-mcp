@@ -6,6 +6,7 @@
 import type { GatePassCriteriaYaml } from '#engine/gates/core/gate-schema.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { JudgeEvaluationConfig } from '#engine/gates/judge/types.js';
+import type { SemanticCriterionInput } from '#shared/types/gate-evaluation.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
 
@@ -54,8 +55,8 @@ export interface GateManagerInput {
   blockResponseOnFail?: boolean;
   /**
    * Who reviews this gate — self-review or a context-isolated judge — plus the judge's model hint
-   * and strict framing. Same `PRESERVED_GATE_YAML_KEYS` route as the keys above, written whole:
-   * a supplied block replaces the existing one, an omitted one is carried forward.
+   * and strict framing. Authored projected content, written whole: a supplied block replaces
+   * the existing one; the lifecycle retains an omitted block on an ordinary update.
    */
   evaluation?: JudgeEvaluationConfig;
   description?: string;
@@ -72,7 +73,8 @@ export interface GateManagerInput {
    * The gate schema's write-side shape — what a caller supplies when building a criterion.
    * min_length/required_patterns/keyword_count/regex_patterns are absent because the loader refuses them at load.
    */
-  pass_criteria?: GatePassCriteriaYaml[];
+  /** Staged semantic authoring shape only; live resource validation still refuses that branch. */
+  pass_criteria?: Array<GatePassCriteriaYaml | SemanticCriterionInput>;
   activation?: {
     prompt_categories?: string[];
     frameworks?: string[];
@@ -156,6 +158,6 @@ export interface GateCreationData {
   calibration_suite_id?: GateManagerInput['calibration_suite_id'];
   /** Same class again (P4.100): the key that makes a gate withhold the step output on a FAIL. */
   blockResponseOnFail?: GateManagerInput['blockResponseOnFail'];
-  /** Same class again (P4.121): the judge-routing block, the last gate.yaml key with no parameter. */
+  /** Authored judge-routing block; absent from a whole-state write means remove it. */
   evaluation?: GateManagerInput['evaluation'];
 }

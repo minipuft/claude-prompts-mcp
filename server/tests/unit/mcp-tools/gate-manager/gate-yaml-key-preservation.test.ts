@@ -18,13 +18,13 @@
  * writer would not produce, plus a key the schema never declares.
  *
  * WHY THE UPDATE CALL RE-SUPPLIES PROJECTED VALUES EXPLICITLY
- * `buildGateYaml` decides these six PROJECTED keys from `GateCreationData` alone — never from the
+ * `buildGateYaml` decides PROJECTED keys from `GateCreationData` alone — never from the
  * file on disk. In production `GateLifecycleProcessor.handleUpdate` re-supplies each one from
  * `existingGate.getDefinition()` before calling the writer (`pass_criteria: pass_criteria ??
  * existingDefinition.pass_criteria`, and so on) precisely so an update that does not mention them
  * does not lose them. This test calls `GateFileWriter` directly, one layer under that processor, so
  * it reproduces the same re-supply by hand rather than asserting a survival the writer itself never
- * promises for these six keys, including the authored `calibration_suite_id` association.
+ * promises for these keys, including authored `calibration_suite_id` and `evaluation`.
  */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -37,6 +37,8 @@ import {
   PRESERVED_GATE_YAML_KEYS,
 } from '../../../../src/engine/gates/core/gate-yaml-keys.js';
 import { GATE_SNAPSHOT_PROJECTED_KEYS } from '../../../../src/modules/versioning/projections/gate-snapshot.js';
+import { projectGateSnapshot } from '../../../../src/modules/versioning/projections/gate-snapshot.js';
+import { gateSnapshotContract } from '../../../../src/mcp/tools/gate-manager/services/gate-snapshot-contract.js';
 import {
   callerSuppliedGateKeys,
   GateFileWriter,
@@ -44,6 +46,7 @@ import {
 import { parseYamlOrThrow } from '../../../../src/shared/utils/yaml/yaml-parser.js';
 
 import type { GateCreationData } from '../../../../src/mcp/tools/gate-manager/core/types.js';
+import type { SemanticCriterionInput } from '../../../../src/shared/types/gate-evaluation.js';
 import type { ConfigManager, Logger } from '../../../../src/shared/types/index.js';
 
 describe('gate.yaml keys survive an update that did not name them (P4.67)', () => {
@@ -194,12 +197,18 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
     /** The schema is `.passthrough()`, so an unknown key loads — and must survive a write too. */
     const PASSTHROUGH_SEED = 'x-authorNote: kept by whoever wrote it';
 
-    // The six keys `buildGateYaml` decides from `GateCreationData` alone (never from disk) — the
+    // The projected keys `buildGateYaml` decides from `GateCreationData` alone (never from disk) — the
     // update below has to re-supply matching values for these, exactly as
     // `GateLifecycleProcessor.handleUpdate` does from `existingGate.getDefinition()`.
     const PROJECTED_UPDATE_DATA: Pick<
       GateCreationData,
-      'name' | 'type' | 'pass_criteria' | 'activation' | 'retry_config' | 'calibration_suite_id'
+      | 'name'
+      | 'type'
+      | 'pass_criteria'
+      | 'activation'
+      | 'retry_config'
+      | 'calibration_suite_id'
+      | 'evaluation'
     > = {
       name: 'Every Key',
       type: 'validation',
@@ -207,6 +216,7 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
       activation: { prompt_categories: ['code'] },
       retry_config: { max_attempts: 3 },
       calibration_suite_id: 'suite:opaque-v1',
+      evaluation: { mode: 'judge' },
     };
 
     it('seeds every schema key, or says why it cannot', () => {
@@ -336,6 +346,163 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
       expect(result.success).toBe(true);
       expect(Object.hasOwn(readYaml(id), 'calibration_suite_id')).toBe(false);
       expect(readYaml(id)['description']).toBe(data.description);
+    });
+  });
+
+  describe('authored evaluation whole-state projection', () => {
+    const id = 'evaluation_probe';
+    const data: GateCreationData = {
+      id,
+      name: 'Evaluation Probe',
+      type: 'validation',
+      description: 'Authored state',
+      guidance: 'Public guidance.\n',
+    };
+    const evaluation = { mode: 'judge' as const, model: 'declared-model', strict: false };
+
+    it('includes the authored evaluation block in the derived snapshot', async () => {
+      expect((await writer.writeGateFiles({ ...data, evaluation })).success).toBe(true);
+      expect(GATE_YAML_PROJECTED_KEYS).toContain('evaluation');
+      expect(PRESERVED_GATE_YAML_KEYS).not.toContain('evaluation');
+      expect(GATE_SNAPSHOT_PROJECTED_KEYS).toContain('evaluation');
+      const snapshot = projectGateSnapshot(id, {
+        name: data.name,
+        type: data.type,
+        description: data.description,
+        guidance: data.guidance,
+        definition: readYaml(id),
+      });
+      expect(snapshot['evaluation']).toEqual(evaluation);
+    });
+
+    it('removes stale evaluation when restoring an explicit whole state without it', async () => {
+      expect((await writer.writeGateFiles({ ...data, evaluation })).success).toBe(true);
+      expect(readYaml(id)['evaluation']).toEqual(evaluation);
+      const restored = gateSnapshotContract.restore(id, { ...data });
+      if (!restored.ok) throw new Error('Valid whole-state fixture was refused');
+      expect(restored.writeModel).not.toHaveProperty('evaluation');
+      expect((await writer.writeGateFiles(restored.writeModel)).success).toBe(true);
+      expect(readYaml(id)).not.toHaveProperty('evaluation');
+    });
+  });
+
+  describe('passive staged semantic authoring remains refused by live writes', () => {
+    const id = 'staged_semantic_probe';
+    const data: GateCreationData = {
+      id,
+      name: 'Staged Semantic Probe',
+      type: 'validation',
+      description: 'Public draft',
+      guidance: 'Public guidance.\n',
+    };
+    const criteria: SemanticCriterionInput[] = [
+      {
+        type: 'semantic_evaluation',
+        id: 'public-boolean',
+        target: { kind: 'step_output' },
+        question: 'Does the output retain the public contract?',
+        result: { kind: 'boolean' },
+        acceptance: { kind: 'equals', value: true },
+        evidence_requirements: { min_items: 1 },
+      },
+      {
+        type: 'semantic_evaluation',
+        id: 'public-category',
+        target: { kind: 'artifact', id: 'public-reference' },
+        question: 'Classify public evidence.',
+        result: { kind: 'category', options: ['supported', 'unknown'] },
+        acceptance: { kind: 'one_of', values: ['supported'] },
+        evidence_requirements: { min_items: 2 },
+        allow_not_applicable: true,
+      },
+      {
+        type: 'semantic_evaluation',
+        id: 'public-score',
+        target: { kind: 'step_output' },
+        question: 'Score public evidence.',
+        result: {
+          kind: 'score',
+          min: 0,
+          max: 2,
+          anchors: [
+            { value: 0, description: 'None' },
+            { value: 2, description: 'Complete' },
+          ],
+        },
+        acceptance: { kind: 'gte', value: 2 },
+        evidence_requirements: { min_items: 1 },
+        allow_not_applicable: false,
+      },
+    ];
+    const mixedCriteria: NonNullable<GateCreationData['pass_criteria']> = [
+      ...criteria,
+      { type: 'shell_verify', shell_command: ['node', '--version'] },
+    ];
+    const evaluation = { mode: 'judge' as const, model: 'declared-model', strict: false };
+
+    it('passively projects every public semantic field and evaluation without writing', async () => {
+      expect((await writer.writeGateFiles(data)).success).toBe(true);
+      const before = readFileSync(yamlPath(id));
+      const guidanceBefore = readFileSync(join(gateDir(id), 'guidance.md'));
+      const changes = await writer.projectGateWrite(
+        { ...data, pass_criteria: mixedCriteria, evaluation },
+        new Set(['pass_criteria', 'evaluation'])
+      );
+      expect(changes.map((change) => change.path)).toEqual([`${id}/gate.yaml`]);
+      const projected = parseYamlOrThrow<Record<string, unknown>>(changes[0]!.after!);
+      expect(projected['pass_criteria']).toEqual(mixedCriteria);
+      expect(projected['evaluation']).toEqual(evaluation);
+      expect(readFileSync(yamlPath(id))).toEqual(before);
+      expect(readFileSync(join(gateDir(id), 'guidance.md'))).toEqual(guidanceBefore);
+    });
+
+    it('passive criterion omission preserves a re-supplied public draft and replacement replaces it', async () => {
+      writeFixture(
+        id,
+        JSON.stringify({
+          ...data,
+          guidanceFile: 'guidance.md',
+          pass_criteria: mixedCriteria,
+          evaluation,
+        })
+      );
+      const before = readFileSync(yamlPath(id));
+      const retained = await writer.projectGateWrite(
+        { ...data, description: 'Changed description', pass_criteria: mixedCriteria, evaluation },
+        new Set(['description'])
+      );
+      expect(
+        parseYamlOrThrow<Record<string, unknown>>(retained[0]!.after!)['pass_criteria']
+      ).toEqual(mixedCriteria);
+      const replacement = [
+        { ...criteria[0]!, id: 'replacement', question: 'Replacement public question.' },
+      ];
+      const replaced = await writer.projectGateWrite(
+        { ...data, pass_criteria: replacement, evaluation },
+        new Set(['pass_criteria'])
+      );
+      expect(
+        parseYamlOrThrow<Record<string, unknown>>(replaced[0]!.after!)['pass_criteria']
+      ).toEqual(replacement);
+      expect(readFileSync(yamlPath(id))).toEqual(before);
+    });
+
+    it('real live verification refuses a staged semantic write and restores existing bytes', async () => {
+      expect((await writer.writeGateFiles({ ...data, evaluation: { mode: 'self' } })).success).toBe(
+        true
+      );
+      const before = readFileSync(yamlPath(id));
+      const guidanceBefore = readFileSync(join(gateDir(id), 'guidance.md'));
+      const result = await writer.writeGateFiles({
+        ...data,
+        guidance: 'Changed guidance',
+        pass_criteria: mixedCriteria,
+        evaluation,
+      });
+      expect(result.success).toBe(false);
+      expect(result.verificationFailure?.rolledBack).toBe(true);
+      expect(readFileSync(yamlPath(id))).toEqual(before);
+      expect(readFileSync(join(gateDir(id), 'guidance.md'))).toEqual(guidanceBefore);
     });
   });
 });

@@ -382,6 +382,11 @@ export class GateFileWriter {
       yamlData['calibration_suite_id'] = data.calibration_suite_id;
     }
 
+    // The whole authored routing block replaces the prior one; absence clears it on restore.
+    if (data.evaluation !== undefined) {
+      yamlData['evaluation'] = data.evaluation;
+    }
+
     // Carry forward the fields this writer builds no value for. Without this, every update
     // silently strips them back to loader defaults (severity, enforcementMode, gate_type, ...).
     Object.assign(

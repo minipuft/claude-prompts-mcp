@@ -72,7 +72,7 @@ describe('settable gate fields (P4.4)', () => {
     rmSync(workspaceDir, { recursive: true, force: true });
   });
 
-  describe('internal lifecycle opaque suite association producers', () => {
+  describe('internal lifecycle authored gate producers', () => {
     async function lifecycle() {
       const gateManager = await createGateManager(logger, {
         registryConfig: { loaderConfig: { gatesDir, enableCache: false } },
@@ -87,6 +87,52 @@ describe('settable gate fields (P4.4)', () => {
       } as unknown as GateResourceContext;
       return { gateManager, processor: new GateLifecycleProcessor(context) };
     }
+
+    it('authored evaluation create writes the exact block through the real lifecycle', async () => {
+      const { processor, gateManager } = await lifecycle();
+      const evaluation = { mode: 'judge' as const, model: 'declared-model', strict: false };
+      const result = await processor.handleCreate({ action: 'create', ...baseGate, evaluation });
+      expect(result.isError).not.toBe(true);
+      expect(readGateYaml()['evaluation']).toEqual(evaluation);
+      expect(gateManager.get(baseGate.id)?.getDefinition().evaluation).toEqual(evaluation);
+    });
+
+    it('authored evaluation update omission retains the complete issued block', async () => {
+      const { processor, gateManager } = await lifecycle();
+      const evaluation = { mode: 'judge' as const, model: 'declared-model', strict: false };
+      expect(
+        (await processor.handleCreate({ action: 'create', ...baseGate, evaluation })).isError
+      ).not.toBe(true);
+      const result = await processor.handleUpdate({
+        action: 'update',
+        id: baseGate.id,
+        description: 'New description',
+      });
+      expect(result.isError).not.toBe(true);
+      expect(readGateYaml()['evaluation']).toEqual(evaluation);
+      expect(gateManager.get(baseGate.id)?.getDefinition().evaluation).toEqual(evaluation);
+    });
+
+    it('authored evaluation replacement replaces the whole block through the real lifecycle', async () => {
+      const { processor, gateManager } = await lifecycle();
+      expect(
+        (
+          await processor.handleCreate({
+            action: 'create',
+            ...baseGate,
+            evaluation: { mode: 'judge', model: 'old-model', strict: true },
+          })
+        ).isError
+      ).not.toBe(true);
+      const result = await processor.handleUpdate({
+        action: 'update',
+        id: baseGate.id,
+        evaluation: { mode: 'self' },
+      });
+      expect(result.isError).not.toBe(true);
+      expect(readGateYaml()['evaluation']).toEqual({ mode: 'self' });
+      expect(gateManager.get(baseGate.id)?.getDefinition().evaluation).toEqual({ mode: 'self' });
+    });
 
     it('create carries opaque bytes into actual YAML and the real registry definition', async () => {
       const { processor, gateManager } = await lifecycle();
@@ -314,9 +360,9 @@ describe('settable gate fields (P4.4)', () => {
 
   // ── P4.121: `evaluation`, the last key of the class ───────────────────────
   //
-  // The judge-routing block. Same preservation route, one difference that matters: it is an
-  // OBJECT, written whole. A supplied block replaces the file's block rather than merging into
-  // it, so returning a gate to `{mode: 'self'}` does not leave a judge's `model` behind.
+  // The authored judge-routing block is projected and written whole. Ordinary update omission
+  // is retained by the lifecycle above; a supplied block replaces rather than merges, so returning
+  // a gate to `{mode: 'self'}` does not leave a judge's `model` behind.
 
   it('writes a caller-supplied evaluation block into gate.yaml', async () => {
     const service = new GateFileWriter({ logger, configManager });
@@ -344,14 +390,18 @@ describe('settable gate fields (P4.4)', () => {
     expect(readGateYaml()['evaluation']).toEqual({ mode: 'self' });
   });
 
-  it('preserves an existing evaluation block when a later update omits the field', async () => {
+  it('preserves a re-supplied evaluation block in a scoped writer update', async () => {
     const service = new GateFileWriter({ logger, configManager });
 
     await service.writeGateFiles({ ...baseGate, evaluation: { mode: 'judge', model: 'haiku' } });
-    const result = await service.writeGateFiles({
-      ...baseGate,
-      description: 'updated, saying nothing about evaluation',
-    });
+    const result = await service.writeGateFiles(
+      {
+        ...baseGate,
+        description: 'updated, re-supplying the evaluation retained by the lifecycle',
+        evaluation: { mode: 'judge', model: 'haiku' },
+      },
+      new Set(['description'])
+    );
 
     expect(result.success).toBe(true);
     expect(readGateYaml()['evaluation']).toEqual({ mode: 'judge', model: 'haiku' });
