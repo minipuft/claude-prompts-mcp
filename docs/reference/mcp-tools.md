@@ -542,7 +542,7 @@ prompt_engine(workflow:{
 
 The call returns the run's first step and a `chain_id`; resume it like any other chain. An accepted
 workflow **is** an ordinary chain run — the `chain_runs` and `chain_run_nodes` rows are
-structurally identical to an equivalent `>>chain`'s, and node ids are the same id space
+structurally identical to an equivalent prompt-backed chain run, and node ids are the same id space
 `target_step_id` addresses (see [Chain Step Targeting](#chain-step-targeting)).
 
 | Rule                         | Behavior                                                                                                                                                    |
