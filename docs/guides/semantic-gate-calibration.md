@@ -122,6 +122,58 @@ evidence needed to replay a report or reconsider a promotion decision.
    separately authorized MCP operations. See
    [reviewed promotion receipts](../../evaluations/README.md#reviewed-promotion-evidence-receipts).
 
+## Measured scope: software controls and native pilot
+
+At measured source revision `9ad69854a1857e5a638978d5479b14f3d945cb47`, 33 accepted
+software controls comprised 25 built-server controls (18 lifecycle, two authoring,
+five history/BYPASS) and eight source-carrier controls across the transport inventory.
+Both STDIO and HTTP were exercised; the history/BYPASS controls include a seeded
+facet. Dropping report forwarding caused two controls to fail; restoring it passed.
+These controls establish software paths and custody, not reviewer truth. Fresh-process
+handoff proof covers rolling handoff, not dead-owner restart recovery.
+
+The separate agent-reviewed native pilot made 11 calls: one matched C8 coding task
+and ten reviews of five development targets in prose and structured presentation
+frames. Both frames used identical criteria, output and evidence contracts,
+configuration and bindings. Each call had a 300-second cap, zero retries, concurrency one and a
+two-child limit; no children were spawned. Each frame's report inventory contains
+six slots: five attempted development cases and one unattempted reserved case.
+
+| Observation                  | Measured result                                                                                                              | Interpretation                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Reviews, each frame          | Three accepted, one rejected, one insufficient-evidence; reserved slot unattempted                                           | Six inventory slots, five native reviews, four binary-eligible outcomes      |
+| Binary confusion, each frame | TP=3, TN=1, FP=0, FN=0; false acceptance 0/1, false rejection 0/3                                                            | Observed agent-label agreement on this sample                                |
+| Criterion states, each frame | Both criteria matched 5/5 reviewed states, including one correct abstention each                                             | Insufficient evidence remains distinct from binary acceptance                |
+| Native failures              | Invalid reports, errors, timeouts and policy violations: zero                                                                | No observed presentation advantage; paired targets are not independent tasks |
+| C8 elapsed time              | Retained baseline 226.629 seconds; new run 103.633 seconds                                                                   | One matched coding comparison; no causal or savings conclusion               |
+| C8 software checks           | Artifact, types and regression passed; both seeded defects were detected                                                     | Eligible for review, not full accepted quality                               |
+| C8 static diagnostics        | Baseline artifact → new artifact: lint 16→15, cognitive complexity 5→5, cyclomatic complexity 11→10; original fixture 14/2/6 | Diagnostics do not replace manual quality review                             |
+
+The coding comparison retained task, framework, model/effort, caps, helpers and
+toolchain bindings, including Codex `0.159.2` through a private read-only two-file
+overlay after host-version drift. MCP, plugins and hooks were disabled for coding;
+this result supplies no live-gate workflow benefit. Human calibration, completed
+manual quality review, model revision and whole-task billing remain unknown. The
+canonical calibration reports also retain unknown usage, timing, cost and reviewer
+instance identity, even though separate native collectors retained execution
+receipts. These results establish neither general accuracy nor quality superiority.
+
+Canonical archive replay verified the dependency closure. A requested `accepted`
+promotion had effective disposition `inconclusive`, with `automatic_promotion:false`.
+Its current bindings still matched after deleting the disposable candidate database,
+WAL and SHM; public resource bytes and archive evidence remained intact. No resource
+promotion mutation occurred, and native collector evidence does not establish a
+native MCP-session join.
+
+Operators retaining this pilot can inspect `evidence/native-measurement.json` and
+`evidence/native-disposition.json` under their private evaluation root. These local
+receipts and their private dependencies are not distributed with the guide. The
+immutable record digests are:
+
+- Measurement: `sha256:8e8448785b337c35cb5cd92a694767d40d3797eb829229e83102562ebe1249aa`
+- Disposition: `sha256:0e008bd3fd56843d410ac39e39747c712e0818ce0b8f9730c1cd364ba279af2f`
+- Replay: `sha256:3e6be0cda29c169c9027b0f7aed0f982c8ab80c6b9a9d5600480c9ec886744ed`
+
 ## Verification
 
 Retain the invocation and receipt references and confirm that replay resolves their
