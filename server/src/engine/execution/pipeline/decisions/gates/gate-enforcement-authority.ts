@@ -318,18 +318,6 @@ export class GateEnforcementAuthority {
     return entries;
   }
 
-  /**
-   * Create a new pending gate review.
-   * Loads gate definitions to populate review prompts with criteria summaries.
-   *
-   * @param options - Review creation options
-   * @returns Created pending review with enriched gate prompts
-   */
-  async createPendingReview(options: CreateReviewOptions): Promise<PendingGateReview> {
-    const definitions = await this.loadReviewDefinitions(options.gateIds);
-    return this.buildPendingReview(options, definitions);
-  }
-
   private buildPendingReview(
     options: CreateReviewOptions,
     definitions: readonly LightweightGateDefinition[]

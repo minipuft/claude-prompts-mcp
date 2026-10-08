@@ -14,6 +14,7 @@ import {
 import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 import { decideVisibility } from '../pipeline/decisions/visibility/index.js';
 
+import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
 import type { VisibilityItem } from '#shared/types/chain-execution.js';
 import type { UnknownLedgerEntry } from '#shared/types/chain-session.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
@@ -52,7 +53,7 @@ export class ChainOperatorExecutor {
     private readonly logger: Logger,
     private readonly convertedPrompts: ConvertedPrompt[],
 
-    private readonly gateGuidanceRenderer?: any,
+    private readonly gateGuidanceRenderer?: Pick<GateGuidanceRenderer, 'renderGuidance'>,
     private readonly getFrameworkContext?: (
       promptId: string,
       scope: StateStoreOptions | undefined,
@@ -386,13 +387,13 @@ export class ChainOperatorExecutor {
     }
     try {
       const guidance: string = await this.gateGuidanceRenderer.renderGuidance(
-        gateIdsToRender,
+        [...gateIdsToRender],
         {
           criteriaExecution: 'pipeline',
           framework: reviewStepContext?.selectedFramework?.type || DEFAULT_FRAMEWORK_ID,
           category: reviewStepContext?.category || 'general',
           promptId: targetStep?.promptId,
-          explicitGateIds,
+          explicitGateIds: [...explicitGateIds],
         },
         ...(protocol.definitions === undefined ? [] : [protocol.definitions])
       );

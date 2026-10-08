@@ -901,7 +901,8 @@ describe('checked declared tool identity in the existing evidence owner', () => 
     const actualExecute = executor.execute.bind(executor);
     jest.spyOn(executor, 'execute').mockImplementation(async (command, scope) => {
       const criterion = gate.pass_criteria?.find((entry) => entry.type === 'script_tool');
-      if (criterion === undefined) throw new Error('Missing script fixture');
+      if (criterion === undefined || criterion.type !== 'script_tool')
+        throw new Error('Missing script fixture');
       criterion.script_tool_id = 'live-tool';
       criterion.script_tool_input = { approved: false };
       return actualExecute(command, scope);

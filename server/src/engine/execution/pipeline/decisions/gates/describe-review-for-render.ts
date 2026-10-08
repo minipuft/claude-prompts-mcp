@@ -198,7 +198,7 @@ export function semanticReviewAction(protocol: FrozenReviewProjection): string |
   }
 }
 
-export function renderFrozenReviewInstructions(protocol: FrozenReviewProjection): string {
+function renderFrozenReviewInstructions(protocol: FrozenReviewProjection): string {
   const action = semanticReviewAction(protocol);
   if (action === undefined) return '';
   if (protocol.exhausted === true) return action;

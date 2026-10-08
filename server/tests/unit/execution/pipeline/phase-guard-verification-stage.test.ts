@@ -1177,7 +1177,9 @@ describe('gradeLateReport (row 3.8)', () => {
       gateIds: [PHASE_GUARD_GATE_ID],
       reviewedOutput: 'one line',
     });
-    expect(store.setReview).toHaveBeenCalledWith('session-1', review!);
+    const reviewCall = jest.mocked(store.setReview, { shallow: true }).mock.calls[0];
+    expect(reviewCall?.[0]).toBe('session-1');
+    expect(reviewCall?.[1]).toEqual(review);
   });
 
   test('twin: a sectioned recorded output opens nothing, whatever the call carried', async () => {

@@ -58,7 +58,7 @@ function freezeJson(value: unknown): void {
 }
 
 /** Keep the full resolved public DTO; the digest sits beside it rather than hashing itself. */
-export function snapshotReviewDefinition(
+function snapshotReviewDefinition(
   input: SemanticReviewDefinitionInput,
   defaults?: Partial<JudgeEvaluationDefaults>
 ): GateReviewDefinitionSnapshot {
@@ -321,7 +321,7 @@ export type SemanticTargetAdmission =
   { readonly kind: 'admitted' } | { readonly kind: 'refused'; readonly message: string };
 
 /** Server-owned target admission, before a verdict can grade or mutate the review. */
-export function resolveSemanticTargetAdmission(input: {
+function resolveSemanticTargetAdmission(input: {
   readonly verdictPresent: boolean;
   readonly review: GateReview | undefined;
   readonly suppliedResponse: string | undefined;

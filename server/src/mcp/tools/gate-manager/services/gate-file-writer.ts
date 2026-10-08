@@ -118,7 +118,7 @@ export function callerSuppliedGateKeys(args: GateManagerInput): ReadonlySet<stri
  * value if the caller had one, otherwise whatever the file itself already declared, otherwise
  * nothing. Mirrors `resolvePreservedPromptYamlFields` exactly.
  */
-export function resolvePreservedGateYamlFields(
+function resolvePreservedGateYamlFields(
   gateData: Record<string, unknown>,
   existingYaml: Record<string, unknown> | undefined
 ): Record<string, unknown> {

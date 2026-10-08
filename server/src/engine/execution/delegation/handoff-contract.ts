@@ -137,7 +137,7 @@ export function parseHandoffTrailer(reply: string): ParsedHandoffTrailer {
 }
 
 /** Half-open UTF-16 offsets into the original reply, never normalized text. */
-export interface HandoffBodyRange {
+interface HandoffBodyRange {
   readonly start: number;
   readonly end: number;
 }

@@ -837,9 +837,9 @@ GATE_REVIEW: FAIL - Tests missing`;
     });
   });
 
-  describe('createPendingReview', () => {
+  describe('createReview prompt construction', () => {
     test('creates review with provided options', async () => {
-      const review = await authority.createPendingReview({
+      const review = await authority.createReview('session-1', 'gate', 'n1', {
         gateIds: ['gate-1', 'gate-2'],
         instructions: 'Please review carefully',
         maxAttempts: 5,
@@ -855,7 +855,7 @@ GATE_REVIEW: FAIL - Tests missing`;
     });
 
     test('uses default maxAttempts when not provided', async () => {
-      const review = await authority.createPendingReview({
+      const review = await authority.createReview('session-1', 'gate', 'n1', {
         gateIds: ['gate-1'],
         instructions: 'Review',
       });
@@ -864,7 +864,7 @@ GATE_REVIEW: FAIL - Tests missing`;
     });
 
     test('returns empty prompts when no gateLoader provided', async () => {
-      const review = await authority.createPendingReview({
+      const review = await authority.createReview('session-1', 'gate', 'n1', {
         gateIds: ['gate-1'],
         instructions: 'Review',
       });
@@ -880,7 +880,7 @@ GATE_REVIEW: FAIL - Tests missing`;
         mockGateLoader
       );
 
-      const review = await authorityWithLoader.createPendingReview({
+      const review = await authorityWithLoader.createReview('session-1', 'gate', 'n1', {
         gateIds: [],
         instructions: 'Review',
       });
@@ -913,7 +913,7 @@ GATE_REVIEW: FAIL - Tests missing`;
         mockGateLoader
       );
 
-      const review = await authorityWithLoader.createPendingReview({
+      const review = await authorityWithLoader.createReview('session-1', 'gate', 'n1', {
         gateIds: ['code-quality', 'test-coverage'],
         instructions: 'Review output',
       });
@@ -949,7 +949,7 @@ GATE_REVIEW: FAIL - Tests missing`;
         mockGateLoader
       );
 
-      const review = await authorityWithLoader.createPendingReview({
+      const review = await authorityWithLoader.createReview('session-1', 'gate', 'n1', {
         gateIds: ['minimal-gate'],
         instructions: 'Review',
       });
@@ -968,7 +968,7 @@ GATE_REVIEW: FAIL - Tests missing`;
         mockGateLoader
       );
 
-      const review = await authorityWithLoader.createPendingReview({
+      const review = await authorityWithLoader.createReview('session-1', 'gate', 'n1', {
         gateIds: ['broken-gate'],
         instructions: 'Review',
       });
