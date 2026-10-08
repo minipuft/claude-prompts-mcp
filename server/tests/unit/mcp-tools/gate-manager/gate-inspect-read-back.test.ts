@@ -18,7 +18,6 @@ import {
 } from '../../../../src/engine/gates/core/gate-schema.js';
 import { GenericGateGuide } from '../../../../src/engine/gates/registry/generic-gate-guide.js';
 import { GateDiscoveryProcessor } from '../../../../src/mcp/tools/gate-manager/services/index.js';
-import { formatPublicPassCriteria } from '../../../../src/mcp/tools/gate-manager/services/gate-discovery-processor.js';
 import { EMPTY_QUARANTINE_VIEW } from '../../../../src/shared/utils/resource-quarantine.js';
 
 import type { GateDefinitionYaml } from '../../../../src/engine/gates/types/index.js';
@@ -208,8 +207,8 @@ describe('complete public criterion read-back', () => {
       allow_not_applicable: false,
     },
   ])(
-    'canonical-schema-validated semantic draft preserves complete definition %j without claiming loader activation',
-    (variant) => {
+    'real canonical-loaded semantic inspect retains declared public definition %j without claiming artifact capture or grading',
+    async (variant) => {
       const criterion = SemanticCriterionSchema.parse({
         type: 'semantic_evaluation',
         id: 'public-criterion',
@@ -217,10 +216,28 @@ describe('complete public criterion read-back', () => {
         evidence_requirements: { min_items: 2 },
         ...variant,
       });
-      expect(readPublicCriteria(formatPublicPassCriteria([criterion]))).toEqual([criterion]);
-      expect(
-        GateDefinitionSchema.safeParse({ ...baseDefinition, pass_criteria: [criterion] }).success
-      ).toBe(false);
+      const declared = {
+        ...baseDefinition,
+        pass_criteria: [criterion],
+        calibration_suite_id: ' unresolved:../private.json #opaque ',
+        evaluation: { mode: 'judge' as const, model: 'public-hint', strict: false },
+      };
+      const loaded = GateDefinitionSchema.safeParse(declared);
+      expect(loaded.success).toBe(true);
+      if (!loaded.success) throw loaded.error;
+      // A real guide holds the canonical parsed definition. No provider bypass activates SEM.
+      const processor = buildProcessor(new Map([['test-gate', loaded.data]]));
+      const response = await processor.handleInspect({ action: 'inspect', id: 'test-gate' });
+      const text = (response.content[0] as { text: string }).text;
+      expect(response.isError).toBe(false);
+      expect(readPublicCriteria(text)).toEqual([criterion]);
+      expect(text).toContain('Evaluation: judge (model: public-hint, strict: false)');
+      expect(text).toContain(
+        `Calibration Suite ID: ${JSON.stringify(declared.calibration_suite_id)}`
+      );
+      expect(text).not.toContain('PRIVATE_SENTINEL');
+      expect(text).not.toContain('target_digest');
+      expect(text).not.toContain('definition_digest');
     }
   );
 });
