@@ -87,6 +87,8 @@ import {
   test,
 } from '@jest/globals';
 
+import { installIssuedReviewCloneFixture } from './issued-review-clone-fixture.js';
+
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -99,6 +101,7 @@ import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/c
 import { BRIEF_END, BRIEF_START } from '../../../src/engine/execution/delegation/brief.js';
 import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
 import { TemporaryGateRegistry } from '../../../src/engine/gates/core/temporary-gate-registry.js';
+import { GateLoader } from '../../../src/engine/gates/core/gate-loader.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import { ChainBlueprintResolver } from '../../../src/engine/execution/parsers/chain-blueprint-resolver.js';
 import { createParsingSystem } from '../../../src/engine/execution/parsers/index.js';
@@ -139,6 +142,14 @@ import type { WorkflowIR } from '../../../src/modules/workflow-ir/types.js';
 // --- fixtures -------------------------------------------------------------------------------
 
 /** The withheld step's response. Absence of this string from a downstream render IS the proof. */
+let issuedCloneFixture: ReturnType<typeof installIssuedReviewCloneFixture>;
+beforeEach(() => {
+  issuedCloneFixture = installIssuedReviewCloneFixture();
+});
+afterEach(() => {
+  issuedCloneFixture.restore();
+});
+
 const S1 = 'P6_ACCEPTANCE_SENTINEL_ONE';
 
 const INLINE_GATE = 'p6-acceptance-inline-gate';
@@ -249,6 +260,23 @@ const buildPipeline = (options: {
   );
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
   const gateRegistry = new TemporaryGateRegistry(logger);
+  const gateLoader = new GateLoader(logger, undefined, gateRegistry);
+  const loadRegisteredGate = gateLoader.loadGate.bind(gateLoader);
+  // The named resource in this fixture's authored binding is a real definition; registry
+  // request gates still load through the original temporary-gate port.
+  jest.spyOn(gateLoader, 'loadGate').mockImplementation(async (id) =>
+    id === INLINE_GATE
+      ? {
+          id: INLINE_GATE,
+          name: 'Declared acceptance resource',
+          type: 'validation',
+          description: 'Resource gate declared by the acceptance fixture',
+          guidance: 'Review the step output',
+          gate_type: 'custom',
+          pass_criteria: [{ type: 'inline_guidance' }],
+        }
+      : loadRegisteredGate(id)
+  );
   const runStepViewProvider = createRunStepViewProvider(sessionStore);
 
   const realStages: Record<string, PipelineStage> = {
@@ -275,7 +303,7 @@ const buildPipeline = (options: {
         gateRegistry,
         () => undefined,
         () => undefined as never,
-        undefined,
+        gateLoader,
         new GateMetricsRecorder(undefined),
         logger,
         runStepViewProvider
@@ -300,7 +328,7 @@ const buildPipeline = (options: {
       undefined,
       recordStore
     ),
-    GateReview: new GateReviewStage(chainExecutor, sessionStore, null, logger, undefined, {
+    GateReview: new GateReviewStage(chainExecutor, sessionStore, gateLoader, logger, undefined, {
       executionRecordStore: recordStore,
     }),
     ResponseFormatting: new ResponseFormattingStage(
@@ -338,7 +366,7 @@ const buildPipeline = (options: {
   return new PromptExecutionPipeline(stages, {
     logger,
     metricsProvider: () => undefined,
-    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger),
+    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
   });

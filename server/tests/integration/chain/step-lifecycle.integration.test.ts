@@ -32,6 +32,8 @@ import {
   test,
 } from '@jest/globals';
 
+import { installIssuedReviewCloneFixture } from './issued-review-clone-fixture.js';
+
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -51,6 +53,7 @@ import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline
 import { StepExecutionStage } from '../../../src/engine/execution/pipeline/stages/18-execution-stage.js';
 import { PhaseGuardVerificationStage } from '../../../src/engine/execution/pipeline/stages/19-phase-guard-verification-stage.js';
 import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
+import { GateLoader } from '../../../src/engine/gates/core/gate-loader.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
@@ -73,6 +76,14 @@ import type { GateReview } from '../../../src/shared/types/chain-execution.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 
 /** The review a bare verdict answers (`resolveReviewTarget`), read by the node it names. */
+let issuedCloneFixture: ReturnType<typeof installIssuedReviewCloneFixture>;
+beforeEach(() => {
+  issuedCloneFixture = installIssuedReviewCloneFixture();
+});
+afterEach(() => {
+  issuedCloneFixture.restore();
+});
+
 const stepReviewOf = (session: {
   reviews?: Record<string, GateReview>;
   state: { currentNodeId: string | null };
@@ -292,16 +303,31 @@ const buildPipeline = (options: {
   gateRegistry?: TemporaryGateRegistry;
 }): PromptExecutionPipeline => {
   const { sessionStore, recordStore, logger } = options;
+  const registry = options.gateRegistry ?? new TemporaryGateRegistry(logger);
+  for (const id of [GATE_ID, 'phase-guard']) {
+    if (registry.getTemporaryGate(id) === undefined)
+      registry.createTemporaryGate({
+        id,
+        name: id,
+        type: 'validation',
+        scope: 'chain',
+        description: 'Declared lifecycle fixture review',
+        source: 'manual',
+        guidance: 'Review the step output',
+        pass_criteria: [{ type: 'inline_guidance' }],
+      });
+  }
+  const gateLoader = new GateLoader(logger, undefined, registry);
   // The post-advance review (`ensurePostAdvanceReview`, P6.25) runs on the real service, wired to
   // stage 16 exactly as `pipeline-builder.ts` wires it. It opens a review only for a gate the
   // registry holds with a step target, so a test that registers none drives the same path as
   // before it was wired.
   const gateEnhancementService = new GateEnhancementService(
     null,
-    options.gateRegistry ?? new TemporaryGateRegistry(logger),
+    registry,
     () => undefined,
     () => undefined,
-    undefined,
+    gateLoader,
     new GateMetricsRecorder(undefined),
     logger,
     createRunStepViewProvider(sessionStore)
@@ -346,7 +372,7 @@ const buildPipeline = (options: {
       recordStore
     ),
     PhaseGuardVerification: phaseGuardVerificationStage,
-    GateReview: new GateReviewStage(chainExecutor, sessionStore, null, logger, undefined, {
+    GateReview: new GateReviewStage(chainExecutor, sessionStore, gateLoader, logger, undefined, {
       executionRecordStore: recordStore,
     }),
     ResponseFormatting: new ResponseFormattingStage(
@@ -426,7 +452,7 @@ const buildPipeline = (options: {
   return new PromptExecutionPipeline(stages, {
     logger,
     metricsProvider: () => undefined,
-    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger),
+    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
   });
@@ -1284,7 +1310,11 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       await pipeline.execute({ chain_id: chainId, user_response: 'step 1 output' });
       await pipeline.execute({ chain_id: chainId, user_response: 'step 2 output' });
       expect(onlySession().state.currentNodeId).toBe('review');
-      const authority = new GateEnforcementAuthority(sessionStore, createLogger());
+      const authority = new GateEnforcementAuthority(
+        sessionStore,
+        createLogger(),
+        new GateLoader(createLogger(), undefined, gateRegistry)
+      );
       await authority.createReview(sessionId, 'structural', 'draft', {
         gateIds: ['phase-guard'],
         instructions: 'Add the missing sections.',
@@ -1395,12 +1425,14 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
         user_response: '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.',
       });
       expect(onlySession().state.currentNodeId).toBe('review');
-      await new GateEnforcementAuthority(sessionStore, createLogger()).createReview(
-        sessionId,
-        'gate',
-        'draft',
-        { gateIds: [GATE_ID], instructions: 'Check step 1.' }
-      );
+      await new GateEnforcementAuthority(
+        sessionStore,
+        createLogger(),
+        new GateLoader(createLogger(), undefined, gateRegistry)
+      ).createReview(sessionId, 'gate', 'draft', {
+        gateIds: [GATE_ID],
+        instructions: 'Check step 1.',
+      });
 
       await pipeline.execute({ chain_id: chainId, user_response: 'one line' });
 
@@ -1426,7 +1458,14 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
         const { chainId, sessionId } = onlySession();
         await pipeline.execute({ chain_id: chainId, user_response: sectioned });
         expect(onlySession().state.currentNodeId).toBe('review');
-        await openReviews(new GateEnforcementAuthority(sessionStore, createLogger()), sessionId);
+        await openReviews(
+          new GateEnforcementAuthority(
+            sessionStore,
+            createLogger(),
+            new GateLoader(createLogger(), undefined, gateRegistry)
+          ),
+          sessionId
+        );
         await pipeline.execute({ chain_id: chainId, ...step2 } as any);
         return reviews();
       };

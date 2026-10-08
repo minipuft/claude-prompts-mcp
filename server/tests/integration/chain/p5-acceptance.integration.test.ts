@@ -39,6 +39,8 @@ import {
   test,
 } from '@jest/globals';
 
+import { installIssuedReviewCloneFixture } from './issued-review-clone-fixture.js';
+
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -51,6 +53,7 @@ import { ResponseAssembler } from '../../../src/engine/execution/formatting/resp
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
 import { TemporaryGateRegistry } from '../../../src/engine/gates/core/temporary-gate-registry.js';
+import { GateLoader } from '../../../src/engine/gates/core/gate-loader.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import { PromptExecutionPipeline } from '../../../src/engine/execution/pipeline/prompt-execution-pipeline.js';
 import { GateEnhancementStage } from '../../../src/engine/execution/pipeline/stages/11-gate-enhancement-stage.js';
@@ -81,6 +84,14 @@ import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 // --- fixtures -------------------------------------------------------------------------------
 
 /** Distinctive per-step outputs. Absence of these strings IS the withholding assertion. */
+let issuedCloneFixture: ReturnType<typeof installIssuedReviewCloneFixture>;
+beforeEach(() => {
+  issuedCloneFixture = installIssuedReviewCloneFixture();
+});
+afterEach(() => {
+  issuedCloneFixture.restore();
+});
+
 const S1 = 'S1_SENTINEL_ALPHA';
 const S2 = 'S2_SENTINEL_BRAVO';
 const S3 = 'S3_SENTINEL_CHARLIE';
@@ -296,6 +307,23 @@ const buildPipeline = (options: {
   const { sessionStore, recordStore, logger } = options;
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
   const gateRegistry = new TemporaryGateRegistry(logger);
+  const gateLoader = new GateLoader(logger, undefined, gateRegistry);
+  const loadRegisteredGate = gateLoader.loadGate.bind(gateLoader);
+  // The named resource in this fixture's authored binding is a real definition; registry
+  // request gates still load through the original temporary-gate port.
+  jest.spyOn(gateLoader, 'loadGate').mockImplementation(async (id) =>
+    id === RUN_WIDE_GATE
+      ? {
+          id: RUN_WIDE_GATE,
+          name: 'Declared acceptance resource',
+          type: 'validation',
+          description: 'Resource gate declared by the acceptance fixture',
+          guidance: 'Review the step output',
+          gate_type: 'custom',
+          pass_criteria: [{ type: 'inline_guidance' }],
+        }
+      : loadRegisteredGate(id)
+  );
   const runStepViewProvider = createRunStepViewProvider(sessionStore);
   // Shared with StepResponseCapture below (P5-F6): the post-advance review re-evaluation needs
   // the SAME registry/runStepViewProvider wiring stage 11 resolves step targets against — a
@@ -306,7 +334,7 @@ const buildPipeline = (options: {
     gateRegistry,
     () => undefined,
     () => undefined as never,
-    undefined,
+    gateLoader,
     new GateMetricsRecorder(undefined),
     logger,
     runStepViewProvider
@@ -336,7 +364,7 @@ const buildPipeline = (options: {
       undefined,
       recordStore
     ),
-    GateReview: new GateReviewStage(chainExecutor, sessionStore, null, logger, undefined, {
+    GateReview: new GateReviewStage(chainExecutor, sessionStore, gateLoader, logger, undefined, {
       executionRecordStore: recordStore,
     }),
     ResponseFormatting: new ResponseFormattingStage(
@@ -404,7 +432,7 @@ const buildPipeline = (options: {
   return new PromptExecutionPipeline(stages, {
     logger,
     metricsProvider: () => undefined,
-    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger),
+    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
     // As production wires it: the run adopts the gates its calls register, so a request gate

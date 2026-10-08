@@ -23,6 +23,8 @@
 
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
+import { installIssuedReviewCloneFixture } from './issued-review-clone-fixture.js';
+
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,6 +50,8 @@ import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline
 import { StepExecutionStage } from '../../../src/engine/execution/pipeline/stages/18-execution-stage.js';
 import { PhaseGuardVerificationStage } from '../../../src/engine/execution/pipeline/stages/19-phase-guard-verification-stage.js';
 import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
+import { GateLoader } from '../../../src/engine/gates/core/gate-loader.js';
+import { TemporaryGateRegistry } from '../../../src/engine/gates/core/temporary-gate-registry.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
 import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
@@ -66,6 +70,14 @@ import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { ChainStepPrompt } from '../../../src/engine/execution/operators/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
+
+let issuedCloneFixture: ReturnType<typeof installIssuedReviewCloneFixture>;
+beforeEach(() => {
+  issuedCloneFixture = installIssuedReviewCloneFixture();
+});
+afterEach(() => {
+  issuedCloneFixture.restore();
+});
 
 const GATE_ID = 'step-quality';
 /** The delegated step's own gate text — the field the brief derives its Result Contract from. */
@@ -265,6 +277,18 @@ const buildPipeline = (options: {
     steps = parsedChainSteps(true, options.phaseGuards === true),
     evidenceMode,
   } = options;
+  const gateRegistry = new TemporaryGateRegistry(logger);
+  gateRegistry.createTemporaryGate({
+    id: GATE_ID,
+    name: 'Step Quality',
+    type: 'validation',
+    scope: 'chain',
+    description: 'Declared step-quality fixture review',
+    source: 'manual',
+    guidance: 'Output must name its evidence',
+    pass_criteria: [{ type: 'inline_guidance' }],
+  });
+  const gateLoader = new GateLoader(logger, undefined, gateRegistry);
   const prompts = options.nativeWorker === undefined ? PROMPTS : [options.nativeWorker.prompt];
   const frameworks = options.nativeWorker?.frameworks;
   const chainExecutor = new ChainOperatorExecutor(
@@ -327,7 +351,7 @@ const buildPipeline = (options: {
       undefined,
       recordStore
     ),
-    GateReview: new GateReviewStage(chainExecutor, sessionStore, null, logger, undefined, {
+    GateReview: new GateReviewStage(chainExecutor, sessionStore, gateLoader, logger, undefined, {
       executionRecordStore: recordStore,
     }),
     ResponseFormatting: new ResponseFormattingStage(
@@ -426,7 +450,7 @@ const buildPipeline = (options: {
   return new PromptExecutionPipeline(stages, {
     logger,
     metricsProvider: () => undefined,
-    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger),
+    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
   });

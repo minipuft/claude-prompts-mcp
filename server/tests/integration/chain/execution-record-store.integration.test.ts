@@ -12,6 +12,9 @@
 
 import { afterEach, beforeEach, describe, expect, test, jest } from '@jest/globals';
 
+import { installIssuedReviewCloneFixture } from './issued-review-clone-fixture.js';
+import { resolveFrozenReviewDefinition } from '../../../src/engine/execution/pipeline/decisions/gates/frozen-review-definitions.js';
+
 import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -44,6 +47,14 @@ import type { Logger } from '../../../src/infra/logging/index.js';
 import type { GateReview } from '../../../src/shared/types/chain-execution.js';
 import type { GateVerdictSubmission } from '../../../src/shared/types/gate-evaluation.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
+
+let issuedCloneFixture: ReturnType<typeof installIssuedReviewCloneFixture>;
+beforeEach(() => {
+  issuedCloneFixture = installIssuedReviewCloneFixture();
+});
+afterEach(() => {
+  issuedCloneFixture.restore();
+});
 
 const REVIEW_SCOPE = { continuityScopeId: 'semantic-capture-scope' };
 const REVIEW_OUTPUT = 'A😀e\u0301 Z';
@@ -634,7 +645,13 @@ describe('issued review capture and cold custody (real SQLite)', () => {
       expect(ordinary.gateIds).toEqual(['ordinary-alias', PHASE_GUARD_GATE_ID]);
       expect(ordinary.structuralGateIds).toEqual([PHASE_GUARD_GATE_ID]);
       expect(selectToolReviewGateIds(ordinary)).toEqual(['ordinary-alias']);
-      expect(ordinary.semanticContext).toEqual(mixed.semanticContext);
+      expect(ordinary.semanticContext).toEqual({
+        ...mixed.semanticContext,
+        definitionAliases: {
+          'ordinary-alias': REVIEW_GATE.id,
+          [PHASE_GUARD_GATE_ID]: PHASE_GUARD_GATE_ID,
+        },
+      });
       await f.store.remapRunGates(
         'review-session',
         new Map([
@@ -646,7 +663,13 @@ describe('issued review capture and cold custody (real SQLite)', () => {
       expect(forward.gateIds).toEqual(['ordinary-alias', 'structural-alias']);
       expect(forward.structuralGateIds).toEqual([PHASE_GUARD_GATE_ID]);
       expect(selectToolReviewGateIds(forward)).toEqual(['ordinary-alias', 'structural-alias']);
-      expect(forward.semanticContext).toEqual(mixed.semanticContext);
+      expect(forward.semanticContext).toEqual({
+        ...mixed.semanticContext,
+        definitionAliases: {
+          'ordinary-alias': REVIEW_GATE.id,
+          'structural-alias': PHASE_GUARD_GATE_ID,
+        },
+      });
       await f.cold();
       expect(currentReview(f)).toEqual(forward);
       expect(selectToolReviewGateIds(currentReview(f))).toEqual([
@@ -670,7 +693,10 @@ describe('issued review capture and cold custody (real SQLite)', () => {
       expect(remapped.gateIds).toEqual([PHASE_GUARD_GATE_ID]);
       expect(remapped.structuralGateIds).toBeUndefined();
       expect(selectToolReviewGateIds(remapped)).toEqual([PHASE_GUARD_GATE_ID]);
-      expect(remapped.semanticContext).toEqual(opened.semanticContext);
+      expect(remapped.semanticContext).toEqual({
+        ...opened.semanticContext,
+        definitionAliases: { [PHASE_GUARD_GATE_ID]: REVIEW_GATE.id },
+      });
       await f.cold();
       expect(currentReview(f)).toEqual(remapped);
     } finally {
@@ -1518,4 +1544,72 @@ describe('ExecutionRecordStore (integration)', () => {
       expect(store.queryRecent()).toEqual([]);
     });
   });
+});
+
+/** Only canonical issuer definitions cross the Jest clone boundary; malformed data stays raw. */
+describe('issued-review test clone boundary fidelity', () => {
+  test.each(['nonplain', 'cycle', 'undefined', 'inconsistent-digest'] as const)(
+    '%s authority remains unlaundered and source-rejected',
+    (issue) => {
+      const issued = createSemanticReviewContext('fidelity-node', 'fidelity-attempt', [
+        REVIEW_GATE,
+      ]);
+      const original = issued.definitions[REVIEW_GATE.id];
+      if (original === undefined) throw new Error('Missing fidelity issuer');
+      let definition: unknown = original.definition;
+      if (issue === 'nonplain') {
+        class ForeignDefinition {
+          readonly id = REVIEW_GATE.id;
+        }
+        definition = new ForeignDefinition();
+      }
+      if (issue === 'cycle') {
+        const cyclic: Record<string, unknown> = { id: REVIEW_GATE.id };
+        cyclic['self'] = cyclic;
+        definition = cyclic;
+      }
+      if (issue === 'undefined')
+        definition = { ...original.definition, pass_criteria: [undefined] };
+      const corrupt = {
+        ...issued,
+        definitions: {
+          [REVIEW_GATE.id]: {
+            ...original,
+            definition,
+            definitionDigest:
+              issue === 'inconsistent-digest'
+                ? hashBytes('wrong issuer digest')
+                : original.definitionDigest,
+          },
+        },
+      };
+      const shared = { retained: true };
+      const value = {
+        semanticContext: corrupt,
+        map: new Map([['value', 7]]),
+        date: new Date(42),
+        optional: undefined,
+        first: shared,
+        second: shared,
+      };
+      const raw = issuedCloneFixture.nativeClone(value);
+      const cloned = structuredClone(value);
+      expect(cloned).toEqual(raw);
+      expect(cloned.first).toBe(cloned.second);
+      expect(cloned.first).not.toBe(shared);
+      expect(Object.getPrototypeOf(cloned.map)).toBe(Object.getPrototypeOf(raw.map));
+      expect(cloned.map.get('value')).toBe(7);
+      expect(cloned.date.getTime()).toBe(42);
+      expect(cloned).toHaveProperty('optional', undefined);
+      expect(cloned.semanticContext.definitions[REVIEW_GATE.id].definitionDigest).toBe(
+        corrupt.definitions[REVIEW_GATE.id].definitionDigest
+      );
+      expect(() =>
+        Reflect.apply(resolveFrozenReviewDefinition, undefined, [
+          cloned.semanticContext,
+          REVIEW_GATE.id,
+        ])
+      ).toThrow();
+    }
+  );
 });
