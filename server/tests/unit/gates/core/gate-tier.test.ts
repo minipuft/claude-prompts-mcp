@@ -1,17 +1,7 @@
 /**
- * `deriveGateTier` (server/src/engine/gates/core/gate-tier.ts) and its JS mirror in
- * `server/scripts/generate-gate-index.js` implement the SAME rule twice — one in TS for
- * runtime callers, one in plain JS so the generator script needs no build step. Nothing else
- * enforces the two stay in step.
- *
- * The unit cases below pin the rule itself. The registry cross-check is the only thing that
- * fails when the JS and TS copies drift: it loads every gate's `gate.yaml` under
- * `server/resources/gates`, parses the generated `_index.md`'s Tier column, and asserts
- * `deriveGateTier` agrees with what the generator already wrote for all 26 gates. If someone
- * edits the JS rule (or the TS rule) without updating the other, this test — and only this
- * test — goes red.
- *
- * Classification: Unit (no network; reads repo-local gate.yaml and _index.md fixtures)
+ * Unit requirement classification plus a registry/index cross-check for shipped resources.
+ * Raw semantic fixtures do not establish loader acceptance, runtime execution or export parity.
+ * Classification: Unit (repo-local YAML/index fixtures; no provider or network).
  */
 
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
@@ -23,9 +13,13 @@ import * as yaml from 'js-yaml';
 
 import {
   deriveGateTier,
+  hasToolCheck,
+  hasSemanticEvaluation,
   formatCheckLine,
   type GateTierSource,
 } from '../../../../src/engine/gates/core/gate-tier.js';
+
+import type { PendingGateTier } from '../../../../src/shared/types/chain-execution.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const GATES_DIR = path.resolve(__dirname, '../../../../resources/gates');
@@ -64,6 +58,49 @@ describe('deriveGateTier — unit cases', () => {
       ],
     };
     expect(deriveGateTier(def)).toBe('reminder');
+  });
+});
+
+describe('authored semantic and mixed component requirements', () => {
+  test('semantic-only criteria classify as evaluation with no tool claim', () => {
+    const definition: GateTierSource = { pass_criteria: [{ type: 'semantic_evaluation' }] };
+    const serialized: PendingGateTier = deriveGateTier(definition);
+    expect(serialized).toBe('evaluation');
+    expect(hasSemanticEvaluation(definition)).toBe(true);
+    expect(hasToolCheck(definition)).toBe(false);
+  });
+  test.each(['shell_verify', 'script_tool'])(
+    'mixed %s preserves tool precedence and both component facts',
+    (type) => {
+      for (const pass_criteria of [
+        [{ type: 'semantic_evaluation' }, { type }],
+        [{ type }, { type: 'semantic_evaluation' }],
+      ]) {
+        const definition: GateTierSource = { pass_criteria };
+        expect(deriveGateTier(definition)).toBe('check');
+        expect(hasToolCheck(definition)).toBe(true);
+        expect(hasSemanticEvaluation(definition)).toBe(true);
+      }
+    }
+  );
+  test.each([
+    {},
+    { pass_criteria: [] },
+    { pass_criteria: [{}] },
+    { pass_criteria: [{ type: 'inline_guidance' }] },
+    { pass_criteria: [{ type: 'framework_compliance' }] },
+    { pass_criteria: [{ type: 'unknown_future_kind' }] },
+  ])('unknown/legacy requirement %j remains reminder with neither component', (definition) => {
+    expect(deriveGateTier(definition)).toBe('reminder');
+    expect(hasToolCheck(definition)).toBe(false);
+    expect(hasSemanticEvaluation(definition)).toBe(false);
+  });
+  test('frozen authored facts are read without mutation', () => {
+    const definition = Object.freeze({
+      pass_criteria: Object.freeze([Object.freeze({ type: 'semantic_evaluation' })]),
+    });
+    expect(deriveGateTier(definition)).toBe('evaluation');
+    expect(definition.pass_criteria).toEqual([{ type: 'semantic_evaluation' }]);
   });
 });
 

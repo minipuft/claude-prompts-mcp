@@ -607,7 +607,7 @@ export class GateEnforcementAuthority {
   /** Tier per gate (`deriveGateTier`); a gate the loader cannot load contributes no entry. */
   private deriveGateTiers(
     definitions: readonly LightweightGateDefinition[]
-  ): Record<string, 'check' | 'reminder'> {
+  ): NonNullable<GateReview['gateTiers']> {
     return Object.fromEntries(definitions.map((def) => [def.id, deriveGateTier(def)]));
   }
 

@@ -442,7 +442,7 @@ export interface GateReviewPrompt {
  * the shared contract the session store persists, and it does not import engine types. The two
  * spellings are structurally identical, so an engine `GateTier` assigns to this and back.
  */
-export type PendingGateTier = 'check' | 'reminder';
+export type PendingGateTier = 'check' | 'evaluation' | 'reminder';
 
 /**
  * One ground-truth check result the ENGINE recorded for a gate — never the model's opinion.
