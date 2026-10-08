@@ -321,15 +321,57 @@ function assignmentsTo(body, name) {
   });
 }
 
+/** Resolve a same-file helper by declaration identity, not by its spelling. */
+function localFunctionOf(call) {
+  const declarations = unwrap(call.getExpression()).getSymbol()?.getDeclarations() ?? [];
+  return declarations.find(
+    (declaration) =>
+      Node.isFunctionDeclaration(declaration) &&
+      declaration.getBody() !== undefined &&
+      declaration.getSourceFile() === call.getSourceFile()
+  );
+}
+
+/** Only writes through the helper's actual output argument forward a source parameter. */
+function helperForwarding(body, sourceName, targetName, visited) {
+  const entries = [];
+  for (const call of body.getDescendantsOfKind(SyntaxKind.CallExpression)) {
+    const arguments_ = call.getArguments();
+    const sourceIndex = arguments_.findIndex((argument) => isParameterRef(argument, sourceName));
+    const targetIndex = arguments_.findIndex((argument) => isParameterRef(argument, targetName));
+    const helper = localFunctionOf(call);
+    if (sourceIndex === -1 || targetIndex === -1 || helper === undefined || visited.has(helper)) {
+      continue;
+    }
+    const source = helper.getParameters()[sourceIndex]?.getNameNode();
+    const target = helper.getParameters()[targetIndex]?.getNameNode();
+    if (!Node.isIdentifier(source) || !Node.isIdentifier(target)) continue;
+    const mapping = forwardedKeys(
+      helper.getBody(),
+      source.getText(),
+      target.getText(),
+      new Set([...visited, helper])
+    );
+    const guards = sourcesIn(body, sourceName, guardsOf(call, body));
+    for (const [parameter, keys] of mapping) {
+      for (const key of keys) {
+        for (const supplied of new Set([parameter, ...guards])) entries.push([supplied, key]);
+      }
+    }
+  }
+  return entries;
+}
+
 /**
  * A forwarding hop: which key of the object `targetName` each parameter of `sourceName` lands
  * under, when a function copies arguments by hand into a new object and hands THAT on. Reads the
  * target's object-literal initializer (through spreads and conditionals) and every
- * `target.key = …` in `body`; a key's sources are the parameters its value and guards read.
+ * `target.key = …` in `body`, including resolved local helpers handed both objects; a key's
+ * sources are the parameters its value and guards read.
  *
  * Returns `Map<parameter, Set<key>>`. A parameter with no entry is dropped at this hop.
  */
-function forwardedKeys(body, sourceName, targetName) {
+function forwardedKeys(body, sourceName, targetName, visited = new Set()) {
   const forwarded = new Map();
   const record = (key, nodes) => {
     for (const parameter of sourcesIn(body, sourceName, nodes)) {
@@ -363,6 +405,9 @@ function forwardedKeys(body, sourceName, targetName) {
     const left = assignment.getLeft();
     if (!Node.isPropertyAccessExpression(left)) continue;
     record(left.getName(), [assignment.getRight(), ...guardsOf(assignment, body)]);
+  }
+  for (const [parameter, key] of helperForwarding(body, sourceName, targetName, visited)) {
+    forwarded.set(parameter, (forwarded.get(parameter) ?? new Set()).add(key));
   }
   return forwarded;
 }

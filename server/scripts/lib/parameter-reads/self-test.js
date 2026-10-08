@@ -360,6 +360,11 @@ function resourceManagerFixture(subject, { helperReads, routerCopies }) {
   project.createSourceFile(
     '/router.ts',
     `
+function forwardOptionalValue(input: any, output: any): void {
+  if (input.reason) {
+    ${routerCopies ? 'output.reason = input.reason;' : 'void input.reason;'}
+  }
+}
 export class Router {
   private readonly demoHandler: DemoHandler;
   async handleAction(args: any) {
@@ -380,7 +385,7 @@ export class Router {
     demoArgs.note = "'reason' is spelled here, in a copied value, and copied nowhere";
     if (args.enforcement_mode) demoArgs.enforcementMode = args.enforcement_mode;
     if (args.severity) demoArgs.severity = args.severity;
-    ${routerCopies ? 'if (args.reason) demoArgs.reason = args.reason;' : ''}
+    forwardOptionalValue(args, demoArgs);
     return this.demoHandler.handleAction(demoArgs, {});
   }
   private log(entry: unknown) { return entry; }
@@ -444,7 +449,8 @@ export class DemoHelper {
 function selfTestResourceManager(subject) {
   const failures = [];
   // Planted: the helper the processor hands `args` to never reads `severity` (named only in a
-  // string, twice), and the router never copies `reason` (named only in a log line). `detail` is
+  // string, twice), and the router's local helper reads `reason` without writing the output.
+  // A read or guard inside a no-op helper cannot prove forwarding. `detail` is
   // owned by another type, so `common:inspect` does not declare it for `demo`; `confirm` is the
   // router's own guard; `enforcement_mode` reaches the helper renamed as `enforcementMode`.
   const planted = resourceManagerFixture(subject, { helperReads: false, routerCopies: false });
