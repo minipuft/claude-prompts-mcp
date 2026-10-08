@@ -4,11 +4,12 @@ import {
   isJudgeMode,
   buildJudgeEnvelope,
   renderJudgePrompt,
+  renderSemanticReviewPrompt,
 } from '../judge/judge-prompt-builder.js';
 
 import type { GateDefinitionProvider } from './gate-loader.js';
 import type { GateReviewPrompt } from '../../execution/types.js';
-import type { JudgeEvaluationDefaults } from '../judge/types.js';
+import type { JudgeEvaluationDefaults, SemanticReviewPromptInput } from '../judge/types.js';
 import type { LightweightGateDefinition } from '../types.js';
 
 export interface ReviewPromptTimestamps {
@@ -72,7 +73,8 @@ export function composeReviewPrompt(
   prompts: GateReviewPrompt[],
   previousResponse?: string,
   retryHints: string[] = [],
-  timestamps?: ReviewPromptTimestamps
+  timestamps?: ReviewPromptTimestamps,
+  semanticReviews: readonly SemanticReviewPromptInput[] = []
 ): ComposedReviewPrompt {
   const gateIds = prompts
     .map((prompt) => prompt.gateId)
@@ -147,6 +149,7 @@ export function composeReviewPrompt(
     'Instructions:',
     instructionBlock,
     gateSections.join('\n\n'),
+    renderSemanticReviewPrompt(semanticReviews.filter((review) => gateIds.includes(review.gateId))),
     retryBlock,
     previousResponseBlock,
   ].filter((segment) => segment && segment.trim().length > 0);
@@ -186,7 +189,9 @@ export function composeReviewPrompt(
 /**
  * The criteria text a judge is given for one gate.
  *
- * `guidance` is all of it. A `pass_criteria` entry contributes nothing: the only fields this
+ * Legacy `guidance` is all of it. Frozen public semantic rubric projections are supplied
+ * separately to the composer; this function never reloads or invents them. Historically the
+ * only `pass_criteria` fields this
  * ever rendered as prose were min_length/max_length/required_patterns/forbidden_patterns, which
  * had no evaluator (B9) and are now refused at load, and the structured types (`shell_verify`,
  * `script_tool`, `framework_compliance`) were never rendered here — they are run by the engine
@@ -253,13 +258,15 @@ export interface ComposedJudgeReviewPrompt {
  */
 export function composeJudgeReviewPrompt(
   judgeGates: LightweightGateDefinition[],
-  output: string
+  output: string,
+  semanticReviews: readonly SemanticReviewPromptInput[] = []
 ): ComposedJudgeReviewPrompt {
   if (judgeGates.length === 0) {
     return { hasJudgeGates: false, judgePrompt: '', judgeGateIds: [] };
   }
 
   const judgeGateIds = judgeGates.map((g) => g.id);
+  const publicReviews = semanticReviews.filter((review) => judgeGateIds.includes(review.gateId));
   const modelHint = judgeGates.find((g) => g.evaluation?.model)?.evaluation?.model;
 
   const firstResolved = resolveJudgeConfig(judgeGates[0]!.evaluation);
@@ -268,7 +275,14 @@ export function composeJudgeReviewPrompt(
   if (judgeGates.length === 1) {
     const gate = judgeGates[0]!;
     const criteria = collectGateCriteria(gate);
-    const envelope = buildJudgeEnvelope(output, gate.name, gate.id, criteria, strict);
+    const envelope = buildJudgeEnvelope(
+      output,
+      gate.name,
+      gate.id,
+      criteria,
+      strict,
+      publicReviews
+    );
     return {
       hasJudgeGates: true,
       judgePrompt: renderJudgePrompt(envelope),
@@ -284,6 +298,13 @@ export function composeJudgeReviewPrompt(
   }
 
   const combinedId = judgeGateIds.join(',');
-  const envelope = buildJudgeEnvelope(output, 'Combined Review', combinedId, allCriteria, strict);
+  const envelope = buildJudgeEnvelope(
+    output,
+    'Combined Review',
+    combinedId,
+    allCriteria,
+    strict,
+    publicReviews
+  );
   return { hasJudgeGates: true, judgePrompt: renderJudgePrompt(envelope), judgeGateIds, modelHint };
 }

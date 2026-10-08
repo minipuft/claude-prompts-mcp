@@ -8,7 +8,11 @@
  * reasoning and using strict (failure-first) framing.
  */
 
-import type { JudgeEvaluationMode } from '#shared/types/gate-evaluation.js';
+import type {
+  JudgeEvaluationMode,
+  SemanticCriterion,
+  SemanticEvaluationBinding,
+} from '#shared/types/gate-evaluation.js';
 
 export type { JudgeEvaluationMode, ResolvedJudgeConfig } from '#shared/types/gate-evaluation.js';
 
@@ -33,6 +37,14 @@ export interface JudgeEvaluationConfig {
   strict?: boolean;
 }
 
+/** Public rubric projection supplied by the server's frozen review authority. */
+export interface SemanticReviewPromptInput {
+  readonly gateId: string;
+  readonly criteria: readonly SemanticCriterion[];
+  /** Absent until capture binds the reviewed output; renderers never mint pins. */
+  readonly binding?: SemanticEvaluationBinding;
+}
+
 /**
  * Semantic envelope for the judge sub-agent.
  * Contains only the data needed for evaluation — no generation reasoning.
@@ -50,6 +62,7 @@ export interface JudgeEnvelope {
   readonly strict: boolean;
   /** Expected verdict format */
   readonly verdictFormat: string;
+  readonly semanticReviews?: readonly SemanticReviewPromptInput[];
 }
 
 /**
