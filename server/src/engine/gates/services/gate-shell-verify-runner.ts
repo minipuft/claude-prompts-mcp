@@ -170,7 +170,14 @@ export async function runGateShellVerifications(
   const gates = checkedDefinitions ?? (await gateDefinitionProvider.loadGates(gateIds));
 
   for (const gate of gates) {
-    const shellCriteria = gate.pass_criteria?.filter((c) => c.type === 'shell_verify');
+    const shellCriteria = gate.pass_criteria?.filter(
+      (
+        c
+      ): c is Exclude<
+        NonNullable<LightweightGateDefinition['pass_criteria']>[number],
+        { type: 'semantic_evaluation' }
+      > => c.type === 'shell_verify'
+    );
     if (!shellCriteria || shellCriteria.length === 0) {
       continue;
     }
