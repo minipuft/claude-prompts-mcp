@@ -18,10 +18,10 @@ tags: [gates, semantic, evaluation, tests]
 ## Now (2026-10-07)
 
 Goal: finish the entire master/child initiative, actual built workflows, matched native/quality evidence, retirement and reviewed green-CI delivery.
-Slice: ROOT accepted6.1 classification committed8b923f01f and8.2 public custody test-only committedbfb590fab, following accepted6.2/5.4/8.1. Normal hooks restored all source. Current main custody report_resume; next disjoint6.3 frozen-render and7.1 history reader preflights.
-Next decision: derive exact6.3 frozen renderer/target instructions and7.1 truthful BYPASS/model/tool history metrics interfaces before edits. Then close index/export/public inspect/actual CLI; semantic activation stays last.
+Slice: ROOT accepted final6.3/R66 committed5bf03545c and7.2/R65 committed4fef5479; source tree clean, both worker scopes released. Mainreport_resume preparing clean checkpoint6/explicit custody release for shorter existing-agent continuation; no transfer until the explicit release message.
+Next decision: shorter main continues exact6 remaining child rows8.3/9.2/10.1-10.4, then current-source native freeze/agent-only pilot/quality receipts, master docs/evidence reconciliation, coherent PR validation/CI and retirement. Existing source proof is accepted; no broad repeats.
 Constraint: planner edits plans/integration only; no new spawn/thread, source ownership remains bounded, no repeated accepted proofs. Semantic activation stays last; root independently reviews actual current native freeze before inference.
-State: child51 rows40done2killed9open; semantic unionOFF/native inference0. Checkpoint4 remains authoritative; previous scoped workflow receipts are complete only for their slices, older trackers remain unavailable.
+State: child51 rows43done2killed6open; semantic unionOFF/native inference0. Checkpoint4 remains authoritative; previous scoped workflow receipts are complete only for their slices, older trackers remain unavailable.
 
 ## Intent and completion criteria
 
