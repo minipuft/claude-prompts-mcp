@@ -180,6 +180,30 @@ under the old key. `chain_sessions` is `derived`, and `chain_runs` is `ephemeral
 `chain_runs` row older than v35 survives. That is what retired the pre-3.1 residual reader in
 `run-registry.ts`. `DROPPED_ON_THIS_BUMP` stays empty.
 
+## Gate History and Calibration Evidence
+
+`execution_records.gate_verdicts_json` carries operational per-gate review results,
+including structured semantic observations and their revision/target bindings. Same-call
+capture and later verdict submission use the existing JSON surface. The table remains
+ephemeral and workspace-scoped: pruning or schema recreation can remove those records.
+An execution-history projection is therefore not a durable calibration receipt.
+
+The opt-in [evaluation archive](../../evaluations/README.md#private-storage-and-replay)
+stores frozen gate/suite/evaluator references, target and report bytes, attempts, grades,
+and reviewed promotion receipts under a caller-selected private filesystem root.
+Calibration and promotion replay verify the full declared dependency graph and
+re-adjudicate archived reports without using operational history. Missing or corrupt
+archive evidence refuses replay. Removing disposable runtime state does not remove
+files held in that separate archive.
+
+Resource `version_history` and its existing byte trees remain authoritative for resource
+revisions. Private calibration cases and expected labels belong to the caller's archive;
+the public resource carries only an opaque suite association. Calibration adds no table,
+column, schema migration, or default server dependency. Existing JSON history retains
+its declared retention; the optional archive supplies the durable evidence boundary.
+See [How to Calibrate a Semantic Gate](../guides/semantic-gate-calibration.md) for the
+operator workflow and the distinction between a reviewed receipt and a resource write.
+
 ## Four Tables Are Durable — A Schema Bump Must Not Destroy Them
 
 `objects` and `version_entries` joined this list at v29; the reasoning below is why the
