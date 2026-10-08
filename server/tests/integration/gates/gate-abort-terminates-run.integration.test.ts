@@ -23,6 +23,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
+import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { isRunComplete } from '../../../src/shared/types/chain-session.js';
@@ -44,18 +45,14 @@ class StubTextReferenceStore {
   clearChainStepResults = jest.fn();
 }
 
-/** The request state `handleGateAction` reads and writes; nothing else of a context. */
-const actionContext = () =>
-  ({
-    state: { gates: {}, session: {} },
-    diagnostics: { info: jest.fn(), warn: jest.fn() },
-    setResponse: jest.fn(),
-  }) as never;
+/** Real raw request and admission getters for the action being submitted. */
+const actionContext = (action: 'retry' | 'skip' | 'abort') =>
+  new ExecutionContext({ gate_action: action }, logger);
 
 /** Answer the run's exhausted review with `action`, the way stage 16 hands it over. */
 const act = (store: ChainSessionStore, sessionId: string, action: 'retry' | 'skip' | 'abort') =>
   new GateVerdictProcessor(store, logger).handleGateAction(
-    actionContext(),
+    actionContext(action),
     store.getSession(sessionId)!,
     action,
     { sessionId } as never

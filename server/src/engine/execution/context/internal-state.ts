@@ -1,4 +1,5 @@
 // @lifecycle canonical - Defines internal execution context state contracts.
+import type { GateReview } from '#shared/types/chain-execution.js';
 import type {
   ConfirmationRequired,
   GateSystemSettings,
@@ -296,6 +297,14 @@ export interface PipelineInternalState {
      * one would be empty there.
      */
     perGateVerdicts?: GateVerdictSummary[];
+    /** Server-only authorized skip custody, consumed by the operational ledger before advance. */
+    reviewActionDetection?: {
+      readonly action: 'skip';
+      readonly source: 'gate_action';
+      readonly nodeId: string;
+      readonly at: number;
+      readonly review: GateReview;
+    };
     /** Parsed verdict detection metadata from gate review processing */
     verdictDetection?: {
       verdict: 'PASS' | 'FAIL';

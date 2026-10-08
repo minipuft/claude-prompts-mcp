@@ -42,8 +42,11 @@ import {
   startServerWithHttp,
   waitForHealth,
 } from './helpers/http-mcp-client.js';
+import { resolvePinnedSemanticContext } from '../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
 
 import type { ChildProcess } from 'node:child_process';
+import type { GateReview, GateVerdictSummary } from '../../src/shared/types/chain-execution.js';
+import type { SemanticEvaluationReport } from '../../src/shared/types/gate-evaluation.js';
 
 const PASS = 'GATE_REVIEW: PASS - ok';
 const FAIL = 'GATE_REVIEW: FAIL - the step misses its gate';
@@ -614,6 +617,187 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       summary: 'g140, sv-block',
       metadata: ['g140', 'sv-block'],
     });
+  }, 180000);
+
+  test('a semantic temporary collision preserves issued pins and accepts the pre-claim report', async () => {
+    const roots = freshRoots();
+    writeFileSync(
+      path.join(roots.workspace, 'config.json'),
+      JSON.stringify({
+        gates: { executeInlineGateDefinitions: true },
+      })
+    );
+    const first = await startServer(roots);
+    await authorResources(first);
+    const criterion = {
+      type: 'semantic_evaluation',
+      id: 'supports-output',
+      target: { kind: 'step_output' },
+      question: 'Does the captured target support this observation?',
+      evidence_requirements: { min_items: 1 },
+      result: { kind: 'boolean' },
+      acceptance: { kind: 'equals', value: true },
+    };
+    const gate = {
+      id: 'sem_claim',
+      name: 'sem_claim',
+      type: 'validation',
+      scope: 'chain',
+      description: 'Original public rubric',
+      guidance: 'A-ISSUED-RUBRIC',
+      pass_criteria: [criterion],
+    };
+    const authored = await first.call('resource_manager', {
+      resource_type: 'prompt',
+      action: 'update',
+      id: 'sv_a',
+      gate_configuration: { ...OPT_OUT, inline_gate_definitions: [gate] },
+    });
+    if (authored.isError) throw new Error(authored.text);
+    const started = await first.call('prompt_engine', { command: '>>sv_chain' });
+    if (started.isError) throw new Error(started.text);
+    expect(started.isError).toBe(false);
+    const chainId = chainIdOf(started.text);
+    const captured = await first.call('prompt_engine', {
+      chain_id: chainId,
+      user_response: 'ORIGINAL-CLAIM-TARGET',
+    });
+    expect(captured.isError).toBe(false);
+    const readReview = (): GateReview => {
+      const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+      try {
+        const row = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId);
+        if (typeof row?.state !== 'string') throw new Error('Missing claimed run');
+        const state: { reviews?: Record<string, GateReview> } = JSON.parse(row.state);
+        const review = state.reviews?.['a'];
+        if (review === undefined) throw new Error('Missing issued review');
+        return review;
+      } finally {
+        db.close();
+      }
+    };
+    const before = readReview();
+    if (before.semanticContext === undefined) throw new Error('Missing server authority');
+    const pinned = resolvePinnedSemanticContext(before.semanticContext, 'sem_claim');
+    const evaluation: SemanticEvaluationReport = {
+      binding: pinned.binding,
+      observations: [
+        {
+          criterion_id: 'supports-output',
+          state: 'met',
+          value: true,
+          evidence: [
+            {
+              target_digest: pinned.binding.target_digest,
+              start: 0,
+              end: pinned.target.content.length,
+              quote: pinned.target.content,
+            },
+          ],
+          rationale: 'Synthetic observation over actual server-captured target.',
+        },
+      ],
+    };
+    const token = await mintToken(first, chainId);
+    const second = await startServer(roots);
+    const otherPrompt = await second.call('resource_manager', {
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sem_other_a',
+      category: 'general',
+      name: 'sem_other_a',
+      description: 'Conflicting temporary rubric',
+      user_message_template: 'OTHER',
+      gate_configuration: {
+        ...OPT_OUT,
+        inline_gate_definitions: [
+          {
+            ...gate,
+            guidance: 'WRONG-B-SENTINEL',
+            pass_criteria: [
+              {
+                ...criterion,
+                question: 'WRONG-B-SENTINEL',
+                acceptance: { kind: 'equals', value: false },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    if (otherPrompt.isError) throw new Error(otherPrompt.text);
+    const otherChain = await second.call('resource_manager', {
+      resource_type: 'prompt',
+      action: 'create',
+      id: 'sem_other_chain',
+      category: 'general',
+      name: 'sem_other_chain',
+      description: 'Conflicting rubric run',
+      user_message_template: 'OTHER',
+      gate_configuration: OPT_OUT,
+      chain_steps: [
+        { promptId: 'sem_other_a', stepName: 'A' },
+        { promptId: 'sv_b', stepName: 'B' },
+      ],
+    });
+    if (otherChain.isError) throw new Error(otherChain.text);
+    const other = await second.call('prompt_engine', { command: '>>sem_other_chain' });
+    expect(other.isError).toBe(false);
+    expect(other.text).toContain('WRONG-B-SENTINEL');
+    await first.stop();
+    const claimed = await second.call('prompt_engine', { claim_token: token });
+    expect(claimed.isError).toBe(false);
+    expect(claimed.text).not.toContain('WRONG-B-SENTINEL');
+    const after = readReview();
+    expect(after.gateIds).toEqual(
+      before.gateIds.map((id) => (id === 'sem_claim' ? 'sem_claim-2' : id))
+    );
+    expect(after.semanticContext).toEqual({
+      ...before.semanticContext,
+      definitionAliases: { 'sv-block': 'sv-block', 'sem_claim-2': 'sem_claim' },
+    });
+    expect(after.history).toEqual(before.history);
+    if (after.semanticContext === undefined) throw new Error('Missing claimed authority');
+    expect(resolvePinnedSemanticContext(after.semanticContext, 'sem_claim-2')).toEqual(pinned);
+    const accepted = await second.call('prompt_engine', {
+      chain_id: chainId,
+      gate_verdict: {
+        overall: 'PASS',
+        rationale: 'Original server-bound report',
+        per_gate: [
+          {
+            index: before.gateIds.indexOf('sem_claim') + 1,
+            passed: true,
+            rationale: 'Captured target supports criterion',
+            evaluation,
+          },
+        ],
+        reminders: { satisfied: ['sv-block'], not_applicable: [] },
+      },
+    });
+    expect(accepted.isError).toBe(false);
+    expect(accepted.text).toContain('BODY-sv_b');
+    const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
+    try {
+      const rows = db
+        .prepare('SELECT gate_verdicts_json FROM execution_records WHERE chain_id = ?')
+        .all(chainId);
+      const summaries = rows.flatMap((row): GateVerdictSummary[] => {
+        if (typeof row.gate_verdicts_json !== 'string')
+          throw new Error('Missing recorded outcomes');
+        return JSON.parse(row.gate_verdicts_json);
+      });
+      const summary = summaries.find(
+        (entry) => entry.gateId === 'sem_claim-2' && entry.verdict === 'PASS'
+      );
+      expect(summary?.reviewBinding).toEqual(pinned.binding);
+      expect(summary?.evaluation).toEqual(evaluation);
+      expect(summary?.requestedEvaluation).toEqual(
+        before.semanticContext.definitions['sem_claim']?.definition['evaluation']
+      );
+    } finally {
+      db.close();
+    }
   }, 180000);
 
   /** Run `sv_chain_other` on `server` with a named gate `g146`, authoring the prompt on first use. */
@@ -1828,7 +2012,9 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
   /**
    * P6.204 / R104. A run recorded before #414 could hold a named gate under a canonical id. Driven
    * by planting one: server A runs `>>sv_chain :: g204:"NAMED-204"`, the recorded `g204` is
-   * rewritten to `content-structure` in every run table, and B claims the run with a FAIL.
+   * operational physical references are rewritten to `content-structure` in every run table,
+   * while the actual issued snapshot/pins remain intact through a server-owned direct alias.
+   * B claims the run with a FAIL; the fixture does not reissue or rehash its original authority.
    * MEASURED 2026-09-27 on `001f35be`: the claim answered `isError: true` with the registry's raw
    * "Error: A temporary gate may not shadow a canonical gate id ('content-structure')", and the
    * run stayed on step a. The claim's named-gate restore already remaps a held id to a fresh
@@ -1852,6 +2038,11 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     await first.stop();
     const db = new DatabaseSync(path.join(roots.runtimeRoot, 'runtime-state', 'state.db'));
     try {
+      const originalRow = db
+        .prepare('SELECT state FROM chain_runs WHERE chain_id = ?')
+        .get(chainId);
+      if (typeof originalRow?.state !== 'string') throw new Error('Missing original run');
+      const originalState: { reviews?: Record<string, GateReview> } = JSON.parse(originalRow.state);
       for (const table of ['chain_runs', 'chain_run_nodes', 'chain_sessions']) {
         const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
           name: string;
@@ -1864,6 +2055,38 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
           );
         }
       }
+      // Blanket text replacement also touches issued JSON. Restore it exactly, changing only
+      // its physical lookup aliases; no original definition, digest, attempt or target changes.
+      const changedRow = db.prepare('SELECT state FROM chain_runs WHERE chain_id = ?').get(chainId);
+      if (typeof changedRow?.state !== 'string') throw new Error('Missing planted run');
+      const changedState: { reviews?: Record<string, GateReview> } = JSON.parse(changedRow.state);
+      for (const [nodeId, original] of Object.entries(originalState.reviews ?? {})) {
+        const current = changedState.reviews?.[nodeId];
+        if (current === undefined) throw new Error('Missing planted review');
+        const issued = original.semanticContext;
+        if (issued !== undefined) {
+          const aliases = issued.definitionAliases ?? {};
+          const logical = Object.hasOwn(aliases, start.recordedId)
+            ? (aliases[start.recordedId] ?? start.recordedId)
+            : start.recordedId;
+          current.semanticContext = {
+            ...issued,
+            definitionAliases: Object.fromEntries([
+              ...Object.entries(aliases).filter(([id]) => id !== start.recordedId),
+              [plantedId, logical],
+            ]),
+          };
+          expect(current.semanticContext.definitions).toEqual(issued.definitions);
+          expect(current.semanticContext.attemptId).toBe(issued.attemptId);
+          expect(current.semanticContext.target).toEqual(issued.target);
+        }
+        current.history = original.history;
+        current.checkResults = original.checkResults;
+      }
+      db.prepare('UPDATE chain_runs SET state = ? WHERE chain_id = ?').run(
+        JSON.stringify(changedState),
+        chainId
+      );
     } finally {
       db.close();
     }
@@ -1872,13 +2095,14 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       user_response: 'A out',
       gate_verdict: FAIL,
     });
+    if (failed.isError) throw new Error(failed.text);
     return { chainId, second, failed };
   }
 
   test('P6.204 (a) a claimed run recorded with a canonical-named gate restores it under a fresh id', async () => {
     const roots = freshRoots();
     const { chainId, failed } = await claimPlantedCanonical(roots, 'content-structure');
-    expect(failed.isError).toBe(false);
+    expect(failed).toMatchObject({ isError: false });
     expect(failed.text).toContain('NAMED-204');
     expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'content-structure-2'] });
   }, 180000);
@@ -1886,7 +2110,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
   test('P6.204 (b) control: a planted id with no canonical gate restores under itself', async () => {
     const roots = freshRoots();
     const { chainId, failed } = await claimPlantedCanonical(roots, 'x204');
-    expect(failed.isError).toBe(false);
+    expect(failed).toMatchObject({ isError: false });
     expect(failed.text).toContain('NAMED-204');
     expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['sv-block', 'x204'] });
   }, 180000);
@@ -1912,7 +2136,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
       'content-structure',
       REQUEST_213
     );
-    expect(failed.isError).toBe(false);
+    expect(failed).toMatchObject({ isError: false });
     expect(failed.text).toContain('REQ-213');
     expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['content-structure-2', 'sv-block'] });
   }, 180000);
@@ -1920,7 +2144,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
   test('P6.213 (b) control: a planted request gate id with no canonical gate restores under itself', async () => {
     const roots = freshRoots();
     const { chainId, failed } = await claimPlantedCanonical(roots, 'x213', REQUEST_213);
-    expect(failed.isError).toBe(false);
+    expect(failed).toMatchObject({ isError: false });
     expect(failed.text).toContain('REQ-213');
     expect(runRow(roots, chainId)?.reviews).toEqual({ a: ['x213', 'sv-block'] });
   }, 180000);

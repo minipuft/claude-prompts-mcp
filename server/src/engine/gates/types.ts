@@ -207,6 +207,8 @@ export interface LightweightGateDefinition {
    * generated gate index.
    */
   subject?: string;
+  /** Opaque evaluation-suite association; no runtime lookup or acceptance authority. */
+  calibration_suite_id?: string;
   /** Severity level for prioritization (defaults to 'medium') */
   severity?: 'critical' | 'high' | 'medium' | 'low';
   /** What a FAIL does. Absent means undeclared — `resolveEnforcementMode` decides (P4.137). */

@@ -438,7 +438,9 @@ describe('ShellVerificationStage', () => {
 
       expect(executor.execute).not.toHaveBeenCalled();
       expect(sessionService.clearPendingShellVerification).toHaveBeenCalled();
-      expect(advanceOwner.applyDeferredAdvance).toHaveBeenCalledWith(context, {
+      const advanceCall = advanceOwner.applyDeferredAdvance.mock.calls[0];
+      expect(advanceCall?.[0]).toBe(context);
+      expect(advanceCall?.[1]).toEqual({
         sessionId: 'test-session',
         nodeId: 'node-1',
         reason: 'gate-skip',
@@ -566,7 +568,9 @@ describe('ShellVerificationStage', () => {
 
       await stage.execute(context);
 
-      expect(advanceOwner.applyDeferredAdvance).toHaveBeenCalledWith(context, {
+      const advanceCall = advanceOwner.applyDeferredAdvance.mock.calls[0];
+      expect(advanceCall?.[0]).toBe(context);
+      expect(advanceCall?.[1]).toEqual({
         sessionId: 'test-session',
         nodeId: 'node-2',
         reason: 'captured',
@@ -617,7 +621,9 @@ describe('ShellVerificationStage', () => {
 
       await stage.execute(context);
 
-      expect(advanceOwner.applyDeferredAdvance).toHaveBeenCalledWith(context, {
+      const advanceCall = advanceOwner.applyDeferredAdvance.mock.calls[0];
+      expect(advanceCall?.[0]).toBe(context);
+      expect(advanceCall?.[1]).toEqual({
         sessionId: 'test-session',
         nodeId: 'node-1',
         reason: 'gate-skip',
@@ -629,7 +635,9 @@ describe('ShellVerificationStage', () => {
 
       await stage.execute(context);
 
-      expect(advanceOwner.applyDeferredAdvance).toHaveBeenCalledWith(context, {
+      const advanceCall = advanceOwner.applyDeferredAdvance.mock.calls[0];
+      expect(advanceCall?.[0]).toBe(context);
+      expect(advanceCall?.[1]).toEqual({
         sessionId: 'test-session',
         nodeId: 'node-1',
         reason: 'captured',
@@ -781,7 +789,9 @@ describe('ShellVerificationStage', () => {
       expect(context.response).toBeUndefined();
       expect(context.state.gates.pendingShellVerification).toBeUndefined();
       expect(sessionService.clearPendingShellVerification).toHaveBeenCalled();
-      expect(advanceOwner.applyDeferredAdvance).toHaveBeenCalledWith(context, {
+      const advanceCall = advanceOwner.applyDeferredAdvance.mock.calls[0];
+      expect(advanceCall?.[0]).toBe(context);
+      expect(advanceCall?.[1]).toEqual({
         sessionId: 'test-session',
         nodeId: 'node-1',
         reason: 'gate-skip',

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-27T10:36:01.270Z",
+  "generatedAt": "2026-10-08T16:52:29.335Z",
   "project": "tsconfig.test.json",
   "scope": "tests/",
   "totals": {
-    "errors": 341
+    "errors": 338
   },
   "byCode": {
     "TS18046": 3,
@@ -13,7 +13,7 @@
     "TS2307": 3,
     "TS2322": 49,
     "TS2339": 34,
-    "TS2345": 81,
+    "TS2345": 78,
     "TS2353": 41,
     "TS2367": 1,
     "TS2416": 1,
@@ -52,7 +52,7 @@
     "tests/manual/test-versioning-service.ts": 15,
     "tests/unit/chain-session/chain-session-store.test.ts": 9,
     "tests/unit/execution/execution-context.test.ts": 2,
-    "tests/unit/execution/operators/chain-operator-executor.test.ts": 7,
+    "tests/unit/execution/operators/chain-operator-executor.test.ts": 4,
     "tests/unit/execution/parsers/argument-parser.test.ts": 1,
     "tests/unit/execution/parsers/argument-schema-validator.test.ts": 1,
     "tests/unit/execution/parsers/command-parser.test.ts": 1,

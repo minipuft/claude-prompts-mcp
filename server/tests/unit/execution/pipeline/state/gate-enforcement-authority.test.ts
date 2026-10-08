@@ -1,8 +1,23 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { GateEnforcementAuthority } from '../../../../../src/engine/execution/pipeline/decisions/index.js';
+import {
+  createSemanticReviewContext,
+  bindSemanticReviewTarget,
+  readSemanticReviewCriteria,
+  resolvePinnedSemanticContext,
+  projectFrozenReview,
+  renewSemanticReviewAttempt,
+} from '../../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
+import {
+  resolveFrozenReviewDefinition,
+  physicalReviewDefinitionIndex,
+} from '../../../../../src/engine/execution/pipeline/decisions/gates/frozen-review-definitions.js';
+import { ExecutionContext } from '../../../../../src/engine/execution/context/execution-context.js';
+import { GateLoader } from '../../../../../src/engine/gates/core/gate-loader.js';
+import { GatePassCriteriaSchema } from '../../../../../src/engine/gates/core/gate-schema.js';
 import { parseGateVerdict } from '../../../../../src/engine/gates/core/gate-verdict-contract.js';
-import { hashBytes } from '../../../../../src/shared/utils/hash.js';
+import { hashBytes, hashCanonical } from '../../../../../src/shared/utils/hash.js';
 
 import type {
   EnforcementMode,
@@ -11,7 +26,10 @@ import type {
 import type {
   GateVerdictSubmission,
   SemanticEvaluationReport,
+  SemanticCriterionInput,
 } from '../../../../../src/shared/types/gate-evaluation.js';
+import type { LightweightGateDefinition } from '../../../../../src/engine/gates/types.js';
+import type { JudgeEvaluationDefaults } from '../../../../../src/engine/gates/judge/types.js';
 
 function richEvaluation(): SemanticEvaluationReport {
   const targetDigest = hashBytes('A😀e\u0301 Z');
@@ -606,9 +624,278 @@ GATE_REVIEW: FAIL - Tests missing`;
   // getPendingReview() was deleted at P4.52 — the wrapper had zero adopters. Every caller now
   // reads a review by the node it names (`chainSessionStore.getReview`, row 3.12).
 
-  describe('createPendingReview', () => {
+  describe('issued public review authority', () => {
+    const liveGate = (id: string): LightweightGateDefinition => ({
+      id,
+      name: id,
+      type: 'validation',
+      description: 'Public definition',
+      guidance: 'Original guidance\nSecond line',
+      guidanceFile: 'guidance.md',
+      sourceRoot: '/internal',
+      severity: 'high',
+      enforcementMode: 'advisory',
+      subject: 'contracts',
+      gate_type: 'custom',
+      blockResponseOnFail: true,
+      activation: { prompt_categories: ['development'], explicit_request: true },
+      retry_config: { max_attempts: 3, improvement_hints: true, preserve_context: true },
+      pass_criteria: [
+        { type: 'shell_verify', shell_command: ['node', '-v'] },
+        { type: 'inline_guidance' },
+      ],
+    });
+    const criterion: SemanticCriterionInput = {
+      type: 'semantic_evaluation',
+      id: 'semantic',
+      target: { kind: 'step_output' },
+      question: 'Is the output supported?',
+      evidence_requirements: { min_items: 1 },
+      result: { kind: 'boolean' },
+      acceptance: { kind: 'equals', value: true },
+    };
+    function withDefinitions(
+      definitions: LightweightGateDefinition[],
+      defaults: Partial<JudgeEvaluationDefaults> = {}
+    ) {
+      const loader = new GateLoader(mockLogger as any);
+      const load = jest
+        .spyOn(loader, 'loadGates')
+        .mockImplementation(async (ids) => definitions.filter((gate) => ids.includes(gate.id)));
+      return {
+        load,
+        owner: new GateEnforcementAuthority(
+          mockSessionManager as any,
+          mockLogger as any,
+          loader,
+          () => ({ evaluation: defaults })
+        ),
+      };
+    }
+    function stagedContext(draft = criterion) {
+      const gate = liveGate('mixed');
+      return createSemanticReviewContext('reviewed-node', 'server-attempt', [
+        { ...gate, pass_criteria: [...(gate.pass_criteria ?? []), draft] },
+      ]);
+    }
+
+    test('freezes full catalog/defaults and snapshots only newly joined gates', async () => {
+      const gate = liveGate('g1');
+      const definitions = [gate];
+      const defaults: Partial<JudgeEvaluationDefaults> = {
+        defaultMode: 'judge',
+        defaultModel: 'requested-model',
+      };
+      const { owner, load } = withDefinitions(definitions, defaults);
+      const review = await owner.createReview('s', 'gate', 'node-1', {
+        gateIds: ['g1'],
+        instructions: 'Review',
+      });
+      const snapshot = review.semanticContext?.definitions['g1'];
+      if (snapshot === undefined) throw new Error('Missing snapshot');
+      expect(snapshot?.definition).toEqual({
+        ...gate,
+        sourceRoot: undefined,
+        evaluation: { mode: 'judge', model: 'requested-model', strict: true },
+      });
+      expect(snapshot?.definition).not.toHaveProperty('sourceRoot');
+      expect(snapshot?.definitionDigest).toBe(hashCanonical(snapshot?.definition));
+      gate.guidance = 'Changed catalog';
+      gate.enforcementMode = 'blocking';
+      gate.pass_criteria?.push({ type: 'inline_guidance' });
+      defaults.defaultMode = 'self';
+      defaults.defaultModel = 'replacement-model';
+      expect(snapshot?.definition['guidance']).toBe('Original guidance\nSecond line');
+      expect(Reflect.set(snapshot.definition, 'guidance', 'Reinterpreted')).toBe(false);
+      expect(await owner.resolveReviewEnforcement(review, [])).toBe('advisory');
+      definitions.push(liveGate('g2'));
+      const context = new ExecutionContext({ gate_verdict: 'GATE_REVIEW: FAIL - Retry' });
+      context.state.gates.temporaryGateIds = ['g2'];
+      context.state.gates.reviewGateIds = ['g1', 'g2'];
+      const joined = await owner.joinSentGates(context, 's', review);
+      expect(joined.semanticContext?.definitions['g1']).toBe(snapshot);
+      expect(joined.semanticContext?.definitions['g1']?.definition['evaluation']).toEqual({
+        mode: 'judge',
+        model: 'requested-model',
+        strict: true,
+      });
+      expect(joined.semanticContext?.definitions['g2']?.definition['evaluation']).toEqual({
+        mode: 'self',
+        model: 'replacement-model',
+        strict: false,
+      });
+      await owner.joinSentGates(context, 's', joined);
+      expect(load.mock.calls).toEqual([[['g1']], [['g2']]]);
+    });
+
+    test('server attempts ignore reported pins and renewal invalidates the captured target', async () => {
+      const { owner } = withDefinitions([liveGate('g1')]);
+      const options = {
+        gateIds: ['g1'],
+        instructions: 'Review',
+        metadata: {
+          attempt_id: 'report-attempt',
+          node_id: 'report-node',
+          definition_digest: 'report-digest',
+        },
+      };
+      const first = await owner.createReview('s', 'gate', 'node-1', options);
+      const second = await owner.createReview('s', 'gate', 'node-1', options);
+      expect(first.semanticContext?.nodeId).toBe('node-1');
+      expect(first.semanticContext?.attemptId).not.toBe('report-attempt');
+      expect(first.semanticContext?.attemptId).not.toBe(second.semanticContext?.attemptId);
+      expect(first.semanticContext?.target).toBeUndefined();
+      const captured = owner.bindReviewOutput(first, '  A😀e\u0301 Z  ');
+      const renewed = owner.renewReviewAttempt(captured);
+      expect(renewed.semanticContext?.attemptId).not.toBe(captured.semanticContext?.attemptId);
+      expect(renewed.semanticContext?.definitions).toBe(first.semanticContext?.definitions);
+      expect(renewed.semanticContext?.target).toBeUndefined();
+      const detached = await owner.createReview('s', 'detached', 'node-2', {
+        ...options,
+        reviewedOutput: '  A😀e\u0301 Z  ',
+      });
+      expect(detached.semanticContext?.target).toEqual(captured.semanticContext?.target);
+    });
+
+    test('staged mixed snapshots retain every criterion while canonical parsing narrows semantics', () => {
+      const issued = stagedContext();
+      const snapshot = issued.definitions['mixed'];
+      if (snapshot === undefined) throw new Error('Missing snapshot');
+      expect(snapshot.definition['pass_criteria']).toHaveLength(3);
+      expect(readSemanticReviewCriteria(snapshot)).toEqual([
+        { ...criterion, allow_not_applicable: false },
+      ]);
+      expect(snapshot.definition).toMatchObject({
+        activation: { explicit_request: true },
+        retry_config: { max_attempts: 3 },
+        blockResponseOnFail: true,
+      });
+      expect(() => resolvePinnedSemanticContext(issued, 'mixed')).toThrow('prior captured');
+      const report = {
+        ...richEvaluation(),
+        binding: {
+          ...richEvaluation().binding,
+          target_digest: hashBytes('client-provided output'),
+        },
+      };
+      expect(
+        resolvePinnedSemanticContext(
+          bindSemanticReviewTarget(issued, 'actual captured output'),
+          'mixed'
+        ).binding.target_digest
+      ).not.toBe(report.binding.target_digest);
+      expect(issued.target).toBeUndefined();
+    });
+
+    test('canonical capture hashes exact trimmed UTF-8 and spans count half-open UTF-16 units', () => {
+      const issued = stagedContext();
+      const captured = bindSemanticReviewTarget(issued, '\n\t A😀e\u0301 Z \t');
+      const pinned = resolvePinnedSemanticContext(captured, 'mixed');
+      expect(pinned.target.content).toBe('A😀e\u0301 Z');
+      expect(pinned.binding.target_digest).toBe(hashBytes(Buffer.from('A😀e\u0301 Z', 'utf8')));
+      expect(pinned.target.content.slice(1, 5)).toBe('😀e\u0301');
+      expect(pinned.binding).toEqual({
+        gate_id: 'mixed',
+        node_id: 'reviewed-node',
+        attempt_id: 'server-attempt',
+        definition_digest: issued.definitions['mixed']?.definitionDigest,
+        target_digest: captured.target?.digest,
+      });
+      expect(bindSemanticReviewTarget(issued, 'A😀é Z').target?.digest).not.toBe(
+        captured.target?.digest
+      );
+      expect(bindSemanticReviewTarget(issued, '  A😀e\u0301 Z  ').target).toEqual(captured.target);
+    });
+
+    test('physical aliases resolve once while snapshots and report pins keep issued identities', () => {
+      const issued = createSemanticReviewContext('n', 'attempt', [
+        { ...liveGate('original'), pass_criteria: [criterion] },
+        { ...liveGate('alias'), pass_criteria: [criterion] },
+      ]);
+      const captured = bindSemanticReviewTarget(
+        { ...issued, definitionAliases: { alias: 'original', current: 'alias' } },
+        'supported'
+      );
+      const review = { gateIds: ['alias', 'current'], semanticContext: captured };
+      const index = physicalReviewDefinitionIndex(review);
+      expect(Object.keys(index ?? {})).toEqual(['alias', 'current']);
+      expect(index?.['alias']).toBe(issued.definitions['original']);
+      expect(index?.['current']).toBe(issued.definitions['alias']);
+      expect(resolveFrozenReviewDefinition(captured, 'current')).toBe(issued.definitions['alias']);
+      expect(resolveFrozenReviewDefinition(captured, 'toString')).toBeUndefined();
+      expect(resolvePinnedSemanticContext(captured, 'alias').binding.gate_id).toBe('original');
+      expect(resolvePinnedSemanticContext(captured, 'current').binding.gate_id).toBe('alias');
+      const projection = projectFrozenReview({
+        ...review,
+        nodeId: 'n',
+        combinedPrompt: '',
+        prompts: [],
+        createdAt: 0,
+        attemptCount: 0,
+        maxAttempts: 2,
+      });
+      expect(projection.definitions?.map((definition) => definition.id)).toEqual([
+        'alias',
+        'current',
+      ]);
+      expect(
+        projection.semanticReviews.map(({ gateId, binding }) => [gateId, binding?.gate_id])
+      ).toEqual([
+        ['alias', 'original'],
+        ['current', 'alias'],
+      ]);
+      expect(issued.definitions['original']?.definition['id']).toBe('original');
+      expect(issued.definitions['alias']?.definition['id']).toBe('alias');
+      for (const snapshot of Object.values(issued.definitions))
+        expect(snapshot.definitionDigest).toBe(hashCanonical(snapshot.definition));
+      const renewed = renewSemanticReviewAttempt(captured, 'next-attempt');
+      expect(renewed.definitionAliases).toBe(captured.definitionAliases);
+      expect(renewed.definitions).toBe(issued.definitions);
+      expect(renewed.target).toBeUndefined();
+      expect(bindSemanticReviewTarget(renewed, 'replacement').definitionAliases).toBe(
+        captured.definitionAliases
+      );
+    });
+
+    test('artifact drafts cannot acquire step-output authority', () => {
+      const issued = stagedContext({
+        ...criterion,
+        target: { kind: 'artifact', id: 'logical-artifact' },
+      });
+      expect(() =>
+        resolvePinnedSemanticContext(bindSemanticReviewTarget(issued, 'output'), 'mixed')
+      ).toThrow('Artifact semantic capture is unavailable');
+    });
+
+    test('public script-tool input preserves own special keys without a digest collision', () => {
+      const input: unknown = JSON.parse(
+        '{"nested":{"__proto__":{"label":"public"},"constructor":"authored"}}'
+      );
+      const criterion = GatePassCriteriaSchema.parse({
+        type: 'script_tool',
+        script_tool_id: 'fixture-tool',
+        script_tool_input: input,
+      });
+      const gate = { ...liveGate('tool'), pass_criteria: [criterion] };
+      const issued = createSemanticReviewContext('n', 'attempt', [gate]);
+      const changed = createSemanticReviewContext('n', 'attempt', [
+        {
+          ...gate,
+          pass_criteria: [
+            { ...criterion, script_tool_input: { nested: { constructor: 'authored' } } },
+          ],
+        },
+      ]);
+      expect(issued.definitions['tool']?.definition['pass_criteria']).toEqual([criterion]);
+      expect(issued.definitions['tool']?.definitionDigest).not.toBe(
+        changed.definitions['tool']?.definitionDigest
+      );
+    });
+  });
+
+  describe('createReview prompt construction', () => {
     test('creates review with provided options', async () => {
-      const review = await authority.createPendingReview({
+      const review = await authority.createReview('session-1', 'gate', 'n1', {
         gateIds: ['gate-1', 'gate-2'],
         instructions: 'Please review carefully',
         maxAttempts: 5,
@@ -624,7 +911,7 @@ GATE_REVIEW: FAIL - Tests missing`;
     });
 
     test('uses default maxAttempts when not provided', async () => {
-      const review = await authority.createPendingReview({
+      const review = await authority.createReview('session-1', 'gate', 'n1', {
         gateIds: ['gate-1'],
         instructions: 'Review',
       });
@@ -633,7 +920,7 @@ GATE_REVIEW: FAIL - Tests missing`;
     });
 
     test('returns empty prompts when no gateLoader provided', async () => {
-      const review = await authority.createPendingReview({
+      const review = await authority.createReview('session-1', 'gate', 'n1', {
         gateIds: ['gate-1'],
         instructions: 'Review',
       });
@@ -649,7 +936,7 @@ GATE_REVIEW: FAIL - Tests missing`;
         mockGateLoader
       );
 
-      const review = await authorityWithLoader.createPendingReview({
+      const review = await authorityWithLoader.createReview('session-1', 'gate', 'n1', {
         gateIds: [],
         instructions: 'Review',
       });
@@ -682,7 +969,7 @@ GATE_REVIEW: FAIL - Tests missing`;
         mockGateLoader
       );
 
-      const review = await authorityWithLoader.createPendingReview({
+      const review = await authorityWithLoader.createReview('session-1', 'gate', 'n1', {
         gateIds: ['code-quality', 'test-coverage'],
         instructions: 'Review output',
       });
@@ -718,7 +1005,7 @@ GATE_REVIEW: FAIL - Tests missing`;
         mockGateLoader
       );
 
-      const review = await authorityWithLoader.createPendingReview({
+      const review = await authorityWithLoader.createReview('session-1', 'gate', 'n1', {
         gateIds: ['minimal-gate'],
         instructions: 'Review',
       });
@@ -737,7 +1024,7 @@ GATE_REVIEW: FAIL - Tests missing`;
         mockGateLoader
       );
 
-      const review = await authorityWithLoader.createPendingReview({
+      const review = await authorityWithLoader.createReview('session-1', 'gate', 'n1', {
         gateIds: ['broken-gate'],
         instructions: 'Review',
       });

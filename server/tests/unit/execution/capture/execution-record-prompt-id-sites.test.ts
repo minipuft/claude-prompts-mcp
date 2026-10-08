@@ -14,10 +14,11 @@
  * | `21-formatting-stage.ts` `emitChainTerminalRecord` | run terminal | parsed command |
  * | `step-capture-service.ts` `ledgerCapturedStep` | step completed / input_required | `recordedStep` |
  * | `step-capture-service.ts` `ledgerSubmittedVerdict` | step verdict | `recordedStep` |
+ * | `step-capture-service.ts` `ledgerSubmittedReviewAction` | skipped node's BYPASS | `recordedStep` |
  *
  * The predicate is the append's object literal naming `promptId`. The count is asserted against the
- * table, so an eighth append fails until it is classified here (the seventh, stage 18's
- * single-prompt render, was added 2026-09-27 by P6.156); the planted site proves the
+ * table, so an additional append fails until it is classified here; the BYPASS row resolves the
+ * skipped node's prompt rather than the current cursor. The planted site proves the
  * predicate reports an append that names no prompt.
  */
 import { describe, expect, test } from '@jest/globals';
@@ -61,7 +62,7 @@ const SITES: Readonly<Record<string, number>> = {
   'engine/execution/pipeline/stages/18-execution-stage.ts': 2,
   'engine/execution/pipeline/stages/20-gate-review-stage.ts': 1,
   'engine/execution/pipeline/stages/21-formatting-stage.ts': 1,
-  'engine/execution/capture/step-capture-service.ts': 2,
+  'engine/execution/capture/step-capture-service.ts': 3,
 };
 
 const namesPrompt = (literal: string): boolean => /\bpromptId\b/.test(literal);

@@ -22,6 +22,10 @@
  * count (R26): the count belongs to the node. Any other event is refused,
  * and so is a PASS over a check the review recorded as failing; a refusal charges nothing.
  *
+ * A fresh verdict attempt is requested by `renewAttempt`, never issued here. Ordinary retries
+ * request renewal immediately; detached retries wait until replacement output arrives. The
+ * returned review keeps its frozen definitions and old pins until the caller applies the intent.
+ *
  * Pure: never mutates the review it is given; the caller persists what it returns.
  */
 
@@ -30,7 +34,12 @@ import type {
   GateReviewHistoryEntry,
   GateReviewPhase,
 } from '#shared/types/chain-execution.js';
-import type { EnforcementMode, GateAction, ParsedVerdict } from './gate-enforcement-types.js';
+import type {
+  EnforcementMode,
+  GateAction,
+  ParsedVerdict,
+  ReviewAttemptIntent,
+} from './gate-enforcement-types.js';
 
 /** What can happen to a review. `at` stamps the history entry the event leaves. */
 export type ReviewEvent =
@@ -52,23 +61,25 @@ type ReviewRefusal = 'phase' | 'failing-check';
  * the caller deletes it; `attempt` is the counter after the event (for a verdict, the attempt it
  * charged — which a PASS spends too, though the review it charged is gone).
  */
-type ReviewAdvance =
-  | {
-      readonly outcome: 'passed' | 'cleared' | 'aborted';
-      readonly review: null;
-      readonly attempt: number;
-    }
-  | {
-      readonly outcome: 'failed' | 'exhausted' | 'reopened';
-      readonly review: GateReview;
-      readonly attempt: number;
-    }
-  | {
-      readonly outcome: 'refused';
-      readonly reason: ReviewRefusal;
-      readonly review: GateReview;
-      readonly attempt: number;
-    };
+type ReviewAdvance = ReviewAttemptIntent &
+  (
+    | {
+        readonly outcome: 'passed' | 'cleared' | 'aborted';
+        readonly review: null;
+        readonly attempt: number;
+      }
+    | {
+        readonly outcome: 'failed' | 'exhausted' | 'reopened';
+        readonly review: GateReview;
+        readonly attempt: number;
+      }
+    | {
+        readonly outcome: 'refused';
+        readonly reason: ReviewRefusal;
+        readonly review: GateReview;
+        readonly attempt: number;
+      }
+  );
 
 /** The event types a review in `phase` accepts; every other one is refused. */
 const ACCEPTS: Readonly<Record<GateReviewPhase, ReviewEvent['type']>> = {
@@ -100,7 +111,12 @@ export function advanceReview(
         reviewedOutput: event.output,
         phase: 'awaiting-verdict',
       };
-      return { outcome: 'reopened', review: reopened, attempt: reopened.attemptCount };
+      return {
+        outcome: 'reopened',
+        review: reopened,
+        attempt: reopened.attemptCount,
+        renewAttempt: true,
+      };
     }
     case 'gate_action':
       return applyAction(review, event.action, event.at);
@@ -139,7 +155,12 @@ function applyVerdict(
   if (attempt >= review.maxAttempts) {
     return { outcome: 'exhausted', review: { ...charged, phase: 'exhausted' }, attempt };
   }
-  return { outcome: 'failed', review: { ...charged, phase: awaitingAnswer(review) }, attempt };
+  return {
+    outcome: 'failed',
+    review: { ...charged, phase: awaitingAnswer(review) },
+    attempt,
+    ...(review.kind === 'detached' ? {} : { renewAttempt: true as const }),
+  };
 }
 
 function applyAction(review: GateReview, action: GateAction, at: number): ReviewAdvance {
@@ -164,7 +185,12 @@ function applyAction(review: GateReview, action: GateAction, at: number): Review
       } satisfies GateReviewHistoryEntry,
     ],
   };
-  return { outcome: 'reopened', review: { ...reset, phase: awaitingAnswer(review) }, attempt: 0 };
+  return {
+    outcome: 'reopened',
+    review: { ...reset, phase: awaitingAnswer(review) },
+    attempt: 0,
+    ...(review.kind === 'detached' ? {} : { renewAttempt: true as const }),
+  };
 }
 
 /** Where a review waits for its next answer: a detached node's comes as a separate report. */

@@ -7,8 +7,9 @@
  */
 
 import { toGateDefinition, type GateDefinitionSource } from './gate-definition-converter.js';
+import { SemanticCriterionSchema } from './gate-schema.js';
 
-import type { GateEnforcementMode, GatePassCriteria, LightweightGateDefinition } from '../types.js';
+import type { GateEnforcementMode, LightweightGateDefinition } from '../types.js';
 
 import { Logger } from '#infra/logging/index.js';
 
@@ -644,6 +645,17 @@ export function createTemporaryGateRegistry(
  * every temporary gate has always carried: explicitly requested, three attempts.
  */
 function liftTemporaryGate(tempGate: TemporaryGateDefinition): GateDefinitionSource {
+  const passCriteria = tempGate.pass_criteria?.slice();
+  passCriteria?.forEach((criterion: unknown, index) => {
+    if (
+      typeof criterion === 'object' &&
+      criterion !== null &&
+      'type' in criterion &&
+      criterion.type === 'semantic_evaluation'
+    ) {
+      passCriteria[index] = SemanticCriterionSchema.parse(criterion);
+    }
+  });
   return {
     id: tempGate.id,
     name: tempGate.name,
@@ -651,7 +663,9 @@ function liftTemporaryGate(tempGate: TemporaryGateDefinition): GateDefinitionSou
     description: tempGate.description,
     guidance: tempGate.guidance,
     ...(tempGate.pass_criteria !== undefined
-      ? { pass_criteria: tempGate.pass_criteria as GatePassCriteria[] }
+      ? {
+          pass_criteria: passCriteria,
+        }
       : {}),
     ...(tempGate.enforcement_mode !== undefined
       ? { enforcementMode: tempGate.enforcement_mode }

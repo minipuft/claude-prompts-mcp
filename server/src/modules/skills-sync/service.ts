@@ -52,7 +52,14 @@ import type { ArtifactKind } from '#engine/gates/utils/artifact-kinds.js';
 import type { DatabasePort, ToolIndexEntry } from '#shared/types/persistence.js';
 
 import { loadHistory } from '#cli-shared/version-history.js';
-import { deriveGateTier, formatCheckLine, type GateTier } from '#engine/gates/core/gate-tier.js';
+import { SemanticCriterionSchema, GateDefinitionSchema } from '#engine/gates/core/gate-schema.js';
+import {
+  deriveGateTier,
+  hasSemanticEvaluation,
+  formatCheckLine,
+  type GateTier,
+} from '#engine/gates/core/gate-tier.js';
+import { renderSemanticReviewPrompt } from '#engine/gates/judge/judge-prompt-builder.js';
 import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
 import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
 import { frameworkLabel } from '#shared/utils/framework-label.js';
@@ -2387,6 +2394,7 @@ interface TieredGateRef {
 /** Registered refs split by tier and harness coverage, plus inline refs untouched. */
 interface PartitionedGateRefs {
   checks: TieredGateRef[];
+  evaluations: TieredGateRef[];
   reminders: TieredGateRef[];
   /** Reminders suppressed because `harnessCovers` already covers their subject (ruling B2). */
   omitted: TieredGateRef[];
@@ -2395,7 +2403,7 @@ interface PartitionedGateRefs {
 }
 
 /**
- * Parses each `registered` gate ref's yaml once and splits the result into checks,
+ * Parses each `registered` gate ref's yaml once and splits the result into checks and independent semantic requirements,
  * live reminders, and reminders this installation's harness already covers.
  *
  * Single source for BOTH `buildQualityGatesSection` (what an exported skill's SKILL.md
@@ -2430,6 +2438,9 @@ function partitionGateRefs(
   });
 
   const checks = tiered.filter((t) => t.tier === 'check');
+  const evaluations = tiered.filter((entry) =>
+    hasSemanticEvaluation({ pass_criteria: entry.passCriteria as Array<{ type?: string }> })
+  );
   const omitted: TieredGateRef[] = [];
   const reminders = tiered.filter((t) => {
     if (t.tier !== 'reminder') return false;
@@ -2440,22 +2451,55 @@ function partitionGateRefs(
     return true;
   });
 
-  return { checks, reminders, omitted, passthrough };
+  return { checks, evaluations, reminders, omitted, passthrough };
+}
+
+/** Normalize only public semantic criteria through the canonical schema; never load a suite. */
+function semanticCriteriaForExport(
+  criteria: readonly unknown[]
+): Array<ReturnType<typeof SemanticCriterionSchema.parse>> {
+  return criteria
+    .filter(
+      (criterion): criterion is Record<string, unknown> =>
+        typeof criterion === 'object' &&
+        criterion !== null &&
+        !Array.isArray(criterion) &&
+        'type' in criterion &&
+        criterion.type === 'semantic_evaluation'
+    )
+    .map((criterion) => SemanticCriterionSchema.parse(criterion));
+}
+
+/** Static public rubric/report convention shared with the runtime owner; no issued binding exists. */
+function renderEvaluationRequirements(evaluations: readonly TieredGateRef[]): string {
+  if (evaluations.length === 0) return '';
+  return (
+    '### Evaluation Requirements\n\n' +
+    evaluations
+      .map((entry) =>
+        renderSemanticReviewPrompt([
+          { gateId: entry.ref.id, criteria: semanticCriteriaForExport(entry.passCriteria) },
+        ])
+      )
+      .join('\n\n') +
+    '\n\n'
+  );
 }
 
 /**
  * Builds the Quality Gates markdown section for SKILL.md.
  *
- * Registered gates split into `### Checks` (a command/tool line, never guidance) and
- * `### Reminders` (the criteria table, as before) by `deriveGateTier` — mirroring
+ * Registered gates split into tool `### Checks`, independent `### Evaluation Requirements`,
+ * and `### Reminders` (the criteria table, as before) by `deriveGateTier` — mirroring
  * `GateGuidanceRenderer.renderGuidance`'s runtime split, so an exported skill reads like a live
  * dispatch. `partition` already excludes a reminder whose `subject` this installation's harness
- * covers; checks are never suppressed (ruling B2).
+ * covers; tool and semantic requirements are never suppressed (ruling B2).
  */
 function buildQualityGatesSection(partition: PartitionedGateRefs, hookEnforced: boolean): string {
-  const { checks, reminders, omitted, passthrough } = partition;
+  const { checks, evaluations, reminders, omitted, passthrough } = partition;
   if (
     checks.length === 0 &&
+    evaluations.length === 0 &&
     reminders.length === 0 &&
     omitted.length === 0 &&
     passthrough.length === 0
@@ -2466,7 +2510,9 @@ function buildQualityGatesSection(partition: PartitionedGateRefs, hookEnforced: 
   const inlineCriteria = passthrough.filter((g) => g.source === 'inline');
   const inlineDefs = passthrough.filter((g) => g.source === 'inline_definition');
 
-  let section = `## Quality Gates\n\n`;
+  let section =
+    `## Quality Gates\n\n` +
+    'Static requirements only: this export has executed no commands or semantic evaluations.\n\n';
 
   // Checks first: a runtime rerun of the same command settles them, no self-review needed.
   if (checks.length > 0) {
@@ -2474,10 +2520,12 @@ function buildQualityGatesSection(partition: PartitionedGateRefs, hookEnforced: 
     for (const { ref, passCriteria } of checks) {
       // `passCriteria` comes off a raw parsed `gate.yaml` as `unknown[]`; cast once here, at
       // the boundary, rather than inside the shared formatter.
-      section += `${formatCheckLine(ref.name ?? ref.id, passCriteria as Array<Record<string, unknown>>)}\n`;
+      section += `${formatCheckLine(ref.name ?? ref.id, passCriteria as Array<Record<string, unknown>>)} (not executed by export)\n`;
     }
     section += '\n';
   }
+
+  section += renderEvaluationRequirements(evaluations);
 
   // Reminders (criteria table) — registered gates whose subject this harness doesn't cover
   if (reminders.length > 0) {
@@ -2514,27 +2562,59 @@ function buildQualityGatesSection(partition: PartitionedGateRefs, hookEnforced: 
     section += '\n';
   }
 
-  // Enforcement protocol
-  section += `### Enforcement Protocol\n\n`;
-  section += `Before completing this task, you MUST self-review against all gate criteria:\n\n`;
-  section += `1. Complete all work specified in the task\n`;
-  section += `2. Evaluate output against EACH gate's guidance (\`gates/{id}/guidance.md\`)\n`;
-  if (inlineCriteria.length > 0) {
-    section += `3. Check inline criteria above\n`;
-    section += `4. Emit verdict: \`GATE_REVIEW: PASS — [rationale]\` or \`GATE_REVIEW: FAIL — [rationale]\`\n`;
-    section += `5. If FAIL: address issues and re-emit until PASS\n`;
+  section += renderEnforcementProtocol(
+    inlineCriteria.length > 0,
+    hookEnforced,
+    evaluations.length > 0
+  );
+
+  return section;
+}
+
+/** Preserve the legacy protocol verbatim when no semantic requirement is exported. */
+function renderEnforcementProtocol(
+  hasInlineCriteria: boolean,
+  hookEnforced: boolean,
+  hasEvaluations: boolean
+): string {
+  if (hasEvaluations) return renderSemanticEnforcementProtocol(hookEnforced);
+  let protocol = `### Enforcement Protocol\n\n`;
+  protocol += `Before completing this task, you MUST self-review against all gate criteria:\n\n`;
+  protocol += `1. Complete all work specified in the task\n`;
+  protocol += `2. Evaluate output against EACH gate's guidance (\`gates/{id}/guidance.md\`)\n`;
+  if (hasInlineCriteria) {
+    protocol += `3. Check inline criteria above\n`;
+    protocol += `4. Emit verdict: \`GATE_REVIEW: PASS — [rationale]\` or \`GATE_REVIEW: FAIL — [rationale]\`\n`;
+    protocol += `5. If FAIL: address issues and re-emit until PASS\n`;
   } else {
-    section += `3. Emit verdict: \`GATE_REVIEW: PASS — [rationale]\` or \`GATE_REVIEW: FAIL — [rationale]\`\n`;
-    section += `4. If FAIL: address issues and re-emit until PASS\n`;
+    protocol += `3. Emit verdict: \`GATE_REVIEW: PASS — [rationale]\` or \`GATE_REVIEW: FAIL — [rationale]\`\n`;
+    protocol += `4. If FAIL: address issues and re-emit until PASS\n`;
   }
   // State the enforcement that this artifact actually ships. The unconditional
   // claim this replaced was true only where the claude-prompts plugin happened to
   // be installed, and an exported skill is routinely used where it is not.
-  section += hookEnforced
+  protocol += hookEnforced
     ? `\n> Enforced: this skill registers a \`Stop\` hook (\`${GATE_HOOK_RELATIVE_PATH}\`) that blocks the end of the turn until a PASS verdict is emitted. It fires once per session.\n\n`
     : `\n> Not mechanically enforced on this client — treat the verdict as a required self-review.\n\n`;
 
-  return section;
+  return protocol;
+}
+
+function renderSemanticEnforcementProtocol(hookEnforced: boolean): string {
+  return [
+    '### Enforcement Protocol',
+    '',
+    'Complete the task and self-review its guidance and tool requirements.',
+    'Semantic contract acceptance requires a captured MCP node output and its unchanged server-issued binding.',
+    'Submit a structured SemanticEvaluationReport in gate_verdict.per_gate[].evaluation for each required semantic gate; use the public rubric and report convention above.',
+    'Without bound MCP review context, semantic acceptance is UNAVAILABLE. Do not invent a binding or substitute new output.',
+    'Bare GATE_REVIEW verdicts and Stop-hook PASS are self-review/turn-stop attestations only; they NEVER establish a semantic grade.',
+    hookEnforced
+      ? `This skill registers a Stop hook (\`${GATE_HOOK_RELATIVE_PATH}\`) for that stop attestation only, not semantic adjudication.`
+      : 'No stop attestation is mechanically enforced on this client.',
+    '',
+    '',
+  ].join('\n');
 }
 
 /** File extension for an emitted script tool, derived from its declared runtime. */
@@ -2741,16 +2821,65 @@ function buildEnhancedChainSection(ir: SkillIR, opts: { hasSubagents?: boolean }
 
 /**
  * The refs a skill build's `emitGateFiles` call should see: every registered ref
- * `partitionGateRefs` kept (checks + live reminders) plus inline/inline_definition refs
+ * `partitionGateRefs` kept (tool + semantic requirements + live reminders) plus inline/inline_definition refs
  * untouched — but never an `omitted` reminder, so its `gates/<id>/` files and manifest entry
  * are absent the same way its SKILL.md line is (plan row 2.3).
  */
 function gateRefsForEmit(partition: PartitionedGateRefs): IRGateRef[] {
-  return [
-    ...partition.checks.map((t) => t.ref),
-    ...partition.reminders.map((t) => t.ref),
+  const refs = [
+    ...partition.checks.map((entry) => entry.ref),
+    ...partition.evaluations.map((entry) => entry.ref),
+    ...partition.reminders.map((entry) => entry.ref),
     ...partition.passthrough,
   ];
+  return [...new Map(refs.map((ref) => [ref.id, ref])).values()];
+}
+
+function publicPassCriteria(criteria: readonly unknown[]): unknown[] {
+  return criteria.map((criterion) =>
+    typeof criterion === 'object' &&
+    criterion !== null &&
+    'type' in criterion &&
+    criterion.type === 'semantic_evaluation'
+      ? SemanticCriterionSchema.parse(criterion)
+      : criterion
+  );
+}
+
+/** Opaque public metadata only; neither association enumerates or resolves a private suite. */
+function publicEvaluationMetadata(
+  parsed: Readonly<Record<string, unknown>>
+): Record<string, unknown> {
+  return {
+    ...(parsed['evaluation'] !== undefined
+      ? { evaluation: GateDefinitionSchema.shape.evaluation.parse(parsed['evaluation']) }
+      : {}),
+    ...(parsed['calibration_suite_id'] !== undefined
+      ? {
+          calibration_suite_id: GateDefinitionSchema.shape.calibration_suite_id.parse(
+            parsed['calibration_suite_id']
+          ),
+        }
+      : {}),
+  };
+}
+
+function publicGateManifestEntry(
+  ref: IRGateRef,
+  parsed: Readonly<Record<string, unknown>>
+): Record<string, unknown> {
+  return {
+    id: ref.id,
+    ...((ref.name ?? parsed['name']) ? { name: ref.name ?? parsed['name'] } : {}),
+    ...((ref.type ?? parsed['type']) ? { type: ref.type ?? parsed['type'] } : {}),
+    ...((ref.description ?? parsed['description'])
+      ? { description: ref.description ?? parsed['description'] }
+      : {}),
+    ...(Array.isArray(parsed['pass_criteria'])
+      ? { pass_criteria: publicPassCriteria(parsed['pass_criteria']) }
+      : {}),
+    ...publicEvaluationMetadata(parsed),
+  };
 }
 
 /**
@@ -2783,15 +2912,7 @@ export function emitGateFiles(
     } catch {
       parsed = {};
     }
-    manifestGates.push({
-      id: ref.id,
-      ...((ref.name ?? parsed['name']) ? { name: ref.name ?? parsed['name'] } : {}),
-      ...((ref.type ?? parsed['type']) ? { type: ref.type ?? parsed['type'] } : {}),
-      ...((ref.description ?? parsed['description'])
-        ? { description: ref.description ?? parsed['description'] }
-        : {}),
-      ...(Array.isArray(parsed['pass_criteria']) ? { pass_criteria: parsed['pass_criteria'] } : {}),
-    });
+    manifestGates.push(publicGateManifestEntry(ref, parsed));
   }
   if (skillId && manifestGates.length > 0) {
     files.push({

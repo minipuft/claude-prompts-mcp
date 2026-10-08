@@ -17,7 +17,11 @@ import {
   resolveHandoffEvidence,
   resolveHandoffEvidenceMode,
 } from '../../delegation/handoff-contract.js';
-import { buildStructuredVerdictTemplate } from '../../formatting/response-assembler.js';
+import {
+  buildStructuredVerdictTemplate,
+  describeReviewForRender,
+  semanticReviewResume,
+} from '../decisions/gates/describe-review-for-render.js';
 import {
   decideInterrupt,
   decideMutation,
@@ -219,6 +223,17 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     // Align pipeline session context with manager state
     this.alignSessionContext(context, sessionContext, session, currentStepAtStart);
 
+    const targetAdmission = this.verdictProcessor.admitSemanticTargetResponse(context, session, {
+      currentStepAtStart,
+      evidenceMode: this.resolveEvidenceMode(),
+      trailerNodeId: this.resolveVerdictTrailer(context, currentNodeIdAtStart, currentStepAtStart),
+    });
+    if (targetAdmission.kind === 'refused') {
+      context.setResponse(this.buildErrorResponse(targetAdmission.message));
+      this.logExit({ semanticTargetAdmission: 'refused' });
+      return;
+    }
+
     // The call that CREATES the run renders its first step and carries no resume: it is a brief,
     // not a reply, so admission has nothing to admit. Admitting it anyway refused every chain
     // whose first step is delegated with "the resume carries no worker reply" (row 4.9).
@@ -335,6 +350,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         sessionContext
       );
       if (skipped !== undefined) {
+        this.stepCaptureService.ledgerSubmittedReviewAction(context, session.sessionId, session);
         await this.verdictProcessor.applyDeferredAdvance(context, skipped);
         await this.ensurePostAdvanceReview(context);
       }
@@ -533,6 +549,12 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     replaces = false
   ): Promise<void> {
     const sessionId = session.sessionId;
+    let opened = replaces
+      ? await this.verdictProcessor.applyReplacementReport(context, session, node.nodeId, reply)
+      : null;
+    if (replaces && opened === null) {
+      throw new Error('Detached replacement review refused before output capture');
+    }
     await this.stepCaptureService.recordDetachedReport(
       context,
       sessionId,
@@ -541,19 +563,24 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       reply
     );
     const gateIds = context.state.gates.detachedReviewGateIds?.[node.stepNumber] ?? [];
-    const opened = replaces
-      ? await this.verdictProcessor.applyReplacementReport(context, session, node.nodeId, reply)
-      : ((await context.gateEnforcement?.openDetachedReview(
+    if (!replaces) {
+      opened =
+        (await context.gateEnforcement?.openDetachedReview(
           context,
           sessionId,
           node,
           gateIds,
           reply
-        )) ?? null);
+        )) ?? null;
+    }
+    // Capture persisted fresh target pins; grading must not write the pre-capture review over them.
+    const capturedReview = this.chainSessionStore.getReview(sessionId, node.nodeId) ?? opened;
     // The structural grade of the recorded result joins that review (row 3.8).
     const grade = this.collaborators.gradeLateReport;
     const review =
-      grade === undefined ? opened : await grade(context, sessionId, node, opened, reply);
+      grade === undefined
+        ? capturedReview
+        : await grade(context, sessionId, node, capturedReview, reply);
     const runCompleted = await this.chainSessionStore.completeHeldRun(sessionId);
     const after =
       this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session;
@@ -573,7 +600,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 review.gateIds,
                 review.prompts,
                 new Map(Object.entries(review.gateTiers ?? {})),
-                new Map()
+                new Map(),
+                describeReviewForRender(review).protocol
               ),
               structuralHints: review.retryHints ?? [],
             }),
@@ -581,7 +609,18 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         : {}),
     });
     context.setResponse({
-      content: [{ type: 'text', text: `${text}\n\nChain: ${after.chainId}` }],
+      content: [
+        {
+          type: 'text',
+          text: [
+            text,
+            review === null ? '' : (semanticReviewResume(review, after.chainId) ?? ''),
+            `Chain: ${after.chainId}`,
+          ]
+            .filter((part) => part !== '')
+            .join('\n\n'),
+        },
+      ],
       isError: false,
     });
   }
@@ -612,6 +651,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       context.setResponse(this.buildErrorResponse(result.message));
       return;
     }
+    this.stepCaptureService.ledgerSubmittedReviewAction(context, sessionId, session);
+    this.stepCaptureService.ledgerSubmittedVerdict(context, sessionId, session);
     const runCompleted = await this.chainSessionStore.completeHeldRun(sessionId);
     const after =
       this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session;
@@ -623,7 +664,18 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       holds: collectRunHolds(after),
     });
     context.setResponse({
-      content: [{ type: 'text', text: `${text}\n\nChain: ${after.chainId}` }],
+      content: [
+        {
+          type: 'text',
+          text: [
+            text,
+            semanticReviewResume(after.reviews?.[node.nodeId], after.chainId) ?? '',
+            `Chain: ${after.chainId}`,
+          ]
+            .filter((part) => part !== '')
+            .join('\n\n'),
+        },
+      ],
       isError: false,
     });
   }

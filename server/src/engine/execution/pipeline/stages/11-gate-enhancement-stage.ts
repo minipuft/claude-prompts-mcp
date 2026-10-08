@@ -32,7 +32,11 @@ export class GateEnhancementStage extends BasePipelineStage {
     private readonly registrar: TemporaryGateRegistrar,
     private readonly gatesConfigProvider: GateSystemSettingsProvider | undefined,
     logger: Logger,
-    private readonly gateSystemEnabled?: GateSystemSwitch
+    private readonly gateSystemEnabled?: GateSystemSwitch,
+    private readonly remapInlineDefinitions?: (
+      context: ExecutionContext,
+      registered: ReadonlyMap<string, string>
+    ) => Promise<void>
   ) {
     super(logger);
   }
@@ -104,17 +108,21 @@ export class GateEnhancementStage extends BasePipelineStage {
     // the single-vs-chain prompt walk live in services, so this stage adds no branches of its
     // own — it stays a thin orchestrator.
     const executeDefinitions = gatesConfig?.executeInlineGateDefinitions === true;
+    const inlineRemap = new Map<string, string>();
     const inlineDefinitionGateIds = this.registrar.registerInlineGateDefinitions(
       context,
       inlineDefinitionCarriers(gateContext),
-      executeDefinitions
+      executeDefinitions,
+      inlineRemap
     );
     // A chain prompt's own definitions bind the steps that name them (P6.158).
     const stepDefinitionIds = this.registrar.registerStepGateDefinitions(
       context,
       this.enhancementService.chainStepGateDefinitions(gateContext),
-      executeDefinitions
+      executeDefinitions,
+      inlineRemap
     );
+    await this.remapInlineDefinitions?.(context, inlineRemap);
 
     if (gateContext.type === 'chain') {
       await this.enhancementService.enhanceChainSteps(

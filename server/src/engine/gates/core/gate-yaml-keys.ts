@@ -20,7 +20,7 @@ export const GATE_YAML_DECLARED_KEYS: readonly string[] = Object.keys(GateDefini
 /**
  * gate.yaml keys `buildGateYaml` writes directly from `GateCreationData` — always
  * (`id`/`name`/`type`/`description`/`guidanceFile`) or conditionally when the caller/fallback
- * supplied a value (`pass_criteria`/`activation`/`retry_config`). Never candidates for the
+ * supplied a value (`pass_criteria`/`activation`/`retry_config`/`calibration_suite_id`/`evaluation`). Never candidates for the
  * generic carry-forward below — `GateFileWriter` already decides their fate.
  */
 export const GATE_YAML_PROJECTED_KEYS = [
@@ -32,6 +32,8 @@ export const GATE_YAML_PROJECTED_KEYS = [
   'pass_criteria',
   'activation',
   'retry_config',
+  'calibration_suite_id',
+  'evaluation',
 ] as const;
 
 /**
@@ -51,7 +53,7 @@ export const GATE_YAML_EXCLUDED_KEYS = ['guidance'] as const;
  *
  * Derived from `GATE_YAML_DECLARED_KEYS` (the walk of `GateDefinitionSchema`'s declared object
  * keys above), minus the projected and excluded sets (currently `severity`, `enforcementMode`,
- * `gate_type`, `evaluation`, `blockResponseOnFail`). A future schema field lands here
+ * `gate_type`, `blockResponseOnFail`). A future schema field lands here
  * automatically — nothing to update by hand.
  *
  * `GateCreationData` carries `severity` and `enforcementMode` since P4.4 and `gate_type` since

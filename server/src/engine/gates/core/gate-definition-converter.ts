@@ -15,6 +15,10 @@
  * and nothing downstream could read it.
  */
 
+import { GatePassCriteriaSchema, SemanticCriterionSchema } from './gate-schema.js';
+
+import type { SemanticCriterion, SemanticCriterionInput } from '#shared/types/gate-evaluation.js';
+import type { GatePassCriteriaYaml } from './gate-schema.js';
 import type { LightweightGateDefinition, LoadedGateDefinition } from '../types.js';
 
 /** `retry_config` is the one key rebuilt rather than copied — see `normalizeRetryConfig`. */
@@ -30,6 +34,7 @@ const COPIED_KEYS = {
   type: true,
   description: true,
   subject: true,
+  calibration_suite_id: true,
   severity: true,
   enforcementMode: true,
   guidanceFile: true,
@@ -98,4 +103,15 @@ export function toGateDefinition(loaded: GateDefinitionSource): LightweightGateD
   const retryConfig = normalizeRetryConfig(loaded.retry_config);
   if (retryConfig !== undefined) carried['retry_config'] = retryConfig;
   return carried as unknown as LightweightGateDefinition;
+}
+
+/** Project complete declared public criteria; undeclared legacy extensions are not public DTO fields. */
+export function projectPublicGateCriteria(
+  criteria: readonly (GatePassCriteriaYaml | SemanticCriterionInput)[] | undefined
+): readonly (GatePassCriteriaYaml | SemanticCriterion)[] {
+  return (criteria ?? []).map((criterion) =>
+    criterion.type === 'semantic_evaluation'
+      ? SemanticCriterionSchema.parse(criterion)
+      : GatePassCriteriaSchema.strip().parse(criterion)
+  );
 }

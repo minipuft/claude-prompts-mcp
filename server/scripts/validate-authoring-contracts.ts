@@ -6,7 +6,8 @@
  * the real builder, including falsy values accepted by the transport. Nested records remain
  * opaque: resource_manager owns semantic validation, not this checker or the adapters.
  *
- * Scope: bundled examples and their creation builders. It cannot verify authored prose,
+ * Scope: bundled examples and their creation builders, including declared public semantic vocabulary.
+ * It cannot establish the correctness of authored prose,
  * domain-valid resources, or operator-installed prompts. No MCP write is executed here.
  */
 import assert from 'node:assert/strict';
@@ -18,6 +19,8 @@ import { fileURLToPath } from 'node:url';
 
 import * as yaml from 'js-yaml';
 import { z } from 'zod';
+
+import { SemanticCriterionSchema } from '../src/engine/gates/core/gate-schema.js';
 
 import { describeParameterRefusal } from '../src/mcp/tools/resource-manager/core/parameter-ownership.js';
 import { resourceManagerInputSchema } from '../src/mcp/tools/schemas/resource-manager.schema.js';
@@ -56,6 +59,7 @@ export interface AuthoringResource {
   schema: JsonSchema;
   arguments: Array<{ name: string; type?: string }>;
   input: JsonObject;
+  guidance?: string;
 }
 export type CreationFields = Record<CreationType, Record<string, JsonSchema>>;
 
@@ -126,6 +130,27 @@ export function runTool(tool: ToolOnDisk, input: unknown): ScriptOutput {
     }
   );
   return JSON.parse(stdout) as ScriptOutput;
+}
+
+/** Public semantic adapter probe; the canonical parser owns every nested constraint/default. */
+export function semanticAuthoringInput(input: JsonObject): JsonObject {
+  const criterion = SemanticCriterionSchema.parse({
+    type: 'semantic_evaluation',
+    id: 'public-contract',
+    target: { kind: 'step_output' },
+    question: 'Does the captured output preserve the contract?',
+    evidence_requirements: { min_items: 1 },
+    result: { kind: 'boolean' },
+    acceptance: { kind: 'equals', value: true },
+  });
+  return {
+    ...input,
+    pass_criteria: [
+      ...(Array.isArray(input['pass_criteria']) ? input['pass_criteria'] : []),
+      criterion,
+    ],
+    calibration_suite_id: '../opaque-public-association',
+  };
 }
 
 /** No hand-maintained list of creation fields: adding a contract parameter immediately fails. */
@@ -240,6 +265,15 @@ export function validateAuthoringContracts(
     const report = (errors: string[]) =>
       problems.push(...errors.map((error) => `${prefix}/${error}`));
     report(declarationProblems(resource, fields));
+    if (resource.guidance !== undefined) {
+      for (const key of [
+        'semantic_evaluation',
+        ...Object.keys(SemanticCriterionSchema.shape),
+        'calibration_suite_id',
+      ]) {
+        if (!resource.guidance.includes(key)) report([`${key}: missing public semantic guidance`]);
+      }
+    }
     const check = (input: JsonObject, key?: string, canonical = key) => {
       try {
         const output = execute(resource.tool, input);
@@ -336,7 +370,11 @@ export function loadAuthoringResources(): AuthoringResource[] {
         tool,
         schema: JSON.parse(readFileSync(path.join(tool.dir, 'schema.json'), 'utf8')) as JsonSchema,
         arguments: prompt.arguments ?? [],
-        input: fixtures[tool.id]!.input,
+        input:
+          type === 'gate'
+            ? semanticAuthoringInput(fixtures[tool.id]!.input)
+            : fixtures[tool.id]!.input,
+        guidance: readFileSync(path.join(tool.promptDir, 'user-message.md'), 'utf8'),
       },
     ];
   });

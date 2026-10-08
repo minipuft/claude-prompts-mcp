@@ -13,11 +13,23 @@
  * lossless projection to assert through. When P4.6 lands, this belongs in the corpus.
  */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { load as parseYaml } from 'js-yaml';
+
+import { createGateManager } from '../../../../src/engine/gates/gate-manager.js';
+import { GateToolHandler } from '../../../../src/mcp/tools/gate-manager/core/manager.js';
+import { GateLifecycleProcessor } from '../../../../src/mcp/tools/gate-manager/services/gate-lifecycle-processor.js';
+import { ObjectDiffGenerator } from '../../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
+import { createResourceManagerRouter } from '../../../../src/mcp/tools/resource-manager/core/router.js';
+import { resourceManagerInputSchema } from '../../../../src/mcp/tools/schemas/resource-manager.schema.js';
+import { SemanticCriterionSchema } from '../../../../src/engine/gates/core/gate-schema.js';
+import {
+  resource_managerCommands,
+  resource_managerParameters,
+} from '../../../../src/mcp/contracts/schemas/_generated/resource_manager.generated.js';
 
 import {
   ALL_GATE_DATA_KEYS,
@@ -26,6 +38,12 @@ import {
 } from '../../../../src/mcp/tools/gate-manager/services/index.js';
 
 import type { GateManagerInput } from '../../../../src/mcp/tools/gate-manager/core/types.js';
+import type { GateResourceContext } from '../../../../src/mcp/tools/gate-manager/core/context.js';
+import type {
+  ResourceManagerInput,
+  ResourceManagerDependencies,
+} from '../../../../src/mcp/tools/resource-manager/core/types.js';
+import type { SemanticCriterionInput } from '../../../../src/shared/types/gate-evaluation.js';
 import type { ConfigManager, Logger } from '../../../../src/shared/types/index.js';
 
 describe('settable gate fields (P4.4)', () => {
@@ -60,11 +78,375 @@ describe('settable gate fields (P4.4)', () => {
     configManager = {
       getGatesDirectory: () => gatesDir,
       getBundledResourceDirectory: () => undefined,
+      getVersioningConfig: () => ({ enabled: false, autoVersion: false, maxVersions: 1 }),
     } as unknown as ConfigManager;
   });
 
   afterEach(() => {
     rmSync(workspaceDir, { recursive: true, force: true });
+  });
+
+  describe('staged resource authoring boundary reaches real gate writes', () => {
+    // The schema/router/dispatcher/lifecycle/verifier stay real. Only unused resource ports
+    // refuse calls; versioning is disabled so this fixture establishes YAML/registry custody.
+    async function routedGate() {
+      const gateManager = await createGateManager(logger, {
+        registryConfig: { loaderConfig: { gatesDir, enableCache: false } },
+      });
+      const handler = new GateToolHandler({ logger, gateManager, configManager });
+      const unusedPort = {
+        handleAction: async () => {
+          throw new Error('Unexpected non-gate route');
+        },
+      };
+      const router = createResourceManagerRouter({
+        logger,
+        gateManager: handler,
+        promptResourceHandler: unusedPort,
+        frameworkManager: unusedPort as unknown as ResourceManagerDependencies['frameworkManager'],
+        categoryManager: unusedPort as unknown as ResourceManagerDependencies['categoryManager'],
+      });
+      async function dispatch(raw: unknown) {
+        const parsed = resourceManagerInputSchema.parse(raw);
+        return await router.handleAction(parsed as ResourceManagerInput, {});
+      }
+      return { gateManager, handler, dispatch };
+    }
+
+    const criteria = [
+      {
+        type: 'shell_verify' as const,
+        shell_command: ['node', '--version'],
+        shell_timeout: 1000,
+        shell_env: { PUBLIC_FLAG: 'public Ω value' },
+        shell_stdin_source: 'agent_response' as const,
+      },
+    ];
+    const evaluation = { mode: 'judge' as const, model: '  declared "Ω" model  ', strict: false };
+    const association = '  suite:../opaque.json#Ω  ';
+    const createInput = {
+      resource_type: 'gate',
+      action: 'create',
+      ...baseGate,
+      skip_version: true,
+      pass_criteria: criteria,
+      evaluation,
+      calibration_suite_id: association,
+    };
+
+    it('routed create preserves complete supported criteria and exact review metadata bytes', async () => {
+      const { gateManager, dispatch } = await routedGate();
+      const result = await dispatch(createInput);
+      expect(result.isError).not.toBe(true);
+      expect(readGateYaml()['pass_criteria']).toEqual(criteria);
+      expect(readGateYaml()['evaluation']).toEqual(evaluation);
+      expect(readGateYaml()['calibration_suite_id']).toBe(association);
+      const definition = gateManager.get(baseGate.id)?.getDefinition();
+      expect(definition?.pass_criteria).toEqual(criteria);
+      expect(definition?.evaluation).toEqual(evaluation);
+      expect(definition?.calibration_suite_id).toBe(association);
+      expect(readFileSync(join(gatesDir, baseGate.id, 'guidance.md'), 'utf8')).toBe(
+        `${baseGate.guidance}\n`
+      );
+    });
+
+    it('routed update omission preserves criteria and complete review metadata', async () => {
+      const { gateManager, dispatch } = await routedGate();
+      expect((await dispatch(createInput)).isError).not.toBe(true);
+      const result = await dispatch({
+        resource_type: 'gate',
+        action: 'update',
+        id: baseGate.id,
+        description: 'New routed description',
+        skip_version: true,
+      });
+      expect(result.isError).not.toBe(true);
+      expect(readGateYaml()['description']).toBe('New routed description');
+      expect(readGateYaml()['pass_criteria']).toEqual(criteria);
+      expect(readGateYaml()['evaluation']).toEqual(evaluation);
+      expect(readGateYaml()['calibration_suite_id']).toBe(association);
+      expect(gateManager.get(baseGate.id)?.getDefinition().evaluation).toEqual(evaluation);
+    });
+
+    it('routed update replaces complete criteria and evaluation instead of merging old fields', async () => {
+      const { gateManager, dispatch } = await routedGate();
+      expect((await dispatch(createInput)).isError).not.toBe(true);
+      const replacement = [{ type: 'inline_guidance' as const }];
+      const result = await dispatch({
+        resource_type: 'gate',
+        action: 'update',
+        id: baseGate.id,
+        skip_version: true,
+        pass_criteria: replacement,
+        evaluation: { mode: 'self' },
+        calibration_suite_id: 'new:opaque#Ω',
+      });
+      expect(result.isError).not.toBe(true);
+      expect(readGateYaml()['pass_criteria']).toEqual(replacement);
+      expect(readGateYaml()['evaluation']).toEqual({ mode: 'self' });
+      expect(readGateYaml()['calibration_suite_id']).toBe('new:opaque#Ω');
+      expect(gateManager.get(baseGate.id)?.getDefinition().pass_criteria).toEqual(replacement);
+      expect(gateManager.get(baseGate.id)?.getDefinition().evaluation).toEqual({ mode: 'self' });
+    });
+
+    it('routed empty criteria replacement removes the prior declaration', async () => {
+      const { dispatch } = await routedGate();
+      expect((await dispatch(createInput)).isError).not.toBe(true);
+      expect(
+        (
+          await dispatch({
+            resource_type: 'gate',
+            action: 'update',
+            id: baseGate.id,
+            skip_version: true,
+            pass_criteria: [],
+          })
+        ).isError
+      ).not.toBe(true);
+      expect(readGateYaml()).not.toHaveProperty('pass_criteria');
+      expect(readGateYaml()['evaluation']).toEqual(evaluation);
+    });
+
+    it.each(['step_output', 'artifact'] as const)(
+      'canonical %s semantic input creates a gate without resolving artifact references',
+      async (kind) => {
+        const { handler, dispatch } = await routedGate();
+        const observedDispatch = jest.spyOn(handler, 'handleAction'); // observes original method
+        const criterion: SemanticCriterionInput = {
+          type: 'semantic_evaluation',
+          id: 'public-staged-criterion',
+          target: kind === 'artifact' ? { kind, id: '../opaque-reference-not-a-path' } : { kind },
+          question: 'Does the output meet this public criterion?',
+          result: { kind: 'boolean' },
+          acceptance: { kind: 'equals', value: true },
+          evidence_requirements: { min_items: 1 },
+        };
+        expect(SemanticCriterionSchema.safeParse(criterion).success).toBe(true);
+        expect(
+          (await dispatch({ ...createInput, id: 'semantic-supported', pass_criteria: [criterion] }))
+            .isError
+        ).not.toBe(true);
+        expect(observedDispatch).toHaveBeenCalled();
+        expect(existsSync(join(gatesDir, 'semantic-supported'))).toBe(true);
+        expect(existsSync(join(workspaceDir, 'opaque-reference-not-a-path'))).toBe(false);
+        observedDispatch.mockRestore();
+      }
+    );
+
+    it('canonical semantic update retains the public criterion and guidance', async () => {
+      const { handler, dispatch } = await routedGate();
+      expect((await dispatch(createInput)).isError).not.toBe(true);
+      const observedDispatch = jest.spyOn(handler, 'handleAction');
+      const yamlBefore = readFileSync(join(gatesDir, baseGate.id, 'gate.yaml'));
+      const guidanceBefore = readFileSync(join(gatesDir, baseGate.id, 'guidance.md'));
+      const criterion: SemanticCriterionInput = {
+        type: 'semantic_evaluation',
+        id: 'public-staged-update',
+        target: { kind: 'artifact', id: 'opaque' },
+        question: 'Does the output preserve evidence?',
+        result: { kind: 'boolean' },
+        acceptance: { kind: 'equals', value: true },
+        evidence_requirements: { min_items: 1 },
+      };
+      expect(SemanticCriterionSchema.safeParse(criterion).success).toBe(true);
+      expect(
+        (
+          await dispatch({
+            resource_type: 'gate',
+            action: 'update',
+            id: baseGate.id,
+            pass_criteria: [criterion],
+          })
+        ).isError
+      ).not.toBe(true);
+      expect(observedDispatch).toHaveBeenCalled();
+      expect(readGateYaml()['pass_criteria']).toEqual([SemanticCriterionSchema.parse(criterion)]);
+      expect(readFileSync(join(gatesDir, baseGate.id, 'gate.yaml'))).not.toEqual(yamlBefore);
+      expect(readFileSync(join(gatesDir, baseGate.id, 'guidance.md'))).toEqual(guidanceBefore);
+      observedDispatch.mockRestore();
+    });
+
+    it('published authoring metadata agrees with the current staged boundary', () => {
+      for (const key of ['evaluation', 'pass_criteria', 'calibration_suite_id'] as const) {
+        const metadata = resource_managerParameters.filter((parameter) => parameter.name === key);
+        expect(metadata).toHaveLength(1);
+        expect(resourceManagerInputSchema.shape[key].description).toBe(metadata[0].description);
+        expect(
+          resource_managerCommands
+            .filter((command) => command.parameters?.includes(key))
+            .map((command) => command.id)
+        ).toEqual(['gate:create', 'gate:update']);
+      }
+      expect(resourceManagerInputSchema.safeParse(createInput).success).toBe(true);
+    });
+  });
+
+  describe('internal lifecycle authored gate producers', () => {
+    async function lifecycle() {
+      const gateManager = await createGateManager(logger, {
+        registryConfig: { loaderConfig: { gatesDir, enableCache: false } },
+      });
+      const context = {
+        logger,
+        configManager,
+        gateManager,
+        gateFileService: new GateFileWriter({ logger, configManager }),
+        textDiffService: new ObjectDiffGenerator(),
+        versionHistoryService: { isAutoVersionEnabled: () => false },
+      } as unknown as GateResourceContext;
+      return { gateManager, processor: new GateLifecycleProcessor(context) };
+    }
+
+    it('authored evaluation create writes the exact block through the real lifecycle', async () => {
+      const { processor, gateManager } = await lifecycle();
+      const evaluation = { mode: 'judge' as const, model: 'declared-model', strict: false };
+      const result = await processor.handleCreate({ action: 'create', ...baseGate, evaluation });
+      expect(result.isError).not.toBe(true);
+      expect(readGateYaml()['evaluation']).toEqual(evaluation);
+      expect(gateManager.get(baseGate.id)?.getDefinition().evaluation).toEqual(evaluation);
+    });
+
+    it('authored evaluation update omission retains the complete issued block', async () => {
+      const { processor, gateManager } = await lifecycle();
+      const evaluation = { mode: 'judge' as const, model: 'declared-model', strict: false };
+      expect(
+        (await processor.handleCreate({ action: 'create', ...baseGate, evaluation })).isError
+      ).not.toBe(true);
+      const result = await processor.handleUpdate({
+        action: 'update',
+        id: baseGate.id,
+        description: 'New description',
+      });
+      expect(result.isError).not.toBe(true);
+      expect(readGateYaml()['evaluation']).toEqual(evaluation);
+      expect(gateManager.get(baseGate.id)?.getDefinition().evaluation).toEqual(evaluation);
+    });
+
+    it('authored evaluation replacement replaces the whole block through the real lifecycle', async () => {
+      const { processor, gateManager } = await lifecycle();
+      expect(
+        (
+          await processor.handleCreate({
+            action: 'create',
+            ...baseGate,
+            evaluation: { mode: 'judge', model: 'old-model', strict: true },
+          })
+        ).isError
+      ).not.toBe(true);
+      const result = await processor.handleUpdate({
+        action: 'update',
+        id: baseGate.id,
+        evaluation: { mode: 'self' },
+      });
+      expect(result.isError).not.toBe(true);
+      expect(readGateYaml()['evaluation']).toEqual({ mode: 'self' });
+      expect(gateManager.get(baseGate.id)?.getDefinition().evaluation).toEqual({ mode: 'self' });
+    });
+
+    it('create carries opaque bytes into actual YAML and the real registry definition', async () => {
+      const { processor, gateManager } = await lifecycle();
+      const opaque = '  suite:opaque/id?revision=1  ';
+      const result = await processor.handleCreate({
+        action: 'create',
+        ...baseGate,
+        calibration_suite_id: opaque,
+      });
+      expect(result.isError).not.toBe(true);
+      expect(readGateYaml()['calibration_suite_id']).toBe(opaque);
+      expect(gateManager.get(baseGate.id)?.getDefinition().calibration_suite_id).toBe(opaque);
+    });
+
+    it('metadata-only update replaces the association on disk', async () => {
+      const { processor } = await lifecycle();
+      await processor.handleCreate({
+        action: 'create',
+        ...baseGate,
+        calibration_suite_id: 'suite:old',
+      });
+      const result = await processor.handleUpdate({
+        action: 'update',
+        id: baseGate.id,
+        calibration_suite_id: '../opaque/new',
+      });
+      expect(result.isError).not.toBe(true);
+      expect(readGateYaml()['calibration_suite_id']).toBe('../opaque/new');
+    });
+
+    it('description-only update preserves the omitted association', async () => {
+      const { processor } = await lifecycle();
+      await processor.handleCreate({
+        action: 'create',
+        ...baseGate,
+        calibration_suite_id: 'suite:keep',
+      });
+      const result = await processor.handleUpdate({
+        action: 'update',
+        id: baseGate.id,
+        description: 'Changed.',
+      });
+      expect(result.isError).not.toBe(true);
+      expect(readGateYaml()['description']).toBe('Changed.');
+      expect(readGateYaml()['calibration_suite_id']).toBe('suite:keep');
+    });
+
+    it('blank create is refused by engine verification with no YAML published', async () => {
+      const { processor } = await lifecycle();
+      const result = await processor.handleCreate({
+        action: 'create',
+        ...baseGate,
+        calibration_suite_id: ' ',
+      });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).toContain('calibration_suite_id');
+      expect(existsSync(join(gatesDir, baseGate.id, 'gate.yaml'))).toBe(false);
+    });
+
+    it('blank replacement is refused and existing YAML remains byte-identical', async () => {
+      const { processor } = await lifecycle();
+      await processor.handleCreate({
+        action: 'create',
+        ...baseGate,
+        calibration_suite_id: 'suite:keep',
+      });
+      const file = join(gatesDir, baseGate.id, 'gate.yaml');
+      const before = readFileSync(file);
+      const result = await processor.handleUpdate({
+        action: 'update',
+        id: baseGate.id,
+        calibration_suite_id: '',
+      });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).toContain('calibration_suite_id');
+      expect(readFileSync(file)).toEqual(before);
+    });
+
+    it('quarantined repair receives the supplied association instead of retaining invalid bytes', async () => {
+      mkdirSync(join(gatesDir, baseGate.id), { recursive: true });
+      writeFileSync(
+        join(gatesDir, baseGate.id, 'gate.yaml'),
+        [
+          `id: ${baseGate.id}`,
+          `name: ${baseGate.name}`,
+          'type: validation',
+          'description: Quarantined association',
+          'calibration_suite_id: ""',
+          'guidanceFile: guidance.md',
+          '',
+        ].join('\n')
+      );
+      writeFileSync(join(gatesDir, baseGate.id, 'guidance.md'), 'Old guidance.\n');
+      const { processor, gateManager } = await lifecycle();
+      expect(gateManager.has(baseGate.id)).toBe(false);
+      expect(gateManager.getQuarantine().byId(baseGate.id)).toHaveLength(1);
+      const result = await processor.handleUpdate({
+        action: 'update',
+        ...baseGate,
+        calibration_suite_id: 'suite:repaired',
+      });
+      expect(result.isError).not.toBe(true);
+      expect(readGateYaml()['calibration_suite_id']).toBe('suite:repaired');
+      expect(gateManager.has(baseGate.id)).toBe(true);
+    });
   });
 
   it('writes a caller-supplied severity and enforcementMode into gate.yaml', async () => {
@@ -187,9 +569,9 @@ describe('settable gate fields (P4.4)', () => {
 
   // ── P4.121: `evaluation`, the last key of the class ───────────────────────
   //
-  // The judge-routing block. Same preservation route, one difference that matters: it is an
-  // OBJECT, written whole. A supplied block replaces the file's block rather than merging into
-  // it, so returning a gate to `{mode: 'self'}` does not leave a judge's `model` behind.
+  // The authored judge-routing block is projected and written whole. Ordinary update omission
+  // is retained by the lifecycle above; a supplied block replaces rather than merges, so returning
+  // a gate to `{mode: 'self'}` does not leave a judge's `model` behind.
 
   it('writes a caller-supplied evaluation block into gate.yaml', async () => {
     const service = new GateFileWriter({ logger, configManager });
@@ -217,14 +599,18 @@ describe('settable gate fields (P4.4)', () => {
     expect(readGateYaml()['evaluation']).toEqual({ mode: 'self' });
   });
 
-  it('preserves an existing evaluation block when a later update omits the field', async () => {
+  it('preserves a re-supplied evaluation block in a scoped writer update', async () => {
     const service = new GateFileWriter({ logger, configManager });
 
     await service.writeGateFiles({ ...baseGate, evaluation: { mode: 'judge', model: 'haiku' } });
-    const result = await service.writeGateFiles({
-      ...baseGate,
-      description: 'updated, saying nothing about evaluation',
-    });
+    const result = await service.writeGateFiles(
+      {
+        ...baseGate,
+        description: 'updated, re-supplying the evaluation retained by the lifecycle',
+        evaluation: { mode: 'judge', model: 'haiku' },
+      },
+      new Set(['description'])
+    );
 
     expect(result.success).toBe(true);
     expect(readGateYaml()['evaluation']).toEqual({ mode: 'judge', model: 'haiku' });
@@ -266,6 +652,7 @@ describe('callerSuppliedGateKeys covers every settable gate-data key (P4.100)', 
     enforcementMode: 'blocking',
     gate_type: 'framework',
     subject: 'code-quality',
+    calibration_suite_id: 'suite:covered',
     blockResponseOnFail: true,
     evaluation: { mode: 'judge' },
   };

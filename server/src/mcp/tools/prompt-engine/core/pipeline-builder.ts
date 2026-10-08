@@ -121,7 +121,8 @@ export class PipelineBuilder {
     const gateEnforcement = new GateEnforcementAuthority(
       deps.chainSessionStore,
       deps.logger,
-      deps.lightweightGateSystem.gateLoader
+      deps.lightweightGateSystem.gateLoader,
+      () => deps.configManager.getConfig().gates
     );
 
     const lifecycleStage = new ExecutionLifecycleStage(temporaryGateRegistry, deps.logger);
@@ -179,7 +180,12 @@ export class PipelineBuilder {
       temporaryGateRegistry,
       deps.gateReferenceResolver,
       deps.logger,
-      deps.chainSessionStore
+      deps.chainSessionStore,
+      (runId) => {
+        const run = deps.chainSessionStore.getSession(runId);
+        if (run === undefined) throw new Error(`Run '${runId}' is unavailable for gate remapping`);
+        return run.gateRemap ?? {};
+      }
     );
     const inlineGateStage = new InlineGateExtractionStage(inlineGateProcessor, deps.logger);
     const operatorValidationStage = new OperatorValidationStage(
@@ -304,7 +310,8 @@ export class PipelineBuilder {
       temporaryGateRegistrar,
       () => deps.configManager.getGatesConfig(),
       deps.logger,
-      (scope) => deps.lightweightGateSystem.isGateSystemEnabled(scope)
+      (scope) => deps.lightweightGateSystem.isGateSystemEnabled(scope),
+      (context, registered) => inlineGateProcessor.remapRegisteredGateIds(context, registered)
     );
 
     const sessionStage = new SessionManagementStage(deps.chainSessionStore, deps.logger);
@@ -330,14 +337,15 @@ export class PipelineBuilder {
       deps.notificationEmitter,
       // A detached node's review runs its gates' checks against the node's recorded output
       // (row 4.8, R10.3) through the same runners and executor stage 20 uses.
-      async (gateIds, agentResponse, scope) =>
+      async (gateIds, agentResponse, scope, issuedDefinitions) =>
         (
           await runGateReviewEvidence(
             gateIds,
             deps.lightweightGateSystem.gateLoader,
             agentResponse,
             { shellVerifyExecutor, scriptToolRuntime: deps.scriptToolRuntime },
-            scope
+            scope,
+            issuedDefinitions
           )
         ).checkResults
     );

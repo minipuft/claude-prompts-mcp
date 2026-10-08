@@ -694,7 +694,8 @@ export class TemporaryGateRegistrar {
      * call site so the calling stage stays branch-free — see ADR 0001 (d) and
      * `GateSystemSettings.executeInlineGateDefinitions`.
      */
-    enabled: boolean
+    enabled: boolean,
+    remap: Map<string, string> = new Map()
   ): string[] {
     if (!enabled) {
       return [];
@@ -703,7 +704,9 @@ export class TemporaryGateRegistrar {
     const registeredIds: string[] = [];
 
     for (const prompt of prompts) {
-      registeredIds.push(...this.registerPromptInlineDefinitions(context, prompt, registeredIds));
+      registeredIds.push(
+        ...this.registerPromptInlineDefinitions(context, prompt, registeredIds, remap)
+      );
     }
 
     if (registeredIds.length > 0) {
@@ -730,7 +733,8 @@ export class TemporaryGateRegistrar {
   registerStepGateDefinitions(
     context: ExecutionContext,
     definitions: ReadonlyArray<StepGateDefinition>,
-    enabled: boolean
+    enabled: boolean,
+    remap: Map<string, string> = new Map()
   ): ReadonlyMap<string, string> {
     const registered = new Map<string, string>();
     const registry = this.temporaryGateRegistry;
@@ -752,6 +756,8 @@ export class TemporaryGateRegistrar {
         thisCall: [...registered.values()],
       });
       if (gateId !== undefined) registered.set(ref, gateId);
+      if (gateId !== undefined && typeof definition['id'] === 'string')
+        remap.set(definition['id'], gateId);
     }
 
     if (registered.size > 0) {
@@ -768,7 +774,8 @@ export class TemporaryGateRegistrar {
     context: ExecutionContext,
     prompt: InlineDefinitionCarrier | undefined,
     /** Ids this call already registered for earlier prompts. */
-    earlierIds: readonly string[]
+    earlierIds: readonly string[],
+    remap: Map<string, string>
   ): string[] {
     const definitions = prompt?.gateConfiguration?.inline_gate_definitions;
     const registry = this.temporaryGateRegistry;
@@ -792,6 +799,7 @@ export class TemporaryGateRegistrar {
       });
       if (gateId !== undefined) {
         registeredIds.push(gateId);
+        if (typeof definition['id'] === 'string') remap.set(definition['id'], gateId);
       }
     }
 

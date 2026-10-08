@@ -101,6 +101,7 @@ export function callerSuppliedGateKeys(args: GateManagerInput): ReadonlySet<stri
     enforcementMode: args.enforcementMode,
     gate_type: args.gate_type,
     subject: args.subject,
+    calibration_suite_id: args.calibration_suite_id,
     blockResponseOnFail: args.blockResponseOnFail,
     evaluation: args.evaluation,
   };
@@ -117,7 +118,7 @@ export function callerSuppliedGateKeys(args: GateManagerInput): ReadonlySet<stri
  * value if the caller had one, otherwise whatever the file itself already declared, otherwise
  * nothing. Mirrors `resolvePreservedPromptYamlFields` exactly.
  */
-export function resolvePreservedGateYamlFields(
+function resolvePreservedGateYamlFields(
   gateData: Record<string, unknown>,
   existingYaml: Record<string, unknown> | undefined
 ): Record<string, unknown> {
@@ -374,6 +375,16 @@ export class GateFileWriter {
 
     if (data.retry_config) {
       yamlData['retry_config'] = data.retry_config;
+    }
+
+    // Authored revision content: absent in a full-state write means remove, not carry forward.
+    if (data.calibration_suite_id !== undefined) {
+      yamlData['calibration_suite_id'] = data.calibration_suite_id;
+    }
+
+    // The whole authored routing block replaces the prior one; absence clears it on restore.
+    if (data.evaluation !== undefined) {
+      yamlData['evaluation'] = data.evaluation;
     }
 
     // Carry forward the fields this writer builds no value for. Without this, every update

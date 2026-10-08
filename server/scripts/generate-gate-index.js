@@ -58,12 +58,28 @@ function loadGuidanceText(dirName, data) {
 // TIER (mirrors server/src/engine/gates/core/gate-tier.ts — kept in step by the
 // registry cross-check in server/tests/unit/gates/core/gate-tier.test.ts)
 // ============================================
-const EVALUATED_PASS_CRITERIA_TYPES = new Set(['shell_verify', 'script_tool']);
+const TOOL_PASS_CRITERIA_TYPES = new Set(['shell_verify', 'script_tool']);
 
-function deriveGateTier(gate) {
-  const criteria = gate.pass_criteria ?? [];
-  const hasEvaluator = criteria.some((c) => EVALUATED_PASS_CRITERIA_TYPES.has(c?.type));
-  return hasEvaluator ? 'check' : 'reminder';
+function hasToolCheck(gate) {
+  return (gate.pass_criteria ?? []).some((criterion) =>
+    TOOL_PASS_CRITERIA_TYPES.has(criterion?.type)
+  );
+}
+
+function hasSemanticEvaluation(gate) {
+  return (gate.pass_criteria ?? []).some((criterion) => criterion?.type === 'semantic_evaluation');
+}
+
+export function deriveGateTier(gate) {
+  if (hasToolCheck(gate)) return 'check';
+  return hasSemanticEvaluation(gate) ? 'evaluation' : 'reminder';
+}
+
+function componentSummary(gate) {
+  const components = [];
+  if (hasToolCheck(gate)) components.push('tool requirement');
+  if (hasSemanticEvaluation(gate)) components.push('semantic evaluation');
+  return components.length > 0 ? components.join(' + ') : 'reminder';
 }
 
 // ============================================
@@ -140,7 +156,7 @@ function tokenEstimate(gate) {
 // ============================================
 // RENDER
 // ============================================
-function renderIndex(gates) {
+export function renderIndex(gates) {
   const grouped = {};
   for (const gate of gates) {
     const group = classifyGate(gate);
@@ -166,11 +182,11 @@ function renderIndex(gates) {
     '',
     `${gates.length} gates across ${Object.keys(grouped).length} groups.`,
     '',
-    'For the full enforcement-mode taxonomy (`inline_guidance` / `framework_compliance` / `shell_verify` / `script_tool`) and how each `pass_criteria.type` actually behaves at runtime, see [docs/guides/gates.md](../../../docs/guides/gates.md#enforcement-modes).',
+    'For the full enforcement-mode taxonomy (`inline_guidance` / `framework_compliance` / `shell_verify` / `script_tool` / `semantic_evaluation`) and how each `pass_criteria.type` actually behaves at runtime, see [docs/guides/gates.md](../../../docs/guides/gates.md#enforcement-modes).',
     '',
     '> **Note:** Gate types `content_check` and `pattern_check` were renamed to `inline_guidance` — neither had a runtime enforcement path; both rendered guidance text only. Gates using the old names should migrate.',
     '',
-    '**Tier** is `check` when a gate carries a real runtime evaluator (`shell_verify` or `script_tool` in its `pass_criteria`); every other gate, pattern/length fields included, is `reminder` — guidance text with no runtime pass/fail path (see the taxonomy link above).',
+    '**Tier** records authored requirements: `check` for tool criteria, `evaluation` for semantic-only criteria, otherwise `reminder`. Tools take tier precedence in mixed gates; **Components** retains both requirements. This static index proves no execution, report acceptance or model quality.',
     '',
     '**Activation** reads `opt-in` when a gate has no `activation` block at all: since claude-prompts-mcp #286, `isGateActiveForContext` never auto-attaches an undefined activation — the gate still applies when named explicitly (`gateConfiguration.include`, `inlineGateIds`). `always` marks a gate whose `activation` block carries no restricting rule and so auto-attaches to every context.',
     '',
@@ -190,13 +206,17 @@ function renderIndex(gates) {
     });
 
     lines.push(`## ${group}`, '');
-    lines.push('| Gate | Tier | Severity | Activation | Subject | ~tokens | Description |');
-    lines.push('|------|------|----------|------------|---------|---------|-------------|');
+    lines.push(
+      '| Gate | Tier | Components | Severity | Activation | Subject | ~tokens | Description |'
+    );
+    lines.push(
+      '|------|------|------------|----------|------------|---------|---------|-------------|'
+    );
 
     for (const gate of items) {
       const desc = (gate.description ?? '').replace(/\n/g, ' ').trim();
       lines.push(
-        `| \`${gate.id}\` | ${deriveGateTier(gate)} | ${severityBadge(gate)} | ${activationSummary(gate)} | ${subjectOf(gate)} | ${tokenEstimate(gate)} | ${desc} |`
+        `| \`${gate.id}\` | ${deriveGateTier(gate)} | ${componentSummary(gate)} | ${severityBadge(gate)} | ${activationSummary(gate)} | ${subjectOf(gate)} | ${tokenEstimate(gate)} | ${desc} |`
       );
     }
     lines.push('');
@@ -238,4 +258,4 @@ function main() {
   console.log(`  ${gates.length} gates indexed`);
 }
 
-main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

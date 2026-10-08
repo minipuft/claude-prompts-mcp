@@ -12,7 +12,10 @@
  */
 import { describe, expect, it } from '@jest/globals';
 
-import { GateDefinitionSchema } from '../../../../src/engine/gates/core/gate-schema.js';
+import {
+  GateDefinitionSchema,
+  SemanticCriterionSchema,
+} from '../../../../src/engine/gates/core/gate-schema.js';
 import { GenericGateGuide } from '../../../../src/engine/gates/registry/generic-gate-guide.js';
 import { GateDiscoveryProcessor } from '../../../../src/mcp/tools/gate-manager/services/index.js';
 import { EMPTY_QUARANTINE_VIEW } from '../../../../src/shared/utils/resource-quarantine.js';
@@ -50,6 +53,29 @@ const baseDefinition: GateDefinitionYaml = {
 };
 
 describe('GateDiscoveryProcessor.handleInspect — P4.11 severity/enforcementMode rendering', () => {
+  it.each(['suite-opaque', '  unresolved:../fixture.json #opaque  ', 'Ω\nidentifier'])(
+    'renders the exact declared opaque association %j as a JSON string',
+    async (value) => {
+      const processor = buildProcessor(
+        new Map([['test-gate', { ...baseDefinition, calibration_suite_id: value }]])
+      );
+      const result = await processor.handleInspect({ action: 'inspect', id: 'test-gate' });
+      const text = (result.content[0] as { text: string }).text;
+      expect(result.isError).toBe(false);
+      const line = text.split('\n').find((entry) => entry.startsWith('  - Calibration Suite ID: '));
+      expect(line).toBe(`  - Calibration Suite ID: ${JSON.stringify(value)}`);
+      expect(JSON.parse(line!.slice('  - Calibration Suite ID: '.length))).toBe(value);
+    }
+  );
+
+  it('omits the association detail when the definition has no association', async () => {
+    const processor = buildProcessor(new Map([['test-gate', baseDefinition]]));
+    const result = await processor.handleInspect({ action: 'inspect', id: 'test-gate' });
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).toContain('ID: test-gate');
+    expect(text).not.toContain('Calibration Suite ID:');
+  });
+
   it('renders severity and enforcementMode when the definition sets them', async () => {
     const processor = buildProcessor(
       new Map([['test-gate', { ...baseDefinition, severity: 'low', enforcementMode: 'blocking' }]])
@@ -85,4 +111,133 @@ describe('GateDiscoveryProcessor.handleInspect — P4.11 severity/enforcementMod
     // re-running this file (red), and reverting.
     expect(text).not.toContain('Enforcement Mode:');
   });
+});
+
+function readPublicCriteria(text: string): unknown {
+  const block = /📑 Public Pass Criteria:\n```json\n([\s\S]*?)\n```/.exec(text)?.[1];
+  if (block === undefined) throw new Error('Public criteria block missing');
+  return JSON.parse(block);
+}
+
+describe('complete public criterion read-back', () => {
+  it('real legacy handleInspect preserves tool/reminder fields and exact opaque association without private extras', async () => {
+    const criteria = [
+      {
+        type: 'shell_verify' as const,
+        shell_command: ['node', '--version'],
+        shell_timeout: 5000,
+        shell_working_dir: './work',
+        shell_env: { PUBLIC_FLAG: 'value' },
+        shell_preset: 'full' as const,
+        shell_stdin_source: 'agent_response' as const,
+        shell_response_env_var: 'PUBLIC_RESPONSE',
+        private_cases: ['PRIVATE_SENTINEL_CASE'],
+        private_label: 'PRIVATE_SENTINEL_LABEL',
+      },
+      {
+        type: 'script_tool' as const,
+        script_tool_id: 'public-tool',
+        script_tool_input: { public: true },
+        script_tool_timeout: 9000,
+        script_tool_working_dir: './tools',
+      },
+      {
+        type: 'framework_compliance' as const,
+        framework: 'CAGEERF',
+        min_compliance_score: 0.8,
+        severity: 'warn' as const,
+        quality_indicators: { public: { keywords: ['proof'], patterns: ['public.*'] } },
+      },
+      { type: 'inline_guidance' as const },
+    ];
+    const definition = {
+      ...baseDefinition,
+      calibration_suite_id: ' unresolved:../private.json #opaque ',
+      evaluation: { mode: 'judge' as const, model: 'public-hint', strict: false },
+      pass_criteria: criteria,
+    };
+    const result = await buildProcessor(new Map([['test-gate', definition]])).handleInspect({
+      action: 'inspect',
+      id: 'test-gate',
+    });
+    const text = (result.content[0] as { text: string }).text;
+    expect(result.isError).toBe(false);
+    const { private_cases: _cases, private_label: _label, ...publicShell } = criteria[0];
+    expect(readPublicCriteria(text)).toEqual([publicShell, ...criteria.slice(1)]);
+    expect(text).toContain('Evaluation: judge (model: public-hint, strict: false)');
+    expect(text).toContain(
+      `Calibration Suite ID: ${JSON.stringify(definition.calibration_suite_id)}`
+    );
+    expect(text).not.toContain('PRIVATE_SENTINEL');
+  });
+
+  it('legacy inspect with no criteria emits no criteria block', async () => {
+    const result = await buildProcessor(new Map([['test-gate', baseDefinition]])).handleInspect({
+      action: 'inspect',
+      id: 'test-gate',
+    });
+    expect((result.content[0] as { text: string }).text).not.toContain('Public Pass Criteria');
+  });
+
+  it.each([
+    {
+      result: { kind: 'boolean' },
+      acceptance: { kind: 'equals', value: true },
+      target: { kind: 'step_output' },
+      allow_not_applicable: false,
+    },
+    {
+      result: { kind: 'category', options: ['accurate', 'inaccurate'] },
+      acceptance: { kind: 'one_of', values: ['accurate'] },
+      target: { kind: 'step_output' },
+      allow_not_applicable: true,
+    },
+    {
+      result: {
+        kind: 'score',
+        min: 1,
+        max: 5,
+        anchors: [
+          { value: 1, description: 'Public minimum' },
+          { value: 5, description: 'Public maximum' },
+        ],
+      },
+      acceptance: { kind: 'gte', value: 4 },
+      target: { kind: 'artifact', id: 'public-artifact' },
+      allow_not_applicable: false,
+    },
+  ])(
+    'real canonical-loaded semantic inspect retains declared public definition %j without claiming artifact capture or grading',
+    async (variant) => {
+      const criterion = SemanticCriterionSchema.parse({
+        type: 'semantic_evaluation',
+        id: 'public-criterion',
+        question: 'Does the output preserve the public contract?',
+        evidence_requirements: { min_items: 2 },
+        ...variant,
+      });
+      const declared = {
+        ...baseDefinition,
+        pass_criteria: [criterion],
+        calibration_suite_id: ' unresolved:../private.json #opaque ',
+        evaluation: { mode: 'judge' as const, model: 'public-hint', strict: false },
+      };
+      const loaded = GateDefinitionSchema.safeParse(declared);
+      expect(loaded.success).toBe(true);
+      if (!loaded.success) throw loaded.error;
+      // A real guide holds the canonical parsed definition. No provider bypass activates SEM.
+      const processor = buildProcessor(new Map([['test-gate', loaded.data]]));
+      const response = await processor.handleInspect({ action: 'inspect', id: 'test-gate' });
+      const text = (response.content[0] as { text: string }).text;
+      expect(response.isError).toBe(false);
+      expect(readPublicCriteria(text)).toEqual([criterion]);
+      expect(text).toContain('Evaluation: judge (model: public-hint, strict: false)');
+      expect(text).toContain(
+        `Calibration Suite ID: ${JSON.stringify(declared.calibration_suite_id)}`
+      );
+      expect(text).not.toContain('PRIVATE_SENTINEL');
+      expect(text).not.toContain('target_digest');
+      expect(text).not.toContain('definition_digest');
+    }
+  );
 });

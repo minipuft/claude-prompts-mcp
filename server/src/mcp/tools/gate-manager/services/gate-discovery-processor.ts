@@ -13,6 +13,8 @@ import type { ToolResponse } from '#shared/types/index.js';
 import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput } from '../core/types.js';
 
+import { projectPublicGateCriteria } from '#engine/gates/core/gate-definition-converter.js';
+
 export class GateDiscoveryProcessor {
   constructor(private readonly ctx: GateResourceContext) {}
 
@@ -126,7 +128,14 @@ export class GateDiscoveryProcessor {
       definition.blockResponseOnFail !== undefined
         ? `\n  - Blocks Response On Fail: ${String(definition.blockResponseOnFail)}`
         : '';
+    const criteriaBlock = formatPublicPassCriteria(definition.pass_criteria);
     const evaluationLine = formatEvaluationLine(definition.evaluation);
+    // JSON quoting preserves the opaque value, including whitespace/newlines, as one detail line.
+    // The association is metadata only: inspect does not resolve cases, paths or archives.
+    const calibrationSuiteLine =
+      definition.calibration_suite_id !== undefined
+        ? `\n  - Calibration Suite ID: ${JSON.stringify(definition.calibration_suite_id)}`
+        : '';
 
     // Announce the fallback. The served definition is correct and the operator asked about it —
     // but if a file for the same id failed to load, their edit to that file is inert, and nothing
@@ -144,7 +153,7 @@ export class GateDiscoveryProcessor {
         `  - ID: ${gate.gateId}\n` +
         `  - Type: ${typeIcon} ${gate.type}\n` +
         `  - Description: ${gate.description}` +
-        `${severityLine}${enforcementModeLine}${gateTypeLine}${blockResponseLine}${evaluationLine}\n\n` +
+        `${severityLine}${enforcementModeLine}${gateTypeLine}${blockResponseLine}${evaluationLine}${calibrationSuiteLine}${criteriaBlock}\n\n` +
         `📝 Guidance:\n${guidancePreview}` +
         shadowedNote
     );
@@ -173,4 +182,13 @@ function formatEvaluationLine(evaluation: JudgeEvaluationConfig | undefined): st
   ];
   const suffix = details.length > 0 ? ` (${details.join(', ')})` : '';
   return `\n  - Evaluation: ${evaluation.mode}${suffix}`;
+}
+
+/** Complete public definition read-back only: no suite lookup, capture binding or evaluation. */
+function formatPublicPassCriteria(criteria: GateManagerInput['pass_criteria']): string {
+  if (criteria === undefined || criteria.length === 0) return '';
+  const publicCriteria = projectPublicGateCriteria(criteria);
+  return (
+    '\n\n📑 Public Pass Criteria:\n```json\n' + JSON.stringify(publicCriteria, null, 2) + '\n```'
+  );
 }

@@ -135,3 +135,39 @@ export interface PinnedSemanticEvaluationContext {
   readonly binding: SemanticEvaluationBinding;
   readonly target: CapturedSemanticTarget;
 }
+
+export interface SemanticEvaluationIssue {
+  readonly code: string;
+  readonly message: string;
+  readonly criterion_id?: string;
+}
+export interface SemanticCriterionResult {
+  readonly criterion_id: string;
+  readonly state: SemanticObservationState | 'invalid';
+  readonly valid: boolean;
+  readonly passed: boolean;
+  readonly issues: readonly SemanticEvaluationIssue[];
+}
+export interface SemanticEvaluationResult {
+  readonly valid: boolean;
+  readonly passed: boolean;
+  readonly issues: readonly SemanticEvaluationIssue[];
+  readonly criteria: readonly SemanticCriterionResult[];
+}
+
+/**
+ * Evaluation mode for a gate.
+ * - 'self': Current default — LLM evaluates its own output (same context)
+ * - 'judge': Context-isolated evaluation via delegation to a sub-agent
+ */
+export type JudgeEvaluationMode = 'self' | 'judge';
+
+/**
+ * Resolved judge config after merging gate-level and global defaults.
+ * All fields are required (defaults applied).
+ */
+export interface ResolvedJudgeConfig {
+  readonly mode: JudgeEvaluationMode;
+  readonly model: string | undefined;
+  readonly strict: boolean;
+}

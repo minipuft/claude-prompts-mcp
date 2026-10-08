@@ -7,11 +7,18 @@
 
 import { REMINDER_CHARS_PER_TOKEN } from '../constants.js';
 import { filterFrameworkGuidance, hasFrameworkSpecificContent } from './FrameworkGuidanceFilter.js';
-import { deriveGateTier, formatCheckLine } from '../core/gate-tier.js';
+import {
+  deriveGateTier,
+  formatCheckLine,
+  hasSemanticEvaluation,
+  hasToolCheck,
+} from '../core/gate-tier.js';
 
 import type { Logger } from '#infra/logging/index.js';
+import type { SemanticReviewDefinitionInput } from '../../execution/pipeline/decisions/gates/semantic-review-context.js';
 import type { GateContext } from '../core/gate-definitions.js';
 import type { GateDefinitionProvider } from '../core/gate-loader.js';
+import type { GateTierSource } from '../core/gate-tier.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateActivationContext, LightweightGateDefinition } from '../types.js';
 
@@ -59,8 +66,10 @@ const SEVERITY_ORDER: Record<NonNullable<LightweightGateDefinition['severity']>,
 };
 
 /** A reminder gate that survived harnessCovers suppression, ready to be budgeted. */
+type GuidanceDefinition = Omit<LightweightGateDefinition, 'pass_criteria'> & GateTierSource;
+
 interface ReminderEntry {
-  gate: LightweightGateDefinition;
+  gate: GuidanceDefinition;
   explicit: boolean;
   /** Full rendered section (`### Name` + guidance) — what a non-degraded reminder emits. */
   rendered: string;
@@ -72,6 +81,7 @@ interface ReminderEntry {
 
 type GateGuidanceEntry =
   | { kind: 'check'; line: string }
+  | { kind: 'evaluation'; line: string }
   | { kind: 'reminder'; reminder: ReminderEntry }
   | { kind: 'suppressed' }
   | { kind: 'skipped' };
@@ -115,7 +125,11 @@ export class GateGuidanceRenderer {
    * @param context - Context for gate activation and framework filtering
    * @returns Formatted guidance text ready for display
    */
-  async renderGuidance(gateIds: string[], context: GateContext = {}): Promise<string> {
+  async renderGuidance(
+    gateIds: string[],
+    context: GateContext = {},
+    frozenDefinitions?: readonly SemanticReviewDefinitionInput[]
+  ): Promise<string> {
     this.logger.info('🎨 [GATE GUIDANCE RENDERER] renderGuidance called:', {
       gateIds,
       framework: context.framework,
@@ -130,6 +144,7 @@ export class GateGuidanceRenderer {
     const { harnessCovers, reminderTokenBudget } = this.resolveGuidanceConfig();
     const criteriaExecute = context.criteriaExecution === 'pipeline';
     const checkLines: string[] = [];
+    const evaluationLines: string[] = [];
     const reminders: ReminderEntry[] = [];
     const explicitSet = new Set(context.explicitGateIds ?? []);
     let suppressedCount = 0;
@@ -141,11 +156,15 @@ export class GateGuidanceRenderer {
           inputOrder,
           context,
           explicitSet.has(gateId),
-          harnessCovers
+          harnessCovers,
+          frozenDefinitions
         );
         switch (entry.kind) {
           case 'check':
             checkLines.push(entry.line);
+            break;
+          case 'evaluation':
+            evaluationLines.push(entry.line);
             break;
           case 'reminder':
             reminders.push(entry.reminder);
@@ -161,7 +180,7 @@ export class GateGuidanceRenderer {
       }
     }
 
-    if (checkLines.length === 0 && reminders.length === 0) {
+    if (checkLines.length === 0 && reminders.length === 0 && evaluationLines.length === 0) {
       this.logger.debug(
         '[GATE GUIDANCE RENDERER] No applicable gates found, returning empty guidance'
       );
@@ -186,6 +205,8 @@ export class GateGuidanceRenderer {
       sections.push('\n\n### Reminders\n\n');
       sections.push([...new Set(reminderLines)].join('\n\n'));
     }
+    if (evaluationLines.length > 0)
+      sections.push('\n\n### Evaluations\n\n', evaluationLines.join('\n\n'));
 
     sections.push('\n\n' + (criteriaExecute ? GATE_ATTESTATION_LINE : GATE_ADVISORY_LINE));
 
@@ -210,19 +231,40 @@ export class GateGuidanceRenderer {
     inputOrder: number,
     context: GateContext,
     isExplicit: boolean,
-    harnessCovers: readonly string[]
+    harnessCovers: readonly string[],
+    frozenDefinitions?: readonly SemanticReviewDefinitionInput[]
   ): Promise<GateGuidanceEntry> {
-    const gate = await this.loadGateDefinition(gateId);
+    const gate: GuidanceDefinition | null =
+      frozenDefinitions === undefined
+        ? await this.loadGateDefinition(gateId)
+        : (frozenDefinitions.find((definition) => definition.id === gateId) ?? null);
     if (gate === null) {
       this.logger.debug('[GATE GUIDANCE RENDERER] Failed to load gate:', gateId);
       return { kind: 'skipped' };
     }
 
     const inline = this.isInlineGate(gateId, gate) || isExplicit;
-    if (!inline && !this.isGateActive(gate, context, isExplicit)) {
+    if (
+      frozenDefinitions === undefined &&
+      !inline &&
+      !this.isGateActive(gate, context, isExplicit)
+    ) {
       this.logger.debug('[GATE GUIDANCE RENDERER] Skipped gate (not applicable):', gateId);
       return { kind: 'skipped' };
     }
+
+    // Issued semantic requirements retain full guidance, independently of reminder budgets.
+    if (hasSemanticEvaluation(gate))
+      return {
+        kind: 'evaluation',
+        line: [
+          `### ${gate.name}`,
+          gate.guidance ?? '',
+          hasToolCheck(gate) ? formatCheckLine(gate.name, gate.pass_criteria ?? []) : '',
+        ]
+          .filter((part) => part !== '')
+          .join('\n'),
+      };
 
     // Check lines are never suppressed or budgeted. Their classification does not establish
     // execution: single prompts keep the configured command visible with an explicit caveat.
@@ -326,7 +368,7 @@ export class GateGuidanceRenderer {
     return { lines, fullCount, degradedCount: ordered.length - fullCount };
   }
 
-  private isInlineGate(gateId: string, gate: LightweightGateDefinition): boolean {
+  private isInlineGate(gateId: string, gate: GuidanceDefinition): boolean {
     // Auto-generated inline gates
     if (gateId.startsWith('inline_gate_')) {
       return true;
@@ -366,7 +408,7 @@ export class GateGuidanceRenderer {
    * applies universally across all categories.
    */
   private isGateActive(
-    gate: LightweightGateDefinition,
+    gate: GuidanceDefinition,
     context: GateContext,
     explicit: boolean = false
   ): boolean {
@@ -382,13 +424,14 @@ export class GateGuidanceRenderer {
     if (context.artifacts !== undefined && context.artifacts.length > 0) {
       activationContext.artifacts = context.artifacts;
     }
-    return this.gateLoader.isGateActive(gate, activationContext);
+    // Frozen members bypass activation; this branch receives the live loader DTO.
+    return this.gateLoader.isGateActive(gate as LightweightGateDefinition, activationContext);
   }
 
   /**
    * Format gate guidance for display with framework-specific filtering
    */
-  private formatGateGuidance(gate: LightweightGateDefinition, context: GateContext): string {
+  private formatGateGuidance(gate: GuidanceDefinition, context: GateContext): string {
     // Trimmed here, not at load: `GateDefinitionLoader` inlines `guidance.md` verbatim (so
     // resource_manager can write it back byte-for-byte), which means a Prettier-formatted file's
     // trailing newline now reaches this method. Rendering is display-only — nothing here feeds a

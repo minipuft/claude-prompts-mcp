@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { GateEnforcementAuthority } from '../../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import { GateReviewStage } from '../../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
+import { GateLoader } from '../../../../src/engine/gates/core/gate-loader.js';
 import { ChainSessionStore } from '../../../../src/modules/chains/manager.js';
+
+import type { LightweightGateDefinition } from '../../../../src/engine/gates/types.js';
 
 /** A run standing on `n1` whose one review is `review` — what stage 20 reads its target off. */
 const runReviewing = (review: Record<string, unknown>) => ({
@@ -250,9 +253,10 @@ describe('GateReviewStage — recording check evidence on the pending review', (
  * node the run stands on.
  */
 describe('GateReviewStage — renders and clears the review of the node it names (row 3.12)', () => {
-  const coveredGate = {
+  const coveredGate: LightweightGateDefinition = {
     id: 'test-suite',
     name: 'Test Suite',
+    type: 'validation',
     description: 'Runs the suite',
     pass_criteria: [{ type: 'shell_verify', shell_command: ['npm', 'test'] }],
   };
@@ -274,15 +278,44 @@ describe('GateReviewStage — renders and clears the review of the node it names
     });
     await store.createSession('s1', 'chain-1', 2);
     (store as any).activeSessions.get('s1').state.currentNodeId = 'n2';
-    const authority = new GateEnforcementAuthority(store, logger());
-    await authority.createReview('s1', 'gate', 'n1', {
+    const definitions: LightweightGateDefinition[] = [
+      {
+        id: 'step-one-gate',
+        name: 'Step One Review',
+        type: 'guidance',
+        description: 'Review the first node',
+        pass_criteria: [{ type: 'inline_guidance' }],
+      },
+      coveredGate,
+    ];
+    const loader = new GateLoader(logger());
+    jest
+      .spyOn(loader, 'loadGates')
+      .mockImplementation(async (ids) => definitions.filter((gate) => ids.includes(gate.id)));
+    const authority = new GateEnforcementAuthority(store, logger(), loader);
+    const first = await authority.createReview('s1', 'gate', 'n1', {
       gateIds: ['step-one-gate'],
       instructions: 'Check step 1.',
     });
-    await authority.createReview('s1', 'gate', 'n2', {
+    const second = await authority.createReview('s1', 'gate', 'n2', {
       gateIds: ['test-suite'],
       instructions: 'Check step 2.',
     });
+    const issued = new Map([
+      ['n1', first.semanticContext],
+      ['n2', second.semanticContext],
+    ]);
+    const getReview = store.getReview.bind(store);
+    // Jest's host structuredClone crosses realms. Keep the real store's lifecycle reads, but
+    // return the exact public authority JSON issued in this realm rather than its host clone.
+    spies.push(
+      jest.spyOn(store, 'getReview').mockImplementation((sessionId, nodeId) => {
+        const review = getReview(sessionId, nodeId);
+        return review === undefined
+          ? undefined
+          : { ...review, semanticContext: issued.get(nodeId) };
+      })
+    );
   });
 
   afterEach(async () => {

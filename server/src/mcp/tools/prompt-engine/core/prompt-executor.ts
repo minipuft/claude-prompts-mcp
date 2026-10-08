@@ -593,7 +593,7 @@ export class PromptExecutor {
       ...(chainIdValue && { chain_id: chainIdValue }),
       ...(normalizedGateVerdict && { gate_verdict: normalizedGateVerdict }),
       ...(args.gate_action && { gate_action: args.gate_action }),
-      ...(args.user_response && { user_response: args.user_response }),
+      ...(args.user_response !== undefined && { user_response: args.user_response }),
       ...(args.force_restart !== undefined && { force_restart: args.force_restart }),
       ...(mergedGates.length > 0 && { gates: mergedGates }),
       ...(args.workflow != null && { workflow: args.workflow }),

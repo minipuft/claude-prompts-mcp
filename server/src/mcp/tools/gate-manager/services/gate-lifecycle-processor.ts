@@ -41,6 +41,7 @@ export class GateLifecycleProcessor {
       enforcementMode,
       gate_type,
       subject,
+      calibration_suite_id,
       blockResponseOnFail,
       evaluation,
     } = args;
@@ -89,6 +90,7 @@ export class GateLifecycleProcessor {
       enforcementMode,
       gate_type,
       subject,
+      calibration_suite_id,
       blockResponseOnFail,
       evaluation,
     };
@@ -184,6 +186,7 @@ export class GateLifecycleProcessor {
       enforcementMode,
       gate_type,
       subject,
+      calibration_suite_id,
       blockResponseOnFail,
       evaluation,
     } = args;
@@ -239,8 +242,10 @@ export class GateLifecycleProcessor {
       enforcementMode,
       gate_type,
       subject,
+      // Retain authored metadata on omission, including after it joins snapshot projection.
+      calibration_suite_id: calibration_suite_id ?? existingDefinition.calibration_suite_id,
       blockResponseOnFail,
-      evaluation,
+      evaluation: evaluation ?? existingDefinition.evaluation,
     };
 
     // The union of fields THIS call actually supplied, as opposed to `gateData` above — which
@@ -398,6 +403,7 @@ export class GateLifecycleProcessor {
       severity: args.severity,
       enforcementMode: args.enforcementMode,
       gate_type: args.gate_type,
+      calibration_suite_id: args.calibration_suite_id,
       blockResponseOnFail: args.blockResponseOnFail,
       evaluation: args.evaluation,
     };

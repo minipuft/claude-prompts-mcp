@@ -7,7 +7,12 @@
  * to shared/ to respect the dependency direction: shared → engine → modules → mcp.
  */
 
-import type { SemanticEvaluationReport } from '#shared/types/gate-evaluation.js';
+import type {
+  SemanticEvaluationReport,
+  SemanticEvaluationResult,
+  SemanticEvaluationBinding,
+  ResolvedJudgeConfig,
+} from '#shared/types/gate-evaluation.js';
 // The handoff evidence reason's ONE definition lives with the contract that produces it, so the
 // record shape and the resolver cannot drift. Type-only, like `execution.ts`'s
 // `#modules/workflow-ir` import — no value crosses the layer.
@@ -109,12 +114,41 @@ export type InputRequiredReason =
  */
 export interface GateVerdictSummary {
   gateId: string;
-  verdict: 'PASS' | 'FAIL';
+  verdict: 'PASS' | 'FAIL' | 'BYPASS';
   rationale?: string;
   timestamp: number;
   attempt?: number;
   /** Original client report retained for later adjudication; custody alone grants no authority. */
   evaluation?: SemanticEvaluationReport;
+  /** Raw validated per-gate claim, distinct from effective acceptance. */
+  reportedVerdict?: 'PASS' | 'FAIL';
+  reportedRationale?: string;
+  reportedReview?: { readonly overall: 'PASS' | 'FAIL'; readonly rationale: string };
+  /** Full canonical result from the one adjudication, never inferred from the client flag. */
+  semanticResult?: SemanticEvaluationResult;
+  toolChecks?: readonly GateCheckResult[];
+  /** Expected pins from the server review, independent of evaluation.binding. */
+  reviewBinding?: SemanticEvaluationBinding;
+  requestedEvaluation?: ResolvedJudgeConfig;
+  disposition?: 'passed' | 'held' | 'advisory-cleared' | 'informational-cleared' | 'bypassed';
+  source?: 'gate_action';
+  /** Server review at authorized bypass; no generation prompts or fabricated evaluation. */
+  bypassReview?: Pick<
+    GateReview,
+    | 'nodeId'
+    | 'kind'
+    | 'phase'
+    | 'gateIds'
+    | 'structuralGateIds'
+    | 'createdAt'
+    | 'attemptCount'
+    | 'maxAttempts'
+    | 'semanticContext'
+    | 'checkResults'
+    | 'gateTiers'
+    | 'reviewedOutput'
+    | 'metadata'
+  >;
   /**
    * Which kind of gate produced this verdict, so a self-declared attestation is never counted
    * as a graded result.
@@ -408,7 +442,7 @@ export interface GateReviewPrompt {
  * the shared contract the session store persists, and it does not import engine types. The two
  * spellings are structurally identical, so an engine `GateTier` assigns to this and back.
  */
-export type PendingGateTier = 'check' | 'reminder';
+export type PendingGateTier = 'check' | 'evaluation' | 'reminder';
 
 /**
  * One ground-truth check result the ENGINE recorded for a gate — never the model's opinion.
@@ -432,6 +466,35 @@ export type GateReviewKind = 'gate' | 'structural' | 'detached';
 /** Where a review stands. A PASS, a skip or an abort deletes the review, so none is a phase. */
 export type GateReviewPhase = 'awaiting-verdict' | 'awaiting-replacement' | 'exhausted';
 
+/** Serializable public definition content; engine readers narrow the persisted JSON. */
+export type GateReviewJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly GateReviewJsonValue[]
+  | { readonly [key: string]: GateReviewJsonValue };
+
+export interface GateReviewDefinitionSnapshot {
+  readonly definition: Readonly<Record<string, GateReviewJsonValue>>;
+  readonly definitionDigest: string;
+}
+
+/** Server-issued authority, separate from any client's evaluation report. */
+export interface GateReviewSemanticContext {
+  readonly nodeId: string;
+  readonly attemptId: string;
+  readonly definitions: Readonly<Record<string, GateReviewDefinitionSnapshot>>;
+  /** Server-owned current physical gate IDs -> original issued definition keys; one hop only. */
+  readonly definitionAliases?: Readonly<Record<string, string>>;
+  /** Absent until owned capture binds canonical step output. Spans use half-open UTF-16 code units. */
+  readonly target?: {
+    readonly kind: 'step_output';
+    readonly content: string;
+    readonly digest: string;
+  };
+}
+
 /**
  * A gate review, keyed by the node it reviews: `ChainSession.reviews[nodeId]` is the one store.
  *
@@ -446,6 +509,11 @@ export interface GateReview {
   phase: GateReviewPhase;
   combinedPrompt: string;
   gateIds: string[];
+  /**
+   * Server-minted structural membership; never accepted from a client verdict.
+   * Tool-runner selection may omit a known synthetic id, while gateIds retains the full hold.
+   */
+  structuralGateIds?: readonly string[];
   prompts: GateReviewPrompt[];
   createdAt: number;
   attemptCount: number;
@@ -484,6 +552,8 @@ export interface GateReview {
    * call that answers the review. Absent on a current-step review, whose output is the call's.
    */
   reviewedOutput?: string;
+  /** Frozen public definitions and server pins; legacy reviews may predate this authority. */
+  semanticContext?: GateReviewSemanticContext;
 }
 
 /**

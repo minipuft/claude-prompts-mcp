@@ -356,19 +356,20 @@ describe('cpm rollback', () => {
   });
 
   /**
-   * F14 — a rollback must not delete YAML keys the snapshot does not carry.
+   * F14 — a legacy projection-only rollback preserves historically unknown YAML keys.
    *
-   * A snapshot is a projection of the authored surface, not the whole file, and the SERVER records
-   * gates as five keys (`id`, `name`, `type`, `description`, `guidance`) while `gate.yaml`
-   * declares more. This command used to write `serializeYaml(result.snapshot)` straight over the
-   * entry file, so a CLI rollback of a server-recorded gate destroyed `guidanceFile` and
-   * `pass_criteria` and wrote a bogus `guidance` key holding the markdown body — the two writers
-   * produced different files from the same version.
+   * This legacy minimal snapshot carries five keys (`id`, `name`, `type`, `description`,
+   * `guidance`) and no file tree, while `gate.yaml` declares more. This command used to write
+   * `serializeYaml(result.snapshot)` straight over the entry file, so a CLI rollback destroyed
+   * `guidanceFile` and `pass_criteria` and wrote a bogus `guidance` key holding the markdown body
+   * — the two writers produced different files from the same version.
    *
-   * The snapshot seeded here is deliberately the SERVER's shape, since that is the row a real
-   * cross-writer rollback reads.
+   * The helper seeds historical projection-only rows, not a modern canonical byte tree. Absent
+   * fields have no historical absence authority: merging and reporting a partial restore is
+   * deliberate. Modern server/CLI writers record richer projections and independently scoped
+   * byte trees; their complete-file fidelity is proved in semantic-gate-versioning.test.ts.
    */
-  it('preserves gate.yaml keys the snapshot does not carry', () => {
+  it('preserves historically unknown gate.yaml keys and discloses legacy partial rollback', () => {
     const gateWs = copyWorkspace(VERSIONED_WS);
     try {
       seedVersionHistory(gateWs, 'gate', 'test-gate', [
@@ -409,6 +410,7 @@ describe('cpm rollback', () => {
 
       // A partial restore is reported, not silently performed.
       expect(stdout).toContain('recorded no');
+      expect(stdout).toContain('pass_criteria');
     } finally {
       if (existsSync(gateWs)) rmSync(gateWs, { recursive: true, force: true });
     }

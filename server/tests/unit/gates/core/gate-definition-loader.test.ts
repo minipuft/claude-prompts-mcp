@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test } from '@jest/globals';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { load as loadYaml } from 'js-yaml';
@@ -9,6 +10,7 @@ import { load as loadYaml } from 'js-yaml';
 import { GateDefinitionLoader } from '../../../../src/engine/gates/core/gate-definition-loader.js';
 import { GateLoader } from '../../../../src/engine/gates/core/gate-loader.js';
 import {
+  GateDefinitionSchema,
   SemanticCriterionSchema,
   validateGateSchema,
 } from '../../../../src/engine/gates/core/gate-schema.js';
@@ -87,11 +89,11 @@ describe('standalone SemanticCriterionSchema draft contract', () => {
     ).toBe(true);
   });
 
-  test('live gate schema refuses even a valid semantic draft until runtime wiring', () => {
+  test('live gate schema accepts a valid semantic criterion', () => {
     expect(SemanticCriterionSchema.safeParse(booleanDraft).success).toBe(true);
     const result = validateGateSchema(minimalGate({ pass_criteria: [booleanDraft] }), 'probe');
-    expect(result.valid).toBe(false);
-    expect(result.errors.join('\n')).toContain('pass_criteria.0.type');
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
   });
 
   test.each([
@@ -488,6 +490,121 @@ describe('subject propagates from gate.yaml to the loaded definition', () => {
     const gate = await gateLoader.loadGate('subject-gate');
 
     expect(gate?.subject).toBe('security');
+  });
+});
+
+describe('opaque calibration suite association propagates without private lookup', () => {
+  let workspaceDir: string;
+  let gatesDir: string;
+  let gatePath: string;
+
+  function writeGate(value?: unknown): void {
+    writeFileSync(
+      gatePath,
+      [
+        'id: association-gate',
+        'name: Association Gate',
+        'type: validation',
+        'description: Inert association metadata',
+        ...(value === undefined ? [] : [`calibration_suite_id: ${JSON.stringify(value)}`]),
+        '',
+      ].join('\n'),
+      'utf8'
+    );
+  }
+
+  beforeEach(() => {
+    workspaceDir = mkdtempSync(join(tmpdir(), 'cpm-gate-association-'));
+    gatesDir = join(workspaceDir, 'gates');
+    mkdirSync(join(gatesDir, 'association-gate'), { recursive: true });
+    gatePath = join(gatesDir, 'association-gate', 'gate.yaml');
+  });
+  afterEach(() => rmSync(workspaceDir, { recursive: true, force: true }));
+
+  test('raw and normalized loaders retain the exact opaque value', async () => {
+    const opaque = '  suite:opaque/id?revision=1  ';
+    writeGate(opaque);
+    expect(
+      new GateDefinitionLoader({ gatesDir }).loadGate('association-gate')?.calibration_suite_id
+    ).toBe(opaque);
+    expect(
+      (await new GateLoader(mockLogger as any, gatesDir).loadGate('association-gate'))
+        ?.calibration_suite_id
+    ).toBe(opaque);
+  });
+
+  test('absence remains accepted by both loaders', async () => {
+    writeGate();
+    const raw = new GateDefinitionLoader({ gatesDir }).loadGate('association-gate');
+    const normalized = await new GateLoader(mockLogger as any, gatesDir).loadGate(
+      'association-gate'
+    );
+    expect(raw).toBeDefined();
+    expect(normalized).not.toBeNull();
+    expect(raw?.calibration_suite_id).toBeUndefined();
+    expect(normalized?.calibration_suite_id).toBeUndefined();
+  });
+
+  test.each(['', '   ', 1, false, null, ['suite'], { id: 'suite' }])(
+    'refuses invalid association %p at its schema path',
+    async (value) => {
+      const parsed = GateDefinitionSchema.safeParse(minimalGate({ calibration_suite_id: value }));
+      expect(parsed.success).toBe(false);
+      if (parsed.success) throw new Error('Invalid association unexpectedly parsed');
+      expect(parsed.error.issues.map((issue) => issue.path)).toContainEqual([
+        'calibration_suite_id',
+      ]);
+      writeGate(value);
+      expect(new GateDefinitionLoader({ gatesDir }).loadGate('association-gate')).toBeUndefined();
+      expect(
+        await new GateLoader(mockLogger as any, gatesDir).loadGate('association-gate')
+      ).toBeNull();
+    }
+  );
+
+  test('a private-file-looking identifier is carried without filesystem lookup or execution', () => {
+    const privateFile = join(workspaceDir, 'private-suite.mjs');
+    const marker = join(workspaceDir, 'executed');
+    writeFileSync(
+      privateFile,
+      `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(marker)}, 'executed');\n`
+    );
+    writeGate(privateFile);
+    const serverRoot = resolve(__dirname, '../../../..');
+    const probe = `
+      import assert from 'node:assert/strict';
+      import fs from 'node:fs';
+      import { syncBuiltinESMExports } from 'node:module';
+      const privateFile = ${JSON.stringify(privateFile)};
+      const touched = [];
+      for (const name of ['existsSync', 'readFileSync', 'statSync']) {
+        const original = fs[name];
+        fs[name] = (...args) => { if (String(args[0]) === privateFile) touched.push(name); return original(...args); };
+      }
+      syncBuiltinESMExports();
+      const { GateDefinitionLoader } = await import(${JSON.stringify(join(serverRoot, 'src/engine/gates/core/gate-definition-loader.ts'))});
+      const { GateLoader } = await import(${JSON.stringify(join(serverRoot, 'src/engine/gates/core/gate-loader.ts'))});
+      const raw = new GateDefinitionLoader({ gatesDir: ${JSON.stringify(gatesDir)} }).loadGate('association-gate');
+      const logger = { debug(){}, info(){}, warn(){}, error(){} };
+      const normalized = await new GateLoader(logger, ${JSON.stringify(gatesDir)}).loadGate('association-gate');
+      assert.equal(raw.calibration_suite_id, privateFile);
+      assert.equal(normalized.calibration_suite_id, privateFile);
+      assert.deepEqual(touched, []);
+      fs.existsSync(privateFile); // Positive control: the observer can see the prohibited lookup.
+      assert.deepEqual(touched, ['existsSync']);
+    `;
+    execFileSync(
+      process.execPath,
+      [
+        '--import',
+        join(serverRoot, 'node_modules/tsx/dist/loader.mjs'),
+        '--input-type=module',
+        '--eval',
+        probe,
+      ],
+      { timeout: 15_000 }
+    );
+    expect(existsSync(marker)).toBe(false);
   });
 });
 

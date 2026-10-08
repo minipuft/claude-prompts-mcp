@@ -1,9 +1,9 @@
 {
   "tool": "prompt_engine",
   "version": 1,
-  "summary": "Execute prompts/chains with ground-truth validation. >>prompt_id | * N | -->chain | :: verify:\"cmd\" :full loop:true | @Framework | %modifiers",
+  "summary": "Execute prompts/chains with tool checks and bound semantic report acceptance. >>prompt_id | * N | -->chain | :: verify:\"cmd\" :full loop:true | @Framework | %modifiers",
   "toolDescription": {
-    "description": "\ud83d\ude80 PROMPT ENGINE: Execute prompts with framework guidance and ground-truth validation.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>prompt * N                         # Repeat N times (chain shorthand)\n- >>step1 --> >>step2                  # Chain multiple steps\n- ^Framework >>prompt                  # Apply framework (CAGEERF, ReACT, etc.); @ deprecated\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nREPETITION:\n- * N unfolds to chain with SAME args (>>p arg * 3 = >>p arg --> >>p arg --> >>p arg)\n- For DIFFERENT args per step, use explicit chain: >>p arg1 --> >>p arg2\n- Each step receives previous output via context propagation\n\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS (one per command): %clean (no injection/gates), %lean (gates only), %judge (preview), %framework (force framework, no gates)\n",
+    "description": "🚀 PROMPT ENGINE: Execute prompts with framework guidance, tool checks and bound semantic reports.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>prompt * N                         # Repeat N times (chain shorthand)\n- >>step1 --> >>step2                  # Chain multiple steps\n- ^Framework >>prompt                  # Apply framework (CAGEERF, ReACT, etc.); @ deprecated\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nREPETITION:\n- * N unfolds to chain with SAME args (>>p arg * 3 = >>p arg --> >>p arg --> >>p arg)\n- For DIFFERENT args per step, use explicit chain: >>p arg1 --> >>p arg2\n- Each step receives previous output via context propagation\n\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS (one per command): %clean (no injection/gates), %lean (gates only), %judge (preview), %framework (force framework, no gates)\n",
     "shortDescription": "Execute prompts with validation and framework",
     "category": "execution",
     "triggerExamples": [
@@ -38,19 +38,19 @@
     {
       "name": "chain_id",
       "type": "string",
-      "description": "Resume token (chain-{prompt} or chain-{prompt}#runNumber). RESUME: chain_id + user_response only. Omit command — with ONE exception: a command whose first token is '-->' appends steps to this run (see `command`).",
+      "description": "Resume token (chain-{prompt} or chain-{prompt}#runNumber). Send output, gate_verdict or gate_action with chain_id. Omit command except a leading '-->' append.",
       "status": "working"
     },
     {
       "name": "user_response",
       "type": "string",
-      "description": "Your completed output from executing the previous step. Paste your work here when resuming a chain. Use with chain_id; do not include command when resuming.",
+      "description": "Step output for chain_id. Canonical bytes are the entire user_response.trim(), without Unicode normalization or metadata stripping. Required semantic review: capture output alone first, then prefer a report-only verdict. Resent work must match that node's captured canonical whole bytes; different or defined-empty work paired with PASS or FAIL is refused before effects. An accepted renewing semantic FAIL clears its target: capture replacement separately before reporting. Another node's body stays scoped to that node.",
       "status": "working"
     },
     {
       "name": "gate_verdict",
       "type": "union[object|string]",
-      "description": "Gate review result. PREFERRED structured object: {overall:'PASS'|'FAIL', rationale:'...', per_gate?:[{index:1, passed:true, rationale:'...', evaluation?:{binding:{gate_id,node_id,attempt_id,definition_digest,target_digest}, observations:[{criterion_id,state:'met'|'unmet'|'insufficient_evidence'|'not_applicable',value?:boolean|string|finite number,evidence:[{target_digest,start,end,quote?:string}],rationale:string}], reviewer?:{provenance:'client_reported'|'unknown',provider?:string,model?:string,revision?:string,context?:'self'|'separate_pass'|'isolated_judge'|'unknown'}}}], reminders?:{satisfied:[ids],not_applicable:[{id,reason}]}}. Ordinary per_gate entries cover check-tier gates; reminders attest reminder-tier gates. evaluation retains typed custody through registration, request, parsing and processor paths. STAGED runtime: live semantic_evaluation resource criteria remain refused; server-issued binding and runtime adjudication are pending. Legacy strings accepted: 'GATE_REVIEW: PASS|FAIL - reason', 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason'.",
+      "description": "Review object {overall:'PASS'|'FAIL',rationale,per_gate?:[{index,passed,rationale,evaluation?}],reminders?} or legacy string. Check/evaluation entries are per_gate; reminders attest reminder-tier gates. Required semantic_evaluation needs evaluation with server-issued binding, typed observations and captured evidence; report pins never supply authority. Missing/failed attributable reports derive FAIL despite client PASS; stale/misaddressed reports refuse without charge. Evidence uses UTF-16 spans and captured UTF-8 hashBytes digest. Requested evaluation is separate from optional client-reported reviewer; host/native identity remains unknown. Legacy forms: 'GATE_REVIEW: PASS|FAIL - reason', 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason'.",
       "status": "working",
       "resolvesPendingRun": true,
       "notes": [
@@ -58,8 +58,9 @@
         "Overall and per_gate rationales are nonempty, single-line and trimmed. Report observation rationales are strings and may span lines; they are not rendered into the verdict rationale.",
         "Reports live only at per_gate[i].evaluation within the existing gate_verdict object/string union. Do not encode reports as JSON in rationale or introduce a separate findings parameter. Every report, binding, observation, evidence reference and reviewer object rejects undeclared keys.",
         "binding requires nonempty string gate_id, node_id, attempt_id, definition_digest and target_digest. Each observation requires nonempty criterion_id, a declared state, an evidence array and string rationale; optional value is boolean, string or finite number. Evidence target_digest is nonempty; start/end are integers >=0, quote is optional string. Identity strings are retained verbatim; whitespace-only identities are rejected.",
-        "The standalone acceptance kernel compares binding against independently pinned context. target_digest uses hashBytes over actual captured UTF-8 content (sha256:<hex>); evidence [start,end) uses JavaScript UTF-16 offsets, not UTF-8 byte positions. The kernel checks bounds/digest/optional quote and criterion predicates; boundary shape validation alone does not adjudicate the report.",
+        "The existing acceptance kernel runs against server-issued frozen definitions/node/attempt and independently captured target. target_digest is hashBytes(actual captured UTF-8 content), sha256:<hex>; evidence [start,end) uses JavaScript UTF-16 offsets. It checks binding, bounds, digest, optional quote, evidence requirements and predicates. Shape validation alone is not report acceptance or model accuracy.",
         "reviewer is optional; absent means unknown. Submitted provenance is only client_reported or unknown, never host_verified. Optional provider/model/revision must be nonempty strings; context is self, separate_pass, isolated_judge or unknown. These are client identity claims, not acceptance authority, and are separate from requested routing metadata.",
+        "Capture-alone first; prefer report-only. If resending the same node's body with a verdict, its whole trim() bytes must equal the captured target. Different/defined-empty canonical work refuses before writes. Renewing FAIL consumes the old same-node body, preserves old ledger pins and requires separate replacement capture; exhausted FAIL does not renew until retry. Detached routing-only HANDOFF metadata is exempt only on the actual addressed detached verdict route. Artifact declarations are valid, but runtime artifact capture is unavailable.",
         "The legacy string branch and the four non-primary verdict patterns are retired once no client has submitted a string verdict for one release cycle, measured via the `source` field on ParsedGateVerdict."
       ]
     },
@@ -67,7 +68,7 @@
       "name": "gate_action",
       "type": "enum",
       "enum": ["retry", "skip", "abort", "resume", "accept_alternative"],
-      "description": "Your move on a run that is waiting for one. THREE ANSWER A FAILED GATE after the retry limit is exhausted: 'retry' resets the attempt count for another try, 'skip' bypasses the failed gate and continues, 'abort' stops chain execution entirely. TWO ANSWER A PAUSED RUN holding a blocking-unknown interrupt (reserved review id '__unknown_interrupt__', raised only when the run declared budget.pauseOnBlocking): 'resume' clears the pause and issues the investigation step as written, 'accept_alternative' replaces the remainder of the run with the nodes supplied in 'remainder' on the SAME call. 'abort' and cancel:true exit either state.",
+      "description": "Your move on a run that is waiting for one. THREE ANSWER A FAILED GATE after the retry limit is exhausted: 'retry' resets attempts (semantic retry renews server attempt and requires separate replacement capture), 'skip' records operational BYPASS and continues without an evaluated PASS/FAIL, 'abort' stops chain execution entirely. TWO ANSWER A PAUSED RUN holding a blocking-unknown interrupt (reserved review id '__unknown_interrupt__', raised only when the run declared budget.pauseOnBlocking): 'resume' clears the pause and issues the investigation step as written, 'accept_alternative' replaces the remainder of the run with the nodes supplied in 'remainder' on the SAME call. 'abort' and cancel:true exit either state.",
       "status": "working",
       "resolvesPendingRun": true,
       "notes": [
@@ -79,7 +80,7 @@
     {
       "name": "gates",
       "type": "array<union[string|{name,description}|object]>",
-      "description": "Quality gates for output validation. Four formats supported:\n\n**1. Registered IDs** (strings): Use predefined gates like 'code-quality', 'research-quality'.\n\n**2. Quick Gates** (RECOMMENDED for LLM-generated validation): `{name, description}` - Create named, domain-specific checks on the fly. Example: `{name: 'Source Quality', description: 'All sources must be official docs'}`.\n\n**3. Full Definitions**: Complete schema with severity, criteria[], pass_criteria[], guidance for production workflows.\n\n**4. Shell Verification** (ground-truth validation): `:: verify:\"command\"` runs shell commands; exit 0 = PASS.\n   - **Presets**: `:fast` (1 attempt, 30s), `:full` (5 attempts, 5min), `:extended` (10 attempts, 10min)\n   - **Options**: `max:N` (attempts), `timeout:N` (seconds), `loop:true` (autonomous Stop hook)\n   - **Example**: `>>fix-bug :: verify:\"npm test\" :full loop:true`",
+      "description": "Gate inputs: registered ID strings; quick {name,description}; full definitions with id,name,severity,criteria[],pass_criteria[],guidance,apply_to_steps[]. Inline :: verify:\"command\" checks exit status under operator allowlists. Presets fast (1 attempt/30s), full (5/5min), extended (10/10min); options max:N,timeout:N,loop:true. Example: >>fix-bug :: verify:\"npm test\" :full loop:true. Semantic criteria use the bound report workflow in user_response/gate_verdict.",
       "status": "working",
       "compatibility": "canonical",
       "notes": [

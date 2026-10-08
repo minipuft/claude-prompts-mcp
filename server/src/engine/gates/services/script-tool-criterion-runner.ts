@@ -69,6 +69,9 @@ export async function runScriptToolCriterion(
   criteria: GatePassCriteria,
   runtime: ScriptToolRuntime | undefined
 ): Promise<ScriptToolCriterionOutcome> {
+  if (criteria.type !== 'script_tool') {
+    return unrunnable(undefined, 'criterion is not a script_tool check');
+  }
   const toolId = criteria.script_tool_id;
 
   if (toolId == null || toolId.trim() === '') {

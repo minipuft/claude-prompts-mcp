@@ -24,6 +24,7 @@ import type { GateDefinitionProvider } from '../core/gate-loader.js';
 import type { ShellVerifyExecutor } from '../shell/shell-verify-executor.js';
 import type { GateShellVerifyResult } from '../shell/shell-verify-message-formatter.js';
 import type { ShellVerifyGate } from '../shell/types.js';
+import type { LightweightGateDefinition } from '../types.js';
 
 import { gateShellScriptReferences } from '#shared/utils/gate-shell-script-reference.js';
 import { isPathInside } from '#shared/utils/path-containment.js';
@@ -161,14 +162,22 @@ export async function runGateShellVerifications(
   gateDefinitionProvider: GateDefinitionProvider,
   runContext: GateShellVerifyRunContext | undefined,
   executor: ShellVerifyExecutor | undefined,
-  scope?: StateStoreOptions
+  scope?: StateStoreOptions,
+  checkedDefinitions?: readonly LightweightGateDefinition[]
 ): Promise<GateShellVerifyResult[]> {
   const results: GateShellVerifyResult[] = [];
 
-  const gates = await gateDefinitionProvider.loadGates(gateIds);
+  const gates = checkedDefinitions ?? (await gateDefinitionProvider.loadGates(gateIds));
 
   for (const gate of gates) {
-    const shellCriteria = gate.pass_criteria?.filter((c) => c.type === 'shell_verify');
+    const shellCriteria = gate.pass_criteria?.filter(
+      (
+        c
+      ): c is Exclude<
+        NonNullable<LightweightGateDefinition['pass_criteria']>[number],
+        { type: 'semantic_evaluation' }
+      > => c.type === 'shell_verify'
+    );
     if (!shellCriteria || shellCriteria.length === 0) {
       continue;
     }

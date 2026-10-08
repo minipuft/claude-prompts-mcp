@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { GateVerdictProcessor } from '../../../../src/engine/gates/services/gate-verdict-processor.js';
+import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ChainSession, ChainSessionService } from '../../../../src/shared/types/index.js';
@@ -55,22 +56,15 @@ const sessionWith = (phase: 'exhausted' | 'awaiting-verdict') =>
     },
   }) as unknown as ChainSession;
 
-/** Minimal context carrying only what `handleGateAction` reads or writes. */
-const createContext = () =>
-  ({
-    gateEnforcement: undefined,
-    state: {
-      gates: {
-        retryLimitExceeded: true,
-        awaitingUserChoice: true,
-        retryExhaustedGateIds: ['some-gate'],
-      },
-      session: {} as { aborted?: boolean },
-    },
-    diagnostics: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
-    setResponse: jest.fn(),
-    getScopeOptions: () => ({}),
-  }) as never;
+/** Real admission getters, with the exhausted review's existing action flags. */
+const createContext = () => {
+  const context = new ExecutionContext({ chain_id: 'chain-review#1' }, createLogger());
+  context.state.gates.retryLimitExceeded = true;
+  context.state.gates.awaitingUserChoice = true;
+  context.state.gates.retryExhaustedGateIds = ['some-gate'];
+  jest.spyOn(context, 'setResponse');
+  return context;
+};
 
 describe('GateVerdictProcessor.handleGateAction', () => {
   let store: ReturnType<typeof createStore>;

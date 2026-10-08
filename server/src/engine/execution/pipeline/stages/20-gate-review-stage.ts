@@ -8,8 +8,18 @@ import {
 import { runGateReviewEvidence } from '../../../gates/services/gate-review-evidence.js';
 import { recordedStep } from '../../capture/step-capture-service.js';
 import { planNodeDrivenRender } from '../../operators/node-step-projection.js';
+import { describeFrozenJudgeReview } from '../decisions/gates/describe-review-for-render.js';
+import { physicalReviewDefinitionIndex } from '../decisions/gates/frozen-review-definitions.js';
 import { resolveGroundTruthCoverage } from '../decisions/gates/ground-truth-coverage.js';
 import { resolveShownReview } from '../decisions/gates/review-target.js';
+import {
+  projectFrozenReview,
+  assertFrozenReviewAvailable,
+} from '../decisions/gates/semantic-review-context.js';
+import {
+  hasStructuralFinding,
+  selectToolReviewGateIds,
+} from '../decisions/gates/structural-review-composition.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -30,6 +40,12 @@ import type { ChainOperatorExecutor } from '../../operators/chain-operator-execu
 import type { ChainStepRenderResult } from '../../operators/types.js';
 
 type GatesConfigProvider = () => GatesConfig | undefined;
+
+/** Legacy tool I/O treats an empty canonical response as absent; the request carrier is untouched. */
+function toolResponseBody(context: ExecutionContext): string | undefined {
+  const response = context.mcpRequest.user_response;
+  return response === '' ? undefined : response;
+}
 
 /** Optional collaborators for {@link GateReviewStage}. */
 export interface GateReviewCollaborators {
@@ -173,7 +189,7 @@ export class GateReviewStage extends BasePipelineStage {
     review: GateReview,
     checkResults: GateCheckResult[]
   ): Promise<GateReview> {
-    const gateTiers = await this.deriveGateTiers(review.gateIds);
+    const gateTiers = await this.deriveGateTiers(review);
 
     if (checkResults.length === 0 && Object.keys(gateTiers).length === 0) {
       return review;
@@ -195,7 +211,14 @@ export class GateReviewStage extends BasePipelineStage {
    * treat a missing id as `check`, which keeps an unloadable gate attestable instead of
    * silently demoting it to a reminder nobody grades.
    */
-  private async deriveGateTiers(gateIds: string[]): Promise<Record<string, PendingGateTier>> {
+  private async deriveGateTiers(review: GateReview): Promise<Record<string, PendingGateTier>> {
+    const frozen = projectFrozenReview(review);
+    assertFrozenReviewAvailable(frozen);
+    if (frozen.definitions !== undefined)
+      return Object.fromEntries(
+        frozen.definitions.map((definition) => [definition.id, deriveGateTier(definition)])
+      );
+    const gateIds = review.gateIds;
     if (!this.gateDefinitionProvider || gateIds.length === 0) return {};
 
     try {
@@ -285,6 +308,8 @@ export class GateReviewStage extends BasePipelineStage {
     let reviewForRender: GateReview = pendingReview;
 
     try {
+      assertFrozenReviewAvailable(projectFrozenReview(pendingReview));
+      const physicalDefinitions = physicalReviewDefinitionIndex(pendingReview);
       // Run the gates' ground-truth criteria (`gate-review-evidence.ts`, shared with a detached
       // node's review). The agent's response is forwarded so gates that opt in via
       // `shell_stdin_source: 'agent_response'` can verify response-content claims (file paths,
@@ -293,24 +318,27 @@ export class GateReviewStage extends BasePipelineStage {
       let shellSection = '';
       if (this.gateDefinitionProvider && pendingReview.gateIds.length > 0) {
         const evidence = await runGateReviewEvidence(
-          pendingReview.gateIds,
+          selectToolReviewGateIds(pendingReview),
           this.gateDefinitionProvider,
-          context.mcpRequest?.user_response,
+          toolResponseBody(context),
           this.collaborators,
-          context.getScopeOptions()
+          context.getScopeOptions(),
+          physicalDefinitions
         );
         const { shellResults, scriptResults } = evidence;
         shellSection = evidence.section;
 
-        // Whether ground truth clears the review is a gate-enforcement decision, so the
-        // authority makes it. The stage keeps what only it can do: running the commands
-        // above, writing the result, and returning early.
+        // The pure coverage owner decides whether tool results can clear this review.
+        // Frozen requirements retain semantic obligations when the live catalog changes.
+        // The stage runs commands, supplies server facts, persists the result and returns.
         //
-        // The decision reads only `gateId` and `passed`, so it is mechanism-agnostic and
-        // both result kinds feed it unchanged.
+        // Tool outcomes remain mechanism-agnostic; include refusals whose checks did not run.
+        // Frozen definitions separately tell the owner whether semantic reports remain due.
         const coverage = resolveGroundTruthCoverage({
           requiredGateIds: pendingReview.gateIds,
-          results: [...shellResults, ...scriptResults],
+          reviewDefinitions: physicalDefinitions,
+          structuralPending: hasStructuralFinding(pendingReview),
+          results: evidence.checkResults,
           priorVerifiedGateIds: context.state.gates.shellVerifyPassedForGates ?? [],
         });
 
@@ -454,6 +482,8 @@ export class GateReviewStage extends BasePipelineStage {
 
   /** Compose the existing context-isolated judge prompt for the assembler (P4.133). */
   private async renderJudgeMetadata(review: GateReview): Promise<JudgeReviewMetadata | undefined> {
+    const frozen = projectFrozenReview(review);
+    if (frozen.definitions !== undefined) return describeFrozenJudgeReview(frozen);
     if (this.gateDefinitionProvider === null || review.gateIds.length === 0) return undefined;
     const gatesConfig = this.gatesConfigProvider?.();
     const { judgeGates } = await resolveJudgeGates(

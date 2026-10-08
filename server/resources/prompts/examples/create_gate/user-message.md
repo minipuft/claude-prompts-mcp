@@ -26,7 +26,7 @@ Design a gate for:
 5. Present the complete non-executing create draft and resolve outstanding choices. Gate creation has no `validate` action and no `preview_action:"create"`; do not invent a preview or claim local schema checks prove resource validity.
 6. Create when authorized and read the server result. Inspect the resulting gate and verify the receipt, then smoke-test attachment with `prompt_engine(command:">>your_prompt", gates:[<gate_id>])` when that execution is in scope.
 
-For example, a declarative gate may use `pass_criteria:[{"type":"inline_guidance"}]` with concrete pass/fail instructions in guidance. A shell criterion may use `{"type":"shell_verify","shell_command":"npm test","shell_preset":"fast"}`, provided the operator has allowlisted that command and any non-default working directory. Shell environment keys controlling command resolution are refused by the server; ordinary input variables may be supplied when needed.
+For example, a declarative gate may use `pass_criteria:[{"type":"inline_guidance"}]` with concrete pass/fail instructions in guidance. A shell criterion may use `{"type":"shell_verify","shell_command":["npm test"],"shell_preset":"fast"}`, provided the operator has allowlisted that command and any non-default working directory. Shell environment keys controlling command resolution are refused by the server; ordinary input variables may be supplied when needed.
 
 Output the proposed create payload and unresolved decisions.
 {% endif %}
@@ -34,3 +34,9 @@ Output the proposed create payload and unresolved decisions.
 ## Existing gate maintenance
 
 Inspect before `update`, review the proposed changes, honor existing authorization, then read the update receipt and inspect/reload the loaded gate. Gate update has no non-mutating update preview. Supported `preview` operations for gates are delete and rollback; they do not authorize the subsequent mutation. Public publication needs its own authorization.
+
+## Semantic gate contract
+
+Author `semantic_evaluation` through the canonical gate create/update contract, then inspect the loaded gate. Criteria declare `id`, `target`, `question`, `evidence_requirements`, `result`, `acceptance`, and `allow_not_applicable` (default false). The server validates nested shapes; builder readiness is not resource validity. A `step_output` target uses actual server-captured output. An artifact target is a valid opaque declaration, but runtime artifact capture is unavailable; do not resolve its id as a filesystem path. Unknown targets and incompatible domains are refused.
+
+Semantic report acceptance requires a structured report with evidence bound to the server-issued frozen review and captured target. Client report bytes and claimed pins are not authority. Bare PASS, stop attestation, and passing tool siblings do not replace the report. Keep requested `evaluation` configuration separate from reported reviewer identity; report acceptance does not establish model accuracy or human approval. `calibration_suite_id` is an opaque public association, not a suite path or private-case lookup. Preserve legacy tool criteria and operator shell command/directory/environment guards.

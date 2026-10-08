@@ -136,6 +136,108 @@ export function parseHandoffTrailer(reply: string): ParsedHandoffTrailer {
   };
 }
 
+/** Half-open UTF-16 offsets into the original reply, never normalized text. */
+interface HandoffBodyRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+export interface HandoffBodyClassification {
+  readonly kind: 'routing-only' | 'work';
+  readonly envelope: HandoffBodyRange | null;
+  readonly workRanges: readonly HandoffBodyRange[];
+}
+
+const FENCE_MARKER_PATTERN = /^(`{3,}|~{3,})/u;
+const PROPOSED_REVIEW_ENTRY_PATTERN =
+  /^-[ \t]+\S[^\r\n\u2028\u2029]*:[ \t]+(?:PASS|FAIL)[ \t]+—[ \t]+\S[^\r\n\u2028\u2029]*$/u;
+
+/** Track only the fence containing the chosen heading; arbitrary outside work is not validated. */
+function enclosingHandoffFence(lines: readonly string[], headingIndex: number): number | null {
+  let opening: { index: number; marker: string } | undefined;
+  for (let index = 0; index < headingIndex; index += 1) {
+    const text = lines[index]?.trim() ?? '';
+    const marker = FENCE_MARKER_PATTERN.exec(text)?.[0];
+    if (marker === undefined) continue;
+    if (opening === undefined) opening = { index, marker };
+    else if (text === opening.marker) opening = undefined;
+  }
+  return opening?.index ?? null;
+}
+
+function handoffEnvelopeBounds(
+  lines: readonly string[],
+  headingIndex: number
+): { firstLine: number; fieldsEnd: number; lastLine: number } | null {
+  const opening = enclosingHandoffFence(lines, headingIndex);
+  if (opening === null) {
+    return { firstLine: headingIndex, fieldsEnd: lines.length, lastLine: lines.length - 1 };
+  }
+  if (
+    lines[opening]?.trim() !== '```' ||
+    lines.slice(opening + 1, headingIndex).some((line) => line.trim().length > 0)
+  )
+    return null;
+  const closing = lines.findIndex((line, index) => index > headingIndex && line.trim() === '```');
+  return closing === -1 ? null : { firstLine: opening, fieldsEnd: closing, lastLine: closing };
+}
+
+function completeHandoffBodyFields(lines: readonly string[]): boolean {
+  const fields = lines.map((line) => line.trim()).filter((line) => line.length > 0);
+  const nodeLine = fields[0];
+  if (nodeLine === undefined || /[\r\u2028\u2029]/u.test(nodeLine)) return false;
+  const node = NODE_LINE_PATTERN.exec(nodeLine);
+  if (node?.[0] !== nodeLine) return false;
+  if (fields.length === 1) return true;
+  return (
+    fields[1] === PROPOSED_GATE_REVIEW_TOKEN &&
+    fields.length > 2 &&
+    fields.slice(2).every((line) => PROPOSED_REVIEW_ENTRY_PATTERN.test(line))
+  );
+}
+
+function originalHandoffLineStarts(lines: readonly string[]): number[] {
+  const starts: number[] = [];
+  let offset = 0;
+  for (const line of lines) {
+    starts.push(offset);
+    offset += line.length + 1;
+  }
+  return starts;
+}
+
+/** Only a complete metadata envelope with no outside work exempts a supplied string's body. */
+export function classifyHandoffBody(reply: string): HandoffBodyClassification {
+  const wholeWork: HandoffBodyClassification = {
+    kind: 'work',
+    envelope: null,
+    workRanges: [{ start: 0, end: reply.length }],
+  };
+  const lines = reply.split('\n');
+  const headingIndex = findLastHeadingIndex(lines);
+  if (headingIndex === -1) return wholeWork;
+  const bounds = handoffEnvelopeBounds(lines, headingIndex);
+  if (
+    bounds === null ||
+    !completeHandoffBodyFields(lines.slice(headingIndex + 1, bounds.fieldsEnd))
+  ) {
+    return wholeWork;
+  }
+  const starts = originalHandoffLineStarts(lines);
+  const envelope = {
+    start: starts[bounds.firstLine] ?? 0,
+    end: Math.min(
+      (starts[bounds.lastLine] ?? 0) + (lines[bounds.lastLine]?.length ?? 0) + 1,
+      reply.length
+    ),
+  };
+  const workRanges = [
+    { start: 0, end: envelope.start },
+    { start: envelope.end, end: reply.length },
+  ].filter((range) => reply.slice(range.start, range.end).trim().length > 0);
+  return { kind: workRanges.length === 0 ? 'routing-only' : 'work', envelope, workRanges };
+}
+
 /** The single classification both public projections read. */
 interface HandoffClassification {
   readonly reason: HandoffEvidenceReason;

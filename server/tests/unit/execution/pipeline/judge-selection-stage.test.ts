@@ -178,10 +178,12 @@ describe('JudgeSelectionStage', () => {
 
       expect(context.state.framework.judgePhaseTriggered).toBe(true);
       expect(context.response).toBeDefined();
-      expect(menuFormatter.buildJudgeResponse).toHaveBeenCalledWith(
-        expect.objectContaining({ styles: expect.any(Array), gates: expect.any(Array) }),
-        context
-      );
+      const responseCall = menuFormatter.buildJudgeResponse.mock.calls[0];
+      expect(responseCall?.[0]).toMatchObject({
+        styles: expect.any(Array),
+        gates: expect.any(Array),
+      });
+      expect(responseCall?.[1]).toBe(context);
     });
   });
 

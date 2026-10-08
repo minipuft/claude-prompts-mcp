@@ -1,7 +1,6 @@
 // @lifecycle canonical - Executes chain operator steps within the pipeline.
 import { declaresFrameworkSections } from '../../frameworks/declared-sections.js';
 import { hasFrameworkGuidance } from '../../frameworks/utils/framework-detection.js';
-import { GATE_ATTESTATION_LINE } from '../../gates/guidance/GateGuidanceRenderer.js';
 import { buildDelegatedStepCallToAction, buildDelegatedStepLines } from '../delegation/brief.js';
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
@@ -9,11 +8,13 @@ import { withResponseStyle } from '../formatting/response-style.js';
 import {
   describeReviewForRender,
   renderReviewSupplements,
+  semanticReviewAction,
+  renderFallbackGateGuidance,
 } from '../pipeline/decisions/gates/describe-review-for-render.js';
 import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 import { decideVisibility } from '../pipeline/decisions/visibility/index.js';
 
-import type { BriefHistoryEntry } from '../delegation/brief.js';
+import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
 import type { VisibilityItem } from '#shared/types/chain-execution.js';
 import type { UnknownLedgerEntry } from '#shared/types/chain-session.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
@@ -28,6 +29,7 @@ import type {
   NormalStepInput,
 } from './types.js';
 import type { DeclaredSection } from '../../frameworks/declared-sections.js';
+import type { BriefHistoryEntry } from '../delegation/brief.js';
 import type { DelegationPayload } from '../delegation/types.js';
 import type { ReviewRenderFacts } from '../pipeline/decisions/gates/describe-review-for-render.js';
 import type { InjectionState } from '../pipeline/decisions/injection/types.js';
@@ -50,8 +52,8 @@ export class ChainOperatorExecutor {
   constructor(
     private readonly logger: Logger,
     private readonly convertedPrompts: ConvertedPrompt[],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private readonly gateGuidanceRenderer?: any,
+
+    private readonly gateGuidanceRenderer?: Pick<GateGuidanceRenderer, 'renderGuidance'>,
     private readonly getFrameworkContext?: (
       promptId: string,
       scope: StateStoreOptions | undefined,
@@ -121,6 +123,7 @@ export class ChainOperatorExecutor {
       gateIdsToRender.some((gateId) => this.isInlineGateId(gateId)) ||
       Boolean(inlineGuidanceText);
     const callToAction =
+      semanticReviewAction(review.protocol) ??
       'Use the resume shortcut below and include both your step output and a gate_verdict (e.g., `GATE_REVIEW: PASS - reason`) to resume the workflow.';
 
     // Get the last actual step that was executed
@@ -203,7 +206,10 @@ export class ChainOperatorExecutor {
     const isTargetFinalStep = targetIndex === stepPrompts.length - 1;
     const declaredSections = await this.resolveDeclaredSections(targetStep, input);
     const responseFormatSection = this.buildResponseFormatSection(
-      { coverage: gateGuidanceEnabled, verdictLine: isTargetFinalStep },
+      {
+        coverage: gateGuidanceEnabled && review.protocol.submission === 'legacy',
+        verdictLine: isTargetFinalStep && review.protocol.submission === 'legacy',
+      },
       declaredSections
     );
 
@@ -361,11 +367,12 @@ export class ChainOperatorExecutor {
     explicitGateIds: readonly string[];
     inlineGuidanceText: string | undefined;
   }): Promise<string> {
+    const protocol = describeReviewForRender(input.review).protocol;
     if (input.review.phase === 'exhausted') {
       this.logger.debug('[SymbolicChain] Gate guidance withheld: the review is exhausted');
       return '';
     }
-    if (!gateGuidanceEnabled) {
+    if (!gateGuidanceEnabled && protocol.semanticReviews.length === 0) {
       this.logger.debug('[SymbolicChain] Gate guidance injection suppressed by decision');
       return '';
     }
@@ -379,13 +386,17 @@ export class ChainOperatorExecutor {
       return this.renderSimpleGateGuidance(gateIdsToRender, inlineGuidanceText);
     }
     try {
-      const guidance: string = await this.gateGuidanceRenderer.renderGuidance(gateIdsToRender, {
-        criteriaExecution: 'pipeline',
-        framework: reviewStepContext?.selectedFramework?.type || DEFAULT_FRAMEWORK_ID,
-        category: reviewStepContext?.category || 'general',
-        promptId: targetStep?.promptId,
-        explicitGateIds,
-      });
+      const guidance: string = await this.gateGuidanceRenderer.renderGuidance(
+        [...gateIdsToRender],
+        {
+          criteriaExecution: 'pipeline',
+          framework: reviewStepContext?.selectedFramework?.type || DEFAULT_FRAMEWORK_ID,
+          category: reviewStepContext?.category || 'general',
+          promptId: targetStep?.promptId,
+          explicitGateIds: [...explicitGateIds],
+        },
+        ...(protocol.definitions === undefined ? [] : [protocol.definitions])
+      );
       return guidance;
     } catch (error) {
       this.logger.warn('[SymbolicChain] Gate guidance rendering failed, using fallback:', error);
@@ -656,40 +667,13 @@ export class ChainOperatorExecutor {
     gateIds: readonly string[],
     inlineGuidanceText?: string
   ): string {
-    const inlineGateIds = gateIds.filter((gateId) => this.isInlineGateId(gateId));
-    const frameworkGateIds = gateIds.filter((gateId) => !this.isInlineGateId(gateId));
-    const hasInlineGuidance =
-      inlineGateIds.length > 0 ||
-      Boolean(inlineGuidanceText && inlineGuidanceText.trim().length > 0);
-    const filteredFrameworkGateIds = hasInlineGuidance
-      ? frameworkGateIds.filter((id) => id === 'framework-compliance')
-      : frameworkGateIds;
-    const sections: string[] = ['\n\n---\n\n##  Quality Enhancement Gates'];
-
-    if (inlineGateIds.length > 0 || (inlineGuidanceText && inlineGuidanceText.trim().length > 0)) {
-      sections.push('\n\n###  Inline Gates (PRIMARY)\n');
-      if (inlineGuidanceText && inlineGuidanceText.trim().length > 0) {
-        sections.push(inlineGuidanceText.trim());
-      }
-      if (inlineGateIds.length > 0) {
-        sections.push('\n\n' + inlineGateIds.map((id) => `- ${id}`).join('\n'));
-      }
-    }
-
-    if (filteredFrameworkGateIds.length > 0) {
-      sections.push('\n\n---\n\n###  Framework Standards');
-      sections.push('\n\n' + filteredFrameworkGateIds.map((id) => `- ${id}`).join('\n'));
-    }
-
-    sections.push('\n\n' + GATE_ATTESTATION_LINE);
-    sections.push('---');
-
-    return sections.join('');
+    return renderFallbackGateGuidance(
+      gateIds.filter((gateId) => this.isInlineGateId(gateId)),
+      gateIds.filter((gateId) => !this.isInlineGateId(gateId)),
+      inlineGuidanceText
+    );
   }
 
-  /**
-   * Determine whether gate guidance injection is enabled for the current chain context.
-   */
   private isGateGuidanceEnabled(chainContext: Record<string, unknown>): boolean {
     const injectionState = chainContext['injectionState'] as
       { gateGuidance?: { inject?: boolean } } | undefined;

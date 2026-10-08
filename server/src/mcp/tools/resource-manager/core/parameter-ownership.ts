@@ -101,6 +101,7 @@ export const PARAMETER_OWNERS: Readonly<Record<string, readonly ResourceType[]>>
   enforcement_mode: ['gate'],
   block_response_on_fail: ['gate'],
   evaluation: ['gate'],
+  calibration_suite_id: ['gate'],
   guidance: ['gate'],
   pass_criteria: ['gate'],
   activation: ['gate'],

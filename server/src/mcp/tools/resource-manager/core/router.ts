@@ -45,6 +45,15 @@ import {
 } from '#shared/utils/request-identity-scope.js';
 import { runWithRequestStateScope } from '#shared/utils/request-state-scope.js';
 
+/** Copy the supplied gate review metadata whole, preserving opaque association bytes. */
+function copyGateReviewMetadata(args: ResourceManagerInput, gateArgs: GateManagerInput): void {
+  // Same parameter and key names: supplied blocks replace; omission adds no field.
+  if (args.evaluation !== undefined) gateArgs.evaluation = args.evaluation;
+  if (args.calibration_suite_id !== undefined) {
+    gateArgs.calibration_suite_id = args.calibration_suite_id;
+  }
+}
+
 /**
  * ResourceManagerRouter routes requests to the appropriate handler
  */
@@ -318,9 +327,7 @@ export class ResourceManagerRouter {
     if (args.block_response_on_fail !== undefined) {
       gateArgs.blockResponseOnFail = args.block_response_on_fail;
     }
-    // Same parameter and key name, so no spelling to map — only the presence test, which is the
-    // part that matters: the block is written whole or not at all.
-    if (args.evaluation !== undefined) gateArgs.evaluation = args.evaluation;
+    copyGateReviewMetadata(args, gateArgs);
     if (args.description) gateArgs.description = args.description;
     if (args.subject) gateArgs.subject = args.subject;
     if (args.guidance) gateArgs.guidance = args.guidance;

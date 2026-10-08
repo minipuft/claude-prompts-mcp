@@ -71,6 +71,7 @@ export type resource_managerParamName =
   | 'enforcement_mode'
   | 'block_response_on_fail'
   | 'evaluation'
+  | 'calibration_suite_id'
   | 'guidance'
   | 'pass_criteria'
   | 'activation'
@@ -510,7 +511,16 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'evaluation',
     type: 'object<{mode:enum[self|judge],model?:string,strict?:boolean}>',
     description:
-      '[Gate] Who reviews this gate: `mode: "self"` (the model that wrote the output) or `mode: "judge"` (a context-isolated reviewer that sees only the output and the criteria). `model` is a hint for which model the judge runs on; `strict` asks for failures first, and defaults to true under `judge`. Writes the gate.yaml key \'evaluation\' whole, so a supplied block replaces the existing one. Omitted on update, an existing gate keeps its current block; send `{"mode": "self"}` to return the gate to self-review. An unrecognized key inside the block is refused by path.',
+      "[Gate] Requested reviewer config {mode:'self'|'judge',model?,strict?}; model is a routing hint, not observed host/native identity. Judge requests isolated review and strict defaults true. Separate from evaluation.reviewer client claims in a gate report; neither establishes accuracy. Writes gate.yaml evaluation whole; omitted on update retains it, supplied block replaces it. Send {mode:'self'} to return to self-review. Unknown inner keys refuse by path.",
+    status: 'working',
+    compatibility: 'canonical',
+    includeInDescription: false,
+  },
+  {
+    name: 'calibration_suite_id',
+    type: 'string',
+    description:
+      '[Gate create/update] Nonempty opaque evaluation-suite association, preserved verbatim in gate.yaml. Omitted on update, the existing association is retained; a supplied value replaces it. This identifier does not resolve an archive, file path, calibration case or expected label.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -527,7 +537,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'pass_criteria',
     type: 'array<object>',
     description:
-      "[Gate] Structured pass criteria definitions. Each entry is an object, not a bare string: optional type (inline_guidance|framework_compliance|shell_verify|script_tool) plus the fields that type reads — framework compliance's framework/min_compliance_score/severity/quality_indicators, shell verification's shell_command/shell_timeout/shell_working_dir/shell_env/shell_max_attempts/shell_preset/shell_stdin_source/shell_response_env_var, or script tool's script_tool_id/script_tool_input/script_tool_timeout/script_tool_working_dir.",
+      '[Gate] Criterion objects. Legacy types: inline_guidance; framework_compliance with framework/min_compliance_score/severity/quality_indicators; shell_verify with shell_command (nonempty string array)/shell_timeout/shell_working_dir/shell_env/shell_max_attempts/shell_preset/shell_stdin_source/shell_response_env_var; script_tool with script_tool_id/script_tool_input/script_tool_timeout/script_tool_working_dir. semantic_evaluation requires id,target,question,evidence_requirements:{min_items},result (boolean/category/anchored score),compatible acceptance; allow_not_applicable defaults false. Target step_output uses server capture; artifact with opaque id is authorable but runtime capture unavailable. Unknown keys and retired pattern/length criteria are refused.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -891,6 +901,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'enforcement_mode',
       'block_response_on_fail',
       'evaluation',
+      'calibration_suite_id',
       'skip_version',
     ],
     status: 'working',
@@ -915,6 +926,7 @@ export const resource_managerCommands: ToolCommand[] = [
       'enforcement_mode',
       'block_response_on_fail',
       'evaluation',
+      'calibration_suite_id',
       'skip_version',
     ],
     status: 'working',

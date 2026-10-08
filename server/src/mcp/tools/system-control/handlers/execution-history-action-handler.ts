@@ -2,8 +2,10 @@
 
 import { ActionHandler } from '../core/action-handler-base.js';
 
-import type { ExecutionRecord } from '#shared/types/chain-execution.js';
+import type { ExecutionRecord, GateVerdictSummary } from '#shared/types/chain-execution.js';
 import type { ToolResponse } from '#shared/types/index.js';
+
+import { resolveFrozenReviewDefinition } from '#engine/execution/pipeline/decisions/gates/frozen-review-definitions.js';
 
 /**
  * Reader for `execution_records`, the append-only chain execution ledger.
@@ -68,11 +70,15 @@ export class ExecutionHistoryActionHandler extends ActionHandler {
     }
 
     const lines = [`📜 **Steps of \`${runId}\`** (latest record per step)`, ''];
+    const historical = [...new Set(records.map((record) => record.sessionId))].flatMap(
+      (sessionId) => store.queryBySession(sessionId, this.context.requestScope)
+    );
+    const latestGates = latestGateFacts(historical);
     for (const record of records) {
       const step = record.stepNumber !== undefined ? `step ${record.stepNumber}` : 'step ?';
       const prompt = record.promptId !== undefined ? ` · ${record.promptId}` : '';
       lines.push(`- ${statusIcon(record.status)} \`${record.status}\` ${step}${prompt}`);
-      lines.push(...formatGateVerdictLines(record));
+      lines.push(...formatLatestGateFacts(record, latestGates));
     }
     return this.createMinimalSystemResponse(lines.join('\n'), 'execution_history_steps');
   }
@@ -133,32 +139,81 @@ function formatRecords(records: readonly ExecutionRecord[]): string {
   }
 
   for (const [sessionId, sessionRecords] of bySession) {
-    const newest = sessionRecords[0];
-    if (newest === undefined) continue;
-
-    const chainLabel = newest.chainId !== undefined ? ` \`${newest.chainId}\`` : '';
-    lines.push(`### ${statusIcon(newest.status)} ${sessionId}${chainLabel}`);
-
-    const telemetryLine = formatTelemetryLine(newest, sessionRecords);
-    if (telemetryLine !== undefined) {
-      lines.push(telemetryLine);
-    }
-
-    for (const record of sessionRecords) {
-      const step = record.stepNumber !== undefined ? `step ${record.stepNumber}` : 'chain';
-      const prompt = record.promptId !== undefined ? ` · ${record.promptId}` : '';
-      const elapsed =
-        record.completedAt !== undefined ? ` · ${record.completedAt - record.startedAt}ms` : '';
-      const error = record.errorMessage !== undefined ? ` · ⚠️ ${record.errorMessage}` : '';
-      lines.push(
-        `- \`${record.status}\` ${step}${prompt} · ${new Date(record.startedAt).toISOString()}${elapsed}${error}`
-      );
-      lines.push(...formatGateVerdictLines(record));
-    }
-    lines.push('');
+    lines.push(...formatSessionRecords(sessionId, sessionRecords));
   }
 
   return lines.join('\n');
+}
+
+function formatSessionRecords(sessionId: string, records: readonly ExecutionRecord[]): string[] {
+  const newest = records[0];
+  if (newest === undefined) return [];
+  const chainLabel = newest.chainId !== undefined ? ` \`${newest.chainId}\`` : '';
+  const lines = [`### ${statusIcon(newest.status)} ${sessionId}${chainLabel}`];
+  const telemetry = formatTelemetryLine(newest, records);
+  if (telemetry !== undefined) lines.push(telemetry);
+  for (const record of records) lines.push(...formatRecordLines(record));
+  lines.push('');
+  return lines;
+}
+
+function formatRecordLines(record: ExecutionRecord): string[] {
+  const step = record.stepNumber !== undefined ? `step ${record.stepNumber}` : 'chain';
+  const prompt = record.promptId !== undefined ? ` · ${record.promptId}` : '';
+  const elapsed =
+    record.completedAt !== undefined ? ` · ${record.completedAt - record.startedAt}ms` : '';
+  const error = record.errorMessage !== undefined ? ` · ⚠️ ${record.errorMessage}` : '';
+  return [
+    `- \`${record.status}\` ${step}${prompt} · ${new Date(record.startedAt).toISOString()}${elapsed}${error}`,
+    ...formatGateVerdictLines(record),
+  ];
+}
+
+interface RecordedGateFact {
+  readonly record: ExecutionRecord;
+  readonly summary: GateVerdictSummary;
+}
+
+function gateFactKey(record: ExecutionRecord, gateId: string): string {
+  return JSON.stringify([record.sessionId, record.nodeId ?? record.stepNumber, gateId]);
+}
+
+/** Creation order, not an old target's timestamp, selects the latest known gate fact. */
+function latestGateFacts(
+  records: readonly ExecutionRecord[]
+): ReadonlyMap<string, RecordedGateFact> {
+  const latest = new Map<string, RecordedGateFact>();
+  for (const record of records) {
+    for (const summary of record.gateVerdicts) {
+      const key = gateFactKey(record, summary.gateId);
+      const previous = latest.get(key);
+      if (previous === undefined || previous.record.executionId < record.executionId)
+        latest.set(key, { record, summary });
+    }
+  }
+  return latest;
+}
+
+function formatLatestGateFacts(
+  record: ExecutionRecord,
+  latest: ReadonlyMap<string, RecordedGateFact>
+): string[] {
+  const facts = [...latest.values()].filter(
+    (fact) =>
+      fact.record.sessionId === record.sessionId &&
+      (fact.record.nodeId ?? fact.record.stepNumber) === (record.nodeId ?? record.stepNumber)
+  );
+  if (facts.length === 0) return [];
+  const lines = [
+    '  Latest-known gate facts (historical; not a grade of a newer empty row or target):',
+  ];
+  for (const fact of facts) {
+    lines.push(...formatGateSummaryLines(fact.summary));
+    lines.push(
+      `    Recorded at ${new Date(fact.summary.timestamp).toISOString()} · record \`${fact.record.executionId}\``
+    );
+  }
+  return lines;
 }
 
 /**
@@ -170,17 +225,90 @@ function formatRecords(records: readonly ExecutionRecord[]): string {
  * says a review happened, never which gate held the run up.
  */
 function formatGateVerdictLines(record: ExecutionRecord): string[] {
-  return record.gateVerdicts.map((verdict) => {
-    // A reminder is the reviewer's own word, not a graded result — it gets its own mark so a
-    // reader scanning the page cannot mistake an attestation for a check that passed.
-    const icon = verdict.tier === 'reminder' ? '≡' : verdict.verdict === 'PASS' ? '✓' : '✗';
-    const attempt = verdict.attempt !== undefined ? ` (attempt ${verdict.attempt})` : '';
-    const rationale =
-      verdict.rationale !== undefined && verdict.rationale.length > 0
-        ? ` — ${verdict.rationale}`
-        : '';
-    return `  - ${icon} \`${verdict.gateId}\` ${verdict.verdict}${attempt}${rationale}`;
-  });
+  return record.gateVerdicts.flatMap(formatGateSummaryLines);
+}
+
+function formatGateSummaryLines(summary: GateVerdictSummary): string[] {
+  const bypass = summary.verdict === 'BYPASS' || summary.disposition === 'bypassed';
+  const icon = bypass
+    ? '↪'
+    : summary.tier === 'reminder'
+      ? '≡'
+      : summary.verdict === 'PASS'
+        ? '✓'
+        : '✗';
+  const attempt = summary.attempt !== undefined ? ` (attempt ${summary.attempt})` : '';
+  const rationale =
+    summary.rationale !== undefined && summary.rationale.length > 0
+      ? ` — ${summary.rationale}`
+      : '';
+  return [
+    `  - ${icon} \`${summary.gateId}\` ${bypass ? 'BYPASS' : summary.verdict}${attempt}${rationale}`,
+    ...formatAcceptanceFacts(summary),
+    ...formatReviewClaims(summary),
+  ];
+}
+
+function formatAcceptanceFacts(summary: GateVerdictSummary): string[] {
+  const lines: string[] = [];
+  if (summary.disposition !== undefined) lines.push(`    Disposition: ${summary.disposition}`);
+  if (summary.verdict === 'BYPASS' || summary.disposition === 'bypassed') return lines;
+  if (summary.tier === 'reminder')
+    lines.push('    Reminder attestation: self-declared, not graded.');
+  else if (summary.semanticResult === undefined && (summary.toolChecks?.length ?? 0) === 0) {
+    lines.push('    Legacy unverified acceptance: no recorded semantic or tool component.');
+  }
+  const semantic = summary.semanticResult;
+  if (semantic !== undefined) {
+    const acceptance = !semantic.valid ? 'invalid' : semantic.passed ? 'accepted' : 'rejected';
+    lines.push(`    Semantic report contract: ${acceptance} (not model accuracy)`);
+    lines.push(
+      `    Criterion states: ${semantic.criteria.map((criterion) => `${criterion.criterion_id}: ${criterion.state}`).join('; ')}`
+    );
+  }
+  if (summary.toolChecks !== undefined) {
+    lines.push(
+      `    Recorded tool checks: ${summary.toolChecks.map((check) => `${check.passed ? 'passed' : 'not passed'} — ${check.summary}`).join('; ')}`
+    );
+    lines.push(
+      '    Attempted execution and exit status: unavailable; not-passed may include did-not-run.'
+    );
+  }
+  return lines;
+}
+
+function formatReviewClaims(summary: GateVerdictSummary): string[] {
+  const lines: string[] = [];
+  if (summary.reportedVerdict !== undefined)
+    lines.push(
+      `    Reported verdict: ${summary.reportedVerdict} — ${summary.reportedRationale ?? ''}`
+    );
+  if (summary.reportedReview !== undefined)
+    lines.push(
+      `    Reported group: ${summary.reportedReview.overall} — ${summary.reportedReview.rationale}`
+    );
+  if (summary.reviewBinding !== undefined)
+    lines.push(`    Server review binding: ${JSON.stringify(summary.reviewBinding)}`);
+  if (summary.evaluation !== undefined)
+    lines.push(`    Reported binding: ${JSON.stringify(summary.evaluation.binding)}`);
+  const requested =
+    summary.requestedEvaluation ??
+    (summary.bypassReview?.semanticContext === undefined
+      ? undefined
+      : resolveFrozenReviewDefinition(summary.bypassReview.semanticContext, summary.gateId)
+          ?.definition['evaluation']);
+  if (requested !== undefined) lines.push(`    Requested evaluation: ${JSON.stringify(requested)}`);
+  if (
+    summary.semanticResult !== undefined ||
+    summary.evaluation !== undefined ||
+    requested !== undefined
+  ) {
+    lines.push(
+      `    Client reviewer claim: ${JSON.stringify(summary.evaluation?.reviewer ?? { provenance: 'unknown' })}`
+    );
+    lines.push('    Host-observed reviewer: unknown; human verification: unknown.');
+  }
+  return lines;
 }
 
 /**

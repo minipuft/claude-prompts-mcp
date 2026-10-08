@@ -8,12 +8,13 @@
  * reasoning and using strict (failure-first) framing.
  */
 
-/**
- * Evaluation mode for a gate.
- * - 'self': Current default — LLM evaluates its own output (same context)
- * - 'judge': Context-isolated evaluation via delegation to a sub-agent
- */
-export type JudgeEvaluationMode = 'self' | 'judge';
+import type {
+  JudgeEvaluationMode,
+  SemanticCriterion,
+  SemanticEvaluationBinding,
+} from '#shared/types/gate-evaluation.js';
+
+export type { JudgeEvaluationMode, ResolvedJudgeConfig } from '#shared/types/gate-evaluation.js';
 
 /**
  * Per-gate judge evaluation configuration.
@@ -36,6 +37,14 @@ export interface JudgeEvaluationConfig {
   strict?: boolean;
 }
 
+/** Public rubric projection supplied by the server's frozen review authority. */
+export interface SemanticReviewPromptInput {
+  readonly gateId: string;
+  readonly criteria: readonly SemanticCriterion[];
+  /** Absent until capture binds the reviewed output; renderers never mint pins. */
+  readonly binding?: SemanticEvaluationBinding;
+}
+
 /**
  * Semantic envelope for the judge sub-agent.
  * Contains only the data needed for evaluation — no generation reasoning.
@@ -53,6 +62,7 @@ export interface JudgeEnvelope {
   readonly strict: boolean;
   /** Expected verdict format */
   readonly verdictFormat: string;
+  readonly semanticReviews?: readonly SemanticReviewPromptInput[];
 }
 
 /**
@@ -66,14 +76,4 @@ export interface JudgeEvaluationDefaults {
   defaultModel?: string;
   /** Default strict setting */
   strict: boolean;
-}
-
-/**
- * Resolved judge config after merging gate-level and global defaults.
- * All fields are required (defaults applied).
- */
-export interface ResolvedJudgeConfig {
-  readonly mode: JudgeEvaluationMode;
-  readonly model: string | undefined;
-  readonly strict: boolean;
 }

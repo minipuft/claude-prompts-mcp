@@ -30,7 +30,7 @@
     },
     "pass_criteria": {
       "type": "array",
-      "description": "[Gate] Structured pass criteria definitions. Each entry is an object, not a bare string: optional type (inline_guidance|framework_compliance|shell_verify|script_tool) plus the fields that type reads — framework compliance's framework/min_compliance_score/severity/quality_indicators, shell verification's shell_command/shell_timeout/shell_working_dir/shell_env/shell_max_attempts/shell_preset/shell_stdin_source/shell_response_env_var, or script tool's script_tool_id/script_tool_input/script_tool_timeout/script_tool_working_dir.",
+      "description": "[Gate] Structured pass criteria definitions. Each entry is an object, not a bare string: optional type (inline_guidance|framework_compliance|shell_verify|script_tool) plus the fields that type reads — framework compliance's framework/min_compliance_score/severity/quality_indicators, shell verification's shell_command/shell_timeout/shell_working_dir/shell_env/shell_max_attempts/shell_preset/shell_stdin_source/shell_response_env_var, or script tool's script_tool_id/script_tool_input/script_tool_timeout/script_tool_working_dir. Supports canonical semantic_evaluation criteria with id, target, question, evidence_requirements, result, acceptance and allow_not_applicable; server validation owns nested shapes.",
       "items": {}
     },
     "activation": {
@@ -64,6 +64,10 @@
     "enforcementMode": {
       "type": "string",
       "description": "Legacy alias for enforcement_mode; canonical value wins when both are supplied"
+    },
+    "calibration_suite_id": {
+      "type": "string",
+      "description": "Opaque public calibration suite association; not a path or private-case lookup."
     }
   },
   "required": ["id", "name", "description"],

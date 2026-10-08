@@ -1,6 +1,9 @@
 // @lifecycle canonical - Type definitions for gate enforcement authority.
 
-import type { PendingGateReview } from '#shared/types/chain-execution.js';
+import type {
+  GateReviewSemanticContext,
+  PendingGateReview,
+} from '#shared/types/chain-execution.js';
 import type { GateVerdictSource } from '../../../../gates/core/gate-verdict-contract.js';
 
 export type {
@@ -30,6 +33,11 @@ export interface GateSetEnforcement {
  * User action choices when retry limit is exceeded.
  */
 export type GateAction = 'retry' | 'skip' | 'abort';
+
+/** Pure lifecycle intent; the authority issues fresh pins when the caller applies it. */
+export interface ReviewAttemptIntent {
+  readonly renewAttempt?: true;
+}
 
 /**
  * Input for verdict parsing decisions.
@@ -67,6 +75,10 @@ export interface GroundTruthOutcome {
 export interface GroundTruthCoverageInput {
   /** Gate ids the pending review is still waiting on. */
   readonly requiredGateIds: readonly string[];
+  /** Server-issued frozen definitions; tool results cannot satisfy their semantic criteria. */
+  readonly reviewDefinitions?: GateReviewSemanticContext['definitions'];
+  /** Server-owned pending structural finding; tool coverage cannot settle that separate hold. */
+  readonly structuralPending?: boolean;
   /** Results produced by running this request's ground-truth criteria, of any mechanism. */
   readonly results: readonly GroundTruthOutcome[];
   /** Gate ids an earlier stage in this same request already shell-verified. */

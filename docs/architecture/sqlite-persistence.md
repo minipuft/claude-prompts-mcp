@@ -180,6 +180,60 @@ under the old key. `chain_sessions` is `derived`, and `chain_runs` is `ephemeral
 `chain_runs` row older than v35 survives. That is what retired the pre-3.1 residual reader in
 `run-registry.ts`. `DROPPED_ON_THIS_BUMP` stays empty.
 
+## Live Run Ownership and Fresh-Process Handoff
+
+**Run persistence supports ownership handoff, not recovery after a dead-owner restart.**
+At startup, [ChainSessionStore](../../server/src/modules/chains/manager.ts) calls
+`cleanupStalePidRows()` before `loadSessions()`, including when the database port is
+late-bound. It removes dead owners' `chain_sessions` projections and delegates removal
+of their `chain_runs` and `chain_run_nodes` to
+[DirectChainRunRegistry.deleteRunsForOwners](../../server/src/modules/chains/run-registry.ts).
+The handoff token lives on the deleted run row, so it is removed too. This bounds
+operational storage by live owners and prevents stale hook projections; saving a run
+to SQLite does not make its token or pending review survive that startup cleanup.
+
+The supported rolling handoff uses compatible processes sharing the same database:
+
+1. While the original owner is alive, persist the run and mint its handoff token.
+2. Start and initialize the replacement process while the original owner is still alive,
+   so its startup cleanup preserves the run.
+3. Stop the original owner, then submit `prompt_engine(claim_token: token)` to the
+   initialized replacement. `claimRunByToken()` transfers `run_owner_pid`, clears the
+   single-use token in the same update, and reconstructs the run from its stored rows.
+
+The [registered transport control](../../server/tests/integration/gates/structured-gate-verdict-flow.test.ts)
+(`built rolling cold hydration retains frozen authority after private catalog changes`)
+uses this chronology on STDIO and Streamable HTTP. It checks that the fresh process
+owns the run and retains the pending review's frozen semantic context after the live
+gate definition changes. It does not establish stop-old-first restart continuity:
+initializing the replacement after the original owner dies prunes the run before a
+claim can hydrate it. The optional evaluation archive below preserves separate
+evidence; it does not restore an operational run or its token.
+
+## Gate History and Calibration Evidence
+
+`execution_records.gate_verdicts_json` carries operational per-gate review results,
+including structured semantic observations and their revision/target bindings. Same-call
+capture and later verdict submission use the existing JSON surface. The table remains
+ephemeral and workspace-scoped: pruning or schema recreation can remove those records.
+An execution-history projection is therefore not a durable calibration receipt.
+
+The opt-in [evaluation archive](../../evaluations/README.md#private-storage-and-replay)
+stores frozen gate/suite/evaluator references, target and report bytes, attempts, grades,
+and reviewed promotion receipts under a caller-selected private filesystem root.
+Calibration and promotion replay verify the full declared dependency graph and
+re-adjudicate archived reports without using operational history. Missing or corrupt
+archive evidence refuses replay. Removing disposable runtime state does not remove
+files held in that separate archive.
+
+Resource `version_history` and its existing byte trees remain authoritative for resource
+revisions. Private calibration cases and expected labels belong to the caller's archive;
+the public resource carries only an opaque suite association. Calibration adds no table,
+column, schema migration, or default server dependency. Existing JSON history retains
+its declared retention; the optional archive supplies the durable evidence boundary.
+See [How to Calibrate a Semantic Gate](../guides/semantic-gate-calibration.md) for the
+operator workflow and the distinction between a reviewed receipt and a resource write.
+
 ## Four Tables Are Durable — A Schema Bump Must Not Destroy Them
 
 `objects` and `version_entries` joined this list at v29; the reasoning below is why the

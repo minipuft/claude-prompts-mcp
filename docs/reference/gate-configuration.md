@@ -38,9 +38,10 @@ Full schema for defining reusable quality gates in `resources/gates/{id}/gate.ya
 
 A gate is a `check` when at least one of its `pass_criteria` entries carries a real runtime
 evaluator — `shell_verify` (exit-code ground truth) or `script_tool` (structured verdict from a
-registered tool). Every other gate is a `reminder`, including a gate with no `pass_criteria` at
-all, and a gate whose `pass_criteria` only sets the pattern/length fields (below) — those render
-as prose and have no evaluator that flips a verdict.
+registered tool). Without tools, a `semantic_evaluation` criterion makes the gate an
+`evaluation`; otherwise it is a `reminder`, including a gate with no criteria. Mixed gates
+remain `check` and retain both tool and semantic requirements. Tier describes authored
+requirements, not whether a check ran or a model judgment is correct.
 
 | Gate           | Criterion type                   | Tier       |
 | -------------- | -------------------------------- | ---------- |
@@ -157,8 +158,8 @@ naming the gate that needs either an activation rule or an explicit reference.
 
 ## Pass Criteria & Retries
 
-Define how strict the gate is. Each `pass_criteria` entry's `type` selects one of four
-enforcement modes — this is also what [Tiers](#tiers) reads to decide `check` vs `reminder`.
+Define how strict the gate is. Each `pass_criteria` entry's `type` selects one of five
+enforcement modes — this is also what [Tiers](#tiers) reads to decide `check`, `evaluation`, or `reminder`.
 
 | `type`                 | Enforcement                                                                                                                                          | When to use                                                                          |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
@@ -166,6 +167,22 @@ enforcement modes — this is also what [Tiers](#tiers) reads to decide `check` 
 | `framework_compliance` | None — auto-passed by `GateValidator`. `PhaseGuardVerificationStage` enforces framework phase guards from `phases.yaml` independently of this value. | Declaring intent only.                                                               |
 | `shell_verify`         | Hard — runs `shell_command` as argv, exit 0 = pass.                                                                                                  | Ground-truth checks: tests passing, files existing, content claims matching reality. |
 | `script_tool`          | Hard — resolves `script_tool_id` to a registered tool and runs it with JSON stdin, parsing `{passed, reason?}` back.                                 | Checks needing typed arguments and an explained verdict.                             |
+| `semantic_evaluation`  | Structured report contract acceptance against frozen server binding and captured evidence.                                                           | Boolean, category, or anchored-score requirements.                                   |
+
+### Semantic evaluation
+
+`semantic_evaluation` declares an `id`, `target`, `question`, `evidence_requirements`,
+`result` domain (boolean, category, or anchored score), compatible `acceptance`, and optional
+`allow_not_applicable` (default false). Authoring and loading use the same strict criterion
+contract. A structured report must address the server-issued frozen review binding and its
+actual captured target; a bare PASS or tool sibling does not satisfy this requirement.
+Capture the step output before submitting the report. Stale or misaddressed bindings are refused.
+
+A target `{kind: step_output}` uses the server capture. `{kind: artifact, id: opaque-reference}`
+is a valid declaration, but artifact capture is currently unavailable at runtime. The id does
+not resolve a filesystem path. Unknown target kinds and malformed domains remain refused.
+Report acceptance checks the declared contract and evidence; it does not establish model
+accuracy, human approval, or execution by an external reviewer.
 
 `llm_self_check` never had a runner and is not a valid `type`. Declaring it is rejected at schema
 validation with an error naming the replacement: use `inline_guidance` (reminder) or

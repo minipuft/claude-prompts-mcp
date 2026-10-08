@@ -1,26 +1,26 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-07T13:26:19.112Z",
+  "generatedAt": "2026-10-08T16:51:57.662Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2448,
-    "warnings": 710
+    "errors": 2440,
+    "warnings": 706
   },
   "byRule": {
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 1648,
+      "errors": 1644,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
       "errors": 0,
-      "warnings": 76
+      "warnings": 75
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
       "warnings": 71
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 334,
+      "errors": 332,
       "warnings": 0
     },
     "max-params": {
@@ -32,32 +32,24 @@
       "warnings": 0
     },
     "import-x/order": {
-      "errors": 4,
+      "errors": 3,
       "warnings": 0
-    },
-    "@typescript-eslint/explicit-module-boundary-types": {
-      "errors": 45,
-      "warnings": 0
-    },
-    "@typescript-eslint/no-unsafe-assignment": {
-      "errors": 0,
-      "warnings": 151
-    },
-    "@typescript-eslint/no-unsafe-call": {
-      "errors": 0,
-      "warnings": 27
-    },
-    "@typescript-eslint/no-unsafe-member-access": {
-      "errors": 0,
-      "warnings": 334
     },
     "@typescript-eslint/explicit-function-return-type": {
       "errors": 19,
       "warnings": 0
     },
+    "@typescript-eslint/no-unsafe-assignment": {
+      "errors": 0,
+      "warnings": 150
+    },
     "@typescript-eslint/no-explicit-any": {
       "errors": 239,
       "warnings": 0
+    },
+    "@typescript-eslint/no-unsafe-member-access": {
+      "errors": 0,
+      "warnings": 333
     },
     "max-depth": {
       "errors": 0,
@@ -78,6 +70,14 @@
     "__unknown__": {
       "errors": 0,
       "warnings": 5
+    },
+    "@typescript-eslint/explicit-module-boundary-types": {
+      "errors": 44,
+      "warnings": 0
+    },
+    "@typescript-eslint/no-unsafe-call": {
+      "errors": 0,
+      "warnings": 26
     },
     "@typescript-eslint/no-unsafe-return": {
       "errors": 0,

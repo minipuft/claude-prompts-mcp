@@ -1,66 +1,42 @@
-// @lifecycle canonical - Derives a gate's tier (check vs reminder) from its pass criteria.
+// @lifecycle canonical - Derives authored tool, semantic evaluation and reminder requirements.
 /**
- * Gate Tier
+ * Gate tier describes requirements, not attempted execution, verified results or model quality.
+ * Tool criteria take precedence in mixed gates; the component readers retain both facts.
+ * Semantic-only criteria require evaluation; legacy guidance and missing criteria are reminders.
+ * The shipped registry/index cross-check covers current resource fixtures. Semantic index and
+ * skills-export projections remain separate consumers of this rule.
  *
- * A gate is a `check` when at least one of its `pass_criteria` entries carries a real
- * runtime evaluator — `shell_verify` (exit-code ground truth) or `script_tool` (structured
- * verdict from a registered tool). Every other gate is a `reminder`, including a gate with
- * no `pass_criteria` at all, and a gate whose `pass_criteria` only sets pattern/length
- * fields (`required_patterns`, `regex_patterns`, `keyword_count`, `min_length`,
- * `max_length`, `forbidden_patterns`) — those fields never had an evaluator that flips a
- * verdict, and since row 1.5 they are refused at load rather than accepted and ignored
- * (ruling B9, ~/.claude/plans/gate-checks-and-reminders.md). They are still named here
- * because a gate.yaml predating that rejection is what someone reading this will be
- * holding.
- *
- * `server/scripts/generate-gate-index.js` carries a JS copy of this same rule so the
- * generated `_index.md` Tier column can be produced without a TS build step. The two
- * copies are kept in step by the registry cross-check in
- * `server/tests/unit/gates/core/gate-tier.test.ts`, which loads every `gate.yaml`, parses
- * `_index.md`'s Tier column, and asserts both rules agree for all gates.
- *
- * This module also carries `formatCheckLine`: the runtime guidance renderer and the skills
- * export used to format a check's line independently, and drifted to two different
- * phrasings (`check: runs \`...\`` vs `Passes \`...\``) describing the same criterion. Export
- * asserts an outcome ("Passes") that it cannot know — it writes a static file once, at
- * export time, and has no way to know whether a rerun of the command will still pass. Both
- * surfaces now read the same function, phrased as what the engine actually does: run the
- * command and record its exit code.
+ * `formatCheckLine` is shared by runtime guidance and skills export: it names the command
+ * the engine runs rather than asserting an outcome a static export cannot know.
  */
 
-import type { GatePassCriteria } from '../types/gate-primitives.js';
+export type GateTier = 'check' | 'evaluation' | 'reminder';
 
-/** A gate's tier: `check` has a runtime evaluator, `reminder` is guidance-only. */
-export type GateTier = 'check' | 'reminder';
+const TOOL_PASS_CRITERIA_TYPES: ReadonlySet<string> = new Set(['shell_verify', 'script_tool']);
 
-/** The only `pass_criteria[].type` values with a runtime pass/fail evaluator. */
-const EVALUATED_PASS_CRITERIA_TYPES: ReadonlySet<GatePassCriteria['type']> = new Set([
-  'shell_verify',
-  'script_tool',
-]);
-
-/**
- * Structural shape this function actually reads. Both the loader's
- * `LightweightGateDefinition` and a bare parsed `gate.yaml` object satisfy it, so this stays
- * the parameter type instead of importing the loader's type — the narrowest type both the
- * loader output and the test can satisfy.
- */
+/** Narrow authored facts, accepted from loader DTOs, frozen requirements and raw YAML. */
 export interface GateTierSource {
-  pass_criteria?: Array<{ type?: string }>;
+  readonly pass_criteria?: readonly { readonly type?: string }[];
 }
 
-/**
- * Derive a gate's tier from its `pass_criteria`.
- *
- * `check` iff at least one criterion's `type` is `shell_verify` or `script_tool`.
- * A gate with no `pass_criteria` (or none matching) is a `reminder`.
- */
-export function deriveGateTier(definition: GateTierSource): GateTier {
-  const criteria = definition.pass_criteria ?? [];
-  const hasEvaluator = criteria.some((criterion) =>
-    EVALUATED_PASS_CRITERIA_TYPES.has(criterion.type as GatePassCriteria['type'])
+/** Declared tool requirement only; this says nothing about whether a command ran or passed. */
+export function hasToolCheck(definition: GateTierSource): boolean {
+  return (definition.pass_criteria ?? []).some(
+    (criterion) => criterion.type !== undefined && TOOL_PASS_CRITERIA_TYPES.has(criterion.type)
   );
-  return hasEvaluator ? 'check' : 'reminder';
+}
+
+/** Declared semantic requirement only; report acceptance remains owned by the canonical kernel. */
+export function hasSemanticEvaluation(definition: GateTierSource): boolean {
+  return (definition.pass_criteria ?? []).some(
+    (criterion) => criterion.type === 'semantic_evaluation'
+  );
+}
+
+/** Tool precedence selects the display tier without discarding a mixed gate's semantic facts. */
+export function deriveGateTier(definition: GateTierSource): GateTier {
+  if (hasToolCheck(definition)) return 'check';
+  return hasSemanticEvaluation(definition) ? 'evaluation' : 'reminder';
 }
 
 /**

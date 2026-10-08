@@ -426,7 +426,11 @@ type Kind =
 
 function renderKind(kind: Kind): string {
   if (kind.kind === 'enum') return `enum[${[...kind.members].sort().join('|')}]`;
-  if (kind.kind === 'union') return `union[${kind.members.map(renderKind).sort().join('|')}]`;
+  if (kind.kind === 'union') {
+    // Distinct object schemas still have the same outer shape; mixed kinds remain a union.
+    const members = [...new Set(kind.members.map(renderKind))].sort();
+    return members.length === 1 ? members.join('') : `union[${members.join('|')}]`;
+  }
   return kind.kind;
 }
 

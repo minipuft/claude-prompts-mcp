@@ -15,7 +15,10 @@
 
 import { isUnknownInterruptPending } from '../mutation/interrupt-policy.js';
 
-import type { PendingGateReview } from './gate-enforcement-types.js';
+import type { GateReview, PendingGateReview } from '#shared/types/chain-execution.js';
+
+/** The one synthetic gate id minted by the phase-guard composition owner. */
+export const PHASE_GUARD_GATE_ID = '__phase_guard__';
 
 /** What one failed structural evaluation found, in the vocabulary a review stores. */
 export interface StructuralFinding {
@@ -52,6 +55,7 @@ export function composeStructuralReview(
   return {
     combinedPrompt: finding.feedback,
     gateIds: [finding.gateId],
+    structuralGateIds: structuralMembership(undefined, finding.gateId),
     prompts: [],
     createdAt: finding.createdAt,
     attemptCount: 0,
@@ -71,13 +75,19 @@ export function composeStructuralReview(
  * Whether `open` is a gate review the finding joins.
  *
  * Not an interrupt hold (no `gate_verdict` resolves one), not a review that already carries the
- * structural id, not an empty review, and not a review of a DIFFERENT step: a review opened for
+ * synthetic structural id (an authored definition collision may join), not an empty review,
+ * and not a review of a DIFFERENT step: a review opened for
  * the step a run just advanced onto is about that step, and the answer being graded is not its.
  * Identity is compared only where both sides state it, node id before ordinal.
  */
 function absorbsStructuralFinding(open: PendingGateReview, finding: StructuralFinding): boolean {
   if (isUnknownInterruptPending(open)) return false;
-  if (open.gateIds.length === 0 || open.gateIds.includes(finding.gateId)) return false;
+  if (open.gateIds.length === 0) return false;
+  if (
+    open.gateIds.includes(finding.gateId) &&
+    !(finding.gateId === PHASE_GUARD_GATE_ID && hasAuthoredStructuralDefinition(open))
+  )
+    return false;
 
   const graded = finding.reviewedStep;
   if (!('nodeId' in graded)) return true;
@@ -95,7 +105,8 @@ function mergeFinding(open: PendingGateReview, finding: StructuralFinding): Pend
     combinedPrompt: [open.combinedPrompt, finding.feedback]
       .filter((part) => part.trim().length > 0)
       .join('\n\n---\n\n'),
-    gateIds: [...open.gateIds, finding.gateId],
+    gateIds: [...new Set([...open.gateIds, finding.gateId])],
+    structuralGateIds: structuralMembership(open, finding.gateId),
     // Structural hints first: they name what is missing from THIS answer, and the renderer
     // shows only the first three.
     retryHints: [...finding.retryHints, ...(open.retryHints ?? [])],
@@ -106,5 +117,71 @@ function mergeFinding(open: PendingGateReview, finding: StructuralFinding): Pend
       mode: finding.mode,
       ...finding.reviewedStep,
     },
+  };
+}
+
+/** An authored definition with the same id remains a tool requirement, not a synthetic exception. */
+function hasAuthoredStructuralDefinition(review: PendingGateReview): boolean {
+  const definitions = review.semanticContext?.definitions ?? {};
+  return (
+    Object.hasOwn(definitions, PHASE_GUARD_GATE_ID) &&
+    definitions[PHASE_GUARD_GATE_ID]?.definition['id'] === PHASE_GUARD_GATE_ID
+  );
+}
+
+function structuralMembership(open: PendingGateReview | undefined, gateId: string): string[] {
+  return gateId === PHASE_GUARD_GATE_ID ||
+    open?.structuralGateIds?.includes(PHASE_GUARD_GATE_ID) === true
+    ? [PHASE_GUARD_GATE_ID]
+    : [];
+}
+
+/**
+ * A server-marked finding, or the contextless legacy structural review that predates the marker.
+ * A frozen authored id without structural membership is not a finding, whatever its kind/source.
+ */
+export function hasStructuralFinding(review: PendingGateReview | undefined): boolean {
+  if (review?.gateIds.includes(PHASE_GUARD_GATE_ID) !== true) return false;
+  if (review.structuralGateIds?.includes(PHASE_GUARD_GATE_ID) === true) return true;
+  return review.structuralGateIds === undefined && review.semanticContext === undefined;
+}
+
+/**
+ * Select tool-runner work only; the complete gateIds and structural hold remain unchanged.
+ * Kind/source labels and prefixes confer no exception. Legacy reviews without the server marker
+ * keep every id; a frozen authored definition wins over structural membership on an id collision.
+ */
+export function selectToolReviewGateIds(review: PendingGateReview): string[] {
+  const synthetic =
+    review.structuralGateIds?.includes(PHASE_GUARD_GATE_ID) === true &&
+    !hasAuthoredStructuralDefinition(review);
+  return review.gateIds.filter((gateId) => gateId !== PHASE_GUARD_GATE_ID || !synthetic);
+}
+
+/**
+ * Remove the previous structural grade before a replacement is graded (Stage19's late-report
+ * path). Preserve any authored requirement sharing the synthetic id, and keep unrelated review
+ * authority, budget and history. The actual passing grade, not tool selection, settles the hold.
+ * Clearing prompt/hints is exact for detached reviews: they open without either, so those lines
+ * came from the previous grade that the replacement supersedes.
+ */
+export function withoutStructuralFinding(review: GateReview): GateReview {
+  if (!hasStructuralFinding(review)) return review;
+  const {
+    failedPhases: _phases,
+    mode: _mode,
+    source: _source,
+    ...metadata
+  } = review.metadata ?? {};
+  if (_source !== undefined && _source !== 'phase-guard-verification') metadata['source'] = _source;
+  return {
+    ...review,
+    gateIds: hasAuthoredStructuralDefinition(review)
+      ? [...review.gateIds]
+      : review.gateIds.filter((gateId) => gateId !== PHASE_GUARD_GATE_ID),
+    structuralGateIds: review.structuralGateIds?.filter((gateId) => gateId !== PHASE_GUARD_GATE_ID),
+    combinedPrompt: '',
+    retryHints: [],
+    metadata,
   };
 }

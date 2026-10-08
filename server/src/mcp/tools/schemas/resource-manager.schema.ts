@@ -31,6 +31,7 @@ import { PREVIEWABLE_ACTIONS } from '../shared/preview-action.js';
 
 import type { JudgeEvaluationConfig } from '#engine/gates/judge/types.js';
 
+import { SemanticCriterionSchema } from '#engine/gates/core/gate-schema.js';
 import {
   ArgumentValidationSchema,
   ChainStepSchema,
@@ -640,10 +641,22 @@ export const resourceManagerInputSchema = z
      * whole: a supplied block replaces the existing one, an omitted one is carried forward.
      */
     evaluation: gateEvaluationSchema.optional().describe(describe('evaluation')),
+    /** [Gate] Opaque evaluation-suite association; never resolved as a path or archive. */
+    calibration_suite_id: z
+      .string()
+      .refine(
+        (value) => value.trim() !== '',
+        'calibration_suite_id must be a nonempty opaque identifier'
+      )
+      .optional()
+      .describe(describe('calibration_suite_id')),
     /** [Gate] Gate guidance content. */
     guidance: z.string().optional().describe(describe('guidance')),
     /** [Gate] Structured pass criteria definitions — see `gatePassCriteriaSchema` above. */
-    pass_criteria: z.array(gatePassCriteriaSchema).optional().describe(describe('pass_criteria')),
+    pass_criteria: z
+      .array(z.discriminatedUnion('type', [gatePassCriteriaSchema, SemanticCriterionSchema]))
+      .optional()
+      .describe(describe('pass_criteria')),
     /** [Gate] Activation rules. */
     activation: z.record(z.string(), z.unknown()).optional().describe(describe('activation')),
     /** [Gate] Retry configuration. */

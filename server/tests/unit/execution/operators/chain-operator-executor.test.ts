@@ -10,6 +10,7 @@ import { DEFAULT_INJECTION_CONFIG } from '../../../../src/engine/execution/pipel
 import { InjectionDecisionService } from '../../../../src/engine/execution/pipeline/decisions/injection/injection-decision-service.js';
 import { GateReviewStage } from '../../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 
+import type { GateGuidanceRenderer } from '../../../../src/engine/gates/guidance/GateGuidanceRenderer.js';
 import type { DeclaredSection } from '../../../../src/engine/frameworks/declared-sections.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';
@@ -251,7 +252,9 @@ describe('ChainOperatorExecutor', () => {
 
   test('renders gate review instructions using explicit :: gate references', async () => {
     const gateRenderer = {
-      renderGuidance: jest.fn().mockResolvedValue('## Gate Guidance'),
+      renderGuidance: jest
+        .fn<GateGuidanceRenderer['renderGuidance']>()
+        .mockResolvedValue('## Gate Guidance'),
     };
     const reviewExecutor = new ChainOperatorExecutor(
       mockLogger,
@@ -406,7 +409,9 @@ describe('ChainOperatorExecutor', () => {
   // asks for no verdict, the last one included.
   test('renders response format section with gate coverage and the verdict line for a gated step', async () => {
     const gateRenderer = {
-      renderGuidance: jest.fn().mockResolvedValue('## Gate Guidance'),
+      renderGuidance: jest
+        .fn<GateGuidanceRenderer['renderGuidance']>()
+        .mockResolvedValue('## Gate Guidance'),
     };
     const gatedExecutor = new ChainOperatorExecutor(mockLogger, mockConvertedPrompts, gateRenderer);
 
@@ -452,7 +457,9 @@ describe('ChainOperatorExecutor', () => {
 
   test('prefers current_step metadata when selecting review step context', async () => {
     const gateRenderer = {
-      renderGuidance: jest.fn().mockResolvedValue('## Gate Guidance'),
+      renderGuidance: jest
+        .fn<GateGuidanceRenderer['renderGuidance']>()
+        .mockResolvedValue('## Gate Guidance'),
     };
     const reviewExecutor = new ChainOperatorExecutor(
       mockLogger,

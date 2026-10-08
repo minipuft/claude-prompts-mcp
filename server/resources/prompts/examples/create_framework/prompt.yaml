@@ -2,7 +2,7 @@ id: create_framework
 name: Create Framework
 description: Designs current framework resources with canonical server
   validation and non-executing drafts before authorized creation.
-category: framework-authoring
+category: examples
 userMessageTemplateFile: user-message.md
 
 arguments:

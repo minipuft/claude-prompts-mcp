@@ -6,31 +6,37 @@ import { SemanticCriterionSchema } from './gate-schema.js';
 import type {
   PinnedSemanticEvaluationContext,
   SemanticCriterion,
+  SemanticCriterionResult,
+  SemanticEvaluationIssue,
+  SemanticEvaluationResult,
   SemanticEvaluationBinding,
   SemanticEvaluationReport,
   SemanticObservation,
-  SemanticObservationState,
 } from '#shared/types/gate-evaluation.js';
 
 import { hashBytes } from '#shared/utils/hash.js';
 
-interface SemanticEvaluationIssue {
-  readonly code: string;
-  readonly message: string;
-  readonly criterion_id?: string;
+/** Canonical faults that cannot be attributed to a report's current review attempt. */
+const ATTRIBUTION_FAULTS = new Set([
+  'binding_mismatch',
+  'target_digest_mismatch',
+  'invalid_context',
+  'duplicate_criterion',
+  'invalid_binding',
+]);
+
+export function semanticAttributionFaults(
+  result: SemanticEvaluationResult
+): readonly SemanticEvaluationIssue[] {
+  return result.issues.filter((entry) => ATTRIBUTION_FAULTS.has(entry.code));
 }
-interface SemanticCriterionResult {
-  readonly criterion_id: string;
-  readonly state: SemanticObservationState | 'invalid';
-  readonly valid: boolean;
-  readonly passed: boolean;
-  readonly issues: readonly SemanticEvaluationIssue[];
-}
-interface SemanticEvaluationResult {
-  readonly valid: boolean;
-  readonly passed: boolean;
-  readonly issues: readonly SemanticEvaluationIssue[];
-  readonly criteria: readonly SemanticCriterionResult[];
+
+export function semanticFailureReasons(result: SemanticEvaluationResult): readonly string[] {
+  return result.issues.length > 0
+    ? result.issues.map((entry) => entry.message)
+    : result.criteria
+        .filter((criterion) => !criterion.passed)
+        .map((criterion) => `${criterion.criterion_id}: ${criterion.state}`);
 }
 
 const text = z.string().refine((value) => value.trim().length > 0);
@@ -302,15 +308,42 @@ export function evaluateSemanticEvaluation(
   if (!pinned.success) return result([], schemaIssues(pinned.error, 'invalid_context'));
   const authority = pinned.data;
   const ids = new Set(authority.criteria.map((criterion) => criterion.id));
-  const parsed = reportSchema.safeParse(report);
-  if (!parsed.success)
+  const contextIssues: SemanticEvaluationIssue[] = [];
+  if (ids.size !== authority.criteria.length)
+    contextIssues.push(issue('duplicate_criterion', 'Pinned criterion IDs must be unique'));
+  if (authority.binding.target_digest !== hashBytes(authority.target.content))
+    contextIssues.push(
+      issue('target_digest_mismatch', 'Pinned digest must hash captured UTF-8 content')
+    );
+  if (contextIssues.length > 0)
     return result(
       authority.criteria.map((criterion) => invalid(criterion.id, [])),
-      schemaIssues(parsed.error, 'invalid_report')
+      contextIssues
     );
+  const parsed = reportSchema.safeParse(report);
+  if (!parsed.success) {
+    const faults = schemaIssues(parsed.error, 'invalid_report');
+    if (report === undefined) {
+      faults.push(
+        issue(
+          'missing_report',
+          'Supply a structured per_gate evaluation report for the captured review'
+        )
+      );
+    } else {
+      const supplied = z.object({ binding: bindingSchema }).safeParse(report);
+      faults.push(
+        ...(supplied.success
+          ? bindingIssues(authority, supplied.data.binding)
+          : [issue('invalid_binding', 'Report binding cannot be attributed to the current review')])
+      );
+    }
+    return result(
+      authority.criteria.map((criterion) => invalid(criterion.id, [])),
+      faults
+    );
+  }
   const issues = bindingIssues(authority, parsed.data.binding);
-  if (ids.size !== authority.criteria.length)
-    issues.push(issue('duplicate_criterion', 'Pinned criterion IDs must be unique'));
   if (issues.length > 0)
     return result(
       authority.criteria.map((criterion) => invalid(criterion.id, [])),

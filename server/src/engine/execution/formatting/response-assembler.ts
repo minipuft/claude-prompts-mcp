@@ -8,6 +8,12 @@ import { DelegationRenderer } from '../delegation/renderer.js';
 import { getHandoffFooterInstruction } from '../delegation/strategy.js';
 import { rerunCommandText } from '../parsers/command-parser.js';
 import { formatShellVerifyToken } from '../parsers/symbolic-operator-parser.js';
+import {
+  buildStructuredVerdictTemplate,
+  semanticReviewResume,
+} from '../pipeline/decisions/gates/describe-review-for-render.js';
+import { projectFrozenReview } from '../pipeline/decisions/gates/semantic-review-context.js';
+import { hasStructuralFinding } from '../pipeline/decisions/gates/structural-review-composition.js';
 import { isUnknownInterruptPending } from '../pipeline/decisions/index.js';
 import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 import { PHASE_GUARD_GATE_ID } from '../pipeline/stages/19-phase-guard-verification-stage.js';
@@ -16,7 +22,7 @@ import type { DeclaredSection } from '#engine/frameworks/declared-sections.js';
 import type { GateTier } from '#engine/gates/core/gate-tier.js';
 import type { JudgeReviewMetadata } from '#engine/gates/core/review-utils.js';
 import type { RunStepView, RunStepViewProvider } from '#engine/gates/services/run-step-view.js';
-import type { GateCheckResult, GateReviewPrompt } from '#shared/types/chain-execution.js';
+import type { GateCheckResult } from '#shared/types/chain-execution.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
 import type {
   ChainFormattingContext,
@@ -28,16 +34,6 @@ import type { GateOperator } from '../parsers/types/operator-types.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
 
 import { ordinalOf, parseStepForNode } from '#shared/utils/node-order.js';
-
-/**
- * Max check-tier gates given a `per_gate` slot in the verdict template.
- *
- * Bounds the collected CHECK entries only — reminder-tier gates never count against this cap,
- * since they render once in the `reminders` field rather than one `per_gate` entry each. The full
- * `gateIds` list is still walked in original order so a run of leading reminders cannot push a
- * later check off the template before it is even considered.
- */
-const MAX_GATE_VERDICT_ENTRIES = 10;
 
 /**
  * The verbs that answer a SOFT (unpaused) interrupt, verbatim from the plan's §Interrupt payload
@@ -368,11 +364,15 @@ export class ResponseAssembler {
       return `Resume: \`chain_id="${chainId}", gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"\``;
     }
 
+    const semantic = semanticReviewResume(pendingReview, chainId);
+    if (semantic !== undefined) return semantic;
+
     const structuredTemplate = buildStructuredVerdictTemplate(
       pendingReview.gateIds,
       pendingReview.prompts,
       this.resolveGateTiers(context),
-      this.resolveCheckResults(context)
+      this.resolveCheckResults(context),
+      projectFrozenReview(pendingReview)
     );
 
     return (
@@ -520,7 +520,8 @@ export class ResponseAssembler {
       // Gate review, or a gated step's render: every render of a gated step asks for its verdict
       // the same way (R171) — only when not delegating
       lines.push(
-        `Next: chain_id="${chainIdentifier}", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"`
+        semanticReviewResume(sessionContext.pendingReview, chainIdentifier) ??
+          `Next: chain_id="${chainIdentifier}", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"`
       );
     } else if (sessionContext.currentStep && sessionContext.totalSteps) {
       lines.push(`Next: chain_id="${chainIdentifier}", user_response="<your step output>"`);
@@ -867,8 +868,10 @@ export class ResponseAssembler {
     const attempt = this.resolveAttemptCounter(context);
     const attemptInfo = attempt !== undefined ? ` (attempt ${attempt.current}/${attempt.max})` : '';
 
-    const isPhaseGuardReview = pendingReview.gateIds?.includes(PHASE_GUARD_GATE_ID) === true;
-    const hasOtherGates = pendingReview.gateIds?.some((id) => id !== PHASE_GUARD_GATE_ID) ?? false;
+    const isPhaseGuardReview = hasStructuralFinding(pendingReview);
+    const hasOtherGates =
+      (projectFrozenReview(pendingReview).definitions?.length ?? 0) > 0 ||
+      (pendingReview.gateIds?.some((id) => id !== PHASE_GUARD_GATE_ID) ?? false);
 
     let header: string;
     let gatesLine: string;
@@ -888,11 +891,16 @@ export class ResponseAssembler {
       pendingReview.gateIds ?? [],
       pendingReview.prompts,
       this.resolveGateTiers(context),
-      this.resolveCheckResults(context)
+      this.resolveCheckResults(context),
+      projectFrozenReview(pendingReview)
     );
 
     const judgeSection = this.buildJudgeReviewSection(context);
     const judgeBlock = judgeSection !== '' ? `\n\n${judgeSection}` : '';
+
+    const semantic = semanticReviewResume(pendingReview, chainId);
+    if (semantic !== undefined)
+      return `\n---\n\n**${header}**${attemptInfo}\n\n${judgeBlock}\n\n${semantic}`;
 
     return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}${this.buildFailedGateSummary(context)}${judgeBlock}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\nSet \`"overall": "FAIL"\` and say what needs improvement if the gates are not met. Rationales are single-line.\n\nA legacy string form is still accepted: \`gate_verdict="GATE_REVIEW: PASS - [assessment]"\`.`;
   }
@@ -913,11 +921,14 @@ export class ResponseAssembler {
       return '';
     }
 
+    const captured = context.sessionContext?.pendingReview?.semanticContext?.target !== undefined;
     const gates = judge.judgeGateIds.map((id) => `\`${id}\``).join(', ');
     const model = judge.modelHint !== undefined ? ` (suggested model: ${judge.modelHint})` : '';
     return [
       `**Independent judge required** for ${gates} — do not grade ${judge.judgeGateIds.length === 1 ? 'this gate' : 'these gates'} yourself.`,
-      `Give a separate sub-agent${model} ONLY the prompt below, with your step output in place of \`${JUDGE_OUTPUT_PLACEHOLDER}\`, and use the verdict it returns for ${judge.judgeGateIds.length === 1 ? 'that gate' : 'those gates'}.`,
+      captured
+        ? `Give a separate sub-agent${model} ONLY the prompt below. Use the server-captured output already included; do not substitute new work.`
+        : `Give a separate sub-agent${model} ONLY the prompt below, with your step output in place of \`${JUDGE_OUTPUT_PLACEHOLDER}\`, and use the verdict it returns for ${judge.judgeGateIds.length === 1 ? 'that gate' : 'those gates'}.`,
       '',
       '````markdown',
       judge.judgePrompt,
@@ -1353,12 +1364,19 @@ export class ResponseAssembler {
       lines.push(EXHAUSTED_REVIEW_CHOICE, '', exhaustedReviewMoves(chainId));
       return true;
     }
+    const semantic = semanticReviewResume(pendingReview, chainId);
+    if (semantic !== undefined) {
+      lines.push('**Review Required**', '', semantic);
+      return true;
+    }
+
     const checkResults = this.resolveCheckResults(context);
     const structuredTemplate = buildStructuredVerdictTemplate(
       gateIds,
       pendingReview.prompts,
       this.resolveGateTiers(context),
-      checkResults
+      checkResults,
+      projectFrozenReview(pendingReview)
     );
 
     lines.push('**Review Required**');
@@ -1589,94 +1607,6 @@ export class ResponseAssembler {
 
     return parts.join(', ') || '(none)';
   }
-}
-
-/**
- * Builds the structured `gate_verdict` template keyed to actual gate names.
- *
- * Offered ahead of the string template because a structured submission is
- * validated by the tool schema and cannot be malformed, whereas the string
- * form is a format the model has to reproduce and the server then reads back
- * with five fallback regexes. Advertising the fragile form first would keep
- * steering clients into the path that can fail.
- *
- * Rendered as JSON rather than prose so it can be copied into the call
- * directly. Rationale placeholders are single-line, which is what the
- * schema requires.
- *
- * A module function, not a method: a detached node's review (row 4.8) renders the same template
- * from `StepResponseCaptureStage`, which holds no assembler.
- */
-export function buildStructuredVerdictTemplate(
-  gateIds: readonly string[],
-  prompts: readonly GateReviewPrompt[],
-  tiers: ReadonlyMap<string, GateTier>,
-  checkResults: ReadonlyMap<string, GateCheckResult>
-): string {
-  const promptMap = buildPromptLookup(prompts);
-
-  const entries: string[] = [];
-  const reminderIds: string[] = [];
-
-  // Walk the FULL advertised list, not a pre-sliced prefix: slicing before the walk let a run
-  // of leading reminders push a later check off the template before it was ever considered.
-  // The cap binds only the collected check entries (below); reminders are never counted against
-  // it because they render once in the `reminders` field rather than one `per_gate` slot each.
-  gateIds.forEach((gateId, position) => {
-    // The index is the gate's place in the ORIGINAL list, not its place among the entries:
-    // `parseGateVerdicts` matches `[n]` back to the advertised gate list, so renumbering the
-    // survivors after reminders are dropped (or a check is capped out) would point every
-    // verdict at the wrong gate.
-    const index = position + 1;
-    if ((tiers.get(gateId) ?? 'check') === 'reminder') {
-      reminderIds.push(gateId);
-      return;
-    }
-    if (entries.length >= MAX_GATE_VERDICT_ENTRIES) {
-      return;
-    }
-
-    const prompt = promptMap.get(gateId);
-    const label = prompt?.gateName ?? gateId;
-    // Criteria carry the reviewer's actual checklist; dropping them would
-    // make the structured form less informative than the string form it
-    // replaces. Quotes are escaped because this lands inside a JSON string.
-    const criteria = prompt?.criteriaSummary;
-    const suffix = criteria != null && criteria.length > 0 ? ` — ${criteria}` : '';
-    // A recorded result is the engine's, so the template states it rather than asking for it
-    // — a slot the model fills is a slot it can fill wrongly, and the processor refuses a PASS
-    // over a recorded failure anyway. `<why>` survives only where nothing ran yet.
-    const recorded = checkResults.get(gateId);
-    const slot = recorded !== undefined ? `<recorded: ${recorded.summary}>` : '<why>';
-    const rationale = `${label}${suffix}: ${slot}`.replace(/"/g, '\\"');
-    const passed = recorded?.passed ?? true;
-    entries.push(`    {"index": ${index}, "passed": ${passed}, "rationale": "${rationale}"}`);
-  });
-
-  const perGate = entries.length > 0 ? `,\n  "per_gate": [\n${entries.join(',\n')}\n  ]` : '';
-  // One field for every reminder, never one entry each (ruling B4). Pre-listed under
-  // `satisfied` because that is the common answer; an id that did not apply moves to
-  // `not_applicable` WITH a reason, which the schema requires.
-  const reminders =
-    reminderIds.length > 0
-      ? `,\n  "reminders": {"satisfied": [${reminderIds
-          .map((id) => `"${id.replace(/"/g, '\\"')}"`)
-          .join(', ')}], "not_applicable": []}`
-      : '';
-  return `{\n  "overall": "PASS",\n  "rationale": "<overall assessment>"${perGate}${reminders}\n}`;
-}
-
-/**
- * Builds a lookup map from gate ID to its review prompt.
- */
-function buildPromptLookup(prompts: readonly GateReviewPrompt[]): Map<string, GateReviewPrompt> {
-  const map = new Map<string, GateReviewPrompt>();
-  for (const prompt of prompts) {
-    if (prompt.gateId != null && prompt.gateId.length > 0) {
-      map.set(prompt.gateId, prompt);
-    }
-  }
-  return map;
 }
 
 /** What an exhausted review accepts, in the words every reply holding one uses. */

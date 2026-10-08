@@ -1,7 +1,9 @@
 // @lifecycle canonical - Captures step results (placeholder or real) in chain sessions.
 
+import { projectBypassSummaries } from '../../gates/services/gate-verdict-summary.js';
 import { handoffNodeToken, resolveHandoffEvidenceReason } from '../delegation/handoff-contract.js';
 import { planNodeDrivenRender } from '../operators/node-step-projection.js';
+import { readSemanticReviewCriteria } from '../pipeline/decisions/gates/semantic-review-context.js';
 import { buildPipelineHookContext } from '../pipeline/hook-context.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -36,6 +38,39 @@ const PLACEHOLDER_SOURCE = 'StepResponseCaptureStage';
 export interface StepTarget {
   readonly ordinal: number;
   readonly nodeId: string;
+}
+
+/** Supplied response intent addresses the current step, including a defined canonical empty body. */
+export function projectCurrentResponseTarget(
+  session: ChainSession,
+  currentStepAtStart: number
+): StepTarget | undefined {
+  return resolveCaptureTarget(session, currentStepAtStart, true);
+}
+
+/**
+ * Resolve which step this call captures for, as BOTH the identity the store addresses by and
+ * the position everything else in the pipeline still speaks.
+ *
+ * - user_response present: capture for the CURRENT step (the one just rendered)
+ * - otherwise: capture a placeholder for the PREVIOUS step
+ *
+ * Returns undefined when the position falls outside the run — before its first step, past its
+ * last, or on no node at all. All three mean "nothing to capture", and collapsing them here
+ * keeps the decision in one place instead of three guards at the call site.
+ */
+function resolveCaptureTarget(
+  session: ChainSession,
+  currentStepAtStart: number,
+  hasUserResponseForCapture: boolean
+): StepTarget | undefined {
+  const ordinal = hasUserResponseForCapture ? currentStepAtStart : currentStepAtStart - 1;
+  const totalSteps = totalOf(session.state.nodes);
+  if (totalSteps > 0 && ordinal > totalSteps) {
+    return undefined;
+  }
+  const nodeId = nodeIdAt(session.state.nodes, ordinal);
+  return nodeId === null ? undefined : { ordinal, nodeId };
 }
 
 /**
@@ -96,13 +131,18 @@ export class StepCaptureService {
         : undefined;
     const hasUserResponseForCapture = captureResponse !== undefined;
 
-    const target = this.resolveTarget(session, currentStepAtStart, hasUserResponseForCapture);
+    const target = resolveCaptureTarget(session, currentStepAtStart, hasUserResponseForCapture);
     if (target === undefined) {
       return undefined;
     }
 
     const existingState = this.chainSessionStore.getStepState(sessionId, target.nodeId);
-    if (existingState?.state === 'completed' && !existingState.isPlaceholder) {
+    const issued = this.chainSessionStore.getReview(sessionId, target.nodeId)?.semanticContext;
+    const renewedCapture =
+      captureResponse !== undefined &&
+      issued?.nodeId === target.nodeId &&
+      issued.target === undefined;
+    if (existingState?.state === 'completed' && !existingState.isPlaceholder && !renewedCapture) {
       return undefined;
     }
 
@@ -202,44 +242,28 @@ export class StepCaptureService {
     target: StepTarget,
     reply: string
   ): Promise<void> {
-    await this.chainSessionStore.updateSessionState(sessionId, target.nodeId, reply, {
-      isPlaceholder: false,
-      source: 'detached_report',
-      capturedAt: Date.now(),
-      outputMapping: this.getStepOutputMapping(context, session, target),
-    });
-    await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
+    const review = this.reviewForCapture(context, sessionId, target.nodeId, reply);
+    const recorded = await this.chainSessionStore.updateSessionState(
+      sessionId,
+      target.nodeId,
+      reply,
+      {
+        isPlaceholder: false,
+        source: 'detached_report',
+        capturedAt: Date.now(),
+        outputMapping: this.getStepOutputMapping(context, session, target),
+      }
+    );
+    if (!recorded) throw new Error(`Output capture refused for node '${target.nodeId}'`);
+    const completed = await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
       preservePlaceholder: false,
     });
+    if (!completed) throw new Error(`Output completion refused for node '${target.nodeId}'`);
+    await this.bindCapturedReview(context, sessionId, review, reply);
     this.ledgerCapturedStep(context, sessionId, session.chainId, target, reply, {
       holdable: false,
     });
     await this.announceStepComplete(context, session.chainId, target, reply);
-  }
-
-  /**
-   * Resolve which step this call captures for, as BOTH the identity the store addresses by and
-   * the position everything else in the pipeline still speaks.
-   *
-   * - user_response present: capture for the CURRENT step (the one just rendered)
-   * - otherwise: capture a placeholder for the PREVIOUS step
-   *
-   * Returns undefined when the position falls outside the run — before its first step, past its
-   * last, or on no node at all. All three mean "nothing to capture", and collapsing them here
-   * keeps the decision in one place instead of three guards at the call site.
-   */
-  private resolveTarget(
-    session: ChainSession,
-    currentStepAtStart: number,
-    hasUserResponseForCapture: boolean
-  ): StepTarget | undefined {
-    const ordinal = hasUserResponseForCapture ? currentStepAtStart : currentStepAtStart - 1;
-    const totalSteps = totalOf(session.state.nodes);
-    if (totalSteps > 0 && ordinal > totalSteps) {
-      return undefined;
-    }
-    const nodeId = nodeIdAt(session.state.nodes, ordinal);
-    return nodeId === null ? undefined : { ordinal, nodeId };
   }
 
   private async capturePlaceholder(
@@ -269,20 +293,28 @@ export class StepCaptureService {
     responseContent: string,
     outputMapping?: Record<string, string>
   ): Promise<void> {
+    const review = this.reviewForCapture(context, sessionId, target.nodeId, responseContent);
     this.logger.debug(
       `Capturing real response for step ${target.ordinal} (${target.nodeId}) in chain ${chainId}: ${responseContent.substring(0, 50)}...`
     );
 
-    await this.chainSessionStore.updateSessionState(sessionId, target.nodeId, responseContent, {
-      isPlaceholder: false,
-      source: 'user_response',
-      capturedAt: Date.now(),
-      outputMapping,
-    });
-
-    await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
+    const recorded = await this.chainSessionStore.updateSessionState(
+      sessionId,
+      target.nodeId,
+      responseContent,
+      {
+        isPlaceholder: false,
+        source: 'user_response',
+        capturedAt: Date.now(),
+        outputMapping,
+      }
+    );
+    if (!recorded) throw new Error(`Output capture refused for node '${target.nodeId}'`);
+    const completed = await this.chainSessionStore.completeStep(sessionId, target.nodeId, {
       preservePlaceholder: false,
     });
+    if (!completed) throw new Error(`Output completion refused for node '${target.nodeId}'`);
+    await this.bindCapturedReview(context, sessionId, review, responseContent);
 
     this.ledgerCapturedStep(context, sessionId, chainId, target, responseContent, {
       holdable: true,
@@ -296,6 +328,44 @@ export class StepCaptureService {
     context.state.session.capturedStep = { nodeId: target.nodeId, ordinal: target.ordinal };
 
     this.logger.debug(`Step ${target.ordinal} (${target.nodeId}) completed with real response`);
+  }
+
+  /** Refuse retargeting before any output mutation; only renewal may replace a semantic target. */
+  private reviewForCapture(
+    context: ExecutionContext,
+    sessionId: string,
+    nodeId: string,
+    response: string
+  ): GateReview | undefined {
+    const review = this.chainSessionStore.getReview(sessionId, nodeId);
+    const issued = review?.semanticContext;
+    if (issued === undefined) return review;
+    if (context.gateEnforcement === undefined) {
+      throw new Error('Captured review output requires the server review authority');
+    }
+    if (
+      issued.target !== undefined &&
+      issued.target.content !== response.trim() &&
+      Object.values(issued.definitions).some(
+        (definition) => readSemanticReviewCriteria(definition).length > 0
+      )
+    ) {
+      throw new Error('A fresh semantic review attempt is required before replacing its target');
+    }
+    return review;
+  }
+
+  /** Only persisted capture content enters the existing binding authority. */
+  private async bindCapturedReview(
+    context: ExecutionContext,
+    sessionId: string,
+    review: GateReview | undefined,
+    response: string
+  ): Promise<void> {
+    if (review?.semanticContext === undefined) return;
+    const authority = context.gateEnforcement;
+    if (authority === undefined) throw new Error('Server review authority is unavailable');
+    await this.chainSessionStore.setReview(sessionId, authority.bindReviewOutput(review, response));
   }
 
   /**
@@ -349,9 +419,9 @@ export class StepCaptureService {
    * delegated — partial population BY ROW TYPE. The reason is recorded here regardless of mode
    * BECAUSE the mode decides refusal, not observation: under `required` an unacceptable resume
    * never reaches this method (stage 16 refuses first), so the rows this writes under `required`
-   * are `ok`, and the other three are what `advisory` is for. Exactly one row per captured step:
-   * gate retries re-enter `captureStep` and take its completed-non-placeholder early return
-   * before reaching this.
+   * are `ok`, and the other three are what `advisory` is for. One row per captured attempt:
+   * unchanged completed output takes the early return. A renewed, targetless authority permits
+   * a fresh captured-attempt row without rewriting prior failed-attempt evidence.
    *
    * It is also the ONLY append that fires on a call carrying a `gate_verdict`, which is why
    * `gateVerdicts` binds here (P4.76). Measured against a hermetic server on 2026-09-20, not
@@ -422,6 +492,35 @@ export class StepCaptureService {
       ...(gateVerdicts !== undefined ? { gateVerdicts } : {}),
       scope: context.getScopeOptions(),
     });
+  }
+
+  /** Persist authorized bypass custody before a caller may advance or complete the held run. */
+  ledgerSubmittedReviewAction(
+    context: ExecutionContext,
+    sessionId: string,
+    session: ChainSession
+  ): void {
+    const receipt = context.state.gates.reviewActionDetection;
+    if (receipt === undefined || this.executionRecordStore === null) return;
+    const ordinal = ordinalOf(session.state.nodes, receipt.nodeId);
+    if (ordinal === -1)
+      throw new Error(`Skipped review node '${receipt.nodeId}' is not in the run`);
+    const { promptId } = recordedStep(context, session, receipt.nodeId, ordinal);
+    const gateVerdicts = projectBypassSummaries(receipt);
+    this.executionRecordStore.append({
+      sessionId,
+      chainId: session.chainId,
+      nodeId: receipt.nodeId,
+      stepNumber: ordinal,
+      ...(promptId !== undefined ? { promptId } : {}),
+      status: 'completed',
+      startedAt: receipt.at,
+      completedAt: receipt.at,
+      substate: { respondedAt: receipt.at },
+      gateVerdicts,
+      scope: context.getScopeOptions(),
+    });
+    context.state.gates.perGateVerdicts = gateVerdicts;
   }
 
   /**
@@ -636,6 +735,48 @@ export class StepCaptureService {
         scopeOptions
       );
     }
+  }
+}
+
+/** Existing step-completion boundary, with the processor's injected IO ports passed explicitly. */
+export async function announceAdvancedStep(input: {
+  readonly context: ExecutionContext;
+  readonly session: ChainSession;
+  readonly advance: DeferredAdvance;
+  readonly chainSessionStore: ChainSessionService;
+  readonly logger: Logger;
+  readonly hookRegistry: HookRegistryPort | undefined;
+  readonly notificationEmitter: McpNotificationEmitterPort | undefined;
+}): Promise<void> {
+  const {
+    context,
+    session,
+    advance,
+    chainSessionStore,
+    logger,
+    hookRegistry,
+    notificationEmitter,
+  } = input;
+  if (hookRegistry === undefined && notificationEmitter === undefined) return;
+  const stepIndex = ordinalOf(session.state.nodes, advance.nodeId);
+  try {
+    const results = chainSessionStore.getChainContext(session.sessionId, context.getScopeOptions())[
+      'step_results'
+    ] as Record<number, string> | undefined;
+    const hookContext = buildPipelineHookContext(context);
+    const output = results?.[stepIndex] ?? '';
+    await hookRegistry?.emitStepComplete(session.chainId, stepIndex, output, hookContext);
+    notificationEmitter?.emitChainStepComplete({
+      chainId: session.chainId,
+      stepIndex,
+      status: advance.reason === 'gate-skip' ? 'failed' : 'passed',
+    });
+  } catch (error) {
+    logger.warn(
+      `[GateVerdictProcessor] Failed to announce step ${stepIndex}: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
   }
 }
 

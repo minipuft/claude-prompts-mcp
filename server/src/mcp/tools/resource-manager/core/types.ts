@@ -333,6 +333,8 @@ export interface ResourceManagerInput {
   block_response_on_fail?: boolean;
   /** Writes the gate.yaml key `evaluation` whole — the per-gate half of judge routing. */
   evaluation?: GateManagerInput['evaluation'];
+  /** Opaque evaluation-suite association, preserved verbatim in gate.yaml. */
+  calibration_suite_id?: GateManagerInput['calibration_suite_id'];
   guidance?: string;
   pass_criteria?: Array<string | GatePassCriteria>;
   activation?: {

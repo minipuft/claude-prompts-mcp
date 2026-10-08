@@ -19,6 +19,8 @@
 
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
+import { installIssuedReviewCloneFixture } from './issued-review-clone-fixture.js';
+
 import { DatabaseSync } from 'node:sqlite';
 
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
@@ -56,6 +58,14 @@ import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
 
 /** The detached step's node id, deliberately not `n2`, so a token cannot match by ordinal. */
+let issuedCloneFixture: ReturnType<typeof installIssuedReviewCloneFixture>;
+beforeEach(() => {
+  issuedCloneFixture = installIssuedReviewCloneFixture();
+});
+afterEach(() => {
+  issuedCloneFixture.restore();
+});
+
 const DETACHED = 'step-review';
 
 const createLogger = (): Logger =>
@@ -263,14 +273,21 @@ const buildPipeline = (options: {
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
   const provider = review !== undefined ? gateProvider(review.gates) : undefined;
   // The same composition `pipeline-builder.ts` wires: real runners, a real executor.
-  const runReviewChecks =
+  const runReviewChecks: ConstructorParameters<typeof GateVerdictProcessor>[4] =
     provider === undefined
       ? undefined
-      : async (gateIds: string[], agentResponse: string) =>
+      : async (gateIds, agentResponse, scope, definitions) =>
           (
-            await runGateReviewEvidence(gateIds, provider, agentResponse, {
-              shellVerifyExecutor: createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] }),
-            })
+            await runGateReviewEvidence(
+              gateIds,
+              provider,
+              agentResponse,
+              {
+                shellVerifyExecutor: createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] }),
+              },
+              scope,
+              definitions
+            )
           ).checkResults;
 
   const realStages: Record<string, PipelineStage> = {
@@ -294,9 +311,16 @@ const buildPipeline = (options: {
       undefined,
       recordStore
     ),
-    GateReview: new GateReviewStage(chainExecutor, sessionStore, null, logger, undefined, {
-      executionRecordStore: recordStore,
-    }),
+    GateReview: new GateReviewStage(
+      chainExecutor,
+      sessionStore,
+      provider ?? null,
+      logger,
+      undefined,
+      {
+        executionRecordStore: recordStore,
+      }
+    ),
     ResponseFormatting: new ResponseFormattingStage(
       new ResponseFormatter(logger),
       new ResponseAssembler(),
