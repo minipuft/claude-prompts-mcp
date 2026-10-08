@@ -3,6 +3,7 @@
 import { ActionHandler } from '../core/action-handler-base.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
+import type { GateOutcomeTally } from '../core/action-handler-base.js';
 
 export class AnalyticsActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
@@ -112,22 +113,22 @@ export class AnalyticsActionHandler extends ActionHandler {
     }
 
     response += '## 🛡️ Quality Gate Analytics (this workspace)\n\n';
-    response += `**Gate Validations**: ${ledger.reviewedRecords}\n`;
+    response += `**Records With Gate Entries**: ${ledger.reviewedRecords}\n`;
     // Numerator and denominator now come from the same scoped page. It used to divide this
     // workspace's reviewed steps by a process-wide execution counter nothing wrote, which made
     // the rate 0% on every server (P4.87).
-    response += `**Gate Review Coverage**: ${
+    response += `**Gate Entry Coverage**: ${
       ledger.records > 0 ? Math.round((ledger.reviewedRecords / ledger.records) * 100) : 0
-    }% of recorded steps\n`;
+    }% of records on the recent page\n`;
 
     // Per gate, not just a total: a 90% adoption rate over one gate that always passes and one
     // that always fails is two different systems, and the total cannot tell them apart. Omitted
     // entirely when no record carries a verdict, so the section appears only once there is
     // something in it.
     if (ledger.byGate.size > 0) {
-      response += '\n**Per-Gate Outcomes** (reviewed steps in the ledger)\n\n';
+      response += '\n**Per-Gate Recorded Outcomes** (recent page; acceptance is not accuracy)\n\n';
       for (const [gateId, tally] of ledger.byGate) {
-        response += `- \`${gateId}\`: ${tally.passed} passed / ${tally.failed} failed\n`;
+        response += formatGateOutcomeStatistics(gateId, tally);
       }
     }
     if (ledger.attestations > 0) {
@@ -154,4 +155,21 @@ export class AnalyticsActionHandler extends ActionHandler {
 
     return this.createMinimalSystemResponse(response, 'analytics');
   }
+}
+
+function formatGateOutcomeStatistics(gateId: string, tally: GateOutcomeTally): string {
+  const semantic = tally.semanticReportAcceptance;
+  const tools = tally.recordedToolChecks;
+  const legacy = tally.legacyUnverifiedAcceptance;
+  const dispositions = tally.dispositions;
+  return (
+    [
+      `- \`${gateId}\`: effective acceptance ${tally.passed} passed / ${tally.failed} failed`,
+      `  - Bypassed: ${tally.bypassed}; reminder attestations: ${tally.reminderAttestations}`,
+      `  - Semantic report acceptance: ${semantic.accepted} accepted / ${semantic.rejected} rejected / ${semantic.invalid} invalid`,
+      `  - Recorded tool checks: ${tools.passed} passed / ${tools.notPassed} not passed (attempted execution and exit status unavailable; not-passed may include did-not-run)`,
+      `  - Legacy unverified acceptance: ${legacy.passed} passed / ${legacy.failed} failed`,
+      `  - Dispositions: ${dispositions.held} held / ${dispositions.advisoryCleared} advisory-cleared / ${dispositions.informationalCleared} informational-cleared`,
+    ].join('\n') + '\n'
+  );
 }

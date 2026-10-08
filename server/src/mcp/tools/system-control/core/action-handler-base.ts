@@ -3,7 +3,7 @@
 import type { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import type { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import type { GateStateStore } from '#engine/gates/gate-state-store.js';
-import type { ExecutionRecord } from '#shared/types/chain-execution.js';
+import type { ExecutionRecord, GateVerdictSummary } from '#shared/types/chain-execution.js';
 import type {
   StateStoreOptions,
   ConfigManager,
@@ -12,7 +12,18 @@ import type {
 } from '#shared/types/index.js';
 import type { SystemControlContext } from './types.js';
 
-/** What one scoped page of the execution ledger says about a workspace. */
+export interface GateOutcomeTally {
+  passed: number;
+  failed: number;
+  bypassed: number;
+  reminderAttestations: number;
+  semanticReportAcceptance: { accepted: number; rejected: number; invalid: number };
+  recordedToolChecks: { passed: number; notPassed: number };
+  legacyUnverifiedAcceptance: { passed: number; failed: number };
+  dispositions: { held: number; advisoryCleared: number; informationalCleared: number };
+}
+
+/** What one scoped page of the execution ledger says; acceptance is not model accuracy. */
 export interface LedgerTally {
   records: number;
   completed: number;
@@ -20,29 +31,82 @@ export interface LedgerTally {
   averageDurationMs: number;
   reviewedRecords: number;
   attestations: number;
-  byGate: Map<string, { passed: number; failed: number }>;
+  byGate: Map<string, GateOutcomeTally>;
 }
 
-/**
- * Fold one record's gate verdicts into the running tally.
- *
- * A reminder has no evaluator — the reviewer attests to it. Counting one beside an evaluated
- * check would average a self-declaration into a pass rate, so it is listed as an attestation and
- * never as a pass.
- */
+function emptyGateTally(): GateOutcomeTally {
+  return {
+    passed: 0,
+    failed: 0,
+    bypassed: 0,
+    reminderAttestations: 0,
+    semanticReportAcceptance: { accepted: 0, rejected: 0, invalid: 0 },
+    recordedToolChecks: { passed: 0, notPassed: 0 },
+    legacyUnverifiedAcceptance: { passed: 0, failed: 0 },
+    dispositions: { held: 0, advisoryCleared: 0, informationalCleared: 0 },
+  };
+}
+
+function foldGateOutcome(verdict: GateVerdictSummary, gate: GateOutcomeTally): void {
+  if (verdict.verdict === 'BYPASS' || verdict.disposition === 'bypassed') {
+    gate.bypassed += 1;
+    return; // Contextual bypassReview.checkResults belong to older attempts, never this action.
+  }
+  foldDisposition(verdict.disposition, gate.dispositions);
+  const tools = verdict.toolChecks ?? [];
+  const semantic = verdict.semanticResult;
+  if (verdict.tier === 'reminder') {
+    gate.reminderAttestations += 1;
+    if (semantic === undefined && tools.length === 0) return;
+  }
+  if (verdict.verdict === 'PASS') gate.passed += 1;
+  if (verdict.verdict === 'FAIL') gate.failed += 1;
+  foldSemanticReport(semantic, gate.semanticReportAcceptance);
+  for (const tool of tools) {
+    if (tool.passed) gate.recordedToolChecks.passed += 1;
+    else gate.recordedToolChecks.notPassed += 1;
+  }
+  foldLegacyAcceptance(verdict, gate);
+}
+
+function foldDisposition(
+  disposition: GateVerdictSummary['disposition'],
+  tally: GateOutcomeTally['dispositions']
+): void {
+  if (disposition === 'held') tally.held += 1;
+  if (disposition === 'advisory-cleared') tally.advisoryCleared += 1;
+  if (disposition === 'informational-cleared') tally.informationalCleared += 1;
+}
+
+function foldSemanticReport(
+  result: GateVerdictSummary['semanticResult'],
+  tally: GateOutcomeTally['semanticReportAcceptance']
+): void {
+  if (result === undefined) return;
+  if (!result.valid) tally.invalid += 1;
+  else if (result.passed) tally.accepted += 1;
+  else tally.rejected += 1;
+}
+
+function foldLegacyAcceptance(verdict: GateVerdictSummary, gate: GateOutcomeTally): void {
+  if (verdict.semanticResult !== undefined || (verdict.toolChecks?.length ?? 0) > 0) return;
+  if (verdict.verdict === 'PASS') gate.legacyUnverifiedAcceptance.passed += 1;
+  if (verdict.verdict === 'FAIL') gate.legacyUnverifiedAcceptance.failed += 1;
+}
+
 function foldVerdicts(record: ExecutionRecord, tally: LedgerTally): void {
   if (record.gateVerdicts.length === 0) return;
   tally.reviewedRecords += 1;
-
   for (const verdict of record.gateVerdicts) {
-    if (verdict.tier === 'reminder') {
-      tally.attestations += 1;
-      continue;
-    }
-    const gate = tally.byGate.get(verdict.gateId) ?? { passed: 0, failed: 0 };
-    if (verdict.verdict === 'PASS') gate.passed += 1;
-    else gate.failed += 1;
+    const gate = tally.byGate.get(verdict.gateId) ?? emptyGateTally();
+    foldGateOutcome(verdict, gate);
     tally.byGate.set(verdict.gateId, gate);
+    if (
+      verdict.tier === 'reminder' &&
+      verdict.verdict !== 'BYPASS' &&
+      verdict.disposition !== 'bypassed'
+    )
+      tally.attestations += 1;
   }
 }
 
