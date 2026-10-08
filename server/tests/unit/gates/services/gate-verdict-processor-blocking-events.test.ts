@@ -30,7 +30,7 @@ import {
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { evaluateSemanticEvaluation } from '../../../../src/engine/gates/core/semantic-evaluation.js';
 import { PHASE_GUARD_GATE_ID } from '../../../../src/engine/execution/pipeline/decisions/gates/structural-review-composition.js';
-import { hashBytes } from '../../../../src/shared/utils/hash.js';
+import { canonicalJson, hashBytes } from '../../../../src/shared/utils/hash.js';
 
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { McpToolRequest } from '../../../../src/shared/types/execution.js';
@@ -556,7 +556,12 @@ describe('GateVerdictProcessor pinned semantic adjudication', () => {
       const original = structuredClone(submission);
       const fixture = custodyFixture(kind, submission);
       const held = pinReview(fixture);
-      const before = structuredClone(held);
+      const issuedContext = held.semanticContext;
+      if (issuedContext === undefined) throw new Error('Missing frozen semantic fixture');
+      const issuedBytes = canonicalJson(issuedContext);
+      // The immutable authority already has plain JSON in the issuing realm; Jest's host
+      // structuredClone must not replace it with a foreign-prototype assertion fixture.
+      const before = { ...structuredClone(held), semanticContext: issuedContext };
       const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
       const enforcement = jest.spyOn(fixture.authority, 'resolveReviewEnforcement');
       const result = await fixture.submit();
@@ -602,6 +607,7 @@ describe('GateVerdictProcessor pinned semantic adjudication', () => {
       if (kind === 'ordinary') expect(result).toMatchObject({ passClearedThisCall: false });
       else expect(result).not.toMatchObject({ result: 'passed' });
       expect(submission).toEqual(original);
+      expect(canonicalJson(issuedContext)).toBe(issuedBytes);
     }
   );
 
@@ -702,7 +708,12 @@ describe('GateVerdictProcessor pinned semantic adjudication', () => {
       }
       const before = structuredClone(held);
       const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
-      const result = await fixture.submit();
+      const result =
+        issue === 'duplicate-criteria' && kind === 'detached'
+          ? await expect(fixture.submit()).rejects.toThrow(
+              "Issued definition 'gate-a' is inconsistent"
+            )
+          : await fixture.submit();
       if (issue === 'missing-context') {
         if (kind === 'detached')
           expect(result).toMatchObject({

@@ -186,7 +186,12 @@ describe('detached frozen tool evidence caller', () => {
     const result = await f.submit();
     expect(f.checks.mock.calls[0][0]).toEqual(['gate-a']);
     expect(f.checks.mock.calls[0][1]).toBe(OUTPUT);
-    expect(f.checks.mock.calls[0][3]).toBe(review.semanticContext?.definitions);
+    const physical = f.checks.mock.calls[0][3];
+    const original = review.semanticContext?.definitions['gate-a'];
+    if (original === undefined) throw new Error('Missing original issued fixture');
+    expect(Object.keys(physical ?? {})).toEqual(['gate-a']);
+    expect(physical?.['gate-a']).toBe(original);
+    expect(physical?.['gate-a']?.definition).toBe(original.definition);
     expect(f.executed).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       kind: 'refused',
