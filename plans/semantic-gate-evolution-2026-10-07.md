@@ -7,7 +7,7 @@ initiative_branch: feat/semantic-gate-activation
 branch_mode: worktree
 worker_cap: 2
 publish: "push+merge (2026-10-07, owner approval in chat R6; reviewed PRs track the initiative)"
-planner_session: completion_coordinator
+planner_session: runtime_resume
 tracking: none
 tracking_reason: operator-opt-out
 tags: [gates, semantic, evaluation, tests]
@@ -15,13 +15,13 @@ tags: [gates, semantic, evaluation, tests]
 
 # Evidence-backed semantic gates and attached calibration suites
 
-## Now (2026-10-07)
+## Now (2026-10-08)
 
 Goal: finish the entire master/child initiative, actual built workflows, matched native/quality evidence, retirement and reviewed green-CI delivery.
-Slice: all source concerns through built10.3 accepted; full33 with guards clean and all workers SAFE. Commit exact3SDKtests +checkpoint9, then explicit fresh planner custody handoff; no native inference.
+Slice: MAIN custody transferred explicitly at clean c64dcd6e; all58 child rows terminal (56done/2killed); finalmetadata/defaultCLI/publicpersistence limit accepted. Main commits exact concerns then actual native immutable graph; no native inference.
 Next decision: complete10.4 metadata/generated/snapshots,10.6 defaultvalidatedCLI,15.1 public dead-owner limit; finalize actualMCPcandidate/currentruntime/C8 graph/rootreview, native11calls/disposition/retirement/greenCImerge.
 Constraint: main edits plans/integration/publication only; no new threads or repeated accepted proofs. Root is independent read-only reviewer and must read actual immutable native freeze before inference.
-State: child58 rows53done2killed3open; accepted definition unionON; built report twins10.3 pending/native inference0. Checkpoint7 and subsequent receipts are authoritative; all prior accepted source receipts remain accepted.
+State: child58 rows56done2killed0open; accepted definition unionON; built report twins10.3 accepted/native inference0. Checkpoint7 and subsequent receipts are authoritative; all prior accepted source receipts remain accepted.
 
 ## Intent and completion criteria
 

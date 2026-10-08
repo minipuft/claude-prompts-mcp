@@ -325,20 +325,20 @@ prompt_engine(command:"%judge analysis_report")
 <details>
 <summary><strong>Parameters</strong></summary>
 
-| Parameter       | Type    | Purpose                                                                                                                                                                                                                                                          |
-| --------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `command`       | string  | Prompt ID with operators and arguments                                                                                                                                                                                                                           |
-| `chain_id`      | string  | Resume token for continuing chains                                                                                                                                                                                                                               |
-| `user_response` | string  | Your output from previous step (for chain resume)                                                                                                                                                                                                                |
-| `gate_verdict`  | union   | Structured review object or legacy verdict string. Optional `per_gate[].evaluation` retains typed custody through the processor; live semantic criteria remain refused. See [Gate Verdict Formats](#gate-verdict-formats). Rationale required.                   |
-| `gate_action`   | enum    | Your move on a run that is waiting for one. After a FAILED GATE with retries exhausted: `retry`, `skip`, `abort`. On a run PAUSED by a blocking unknown: `resume`, `accept_alternative`, `abort`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt). |
-| `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                                                           |
-| `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                                                        |
-| `inputs`        | object  | Typed prompt arguments. Nested objects and arrays stay structured; explicit inline arguments win on key conflicts.                                                                                                                                               |
-| `options`       | object  | Legacy prompt values and execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) when transport metadata is unavailable.                                                                                   |
-| `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                                                      |
-| `workflow`      | object  | A structured multi-step run submitted instead of a command string. Mutually exclusive with `command` and `chain_id`. See [Workflow Submission](#workflow-submission).                                                                                            |
-| `remainder`     | object  | Rewrite the rest of a running chain after a blocking unknown invalidated its shape. `{mode:'replace'\|'append', nodes:[…], edges?:[…]}`, requires `chain_id`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt).                                     |
+| Parameter       | Type    | Purpose                                                                                                                                                                                                                                                             |
+| --------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `command`       | string  | Prompt ID with operators and arguments                                                                                                                                                                                                                              |
+| `chain_id`      | string  | Resume token for continuing chains                                                                                                                                                                                                                                  |
+| `user_response` | string  | Your output from previous step (for chain resume)                                                                                                                                                                                                                   |
+| `gate_verdict`  | union   | Structured review object or legacy verdict string. Required semantic criteria use `per_gate[].evaluation` with server-issued binding and captured evidence; legacy strings remain supported. See [Gate Verdict Formats](#gate-verdict-formats). Rationale required. |
+| `gate_action`   | enum    | Your move on a run that is waiting for one. After a FAILED GATE with retries exhausted: `retry`, `skip`, `abort`. On a run PAUSED by a blocking unknown: `resume`, `accept_alternative`, `abort`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt).    |
+| `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                                                              |
+| `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                                                           |
+| `inputs`        | object  | Typed prompt arguments. Nested objects and arrays stay structured; explicit inline arguments win on key conflicts.                                                                                                                                                  |
+| `options`       | object  | Legacy prompt values and execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) when transport metadata is unavailable.                                                                                      |
+| `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                                                         |
+| `workflow`      | object  | A structured multi-step run submitted instead of a command string. Mutually exclusive with `command` and `chain_id`. See [Workflow Submission](#workflow-submission).                                                                                               |
+| `remainder`     | object  | Rewrite the rest of a running chain after a blocking unknown invalidated its shape. `{mode:'replace'\|'append', nodes:[…], edges?:[…]}`, requires `chain_id`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt).                                        |
 
 </details>
 
@@ -378,8 +378,9 @@ prompt_engine(
   chain_id:"chain-research#2",
   gate_verdict:"GATE_REVIEW: PASS - All sources cited"
 )
+```
 
-**Combined resume (recommended for token efficiency):**
+**Combined resume for ordinary legacy reviews:**
 
 ```bash
 prompt_engine(
@@ -387,7 +388,7 @@ prompt_engine(
   user_response:"Step 2 output...",
   gate_verdict:"GATE_REVIEW: PASS - criteria met"
 )
-````
+```
 
 Notes:
 
@@ -427,7 +428,7 @@ prompt_engine(command:"code_review", gates:[
   {"name": "Test Coverage", "description": "All functions have unit tests"},
   {"name": "Error Handling", "description": "Proper try/catch patterns"}
 ])
-````
+```
 
 **A criterion or a `verify:` command cannot contain a quote character.** The text is delimited by
 `"` or `'`, and there is no escape, so `:: "it's fine"` is refused at parse, naming `::` and the
@@ -1250,21 +1251,27 @@ re-send them with `edges:` on an `update`.
 
 **Gate Parameters:**
 
-| Parameter                | Purpose                                                                        |
-| ------------------------ | ------------------------------------------------------------------------------ |
-| `type`                   | `validation` (pass/fail) or `guidance` (advisory)                              |
-| `gate_type`              | `framework` \| `category` \| `custom`. Default `custom`                        |
-| `severity`               | `critical` \| `high` \| `medium` \| `low`. Default `medium`                    |
-| `enforcement_mode`       | `blocking` \| `advisory` \| `informational`: what a FAIL does. Absent: holds   |
-| `block_response_on_fail` | `true` withholds the step output on a FAIL and returns the gate review instead |
-| `evaluation`             | `{mode, model?, strict?}`: who reviews the gate, `self` or `judge`             |
-| `guidance`               | Gate criteria content                                                          |
-| `pass_criteria`          | Array of success conditions                                                    |
-| `activation`             | When gate activates (categories, frameworks)                                   |
+| Parameter                | Purpose                                                                                   |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| `type`                   | `validation` (pass/fail) or `guidance` (advisory)                                         |
+| `gate_type`              | `framework` \| `category` \| `custom`. Default `custom`                                   |
+| `severity`               | `critical` \| `high` \| `medium` \| `low`. Default `medium`                               |
+| `enforcement_mode`       | `blocking` \| `advisory` \| `informational`: what a FAIL does. Absent: holds              |
+| `block_response_on_fail` | `true` withholds the step output on a FAIL and returns the gate review instead            |
+| `evaluation`             | `{mode, model?, strict?}`: who reviews the gate, `self` or `judge`                        |
+| `calibration_suite_id`   | Nonempty opaque public suite association; preserved verbatim, no path/private-case lookup |
+| `guidance`               | Gate criteria content                                                                     |
+| `pass_criteria`          | Array of success conditions                                                               |
+| `activation`             | When gate activates (categories, frameworks)                                              |
 
 `pass_criteria` supports `inline_guidance` (declarative client assessment),
 `framework_compliance`, `shell_verify` (command exit-status verification under operator allowlists),
-and `script_tool` (registered script execution). These modes use the canonical criterion fields;
+and `script_tool` (registered script execution), plus `semantic_evaluation` for bound report
+acceptance. Semantic criteria declare `id`, `target`, `question`, `evidence_requirements`, `result`
+(boolean, category or anchored score), compatible `acceptance`, and optional `allow_not_applicable`
+(default false). A `step_output` target uses server capture. An `artifact` target with opaque `id`
+is a valid declaration, but runtime artifact capture is unavailable; it does not resolve a path.
+These modes use the canonical criterion fields;
 legacy output-regexp or minimum-length checks are not supported criterion types. See
 [Gate Definitions](../guides/gates.md) for execution controls and examples.
 
@@ -1704,16 +1711,26 @@ branch remains accepted, with these case-insensitive formats:
 - Rationale is always required
 - Verdicts are read only from `gate_verdict`; `user_response` carries the actual step output.
 
-### Semantic report schema (staged)
+### Bound semantic report acceptance
 
-The boundary schema accepts an optional report at `per_gate[i].evaluation` within the same
-`gate_verdict` object/string union. Registration, request, parsing and processor paths preserve
-the original typed submission and report. **Runtime activation is pending:** live
-`semantic_evaluation` resource criteria are still refused, and server-issued binding and runtime
-adjudication remain pending activation work. Keep reports structured; do not encode JSON in a
-rationale or submit a separate `findings` field.
+The enabled boundary retains `per_gate[i].evaluation` through registration, parsing, adjudication
+and the persisted ledger. Required `semantic_evaluation` criteria need a structured report tied to
+server-issued frozen definitions, node, attempt and captured target. Report-supplied pins cannot
+replace that authority. Capture the output **alone first**, then prefer a report-only verdict.
+If resending work for the same reviewed node, send its identical canonical whole `user_response.trim()`
+bytes. The server does not normalize Unicode or strip metadata from ordinary work. Different or
+supplied-empty canonical work paired with PASS or FAIL is refused before grading or capture.
+Another known node's body remains scoped to that node. Routing-only handoff metadata is exempt
+only on the actual addressed detached review-verdict route.
 
-The following illustrates the report shape inside one entry; the binding values are placeholders:
+An attributable failed/missing report derives FAIL despite a client PASS. A renewing FAIL clears
+the server target and consumes the old same-node response; send replacement output in a separate
+capture call before its new report. Exhausted FAIL waits for `gate_action:retry` rather than
+renewing immediately. Stale/misaddressed bindings refuse without charging or replacing fresh pins.
+Tool siblings do not substitute for required semantic evidence. Advisory/informational clearing
+preserves failed evaluation facts; skip is an operational BYPASS, not an evaluated PASS or FAIL.
+
+This example illustrates the shape only: copy the actual server-issued binding and captured-target span; never invent pins from its placeholders.
 
 ```json
 {
@@ -1765,14 +1782,16 @@ The following illustrates the report shape inside one entry; the binding values 
 All nested report objects reject undeclared keys. Identity strings are retained verbatim;
 whitespace-only identities are refused. Absent `reviewer` means unknown provenance. Submitted
 `host_verified` provenance is rejected; provider/model/revision/context are client claims, separate
-from requested routing metadata, and do not affect semantic acceptance.
+from the frozen requested `evaluation` configuration, and do not establish host/native identity
+or model accuracy. Absent observed reviewer identity remains unknown. Semantic contract acceptance
+checks the submitted evidence and predicates; it is not human approval or verified model quality.
 
 The standalone acceptance kernel validates reports against independently pinned execution and
 definition identities. `target_digest` uses `hashBytes` over the actual captured UTF-8 content,
 with the `sha256:<hex>` prefix. Evidence uses half-open JavaScript UTF-16 spans `[start,end)`,
 not UTF-8 byte offsets. The kernel checks span bounds, target digest, optional quote and criterion
-predicates; schema validation alone does not establish acceptance. Server-issued binding and runtime
-adjudication remain pending activation work.
+predicates; schema validation alone does not establish acceptance. The enabled processor applies
+that kernel to the frozen server review and retains its derived result alongside the original report.
 
 ---
 
