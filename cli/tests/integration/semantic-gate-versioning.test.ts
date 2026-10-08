@@ -1,8 +1,8 @@
 /**
- * Actual built CLI byte-tree proof while the live semantic criterion union is OFF.
- * Rollback deliberately uses --no-validate: this proves version fidelity, not default
- * semantic authoring/validation or model evaluation. Activated default validation belongs
- * to the later transport/activation controls. All private/sibling data here is synthetic.
+ * Actual built CLI byte-tree proof with distinct validation boundaries.
+ * The historical --no-validate control proves byte fidelity only. Separate controls
+ * exercise default semantic validation and refusal without changing resource history.
+ * All private/sibling data here is synthetic; no model evaluation is claimed.
  */
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
 import { spawnSync } from "node:child_process";
@@ -65,7 +65,9 @@ const ORIGINAL = state(1);
 const CURRENT = state(2);
 const PRIVATE =
   '{"synthetic_private_sentinel":"never publish expected labels"}\n';
-const SIBLING = "# synthetic sibling sentinel\nid: sibling\nname: Sibling\n";
+// A valid sibling keeps catalog validation meaningful while byte checks prove exclusion.
+const SIBLING =
+  "# synthetic sibling sentinel\nid: sibling\nname: Sibling\ntype: guidance\ndescription: Synthetic sibling exclusion control\nguidance: Retain this sibling unchanged.\n";
 const logger: Logger = { debug() {}, info() {}, warn() {}, error() {} };
 
 let workspace = "";
@@ -209,7 +211,7 @@ afterEach(async () => {
   if (workspace !== "") await rm(workspace, { recursive: true, force: true });
 });
 
-describe("built cpm semantic gate version fidelity, preactivation --no-validate only", () => {
+describe("built cpm semantic gate version fidelity", () => {
   it("compares full public projections backed by canonical scoped byte trees with private/sibling exclusions", () => {
     withDatabase((db) => {
       const rows = db
@@ -348,5 +350,93 @@ describe("built cpm semantic gate version fidelity, preactivation --no-validate 
       expect(readFileSync(guidance)).toEqual(Buffer.from(expected.guidance));
       expectExcludedBytesUntouched();
     }
+  });
+
+  it("default validation accepts semantic public definitions and compare/rollback retains exact bytes and exclusions", () => {
+    const compared = run(["compare", "gate", ID, "1", "2", "--json"]);
+    expect(compared.exitCode).toBe(0);
+    const snapshots = JSON.parse(compared.stdout) as {
+      from: { snapshot: Record<string, unknown> };
+      to: { snapshot: Record<string, unknown> };
+    };
+    for (const [snapshot, expected] of [
+      [snapshots.from.snapshot, ORIGINAL],
+      [snapshots.to.snapshot, CURRENT],
+    ] as const) {
+      const authored = parseYamlOrThrow<Record<string, unknown>>(expected.yaml);
+      for (const field of [
+        "pass_criteria",
+        "calibration_suite_id",
+        "evaluation",
+      ])
+        expect(snapshot[field]).toEqual(authored[field]);
+      expect(snapshot["guidance"]).toBe(expected.guidance);
+    }
+    const validate = () => {
+      const checked = run(["validate", "--gates", "--json"]);
+      expect(checked.exitCode).toBe(0);
+      expect(JSON.parse(checked.stdout)).toMatchObject({
+        valid: true,
+        summary: { total: 2, invalid: 0 },
+      });
+    };
+    validate();
+    for (const [version, expected] of [
+      [1, ORIGINAL],
+      [2, CURRENT],
+    ] as const) {
+      // No --no-validate: the CLI's canonical verifier runs after restoring the real tree.
+      const restored = run(["rollback", "gate", ID, String(version), "--json"]);
+      expect(restored.exitCode).toBe(0);
+      expect(JSON.parse(restored.stdout)).toMatchObject({
+        recorded: true,
+        restored_version: version,
+        not_restored: [],
+        files_written: expect.arrayContaining(["gate.yaml", "guidance.md"]),
+      });
+      expect(readFileSync(entry)).toEqual(Buffer.from(expected.yaml));
+      expect(readFileSync(guidance)).toEqual(Buffer.from(expected.guidance));
+      expectExcludedBytesUntouched();
+      validate();
+    }
+  });
+
+  it("default rollback refuses a malformed semantic historical definition and restores current bytes without recording success", async () => {
+    const malformed = {
+      ...ORIGINAL,
+      yaml: ORIGINAL.yaml.replace("min_items: 1", "min_items: 0"),
+    };
+    await recordState(malformed, 3);
+    await recordState(CURRENT, 4);
+    const rows = () =>
+      withDatabase((db) =>
+        db
+          .prepare(
+            "SELECT version, snapshot, tree_hash FROM version_history WHERE tenant_id = ? AND resource_type = ? AND resource_id = ? ORDER BY version",
+          )
+          .all(SCOPE, "gate", ID),
+      );
+    const before = rows();
+    const refused = run(["rollback", "gate", ID, "3", "--json"]);
+    expect(refused.exitCode).toBe(1);
+    const failure = JSON.parse(refused.stdout) as {
+      error: string;
+      validation: { valid: boolean; errors: Array<{ path: string }> };
+      rollback: { performed: boolean };
+    };
+    expect(failure.error).toContain("failed validation");
+    expect(failure.validation.valid).toBe(false);
+    expect(failure.rollback.performed).toBe(true);
+    expect(
+      failure.validation.errors.some(
+        (issue) =>
+          issue.path.includes("pass_criteria") &&
+          issue.path.includes("min_items"),
+      ),
+    ).toBe(true);
+    expect(readFileSync(entry)).toEqual(Buffer.from(CURRENT.yaml));
+    expect(readFileSync(guidance)).toEqual(Buffer.from(CURRENT.guidance));
+    expectExcludedBytesUntouched();
+    expect(rows()).toEqual(before);
   });
 });
