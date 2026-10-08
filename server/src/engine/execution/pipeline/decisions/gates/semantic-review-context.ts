@@ -131,6 +131,32 @@ export function readSemanticReviewCriteria(
   return semantic;
 }
 
+/** Capture intent after a successful renewal: the graded body cannot bind its next attempt. */
+export function projectRenewedSemanticCapture(input: {
+  readonly review: GateReview;
+  readonly renewedReview: GateReview | null;
+  readonly renewAttempt?: boolean;
+  readonly responseNodeId?: string;
+  readonly userResponse: string | undefined;
+}): { readonly userResponse: string | undefined; readonly earlyExit: boolean } {
+  const old = input.review.semanticContext;
+  const renewed = input.renewedReview?.semanticContext;
+  const consumed =
+    input.renewAttempt === true &&
+    old !== undefined &&
+    renewed !== undefined &&
+    renewed.attemptId !== old.attemptId &&
+    renewed.target === undefined &&
+    input.responseNodeId === input.review.nodeId &&
+    old.target?.content === input.userResponse?.trim() &&
+    input.review.gateIds.some((gateId) => {
+      const snapshot = old.definitions[gateId];
+      return snapshot !== undefined && readSemanticReviewCriteria(snapshot).length > 0;
+    });
+  const userResponse = consumed ? undefined : input.userResponse;
+  return { userResponse, earlyExit: userResponse === undefined || userResponse.length === 0 };
+}
+
 /** Capture-first: no report can create a missing target or substitute any expected pin. */
 export function resolvePinnedSemanticContext(
   context: GateReviewSemanticContext,

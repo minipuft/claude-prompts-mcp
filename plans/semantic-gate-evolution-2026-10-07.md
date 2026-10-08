@@ -18,10 +18,10 @@ tags: [gates, semantic, evaluation, tests]
 ## Now (2026-10-07)
 
 Goal: finish the entire master/child initiative, actual built workflows, matched native/quality evidence, retirement and reviewed green-CI delivery.
-Slice:10.2 actual MCP builders/guard/receiver and R74 parsed-equal mechanical format accepted; source owner SAFE. Private native draft-only preparation active; no inference.
-Next decision: commit sealed10.2, dispatch built STDIO/HTTP10.3 and enabled inspector/CLI follow-through; complete metadata10.4, then finalize actual immutable native freeze for root review.
+Slice: committed5c141a1d MCP builders;13.1 two-source semantic renewal intent repair has freshbuilt6green/types0/budgetsmet, namedmutations/baselinecheck active. Disjoint10.5 inspector test only active.
+Next decision: accept/reseal13.1, finish actualbuilt10.3 twins, then metadata10.4/enabledCLI10.6; finalize actualMCPcandidate/currentruntime/C8 immutable graph and rootreview before native11calls.
 Constraint: main edits plans/integration/publication only; no new threads or repeated accepted proofs. Root is independent read-only reviewer and must read actual immutable native freeze before inference.
-State: child55 rows49done2killed4open; accepted definition unionON; built report twins10.3 pending/native inference0. Checkpoint7 and subsequent receipts are authoritative; all prior accepted source receipts remain accepted.
+State: child57 rows51done2killed4open; accepted definition unionON; built report twins10.3 pending/native inference0. Checkpoint7 and subsequent receipts are authoritative; all prior accepted source receipts remain accepted.
 
 ## Intent and completion criteria
 

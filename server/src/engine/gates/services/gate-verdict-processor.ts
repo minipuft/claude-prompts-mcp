@@ -22,6 +22,7 @@ import { advanceReview } from '../../execution/pipeline/decisions/gates/review-l
 import { resolveReviewTarget } from '../../execution/pipeline/decisions/gates/review-target.js';
 import {
   readSemanticReviewCriteria,
+  projectRenewedSemanticCapture,
   resolvePinnedSemanticContext,
   resolveSemanticTargetResponseAdmission,
 } from '../../execution/pipeline/decisions/gates/semantic-review-context.js';
@@ -653,6 +654,10 @@ export class GateVerdictProcessor {
     ) {
       return untouched;
     }
+    const captureNodeId = projectCurrentResponseTarget(
+      session,
+      currentOrdinal(session.state.nodes, session.state.currentNodeId)
+    )?.nodeId;
     const answer = await this.answerVerdict(
       context,
       session,
@@ -708,8 +713,13 @@ export class GateVerdictProcessor {
 
     return {
       passClearedThisCall: advance.outcome === 'passed',
-      earlyExit: !hasResponse,
-      userResponse,
+      ...projectRenewedSemanticCapture({
+        review,
+        renewedReview: advance.review,
+        renewAttempt: advance.renewAttempt,
+        responseNodeId: captureNodeId,
+        userResponse,
+      }),
       ...(deferredAdvance !== undefined ? { deferredAdvance } : {}),
     };
   }
@@ -1230,16 +1240,13 @@ export class GateVerdictProcessor {
     verdict: ParsedGateVerdict,
     review: GateReview
   ): GateVerdictSummary[] {
-    const authority = context.gateEnforcement;
-    const entries =
-      authority === undefined
-        ? []
-        : authority.parseGateVerdicts(
-            verdict.submission ?? verdict.raw,
-            review.gateIds,
-            review.attemptCount
-          );
-    return entries;
+    return (
+      context.gateEnforcement?.parseGateVerdicts(
+        verdict.submission ?? verdict.raw,
+        review.gateIds,
+        review.attemptCount
+      ) ?? []
+    );
   }
 
   /**
