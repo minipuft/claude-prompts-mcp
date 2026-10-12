@@ -148,6 +148,7 @@ export interface ResourceDependencies {
           type: 'validation' | 'guidance';
           severity: 'critical' | 'high' | 'medium' | 'low';
           getGuidance(): string;
+          getDefinition(): GateTierSource;
         }
       | undefined;
   };

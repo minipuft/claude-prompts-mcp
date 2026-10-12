@@ -335,6 +335,49 @@ describe('MCP Resources Registration Integration', () => {
       );
     });
 
+    test('gate detail renders the derived tier above the authored type for semantic and mixed gates', async () => {
+      const gate = (gateId: string, passCriteria: Array<{ type: string }>) => ({
+        gateId,
+        name: gateId,
+        description: '',
+        type: 'validation' as const,
+        severity: 'medium' as const,
+        getGuidance: () => '',
+        getDefinition: () => ({ pass_criteria: passCriteria }),
+      });
+      const guides = new Map([
+        ['sem-only', gate('sem-only', [{ type: 'semantic_evaluation' }])],
+        [
+          'sem-and-tool',
+          gate('sem-and-tool', [{ type: 'shell_verify' }, { type: 'semantic_evaluation' }]),
+        ],
+      ]);
+      registerResources(mockMcpServer as never, {
+        logger: mockLogger,
+        gateManager: { list: () => [...guides.values()], get: (id: string) => guides.get(id) },
+      });
+      const read = async (id: string): Promise<string> => {
+        const result = (await registeredResources
+          .get('gate')!
+          .readHandler(
+            new URL(`resource://${RESOURCE_URI_PATTERNS.GATE_ITEM.replace('{id}', id)}`),
+            {
+              id,
+            }
+          )) as { contents: Array<{ text: string }> };
+        return result.contents[0].text;
+      };
+
+      const semantic = await read('sem-only');
+      expect(semantic).toContain('**Tier:** evaluation');
+      expect(semantic).toContain('**Declared Type:** validation');
+      expect(semantic).not.toContain('**Type:**');
+
+      const mixed = await read('sem-and-tool');
+      expect(mixed).toContain('**Tier:** check + evaluation');
+      expect(mixed).toContain('**Declared Type:** validation');
+    });
+
     test('individual gate handler returns full content', async () => {
       const handler = registeredResources.get('gate')?.readHandler;
       expect(handler).toBeDefined();
@@ -350,7 +393,8 @@ describe('MCP Resources Registration Integration', () => {
 
       const content = result.contents[0].text;
       expect(content).toContain('**ID:** `code-quality`');
-      expect(content).toContain('**Type:**');
+      expect(content).toContain('**Tier:**');
+      expect(content).toContain('**Declared Type:**');
       expect(content).toContain('**Severity:**');
     });
 
