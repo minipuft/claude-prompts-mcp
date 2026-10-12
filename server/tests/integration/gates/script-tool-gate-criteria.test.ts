@@ -24,11 +24,15 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 
 import { validateGateSchema } from '../../../src/engine/gates/core/gate-schema.js';
-import { runGateScriptToolVerifications } from '../../../src/engine/gates/services/gate-script-tool-runner.js';
+import {
+  formatGateScriptToolSection,
+  runGateScriptToolVerifications,
+} from '../../../src/engine/gates/services/gate-script-tool-runner.js';
 import { runScriptToolCriterion } from '../../../src/engine/gates/services/script-tool-criterion-runner.js';
 import { resolveGroundTruthCoverage } from '../../../src/engine/execution/pipeline/decisions/gates/ground-truth-coverage.js';
 import { createScriptExecutor } from '../../../src/modules/automation/execution/script-executor.js';
 
+import type { ScriptToolRuntime } from '../../../src/engine/gates/services/script-tool-criterion-runner.js';
 import type { ScriptLoader } from '../../../src/engine/execution/reference/script-reference-resolver.js';
 import type { GateDefinitionProvider } from '../../../src/engine/gates/core/gate-loader.js';
 import type {
@@ -36,7 +40,13 @@ import type {
   LightweightGateDefinition,
 } from '../../../src/engine/gates/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
-import type { LoadedScriptTool } from '../../../src/shared/types/index.js';
+import type {
+  LoadedScriptTool,
+  ScriptExecutionRequest,
+  ScriptExecutionResult,
+  ScriptExecutorPort,
+} from '../../../src/shared/types/index.js';
+import type { GateScriptToolResult } from '../../../src/engine/gates/services/gate-script-tool-runner.js';
 
 const FIXTURE_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -99,6 +109,65 @@ function loaderProviderFor(gate: LightweightGateDefinition): GateDefinitionProvi
     getCacheStats: () => ({ hits: 0, misses: 0, size: 1 }),
   } as unknown as GateDefinitionProvider;
 }
+
+/** A registered tool backed by another fixture script (same shape as `verdictTool`). */
+function fixtureTool(
+  id: string,
+  file: string,
+  overrides: Partial<LoadedScriptTool> = {}
+): LoadedScriptTool {
+  return verdictTool({
+    id,
+    scriptPath: file,
+    absoluteScriptPath: path.join(FIXTURE_DIR, file),
+    ...overrides,
+  } as Partial<LoadedScriptTool>);
+}
+
+/** Forwards to the real executor and records what the criterion runner handed it. */
+function recordingExecutor(inner: ScriptExecutorPort): ScriptExecutorPort & {
+  calls: Array<{ request: ScriptExecutionRequest; tool: LoadedScriptTool }>;
+} {
+  const calls: Array<{ request: ScriptExecutionRequest; tool: LoadedScriptTool }> = [];
+  return {
+    calls,
+    execute: async (request, tool) => {
+      calls.push({ request, tool });
+      return inner.execute(request, tool);
+    },
+  };
+}
+
+/** The process boundary replaced: an executor that returns (or throws) exactly what is handed in. */
+function stubExecutor(
+  outcome: Partial<ScriptExecutionResult> | Error | string
+): ScriptExecutorPort {
+  return {
+    execute: async () => {
+      if (outcome instanceof Error) throw outcome;
+      if (typeof outcome === 'string') throw outcome;
+      return {
+        success: true,
+        output: null,
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+        durationMs: 7,
+        ...outcome,
+      };
+    },
+  };
+}
+
+function runtimeWith(
+  executor: ScriptExecutorPort,
+  ...tools: LoadedScriptTool[]
+): ScriptToolRuntime {
+  return { loader: loaderFor(...tools), executor };
+}
+
+const scriptCriterion = (extra: Record<string, unknown>): GatePassCriteria =>
+  ({ type: 'script_tool', ...extra }) as GatePassCriteria;
 
 describe('script_tool gate criteria', () => {
   let scriptTools: () => {
@@ -203,6 +272,485 @@ describe('script_tool gate criteria', () => {
       expect(outcome.unrunnable).toBe(true);
       expect(outcome.reason).toContain('confirmation');
     });
+  });
+
+  // Failure paths of the criterion rule. Real ScriptExecutor and real subprocesses wherever
+  // the executor can produce the case; the process boundary is stubbed only for results a
+  // real executor cannot emit (a non-object payload, a throw from spawn itself).
+  describe('the criterion rule — failure paths', () => {
+    test('a criterion of another type is unrunnable and names no tool', async () => {
+      const outcome = await runScriptToolCriterion(
+        { type: 'shell_verify', shell_command: ['true'] } as unknown as GatePassCriteria,
+        scriptTools()
+      );
+
+      expect(outcome).toMatchObject({
+        toolId: undefined,
+        passed: false,
+        unrunnable: true,
+        reason: 'criterion is not a script_tool check',
+        durationMs: 0,
+      });
+    });
+
+    // Positive control for the two id-less cases below: the same runtime runs a named id.
+    test('a whitespace-only id is unrunnable with the no-id reason', async () => {
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: '   ' }),
+        scriptTools()
+      );
+
+      expect(outcome.unrunnable).toBe(true);
+      expect(outcome.toolId).toBeUndefined();
+      expect(outcome.reason).toContain('no script_tool_id specified');
+    });
+
+    test('an unknown id is unrunnable and echoes the id it could not resolve', async () => {
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'no_such_tool' }),
+        scriptTools()
+      );
+
+      expect(outcome.toolId).toBe('no_such_tool');
+      expect(outcome.unrunnable).toBe(true);
+      expect(outcome.reason).toContain('names a tool, not a shell command');
+    });
+
+    // A tool that leaves `confirm` unset means true — the default must not be read as
+    // "no confirmation needed".
+    test('a tool with no execution block at all is refused as confirm-required', async () => {
+      const bare = verdictTool({ execution: undefined } as unknown as Partial<LoadedScriptTool>);
+
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'verdict_tool' }),
+        {
+          loader: loaderFor(bare),
+          executor: createScriptExecutor({ debug: false }),
+        }
+      );
+
+      expect(outcome.unrunnable).toBe(true);
+      expect(outcome.reason).toContain('confirmation');
+    });
+
+    test('script_tool_timeout is forwarded and a script outliving it fails with the timeout reason', async () => {
+      const executor = recordingExecutor(createScriptExecutor({ debug: false }));
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'sleeper', script_tool_timeout: 300 }),
+        runtimeWith(executor, fixtureTool('sleeper', 'sleep-long.cjs'))
+      );
+
+      expect(executor.calls[0]?.request.timeout).toBe(300);
+      expect(outcome.passed).toBe(false);
+      expect(outcome.unrunnable).toBe(false);
+      expect(outcome.reason).toBe('Script timed out after 300ms');
+      expect(outcome.scriptOutput).toBeNull();
+    }, 20000);
+
+    // Control for the timeout case: no declared timeout means the key is absent from the
+    // request, not present as undefined, so the executor's own default applies.
+    test('no script_tool_timeout leaves the request without a timeout key; inputs default to {}', async () => {
+      const executor = recordingExecutor(createScriptExecutor({ debug: false }));
+      await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'verdict_tool' }),
+        runtimeWith(executor, verdictTool())
+      );
+
+      const request = executor.calls[0]?.request;
+      expect(request).toBeDefined();
+      expect('timeout' in (request as ScriptExecutionRequest)).toBe(false);
+      expect(request?.inputs).toEqual({});
+      expect(request?.promptId).toBe('gate_owner');
+    }, 20000);
+
+    test('declared script_tool_input reaches the script verbatim', async () => {
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'verdict_tool', script_tool_input: { verdict: 'pass' } }),
+        scriptTools()
+      );
+
+      expect(outcome.passed).toBe(true);
+      expect(outcome.reason).toBe('verdict fixture saw "pass"');
+      expect(outcome.exitCode).toBe(0);
+    }, 20000);
+
+    test('a non-zero exit fails with the stderr as reason and carries exit code and stderr', async () => {
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'crasher' }),
+        runtimeWith(
+          createScriptExecutor({ debug: false }),
+          fixtureTool('crasher', 'exit-nonzero.cjs')
+        )
+      );
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.unrunnable).toBe(false);
+      expect(outcome.exitCode).toBe(3);
+      expect(outcome.reason).toBe('fixture failed on purpose');
+      expect(outcome.stderr).toBe('fixture failed on purpose');
+    }, 20000);
+
+    // Control for the stderr spread: a clean run has no stderr key at all.
+    test('a clean run carries no stderr key', async () => {
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'verdict_tool', script_tool_input: { verdict: 'pass' } }),
+        scriptTools()
+      );
+
+      expect('stderr' in outcome).toBe(false);
+    }, 20000);
+
+    test('stdout that is not JSON fails with the executor error, not a pass', async () => {
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'prose' }),
+        runtimeWith(
+          createScriptExecutor({ debug: false }),
+          fixtureTool('prose', 'print-non-json.cjs')
+        )
+      );
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.unrunnable).toBe(false);
+      expect(outcome.scriptOutput).toBeNull();
+      expect(outcome.reason).toContain('wrote output that is not JSON');
+    }, 20000);
+
+    test('a payload without passed:true fails with the did-not-report reason', async () => {
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'echo' }),
+        runtimeWith(createScriptExecutor({ debug: false }), fixtureTool('echo', 'echo-inputs.cjs'))
+      );
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.unrunnable).toBe(false);
+      expect(outcome.reason).toBe('Script tool did not report passed: true');
+      expect(outcome.scriptOutput).toEqual({ received: {}, ok: true });
+    }, 20000);
+
+    test('a non-object output fails closed even when the executor reports success', async () => {
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'verdict_tool' }),
+        runtimeWith(stubExecutor({ success: true, output: 'passed' }), verdictTool())
+      );
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.scriptOutput).toBeNull();
+      expect(outcome.reason).toBe('Script tool did not report passed: true');
+    });
+
+    test('passed:true without a reason reports the default pass reason', async () => {
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'verdict_tool' }),
+        runtimeWith(stubExecutor({ output: { passed: true } }), verdictTool())
+      );
+
+      expect(outcome.passed).toBe(true);
+      expect(outcome.reason).toBe('Script tool passed');
+      expect(outcome.durationMs).toBe(7);
+    });
+
+    // passed:true from a script is not enough when the process itself failed.
+    test('passed:true does not override an executor failure', async () => {
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'verdict_tool' }),
+        runtimeWith(
+          stubExecutor({
+            success: false,
+            output: { passed: true },
+            error: 'killed',
+            exitCode: 137,
+          }),
+          verdictTool()
+        )
+      );
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.reason).toBe('killed');
+      expect(outcome.exitCode).toBe(137);
+    });
+
+    test('an executor that throws becomes a failing, runnable outcome naming the error', async () => {
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'verdict_tool' }),
+        runtimeWith(stubExecutor(new Error('spawn exploded')), verdictTool())
+      );
+
+      expect(outcome).toMatchObject({
+        toolId: 'verdict_tool',
+        passed: false,
+        unrunnable: false,
+        reason: 'Script tool error: spawn exploded',
+      });
+      expect(outcome.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    test('a thrown non-Error is stringified into the reason', async () => {
+      const outcome = await runScriptToolCriterion(
+        scriptCriterion({ script_tool_id: 'verdict_tool' }),
+        runtimeWith(stubExecutor('plain string'), verdictTool())
+      );
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.reason).toBe('Script tool error: plain string');
+    });
+
+    describe('script_tool_working_dir', () => {
+      test('is applied to the tool handed to the executor, leaving the registry entry untouched', async () => {
+        const registered = verdictTool();
+        const executor = recordingExecutor(createScriptExecutor({ debug: false }));
+
+        const outcome = await runScriptToolCriterion(
+          scriptCriterion({
+            script_tool_id: 'verdict_tool',
+            script_tool_input: { verdict: 'pass' },
+            script_tool_working_dir: '.',
+          }),
+          runtimeWith(executor, registered)
+        );
+
+        expect(executor.calls[0]?.tool.workingDir).toBe('.');
+        expect(executor.calls[0]?.tool).not.toBe(registered);
+        expect(registered.workingDir).toBeUndefined();
+        expect(outcome.passed).toBe(true);
+      }, 20000);
+
+      // Control for the above: with no declared dir the registered tool is passed as is.
+      test('absent, the registered tool is passed through unchanged', async () => {
+        const registered = verdictTool();
+        const executor = recordingExecutor(createScriptExecutor({ debug: false }));
+
+        await runScriptToolCriterion(
+          scriptCriterion({ script_tool_id: 'verdict_tool' }),
+          runtimeWith(executor, registered)
+        );
+
+        expect(executor.calls[0]?.tool).toBe(registered);
+      }, 20000);
+
+      test('a directory escaping the tool directory is refused by the executor, not run', async () => {
+        const outcome = await runScriptToolCriterion(
+          scriptCriterion({
+            script_tool_id: 'verdict_tool',
+            script_tool_input: { verdict: 'pass' },
+            script_tool_working_dir: '../../..',
+          }),
+          scriptTools()
+        );
+
+        expect(outcome.passed).toBe(false);
+        expect(outcome.unrunnable).toBe(false);
+        expect(outcome.reason).toContain("outside the tool's own directory");
+      }, 20000);
+    });
+  });
+
+  // The review-feedback projection. Results come from real runs through
+  // `runGateScriptToolVerifications`, so the text asserted is what a reviewer is shown.
+  describe('formatGateScriptToolSection', () => {
+    const providerFor = (gate: LightweightGateDefinition): GateDefinitionProvider =>
+      ({
+        ...loaderProviderFor(gate),
+        loadGates: async (ids: string[]) => (ids.includes(gate.id) ? [gate] : []),
+      }) as unknown as GateDefinitionProvider;
+
+    const section = async (
+      criteria: Record<string, unknown>,
+      runtime: ScriptToolRuntime | undefined = scriptTools()
+    ): Promise<string> => {
+      const gate = gateWith(criteria);
+      return formatGateScriptToolSection(
+        await runGateScriptToolVerifications([gate.id], providerFor(gate), runtime)
+      );
+    };
+
+    test('no results render as an empty string', () => {
+      expect(formatGateScriptToolSection([])).toBe('');
+    });
+
+    test('a failing verdict renders FAILED, the script reason, duration and its details as JSON', async () => {
+      const text = await section({
+        type: 'script_tool',
+        script_tool_id: 'verdict_tool',
+        script_tool_input: { verdict: 'nope' },
+      });
+
+      expect(text).toContain('## Script Tool Verification Results');
+      expect(text).toContain('### Script Tool Gate — FAILED');
+      expect(text).toContain('**Tool:** `verdict_tool`');
+      expect(text).toContain('**Reason:** verdict fixture saw "nope"');
+      expect(text).toMatch(/\*\*Duration:\*\* \d+ms/);
+      expect(text).toContain('```json');
+      expect(text).toContain('"marker": "gate-verdict.cjs"');
+    }, 20000);
+
+    // Positive control for the FAILED case: same tool, passing verdict, no status leak and
+    // no details block.
+    test('a passing verdict renders PASSED with no details block', async () => {
+      const text = await section({
+        type: 'script_tool',
+        script_tool_id: 'verdict_tool',
+        script_tool_input: { verdict: 'pass' },
+      });
+
+      expect(text).toContain('### Script Tool Gate — PASSED');
+      expect(text).not.toContain('FAILED');
+      expect(text).not.toContain('```json');
+    }, 20000);
+
+    test('an unrunnable criterion renders COULD NOT RUN with no duration line', async () => {
+      const text = await section({ type: 'script_tool', script_tool_id: 'no_such_tool' });
+
+      expect(text).toContain('### Script Tool Gate — COULD NOT RUN');
+      expect(text).toContain('**Tool:** `no_such_tool`');
+      expect(text).toContain('**Reason:** no registered script tool has that id');
+      expect(text).not.toContain('**Duration:**');
+      expect(text).not.toContain('```json');
+    });
+
+    test('a criterion naming no tool renders the none-declared placeholder', async () => {
+      const text = await section({ type: 'script_tool' });
+
+      expect(text).toContain('### Script Tool Gate — COULD NOT RUN');
+      expect(text).toContain('**Tool:** `(none declared)`');
+    });
+
+    test('a failure with no details renders no JSON block', async () => {
+      const text = await section(
+        { type: 'script_tool', script_tool_id: 'crasher' },
+        runtimeWith(
+          createScriptExecutor({ debug: false }),
+          fixtureTool('crasher', 'exit-nonzero.cjs')
+        )
+      );
+
+      expect(text).toContain('### Script Tool Gate — FAILED');
+      expect(text).toContain('**Reason:** fixture failed on purpose');
+      expect(text).not.toContain('```json');
+    }, 20000);
+
+    test('results are rendered in order, one block per criterion, separated by a blank line', () => {
+      const base: GateScriptToolResult = {
+        gateId: 'g',
+        gateName: 'First',
+        toolId: 't1',
+        passed: true,
+        reason: 'ok',
+        unrunnable: false,
+        durationMs: 5,
+      };
+      const text = formatGateScriptToolSection([
+        base,
+        { ...base, gateName: 'Second', toolId: 't2', passed: false },
+      ]);
+
+      expect(text.indexOf('### First — PASSED')).toBeGreaterThan(-1);
+      expect(text.indexOf('### Second — FAILED')).toBeGreaterThan(
+        text.indexOf('### First — PASSED')
+      );
+      expect(text).toContain('**Duration:** 5ms\n\n### Second');
+      expect(text.endsWith('\n')).toBe(false);
+    });
+
+    test('details are capped at 2000 characters', () => {
+      const text = formatGateScriptToolSection([
+        {
+          gateId: 'g',
+          gateName: 'Big',
+          toolId: 't',
+          passed: false,
+          reason: 'too much',
+          unrunnable: false,
+          durationMs: 1,
+          scriptOutput: { details: { blob: 'x'.repeat(5000) } },
+        },
+      ]);
+
+      const body = text.split('```json\n')[1]?.split('\n```')[0] ?? '';
+      expect(body).toHaveLength(2000);
+    });
+  });
+
+  // Inputs of `runGateScriptToolVerifications` the live path does not exercise above.
+  describe('runGateScriptToolVerifications — inputs', () => {
+    test('checkedDefinitions bypass the provider entirely', async () => {
+      const gate = gateWith({
+        type: 'script_tool',
+        script_tool_id: 'verdict_tool',
+        script_tool_input: { verdict: 'pass' },
+      });
+      const provider = {
+        loadGates: async () => {
+          throw new Error('provider must not be consulted');
+        },
+      } as unknown as GateDefinitionProvider;
+
+      const results = await runGateScriptToolVerifications([gate.id], provider, scriptTools(), [
+        gate,
+      ]);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.passed).toBe(true);
+      expect(results[0]).toMatchObject({
+        gateId: 'script-tool-gate',
+        gateName: 'Script Tool Gate',
+        exitCode: 0,
+      });
+    }, 20000);
+
+    test('a gate with no pass_criteria contributes nothing', async () => {
+      const bare = {
+        id: 'bare',
+        name: 'Bare',
+        type: 'validation',
+        description: 'no criteria',
+      } as unknown as LightweightGateDefinition;
+
+      const results = await runGateScriptToolVerifications(
+        [bare.id],
+        {} as unknown as GateDefinitionProvider,
+        scriptTools(),
+        [bare]
+      );
+
+      expect(results).toEqual([]);
+    });
+
+    test('a thrown executor error still yields a row without exit code or output fields', async () => {
+      const gate = gateWith({ type: 'script_tool', script_tool_id: 'verdict_tool' });
+
+      const results = await runGateScriptToolVerifications(
+        [gate.id],
+        {} as unknown as GateDefinitionProvider,
+        runtimeWith(stubExecutor(new Error('boom')), verdictTool()),
+        [gate]
+      );
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.reason).toBe('Script tool error: boom');
+      expect('exitCode' in (results[0] as object)).toBe(false);
+      expect('scriptOutput' in (results[0] as object)).toBe(false);
+      expect('stderr' in (results[0] as object)).toBe(false);
+    });
+
+    test('exit code, script output and stderr are carried onto the row', async () => {
+      const gate = gateWith({ type: 'script_tool', script_tool_id: 'crasher' });
+
+      const results = await runGateScriptToolVerifications(
+        [gate.id],
+        {} as unknown as GateDefinitionProvider,
+        runtimeWith(
+          createScriptExecutor({ debug: false }),
+          fixtureTool('crasher', 'exit-nonzero.cjs')
+        ),
+        [gate]
+      );
+
+      expect(results[0]).toMatchObject({
+        exitCode: 3,
+        stderr: 'fixture failed on purpose',
+        scriptOutput: null,
+      });
+    }, 20000);
   });
 
   // F11 — was a characterization of inertness; now the liveness assertion.
