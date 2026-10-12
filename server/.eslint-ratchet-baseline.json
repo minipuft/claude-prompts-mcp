@@ -1,26 +1,26 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-08T16:51:57.662Z",
+  "generatedAt": "2026-10-12T22:25:32.621Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2436,
-    "warnings": 706
+    "errors": 2408,
+    "warnings": 702
   },
   "byRule": {
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 1642,
+      "errors": 1627,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
       "errors": 0,
-      "warnings": 75
+      "warnings": 74
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
       "warnings": 71
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 332,
+      "errors": 324,
       "warnings": 0
     },
     "max-params": {
@@ -41,10 +41,10 @@
     },
     "@typescript-eslint/no-unsafe-assignment": {
       "errors": 0,
-      "warnings": 150
+      "warnings": 149
     },
     "@typescript-eslint/no-explicit-any": {
-      "errors": 238,
+      "errors": 234,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-member-access": {
@@ -53,7 +53,7 @@
     },
     "max-depth": {
       "errors": 0,
-      "warnings": 27
+      "warnings": 26
     },
     "@typescript-eslint/prefer-optional-chain": {
       "errors": 1,
@@ -72,7 +72,7 @@
       "warnings": 5
     },
     "@typescript-eslint/explicit-module-boundary-types": {
-      "errors": 43,
+      "errors": 42,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-call": {
@@ -81,7 +81,7 @@
     },
     "@typescript-eslint/no-unsafe-return": {
       "errors": 0,
-      "warnings": 11
+      "warnings": 10
     },
     "@typescript-eslint/no-floating-promises": {
       "errors": 7,
@@ -98,10 +98,6 @@
     "max-lines": {
       "errors": 0,
       "warnings": 1
-    },
-    "claude/no-optional-collaborator-call": {
-      "errors": 0,
-      "warnings": 0
     }
   },
   "overrideLog": [

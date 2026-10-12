@@ -292,10 +292,20 @@ export type WorkflowRejectionReason =
    * refusal, addressed to no node.
    */
   | 'gate-id-canonical'
+  /**
+   * An inline gate criterion is empty or blank, or a named inline gate carries no criterion
+   * (R11.8): registered, it could neither pass nor fail, and skipped, the client would believe a
+   * gate it asked for was enforced. Produced by stage 05 before anything registers; addressed to
+   * the step's node when the criterion is a step's, otherwise run-level.
+   */
+  | 'gate-criteria-invalid'
   | 'required-argument-missing'
   | 'unknown-visibility-item';
 
-/** One addressed rejection. At least one of `nodeId` / `edge` is set for every reason but the three run-level ones. */
+/**
+ * One addressed rejection. At least one of `nodeId` / `edge` is set for every reason but the three
+ * run-level ones, and for `gate-criteria-invalid` when the criterion belongs to a step.
+ */
 export interface WorkflowRejection {
   readonly reason: WorkflowRejectionReason;
   /** The node this rejection is about, when it is about one. */

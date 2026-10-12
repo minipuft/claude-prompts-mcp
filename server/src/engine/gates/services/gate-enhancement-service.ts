@@ -283,10 +283,7 @@ export class GateEnhancementService {
     /** Canonical ids for this prompt's inline definitions, already registered by the caller. */
     inlineDefinitionGateIds: readonly string[] = []
   ): Promise<void> {
-    const executionPlan = context.executionPlan;
-    if (executionPlan === undefined) {
-      return;
-    }
+    const executionPlan = context.requireExecutionPlan();
 
     const { prompt, inlineGateIds } = gateContext;
 

@@ -126,14 +126,14 @@ export class GateReviewStage extends BasePipelineStage {
    * Scoped to the run-creating call for that reason: on any resume the current step already has
    * a row from stage 18, and appending again would add a duplicate `working` row per gate retry.
    */
-  private ledgerFirstRenderedStep(context: ExecutionContext): void {
+  private ledgerFirstRenderedStep(
+    context: ExecutionContext,
+    session: NonNullable<ExecutionContext['sessionContext']>
+  ): void {
     if (this.collaborators.executionRecordStore == null) return;
 
     const decision = context.state.session.lifecycleDecision;
     if (decision !== 'create-new' && decision !== 'create-force-restart') return;
-
-    const session = context.sessionContext;
-    if (session === undefined) return;
 
     const currentNodeId = session.currentNodeId ?? undefined;
     const stepNumber = session.currentStep ?? 1;
@@ -187,9 +187,10 @@ export class GateReviewStage extends BasePipelineStage {
   private async recordReviewEvidence(
     sessionId: string,
     review: GateReview,
-    checkResults: GateCheckResult[]
+    checkResults: GateCheckResult[],
+    gateDefinitionProvider: GateDefinitionProvider
   ): Promise<GateReview> {
-    const gateTiers = await this.deriveGateTiers(review);
+    const gateTiers = await this.deriveGateTiers(review, gateDefinitionProvider);
 
     if (checkResults.length === 0 && Object.keys(gateTiers).length === 0) {
       return review;
@@ -211,7 +212,10 @@ export class GateReviewStage extends BasePipelineStage {
    * treat a missing id as `check`, which keeps an unloadable gate attestable instead of
    * silently demoting it to a reminder nobody grades.
    */
-  private async deriveGateTiers(review: GateReview): Promise<Record<string, PendingGateTier>> {
+  private async deriveGateTiers(
+    review: GateReview,
+    gateDefinitionProvider: GateDefinitionProvider
+  ): Promise<Record<string, PendingGateTier>> {
     const frozen = projectFrozenReview(review);
     assertFrozenReviewAvailable(frozen);
     if (frozen.definitions !== undefined)
@@ -219,10 +223,9 @@ export class GateReviewStage extends BasePipelineStage {
         frozen.definitions.map((definition) => [definition.id, deriveGateTier(definition)])
       );
     const gateIds = review.gateIds;
-    if (!this.gateDefinitionProvider || gateIds.length === 0) return {};
 
     try {
-      const definitions = await this.gateDefinitionProvider.loadGates(gateIds);
+      const definitions = await gateDefinitionProvider.loadGates(gateIds);
       const tiers: Record<string, PendingGateTier> = {};
       for (const definition of definitions) {
         tiers[definition.id] = deriveGateTier(definition);
@@ -271,8 +274,9 @@ export class GateReviewStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    const sessionId = context.sessionContext?.sessionId;
-    if (!sessionId || !context.sessionContext?.pendingReview) {
+    const sessionContext = context.sessionContext;
+    const sessionId = sessionContext?.sessionId;
+    if (!sessionId || !sessionContext?.pendingReview) {
       this.logExit({ skipped: 'No pending gate review' });
       return;
     }
@@ -295,12 +299,7 @@ export class GateReviewStage extends BasePipelineStage {
       return;
     }
 
-    context.sessionContext = context.sessionContext
-      ? {
-          ...context.sessionContext,
-          pendingReview,
-        }
-      : context.sessionContext;
+    context.sessionContext = { ...sessionContext, pendingReview };
 
     // The review handed to the renderer below. Reassigned once, when this stage records check
     // results onto it (ruling B4) — the store copy and the context copy must be the same object
@@ -316,10 +315,11 @@ export class GateReviewStage extends BasePipelineStage {
       // line numbers, symbols) against ground truth. A failing check of either kind blocks, and
       // coverage requires every required gate to have been verified by SOMETHING.
       let shellSection = '';
-      if (this.gateDefinitionProvider && pendingReview.gateIds.length > 0) {
+      const gateDefinitionProvider = this.gateDefinitionProvider;
+      if (gateDefinitionProvider && pendingReview.gateIds.length > 0) {
         const evidence = await runGateReviewEvidence(
           selectToolReviewGateIds(pendingReview),
-          this.gateDefinitionProvider,
+          gateDefinitionProvider,
           toolResponseBody(context),
           this.collaborators,
           context.getScopeOptions(),
@@ -361,7 +361,7 @@ export class GateReviewStage extends BasePipelineStage {
 
           // Same gap on the early-exit path: this call still consumed the run's first step
           // without stage 18 ever rendering it, so the row is owed here too.
-          this.ledgerFirstRenderedStep(context);
+          this.ledgerFirstRenderedStep(context, context.sessionContext);
 
           context.diagnostics.info(this.name, 'Gate review auto-cleared by shell verification', {
             sessionId,
@@ -383,11 +383,10 @@ export class GateReviewStage extends BasePipelineStage {
         reviewForRender = await this.recordReviewEvidence(
           sessionId,
           pendingReview,
-          evidence.checkResults
+          evidence.checkResults,
+          gateDefinitionProvider
         );
-        if (context.sessionContext !== undefined) {
-          context.sessionContext = { ...context.sessionContext, pendingReview: reviewForRender };
-        }
+        context.sessionContext = { ...context.sessionContext, pendingReview: reviewForRender };
       }
 
       // R63: one framework-injection decision per call. The review render honours the call's
@@ -459,7 +458,7 @@ export class GateReviewStage extends BasePipelineStage {
         generatedAt: Date.now(),
       };
 
-      this.ledgerFirstRenderedStep(context);
+      this.ledgerFirstRenderedStep(context, context.sessionContext);
 
       // Record diagnostic for gate review rendering
       context.diagnostics.info(this.name, 'Gate review step rendered', {

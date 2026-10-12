@@ -41,6 +41,9 @@ const createRegistry = () => {
   return {
     // No canonical gate here: no id is refused (R100).
     canonicalIdRefusal: () => undefined,
+    // No run holds a declared id here. Absent, the registrar's lookup threw, and a catch that has
+    // since gone (R11.8) dropped the request gate, so the test below passed with no gate at all.
+    resolveDeclared: () => undefined,
     createTemporaryGate: jest.fn((definition: Record<string, unknown>) => {
       const id = String(definition['id']);
       gates.push({ ...definition, id });
@@ -209,13 +212,16 @@ describe('stage 11 publishes the enforcement mode the gates declare (P4.137)', (
   });
 
   test("a blocking gate bound to another step does not decide this step's mode", async () => {
-    const mode = await chainMode({
+    const state = await chainState({
       firstStepGates: ['gate-advisory'],
       otherStepGateSpecs: [
         { id: 'gate-blocking', name: 'later', criteria: ['x'], target_step_id: 'second' },
       ],
     });
-    expect(mode).toBe('advisory');
+    // Positive control: the other step's gate did register, so its absence from the mode is a
+    // decision and not a gate that never existed.
+    expect(state.temporaryGateIds).toContain('gate-blocking');
+    expect(state.enforcementMode).toBe('advisory');
   });
 
   test('the per-gate map the verdict path resolves against carries each declared mode (R107)', async () => {

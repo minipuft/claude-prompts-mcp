@@ -26,6 +26,7 @@ type GateSystemSwitch = (scope: StateStoreOptions | undefined) => boolean;
  */
 export class GateEnhancementStage extends BasePipelineStage {
   readonly name = 'GateEnhancement';
+  readonly requires = ['executionPlan'] as const;
 
   constructor(
     private readonly enhancementService: GateEnhancementService,
@@ -64,11 +65,7 @@ export class GateEnhancementStage extends BasePipelineStage {
       return;
     }
 
-    const executionPlan = context.executionPlan;
-    if (executionPlan === undefined) {
-      this.logExit({ skipped: 'Execution plan missing' });
-      return;
-    }
+    const executionPlan = context.requireExecutionPlan();
 
     if (this.enhancementService.shouldSkip(executionPlan.modifiers)) {
       this.logExit({ skipped: 'Gate enhancement disabled by execution modifier' });
@@ -95,14 +92,18 @@ export class GateEnhancementStage extends BasePipelineStage {
       return;
     }
 
-    const frameworkGateIds = await this.enhancementService.loadFrameworkGateIds();
-    const registeredGates = await this.registrar.registerTemporaryGates(context);
-
+    // Resolved before anything is registered: stage 07 throws on the only input that yields null
+    // (a parsed command with neither a prompt nor steps), so null here is a broken pipeline
+    // invariant, not a request to skip — and it must not leave registered gates behind.
     const gateContext = this.enhancementService.resolveGateContext(context);
     if (gateContext === null) {
-      this.logExit({ skipped: 'Unsupported execution context' });
-      return;
+      throw new Error(
+        'Gate enhancement reached a parsed command with neither a converted prompt nor chain steps - PlanningStage should have rejected it'
+      );
     }
+
+    const frameworkGateIds = await this.enhancementService.loadFrameworkGateIds();
+    const registeredGates = await this.registrar.registerTemporaryGates(context);
 
     // ADR 0001 (d) ships inline gate execution in two releases. Both the enablement check and
     // the single-vs-chain prompt walk live in services, so this stage adds no branches of its

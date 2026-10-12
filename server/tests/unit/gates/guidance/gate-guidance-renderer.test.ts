@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-import { GateGuidanceRenderer } from '../../../../src/engine/gates/guidance/GateGuidanceRenderer.js';
+import {
+  createGateGuidanceRenderer,
+  GateGuidanceRenderer,
+} from '../../../../src/engine/gates/guidance/GateGuidanceRenderer.js';
 
 const logger = {
   info: jest.fn(),
@@ -667,5 +670,439 @@ describe('GateGuidanceRenderer — B13 artifacts reach the activation check', ()
 
     expect((loader.isGateActive as jest.Mock).mock.calls[0]?.[1]).not.toHaveProperty('artifacts');
     expect(guidance).not.toContain('Test Coverage Gate');
+  });
+});
+
+/**
+ * Row 0C1.12: the renderer's construction contract, load-failure handling, semantic-evaluation
+ * section, frozen-definition path and inline-gate recognition. Drives the public methods against a
+ * fake `GateDefinitionProvider` and asserts the rendered text.
+ */
+describe('GateGuidanceRenderer — construction, failure isolation, evaluations, frozen and inline gates', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const loaderFor = (gates: Record<string, unknown>, active = true) => {
+    const loader = {
+      ...createMockLoader(),
+      listAvailableGateDefinitions: jest.fn(),
+    };
+    (loader.loadGate as jest.Mock).mockImplementation((async (gateId: string) => {
+      return gates[gateId] ?? null;
+    }) as any);
+    (loader.isGateActive as jest.Mock).mockReturnValue(active);
+    return loader;
+  };
+
+  const rendererFor = (loader: unknown, extra: Record<string, unknown> = {}) =>
+    new GateGuidanceRenderer(logger as any, {
+      gatesConfigProvider: () => undefined,
+      frameworkIdentifierProvider: () => undefined,
+      gateLoader: loader as any,
+      ...extra,
+    });
+
+  const reminder = (id: string, overrides: Record<string, unknown> = {}) => ({
+    id,
+    name: `${id} Gate`,
+    type: 'guidance',
+    description: `${id} description`,
+    guidance: `- ${id} guidance body.`,
+    activation: {},
+    ...overrides,
+  });
+
+  const semanticGate = (id: string, overrides: Record<string, unknown> = {}) => ({
+    id,
+    name: `${id} Gate`,
+    type: 'validation',
+    description: `${id} description`,
+    guidance: `RUBRIC FOR ${id}`,
+    pass_criteria: [{ type: 'semantic_evaluation' }],
+    activation: {},
+    ...overrides,
+  });
+
+  describe('construction', () => {
+    test('refuses to construct without a gate loader', () => {
+      expect(
+        () =>
+          new GateGuidanceRenderer(
+            logger as any,
+            {
+              gatesConfigProvider: () => undefined,
+              frameworkIdentifierProvider: () => undefined,
+            } as any
+          )
+      ).toThrow('GateGuidanceRenderer requires a gate loader/provider instance');
+    });
+
+    test('refuses to construct when options are absent altogether', () => {
+      expect(() => new GateGuidanceRenderer(logger as any, undefined as any)).toThrow(
+        'requires a gate loader'
+      );
+    });
+
+    test('createGateGuidanceRenderer returns a working renderer', async () => {
+      const renderer = createGateGuidanceRenderer(logger as any, {
+        gatesConfigProvider: () => undefined,
+        frameworkIdentifierProvider: () => undefined,
+        gateLoader: loaderFor({ plain: reminder('plain') }) as any,
+      });
+
+      expect(await renderer.renderGuidance(['plain'], {})).toContain('plain guidance body.');
+    });
+
+    test('a supplied temporary gate registry is announced at construction; absence is silent about it', () => {
+      const registry = { getTemporaryGate: jest.fn() };
+      rendererFor(loaderFor({}), { temporaryGateRegistry: registry });
+      expect(logger.debug).toHaveBeenCalledWith(
+        '[GATE GUIDANCE RENDERER] Temporary gate registry enabled'
+      );
+
+      logger.debug.mockClear();
+      rendererFor(loaderFor({}));
+      expect(logger.debug).not.toHaveBeenCalledWith(
+        '[GATE GUIDANCE RENDERER] Temporary gate registry enabled'
+      );
+    });
+  });
+
+  describe('empty and failing loads', () => {
+    test('no gate ids renders nothing and never touches the loader', async () => {
+      const loader = loaderFor({});
+      const guidance = await rendererFor(loader).renderGuidance([], {});
+
+      expect(guidance).toBe('');
+      expect(loader.loadGate).not.toHaveBeenCalled();
+    });
+
+    test('a gate the loader cannot find warns and renders nothing', async () => {
+      const guidance = await rendererFor(loaderFor({})).renderGuidance(['ghost'], {});
+
+      expect(guidance).toBe('');
+      expect(logger.warn).toHaveBeenCalledWith(
+        '[GATE GUIDANCE RENDERER] Gate definition not found:',
+        'ghost'
+      );
+    });
+
+    test('a loader that throws for one gate does not lose the others', async () => {
+      const loader = loaderFor({ good: reminder('good') });
+      const boom = new Error('disk gone');
+      (loader.loadGate as jest.Mock).mockImplementation((async (gateId: string) => {
+        if (gateId === 'bad') throw boom;
+        return gateId === 'good' ? reminder('good') : null;
+      }) as any);
+
+      const guidance = await rendererFor(loader).renderGuidance(['bad', 'good'], {});
+
+      expect(guidance).toContain('### good Gate');
+      expect(guidance).toContain('good guidance body.');
+      expect(logger.warn).toHaveBeenCalledWith(
+        '[GATE GUIDANCE RENDERER] Failed to load gate:',
+        'bad',
+        boom
+      );
+    });
+
+    test('a gate that fails activation renders nothing', async () => {
+      const guidance = await rendererFor(
+        loaderFor({ plain: reminder('plain') }, false)
+      ).renderGuidance(['plain'], {});
+
+      expect(guidance).toBe('');
+    });
+  });
+
+  describe('Evaluations section', () => {
+    test('a semantic-only gate renders under Evaluations with its rubric and no Checks or Reminders', async () => {
+      const guidance = await rendererFor(loaderFor({ sem: semanticGate('sem') })).renderGuidance(
+        ['sem'],
+        { criteriaExecution: 'pipeline' }
+      );
+
+      expect(guidance).toContain('### Evaluations\n\n### sem Gate\nRUBRIC FOR sem');
+      expect(guidance).not.toContain('### Checks');
+      expect(guidance).not.toContain('### Reminders');
+      expect(guidance).toContain('Attest reminders');
+    });
+
+    test('a semantic gate without guidance renders its heading alone', async () => {
+      const guidance = await rendererFor(
+        loaderFor({ sem: semanticGate('sem', { guidance: undefined }) })
+      ).renderGuidance(['sem'], {});
+
+      expect(guidance).toContain('### Evaluations\n\n### sem Gate\n\n');
+      expect(guidance).not.toContain('undefined');
+    });
+
+    test('evaluations keep full guidance when harnessCovers matches and the budget is zero', async () => {
+      const guidance = await rendererFor(
+        loaderFor({ sem: semanticGate('sem', { subject: 'security' }) }),
+        { gatesConfigProvider: () => ({ harnessCovers: ['security'], reminderTokenBudget: 0 }) }
+      ).renderGuidance(['sem'], {});
+
+      expect(guidance).toContain('RUBRIC FOR sem');
+    });
+
+    test('several evaluations are separated by one blank line, in input order', async () => {
+      const guidance = await rendererFor(
+        loaderFor({ a: semanticGate('a'), b: semanticGate('b') })
+      ).renderGuidance(['a', 'b'], {});
+
+      expect(guidance).toContain('### a Gate\nRUBRIC FOR a\n\n### b Gate\nRUBRIC FOR b');
+    });
+
+    test('a mixed gate outside pipeline delivery marks its check line as not executed', async () => {
+      const mixed = semanticGate('mixed', {
+        pass_criteria: [
+          { type: 'script_tool', script_tool_id: 'lint-runner' },
+          { type: 'semantic_evaluation' },
+        ],
+      });
+
+      const guidance = await rendererFor(loaderFor({ mixed })).renderGuidance(['mixed'], {});
+
+      expect(guidance).toContain(
+        '- **mixed Gate** — check: runs tool `lint-runner` (not executed here)'
+      );
+      expect(guidance).toContain('### Evaluations\n\n### mixed Gate\nRUBRIC FOR mixed');
+    });
+
+    test('a mixed gate listed twice renders its check line once', async () => {
+      const mixed = semanticGate('mixed', {
+        pass_criteria: [
+          { type: 'shell_verify', shell_command: ['npm', 'test'] },
+          { type: 'semantic_evaluation' },
+        ],
+      });
+
+      const guidance = await rendererFor(loaderFor({ mixed })).renderGuidance(['mixed', 'mixed'], {
+        criteriaExecution: 'pipeline',
+      });
+
+      expect(guidance.split('- **mixed Gate** — check: runs `npm test`')).toHaveLength(2);
+    });
+  });
+
+  describe('frozen definitions', () => {
+    test('issued definitions render without consulting the loader or activation', async () => {
+      const loader = loaderFor({ sem: semanticGate('sem', { guidance: 'LIVE RUBRIC' }) }, false);
+      const frozen = [semanticGate('sem', { guidance: 'FROZEN RUBRIC' })] as any;
+
+      const guidance = await rendererFor(loader).renderGuidance(['sem'], {}, frozen);
+
+      expect(guidance).toContain('FROZEN RUBRIC');
+      expect(guidance).not.toContain('LIVE RUBRIC');
+      expect(loader.loadGate).not.toHaveBeenCalled();
+      expect(loader.isGateActive).not.toHaveBeenCalled();
+    });
+
+    test('an id absent from the frozen set is skipped, not loaded live', async () => {
+      const loader = loaderFor({ other: reminder('other') });
+      const frozen = [semanticGate('sem')] as any;
+
+      const guidance = await rendererFor(loader).renderGuidance(['other'], {}, frozen);
+
+      expect(guidance).toBe('');
+      expect(loader.loadGate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('inline gate recognition bypasses activation', () => {
+    const inactiveRender = async (id: string, gate: Record<string, unknown>, extra = {}) => {
+      const loader = loaderFor({ [id]: gate }, false);
+      const guidance = await rendererFor(loader, extra).renderGuidance([id], {});
+      return { guidance, loader };
+    };
+
+    test('positive control: an ordinary inactive gate renders nothing', async () => {
+      const { guidance, loader } = await inactiveRender('ordinary', reminder('ordinary'));
+
+      expect(guidance).toBe('');
+      expect(loader.isGateActive).toHaveBeenCalled();
+    });
+
+    test('a temp_-prefixed id renders although the loader reports it inactive', async () => {
+      const { guidance, loader } = await inactiveRender('temp_abc', reminder('temp_abc'));
+
+      expect(guidance).toContain('temp_abc guidance body.');
+      expect(loader.isGateActive).not.toHaveBeenCalled();
+    });
+
+    test('an id known to the temporary registry renders although inactive', async () => {
+      const registry = {
+        getTemporaryGate: jest.fn((id: string) => (id === 'custom' ? {} : undefined)),
+      };
+      const { guidance, loader } = await inactiveRender('custom', reminder('custom'), {
+        temporaryGateRegistry: registry,
+      });
+
+      expect(registry.getTemporaryGate).toHaveBeenCalledWith('custom');
+      expect(guidance).toContain('custom guidance body.');
+      expect(loader.isGateActive).not.toHaveBeenCalled();
+    });
+
+    test('an id the registry does not know stays subject to activation', async () => {
+      const registry = { getTemporaryGate: jest.fn(() => undefined) };
+      const { guidance } = await inactiveRender('custom', reminder('custom'), {
+        temporaryGateRegistry: registry,
+      });
+
+      expect(guidance).toBe('');
+    });
+
+    test.each(['My Inline Quality Check', 'INLINE GATE for tone'])(
+      'a gate named %s counts as inline by name',
+      async (name) => {
+        const { guidance, loader } = await inactiveRender('named', reminder('named', { name }));
+
+        expect(guidance).toContain(`### ${name}`);
+        expect(loader.isGateActive).not.toHaveBeenCalled();
+      }
+    );
+
+    test('a gate with no name is not mistaken for an inline gate', async () => {
+      const { guidance } = await inactiveRender(
+        'nameless',
+        reminder('nameless', { name: undefined })
+      );
+
+      expect(guidance).toBe('');
+    });
+
+    test.each(['Inline Quality Criteria', 'Inline Validation Criteria'])(
+      'the auto-generated %s gate renders its guidance without a heading',
+      async (name) => {
+        const loader = loaderFor({
+          inline_gate_x: reminder('inline_gate_x', { name, guidance: '- Be precise.' }),
+        });
+
+        const guidance = await rendererFor(loader).renderGuidance(['inline_gate_x'], {});
+
+        expect(guidance).toContain('### Reminders\n\n- Be precise.');
+        expect(guidance).not.toContain(`### ${name}`);
+      }
+    );
+  });
+
+  describe('reminder ordering and degradation edges', () => {
+    test('a degraded reminder with no description is just its bolded name', async () => {
+      const guidance = await rendererFor(
+        loaderFor({ bare: reminder('bare', { description: undefined }) }),
+        { gatesConfigProvider: () => ({ reminderTokenBudget: 0 }) }
+      ).renderGuidance(['bare'], {});
+
+      expect(guidance).toContain('- **bare Gate** —\n');
+      expect(guidance).not.toContain('undefined');
+    });
+
+    test('equal-severity reminders keep the caller order when the budget fits only one', async () => {
+      const big = 'x'.repeat(400);
+      const loader = loaderFor({
+        first: reminder('first', { guidance: `- ${big}` }),
+        second: reminder('second', { guidance: `- ${big}` }),
+      });
+
+      const guidance = await rendererFor(loader, {
+        gatesConfigProvider: () => ({ reminderTokenBudget: 120 }),
+      }).renderGuidance(['first', 'second'], {});
+
+      expect(guidance).toContain('### first Gate');
+      expect(guidance).not.toContain('### second Gate');
+      expect(guidance).toContain('- **second Gate** — second description');
+    });
+
+    test('an unset severity sorts as medium: between high and low', async () => {
+      const loader = loaderFor({
+        low: reminder('low', { severity: 'low', description: 'low summary' }),
+        plain: reminder('plain', { description: 'plain summary' }),
+        high: reminder('high', { severity: 'high', description: 'high summary' }),
+      });
+
+      const guidance = await rendererFor(loader, {
+        gatesConfigProvider: () => ({ reminderTokenBudget: 0 }),
+      }).renderGuidance(['low', 'plain', 'high'], {});
+
+      const order = ['high summary', 'plain summary', 'low summary'].map((text) =>
+        guidance.indexOf(text)
+      );
+      expect(order).toEqual([...order].sort((a, b) => a - b));
+      expect(order.every((index) => index >= 0)).toBe(true);
+    });
+
+    test('two explicit reminders fall back to severity between themselves', async () => {
+      const loader = loaderFor({
+        lowExplicit: reminder('lowExplicit', { severity: 'low', description: 'low summary' }),
+        highExplicit: reminder('highExplicit', { severity: 'high', description: 'high summary' }),
+      });
+
+      const guidance = await rendererFor(loader, {
+        gatesConfigProvider: () => ({ reminderTokenBudget: 0 }),
+      }).renderGuidance(['lowExplicit', 'highExplicit'], {
+        explicitGateIds: ['lowExplicit', 'highExplicit'],
+      });
+
+      expect(guidance.indexOf('high summary')).toBeLessThan(guidance.indexOf('low summary'));
+    });
+
+    test('an identical degraded line is emitted once', async () => {
+      const guidance = await rendererFor(loaderFor({ dup: reminder('dup') }), {
+        gatesConfigProvider: () => ({ reminderTokenBudget: 0 }),
+      }).renderGuidance(['dup', 'dup'], {});
+
+      expect(guidance.split('- **dup Gate** — dup description')).toHaveLength(2);
+    });
+  });
+
+  describe('defaults and ordering edges', () => {
+    test('renderGuidance without a context renders with the advisory delivery line', async () => {
+      const guidance = await rendererFor(loaderFor({ plain: reminder('plain') })).renderGuidance([
+        'plain',
+      ]);
+
+      expect(guidance).toContain('plain guidance body.');
+      expect(guidance).toContain('Use these gates as advisory guidance.');
+    });
+
+    test('a reminder with no guidance text renders its heading and nothing after it', async () => {
+      const guidance = await rendererFor(
+        loaderFor({ empty: reminder('empty', { guidance: undefined }) })
+      ).renderGuidance(['empty'], {});
+
+      expect(guidance).toContain('### empty Gate\n\n');
+      expect(guidance).not.toContain('undefined');
+    });
+
+    test.each([
+      ['explicit first in the input', ['asked', 'other']],
+      ['explicit last in the input', ['other', 'asked']],
+    ])('an explicit reminder is ordered ahead of a non-explicit one: %s', async (_label, ids) => {
+      const loader = loaderFor({
+        asked: reminder('asked', { severity: 'low', description: 'asked summary' }),
+        other: reminder('other', { severity: 'critical', description: 'other summary' }),
+      });
+
+      const guidance = await rendererFor(loader, {
+        gatesConfigProvider: () => ({ reminderTokenBudget: 0 }),
+      }).renderGuidance(ids, { explicitGateIds: ['asked'] });
+
+      expect(guidance.indexOf('asked summary')).toBeLessThan(guidance.indexOf('other summary'));
+    });
+  });
+
+  describe('getAvailableGateDefinitions', () => {
+    test('returns exactly what the loader lists', async () => {
+      const definitions = [reminder('one'), reminder('two')];
+      const loader = loaderFor({});
+      (loader.listAvailableGateDefinitions as jest.Mock).mockResolvedValue(definitions as never);
+
+      const listed = await rendererFor(loader).getAvailableGateDefinitions();
+
+      expect(listed).toBe(definitions);
+      expect(loader.listAvailableGateDefinitions).toHaveBeenCalledTimes(1);
+    });
   });
 });

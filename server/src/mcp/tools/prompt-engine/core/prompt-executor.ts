@@ -863,11 +863,17 @@ export class PromptExecutor {
     try {
       switch (call.targetTool) {
         case 'resource_manager': {
+          // Null only before `mcp/tools/index.ts` assigns its resource_manager router, which
+          // happens during startup and before any request is served. Reaching here in that state
+          // is an ordering defect, so it is refused rather than answered from a second catalog.
           const resourceHandler = this.mcpToolsManager.getResourceManagerHandler?.();
-          if (resourceHandler) {
-            return resourceHandler(call.translatedParams, {});
+          if (!resourceHandler) {
+            throw new Error(
+              'resource_manager router is not assigned yet: a request was routed before the ' +
+                'composition root built it (startup ordering defect)'
+            );
           }
-          return this.buildPromptListFallback(call.translatedParams?.['search_query']);
+          return resourceHandler(call.translatedParams, {});
         }
         case 'system_control':
           if (this.mcpToolsManager.systemControl) {
@@ -906,62 +912,6 @@ export class PromptExecutor {
       });
       return this.responseFormatter.formatErrorResponse(message);
     }
-  }
-
-  private buildPromptListFallback(searchQuery?: string): ToolResponse {
-    const normalizedQuery = searchQuery?.toLowerCase().trim();
-    const matchingPrompts = this.convertedPrompts
-      .filter((prompt) => {
-        if (!normalizedQuery) {
-          return true;
-        }
-        return (
-          prompt.id.toLowerCase().includes(normalizedQuery) ||
-          (prompt.name?.toLowerCase().includes(normalizedQuery) ?? false) ||
-          (prompt.category?.toLowerCase().includes(normalizedQuery) ?? false)
-        );
-      })
-      .slice(0, 25);
-
-    if (matchingPrompts.length === 0) {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `📭 No prompts match "${searchQuery}". Try a broader search or provide fewer keywords.`,
-          },
-        ],
-        isError: false,
-      };
-    }
-
-    const lines: string[] = [];
-    lines.push('📚 **Prompt Catalog Snapshot**');
-    if (normalizedQuery) {
-      lines.push(`Filter: ${normalizedQuery}`);
-    }
-    lines.push('');
-    matchingPrompts.forEach((prompt) => {
-      const category = prompt.category ?? 'uncategorized';
-      const description = prompt.description
-        ? prompt.description.length > 80
-          ? `${prompt.description.slice(0, 77)}…`
-          : prompt.description
-        : 'No description provided.';
-      lines.push(`- \`${prompt.id}\` — ${prompt.name ?? prompt.id} _(category: ${category})_`);
-      lines.push(`  ${description}`);
-    });
-
-    if (matchingPrompts.length === 25) {
-      lines.push(
-        '\n…results truncated. Use resource_manager(resource_type:"prompt", action:"list") for full search capabilities.'
-      );
-    }
-
-    return {
-      content: [{ type: 'text', text: lines.join('\n') }],
-      isError: false,
-    };
   }
 
   private generatePromptEngineGuide(goal?: string): ToolResponse {

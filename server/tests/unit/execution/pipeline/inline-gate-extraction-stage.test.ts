@@ -3,6 +3,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { InlineGateExtractionStage } from '../../../../src/engine/execution/pipeline/stages/05-inline-gate-stage.js';
 import { InlineGateProcessor } from '../../../../src/engine/gates/services/inline-gate-processor.js';
+import { TemporaryGateRegistrar } from '../../../../src/engine/gates/services/temporary-gate-registrar.js';
 
 import type { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 import type { GateReferenceResolver } from '../../../../src/engine/gates/services/gate-reference-resolver.js';
@@ -440,5 +441,160 @@ describe('InlineGateExtractionStage', () => {
 
     // Should NOT set up shell verification
     expect(context.state.gates.pendingShellVerification).toBeUndefined();
+  });
+});
+
+describe('an inline gate the client requested is refused or registered, never dropped (R11.8)', () => {
+  const SYNTAX = 'Accepted forms: `:: "criterion"`, `:: id:"criterion"`, `:: verify:"command"`.';
+
+  const commandWith = (gates: {
+    inlineGateCriteria?: string[];
+    namedInlineGates?: Array<{ gateId: string; criteria: string[] }>;
+    steps?: Array<{ nodeId?: string; inlineGateCriteria: string[] }>;
+  }) => {
+    const context = new ExecutionContext({ command: '>>demo' });
+    context.parsedCommand = {
+      promptId: 'demo',
+      rawArgs: '',
+      format: 'symbolic',
+      confidence: 0.9,
+      metadata: {
+        originalCommand: '>>demo',
+        parseStrategy: 'symbolic',
+        detectedFormat: 'symbolic',
+        warnings: [],
+      },
+      ...(gates.inlineGateCriteria !== undefined
+        ? { inlineGateCriteria: gates.inlineGateCriteria }
+        : {}),
+      ...(gates.namedInlineGates !== undefined ? { namedInlineGates: gates.namedInlineGates } : {}),
+      ...(gates.steps !== undefined
+        ? {
+            commandType: 'chain' as const,
+            steps: gates.steps.map((step, index) => ({
+              stepNumber: index + 1,
+              promptId: `step_${index + 1}`,
+              args: {},
+              ...step,
+            })),
+          }
+        : {}),
+    };
+    return context;
+  };
+
+  const run = async (context: ExecutionContext) => {
+    const { registry, createTemporaryGate } = createRegistry();
+    await createStage(registry, createResolver().resolver).execute(context);
+    return { createTemporaryGate, text: (context.response?.content[0] as { text: string })?.text };
+  };
+
+  test('an empty criterion on a step is refused, addressed to its node, and registers nothing', async () => {
+    const context = commandWith({
+      steps: [
+        { nodeId: 'draft', inlineGateCriteria: ['cites sources'] },
+        { nodeId: 'review', inlineGateCriteria: [''] },
+      ],
+    });
+    const { createTemporaryGate, text } = await run(context);
+
+    expect(context.response?.isError).toBe(true);
+    expect(text).toContain(
+      '• [gate-criteria-invalid] node "review": inline gate on step 2 has the criterion "", which is empty.'
+    );
+    expect(text).toContain(SYNTAX);
+    // Nothing is created for the request: not even the valid step's gate.
+    expect(createTemporaryGate).not.toHaveBeenCalled();
+    expect(context.state.gates.temporaryGateIds).toEqual([]);
+  });
+
+  test('a blank criterion on the command is refused, quoting it', async () => {
+    const context = commandWith({ inlineGateCriteria: ['Be concise', '   '] });
+    const { createTemporaryGate, text } = await run(context);
+
+    expect(context.response?.isError).toBe(true);
+    expect(text).toContain(
+      '• [gate-criteria-invalid] workflow: inline gate has the criterion "   ", which is blank.'
+    );
+    expect(text).toContain(SYNTAX);
+    expect(createTemporaryGate).not.toHaveBeenCalled();
+  });
+
+  test('a named gate left with no criterion (`:: security:"  "`) is refused by name', async () => {
+    const context = commandWith({ namedInlineGates: [{ gateId: 'security', criteria: [] }] });
+    const { createTemporaryGate, text } = await run(context);
+
+    expect(context.response?.isError).toBe(true);
+    expect(text).toContain(
+      '• [gate-criteria-invalid] workflow: named inline gate "security" carries no criterion: the text between its quotes is blank.'
+    );
+    expect(text).toContain(SYNTAX);
+    expect(createTemporaryGate).not.toHaveBeenCalled();
+  });
+
+  test('control: valid criteria register and set no response', async () => {
+    const context = commandWith({
+      inlineGateCriteria: ['Be concise'],
+      namedInlineGates: [{ gateId: 'security', criteria: ['no secrets'] }],
+      steps: [{ nodeId: 'draft', inlineGateCriteria: ['cites sources'] }],
+    });
+    const { createTemporaryGate } = await run(context);
+
+    expect(context.response).toBeUndefined();
+    expect(createTemporaryGate).toHaveBeenCalledTimes(3);
+  });
+
+  test('control: an empty criteria list is no gate, not a refusal', async () => {
+    // The command builder writes `[]` on a step that declared no gate.
+    const context = commandWith({ steps: [{ nodeId: 'draft', inlineGateCriteria: [] }] });
+    const { createTemporaryGate } = await run(context);
+
+    expect(context.response).toBeUndefined();
+    expect(createTemporaryGate).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['anonymous criteria', { inlineGateCriteria: ['Be concise'] }],
+    ['a named gate', { namedInlineGates: [{ gateId: 'security', criteria: ['no secrets'] }] }],
+  ])(
+    '%s whose registration throws fails the call instead of running without it',
+    async (_n, gates) => {
+      const createTemporaryGate = jest.fn(() => {
+        throw new Error('registry refused the gate');
+      });
+      const { registry } = createRegistry({ createTemporaryGate });
+      const context = commandWith(gates);
+
+      await expect(
+        createStage(registry, createResolver().resolver).execute(context)
+      ).rejects.toThrow('registry refused the gate');
+      expect(createTemporaryGate).toHaveBeenCalledTimes(1);
+    }
+  );
+});
+
+describe('a request gate whose registration throws fails the call (R11.8)', () => {
+  test('the registry error propagates instead of the gate being skipped', async () => {
+    const createTemporaryGate = jest.fn<() => string>(() => {
+      throw new Error('registry refused the gate');
+    });
+    const registry = {
+      createTemporaryGate,
+      getTemporaryGate: jest.fn(),
+      resolveDeclared: jest.fn(),
+      getRunGates: jest.fn(() => []),
+    } as unknown as TemporaryGateRegistry;
+    const context = new ExecutionContext({ command: '>>demo' });
+    context.state.gates.requestedOverrides = {
+      gates: [{ id: 'rg-1', name: 'rg-1', criteria: ['REQUEST'] }],
+    };
+    const registrar = new TemporaryGateRegistrar(registry, undefined, createLogger());
+
+    await expect(registrar.registerTemporaryGates(context)).rejects.toThrow(
+      'registry refused the gate'
+    );
+    // Control: once the registry accepts, the same call registers the gate.
+    createTemporaryGate.mockImplementation(() => 'rg-1');
+    expect((await registrar.registerTemporaryGates(context)).temporaryGateIds).toEqual(['rg-1']);
   });
 });
