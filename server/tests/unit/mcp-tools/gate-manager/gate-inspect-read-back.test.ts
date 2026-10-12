@@ -274,3 +274,44 @@ describe('inspect names the tier the criteria require', () => {
     expect(lines.some((line) => line.startsWith('  - Type:'))).toBe(false);
   });
 });
+
+// R10.10: list drew its icon from the authored `type`, so a semantic-only gate declared
+// `validation` listed as `✓` — the same claim inspect stopped making in R10.6. List derives the
+// tier through the same function inspect does.
+describe('list names the tier the criteria require', () => {
+  const semantic = SemanticCriterionSchema.parse({
+    type: 'semantic_evaluation',
+    id: 'public-criterion',
+    question: 'Does the output preserve the public contract?',
+    evidence_requirements: { min_items: 1 },
+    result: { kind: 'boolean' },
+    acceptance: { kind: 'equals', value: true },
+    target: { kind: 'step_output' },
+    allow_not_applicable: false,
+  });
+  const shell = { type: 'shell_verify' as const, shell_command: ['true'] };
+
+  function buildListProcessor(definitions: GateDefinitionYaml[]): GateDiscoveryProcessor {
+    const guides = definitions.map((def) => new GenericGateGuide(GateDefinitionSchema.parse(def)));
+    const gateManager = {
+      list: () => guides,
+      getStats: () => ({ totalGates: guides.length, enabledGates: guides.length }),
+      getQuarantine: () => EMPTY_QUARANTINE_VIEW,
+    } as unknown as GateManager;
+    return new GateDiscoveryProcessor({ gateManager } as unknown as GateResourceContext);
+  }
+
+  it('lists each gate under the tier its criteria require, not its authored type', async () => {
+    const processor = buildListProcessor([
+      { ...baseDefinition, id: 'sem-gate', name: 'Sem', pass_criteria: [semantic] },
+      { ...baseDefinition, id: 'mixed-gate', name: 'Mixed', pass_criteria: [shell, semantic] },
+      { ...baseDefinition, id: 'guide-gate', name: 'Guide', type: 'guidance' },
+    ]);
+    const result = await processor.handleList({ action: 'list' } as GateManagerInput);
+    const lines = (result.content[0] as { text: string }).text.split('\n');
+    expect(lines).toContain('  sem-gate: Sem [evaluation]');
+    expect(lines).toContain('  mixed-gate: Mixed [check + evaluation]');
+    expect(lines).toContain('  guide-gate: Guide [reminder]');
+    expect(lines.some((line) => line.includes('✓') || line.includes('📖'))).toBe(false);
+  });
+});

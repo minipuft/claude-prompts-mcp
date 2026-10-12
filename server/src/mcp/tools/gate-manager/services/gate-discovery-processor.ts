@@ -67,10 +67,11 @@ export class GateDiscoveryProcessor {
     }
 
     const gateList = gates
-      .map((gate) => {
-        const typeIcon = gate.type === 'validation' ? '✓' : '📖';
-        return `  ${typeIcon} ${gate.gateId}: ${gate.name}`;
-      })
+      // The tier comes from what the criteria require (same derivation as inspect). The authored
+      // `type` chose an icon that claimed a check runs for a semantic-only gate declared `validation`.
+      .map(
+        (gate) => `  ${gate.gateId}: ${gate.name} [${formatGateTierLabel(gate.getDefinition())}]`
+      )
       .join('\n');
 
     return this.success(
