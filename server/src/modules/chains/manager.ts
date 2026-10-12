@@ -294,6 +294,8 @@ export class ChainSessionStore implements ChainSessionService {
     return { ...this.pidScope, ...(this.workspaceScope ?? {}) };
   }
   private initPromise!: Promise<void>;
+  /** The initialization failure already logged, so a chained rejection is not logged twice. */
+  private reportedInitFailure: unknown;
   private hookRegistry?: HookRegistryPort;
   private notificationEmitter?: McpNotificationEmitterPort;
 
@@ -331,7 +333,7 @@ export class ChainSessionStore implements ChainSessionService {
     this.logger.debug('ChainSessionStore initialized with text reference manager integration');
 
     // Initialize asynchronously — store promise so callers can await it
-    this.initPromise = this.initialize();
+    this.initPromise = this.reportInitFailure(this.initialize());
     this.startCleanupScheduler();
   }
 
@@ -360,28 +362,56 @@ export class ChainSessionStore implements ChainSessionService {
     // every persist, empty chain_runs/chain_sessions while a run was active). Chain onto
     // initPromise so callers awaiting init observe the completed late load.
     //
-    // A failure REJECTS initPromise rather than being logged here: every session operation awaits
-    // it, so the next one reports the port's own error. Caught and logged, `runRegistry` stayed
-    // unassigned and the next persist threw an unrelated TypeError far from the cause.
+    // A failure REJECTS initPromise: every session operation awaits it, so the next one reports
+    // the port's own error. Caught and swallowed here, `runRegistry` stayed unassigned and the next
+    // persist threw an unrelated TypeError far from the cause.
     if (!this.runRegistry) {
-      this.initPromise = this.initPromise.then(async () => {
-        if (this.runRegistry) return;
-        await db.initialize();
-        this.runRegistry = new DirectChainRunRegistry(db);
-        await this.runRegistry.ensureInitialized();
-        this.cleanupStalePidRows();
-        await this.loadSessions();
-      });
+      this.initPromise = this.reportInitFailure(
+        this.initPromise.then(async () => {
+          if (this.runRegistry) return;
+          await db.initialize();
+          this.runRegistry = new DirectChainRunRegistry(db);
+          await this.runRegistry.ensureInitialized();
+          this.cleanupStalePidRows();
+          await this.loadSessions();
+        })
+      );
     }
+  }
+
+  /**
+   * Log an initialization failure once, and return `init` itself still rejecting.
+   *
+   * The failure must SURFACE — every session operation awaits `initPromise` and rejects with the
+   * port's own error — and must also be CAUGHT: a constructor-started promise that rejects while
+   * nothing awaits it reaches `process.on('unhandledRejection')`, which `index.ts` turns into an
+   * emergency shutdown. The handler attached here marks the rejection handled and logs it; it does
+   * not replace the promise callers await.
+   *
+   * Once per cause: a late `setDatabasePort` chains onto a promise that may already have rejected,
+   * and that rejection then arrives at both handlers.
+   */
+  private reportInitFailure(init: Promise<void>): Promise<void> {
+    init.catch((error: unknown) => {
+      if (error === this.reportedInitFailure) return;
+      this.reportedInitFailure = error;
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `ChainSessionStore: chain-session persistence failed to initialize; every session ` +
+          `operation will reject with this error: ${message}`
+      );
+    });
+    return init;
   }
 
   /**
    * Initialize the manager asynchronously.
    *
    * Failures propagate: the returned promise is `initPromise`, which every session operation
-   * awaits, so a port that cannot initialize is reported by the next operation as itself. Startup
-   * already refuses when the engine cannot initialize, so a catch here could only hide a test-path
-   * or ordering defect — and did, as a TypeError from the unassigned `runRegistry` on next persist.
+   * awaits, so a port that cannot initialize is reported by the next operation as itself, and
+   * {@link reportInitFailure} logs it once so an unawaited rejection cannot end the process. A
+   * catch-and-warn here hid the cause instead, as a TypeError from the unassigned `runRegistry` on
+   * the next persist.
    */
   private async initialize(): Promise<void> {
     // Create SQLite-backed registry if no custom store was provided
