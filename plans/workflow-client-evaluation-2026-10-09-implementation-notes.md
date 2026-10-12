@@ -149,3 +149,10 @@ Tier 2 row 2.1 records the owner's requested consolidated diagnosis. Dispatch on
 
 - The authored-type mislabel had four human-facing surfaces: inspect (0.6), list (0.10), `resource://gate/` (0.12), `resource://gate/{id}` (0.13). Enumeration by shape (`rg "\.type\b"` over `gate-manager/services`, `resources/handlers/gate-resources.ts`, `gates/guidance`) leaves only writers and structured metadata fields named `type`, which carry the declared value.
 - Finding (0.13): `ResourceDependencies.gateManager` declared `getDefinition()` on `list()` items but not on `get()`, which is why only one of the two resource views could derive the tier. Both now declare it.
+
+## 2026-10-12 — 0.7 and 0.14 accepted
+
+- 0.7: 63 scanner candidates (21 session ids, 1 history, 2 tense words, 1 commented code, 38 header-growth) → 21 rewritten or deleted, 24 headers edited, 14 headers kept, 1 tense word kept, 1 JSDoc example kept. The split moved 32 tests byte-identical into `review-capture-custody.integration.test.ts`; the clone-fixture block was kept because nothing else checks that the fixture leaves malformed definitions raw.
+- DEV-T0-7: 0.7 renamed two describe titles (`(row 3.12)`, `R10.6:`), which are code, not comments, and fixed context lines in the same hunks and a few unflagged headers in already-touched files. Accepted.
+- Finding (0.7 → `/code-comments` skill): the scanner reads added lines only and never test titles, so ids in `test()`/`describe()` names pass unseen; HEADER-UNCHANGED was right on 24 of 38. Its first `--comment-only` run with `:(top)` pathspecs was vacuous until re-run with plain paths. Row 0C1.15 adds a test-title mode before the repo-wide sweep.
+- 0.14: the unreached-methods baseline reason cited acceptance ids 0.7 removed; its validator never reads reason prose.
