@@ -563,6 +563,9 @@ before the first read, so a start that meets another process's lock waits up to
 `STATE_DB_BUSY_TIMEOUT_MS` instead of failing at once. A read that still times out says the file
 was locked and is not damaged; the compatible-runtime remedy above is reserved for an authority that
 is missing, malformed or newer.
+Every initialization failure names the `state.db` path: one that cannot be opened (an uncreatable
+directory, a directory at the file's path) says what to check, and any other failure that did not
+already name the file is prefixed with it, the original error kept as `cause`.
 
 **The check belongs to initialization, not every operation.** An already-open process does not
 revalidate a schema another writer replaces. Legacy binaries without this guard can still recreate

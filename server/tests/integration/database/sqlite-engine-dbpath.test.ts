@@ -77,4 +77,34 @@ describe('SqliteEngine dbPath ownership', () => {
       /non-empty dbPath/
     );
   });
+
+  // `node:sqlite` reports an unopenable file as "unable to open database file", and `mkdirSync`
+  // names only the directory it could not make — neither says WHICH state.db, which is the one
+  // fact an operator with several runtime roots needs.
+  it('names the database file when it cannot be opened', async () => {
+    const directoryAtDbPath = path.join(runtimeRoot, 'runtime-state', 'is-a-directory.db');
+    await fs.mkdir(directoryAtDbPath, { recursive: true });
+
+    const engine = await SqliteEngine.getInstance(mockLogger as never, {
+      dbPath: directoryAtDbPath,
+    });
+    const error: unknown = await engine.initialize().catch((failure: unknown) => failure);
+
+    expect((error as Error).message).toContain(directoryAtDbPath);
+    expect((error as Error).message).toMatch(/unable to open database file/);
+    expect((error as Error).message).toMatch(/MCP_RUNTIME_ROOT/);
+    expect(engine.isInitialized()).toBe(false);
+  });
+
+  it('names the database file when its directory cannot be created', async () => {
+    const fileAsParent = path.join(runtimeRoot, 'not-a-directory');
+    await fs.writeFile(fileAsParent, 'a file where the runtime-state directory should go');
+    const unreachable = path.join(fileAsParent, 'runtime-state', 'state.db');
+
+    const engine = await SqliteEngine.getInstance(mockLogger as never, { dbPath: unreachable });
+    const error: unknown = await engine.initialize().catch((failure: unknown) => failure);
+
+    expect((error as Error).message).toContain(unreachable);
+    expect((error as Error).message).toMatch(/ENOTDIR/);
+  });
 });

@@ -524,6 +524,21 @@ function isSqliteLockError(error: unknown): boolean {
 }
 
 /**
+ * The error `initialize()` reports: the original when it already names the file, otherwise the
+ * same failure prefixed with the file's path (and the lock remedy for a lock), the original kept
+ * as `cause`. Every startup failure says which `state.db` it is about — the restore and contract
+ * failures name a table, not the file, and a lock met after the first read named nothing.
+ */
+function nameTheFile(dbPath: string, error: unknown): Error {
+  const message = messageOf(error);
+  if (message.includes(dbPath) && error instanceof Error) {
+    return error;
+  }
+  const remedy = isSqliteLockError(error) ? ` ${LOCK_REMEDY}` : '';
+  return new Error(`state.db at ${dbPath}: ${message}${remedy}`, { cause: error });
+}
+
+/**
  * The history key a row belongs to, as one string.
  *
  * `JSON.stringify` rather than a joined separator: a resource id may contain any character,
@@ -674,11 +689,7 @@ export class SqliteEngine implements DatabasePort {
     this.logger.info('Initializing SQLite database (node:sqlite)...');
 
     try {
-      // Ensure runtime-state directory exists
-      fs.mkdirSync(path.dirname(this.dbPath), { recursive: true });
-
-      // Open file-backed database (creates file if not exists)
-      this.db = new DatabaseSync(this.dbPath);
+      this.db = this.openFile();
 
       // The per-connection pragmas every WRITER of this file sets, from the one list both writers
       // read (`STATE_DB_WRITER_PRAGMAS`) — this server and `cpm` cannot share a module tree, so a
@@ -730,11 +741,32 @@ export class SqliteEngine implements DatabasePort {
       } finally {
         this.db = null;
       }
-      const msg = error instanceof Error ? error.message : String(error);
-      const stack = error instanceof Error ? error.stack : undefined;
-      this.logger.error(`Failed to initialize SQLite database: ${msg}`);
-      if (stack) this.logger.error(`Stack: ${stack}`);
-      throw error;
+      const reported = nameTheFile(this.dbPath, error);
+      this.logger.error(`Failed to initialize SQLite database: ${reported.message}`);
+      if (reported.stack) this.logger.error(`Stack: ${reported.stack}`);
+      throw reported;
+    }
+  }
+
+  /**
+   * Create the runtime-state directory and open the file, naming the file if either fails.
+   *
+   * `node:sqlite` reports any unopenable file as "unable to open database file" and `mkdirSync`
+   * names only the directory, so neither said WHICH `state.db` — the one fact an operator running
+   * several runtime roots needs before anything else.
+   */
+  private openFile(): DatabaseSync {
+    try {
+      fs.mkdirSync(path.dirname(this.dbPath), { recursive: true });
+      // Creates the file if it does not exist.
+      return new DatabaseSync(this.dbPath);
+    } catch (error) {
+      throw new Error(
+        `Cannot open state.db at ${this.dbPath}: ${messageOf(error)}. Check that its directory ` +
+          'exists or can be created, that this process can write there, and that the path is not ' +
+          'a directory; or set MCP_RUNTIME_ROOT to a writable directory.',
+        { cause: error }
+      );
     }
   }
 
