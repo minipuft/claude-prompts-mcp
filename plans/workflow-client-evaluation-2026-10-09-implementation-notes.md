@@ -168,3 +168,12 @@ Tier 2 row 2.1 records the owner's requested consolidated diagnosis. Dispatch on
 - #477 merged (squash) with every required check green on its final head; the first CI run failed only E2E on the stale extractor fixed by 0.15. Row receipts now cite #477 instead of branch SHAs that the squash and branch deletion made unreachable.
 - Review worktrees `claude-prompts-mcp-bench-review` and `-bench-mutation` removed (both clean); slice worktree `claude-prompts-mcp-coverage-0c1` cut from `origin/main` at #477.
 - 0C1 wave 1 = the five test-only rows with no owner question and no shared file: 0C1.1, 0C1.4, 0C1.5, 0C1.6, 0C1.9.
+
+## 2026-10-12 — 0C1 wave 1 accepted
+
+- 0C1.1, 0C1.4, 0C1.5, 0C1.6, 0C1.9 accepted: about 145 tests added, test files only, every source file byte-identical after its mutation checks. Each worker measured on a different suite subset, so the per-row before/after figures are not comparable to the 0.4 audit's unit+integration baseline; a combined re-measure runs before the slice PR (it needs `--max-old-space-size=4096` — the default heap aborted at 2 GB, as `project_unit_suite_heap_ceiling` records).
+- Finding (0C1.1): `formatUptime` lives in `action-handler-base.ts`, not the analytics handler the audit attributed it to.
+- Finding (0C1.9 → row 0C1.16): four stage-20 guards cannot hold. Finding (0C1.4 → row 0C1.17): two gate-manager arms cannot run.
+- Finding (0C1.4): `writeGateFiles` throws `ENOTDIR` from `planGateWrite` when the gates root sits under a regular file, instead of returning `success: false`; the handler's catch boundary turns it into an error reply, which matches the architecture's throw-to-the-boundary posture. Not a row.
+- Finding (0C1.4): the repair path's "version row matched" arms (lifecycle ~441, ~484) need a real `version_history` table; left for an integration test if 0C1 coverage stays short.
+- Shared-tree noise: the jest tree-state teardown guard fires on any other worker's untracked file; coverage still writes. `structured-gate-verdict-flow` fails without a built `dist` in a fresh worktree.
