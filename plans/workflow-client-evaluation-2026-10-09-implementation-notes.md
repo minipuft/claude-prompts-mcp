@@ -96,3 +96,15 @@ Tier 2 row 2.1 records the owner's requested consolidated diagnosis. Dispatch on
 - R10.8: the fix slice is approved; response size goes into this plan (rows cut after 0.5).
 - R10.9: Tier 0 cap is 5 live workers. Editing rows share the slice worktree, commit nothing, and touch disjoint files; read-only audits run in `claude-prompts-mcp-bench-mutation` (clean `origin/main`). 0.2 edits `~/.claude` only.
 - Tier 1's 2026-10-10 owner stop stays in force; Tier 0 touches no hook and no 1.x scope.
+
+## 2026-10-12 — Wave A handoffs (0.2, 0.3, 0.5)
+
+- 0.3 accepted. Required `Test Suite` runs `evaluations` test:core, test:gates and typecheck on the Node 24 leg; `evaluations.yml` deleted; `evaluations/**` classifies `full`.
+- DEV-T0-1: 0.3 edited `server/scripts/validate-renovate-extraction.js`, outside its named files. The validator listed the deleted workflow in `ACTION_FILES` (expected count 9 → 8, negative control moved to `ci.yml`). The brief's citation pattern missed it; a bare `rg evaluations scripts server/scripts` finds it. Accepted: without it the validator fails on a missing file.
+- 0.5 accepted, verdict sound-with-debt. Every repeated block comes from `renderFrozenReviewInstructions` (`describe-review-for-render.ts:201`), reached by three emitters (operator supplements, assembler CTA, footer). Sections are anonymous strings, so nothing can dedupe; `validate:domain-ownership` checks where a symbol is exported, not who composes reply text; conformance has no size or occurrence check. Kernel Zod text reaches clients because `schemaIssues` (`semantic-evaluation.ts:103`) prefixes an empty path. Rows 1.9–1.14 and Q1–Q6 recorded.
+- Finding (0.5): `CLAUDE.md:324` says string-verdict retirement is measurable via the `source` field; `GateVerdictSource` records which parameter carried the verdict, not its shape, so the condition cannot be evaluated. Row 1.13.
+- Finding (0.5): 1.11 is inferred from source; the detached semantic path has not been driven.
+- 0.6 no longer owns the derived-FAIL message text; 1.12 does (one question, one row).
+- 0.2 built `~/.claude/skills/code-comments/` (SKILL.md, references, scanner script, template), validated by `validate-skill.sh` and `lint-skills.js`; scanner controls in `/tmp/sb-ctl`. Uncommitted pending Q7.
+- DEV-T0-2: 0.2 also edited `skills/_index.md`, `skills/skill-authoring/ecosystem-map.md` and `skills/testing/SKILL.md` (catalog registration), and skipped a gate pointer: `gate_table.py` rows need coded conditions, and the existing `pre-flight`/`tests` pointers fire on the same events.
+- Finding (0.2): 271 lines in `server/src` and `server/tests` carry `Tier N`, `ACn` or plan references; 5 cite `~/.claude/plans`. 0.7 is scoped to the #474–#476 range (26 scanner candidates); the remainder needs its own row once 0.7 proves the pass.
