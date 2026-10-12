@@ -116,3 +116,13 @@ Tier 2 row 2.1 records the owner's requested consolidated diagnosis. Dispatch on
 - Finding (0.1): the guard class is wider than the two named sites. Stage 11 still reads `this.gatesConfigProvider?.()` and `this.gateSystemEnabled?.(…)`, both wired. A fix at the found sites is not a fix of the class → row 0.8 enumerates by shape and adds a lint rule.
 - Concern (0.1): a config mock without a `gates` key now throws in `createReview` (e.g. `tests/helpers/test-helpers.ts:382`); suites not run by the row may hit it. Checked at the PR boundary.
 - The retired semantic-gate plan's `Now` and four "hosted CI pending" stamps now state the merged #476 result (R10.3 item, planner-owned plan file).
+
+## 2026-10-12 — 0.4 accepted; Tier 0C cut
+
+- 0.4 accepted. A fresh unit+integration run (472 suites, 8295 tests) replaced the review's subset baseline: chains/manager 76.9, gate-lifecycle 77.7, gate-discovery 61.5 branch %. All 17 files remain under 80%. Two files were classified by sub-agents and spot-checked by the 0.4 worker.
+- Tier 0C has 30 rows in three module slices. R10.10: each slice ships as its own PR after the Tier 0 PR; a slice over 8 rows runs under its own planner session. 0C1 depends on 0.6/0.8/1.9 where files overlap.
+- Finding (0.4): the composition root (`pipeline-builder.ts`, `prompt-executor.ts`) has no in-process test; integration tests rebuild the wiring by hand, so a dropped builder closure is invisible to jest. Row 0C1.13.
+- Finding (0.4): live-and-wrong swallows → Q8 (inline gate silently unenforced), Q9 (chain manager init cause lost), skills-sync loaders that never reach `report.failures` (row 0C3.4).
+- Finding (0.4): `sync-diff-commands.test.ts:208` passes without creating the stale directory it claims to keep (row 0C3.3).
+- Finding (0.4): `chainSessions.reviewTimeoutMinutes` feeds a cleanup for `prompt-review-*` ids nothing mints; removing it changes `config.json` (breaking). Not proposed.
+- Finding (0.4): the error-text shape recurs at 163 sites in 76 files → Q11; 0C rows do not sweep it piecemeal (R192 scope rule).
