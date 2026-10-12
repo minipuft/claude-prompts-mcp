@@ -46,12 +46,11 @@ npm --prefix evaluations run test:gates
 `test:core` runs `node --test tests/*.test.ts`; `test:gates` runs
 `node --import ../server/node_modules/tsx/dist/loader.mjs --test gates/*.test.ts` inside
 this directory. Both exercise real canonical collaborators and temporary filesystems,
-make no model calls and need no provider credentials. The optional
-[CI workflow](../.github/workflows/evaluations.yml) uses a fresh Ubuntu checkout and Node24
-to run native core controls, explicit gate-loader controls, then strict package types.
-Its path filters cover this package and the imported server gate/shared sources; it is
-unsuitable as a required branch-protection context. Local checks do not establish that
-a hosted workflow ran successfully.
+make no model calls and need no provider credentials. The required `Test Suite` check runs
+both scripts, then `npm --prefix evaluations run typecheck`, on the Node 24 leg of the `test` job in [`ci.yml`](../.github/workflows/ci.yml), because this
+package declares `engines.node >=24`. They run on the `full` validation scope, which every
+change under `evaluations/` selects, and reuse the job's locked server install. Local checks do
+not establish that a hosted workflow ran successfully.
 
 ## Private gate-suite contracts
 
