@@ -6,6 +6,7 @@
  * Resources provide token-efficient read-only access to prompts, gates, and observability data.
  */
 
+import type { GateTierSource } from '#engine/gates/core/gate-tier.js';
 import type { Logger } from '#shared/types/index.js';
 import type { McpServer } from '@modelcontextprotocol/server';
 
@@ -137,6 +138,7 @@ export interface ResourceDependencies {
       type: 'validation' | 'guidance';
       severity: 'critical' | 'high' | 'medium' | 'low';
       getGuidance(): string;
+      getDefinition(): GateTierSource;
     }>;
     get(id: string):
       | {

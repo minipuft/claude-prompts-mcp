@@ -295,12 +295,44 @@ describe('MCP Resources Registration Integration', () => {
       expect(result.contents).toHaveLength(1);
       expect(result.contents[0].mimeType).toBe('text/plain');
 
-      // New compact format: "Gates (N):\nid: name (type)"
+      // Compact format: "Gates (N):\nid: name [tier]" — the tier derives from pass_criteria
       const text = result.contents[0].text;
       expect(text).toMatch(/^Gates \(\d+\):/);
-      // Should have gates loaded from server/gates/
-      expect(text).toContain('code-quality:');
-      expect(text).toContain('(validation)');
+      // code-quality is authored `type: validation` but carries only inline_guidance
+      expect(text).toContain('code-quality: Code Quality Standards [reminder]');
+      expect(text).toContain('test-suite: ');
+      expect(text).toMatch(/test-suite: .* \[check\]/);
+      expect(text).not.toMatch(/\((validation|guidance)\)/);
+    });
+
+    test('gates list renders the derived tier for semantic and mixed gates, not the authored type', async () => {
+      const gate = (gateId: string, passCriteria: Array<{ type: string }>) => ({
+        gateId,
+        name: gateId,
+        description: '',
+        type: 'validation' as const,
+        severity: 'medium' as const,
+        getGuidance: () => '',
+        getDefinition: () => ({ pass_criteria: passCriteria }),
+      });
+      const guides = [
+        gate('sem-only', [{ type: 'semantic_evaluation' }]),
+        gate('sem-and-tool', [{ type: 'shell_verify' }, { type: 'semantic_evaluation' }]),
+      ];
+      registerResources(mockMcpServer as never, {
+        logger: mockLogger,
+        gateManager: { list: () => guides, get: () => undefined },
+      });
+
+      const result = (await registeredResources
+        .get('gates')!
+        .readHandler(new URL(`resource://${RESOURCE_URI_PATTERNS.GATE_LIST}`), {})) as {
+        contents: Array<{ text: string }>;
+      };
+
+      expect(result.contents[0].text).toBe(
+        'Gates (2):\nsem-only: sem-only [evaluation]\nsem-and-tool: sem-and-tool [check + evaluation]'
+      );
     });
 
     test('individual gate handler returns full content', async () => {
