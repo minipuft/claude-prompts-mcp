@@ -84,7 +84,6 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   safeConfigWriter?: SafeConfigWriter;
   onRestart?: (reason: string) => Promise<void>;
   onToolSurfaceChanged?: () => Promise<void>;
-  mcpToolsManager?: any;
   analyticsService?: MetricsCollector;
   promptGuidanceService?: PromptGuidanceService;
 
@@ -128,11 +127,6 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
   setToolSurfaceChangedHandler(handler: () => Promise<void>): void {
     this.onToolSurfaceChanged = handler;
-  }
-
-  setMCPToolsManager(mcpToolsManager: any): void {
-    this.mcpToolsManager = mcpToolsManager;
-    this.logger.debug('MCPToolsManager reference configured for dynamic tool updates');
   }
 
   setGateStateStore(gateStateStore: GateStateStore): void {

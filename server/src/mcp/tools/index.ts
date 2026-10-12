@@ -773,8 +773,6 @@ export class McpToolRouter {
       // Set ConfigManager for system control config operations
       this.systemControl.setConfigManager(this.configManager);
 
-      // Set MCPToolsManager reference for dynamic tool updates
-      this.systemControl.setMCPToolsManager(this);
       // Toggling the gate system changes which parameters `prompt_engine`
       // advertises, so it refreshes the surface exactly as a framework switch does.
       this.systemControl.setToolSurfaceChangedHandler(async () => {
