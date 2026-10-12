@@ -108,3 +108,11 @@ Tier 2 row 2.1 records the owner's requested consolidated diagnosis. Dispatch on
 - 0.2 built `~/.claude/skills/code-comments/` (SKILL.md, references, scanner script, template), validated by `validate-skill.sh` and `lint-skills.js`; scanner controls in `/tmp/sb-ctl`. Uncommitted pending Q7.
 - DEV-T0-2: 0.2 also edited `skills/_index.md`, `skills/skill-authoring/ecosystem-map.md` and `skills/testing/SKILL.md` (catalog registration), and skipped a gate pointer: `gate_table.py` rows need coded conditions, and the existing `pre-flight`/`tests` pointers fire on the same events.
 - Finding (0.2): 271 lines in `server/src` and `server/tests` carry `Tier N`, `ACn` or plan references; 5 cite `~/.claude/plans`. 0.7 is scoped to the #474–#476 range (26 scanner candidates); the remainder needs its own row once 0.7 proves the pass.
+
+## 2026-10-12 — 0.1 accepted; 0.8 opened
+
+- 0.1 accepted (`4ef748b6`). Mutations M3, P8, C2, H1, H2, G6a, G6b each red, then reverted. Persistence: the processor's did-not-run block moved to `execution-record-store.integration.test.ts` on real SQLite with a cold reload; decision-only assertions keep a stub whose persistence methods now throw if called.
+- DEV-T0-3: making `remapInlineDefinitions` required turned the earlier optional parameters into explicit `| undefined`; a third predicate `isLegacyUnverifiedAcceptance` was extracted (2 sites); a new unit file `execution-history-latest-facts.test.ts` was created because none existed. `calibration.ts` codes are plain strings with no union, so only the test changed. Accepted.
+- Finding (0.1): the guard class is wider than the two named sites. Stage 11 still reads `this.gatesConfigProvider?.()` and `this.gateSystemEnabled?.(…)`, both wired. A fix at the found sites is not a fix of the class → row 0.8 enumerates by shape and adds a lint rule.
+- Concern (0.1): a config mock without a `gates` key now throws in `createReview` (e.g. `tests/helpers/test-helpers.ts:382`); suites not run by the row may hit it. Checked at the PR boundary.
+- The retired semantic-gate plan's `Now` and four "hosted CI pending" stamps now state the merged #476 result (R10.3 item, planner-owned plan file).
