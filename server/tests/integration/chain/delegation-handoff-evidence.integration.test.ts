@@ -277,7 +277,7 @@ const buildPipeline = (options: {
     steps = parsedChainSteps(true, options.phaseGuards === true),
     evidenceMode,
   } = options;
-  const gateRegistry = new TemporaryGateRegistry(logger);
+  const gateRegistry = new TemporaryGateRegistry(logger, { isCanonicalGateId: () => false });
   gateRegistry.createTemporaryGate({
     id: GATE_ID,
     name: 'Step Quality',

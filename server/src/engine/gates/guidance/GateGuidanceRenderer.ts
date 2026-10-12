@@ -47,14 +47,14 @@ const GATE_ADVISORY_LINE =
 export interface GateGuidanceRendererOptions {
   gateLoader: GateDefinitionProvider;
   temporaryGateRegistry?: TemporaryGateRegistry;
-  frameworkIdentifierProvider?: () => readonly string[] | undefined;
+  frameworkIdentifierProvider: () => readonly string[] | undefined;
   /**
    * Reads the live `gates` config. A provider, not a snapshot: `system_control` can change
    * `gates.harnessCovers` / `gates.reminderTokenBudget` at runtime, and a value captured at
    * construction would pin the renderer to the config that existed at server start. Same shape
    * as `frameworkIdentifierProvider` above and as `GatesConfigProvider` in the pipeline stages.
    */
-  gatesConfigProvider?: () => GateGuidanceConfig | undefined;
+  gatesConfigProvider: () => GateGuidanceConfig | undefined;
 }
 
 /** Severity ordering weights, most severe first. */
@@ -99,8 +99,8 @@ export class GateGuidanceRenderer {
   private readonly logger: Logger;
   private readonly gateLoader: GateDefinitionProvider;
   private readonly temporaryGateRegistry: TemporaryGateRegistry | undefined;
-  private readonly frameworkIdentifierProvider: (() => readonly string[] | undefined) | undefined;
-  private readonly gatesConfigProvider: (() => GateGuidanceConfig | undefined) | undefined;
+  private readonly frameworkIdentifierProvider: () => readonly string[] | undefined;
+  private readonly gatesConfigProvider: () => GateGuidanceConfig | undefined;
 
   constructor(logger: Logger, options: GateGuidanceRendererOptions) {
     if (!options?.gateLoader) {
@@ -319,10 +319,10 @@ export class GateGuidanceRenderer {
     harnessCovers: readonly string[];
     reminderTokenBudget: number;
   } {
-    const gatesConfig = this.gatesConfigProvider?.();
-    // No provider means no wiring, not a second opinion about what the defaults are:
+    const gatesConfig = this.gatesConfigProvider();
+    // A provider that returns nothing is not a second opinion about what the defaults are:
     // `DEFAULT_GATES_CONFIG` is the same object `ConfigManager` folds into `getGatesConfig()`,
-    // so an unwired renderer and a wired one with an empty config.json render identically.
+    // so a provider returning nothing and one backed by an empty config.json render identically.
     return {
       harnessCovers: gatesConfig?.harnessCovers ?? DEFAULT_GATES_CONFIG.harnessCovers,
       reminderTokenBudget:
@@ -442,7 +442,7 @@ export class GateGuidanceRenderer {
     // write-back — so trimming for display keeps the section spacing below unchanged from before
     // that fix, one blank line between gates rather than two.
     let guidance = (gate.guidance ?? '').trim();
-    const frameworkNames = this.frameworkIdentifierProvider?.();
+    const frameworkNames = this.frameworkIdentifierProvider();
 
     if (context.framework && hasFrameworkSpecificContent(guidance, frameworkNames)) {
       guidance = filterFrameworkGuidance(guidance, context.framework, frameworkNames);

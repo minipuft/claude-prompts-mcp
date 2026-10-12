@@ -45,7 +45,7 @@ const carrier = (guidance: string) => ({
 
 describe('an inline definition with a declared id (P6.107)', () => {
   test('re-registered by its own run is the same gate, with no warning', () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const log = logger();
     const registrar = new TemporaryGateRegistrar(registry, undefined, log);
 
@@ -64,7 +64,7 @@ describe('an inline definition with a declared id (P6.107)', () => {
   });
 
   test('a differing body on the same run merges over the held one', () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
     const context = callOf(undefined);
 
@@ -75,7 +75,7 @@ describe('an inline definition with a declared id (P6.107)', () => {
   });
 
   test("another run's held id registers fresh and leaves that run's body alone", () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
 
     registry.adoptIntoRun(
@@ -102,7 +102,7 @@ describe('an inline definition with a declared id (P6.107)', () => {
  */
 describe('a run holding a fresh id re-sends the declared one (P6.113)', () => {
   test('a request gate resolves to the id the run registered, and registers nothing', async () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
     const gate = (criterion: string) => [{ id: 'rg113', name: 'rg113', criteria: [criterion] }];
 
@@ -119,7 +119,7 @@ describe('a run holding a fresh id re-sends the declared one (P6.113)', () => {
   });
 
   test('an inline definition resolves to the id the run registered, with no warning', () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const log = logger();
     const registrar = new TemporaryGateRegistrar(registry, undefined, log);
 
@@ -146,7 +146,7 @@ describe('a run holding a fresh id re-sends the declared one (P6.113)', () => {
   });
 
   test('control: a third live run declaring the id still gets its own', async () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
     const gate = [{ id: 'rg113c', name: 'rg113c', criteria: ['X'] }];
     for (const run of ['run-1', 'run-2']) {
@@ -164,7 +164,7 @@ describe('a request gate with an id (P6.107)', () => {
   const gate = (criterion: string) => [{ id: 'rq107', name: 'rq107', criteria: [criterion] }];
 
   test('a second run declaring a held id grades its own criteria; its own resume reuses the gate', async () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
 
     const first = await registrar.registerTemporaryGates(callOf(undefined, gate('ONE')));
@@ -181,7 +181,7 @@ describe('a request gate with an id (P6.107)', () => {
   });
 
   test('control: a fresh id registers under itself', async () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
     const result = await registrar.registerTemporaryGates(callOf(undefined, gate('FRESH')));
     expect(result.temporaryGateIds).toEqual(['rq107']);
@@ -224,7 +224,7 @@ describe('an untargeted chain request gate stays bound to its first step (P6.114
   };
 
   const startAndResume = async (gate: Record<string, unknown>) => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const create = jest.spyOn(registry, 'createTemporaryGate');
     const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
     const started = await registrar.registerTemporaryGates(chainCallOf(undefined, 1, [gate]));
@@ -302,7 +302,7 @@ describe("a run files its start call's chain-scoped gates under its chain id (P6
     registry.getTemporaryGatesForScope('chain', scopeId).map((gate) => gate.id);
 
   test('two runs: each chain scope lists its own gate, and one run ending leaves the other', () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
 
     const first = registrar.registerInlineGateDefinitions(callOf(undefined), [chainCarrier], true);
@@ -326,7 +326,7 @@ describe("a run files its start call's chain-scoped gates under its chain id (P6
   });
 
   test('control: a gate that is not chain-scoped keeps its scope', () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const registrar = new TemporaryGateRegistrar(registry, undefined, logger());
     const started = registrar.registerInlineGateDefinitions(
       callOf(undefined),

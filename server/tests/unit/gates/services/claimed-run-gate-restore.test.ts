@@ -80,11 +80,13 @@ async function startRun(registry: TemporaryGateRegistry): Promise<ParsedCommand>
 
 describe('InlineGateProcessor.restoreRunGates', () => {
   test('(a) a new process registers every gate the blueprint references, under its recorded id', async () => {
-    const started = await startRun(new TemporaryGateRegistry(logger()));
+    const started = await startRun(
+      new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false })
+    );
     const stepTemps = (started.steps ?? []).map((step) => step.inlineGateIds?.[2]);
     expect(stepTemps.every((id) => /^temp_\d+_[a-z0-9]+$/.test(id ?? ''))).toBe(true);
 
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const processor = new InlineGateProcessor(registry, resolver, logger(), runGateStore());
     const { context, parsed } = restoredOn(started, 'run-1');
     const restored = await processor.restoreRunGates(context, parsed);
@@ -102,7 +104,7 @@ describe('InlineGateProcessor.restoreRunGates', () => {
   });
 
   test('(b) control: in the process that holds them, nothing registers', async () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const started = await startRun(registry);
     // The pipeline's `finally` hands the start call's gates to the run it created (R47).
     registry.adoptIntoRun('run-1', [
@@ -120,7 +122,7 @@ describe('InlineGateProcessor.restoreRunGates', () => {
   });
 
   test('(c) a named gate recorded under a fresh id is restored under that id', async () => {
-    const first = new TemporaryGateRegistry(logger());
+    const first = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     first.createTemporaryGate({
       id: 'g112',
       name: 'g112',
@@ -133,7 +135,7 @@ describe('InlineGateProcessor.restoreRunGates', () => {
     const started = await startRun(first);
     expect(started.inlineGateIds).toEqual(['g112-2']);
 
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const processor = new InlineGateProcessor(registry, resolver, logger(), runGateStore());
     const { context, parsed } = restoredOn(started, 'run-1');
     await processor.restoreRunGates(context, parsed);
@@ -143,10 +145,12 @@ describe('InlineGateProcessor.restoreRunGates', () => {
   });
 
   test('P6.129 (f) a recorded id another run holds here restores under a fresh id the restored command references', async () => {
-    const started = await startRun(new TemporaryGateRegistry(logger()));
+    const started = await startRun(
+      new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false })
+    );
     expect(started.inlineGateIds).toEqual(['g112']);
 
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     registry.adoptIntoRun('run-other', [
       registry.createTemporaryGate({
         id: 'g112',
@@ -185,7 +189,7 @@ describe('InlineGateProcessor.restoreRunGates', () => {
   });
 
   test('(e) a criterion naming another gate by its generated id stays a reference', async () => {
-    const first = new TemporaryGateRegistry(logger());
+    const first = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const referenced = first.createTemporaryGate({
       name: 'elsewhere',
       type: 'validation',
@@ -208,7 +212,7 @@ describe('InlineGateProcessor.restoreRunGates', () => {
     const own = started.steps?.[0]?.inlineGateIds?.at(-1) ?? '';
     expect(started.steps?.[0]?.inlineGateIds).toEqual(['sv-block', referenced, own]);
 
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const { context, parsed } = restoredOn(started, 'run-1');
     await new InlineGateProcessor(registry, resolver, logger(), runGateStore()).restoreRunGates(
       context,
@@ -220,10 +224,12 @@ describe('InlineGateProcessor.restoreRunGates', () => {
   });
 
   test("(d) the start call's request gates go back to stage 11 only while the run owns none", async () => {
-    const started = await startRun(new TemporaryGateRegistry(logger()));
+    const started = await startRun(
+      new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false })
+    );
     started.requestGates = [{ id: 'rq112', name: 'rq112', criteria: ['REQ'] }];
 
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const processor = new InlineGateProcessor(registry, resolver, logger(), runGateStore());
     const claimed = restoredOn(started, 'run-1');
     await processor.restoreRunGates(claimed.context, claimed.parsed);
@@ -264,7 +270,9 @@ describe('P6.226: the fresh id stage 05 hands back is the id stage 11 registers'
     new TemporaryGateRegistry(logger(), { isCanonicalGateId: (id) => id === CANONICAL });
 
   async function claimWithRequestGate(registry: TemporaryGateRegistry) {
-    const started = await startRun(new TemporaryGateRegistry(logger()));
+    const started = await startRun(
+      new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false })
+    );
     started.requestGates = [{ id: CANONICAL, criteria: ['REQ-226'] }];
     const store = runGateStore();
     const processor = new InlineGateProcessor(registry, resolver, logger(), store);

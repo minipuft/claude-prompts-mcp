@@ -208,7 +208,7 @@ const buildPipeline = (options: {
   steps?: ReturnType<typeof parsedChainSteps>;
 }): PromptExecutionPipeline => {
   const { sessionStore, recordStore, logger, steps = parsedChainSteps() } = options;
-  const gateRegistry = new TemporaryGateRegistry(logger);
+  const gateRegistry = new TemporaryGateRegistry(logger, { isCanonicalGateId: () => false });
   gateRegistry.createTemporaryGate({
     id: GATE_ID,
     name: 'Step Quality',

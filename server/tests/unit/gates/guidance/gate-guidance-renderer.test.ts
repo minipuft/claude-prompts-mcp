@@ -37,6 +37,8 @@ describe('GateGuidanceRenderer (loader integration)', () => {
     (loader.isGateActive as jest.Mock).mockReturnValue(true);
 
     const renderer = new GateGuidanceRenderer(logger as any, {
+      gatesConfigProvider: () => undefined,
+      frameworkIdentifierProvider: () => undefined,
       gateLoader: loader as any,
     });
 
@@ -77,6 +79,8 @@ describe('GateGuidanceRenderer (loader integration)', () => {
     (loader.isGateActive as jest.Mock).mockReturnValue(true);
 
     const renderer = new GateGuidanceRenderer(logger as any, {
+      gatesConfigProvider: () => undefined,
+      frameworkIdentifierProvider: () => undefined,
       gateLoader: loader as any,
     });
 
@@ -108,6 +112,7 @@ describe('GateGuidanceRenderer (loader integration)', () => {
     (loader.isGateActive as jest.Mock).mockReturnValue(true);
 
     const renderer = new GateGuidanceRenderer(logger as any, {
+      gatesConfigProvider: () => undefined,
       gateLoader: loader as any,
       frameworkIdentifierProvider: () => ['CAGEERF', 'REACT'],
     });
@@ -137,6 +142,8 @@ describe('GateGuidanceRenderer (loader integration)', () => {
     (loader.isGateActive as jest.Mock).mockReturnValue(true);
 
     const renderer = new GateGuidanceRenderer(logger as any, {
+      gatesConfigProvider: () => undefined,
+      frameworkIdentifierProvider: () => undefined,
       gateLoader: loader as any,
     });
 
@@ -164,6 +171,8 @@ describe('GateGuidanceRenderer (loader integration)', () => {
     );
 
     const renderer = new GateGuidanceRenderer(logger as any, {
+      gatesConfigProvider: () => undefined,
+      frameworkIdentifierProvider: () => undefined,
       gateLoader: loader as any,
     });
 
@@ -218,7 +227,11 @@ describe('GateGuidanceRenderer (loader integration)', () => {
 
     test('two framework gates stay separated by exactly one blank line', async () => {
       const loader = loaderWithTrailingNewlineGuidance();
-      const renderer = new GateGuidanceRenderer(logger as any, { gateLoader: loader as any });
+      const renderer = new GateGuidanceRenderer(logger as any, {
+        gatesConfigProvider: () => undefined,
+        frameworkIdentifierProvider: () => undefined,
+        gateLoader: loader as any,
+      });
 
       const guidance = await renderer.renderGuidance(['framework_gate_one', 'framework_gate_two'], {
         framework: 'CAGEERF',
@@ -233,7 +246,11 @@ describe('GateGuidanceRenderer (loader integration)', () => {
 
     test('the closing attestation line stays one blank line after the last gate', async () => {
       const loader = loaderWithTrailingNewlineGuidance();
-      const renderer = new GateGuidanceRenderer(logger as any, { gateLoader: loader as any });
+      const renderer = new GateGuidanceRenderer(logger as any, {
+        gatesConfigProvider: () => undefined,
+        frameworkIdentifierProvider: () => undefined,
+        gateLoader: loader as any,
+      });
 
       const guidance = await renderer.renderGuidance(['framework_gate_two'], {
         criteriaExecution: 'pipeline',
@@ -291,6 +308,7 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
 
     test('a reminder whose subject is covered by the harness is absent entirely', async () => {
       const renderer = new GateGuidanceRenderer(logger as any, {
+        frameworkIdentifierProvider: () => undefined,
         gateLoader: loaderFor(gates) as any,
         gatesConfigProvider: () => ({ harnessCovers: ['security'] }),
       });
@@ -306,6 +324,7 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
 
     test('the same reminder renders when harnessCovers is empty', async () => {
       const renderer = new GateGuidanceRenderer(logger as any, {
+        frameworkIdentifierProvider: () => undefined,
         gateLoader: loaderFor(gates) as any,
         gatesConfigProvider: () => ({ harnessCovers: [] }),
       });
@@ -319,6 +338,7 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
 
     test('config outranks the prompt author: an explicitly requested reminder is still suppressed', async () => {
       const renderer = new GateGuidanceRenderer(logger as any, {
+        frameworkIdentifierProvider: () => undefined,
         gateLoader: loaderFor(gates) as any,
         gatesConfigProvider: () => ({ harnessCovers: ['security'] }),
       });
@@ -332,6 +352,7 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
 
     test('a reminder with no subject is never suppressed', async () => {
       const renderer = new GateGuidanceRenderer(logger as any, {
+        frameworkIdentifierProvider: () => undefined,
         gateLoader: loaderFor({ plain: reminderGate('plain') }) as any,
         gatesConfigProvider: () => ({ harnessCovers: ['security', 'plain'] }),
       });
@@ -345,6 +366,7 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
   describe('checks render as one line naming what they run, never their guidance', () => {
     test('a shell_verify gate lists its command and drops its guidance', async () => {
       const renderer = new GateGuidanceRenderer(logger as any, {
+        frameworkIdentifierProvider: () => undefined,
         gateLoader: loaderFor({
           'suite-check': {
             id: 'suite-check',
@@ -370,6 +392,7 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
 
     test('a check is not suppressed even when its subject is in harnessCovers', async () => {
       const renderer = new GateGuidanceRenderer(logger as any, {
+        frameworkIdentifierProvider: () => undefined,
         gateLoader: loaderFor({
           'tool-check': {
             id: 'tool-check',
@@ -394,6 +417,7 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
     // under whichever heading preceded it — a reader saw a check listed with the reminders.
     test("a mixed gate's check renders under Checks, its rubric under Evaluations", async () => {
       const renderer = new GateGuidanceRenderer(logger as any, {
+        frameworkIdentifierProvider: () => undefined,
         gateLoader: loaderFor({
           'sem-mixed': {
             id: 'sem-mixed',
@@ -457,6 +481,7 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
 
     test('budget 0 renders every reminder as one line', async () => {
       const renderer = new GateGuidanceRenderer(logger as any, {
+        frameworkIdentifierProvider: () => undefined,
         gateLoader: loaderFor(threeGates) as any,
         gatesConfigProvider: () => ({ reminderTokenBudget: 0 }),
       });
@@ -474,6 +499,7 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
 
     test('a large budget renders every reminder in full', async () => {
       const renderer = new GateGuidanceRenderer(logger as any, {
+        frameworkIdentifierProvider: () => undefined,
         gateLoader: loaderFor(threeGates) as any,
         gatesConfigProvider: () => ({ reminderTokenBudget: 100000 }),
       });
@@ -490,6 +516,7 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
     test('severity ordering decides which reminder overflows into one line', async () => {
       // Each rendered section is ~220 chars → ~55 tokens. A 120-token budget fits two.
       const renderer = new GateGuidanceRenderer(logger as any, {
+        frameworkIdentifierProvider: () => undefined,
         gateLoader: loaderFor(threeGates) as any,
         gatesConfigProvider: () => ({ reminderTokenBudget: 120 }),
       });
@@ -507,6 +534,7 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
 
     test('an explicitly requested reminder keeps full guidance ahead of a more severe one', async () => {
       const renderer = new GateGuidanceRenderer(logger as any, {
+        frameworkIdentifierProvider: () => undefined,
         gateLoader: loaderFor(threeGates) as any,
         gatesConfigProvider: () => ({ reminderTokenBudget: 60 }),
       });
@@ -519,8 +547,10 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
       expect(guidance).toContain('- **Critical Gate** — critical summary');
     });
 
-    test('absent gatesConfigProvider falls back to the config.schema.json defaults', async () => {
+    test('a gatesConfigProvider returning nothing falls back to the config.schema.json defaults', async () => {
       const renderer = new GateGuidanceRenderer(logger as any, {
+        gatesConfigProvider: () => undefined,
+        frameworkIdentifierProvider: () => undefined,
         gateLoader: loaderFor(threeGates) as any,
       });
 
@@ -534,6 +564,8 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
 
   test('the retired Post-Execution Review pair is gone from the rendered output', async () => {
     const renderer = new GateGuidanceRenderer(logger as any, {
+      gatesConfigProvider: () => undefined,
+      frameworkIdentifierProvider: () => undefined,
       gateLoader: loaderFor({ plain: reminderGate('plain') }) as any,
     });
 
@@ -552,6 +584,8 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
     'delivery policy %s does not promise executed criteria or demand a verdict',
     async (criteriaExecution) => {
       const renderer = new GateGuidanceRenderer(logger as any, {
+        gatesConfigProvider: () => undefined,
+        frameworkIdentifierProvider: () => undefined,
         gateLoader: loaderFor({
           plain: reminderGate('plain'),
           check: reminderGate('check', {
@@ -600,7 +634,11 @@ describe('GateGuidanceRenderer — B13 artifacts reach the activation check', ()
       (context.artifacts ?? []).includes('test')
     );
 
-    const renderer = new GateGuidanceRenderer(logger as any, { gateLoader: loader as any });
+    const renderer = new GateGuidanceRenderer(logger as any, {
+      gatesConfigProvider: () => undefined,
+      frameworkIdentifierProvider: () => undefined,
+      gateLoader: loader as any,
+    });
     const guidance = await renderer.renderGuidance(['test-coverage'], {
       category: 'development',
       artifacts: ['test', 'readme'],
@@ -620,7 +658,11 @@ describe('GateGuidanceRenderer — B13 artifacts reach the activation check', ()
       (context.artifacts ?? []).includes('test')
     );
 
-    const renderer = new GateGuidanceRenderer(logger as any, { gateLoader: loader as any });
+    const renderer = new GateGuidanceRenderer(logger as any, {
+      gatesConfigProvider: () => undefined,
+      frameworkIdentifierProvider: () => undefined,
+      gateLoader: loader as any,
+    });
     const guidance = await renderer.renderGuidance(['test-coverage'], {
       category: 'development',
     });

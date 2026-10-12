@@ -24,7 +24,9 @@ const gate = (id: string) => ({
 
 describe('ExecutionLifecycleStage', () => {
   test("the cleanup hook releases the call's gates no run adopted, and only those", async () => {
-    const registry = new TemporaryGateRegistry(createLogger() as never);
+    const registry = new TemporaryGateRegistry(createLogger() as never, {
+      isCanonicalGateId: () => false,
+    });
     const stage = new ExecutionLifecycleStage(registry, createLogger() as never);
     const context = new ExecutionContext({ command: '>>demo' });
 
@@ -53,7 +55,9 @@ describe('ExecutionLifecycleStage', () => {
   });
 
   test('an adopted gate drops its expiry: it ends with its run, not with a timer', () => {
-    const registry = new TemporaryGateRegistry(createLogger() as never);
+    const registry = new TemporaryGateRegistry(createLogger() as never, {
+      isCanonicalGateId: () => false,
+    });
     const id = registry.createTemporaryGate(gate('timed'));
     expect(registry.getTemporaryGate(id)?.expires_at).toBeDefined();
 

@@ -206,14 +206,3 @@ export class ScriptAutoExecuteStage extends BasePipelineStage {
     );
   }
 }
-
-/**
- * Factory function for creating the stage with dependencies.
- */
-export function createScriptAutoExecuteStage(
-  resourceManagerHandler: AutoExecuteHandler | null,
-  logger: Logger,
-  describeParamRefusal: AutoExecuteParamRefusal
-): ScriptAutoExecuteStage {
-  return new ScriptAutoExecuteStage(resourceManagerHandler, logger, describeParamRefusal);
-}

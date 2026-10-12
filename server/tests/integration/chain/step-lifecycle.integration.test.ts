@@ -303,7 +303,8 @@ const buildPipeline = (options: {
   gateRegistry?: TemporaryGateRegistry;
 }): PromptExecutionPipeline => {
   const { sessionStore, recordStore, logger } = options;
-  const registry = options.gateRegistry ?? new TemporaryGateRegistry(logger);
+  const registry =
+    options.gateRegistry ?? new TemporaryGateRegistry(logger, { isCanonicalGateId: () => false });
   for (const id of [GATE_ID, 'phase-guard']) {
     if (registry.getTemporaryGate(id) === undefined)
       registry.createTemporaryGate({
@@ -524,7 +525,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     sessionStore = new ChainSessionStore(logger, new StubTextReferenceStore() as any, {
       cleanupIntervalMs: 60_000,
     });
-    gateRegistry = new TemporaryGateRegistry(logger);
+    gateRegistry = new TemporaryGateRegistry(logger, { isCanonicalGateId: () => false });
 
     pipeline = buildPipeline({
       sessionStore,

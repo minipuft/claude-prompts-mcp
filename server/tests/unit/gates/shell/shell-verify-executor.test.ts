@@ -40,6 +40,7 @@ describe('ShellVerifyExecutor', () => {
 
   beforeEach(() => {
     executor = createShellVerifyExecutor({
+      gateSystemEnabled: () => true,
       debug: false,
       defaultTimeout: 5000,
       allowlist: ALLOW_ALL,
@@ -51,13 +52,17 @@ describe('ShellVerifyExecutor', () => {
 
   describe('constructor and configuration', () => {
     it('should use default timeout when not specified', () => {
-      const defaultExecutor = createShellVerifyExecutor({ allowlist: ALLOW_ALL });
+      const defaultExecutor = createShellVerifyExecutor({
+        gateSystemEnabled: () => true,
+        allowlist: ALLOW_ALL,
+      });
       // Verify by running a command and checking it doesn't use 0 timeout
       expect(defaultExecutor).toBeDefined();
     });
 
     it('should accept custom configuration', () => {
       const customExecutor = createShellVerifyExecutor({
+        gateSystemEnabled: () => true,
         allowlist: ALLOW_ALL,
         defaultTimeout: 10000,
         maxTimeout: 30000,
@@ -151,6 +156,7 @@ describe('ShellVerifyExecutor', () => {
   describe('timeout handling', () => {
     it('should set timedOut flag when command exceeds timeout', async () => {
       const shortTimeoutExecutor = createShellVerifyExecutor({
+        gateSystemEnabled: () => true,
         defaultTimeout: 100, // Very short timeout
         allowlist: ALLOW_ALL,
       });
@@ -175,7 +181,11 @@ describe('ShellVerifyExecutor', () => {
     });
 
     it('should clamp timeout to maximum allowed', async () => {
-      const executor = createShellVerifyExecutor({ maxTimeout: 1000, allowlist: ALLOW_ALL });
+      const executor = createShellVerifyExecutor({
+        gateSystemEnabled: () => true,
+        maxTimeout: 1000,
+        allowlist: ALLOW_ALL,
+      });
 
       // Even with very long timeout, should be clamped
       const result = await executor.execute({
@@ -188,6 +198,7 @@ describe('ShellVerifyExecutor', () => {
 
     it('should use default timeout from config when not specified', async () => {
       const customExecutor = createShellVerifyExecutor({
+        gateSystemEnabled: () => true,
         allowlist: ALLOW_ALL,
         defaultTimeout: 2000,
       });
@@ -316,6 +327,7 @@ describe('ShellVerifyExecutor', () => {
 
     it('should use default working directory when not specified', async () => {
       const executor = createShellVerifyExecutor({
+        gateSystemEnabled: () => true,
         allowlist: ALLOW_ALL,
         defaultWorkingDir: '/tmp',
       });
@@ -451,7 +463,10 @@ describe('gate master switch (row 1.5)', () => {
   });
 
   it('leaves execution ungoverned when no resolver is supplied', async () => {
-    const executor = createShellVerifyExecutor({ allowlist: ALLOW_ALL });
+    const executor = createShellVerifyExecutor({
+      gateSystemEnabled: () => true,
+      allowlist: ALLOW_ALL,
+    });
 
     const result = await executor.execute({ command: 'echo reached' });
 
@@ -463,7 +478,11 @@ describe('author-supplied environment and working directory (row 1.6)', () => {
   const ALLOW_ALL_CMD: readonly string[] = [SHELL_VERIFY_ALLOW_ALL];
 
   it('refuses a gate whose shell_env sets PATH, even when the command is allowlisted', async () => {
-    const executor = createShellVerifyExecutor({ allowlist: ALLOW_ALL_CMD, allowedDirs: [] });
+    const executor = createShellVerifyExecutor({
+      gateSystemEnabled: () => true,
+      allowlist: ALLOW_ALL_CMD,
+      allowedDirs: [],
+    });
 
     const result = await executor.execute({
       command: 'echo reached',
@@ -475,7 +494,11 @@ describe('author-supplied environment and working directory (row 1.6)', () => {
   });
 
   it('names every offending key so the author can fix the gate in one pass', async () => {
-    const executor = createShellVerifyExecutor({ allowlist: ALLOW_ALL_CMD, allowedDirs: [] });
+    const executor = createShellVerifyExecutor({
+      gateSystemEnabled: () => true,
+      allowlist: ALLOW_ALL_CMD,
+      allowedDirs: [],
+    });
 
     const result = await executor.execute({
       command: 'echo reached',
@@ -490,7 +513,11 @@ describe('author-supplied environment and working directory (row 1.6)', () => {
     // An empty allowlist would refuse this command anyway. The assertion is on WHICH
     // refusal fires: reporting "command not in the allowlist" for a PATH override would
     // send the operator to fix the wrong setting.
-    const executor = createShellVerifyExecutor({ allowlist: [], allowedDirs: [] });
+    const executor = createShellVerifyExecutor({
+      gateSystemEnabled: () => true,
+      allowlist: [],
+      allowedDirs: [],
+    });
 
     const result = await executor.execute({ command: 'echo reached', env: { PATH: '/tmp/x' } });
 
@@ -499,7 +526,11 @@ describe('author-supplied environment and working directory (row 1.6)', () => {
   });
 
   it('still runs a gate whose shell_env is ordinary — the denylist must not be a blanket refusal', async () => {
-    const executor = createShellVerifyExecutor({ allowlist: ALLOW_ALL_CMD, allowedDirs: [] });
+    const executor = createShellVerifyExecutor({
+      gateSystemEnabled: () => true,
+      allowlist: ALLOW_ALL_CMD,
+      allowedDirs: [],
+    });
 
     const result = await executor.execute({
       command: 'echo "$MY_GATE_FLAG"',
@@ -513,6 +544,7 @@ describe('author-supplied environment and working directory (row 1.6)', () => {
 
   it('refuses a working directory outside every permitted root', async () => {
     const executor = createShellVerifyExecutor({
+      gateSystemEnabled: () => true,
       allowlist: ALLOW_ALL_CMD,
       defaultWorkingDir: '/tmp/mcp-wd-root',
       allowedDirs: [],
@@ -526,6 +558,7 @@ describe('author-supplied environment and working directory (row 1.6)', () => {
 
   it('refuses a RELATIVE working directory that resolves out of the root', async () => {
     const executor = createShellVerifyExecutor({
+      gateSystemEnabled: () => true,
       allowlist: ALLOW_ALL_CMD,
       defaultWorkingDir: '/tmp/mcp-wd-root/nested',
       allowedDirs: [],
@@ -538,6 +571,7 @@ describe('author-supplied environment and working directory (row 1.6)', () => {
 
   it('permits a directory the operator declared', async () => {
     const executor = createShellVerifyExecutor({
+      gateSystemEnabled: () => true,
       allowlist: ALLOW_ALL_CMD,
       defaultWorkingDir: '/tmp/mcp-wd-root',
       allowedDirs: ['/tmp'],
@@ -556,6 +590,7 @@ describe('author-supplied environment and working directory (row 1.6)', () => {
   // the spawning process, not against the root it was checked against.
   it('spawns in the directory the check approved', async () => {
     const executor = createShellVerifyExecutor({
+      gateSystemEnabled: () => true,
       allowlist: ALLOW_ALL_CMD,
       defaultWorkingDir: '/tmp',
       allowedDirs: [],

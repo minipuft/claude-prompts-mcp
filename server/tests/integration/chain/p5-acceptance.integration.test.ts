@@ -306,7 +306,7 @@ const buildPipeline = (options: {
 }): PromptExecutionPipeline => {
   const { sessionStore, recordStore, logger } = options;
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
-  const gateRegistry = new TemporaryGateRegistry(logger);
+  const gateRegistry = new TemporaryGateRegistry(logger, { isCanonicalGateId: () => false });
   const gateLoader = new GateLoader(logger, undefined, gateRegistry);
   const loadRegisteredGate = gateLoader.loadGate.bind(gateLoader);
   // The named resource in this fixture's authored binding is a real definition; registry

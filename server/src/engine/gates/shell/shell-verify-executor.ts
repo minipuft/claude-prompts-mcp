@@ -38,7 +38,7 @@ import { executeProcess, findUnsafeEnvironmentKeys } from '#shared/utils/process
  *
  * @example
  * ```typescript
- * const executor = new ShellVerifyExecutor();
+ * const executor = new ShellVerifyExecutor({ gateSystemEnabled: () => true });
  *
  * const result = await executor.execute({
  *   command: 'npm test',
@@ -59,7 +59,7 @@ export class ShellVerifyExecutor {
   private readonly allowedDirs: readonly string[] | undefined;
   private readonly gateSystemEnabled: ShellVerifyExecutorConfig['gateSystemEnabled'];
 
-  constructor(config: ShellVerifyExecutorConfig = {}) {
+  constructor(config: ShellVerifyExecutorConfig) {
     this.defaultTimeout = config.defaultTimeout ?? SHELL_VERIFY_DEFAULT_TIMEOUT;
     this.maxTimeout = config.maxTimeout ?? SHELL_VERIFY_MAX_TIMEOUT;
     this.defaultWorkingDir = config.defaultWorkingDir ?? process.cwd();
@@ -117,7 +117,7 @@ export class ShellVerifyExecutor {
     // different questions: whether the gate subsystem runs at all, versus what a
     // running gate may execute. They compose with AND, and an operator who
     // disabled the system is entitled to have that mean it.
-    if (this.gateSystemEnabled?.(scope) === false) {
+    if (!this.gateSystemEnabled(scope)) {
       return {
         passed: false,
         refused: true,
@@ -228,8 +228,8 @@ export class ShellVerifyExecutor {
 }
 
 /**
- * Factory function with default configuration.
+ * Factory function; `gateSystemEnabled` is required, the rest default.
  */
-export function createShellVerifyExecutor(config?: ShellVerifyExecutorConfig): ShellVerifyExecutor {
+export function createShellVerifyExecutor(config: ShellVerifyExecutorConfig): ShellVerifyExecutor {
   return new ShellVerifyExecutor(config);
 }

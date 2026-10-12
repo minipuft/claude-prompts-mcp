@@ -169,7 +169,7 @@ const buildPipeline = (options: {
   const { sessionStore, recordStore, logger } = options;
   const parsingSystem = createParsingSystem(logger);
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
-  const gateRegistry = new TemporaryGateRegistry(logger);
+  const gateRegistry = new TemporaryGateRegistry(logger, { isCanonicalGateId: () => false });
   const runStepViewProvider = createRunStepViewProvider(sessionStore);
 
   const realStages: Record<string, PipelineStage> = {

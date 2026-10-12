@@ -283,7 +283,10 @@ const buildPipeline = (options: {
               provider,
               agentResponse,
               {
-                shellVerifyExecutor: createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] }),
+                shellVerifyExecutor: createShellVerifyExecutor({
+                  gateSystemEnabled: () => true,
+                  allowlist: ['UNSAFE_ALLOW_ALL'],
+                }),
               },
               scope,
               definitions

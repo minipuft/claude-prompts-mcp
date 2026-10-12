@@ -149,7 +149,10 @@ function fixture(
     reviews: { n1: review },
     state: { currentNodeId: 'n2', nodes: [{ id: 'n1' }, { id: 'n2' }] },
   } as unknown as ChainSession;
-  const executor = new ShellVerifyExecutor({ allowlist: ['false', 'true'] });
+  const executor = new ShellVerifyExecutor({
+    gateSystemEnabled: () => true,
+    allowlist: ['false', 'true'],
+  });
   const executed = jest.spyOn(executor, 'execute');
   type Callback = NonNullable<ConstructorParameters<typeof GateVerdictProcessor>[4]>;
   const checks = jest.fn<Callback>(

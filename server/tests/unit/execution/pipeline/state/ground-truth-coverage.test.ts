@@ -248,7 +248,10 @@ describe('resolveGroundTruthCoverage', () => {
     });
     const before = structuredClone(pending);
     const provider = evidenceProvider([gate]);
-    const executor = new ShellVerifyExecutor({ allowlist: ['true'] });
+    const executor = new ShellVerifyExecutor({
+      gateSystemEnabled: () => true,
+      allowlist: ['true'],
+    });
     const executed = jest.spyOn(executor, 'execute');
     const evidence = await runGateReviewEvidence(
       selectToolReviewGateIds(pending),
@@ -543,7 +546,10 @@ describe('ordinary frozen tool evidence caller and legacy response I/O', () => {
         },
         sibling,
       ]);
-      const executor = new ShellVerifyExecutor({ allowlist: ['false', 'true'] });
+      const executor = new ShellVerifyExecutor({
+        gateSystemEnabled: () => true,
+        allowlist: ['false', 'true'],
+      });
       const executed = jest.spyOn(executor, 'execute');
       const f = stageFixture('tool', false, false, {
         review,
@@ -565,7 +571,10 @@ describe('ordinary frozen tool evidence caller and legacy response I/O', () => {
     'unchanged real tool command pass=%j records the actual exit',
     async (passed) => {
       const gate = passed ? TOOL_GATE : FALSE_GATE;
-      const executor = new ShellVerifyExecutor({ allowlist: ['false', 'true'] });
+      const executor = new ShellVerifyExecutor({
+        gateSystemEnabled: () => true,
+        allowlist: ['false', 'true'],
+      });
       const executed = jest.spyOn(executor, 'execute');
       const f = stageFixture('tool', false, false, {
         review: issuedToolReview([gate]),
@@ -585,7 +594,10 @@ describe('ordinary frozen tool evidence caller and legacy response I/O', () => {
   test('missing issued definition cannot run a real required gate or be cleared by a prior ID', async () => {
     const review = issuedToolReview([]);
     review.gateIds = ['gate-a'];
-    const executor = new ShellVerifyExecutor({ allowlist: ['true'] });
+    const executor = new ShellVerifyExecutor({
+      gateSystemEnabled: () => true,
+      allowlist: ['true'],
+    });
     const executed = jest.spyOn(executor, 'execute');
     const f = stageFixture('tool', false, false, { review, live: [TOOL_GATE], shell: executor });
     f.context.state.gates.shellVerifyPassedForGates = ['gate-a'];
@@ -623,7 +635,10 @@ describe('ordinary frozen tool evidence caller and legacy response I/O', () => {
         kind: 'gate' as const,
         phase: 'awaiting-verdict' as const,
       };
-      const executor = new ShellVerifyExecutor({ allowlist: ['true'] });
+      const executor = new ShellVerifyExecutor({
+        gateSystemEnabled: () => true,
+        allowlist: ['true'],
+      });
       const executed = jest.spyOn(executor, 'execute');
       const f = stageFixture('tool', false, false, {
         review,
@@ -663,7 +678,10 @@ describe('ordinary frozen tool evidence caller and legacy response I/O', () => {
             },
           ],
         };
-        const executor = new ShellVerifyExecutor({ allowlist: [`node ${script}`] });
+        const executor = new ShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: [`node ${script}`],
+        });
         const executed = jest.spyOn(executor, 'execute');
         const f = stageFixture('tool', false, true, { live: [gate], shell: executor, body });
         await f.stage.execute(f.context);
@@ -710,7 +728,10 @@ describe('checked declared tool identity in the existing evidence owner', () => 
     };
     expect(evaluateSemanticEvaluation(expected, report).passed).toBe(true);
     const fixture = evidenceProvider([TOOL_GATE]);
-    const executor = new ShellVerifyExecutor({ allowlist: ['false', 'true'] });
+    const executor = new ShellVerifyExecutor({
+      gateSystemEnabled: () => true,
+      allowlist: ['false', 'true'],
+    });
     const execution = jest.spyOn(executor, 'execute');
     const evidence = await runGateReviewEvidence(
       ['gate-a'],
@@ -737,7 +758,12 @@ describe('checked declared tool identity in the existing evidence owner', () => 
       ['gate-a'],
       fixture.provider,
       undefined,
-      { shellVerifyExecutor: new ShellVerifyExecutor({ allowlist: ['false', 'true'] }) },
+      {
+        shellVerifyExecutor: new ShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['false', 'true'],
+        }),
+      },
       undefined,
       issued.definitions
     );
@@ -749,7 +775,10 @@ describe('checked declared tool identity in the existing evidence owner', () => 
   test('omitted frozen authority retains live legacy execution', async () => {
     const fixture = evidenceProvider([TOOL_GATE]);
     const evidence = await runGateReviewEvidence(['gate-a'], fixture.provider, undefined, {
-      shellVerifyExecutor: new ShellVerifyExecutor({ allowlist: ['true'] }),
+      shellVerifyExecutor: new ShellVerifyExecutor({
+        gateSystemEnabled: () => true,
+        allowlist: ['true'],
+      }),
     });
     expect(evidence.shellResults).toMatchObject([{ command: 'true', passed: true, exitCode: 0 }]);
     expect(fixture.loadGates).toHaveBeenCalledTimes(1);
@@ -763,7 +792,12 @@ describe('checked declared tool identity in the existing evidence owner', () => 
       ['gate-a'],
       fixture.provider,
       undefined,
-      { shellVerifyExecutor: new ShellVerifyExecutor({ allowlist: ['false', 'true'] }) },
+      {
+        shellVerifyExecutor: new ShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['false', 'true'],
+        }),
+      },
       undefined,
       issued.definitions
     );
@@ -788,7 +822,10 @@ describe('checked declared tool identity in the existing evidence owner', () => 
         ],
       };
       const fixture = evidenceProvider([live]);
-      const executor = new ShellVerifyExecutor({ allowlist: ['false', 'true'] });
+      const executor = new ShellVerifyExecutor({
+        gateSystemEnabled: () => true,
+        allowlist: ['false', 'true'],
+      });
       const execution = jest.spyOn(executor, 'execute');
       const evidence = await runGateReviewEvidence(
         ['gate-a'],
@@ -842,7 +879,10 @@ describe('checked declared tool identity in the existing evidence owner', () => 
     const issued = createSemanticReviewContext('n1', 'attempt-1', [gate]);
     const fixture = evidenceProvider([gate]);
     const scripts = scriptRuntime();
-    const executor = new ShellVerifyExecutor({ allowlist: ['false'] });
+    const executor = new ShellVerifyExecutor({
+      gateSystemEnabled: () => true,
+      allowlist: ['false'],
+    });
     const actualExecute = executor.execute.bind(executor);
     jest.spyOn(executor, 'execute').mockImplementation(async (command, scope) => {
       const criterion = gate.pass_criteria?.find((entry) => entry.type === 'script_tool');
@@ -913,7 +953,7 @@ describe('checked declared tool identity in the existing evidence owner', () => 
       const issued = createSemanticReviewContext('n1', 'attempt-1', [gate]);
       expect(issued.definitions['gate-a']?.definition).not.toHaveProperty('sourceRoot');
       const fixture = evidenceProvider([gate]);
-      const executor = new ShellVerifyExecutor({ allowlist: [] });
+      const executor = new ShellVerifyExecutor({ gateSystemEnabled: () => true, allowlist: [] });
       const execution = jest.spyOn(executor, 'execute').mockResolvedValue({
         passed: false,
         exitCode: -1,

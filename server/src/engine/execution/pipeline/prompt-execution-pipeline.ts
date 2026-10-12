@@ -39,7 +39,7 @@ import type { Span } from '@opentelemetry/api';
 /** Everything the pipeline needs that is not a stage. */
 export interface PipelinePorts {
   logger: Logger;
-  metricsProvider?: () => MetricsCollector | undefined;
+  metricsProvider: () => MetricsCollector | undefined;
   hookRegistry?: HookRegistryPort;
   /**
    * Assigned onto every ExecutionContext before the first stage runs. Built once
@@ -72,7 +72,7 @@ export interface PipelinePorts {
 export class PromptExecutionPipeline {
   private readonly stages: readonly PipelineStage[];
   private readonly logger: Logger;
-  private readonly metricsProvider: (() => MetricsCollector | undefined) | undefined;
+  private readonly metricsProvider: () => MetricsCollector | undefined;
   private readonly hookRegistry: HookRegistryPort | undefined;
   private readonly gateEnforcement: GateEnforcementAuthority | undefined;
   private readonly executionRecordStore: ExecutionRecordStore | undefined;
@@ -551,7 +551,7 @@ export class PromptExecutionPipeline {
   }
 
   private getMetricsCollector(): MetricsCollector | undefined {
-    return this.metricsProvider?.();
+    return this.metricsProvider();
   }
 
   private createCommandMetricId(): string {

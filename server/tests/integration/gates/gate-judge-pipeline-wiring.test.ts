@@ -132,7 +132,12 @@ function createStageWithGates(
     // Production wires this from PipelineBuilder. Absent, shell_verify criteria now fail
     // closed and say so rather than silently contributing nothing, so a test that means to
     // exercise them has to supply one. UNSAFE_ALLOW_ALL: these run real commands.
-    { shellVerifyExecutor: createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] }) }
+    {
+      shellVerifyExecutor: createShellVerifyExecutor({
+        gateSystemEnabled: () => true,
+        allowlist: ['UNSAFE_ALLOW_ALL'],
+      }),
+    }
   );
 
   const context = new ExecutionContext({ command: '>>chain' });

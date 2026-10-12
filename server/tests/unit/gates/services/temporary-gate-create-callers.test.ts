@@ -160,7 +160,7 @@ async function unresolved(callers: readonly CreateCaller[]): Promise<string[]> {
   const names: string[] = [];
   for (const caller of callers) {
     if (caller.call === undefined || caller.heldId === undefined) continue;
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const create = jest.spyOn(registry, 'createTemporaryGate');
     registry.adoptIntoRun('run-120', await caller.call(registry));
     // Positive control: the first call did reach the create with the id
@@ -259,7 +259,7 @@ describe('no createTemporaryGate caller registers under a canonical id (P6.193)'
     CALLERS.filter((caller) => caller.canonicalId === 'refused').map((c) => [c.name, c] as const)
   )('%s: a canonical id registers no temporary gate under it', async (_name, caller) => {
     // Positive control: with no canonical gate, the same call does register under the id.
-    const open = new TemporaryGateRegistry(logger());
+    const open = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     await caller.call!(open);
     expect(open.getTemporaryGate(caller.heldId!)).toBeDefined();
     expect(await shadowing([caller])).toEqual([]);
@@ -275,7 +275,9 @@ describe('no createTemporaryGate caller registers under a canonical id (P6.193)'
     expect(await caller.call!(registry)).toEqual([`${heldId}-2`]);
     expect(registry.getTemporaryGate(heldId)).toBeUndefined();
     // Control: with no canonical gate the same restore registers under the recorded id.
-    expect(await caller.call!(new TemporaryGateRegistry(logger()))).toEqual([heldId]);
+    expect(
+      await caller.call!(new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false }))
+    ).toEqual([heldId]);
   });
 
   test('restoring a generated id refuses a canonical one by name (R104)', () => {
@@ -301,7 +303,7 @@ describe('no createTemporaryGate caller registers under a canonical id (P6.193)'
   test('a gate reference that fails to resolve is logged with its message (R104)', async () => {
     const log = logger();
     const processor = new InlineGateProcessor(
-      new TemporaryGateRegistry(logger()),
+      new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false }),
       {
         resolve: async () => {
           throw new Error('resolver down');

@@ -140,7 +140,7 @@ describe('a gate-shipped shell_verify script resolves from the gate directory (P
       [GATE_ID],
       new GateLoader(logger as never, gatesRoot),
       undefined,
-      createShellVerifyExecutor({ allowlist: ['sh *'] })
+      createShellVerifyExecutor({ gateSystemEnabled: () => true, allowlist: ['sh *'] })
     );
 
     expect(results).toHaveLength(1);

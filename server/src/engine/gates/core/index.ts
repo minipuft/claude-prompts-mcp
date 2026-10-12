@@ -9,8 +9,7 @@
  */
 
 import { GateStateStore } from '../gate-state-store.js';
-import { createGateLoader } from './gate-loader.js';
-import { TemporaryGateRegistry, createTemporaryGateRegistry } from './temporary-gate-registry.js';
+import { TemporaryGateRegistry } from './temporary-gate-registry.js';
 
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { GateDefinitionProvider } from './gate-loader.js';
@@ -151,42 +150,4 @@ export class LightweightGateSystem {
       }
     }
   }
-}
-
-/**
- * Create a complete core gate system with optional temporary gate support
- */
-export function createLightweightGateSystem(
-  logger: any,
-  gatesDirectory?: string,
-  gateStateStore?: GateStateStore,
-  options?: {
-    provider?: GateDefinitionProvider;
-    enableTemporaryGates?: boolean;
-    maxMemoryGates?: number;
-    defaultExpirationMs?: number;
-  }
-): LightweightGateSystem {
-  // Create temporary gate registry if enabled
-  let temporaryGateRegistry: TemporaryGateRegistry | undefined;
-  if (options?.enableTemporaryGates !== false) {
-    const temporaryGateOptions: Parameters<typeof createTemporaryGateRegistry>[1] = {};
-    if (options?.maxMemoryGates !== undefined) {
-      temporaryGateOptions.maxMemoryGates = options.maxMemoryGates;
-    }
-    if (options?.defaultExpirationMs !== undefined) {
-      temporaryGateOptions.defaultExpirationMs = options.defaultExpirationMs;
-    }
-    temporaryGateRegistry = createTemporaryGateRegistry(logger, temporaryGateOptions);
-  }
-
-  const gateLoader =
-    options?.provider ?? createGateLoader(logger, gatesDirectory, temporaryGateRegistry);
-  const gateSystem = new LightweightGateSystem(gateLoader, temporaryGateRegistry);
-
-  if (gateStateStore) {
-    gateSystem.setGateStateStore(gateStateStore);
-  }
-
-  return gateSystem;
 }

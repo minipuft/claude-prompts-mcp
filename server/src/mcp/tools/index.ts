@@ -182,7 +182,7 @@ export class McpToolRouter {
   // Removed executionCoordinator - chains now use LLM-driven execution model
 
   // Callback references
-  private onRestart?: (reason: string) => Promise<void>;
+  private onRestart!: (reason: string) => Promise<void>;
 
   /**
    * How every resource tool's version history finds the files it records (owner ruling R65).
@@ -689,7 +689,7 @@ export class McpToolRouter {
           '🚨 Restart on tool description change is enabled - initiating server restart...'
         );
         // Use the existing restart mechanism
-        await this.onRestart?.(
+        await this.onRestart(
           'Tool descriptions updated - restart required for clients to see new descriptions'
         );
       } else {

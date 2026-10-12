@@ -170,7 +170,7 @@ describe('runGateShellVerifications', () => {
       ['code-quality'],
       gateProvider,
       undefined,
-      createShellVerifyExecutor({})
+      createShellVerifyExecutor({ gateSystemEnabled: () => true })
     );
     expect(results).toHaveLength(0);
   });
@@ -195,7 +195,7 @@ describe('runGateShellVerifications', () => {
       ['test'],
       gateProvider,
       undefined,
-      createShellVerifyExecutor({})
+      createShellVerifyExecutor({ gateSystemEnabled: () => true })
     );
     expect(results).toHaveLength(0);
   });
@@ -212,7 +212,7 @@ describe('runGateShellVerifications', () => {
       ['nonexistent'],
       gateProvider,
       undefined,
-      createShellVerifyExecutor({})
+      createShellVerifyExecutor({ gateSystemEnabled: () => true })
     );
     expect(results).toHaveLength(0);
   });
@@ -252,6 +252,7 @@ describe('shell_response_env_var cannot smuggle a denied key (row 1.6)', () => {
       gateProvider,
       { agentResponse: '/attacker/bin' },
       createShellVerifyExecutor({
+        gateSystemEnabled: () => true,
         allowlist: [SHELL_VERIFY_ALLOW_ALL],
         allowedDirs: [SHELL_VERIFY_ALLOW_ANY_DIR],
       })
@@ -292,6 +293,7 @@ describe('shell_response_env_var cannot smuggle a denied key (row 1.6)', () => {
       gateProvider,
       { agentResponse: 'hello' },
       createShellVerifyExecutor({
+        gateSystemEnabled: () => true,
         allowlist: [SHELL_VERIFY_ALLOW_ALL],
         allowedDirs: [SHELL_VERIFY_ALLOW_ANY_DIR],
       })
@@ -336,6 +338,7 @@ describe('a shell_verify script that ships inside the gate (P4.105)', () => {
       gateProvider,
       undefined,
       createShellVerifyExecutor({
+        gateSystemEnabled: () => true,
         allowlist: [SHELL_VERIFY_ALLOW_ALL],
         allowedDirs: [SHELL_VERIFY_ALLOW_ANY_DIR],
       })

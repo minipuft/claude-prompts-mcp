@@ -441,6 +441,7 @@ describe('frozen semantic source rendering', () => {
       isGateActive: () => true,
     } as unknown as GateDefinitionProvider;
     const renderer = new GateGuidanceRenderer(logger, {
+      frameworkIdentifierProvider: () => undefined,
       gateLoader: liveProvider,
       gatesConfigProvider: () => ({ harnessCovers: ['code'], reminderTokenBudget: 0 }),
     });

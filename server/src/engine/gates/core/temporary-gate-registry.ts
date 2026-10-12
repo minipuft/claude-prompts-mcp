@@ -141,7 +141,7 @@ export class TemporaryGateRegistry {
   private gateOwners: Map<string, string>;
   private maxMemoryGates: number;
   private defaultExpirationMs: number;
-  private isCanonicalGateId: ((gateId: string) => boolean) | undefined;
+  private isCanonicalGateId: (gateId: string) => boolean;
 
   constructor(
     logger: Logger,
@@ -152,10 +152,12 @@ export class TemporaryGateRegistry {
        * Whether an id names a canonical gate (P6.193, R94). Gate loading reads this registry
        * first and it is keyed by id per process, so a temporary gate under a canonical id would
        * replace that gate's criteria for every run while it lived: `createTemporaryGate` refuses
-       * one, whichever caller chose the id. Absent, no id is refused.
+       * one, whichever caller chose the id. Required: a registry that cannot ask would refuse no
+       * id, which is the shadowing this exists to prevent. A caller with no canonical gates to
+       * protect passes `() => false`.
        */
-      isCanonicalGateId?: (gateId: string) => boolean;
-    } = {}
+      isCanonicalGateId: (gateId: string) => boolean;
+    }
   ) {
     this.logger = logger;
     this.temporaryGates = new Map();
@@ -208,7 +210,7 @@ export class TemporaryGateRegistry {
 
   /** Whether `gateId` names a canonical gate, which no temporary gate may register under. */
   shadowsCanonicalGate(gateId: string): boolean {
-    return this.isCanonicalGateId?.(gateId) === true;
+    return this.isCanonicalGateId(gateId);
   }
 
   /**
@@ -629,7 +631,7 @@ export class TemporaryGateRegistry {
  */
 export function createTemporaryGateRegistry(
   logger: Logger,
-  options?: ConstructorParameters<typeof TemporaryGateRegistry>[1]
+  options: ConstructorParameters<typeof TemporaryGateRegistry>[1]
 ): TemporaryGateRegistry {
   return new TemporaryGateRegistry(logger, options);
 }
