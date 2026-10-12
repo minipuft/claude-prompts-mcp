@@ -339,7 +339,7 @@ describe.each([
         user_response: cageerfAnswer(`${OUTPUT_MARKER}: attempt ${attempt}.`),
         gate_verdict: `GATE_REVIEW: FAIL - attempt ${attempt} is not good enough`,
       });
-      counters.push(/\*\*Attempt \d+ of \d+\*\*/.exec(outcome.text)?.[0] ?? '(no counter)');
+      counters.push(/\*\*Attempt \d+\/\d+\*\*/.exec(outcome.text)?.[0] ?? '(no counter)');
       replies.push(outcome.text);
       const event = outcome.notifications.find(
         (n) => n.method === 'notifications/gate/retry_exhausted'

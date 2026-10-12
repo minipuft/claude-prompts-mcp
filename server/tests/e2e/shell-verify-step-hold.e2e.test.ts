@@ -379,7 +379,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect(start.text).toContain('Progress 1/3');
     expect(runs()).toBe(0);
 
-    // The check the render saved survives to the first answer, at attempt 0
+    // The check the render saved survives to the first answer, which runs it as attempt 1/5
     const bounced = await answer(call, 'Step 1');
     expect(bounced.text).toContain('Shell Verification FAILED (Attempt 1/5)');
     expect(count(bounced, STEP_COMPLETE)).toBe(0);
