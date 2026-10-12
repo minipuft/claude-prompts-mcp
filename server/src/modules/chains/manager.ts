@@ -359,52 +359,45 @@ export class ChainSessionStore implements ChainSessionService {
     // "Failed to save sessions: Cannot read properties of undefined (reading 'save')" on
     // every persist, empty chain_runs/chain_sessions while a run was active). Chain onto
     // initPromise so callers awaiting init observe the completed late load.
+    //
+    // A failure REJECTS initPromise rather than being logged here: every session operation awaits
+    // it, so the next one reports the port's own error. Caught and logged, `runRegistry` stayed
+    // unassigned and the next persist threw an unrelated TypeError far from the cause.
     if (!this.runRegistry) {
-      this.initPromise = this.initPromise
-        .then(async () => {
-          if (this.runRegistry) return;
-          await db.initialize();
-          this.runRegistry = new DirectChainRunRegistry(db);
-          await this.runRegistry.ensureInitialized();
-          this.cleanupStalePidRows();
-          await this.loadSessions();
-        })
-        .catch((error) => {
-          this.logger.warn(
-            `ChainSessionStore: late DatabasePort initialization failed: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        });
+      this.initPromise = this.initPromise.then(async () => {
+        if (this.runRegistry) return;
+        await db.initialize();
+        this.runRegistry = new DirectChainRunRegistry(db);
+        await this.runRegistry.ensureInitialized();
+        this.cleanupStalePidRows();
+        await this.loadSessions();
+      });
     }
   }
 
   /**
-   * Initialize the manager asynchronously
+   * Initialize the manager asynchronously.
+   *
+   * Failures propagate: the returned promise is `initPromise`, which every session operation
+   * awaits, so a port that cannot initialize is reported by the next operation as itself. Startup
+   * already refuses when the engine cannot initialize, so a catch here could only hide a test-path
+   * or ordering defect — and did, as a TypeError from the unassigned `runRegistry` on next persist.
    */
   private async initialize(): Promise<void> {
-    try {
-      // Create SQLite-backed registry if no custom store was provided
-      if (!this.runRegistry) {
-        const dbManager = this.injectedDbEngine;
-        if (!dbManager) {
-          this.logger.warn('ChainSessionStore: no DatabasePort provided, persistence disabled');
-          return;
-        }
-        await dbManager.initialize();
-        this.resolvedDbEngine = dbManager;
-        this.runRegistry = new DirectChainRunRegistry(dbManager);
+    // Create SQLite-backed registry if no custom store was provided
+    if (!this.runRegistry) {
+      const dbManager = this.injectedDbEngine;
+      if (!dbManager) {
+        this.logger.warn('ChainSessionStore: no DatabasePort provided, persistence disabled');
+        return;
       }
-      await this.runRegistry.ensureInitialized();
-      this.cleanupStalePidRows();
-      await this.loadSessions();
-    } catch (error) {
-      this.logger.warn(
-        `Failed to initialize ChainSessionStore: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+      await dbManager.initialize();
+      this.resolvedDbEngine = dbManager;
+      this.runRegistry = new DirectChainRunRegistry(dbManager);
     }
+    await this.runRegistry.ensureInitialized();
+    this.cleanupStalePidRows();
+    await this.loadSessions();
   }
 
   /**
