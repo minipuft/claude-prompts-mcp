@@ -330,6 +330,45 @@ describe('GateEnhancementStage', () => {
     expect(scopes[0]).toBeDefined();
   });
 
+  test('a request with no execution plan throws the accessor message instead of skipping', async () => {
+    const gateService = createGateService();
+    const stage = createStage({
+      gateService,
+      gatesConfigProvider: () => baseGatesConfig,
+      gateSystemEnabled: () => true,
+    });
+    const context = runtimeSwitchContext();
+    context.executionPlan = undefined;
+
+    await expect(stage.execute(context)).rejects.toThrow(
+      'ExecutionPlan not available - neither CommandParsingStage nor PlanningStage provided it'
+    );
+    expect(gateService.enhancePrompt as jest.Mock).not.toHaveBeenCalled();
+  });
+
+  test('a parsed command with neither prompt nor steps throws before any temporary gate is registered', async () => {
+    const registerTemporaryGates = jest.spyOn(
+      TemporaryGateRegistrar.prototype,
+      'registerTemporaryGates'
+    );
+    try {
+      const stage = createStage({
+        gateService: createGateService(),
+        gatesConfigProvider: () => baseGatesConfig,
+        gateSystemEnabled: () => true,
+      });
+      const context = runtimeSwitchContext();
+      context.parsedCommand = { commandType: 'single' } as any;
+
+      await expect(stage.execute(context)).rejects.toThrow(
+        'neither a converted prompt nor chain steps'
+      );
+      expect(registerTemporaryGates).not.toHaveBeenCalled();
+    } finally {
+      registerTemporaryGates.mockRestore();
+    }
+  });
+
   test('control: with the runtime gate switch on, the same request is enhanced', async () => {
     const gateService = createGateService();
     const stage = createStage({

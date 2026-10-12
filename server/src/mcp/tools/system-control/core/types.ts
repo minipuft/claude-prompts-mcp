@@ -62,7 +62,6 @@ export interface SystemControlContext {
    * advertising parameters that no longer do anything.
    */
   readonly onToolSurfaceChanged?: () => Promise<void>;
-  readonly mcpToolsManager?: any;
   readonly analyticsService?: MetricsCollector;
   readonly promptGuidanceService?: PromptGuidanceService;
 

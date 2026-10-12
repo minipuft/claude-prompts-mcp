@@ -170,9 +170,6 @@ export abstract class ActionHandler {
   protected get onRestart(): ((reason: string) => Promise<void>) | undefined {
     return this.context.onRestart;
   }
-  protected get mcpToolsManager(): any {
-    return this.context.mcpToolsManager;
-  }
   protected get requestScope(): StateStoreOptions | undefined {
     return this.context.requestScope;
   }
@@ -228,20 +225,5 @@ export abstract class ActionHandler {
       unitIndex++;
     }
     return `${Math.round(value * 100) / 100}${units[unitIndex]}`;
-  }
-
-  protected getHealthIcon(status: string): string {
-    switch (status) {
-      case 'healthy':
-        return '✅';
-      case 'warning':
-        return '⚠️';
-      case 'error':
-        return '❌';
-      case 'critical':
-        return '🚨';
-      default:
-        return '❓';
-    }
   }
 }

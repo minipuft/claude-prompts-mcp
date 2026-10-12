@@ -2,6 +2,7 @@
 
 import { ActionHandler } from '../core/action-handler-base.js';
 
+import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type { ExecutionRecord, GateVerdictSummary } from '#shared/types/chain-execution.js';
 import type { ToolResponse } from '#shared/types/index.js';
 
@@ -35,9 +36,9 @@ export class ExecutionHistoryActionHandler extends ActionHandler {
 
     switch (operation) {
       case 'list':
-        return this.listRecent(args);
+        return this.listRecent(store, args);
       case 'steps':
-        return this.listLatestPerStep(args);
+        return this.listLatestPerStep(store, args);
       default:
         throw new Error(
           `Unknown execution_history operation: ${operation}. Valid operations: list, steps`
@@ -52,11 +53,10 @@ export class ExecutionHistoryActionHandler extends ActionHandler {
    * shows `completed` above its verdict and a reader has to know which row wins. This resolves
    * it: one line per step, the newest row's status and gate verdicts.
    */
-  private listLatestPerStep(args: Record<string, unknown>): ToolResponse {
-    const store = this.context.executionRecordStore;
-    if (store === undefined) {
-      throw new Error('Execution record store not initialized');
-    }
+  private listLatestPerStep(
+    store: ExecutionRecordStore,
+    args: Record<string, unknown>
+  ): ToolResponse {
     const runId = args['session_id'];
     if (typeof runId !== 'string' || runId.trim() === '') {
       throw new Error(
@@ -92,12 +92,7 @@ export class ExecutionHistoryActionHandler extends ActionHandler {
    * `limit` is passed through to `queryRecent`, which clamps it — the ledger has no
    * retention policy yet, so an unbounded read is a real possibility to guard against.
    */
-  private listRecent(args: Record<string, unknown>): ToolResponse {
-    const store = this.context.executionRecordStore;
-    if (store === undefined) {
-      throw new Error('Execution record store not initialized');
-    }
-
+  private listRecent(store: ExecutionRecordStore, args: Record<string, unknown>): ToolResponse {
     const limit = typeof args['limit'] === 'number' ? args['limit'] : undefined;
     const records = store.queryRecent(limit, this.context.requestScope);
 

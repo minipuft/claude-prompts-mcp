@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -13,13 +22,17 @@ import {
   PRESERVED_GATE_YAML_KEYS,
 } from '../../../../src/engine/gates/core/gate-yaml-keys.js';
 import { GateFileWriter } from '../../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
-import { EMPTY_QUARANTINE_VIEW } from '../../../../src/shared/utils/resource-quarantine.js';
+import {
+  EMPTY_QUARANTINE_VIEW,
+  ResourceQuarantine,
+} from '../../../../src/shared/utils/resource-quarantine.js';
 import { gateSnapshotContract } from '../../../../src/mcp/tools/gate-manager/services/gate-snapshot-contract.js';
 import { loadYamlFileSync } from '../../../../src/shared/utils/yaml/index.js';
 
 import type { GateManager } from '../../../../src/engine/gates/gate-manager.js';
 import type { GateGuide } from '../../../../src/engine/gates/types/index.js';
 import type { GateManagerInput } from '../../../../src/mcp/tools/gate-manager/core/types.js';
+import type { DatabasePort } from '../../../../src/shared/types/persistence.js';
 import type { ConfigManager, Logger } from '../../../../src/shared/types/index.js';
 
 /**
@@ -764,6 +777,579 @@ describe('GateToolHandler', () => {
       expect(writeResult.success).toBe(true);
       const written = readFileSync(join(gatesDir, 'multi-newline-gate', 'guidance.md'), 'utf8');
       expect(written).toBe('Already terminated.\n\n\n');
+    });
+  });
+});
+
+// What a `resource_manager` gate caller is told when the request is incomplete, the target is
+// missing or protected, or a step fails. Driven through the real `GateToolHandler` and its
+// processors over a temp directory; the doubles are the registry's answers, the version store's
+// `DatabasePort` and, for write failures, a path the filesystem refuses.
+describe('GateToolHandler — refusals and failure reports', () => {
+  const text = (result: { content: unknown[] }): string =>
+    (result.content[0] as { text: string }).text;
+
+  // Permission-based failures cannot be provoked by a superuser.
+  const runsAsRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+
+  let root: string;
+  let gatesDir: string;
+  let bundledDir: string | undefined;
+  let versioning: { enabled: boolean; autoVersion: boolean; maxVersions: number };
+  let quarantine: ResourceQuarantine;
+  let registry: jest.Mocked<
+    Pick<GateManager, 'has' | 'unregister' | 'reload' | 'list' | 'getStats' | 'get'>
+  >;
+  let onRefresh: jest.Mock<() => Promise<void>>;
+  let handler: GateToolHandler;
+
+  function buildHandler(): GateToolHandler {
+    const configManager = {
+      getGatesDirectory: () => gatesDir,
+      getBundledResourceDirectory: () => bundledDir,
+      getVersioningConfig: () => versioning,
+      getServerRoot: () => root,
+    } as unknown as ConfigManager;
+    return new GateToolHandler({
+      logger: createLogger(),
+      gateManager: {
+        ...registry,
+        getQuarantine: () => quarantine,
+      } as unknown as GateManager,
+      configManager,
+      onRefresh,
+    });
+  }
+
+  function refuse(id: string, error = 'schema: name is required'): string {
+    const filePath = join(gatesDir, id, 'gate.yaml');
+    quarantine.sinkFor('gate', gatesDir).record({ id, path: filePath, error });
+    return filePath;
+  }
+
+  /** A `DatabasePort` whose version_history count is `rows`, or whose transaction throws. */
+  function versionDb(outcome: { rows: number } | { failure: string }): DatabasePort {
+    return {
+      isInitialized: () => true,
+      initialize: async () => undefined,
+      query: () => [],
+      queryOne: (sql: string) =>
+        'rows' in outcome && sql.includes('version_history') ? { cnt: outcome.rows } : null,
+      run: () => undefined,
+      transaction: async <T>(fn: () => T | Promise<T>): Promise<T> => {
+        if ('failure' in outcome) throw new Error(outcome.failure);
+        return fn();
+      },
+      beginTransaction: () => undefined,
+      commit: () => undefined,
+      rollback: () => undefined,
+    } as unknown as DatabasePort;
+  }
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), 'cpm-gate-refusals-'));
+    gatesDir = join(root, 'gates');
+    mkdirSync(gatesDir, { recursive: true });
+    bundledDir = undefined;
+    versioning = { enabled: false, autoVersion: false, maxVersions: 50 };
+    quarantine = new ResourceQuarantine();
+    onRefresh = jest.fn(async () => undefined);
+    registry = {
+      has: jest.fn(() => false),
+      unregister: jest.fn(() => true),
+      reload: jest.fn(async () => true),
+      list: jest.fn(() => []),
+      get: jest.fn(() => undefined),
+      getStats: jest.fn(() => ({ totalGates: 0, enabledGates: 0, disabledGates: 0 })),
+    } as never;
+    handler = buildHandler();
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  describe('required fields', () => {
+    const complete = {
+      action: 'create' as const,
+      id: 'needs-fields',
+      name: 'Needs Fields',
+      description: 'Has a description',
+      guidance: 'Has guidance',
+    };
+
+    test.each([
+      ['id', 'Gate ID is required for create action'],
+      ['name', 'Gate name is required for create action'],
+      ['description', 'Gate description is required for create action'],
+      ['guidance', 'Gate guidance is required for create action'],
+    ] as const)('create without %s is refused and writes nothing', async (field, message) => {
+      const { [field]: _omitted, ...incomplete } = complete;
+
+      const result = await handler.handleAction(incomplete, {});
+
+      expect(result.isError).toBe(true);
+      expect(text(result)).toBe(`❌ ${message}`);
+      expect(readdirSync(gatesDir)).toEqual([]);
+      expect(onRefresh).not.toHaveBeenCalled();
+    });
+
+    test('create with all four present succeeds (control for the refusals above)', async () => {
+      const result = await handler.handleAction(complete, {});
+
+      expect(result.isError).toBe(false);
+      expect(readdirSync(gatesDir)).toEqual(['needs-fields']);
+    });
+
+    test.each(['update', 'delete', 'reload'] as const)(
+      '%s without an id is refused',
+      async (action) => {
+        const result = await handler.handleAction({ action }, {});
+
+        expect(result.isError).toBe(true);
+        expect(text(result)).toBe(`❌ Gate ID is required for ${action} action`);
+        expect(registry.reload).not.toHaveBeenCalled();
+        expect(registry.unregister).not.toHaveBeenCalled();
+      }
+    );
+  });
+
+  describe('update', () => {
+    test('names `create` when neither the registry nor the quarantine knows the id', async () => {
+      refuse('some-other-gate');
+
+      const result = await handler.handleAction({ action: 'update', id: 'ghost-gate' }, {});
+
+      expect(result.isError).toBe(true);
+      expect(text(result)).toBe(
+        "❌ Gate 'ghost-gate' not found. Use create action to add new gate."
+      );
+      expect(readdirSync(gatesDir)).toEqual([]);
+    });
+
+    test('reports a registry that lists the id but cannot return the gate', async () => {
+      registry.has.mockReturnValue(true);
+      registry.get.mockReturnValue(undefined);
+
+      const result = await handler.handleAction({ action: 'update', id: 'half-gate' }, {});
+
+      expect(result.isError).toBe(true);
+      expect(text(result)).toBe("❌ Failed to retrieve gate 'half-gate'");
+    });
+
+    test('a gate with no declared type is written back as `validation`', async () => {
+      registry.has.mockReturnValue(true);
+      registry.get.mockReturnValue({
+        ...createFakeGate({ gateId: 'untyped-gate' }),
+        type: undefined,
+      } as unknown as GateGuide);
+
+      const result = await handler.handleAction(
+        { action: 'update', id: 'untyped-gate', description: 'now described' },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      const written = loadYamlFileSync(join(gatesDir, 'untyped-gate', 'gate.yaml')) as Record<
+        string,
+        unknown
+      >;
+      expect(written['type']).toBe('validation');
+      expect(written['description']).toBe('now described');
+    });
+
+    test.each([
+      [true, '🔄 Gate reloaded'],
+      [false, 'could not be reloaded into this process'],
+    ])('reload outcome %s is reported as written, not assumed', async (reloaded, expected) => {
+      registry.has.mockReturnValue(true);
+      registry.get.mockReturnValue(createFakeGate({ gateId: 'reload-gate' }));
+      registry.reload.mockResolvedValue(reloaded);
+
+      const result = await handler.handleAction(
+        { action: 'update', id: 'reload-gate', description: 'changed' },
+        {}
+      );
+
+      // Not an error either way: the files ARE written.
+      expect(result.isError).toBe(false);
+      expect(text(result)).toContain("Gate 'reload-gate' updated successfully");
+      expect(text(result)).toContain(expected);
+      if (!reloaded) expect(text(result)).not.toContain('🔄 Gate reloaded');
+      expect(existsSync(join(gatesDir, 'reload-gate', 'gate.yaml'))).toBe(true);
+    });
+
+    test('an update that changes nothing carries no diff block', async () => {
+      const created = await handler.handleAction(
+        {
+          action: 'create',
+          id: 'steady-gate',
+          name: 'Steady',
+          description: 'Same description',
+          guidance: 'Same guidance\n',
+        },
+        {}
+      );
+      expect(created.isError).toBe(false);
+      registry.has.mockReturnValue(true);
+      registry.get.mockReturnValue(
+        createFakeGate({
+          gateId: 'steady-gate',
+          name: 'Steady',
+          description: 'Same description',
+          guidance: 'Same guidance\n',
+        })
+      );
+
+      const unchanged = await handler.handleAction(
+        { action: 'update', id: 'steady-gate', description: 'Same description' },
+        {}
+      );
+      const changed = await handler.handleAction(
+        { action: 'update', id: 'steady-gate', description: 'Different description' },
+        {}
+      );
+
+      expect(unchanged.isError).toBe(false);
+      expect(text(changed)).toContain('Different description');
+      // The control: the diff block exists when something changed, so its absence is meaningful.
+      expect(text(unchanged)).not.toContain('Different description');
+      expect(text(unchanged).length).toBeLessThan(text(changed).length);
+    });
+  });
+
+  describe('create', () => {
+    const body = {
+      action: 'create' as const,
+      id: 'fresh-gate',
+      name: 'Fresh',
+      description: 'Fresh description',
+      guidance: 'Fresh guidance',
+    };
+
+    test('says the gate is on disk but NOT active when the registry could not load it', async () => {
+      registry.reload.mockResolvedValue(false);
+
+      const result = await handler.handleAction(body, {});
+
+      // Files are written, so this is not an error — but it must not claim "ready to use now".
+      expect(result.isError).toBe(false);
+      expect(text(result)).toContain('NOT active in this server process');
+      expect(text(result)).toContain('action: "reload"');
+      expect(text(result)).not.toContain('ready to use now');
+      expect(existsSync(join(gatesDir, 'fresh-gate', 'gate.yaml'))).toBe(true);
+    });
+
+    test('redirects an id whose file the loader refused to `update` instead of overwriting it', async () => {
+      const refusedPath = refuse('fresh-gate', 'schema: name is required');
+
+      const result = await handler.handleAction(body, {});
+
+      expect(result.isError).toBe(true);
+      expect(text(result)).toContain("Gate 'fresh-gate' already exists on disk");
+      expect(text(result)).toContain(refusedPath);
+      expect(text(result)).toContain('schema: name is required');
+      expect(text(result)).toContain('action: "update"');
+      expect(existsSync(join(gatesDir, 'fresh-gate'))).toBe(false);
+    });
+
+    (runsAsRoot ? test.skip : test)('reports a failed write and registers nothing', async () => {
+      chmodSync(gatesDir, 0o555);
+      try {
+        const result = await handler.handleAction(body, {});
+
+        expect(result.isError).toBe(true);
+        expect(text(result)).toMatch(/^❌ Failed to create gate: /);
+        expect(readdirSync(gatesDir)).toEqual([]);
+        expect(registry.reload).not.toHaveBeenCalled();
+        expect(onRefresh).not.toHaveBeenCalled();
+      } finally {
+        chmodSync(gatesDir, 0o755);
+      }
+    });
+  });
+
+  describe('repairing a refused gate through update', () => {
+    test.each([
+      [{}, 'name, description, guidance'],
+      [{ name: 'Only A Name' }, 'description, guidance'],
+      [{ name: 'N', description: 'D' }, 'guidance'],
+    ])('a partial body %j is refused naming what is missing', async (supplied, missing) => {
+      const refusedPath = refuse('broken-gate');
+
+      const result = await handler.handleAction(
+        { action: 'update', id: 'broken-gate', ...supplied },
+        {}
+      );
+
+      expect(result.isError).toBe(true);
+      expect(text(result)).toContain("Gate 'broken-gate' is quarantined");
+      expect(text(result)).toContain(refusedPath);
+      expect(text(result)).toContain(`Missing: ${missing}.`);
+      expect(existsSync(join(gatesDir, 'broken-gate'))).toBe(false);
+      expect(registry.reload).not.toHaveBeenCalled();
+    });
+
+    const wholeBody = {
+      action: 'update' as const,
+      id: 'broken-gate',
+      name: 'Repaired',
+      description: 'Repaired description',
+      guidance: 'Repaired guidance',
+    };
+
+    test('reports "Still quarantined" when the reload leaves the refused file refused', async () => {
+      const refusedPath = refuse('broken-gate');
+
+      const result = await handler.handleAction(wholeBody, {});
+
+      expect(result.isError).toBe(false);
+      expect(text(result)).toContain("Repair written for quarantined gate 'broken-gate'");
+      expect(text(result)).toContain('**Still quarantined**');
+      expect(text(result)).toContain(refusedPath);
+      expect(text(result)).toContain('No version was recorded');
+      expect(registry.reload).toHaveBeenCalledWith('broken-gate');
+    });
+
+    test('reports "Repaired" once the quarantine record is gone after the reload', async () => {
+      refuse('broken-gate');
+      registry.reload.mockImplementation(async () => {
+        quarantine.sinkFor('gate', gatesDir).forget(join(gatesDir, 'broken-gate', 'gate.yaml'));
+        return true;
+      });
+
+      const result = await handler.handleAction(wholeBody, {});
+
+      expect(result.isError).toBe(false);
+      expect(text(result)).toContain('**Repaired**');
+      expect(text(result)).not.toContain('Still quarantined');
+    });
+
+    (runsAsRoot ? test.skip : test)('reports a failed repair write', async () => {
+      refuse('broken-gate');
+      chmodSync(gatesDir, 0o555);
+      try {
+        const result = await handler.handleAction(wholeBody, {});
+
+        expect(result.isError).toBe(true);
+        expect(text(result)).toMatch(/^❌ Failed to repair gate: /);
+        expect(registry.reload).not.toHaveBeenCalled();
+      } finally {
+        chmodSync(gatesDir, 0o755);
+      }
+    });
+  });
+
+  describe('delete', () => {
+    test('refuses an id that resolves outside the gates root and removes nothing', async () => {
+      const outside = join(root, 'precious');
+      mkdirSync(outside);
+      writeFileSync(join(outside, 'keep.txt'), 'must survive');
+
+      const result = await handler.handleAction(
+        { action: 'delete', id: '../precious', confirm: true },
+        {}
+      );
+
+      expect(result.isError).toBe(true);
+      expect(text(result)).toContain('Refusing to write outside the resource root');
+      expect(readFileSync(join(outside, 'keep.txt'), 'utf8')).toBe('must survive');
+      expect(registry.unregister).not.toHaveBeenCalled();
+    });
+
+    test('a contained id is deleted in the same setup (control for the traversal refusal)', async () => {
+      mkdirSync(join(gatesDir, 'contained-gate'));
+
+      const result = await handler.handleAction(
+        { action: 'delete', id: 'contained-gate', confirm: true },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      expect(existsSync(join(gatesDir, 'contained-gate'))).toBe(false);
+    });
+
+    describe('a gate served only from the bundled tree', () => {
+      beforeEach(() => {
+        bundledDir = join(root, 'bundled-gates');
+        mkdirSync(join(bundledDir, 'shipped-gate'), { recursive: true });
+        handler = buildHandler();
+      });
+
+      test('is refused as read-only, naming the bundled path and the update route', async () => {
+        const result = await handler.handleAction(
+          { action: 'delete', id: 'shipped-gate', confirm: true },
+          {}
+        );
+
+        expect(result.isError).toBe(true);
+        expect(text(result)).toContain("'shipped-gate' ships with the server");
+        expect(text(result)).toContain(join(bundledDir!, 'shipped-gate'));
+        expect(text(result)).toContain(`Your resources root is ${gatesDir}`);
+        expect(existsSync(join(bundledDir!, 'shipped-gate'))).toBe(true);
+        expect(registry.unregister).not.toHaveBeenCalled();
+      });
+
+      test('an id absent from the bundled tree too still reads as "not found"', async () => {
+        const result = await handler.handleAction(
+          { action: 'delete', id: 'nowhere-gate', confirm: true },
+          {}
+        );
+
+        expect(text(result)).toBe("❌ Gate not found: 'nowhere-gate'. Nothing was removed.");
+      });
+
+      test('a bundled root that IS the gates root is not reported as read-only', async () => {
+        bundledDir = gatesDir;
+        handler = buildHandler();
+
+        const result = await handler.handleAction(
+          { action: 'delete', id: 'shipped-gate', confirm: true },
+          {}
+        );
+
+        expect(text(result)).toBe("❌ Gate not found: 'shipped-gate'. Nothing was removed.");
+      });
+    });
+
+    test('a preview names the directory and the purge but removes nothing', async () => {
+      const gateDir = join(gatesDir, 'previewed-gate');
+      mkdirSync(gateDir);
+      versioning = { enabled: true, autoVersion: false, maxVersions: 50 };
+      handler = buildHandler();
+      const db = versionDb({ rows: 3 });
+      const run = jest.spyOn(db, 'run');
+      handler.setDatabasePort(db);
+
+      const result = await handler.handleAction(
+        { action: 'preview', preview_action: 'delete', id: 'previewed-gate' },
+        {}
+      );
+
+      expect(result.isError).toBe(false);
+      expect(text(result)).toContain("**Preview** — deletion of gate 'previewed-gate'");
+      expect(text(result)).toContain(`Would remove the directory: ${gateDir}`);
+      expect(text(result)).toContain('Nothing was removed');
+      expect(existsSync(gateDir)).toBe(true);
+      expect(run).not.toHaveBeenCalled();
+      expect(registry.unregister).not.toHaveBeenCalled();
+      expect(onRefresh).not.toHaveBeenCalled();
+    });
+
+    describe('version-history purge', () => {
+      beforeEach(() => {
+        mkdirSync(join(gatesDir, 'history-gate'));
+        versioning = { enabled: true, autoVersion: false, maxVersions: 50 };
+        handler = buildHandler();
+      });
+
+      test('reports the number of rows purged', async () => {
+        handler.setDatabasePort(versionDb({ rows: 4 }));
+
+        const result = await handler.handleAction(
+          { action: 'delete', id: 'history-gate', confirm: true },
+          {}
+        );
+
+        expect(result.isError).toBe(false);
+        expect(text(result)).toContain('Version history purged: 4 row(s)');
+        expect(registry.unregister).toHaveBeenCalledWith('history-gate');
+      });
+
+      test('a purge that throws is an error saying the files are gone and the rows remain', async () => {
+        handler.setDatabasePort(versionDb({ failure: 'disk I/O error' }));
+
+        const result = await handler.handleAction(
+          { action: 'delete', id: 'history-gate', confirm: true },
+          {}
+        );
+
+        expect(result.isError).toBe(true);
+        expect(text(result)).toContain("gate 'history-gate' was deleted");
+        expect(text(result)).toContain('could NOT be purged');
+        expect(text(result)).toContain('disk I/O error');
+        // The directory removal already happened; the registry and refresh are not told it did.
+        expect(existsSync(join(gatesDir, 'history-gate'))).toBe(false);
+        expect(registry.unregister).not.toHaveBeenCalled();
+        expect(onRefresh).not.toHaveBeenCalled();
+      });
+    });
+
+    (runsAsRoot ? test.skip : test)(
+      'a directory the filesystem refuses to remove is reported and its history is left alone',
+      async () => {
+        const gateDir = join(gatesDir, 'locked-gate');
+        const inner = join(gateDir, 'inner');
+        mkdirSync(inner, { recursive: true });
+        writeFileSync(join(inner, 'gate.yaml'), 'id: locked-gate\n');
+        versioning = { enabled: true, autoVersion: false, maxVersions: 50 };
+        handler = buildHandler();
+        const db = versionDb({ rows: 2 });
+        const run = jest.spyOn(db, 'run');
+        handler.setDatabasePort(db);
+        chmodSync(inner, 0o555);
+        try {
+          const result = await handler.handleAction(
+            { action: 'delete', id: 'locked-gate', confirm: true },
+            {}
+          );
+
+          expect(result.isError).toBe(true);
+          expect(text(result)).toMatch(/^❌ Failed to delete gate directory: /);
+          expect(existsSync(join(inner, 'gate.yaml'))).toBe(true);
+          // Rows are purged only after the removal succeeded.
+          expect(run).not.toHaveBeenCalled();
+          expect(registry.unregister).not.toHaveBeenCalled();
+        } finally {
+          chmodSync(inner, 0o755);
+        }
+      }
+    );
+  });
+
+  describe('reload', () => {
+    test('names every refused file and its reason when the loader read and refused it', async () => {
+      registry.reload.mockResolvedValue(false);
+      const first = refuse('stuck-gate', 'schema: severity must be one of low|medium|high');
+      quarantine
+        .sinkFor('gate', join(root, 'overlay'))
+        .record({ id: 'stuck-gate', path: '/overlay/stuck-gate/gate.yaml', error: 'bad yaml' });
+
+      const result = await handler.handleAction({ action: 'reload', id: 'Stuck-Gate' }, {});
+
+      expect(result.isError).toBe(true);
+      expect(text(result)).toContain(
+        "Failed to reload gate 'Stuck-Gate' — the file was read and refused:"
+      );
+      expect(text(result)).toContain(
+        `  - ${first}: schema: severity must be one of low|medium|high`
+      );
+      expect(text(result)).toContain('  - /overlay/stuck-gate/gate.yaml: bad yaml');
+    });
+
+    test('names the expected gate.yaml path when nothing loaded and nothing was refused', async () => {
+      registry.reload.mockResolvedValue(false);
+
+      const result = await handler.handleAction({ action: 'reload', id: 'absent-gate' }, {});
+
+      expect(result.isError).toBe(true);
+      expect(text(result)).toContain('no gate definition could be loaded from disk');
+      expect(text(result)).toContain(join(gatesDir, 'absent-gate', 'gate.yaml'));
+      expect(text(result)).not.toContain('read and refused');
+    });
+
+    test('appends the reason only when one was given', async () => {
+      const withReason = await handler.handleAction(
+        { action: 'reload', id: 'ok-gate', reason: 'edited by hand' },
+        {}
+      );
+      const without = await handler.handleAction({ action: 'reload', id: 'ok-gate' }, {});
+
+      expect(withReason.isError).toBe(false);
+      expect(text(withReason)).toBe(
+        "🔄 Gate 'ok-gate' reloaded successfully (reason: edited by hand)"
+      );
+      expect(text(without)).toBe("🔄 Gate 'ok-gate' reloaded successfully");
     });
   });
 });

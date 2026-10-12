@@ -344,13 +344,16 @@ submission is fixed in one pass rather than one error per round trip.
 | `mutually-exclusive-source` | The call carried a workflow **and** a `command` or `chain_id`.                                                                                                                                                                                   |
 | `gate-target-passed`        | A resume's `gates` entry targets a node the run has already passed, or the node the call answers. Not refused when the call re-renders that node: a FAIL, or no verdict while its gate review is open, joins the gate to that review.            |
 | `gate-id-canonical`         | A `gates` entry carrying criteria or guidance, or a named inline gate, takes a canonical gate's id.                                                                                                                                              |
+| `gate-criteria-invalid`     | An inline gate criterion (`inlineGateCriteria`, `:: "…"`) is empty or blank, or a named inline gate (`:: id:"…"`) has no criterion. The detail quotes the criterion and the accepted forms.                                                      |
 
-Every reason but the last three is produced by validating one workflow in isolation.
+Every reason but the last four is produced by validating one workflow in isolation.
 `mutually-exclusive-source` is about the shape of the whole request, so it is raised by the parsing
 stage rather than the validator; `gate-target-passed` needs the running run's position, so the gate
 registrar raises it on a resume; `gate-id-canonical` needs the server's canonical gates, so the
-stage that would register the gate raises it before anything registers. All three reach you through
-the same addressed-rejection channel.
+stage that would register the gate raises it before anything registers; `gate-criteria-invalid`
+covers command-string gates and chain prompt steps as well as workflow nodes, so the inline gate
+stage raises it, before anything registers, rather than a gate the client asked for being left out
+of the run. All four reach you through the same addressed-rejection channel.
 
 Id problems short-circuit the rest. With duplicate ids, "the node named X" is not a well-formed
 address, so every later rejection would be ambiguous about which node it meant.

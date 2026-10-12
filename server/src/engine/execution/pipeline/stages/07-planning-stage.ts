@@ -25,6 +25,7 @@ type FrameworkEnabledProvider = (scope: StateStoreOptions | undefined) => boolea
  */
 export class ExecutionPlanningStage extends BasePipelineStage {
   readonly name = 'ExecutionPlanning';
+  readonly provides = ['executionPlan'] as const;
 
   constructor(
     private readonly executionPlanner: ExecutionPlanner,

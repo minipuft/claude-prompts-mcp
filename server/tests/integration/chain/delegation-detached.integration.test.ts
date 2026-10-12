@@ -379,6 +379,7 @@ const buildPipeline = (options: {
     if (name === 'ExecutionPlanning') {
       return {
         name,
+        provides: ['executionPlan'],
         execute: async (context: ExecutionContext) => {
           context.executionPlan = {
             strategy: 'chain',

@@ -13,7 +13,8 @@ import type { ExecutionContext } from '../../context/index.js';
  *
  * Dependencies: context.parsedCommand
  * Output: context.parsedCommand.inlineGateIds, registered temporary gates
- * Can Early Exit: Yes (a named inline gate carrying a canonical gate's id, R100)
+ * Can Early Exit: Yes (a named inline gate carrying a canonical gate's id, R100; an inline gate
+ *   whose criteria cannot register, R11.8)
  */
 export class InlineGateExtractionStage extends BasePipelineStage {
   readonly name = 'InlineGateExtraction';
@@ -45,19 +46,23 @@ export class InlineGateExtractionStage extends BasePipelineStage {
       return;
     }
 
-    // R100: refused before any gate registers, in the rejection shape every refusing stage shares.
-    const collisions = this.inlineGateProcessor.canonicalIdCollisions(parsedCommand);
-    if (collisions.length > 0) {
-      context.diagnostics.warn(this.name, 'Named inline gate refused', {
-        count: collisions.length,
-      });
+    // Refused before any gate registers, in the rejection shape every refusing stage shares: a
+    // criterion that cannot register (R11.8) and a named gate under a canonical id (R100). All at
+    // once, so the client fixes its command in one pass.
+    const refusals = [
+      ...this.inlineGateProcessor
+        .invalidCriteria(parsedCommand)
+        .map((refusal) => ({ reason: 'gate-criteria-invalid' as const, ...refusal })),
+      ...this.inlineGateProcessor
+        .canonicalIdCollisions(parsedCommand)
+        .map((refusal) => ({ reason: 'gate-id-canonical' as const, ...refusal })),
+    ];
+    if (refusals.length > 0) {
+      context.diagnostics.warn(this.name, 'Inline gate refused', { count: refusals.length });
       context.setResponse(
-        buildWorkflowRejectionResponse(
-          collisions.map((refusal) => ({ reason: 'gate-id-canonical' as const, ...refusal })),
-          context.state.session.resumeChainId
-        )
+        buildWorkflowRejectionResponse(refusals, context.state.session.resumeChainId)
       );
-      this.logExit({ refusedNamedGates: collisions.length });
+      this.logExit({ refusedInlineGates: refusals.length });
       return;
     }
 

@@ -283,7 +283,7 @@ describe('TemporaryGateRegistrar.registerInlineGateDefinitions', () => {
       expect(logger.warn).toHaveBeenCalled();
     });
 
-    it('keeps sibling definitions when one fails to register', () => {
+    it('a definition that fails to register fails the call instead of running without it (R11.8)', () => {
       const registry = createRegistry();
       let call = 0;
       registry.createTemporaryGate = jest.fn((definition: Record<string, unknown>) => {
@@ -294,14 +294,17 @@ describe('TemporaryGateRegistrar.registerInlineGateDefinitions', () => {
         return String(definition['id'] ?? 'generated');
       }) as never;
       const logger = createLogger();
-
-      const ids = register(buildRegistrar(registry, logger), createContext() as never, [
+      const prompts = [
         promptWith([validDefinition({ id: 'boom' }), validDefinition({ id: 'fine' })]),
-      ]);
+      ];
 
-      // One registration failure must not take the prompt's other gates out of service.
-      expect(ids).toEqual(['fine']);
-      expect(logger.warn).toHaveBeenCalled();
+      expect(() =>
+        register(buildRegistrar(registry, logger), createContext() as never, prompts)
+      ).toThrow('registry rejected this gate');
+      // Control: once the registry accepts, both definitions register.
+      expect(register(buildRegistrar(registry, logger), createContext() as never, prompts)).toEqual(
+        ['boom', 'fine']
+      );
     });
 
     it('warns and returns nothing when no registry is available', () => {
