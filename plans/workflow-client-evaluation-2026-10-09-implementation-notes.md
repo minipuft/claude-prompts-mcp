@@ -81,3 +81,18 @@ Architecture assessment: use the product interaction contract as the criterion f
 Tradeoff: aligning hooks to an authoritative contract preserves cross-client state/audit consistency but requires projection/version compatibility and native tests. Adapting source to a hook can be appropriate when the hook reveals a genuine product or host constraint; doing so solely to retain current denials would sacrifice the declared capture/report/retry semantics. Independent implementations without a shared contract retain drift risk.
 
 Tier 2 row 2.1 records the owner's requested consolidated diagnosis. Dispatch once the source/client evidence pass is sealed, before final initiative acceptance. The diagnostician must separate proven causes from hypotheses, group recurring symptoms by boundary, propose owners/falsifiers/regressions, and retain unavailable client evidence. No new individual reviewer chain, fresh model benchmark or source repair is authorized by this notes update.
+
+## 2026-10-12 — Tier 0 review remediation opened
+
+- Review of #474–#476 (2026-10-11) found no failing gate and no added debt; it found two silent-skip wiring guards, a duplicated bypass/acceptance predicate, a mislabelled calibration error, a missing #476 CHANGELOG entry, four untested refusals (P8, C2, H1, H2), one unreachable branch (P5), a persistence stub, drifted test headers, inconsistent attempt numbering and response bloat. Evidence moved from `/tmp` to `~/.local/share/claude-prompts-mcp/evaluations/semantic-review-20261011/`.
+- The governing plan was untracked in two checkouts. The worktree copy (newer, carrying R9.x and the 2026-10-10 stop) was committed verbatim on `fix/semantic-gate-review-remediation` as `ede8be78`, then removed from `claude-prompts-mcp-workflow-evaluation`. The older drafts in the primary checkout are superseded and left in place for the owner to delete.
+- R10.1: audit the older code that dilutes coverage first (0.4, opus high), then cut cleanup rows from it.
+- R10.2: comment and test-header cleanup follows a new reusable skill (0.2, sonnet high, `~/.claude`), applied by 0.7 (sonnet high).
+- R10.3: one opus-high worker owns all standards findings plus the persistence stub (0.1). This overrides the ≤3-file row bound by owner direction.
+- R10.4: why repetition is not prevented by code or interface is a read-only audit (0.5), answered before any fix.
+- R10.5: whether the Zod schema surface is still sound is part of 0.5.
+- R10.6: attempt numbering is consolidated to one truthful scheme (0.6); the same row fixes the other render mislabels the drive found.
+- R10.7: the evaluations checks join the required Test Suite job; the optional path-filtered workflow is deleted as superseded (0.3).
+- R10.8: the fix slice is approved; response size goes into this plan (rows cut after 0.5).
+- R10.9: Tier 0 cap is 5 live workers. Editing rows share the slice worktree, commit nothing, and touch disjoint files; read-only audits run in `claude-prompts-mcp-bench-mutation` (clean `origin/main`). 0.2 edits `~/.claude` only.
+- Tier 1's 2026-10-10 owner stop stays in force; Tier 0 touches no hook and no 1.x scope.
