@@ -88,7 +88,7 @@ export class ScriptAutoExecuteStage extends BasePipelineStage {
   constructor(
     private readonly resourceManagerHandler: AutoExecuteHandler | null,
     logger: Logger,
-    private readonly describeParamRefusal: AutoExecuteParamRefusal | null = null
+    private readonly describeParamRefusal: AutoExecuteParamRefusal
   ) {
     super(logger);
   }
@@ -168,7 +168,7 @@ export class ScriptAutoExecuteStage extends BasePipelineStage {
    * script so an operator knows which file to open.
    */
   private assertParamsAreDeclared(toolId: string, params: Record<string, unknown>): void {
-    const refusal = this.describeParamRefusal?.(params) ?? null;
+    const refusal = this.describeParamRefusal(params);
     if (refusal === null) return;
 
     throw new Error(
@@ -213,7 +213,7 @@ export class ScriptAutoExecuteStage extends BasePipelineStage {
 export function createScriptAutoExecuteStage(
   resourceManagerHandler: AutoExecuteHandler | null,
   logger: Logger,
-  describeParamRefusal: AutoExecuteParamRefusal | null = null
+  describeParamRefusal: AutoExecuteParamRefusal
 ): ScriptAutoExecuteStage {
   return new ScriptAutoExecuteStage(resourceManagerHandler, logger, describeParamRefusal);
 }

@@ -328,7 +328,7 @@ const buildPipeline = (options: {
     () => undefined,
     () => undefined,
     gateLoader,
-    new GateMetricsRecorder(undefined),
+    new GateMetricsRecorder(() => undefined),
     logger,
     createRunStepViewProvider(sessionStore)
   );
@@ -372,9 +372,16 @@ const buildPipeline = (options: {
       recordStore
     ),
     PhaseGuardVerification: phaseGuardVerificationStage,
-    GateReview: new GateReviewStage(chainExecutor, sessionStore, gateLoader, logger, undefined, {
-      executionRecordStore: recordStore,
-    }),
+    GateReview: new GateReviewStage(
+      chainExecutor,
+      sessionStore,
+      gateLoader,
+      logger,
+      () => undefined,
+      {
+        executionRecordStore: recordStore,
+      }
+    ),
     ResponseFormatting: new ResponseFormattingStage(
       new ResponseFormatter(logger),
       new ResponseAssembler(),

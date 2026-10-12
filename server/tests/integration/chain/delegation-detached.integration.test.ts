@@ -316,7 +316,7 @@ const buildPipeline = (options: {
       sessionStore,
       provider ?? null,
       logger,
-      undefined,
+      () => undefined,
       {
         executionRecordStore: recordStore,
       }

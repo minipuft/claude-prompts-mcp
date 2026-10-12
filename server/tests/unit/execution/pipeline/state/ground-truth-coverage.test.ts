@@ -164,7 +164,7 @@ function stageFixture(
     store as unknown as ChainSessionService,
     provider,
     logger,
-    undefined,
+    () => undefined,
     { shellVerifyExecutor: shell }
   );
   const context = new ExecutionContext(

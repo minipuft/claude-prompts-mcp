@@ -304,14 +304,14 @@ const buildPipeline = (options: {
         () => undefined,
         () => undefined as never,
         gateLoader,
-        new GateMetricsRecorder(undefined),
+        new GateMetricsRecorder(() => undefined),
         logger,
         runStepViewProvider
       ),
       new TemporaryGateRegistrar(gateRegistry, undefined, logger, runStepViewProvider),
       () => ({ enabled: true, definitionsDirectory: 'gates', enableFrameworkGates: true }),
       logger,
-      undefined,
+      () => true,
       async () => undefined
     ),
     SessionManagement: new SessionManagementStage(sessionStore, logger),
@@ -330,9 +330,16 @@ const buildPipeline = (options: {
       undefined,
       recordStore
     ),
-    GateReview: new GateReviewStage(chainExecutor, sessionStore, gateLoader, logger, undefined, {
-      executionRecordStore: recordStore,
-    }),
+    GateReview: new GateReviewStage(
+      chainExecutor,
+      sessionStore,
+      gateLoader,
+      logger,
+      () => undefined,
+      {
+        executionRecordStore: recordStore,
+      }
+    ),
     ResponseFormatting: new ResponseFormattingStage(
       new ResponseFormatter(logger),
       new ResponseAssembler(),

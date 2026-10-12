@@ -96,14 +96,14 @@ function buildStage(view: RunStepView | undefined) {
       () => undefined,
       () => undefined as never,
       createGateLoader() as never,
-      new GateMetricsRecorder(undefined),
+      new GateMetricsRecorder(() => undefined),
       logger as never,
       provider as never
     ),
     new TemporaryGateRegistrar(registry as never, undefined, logger as never, provider as never),
     () => ({ enabled: true, definitionsDirectory: 'gates', enableFrameworkGates: false }),
     logger as never,
-    undefined,
+    () => true,
     async () => undefined
   );
 }

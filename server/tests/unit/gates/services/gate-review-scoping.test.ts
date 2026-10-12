@@ -172,14 +172,14 @@ const reviewGatesFor = async (options: {
       () => undefined,
       () => undefined as never,
       undefined,
-      new GateMetricsRecorder(undefined),
+      new GateMetricsRecorder(() => undefined),
       logger as never,
       provider as never
     ),
     new TemporaryGateRegistrar(registry as never, undefined, logger as never, provider as never),
     () => ({ enabled: true, definitionsDirectory: 'gates', enableFrameworkGates: true }),
     logger as never,
-    undefined,
+    () => true,
     async () => undefined
   );
 
@@ -561,7 +561,7 @@ describe('gate review scoping (P4-F3)', () => {
         () => undefined,
         () => undefined as never,
         undefined,
-        new GateMetricsRecorder(undefined),
+        new GateMetricsRecorder(() => undefined),
         createLogger() as never,
         undefined
       );

@@ -173,14 +173,14 @@ const selectStepsFor = async (
       () => undefined,
       () => undefined as never,
       undefined,
-      new GateMetricsRecorder(undefined),
+      new GateMetricsRecorder(() => undefined),
       logger as never,
       provider
     ),
     new TemporaryGateRegistrar(registry as never, undefined, logger as never, provider),
     () => ({ enabled: true, definitionsDirectory: 'gates', enableFrameworkGates: true }),
     logger as never,
-    undefined,
+    () => true,
     async () => undefined
   );
 

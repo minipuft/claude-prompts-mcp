@@ -807,7 +807,113 @@ const noBindinglessEmptyCatchRule = {
   },
 };
 
+const isNullishKeyword = (typeNode) =>
+  typeNode?.type === 'TSUndefinedKeyword' || typeNode?.type === 'TSNullKeyword';
+
+/** `?`, or a type annotation written as a union with `undefined` or `null`. */
+const isDeclaredAbsentable = (binding) => {
+  if (binding.optional === true) return true;
+  const annotation = binding.typeAnnotation?.typeAnnotation;
+  return annotation?.type === 'TSUnionType' && annotation.types.some(isNullishKeyword);
+};
+
+const memberName = (key) => (key.type === 'Identifier' ? key.name : null);
+
+/**
+ * Names of the class's members that can be absent by declaration: optional or nullable class
+ * properties, and optional or nullable constructor parameter properties (a defaulted one included,
+ * `private readonly x: X | null = null`).
+ */
+const collectAbsentableMembers = (classBody) => {
+  const names = new Set();
+  for (const element of classBody.body) {
+    if (element.type === 'PropertyDefinition' && !element.computed) {
+      const name = memberName(element.key);
+      if (name !== null && isDeclaredAbsentable(element)) names.add(name);
+    }
+    if (element.type === 'MethodDefinition' && element.kind === 'constructor') {
+      for (const param of element.value.params) {
+        if (param.type !== 'TSParameterProperty') continue;
+        const binding =
+          param.parameter.type === 'AssignmentPattern' ? param.parameter.left : param.parameter;
+        if (binding.type === 'Identifier' && isDeclaredAbsentable(binding)) {
+          names.add(binding.name);
+        }
+      }
+    }
+  }
+  return names;
+};
+
+/**
+ * Forbids `this.<member>?.()` where the class declares `<member>` as possibly absent.
+ *
+ * The shape is an existence guard around a wiring call. When every production construction site
+ * passes the collaborator, the absent branch is unreachable in production and the `?.` only ever
+ * fires in a test or a mis-wired constructor — where it turns a missing collaborator into a silent
+ * skip that reads as "nothing to do". Measured 2026-10-12 (row 0.8): 15 sites across 11 classes,
+ * and no class had a production construction site that omitted the collaborator. The motivating
+ * instance was `this.gateSystemEnabled?.(scope) === false` in stage 11, where an unwired switch
+ * read as "gates on" rather than as a construction error.
+ *
+ * Narrow on purpose. It reads declarations in the SAME class only, by syntax: a member typed
+ * through an alias that itself includes `undefined` (`type P = (() => X) | undefined`) is not
+ * seen, and neither is a collaborator object dereferenced as `this.x?.method()` — that shape
+ * also covers legitimately late-bound fields and plain data, and cannot be told apart without
+ * types. A collaborator that is genuinely absent in production keeps its `?.` under an
+ * `eslint-disable-next-line` naming the production state in which it is absent.
+ */
+const noOptionalCollaboratorCallRule = {
+  meta: {
+    type: 'problem',
+    docs: {
+      description:
+        'Forbids calling a possibly-absent constructor collaborator through `?.()`, which turns a wiring omission into a silent skip',
+    },
+    schema: [],
+    messages: {
+      optionalCollaboratorCall:
+        '`this.{{name}}?.()` calls a collaborator this class declares as possibly absent, so an unwired constructor skips the call silently. If every production construction site passes it, make it required and call it directly. If it is genuinely absent in some production state, disable this line and name that state in the reason.',
+    },
+  },
+  create(context) {
+    const classStack = [];
+    const enterClass = (node) => classStack.push({ body: node.body, names: null });
+    const exitClass = () => classStack.pop();
+    return {
+      ClassDeclaration: enterClass,
+      'ClassDeclaration:exit': exitClass,
+      ClassExpression: enterClass,
+      'ClassExpression:exit': exitClass,
+      CallExpression(node) {
+        if (node.optional !== true) return;
+        const callee = node.callee;
+        if (
+          callee.type !== 'MemberExpression' ||
+          callee.optional === true ||
+          callee.computed ||
+          callee.object.type !== 'ThisExpression' ||
+          callee.property.type !== 'Identifier'
+        ) {
+          return;
+        }
+        const current = classStack[classStack.length - 1];
+        if (current === undefined) return;
+        current.names ??= collectAbsentableMembers(current.body);
+        if (current.names.has(callee.property.name)) {
+          context.report({
+            node,
+            messageId: 'optionalCollaboratorCall',
+            data: { name: callee.property.name },
+          });
+        }
+      },
+    };
+  },
+};
+
 export const rules = {
+  'no-optional-collaborator-call': noOptionalCollaboratorCallRule,
   'require-exception-audit': requireExceptionAuditRule,
   'no-bindingless-empty-catch': noBindinglessEmptyCatchRule,
   'no-context-deep-imports': noContextDeepImportsRule,

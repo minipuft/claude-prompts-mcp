@@ -507,6 +507,20 @@ export default [
     },
   },
 
+  // Row 0.8 — an existence guard around a wiring call. `this.x?.()` on a collaborator the class
+  // declares as possibly absent reads as "nothing to do" when the constructor was mis-wired.
+  // Scoped to `src`: the shape needs constructor parameter properties and class fields, and the
+  // composition roots that wire them live there.
+  {
+    files: ['src/**/*.ts'],
+    plugins: {
+      claude: claudePlugin,
+    },
+    rules: {
+      'claude/no-optional-collaborator-call': 'error',
+    },
+  },
+
   // Ignore patterns
   {
     ignores: [

@@ -30,9 +30,9 @@ export class GateEnhancementStage extends BasePipelineStage {
   constructor(
     private readonly enhancementService: GateEnhancementService,
     private readonly registrar: TemporaryGateRegistrar,
-    private readonly gatesConfigProvider: GateSystemSettingsProvider | undefined,
+    private readonly gatesConfigProvider: GateSystemSettingsProvider,
     logger: Logger,
-    private readonly gateSystemEnabled: GateSystemSwitch | undefined,
+    private readonly gateSystemEnabled: GateSystemSwitch,
     private readonly remapInlineDefinitions: (
       context: ExecutionContext,
       registered: ReadonlyMap<string, string>
@@ -49,7 +49,7 @@ export class GateEnhancementStage extends BasePipelineStage {
       return;
     }
 
-    const gatesConfig = this.gatesConfigProvider?.();
+    const gatesConfig = this.gatesConfigProvider();
     if (gatesConfig?.enabled === false) {
       this.logExit({ skipped: 'Gate system disabled by configuration' });
       return;
@@ -59,7 +59,7 @@ export class GateEnhancementStage extends BasePipelineStage {
     // started with the switch off select its gates anyway: stage 13 opened a review on its first
     // step and asked for a `gate_verdict` the tool refuses while the switch is off, so no answer
     // could ever move the run (P6.292).
-    if (this.gateSystemEnabled?.(context.getScopeOptions()) === false) {
+    if (!this.gateSystemEnabled(context.getScopeOptions())) {
       this.logExit({ skipped: 'Gate system disabled at runtime' });
       return;
     }

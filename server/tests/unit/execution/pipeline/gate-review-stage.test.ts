@@ -46,12 +46,18 @@ describe('GateReviewStage', () => {
       getSession: jest.fn().mockReturnValue(runReviewing(review)),
     } as any;
 
-    const stage = new GateReviewStage(chainOperatorExecutor, chainSessionStore, null, {
-      debug: jest.fn(),
-      info: jest.fn(),
-      warn: jest.fn(),
-      error: jest.fn(),
-    } as any);
+    const stage = new GateReviewStage(
+      chainOperatorExecutor,
+      chainSessionStore,
+      null,
+      {
+        debug: jest.fn(),
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+      } as any,
+      () => undefined
+    );
 
     const context = new ExecutionContext({ command: '>>chain' });
     context.parsedCommand = {
@@ -90,7 +96,8 @@ describe('GateReviewStage', () => {
         getChainContext: jest.fn(),
       } as any,
       null,
-      { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } as any
+      { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } as any,
+      () => undefined
     );
 
     const context = new ExecutionContext({ command: 'noop' });
@@ -173,7 +180,7 @@ describe('GateReviewStage — recording check evidence on the pending review', (
       store as any,
       { loadGates: jest.fn().mockResolvedValue([failingGate, reminderGate] as never) } as any,
       logger(),
-      undefined,
+      () => undefined,
       {
         shellVerifyExecutor: {
           execute: jest.fn().mockResolvedValue({
@@ -220,7 +227,7 @@ describe('GateReviewStage — recording check evidence on the pending review', (
       store as any,
       { loadGates: jest.fn().mockResolvedValue([failingGate] as never) } as any,
       logger(),
-      undefined,
+      () => undefined,
       {
         shellVerifyExecutor: {
           execute: jest.fn().mockResolvedValue({
@@ -347,7 +354,13 @@ describe('GateReviewStage — renders and clears the review of the node it names
 
   test('two open reviews: it renders the review of the node the run stands on', async () => {
     const renderStep = jest.fn().mockResolvedValue(createExecutionResult() as never);
-    const stage = new GateReviewStage({ renderStep } as any, store, null, logger());
+    const stage = new GateReviewStage(
+      { renderStep } as any,
+      store,
+      null,
+      logger(),
+      () => undefined
+    );
 
     const context = contextOnStep2();
     await stage.execute(context);
@@ -363,7 +376,7 @@ describe('GateReviewStage — renders and clears the review of the node it names
       store,
       { loadGates: jest.fn().mockResolvedValue([coveredGate] as never) } as any,
       logger(),
-      undefined,
+      () => undefined,
       {
         shellVerifyExecutor: {
           execute: jest.fn().mockResolvedValue({

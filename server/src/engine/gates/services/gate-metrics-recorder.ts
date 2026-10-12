@@ -11,14 +11,14 @@ import type { ExecutionContext } from '../../execution/context/index.js';
  * `gate_verdict` and are owned by `GateVerdictProcessor`.
  */
 export class GateMetricsRecorder {
-  constructor(private readonly metricsProvider: (() => MetricsCollector | undefined) | undefined) {}
+  constructor(private readonly metricsProvider: () => MetricsCollector | undefined) {}
 
   recordGateUsageMetrics(
     context: ExecutionContext,
     gateIds: string[],
     instructionLength?: number
   ): void {
-    const metrics = this.metricsProvider?.();
+    const metrics = this.metricsProvider();
     if (metrics === undefined || gateIds.length === 0) {
       return;
     }

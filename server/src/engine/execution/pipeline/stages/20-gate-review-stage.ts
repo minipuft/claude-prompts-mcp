@@ -102,7 +102,7 @@ export class GateReviewStage extends BasePipelineStage {
     private readonly chainSessionStore: ChainSessionService,
     private readonly gateDefinitionProvider: GateDefinitionProvider | null,
     logger: Logger,
-    private readonly gatesConfigProvider?: GatesConfigProvider,
+    private readonly gatesConfigProvider: GatesConfigProvider,
     /**
      * Optional collaborators, grouped rather than appended. The stage carries the four it
      * cannot work without plus the config provider; every further positional argument makes
@@ -485,7 +485,7 @@ export class GateReviewStage extends BasePipelineStage {
     const frozen = projectFrozenReview(review);
     if (frozen.definitions !== undefined) return describeFrozenJudgeReview(frozen);
     if (this.gateDefinitionProvider === null || review.gateIds.length === 0) return undefined;
-    const gatesConfig = this.gatesConfigProvider?.();
+    const gatesConfig = this.gatesConfigProvider();
     const { judgeGates } = await resolveJudgeGates(
       review.gateIds,
       this.gateDefinitionProvider,
