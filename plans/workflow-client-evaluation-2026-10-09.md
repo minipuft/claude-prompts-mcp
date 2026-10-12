@@ -1,0 +1,163 @@
+---
+title: Client workflow contracts and repeatable evaluation
+date: 2026-10-09
+type: implementation-plan
+status: active
+initiative_branch: feat/workflow-client-evaluation
+worker_cap: 2
+branch_mode: shared-tree
+planner_session: root-workflow-client-evaluation
+publish: "push+merge (2026-10-09, continuation of owner R6 reviewed-slice delivery; owner directs execution through this follow-up plan)"
+tracking: none
+tracking_reason: local-only
+tags: [hooks, workflows, evaluation, clients]
+---
+
+# Client workflow contracts and repeatable evaluation
+
+## Now (2026-10-10)
+
+Goal: align client/plugin/hook interactions with server-owned workflow progression, then evaluate target outcomes with independent evidence.
+Slice: STOPPED at unaccepted row 1.1 inventory; no source edits or native/model trials performed.
+Next decision: freeze a requirement-led authoritative interaction contract after inventory resumes; hooks consume its permitted actions.
+Constraint: implementation remains stopped; maintain source/client/harness problem register and durable evidence; no native trials.
+Stop rule: expected negative controls establish their named behavior; unexpected validation failures or contract discrepancies halt dependent work and are reported to the owner.
+Boundary: original semantic implementation is delivered; new client integration and shared-runner work remains open.
+
+## Intent
+
+**Work type:** bounded bug fixes followed by an opt-in evaluation feature.
+**Confidence:** high on direct-MCP behavior and checkout-hook findings; medium on native client adapters and final wire projections.
+**Scope:** existing hook enforcement/reminders/recovery, server interaction projections where required, existing conformance tests, optional evaluations package, related documentation.
+**Problem:** direct server correctness does not establish that installed clients receive, submit and recover the same contract. Desired behavior connects the intended target change, current workflow state, valid client actions, actual verification and authoritative server transitions.
+
+Owner authorized execution through this follow-up plan on 2026-10-09. Existing R6 reviewed-slice GitHub delivery carries into this continuation. The completed semantic implementation stays closed. Native client trials use isolated candidate installations, existing account access, bounded count/time and explicit unknown cost where collection is incomplete. Paid comparison batches, releases and global policy promotion remain outside scope.
+
+## Delivered foundation
+
+| State                                        | Receipt                                                                               | Reuse boundary                                                                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Merged semantic schema and acceptance kernel | PR #474; squash 2b8805aa3b2466b5e264ac900b6b67169d72a4a9                              | Typed criteria, bounded values, evidence and acceptance rules                                                    |
+| Merged private archive/calibration/replay    | PR #475; squash 9644ba2712f02fb8c1b1c176403ef28a1682eba1                              | Durable evidence and independent suite revisions                                                                 |
+| Merged runtime activation                    | PR #476; squash 6889b0154e44eebd38cb1f622089c9650769aa1b                              | Frozen definitions, captured targets, attempts, derived verdicts and history                                     |
+| Global recovery guidance applied locally     | Global repository commit a7273b5                                                      | Activate workers explicitly; retain accepted checks; avoid repeated review chains; respect runtime writer leases |
+| Recorded five-case MCP demo                  | Private local demo results/receipts/snapshots; 40 sealed files verified during review | STDIO execution evidence; prepared texts and external model judgments; no native plugin/hook proof               |
+
+The native calibration pilot remains scoped evidence: 11 calls, no observed structured-versus-prose quality advantage on the small suite, disposition INCONCLUSIVE and automatic promotion disabled. It is not the baseline for a new native-client comparison.
+
+## Settled decisions
+
+- **D1 — Authority:** prompt_engine owns workflow progression; resource_manager owns resources. Hooks project and reinforce valid server interactions. The optional runner observes and checks outcomes; it does not introduce another workflow state machine.
+- **D2 — Honest failure:** a valid structured FAIL must reach the server so its ledger, retry budget and next attempt can be updated. Hook guidance may explain the failure without suppressing that submission.
+- **D3 — State-aware guidance:** reminders distinguish capture, semantic report submission, retry exhaustion and other holds. Ordinary legacy gates retain supported legacy behavior; required semantic criteria need the structured report.
+- **D4 — Refusal:** a refused report is a distinct interaction outcome. Preserve current pending state unless authoritative evidence establishes resolution; recapture/review against current bindings where required.
+- **D5 — Target proof:** declare the goal, target workspace/artifact and intended change before the run. Code tasks need actual changed-file and verification evidence tied to the relevant revision. Step-output citations alone establish a narrower claim. Unsupported artifact capture must remain explicit.
+- **D6 — Independent checking:** a testing prompt can drive ordinary product use, while frozen expectations and final acceptance checks remain outside the workflow being tested. Keep private labels and holdouts out of actor/reviewer context.
+- **D7 — Reuse and isolation:** extend claims-conformance scenarios and evaluations contracts/archive. Keep evaluation execution opt-in and outside default MCP startup. Preserve shared DBs, dependency symlinks and installed configurations.
+- **D8 — Reporting and cadence:** separate product defects, harness defects, incomplete/inconclusive execution and verified success. Keep correctness, client behavior, target quality, latency and cost separate; unavailable billing is unknown. Run affected checks locally and required full tests once at PR CI.
+- **D9 — Authority recommendation (2026-10-10):** evaluate both implementations against the intended product contract. The server owns workflow admission, grade processing, retries and progression; hooks/adapters project that state and enforce host-specific policy. Align hooks to legitimate server actions in the observed conflicts. Improve source projections if clients cannot consume the contract reliably; do not weaken capture/binding or auditability to preserve an older hook assumption. Final fields and native behavior remain unverified.
+
+## Evidence and limits
+
+| ID  | Finding                                                                                                      | Evidence boundary / closure condition                                                                                                                                                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F1  | Old report mismatch was deliberately injected after FAIL renewed the attempt and revised output was captured | Raw demo calls 08-10 and before/after snapshots; expected protection, not accidental client drift                                                                                                                                                                                            |
+| F2  | Checkout gate-enforce.py denies the actual valid FAIL request                                                | Direct source-hook probe with demo call 08; PASS and contradictory-PASS controls allowed; installed native behavior still unmeasured                                                                                                                                                         |
+| F3  | Recovery reminders prescribe a plain PASS/FAIL string for pending gates                                      | hooks/lib/session_state.py format_chain_reminder source; no semantic review-type projection found in the examined hook consumers                                                                                                                                                             |
+| F4  | Post-tool fallback can clear tracked state when verdict response has no parsed markers                       | Source inspection of hooks/post-prompt-engine.py; prove actual error-event delivery and refusal preservation per selected client before claiming native reproduction                                                                                                                         |
+| F5  | Expected stale refusal stopped the initial demo driver                                                       | Recovery notes and raw refusal receipt; immediate after-state snapshot absent, so retry preservation remains unverified                                                                                                                                                                      |
+| F6  | Framework disable was in-memory and restart restored framework guidance                                      | Framework-disable response, later CAGEERF response and advisory header warnings; experimental configuration changed across runs                                                                                                                                                              |
+| F7  | Corrected PASS advanced to observation in a fresh run                                                        | Different session UUIDs and completed handoff ledger; no continuous repair loop or completed observation step demonstrated                                                                                                                                                                   |
+| F8  | The page serves recorded evidence                                                                            | Static HTTP GET logs; browser case selection does not invoke MCP or a reviewer                                                                                                                                                                                                               |
+| F9  | NEW: capture-first action is not admitted by the pending-gate hook predicate                                 | Server semanticReviewAction requires user_response alone; generated resolution set contains only cancel/gate_action/gate_verdict. A tracked pending gate therefore makes gate-enforce deny the required capture call. Source-confirmed conditional conflict, native reproduction not claimed |
+| F10 | NEW: native metadata preflight failed before config access                                                   | ModuleNotFoundError for tomllib under system Python; CLI 0.161.0 help/features were observed, actual installed hook events/config/runtime agreement remain unverified                                                                                                                        |
+
+## Existing systems audit
+
+| Existing owner / surface                                                                               | Intended reuse                                                                                 |
+| ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| hooks/gate-enforce.py and hooks/tests/test_gate_enforce_verdict.py                                     | Honest-report submission and pending-resolution enforcement controls                           |
+| hooks/post-prompt-engine.py and hooks/tests/test_post_prompt_engine_clearing.py                        | Pending-state preservation and explicit completion boundaries                                  |
+| hooks/lib/session_state.py, hooks/lib/db_reader.py, hooks/prompt-suggest.py, hooks/compact-recovery.py | State-aware reminder/recovery projections; enumerate all consumers before changing a field     |
+| server/src/engine/execution/formatting/response-assembler.ts and existing review-render decisions      | Authoritative client-facing state and next-action projection where required                    |
+| Generated resolution verbs / MCP contracts                                                             | Shared allowed-resolution vocabulary; never hand-copy another list                             |
+| server/tests/e2e/claims-conformance.test.ts and conformance corpus                                     | Real-server request/response scenarios and setup-error versus expected-refusal separation      |
+| evaluations/core/contracts.ts and archive.ts                                                           | Frozen identities, records, evidence references and replay                                     |
+| evaluations/gates/*                                                                                    | Existing semantic specialization; preserve private suites and canonical schemas                |
+| Existing benchmark-authoring backlog                                                                   | Reconcile implemented foundations and retain wider authoring/ingestion work outside this slice |
+
+The older benchmark backlog describes some archive/package foundations as proposed; those passages are historical planning evidence and must be reconciled before its E-rows are activated. Do not execute the whole backlog as this slice.
+
+## Consequence tracing before contract freeze
+
+No new field or schema is selected by this planning note. Row 1.1 must enumerate the existing state and resolve the minimum projection required:
+
+| Concern                                  | Writer                                                       | Readers / decisions                                                                  | View and checks                                                            |
+| ---------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| Review kind, phase and valid next action | Existing server review lifecycle / capture owners            | Enforcement, prompt suggestion, post-tool tracking, compact recovery, client adapter | Response renderer, generated verb vocabulary, state-aware hook controls    |
+| Refusal versus completion                | Existing server result projection                            | Native host event adapter and post-tool tracker                                      | Actual error/result payloads and before/after state controls               |
+| Attempt and captured-target identity     | Existing semantic context/capture owners                     | Actor/reviewer report assembly and server acceptance                                 | Frozen binding, target digest, persisted verdict and stale-report controls |
+| Trial outcome and target proof           | External runner/collector; independent checker writes grades | Replay and report projection                                                         | Existing archive references plus native trace/artifact evidence            |
+
+## Implementation rows — Tier 1
+
+All open rows are as of 2026-10-09. Their flip condition is the stated acceptance receipt; source changes and trials have not started.
+
+| ID  | Status                                                                                         | Owner / Tier / Effort / Failure shape                                    | Files / responsibility                                                                                                                                 | Depends       | Acceptance and own check                                                                                                                                                                             |
+| --- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1 | ☐ (as of 2026-10-09; flips when interaction contract and consumer inventory are accepted)      | planner judges; worker-high / high / wrong authority or omitted consumer | Existing server result/review projections, hook consumers, generated vocabulary and docs; freeze goal/state/action/report/transition/recovery contract | —             | Every selected field has named writers/readers/deciders/views; explicit accepted/refused/held/advanced/completed semantics and target-evidence limits                                                |
+| 1.2 | ☐ (as of 2026-10-09; flips when honest FAIL reaches server and source controls pass)           | worker-high / high / silently suppressed ledger transition               | gate-enforce.py and owning tests; preserve valid resolution exits                                                                                      | 1.1           | Actual structured FAIL allowed to reach server; server records FAIL and owns retry; required controls observe the removed conflict                                                                   |
+| 1.3 | ☐ (as of 2026-10-09; flips when reminder and refusal-preservation controls pass)               | worker-high / high / stale guidance or lost pending state                | session_state.py, db_reader.py, post-prompt-engine.py, prompt-suggest.py, compact-recovery.py and owning tests as inventory requires                   | 1.1           | Semantic reminder requests the right current action; refusal preserves state; explicit completion clears it; ordinary gate/interrupt behavior retained                                               |
+| 1.4 | ☐ (as of 2026-10-09; flips when deterministic interaction controls pass)                       | worker-high / high / false green from wrong failure                      | Existing conformance corpus/driver and hook integration controls                                                                                       | 1.2, 1.3, 1.7 | Capture-first, positive pass, honest fail, stale refusal, invalid evidence and contradictory verdict each fail for the named reason under their control mutation; harness/setup errors stay distinct |
+| 1.5 | ☐ (as of 2026-10-09; flips when one installed-client run completes with joined evidence)       | worker-high / high / claimed host behavior or incomplete workflow        | Existing native collector adapters and an isolated first-client fixture; add an adapter only if inventory shows a missing boundary                     | 1.4, 1.8      | One uninterrupted produce/fail/revise/pass/complete run with real plugin/hooks; stale refusal after-state retained; actual host/source/resource/config revisions and target checks recorded          |
+| 1.6 | ☐ (as of 2026-10-09; flips when optional runner and report replay cover first three scenarios) | worker-high / high / circular grading or untraceable outcomes            | Extend evaluations contracts/archive and existing conformance execution; documented testing-prompt entry through MCP resource tooling                  | 1.5           | Frozen scenarios cover continuous repair, stale refusal and a small code change with real verification; external checks determine outcomes; archive/replay reproduces report without model reruns    |
+| 1.7 | ☐ (as of 2026-10-09; flips when capture-aware admission preserves valid phase actions)         | worker-high / high / blocked capture or widened interrupt exits          | gate-enforce.py plus existing generated action/state consumers and owning tests; exact projection follows revised 1.1 inventory                        | 1.1, 1.3      | Required semantic capture/recapture reaches server when a gate is tracked; unrelated holds retain their own permitted actions. Do not globally equate user_response with resolving every pending run |
+| 1.8 | ☐ (as of 2026-10-09; flips when safe native metadata preflight completes)                      | worker-high / high / environment failure or exposed credentials          | Existing native staging/config metadata interfaces; use available safe parser or CLI interface without installs/config changes                         | —             | Allowlisted metadata read succeeds without auth/credential access; exact native source/config/hook evidence needs are recorded before trials                                                         |
+
+Source-file scopes and numeric diff bounds must be finalized per row after 1.1 inventory. A new file requires a missing-boundary justification; no duplicated schema, archive, provider SDK or workflow authority.
+
+## Consolidated diagnosis — Tier 2
+
+Entry: after the planned source/client evidence pass is sealed, before final initiative acceptance. Do not dispatch while the current owner stop remains in force. A genuinely unavailable client observation stays unknown; do not manufacture proof to satisfy this entry condition.
+
+| ID  | Status                                                                                                              | Owner / Tier / Effort / Failure shape                                                            | Responsibility                                                                                                             | Depends | Acceptance and own check                                                                                                                                                                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2.1 | ☐ (as of 2026-10-10; flips when one consolidated diagnosis is accepted against retained source and client evidence) | worker-high / high / confusing static source with native behavior or treating symptoms as causes | Read-only synthesis of the problem register and frozen source/client/harness receipts; no source edits or benchmark reruns | —       | Every problem has symptom, proven cause or explicit hypothesis, affected boundary, source/client evidence levels, proposed owner, falsifier and regression scope; root accepts one diagnosis handoff, not a chain of duplicate reviewers |
+
+The problem register lives in the sibling implementation notes. Tier 2 uses the sealed Tier 1 evidence as its entry condition rather than cross-tier dependency IDs. This end-of-evidence diagnosis does not replace per-fix reproduction and cause verification.
+
+## Completion criteria
+
+| Criterion                                           | Required evidence                                                                                                                   |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Valid failed reviews reach the authoritative server | Source-hook control plus actual native tool delivery and persisted FAIL/retry transition                                            |
+| Required capture actions remain admitted            | Capture-first/recapture control with an actual tracked pending semantic review; alternate holds do not acquire unsupported exits    |
+| Client instructions match current review phase      | State-aware reminder examples and complete enumerated projection tests                                                              |
+| Refusal does not masquerade as completion           | Selected host error-event trace and immediate before/after pending-state snapshots                                                  |
+| Workflow reaches real terminal completion           | Final work artifact/checker result, terminal native trace and server completion state; a delivered last-step prompt is insufficient |
+| Target acceptance is independent                    | Frozen external checks and at least one plausible failing artifact/control                                                          |
+| Evidence survives disposable runtime cleanup        | Existing immutable archive closure and replay over the actual run records                                                           |
+| Scope and validation remain bounded                 | Row-own checks locally; mandatory push checks and full CI at reviewed PR boundary; no repeat of accepted unrelated proofs           |
+
+## Open decisions and pre-dispatch notation
+
+| Decision                | Current default                                                                                                                                                                                   | Closes when                                                                                                                                                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| First native host       | RULED R9.1: Codex CLI, isolated candidate plugin; T3-hosted execution remains a distinct capability surface                                                                                       | Before row 1.5, verify actual version/source, hook activation/trust/events and MCP/runtime-root agreement                                                                                                     |
+| Result/state projection | Extend existing server-owned projections; exact fields unselected                                                                                                                                 | 1.1 inventory and contract ruling name the consumed fields and all projections without another authority                                                                                                      |
+| Native trial bounds     | RULED R9.2: at most 3 scenario task runs, one separate reviewer per scenario, 600 seconds per task/review, concurrency 1, no automatic reruns; reuse existing account without credential handling | Native preflight records effective model/effort and usage collection. Incomplete monetary measurement stays unknown; stop on unexpected account/setup requirements or quota errors. No comparative paid batch |
+| Delivery                | RULED R9.3: continue original R6 reviewed PR push+merge scope for these plan slices; no release or global promotion                                                                               | Green required CI and reviewed, matching-head normal merge; each slice carries its plan writeback                                                                                                             |
+
+## Scope exclusions and rollback
+
+This first slice excludes a full all-client matrix, model rankings, efficiency superiority claims, paid benchmark batches, new schedulers/provider clients, broad conversation ingestion, live shared-database migration and global rule promotion. Revisit each only with a named need and a separate bounded row.
+
+Rollback uses the reviewed source/resource revisions and ordinary resource versioning. Preserve original fixtures, accepted evidence, private archives and installed configuration; evaluate candidates in isolated worktrees/runtime roots.
+
+## Sources
+
+- Completed [semantic-gate plan](reference/semantic-gate-evolution-2026-10-07.md) and its [notes](reference/semantic-gate-evolution-2026-10-07-implementation-notes.md).
+- Existing [benchmark-authoring plan](backlog/benchmark-authoring-and-evaluation-2026-09-30.md) and [notes](backlog/benchmark-authoring-and-evaluation-2026-09-30-implementation-notes.md).
+- [Evaluation package](../evaluations/README.md), [judge contract](../docs/guides/judge-mode.md), [gates](../docs/guides/gates.md), [hooks](../hooks/README.md) and real-server conformance scenarios.
+- Public local demo evidence: /home/minipuft/.local/share/claude-prompts-mcp/demos/semantic-gate-showcase-20261008/{results.json,judge-receipt.json,manifest.json,verification.json,receipts/,snapshots/}. The demo location is an operator artifact, not a served calibration suite.
+- Source-hook probe on 2026-10-09: actual demo FAIL denied; PASS/contradictory-PASS allowed; isolated probe state-file count zero. This is not native installed-plugin proof.
