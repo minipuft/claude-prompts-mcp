@@ -19,7 +19,10 @@ import {
 } from '../../../../src/engine/gates/core/gate-schema.js';
 import { GenericGateGuide } from '../../../../src/engine/gates/registry/generic-gate-guide.js';
 import { GateDiscoveryProcessor } from '../../../../src/mcp/tools/gate-manager/services/index.js';
-import { EMPTY_QUARANTINE_VIEW } from '../../../../src/shared/utils/resource-quarantine.js';
+import {
+  EMPTY_QUARANTINE_VIEW,
+  ResourceQuarantine,
+} from '../../../../src/shared/utils/resource-quarantine.js';
 
 import type { GateDefinitionYaml } from '../../../../src/engine/gates/types/index.js';
 import type { GateManager } from '../../../../src/engine/gates/gate-manager.js';
@@ -312,5 +315,224 @@ describe('list names the tier the criteria require', () => {
     expect(lines).toContain('  mixed-gate: Mixed [check + evaluation]');
     expect(lines).toContain('  guide-gate: Guide [reminder]');
     expect(lines.some((line) => line.includes('✓') || line.includes('📖'))).toBe(false);
+  });
+});
+
+// The refusals and renderings `list` and `inspect` hand to a `resource_manager` caller. Each
+// drives the real `GateDiscoveryProcessor`; the only doubles are the registry's `list`/`get`/
+// `getStats` answers, and the quarantine is a real `ResourceQuarantine` the way a loader fills it.
+describe('GateDiscoveryProcessor — list and inspect boundaries', () => {
+  const BUNDLED_ROOT = '/srv/bundled/gates';
+  const WORKSPACE_ROOT = '/srv/workspace/gates';
+
+  interface DiscoveryFixture {
+    definitions?: GateDefinitionYaml[];
+    disabledIds?: string[];
+    refused?: Array<{ id: string; root: string; error: string }>;
+  }
+
+  function buildDiscovery(fixture: DiscoveryFixture = {}): GateDiscoveryProcessor {
+    const guides = (fixture.definitions ?? []).map(
+      (def) =>
+        new GenericGateGuide({
+          ...GateDefinitionSchema.parse(def),
+          sourceRoot: BUNDLED_ROOT,
+        })
+    );
+    const disabled = new Set(fixture.disabledIds ?? []);
+    const quarantine = new ResourceQuarantine();
+    for (const refusal of fixture.refused ?? []) {
+      quarantine.sinkFor('gate', refusal.root).record({
+        id: refusal.id,
+        path: `${refusal.root}/${refusal.id}/gate.yaml`,
+        error: refusal.error,
+      });
+    }
+    const gateManager = {
+      list: (enabledOnly: boolean) =>
+        guides.filter((guide) => !enabledOnly || !disabled.has(guide.gateId)),
+      get: (id: string) => guides.find((guide) => guide.gateId === id),
+      getStats: () => ({
+        totalGates: guides.length,
+        enabledGates: guides.length - disabled.size,
+      }),
+      getQuarantine: () => quarantine,
+    } as unknown as GateManager;
+    return new GateDiscoveryProcessor({ gateManager } as unknown as GateResourceContext);
+  }
+
+  const textOf = (result: { content: unknown[] }): string =>
+    (result.content[0] as { text: string }).text;
+
+  describe('list', () => {
+    it('says no gates were found and names the enabled-only filter that was applied', async () => {
+      const processor = buildDiscovery();
+      const filtered = textOf(await processor.handleList({ action: 'list' }));
+      const unfiltered = textOf(
+        await processor.handleList({ action: 'list', enabled_only: false })
+      );
+
+      expect(filtered).toContain('No gates found (enabled only)');
+      expect(filtered).toContain('action:"create"');
+      // Positive control: the suffix tracks the filter rather than being constant text.
+      expect(unfiltered).toContain('No gates found');
+      expect(unfiltered).not.toContain('(enabled only)');
+    });
+
+    it('names a refused gate file on the empty list instead of a bare "no gates"', async () => {
+      const processor = buildDiscovery({
+        refused: [
+          { id: 'broken-gate', root: WORKSPACE_ROOT, error: 'missing required field: name' },
+        ],
+      });
+      const result = await processor.handleList({ action: 'list' });
+
+      expect(result.isError).toBe(false);
+      const text = textOf(result);
+      expect(text).toContain('No gates found');
+      expect(text).toContain('Quarantined');
+      expect(text).toContain(`${WORKSPACE_ROOT}/broken-gate/gate.yaml`);
+      expect(text).toContain('missing required field: name');
+      // Nothing serves this id, so it is not reported as shadowed.
+      expect(text).not.toContain('shadowed');
+    });
+
+    it('counts disabled gates and lists them only when enabled_only is false', async () => {
+      const processor = buildDiscovery({
+        definitions: [
+          { ...baseDefinition, id: 'on-gate', name: 'On' },
+          { ...baseDefinition, id: 'off-gate', name: 'Off' },
+        ],
+        disabledIds: ['off-gate'],
+      });
+
+      const enabledOnly = textOf(await processor.handleList({ action: 'list' }));
+      expect(enabledOnly).toContain('Gates (1 total)');
+      expect(enabledOnly).toContain('on-gate: On');
+      expect(enabledOnly).not.toContain('off-gate');
+      expect(enabledOnly).toContain('Total gates: 2');
+      expect(enabledOnly).toContain('Enabled: 1');
+      expect(enabledOnly).toContain('Disabled: 1');
+
+      const all = textOf(await processor.handleList({ action: 'list', enabled_only: false }));
+      expect(all).toContain('Gates (2 total)');
+      expect(all).toContain('off-gate: Off');
+    });
+
+    it('marks a refused file whose id another root still serves as shadowed, naming that root', async () => {
+      const processor = buildDiscovery({
+        definitions: [{ ...baseDefinition, id: 'shared-gate', name: 'Shared' }],
+        refused: [{ id: 'shared-gate', root: WORKSPACE_ROOT, error: 'bad yaml' }],
+      });
+      const text = textOf(await processor.handleList({ action: 'list' }));
+
+      expect(text).toContain('shared-gate: Shared');
+      expect(text).toContain('Quarantined');
+      expect(text).toContain(`currently served from ${BUNDLED_ROOT}`);
+    });
+  });
+
+  describe('inspect', () => {
+    it('refuses a call with no id', async () => {
+      const result = await buildDiscovery().handleInspect({ action: 'inspect' });
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toBe('❌ Gate ID is required for inspect action');
+    });
+
+    it('answers "not found" for an id nothing serves and nothing quarantined', async () => {
+      const result = await buildDiscovery({
+        refused: [{ id: 'other-gate', root: WORKSPACE_ROOT, error: 'bad yaml' }],
+      }).handleInspect({ action: 'inspect', id: 'missing-gate' });
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toBe("❌ Gate 'missing-gate' not found");
+    });
+
+    it('reports the refused file, case-insensitively, instead of "not found" for a quarantined id', async () => {
+      const processor = buildDiscovery({
+        refused: [{ id: 'broken-gate', root: WORKSPACE_ROOT, error: 'unknown key: foo' }],
+      });
+      const result = await processor.handleInspect({ action: 'inspect', id: 'Broken-Gate' });
+
+      expect(result.isError).toBe(true);
+      const text = textOf(result);
+      expect(text).not.toContain('not found');
+      expect(text).toContain('Quarantined');
+      expect(text).toContain(`${WORKSPACE_ROOT}/broken-gate/gate.yaml`);
+      expect(text).toContain('unknown key: foo');
+    });
+
+    it('appends the shadowed-file note to a healthy gate whose namesake file was refused', async () => {
+      const processor = buildDiscovery({
+        definitions: [baseDefinition],
+        refused: [{ id: 'test-gate', root: WORKSPACE_ROOT, error: 'bad yaml' }],
+      });
+      const result = await processor.handleInspect({ action: 'inspect', id: 'test-gate' });
+
+      expect(result.isError).toBe(false);
+      const text = textOf(result);
+      expect(text).toContain('Another file for this id failed to load');
+      expect(text).toContain(`served from ${BUNDLED_ROOT}`);
+      // Positive control: the same gate with no refused namesake carries no note.
+      const clean = textOf(
+        await buildDiscovery({ definitions: [baseDefinition] }).handleInspect({
+          action: 'inspect',
+          id: 'test-gate',
+        })
+      );
+      expect(clean).not.toContain('Another file');
+    });
+
+    it('truncates guidance past 500 characters and leaves a 500-character guide whole', async () => {
+      const long = 'g'.repeat(501);
+      const exact = 'e'.repeat(500);
+      const inspectGuidance = async (guidance: string): Promise<string> => {
+        const text = textOf(
+          await buildDiscovery({ definitions: [{ ...baseDefinition, guidance }] }).handleInspect({
+            action: 'inspect',
+            id: 'test-gate',
+          })
+        );
+        return text.slice(text.indexOf('📝 Guidance:\n') + '📝 Guidance:\n'.length);
+      };
+
+      expect(await inspectGuidance(long)).toBe('g'.repeat(500) + '...');
+      expect(await inspectGuidance(exact)).toBe(exact);
+    });
+
+    it('reads back an authored blockResponseOnFail:false and gate_type, and omits the former when undeclared', async () => {
+      const declared = textOf(
+        await buildDiscovery({
+          definitions: [{ ...baseDefinition, blockResponseOnFail: false, gate_type: 'framework' }],
+        }).handleInspect({ action: 'inspect', id: 'test-gate' })
+      );
+      expect(declared).toContain('Blocks Response On Fail: false');
+      expect(declared).toContain('Classification: framework');
+
+      const silent = textOf(
+        await buildDiscovery({ definitions: [baseDefinition] }).handleInspect({
+          action: 'inspect',
+          id: 'test-gate',
+        })
+      );
+      expect(silent).not.toContain('Blocks Response On Fail');
+    });
+
+    it.each([
+      [{ mode: 'self' as const }, '  - Evaluation: self'],
+      [{ mode: 'judge' as const, model: 'haiku' }, '  - Evaluation: judge (model: haiku)'],
+      [{ mode: 'judge' as const, strict: true }, '  - Evaluation: judge (strict: true)'],
+      [
+        { mode: 'judge' as const, model: 'haiku', strict: false },
+        '  - Evaluation: judge (model: haiku, strict: false)',
+      ],
+    ])('reads back only the evaluation keys the author declared: %j', async (evaluation, line) => {
+      const result = await buildDiscovery({
+        definitions: [{ ...baseDefinition, evaluation }],
+      }).handleInspect({ action: 'inspect', id: 'test-gate' });
+
+      expect(textOf(result).split('\n')).toContain(line);
+    });
   });
 });
