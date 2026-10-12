@@ -81,6 +81,67 @@ export function isValidGateCriteria(criteria: unknown): criteria is readonly str
   );
 }
 
+/** The accepted inline gate syntax, quoted by every criteria refusal (R11.8). */
+const INLINE_GATE_SYNTAX =
+  'Accepted forms: `:: "criterion"`, `:: id:"criterion"`, `:: verify:"command"`.';
+
+/** One refusal of an inline gate's criteria, addressed to its step's node when it has one. */
+interface InlineCriteriaRefusal {
+  readonly detail: string;
+  readonly nodeId?: string;
+}
+
+/**
+ * Why `criteria` cannot register as an inline gate, or undefined when it can. An absent or empty
+ * list is no gate at all (the command builder writes `[]` on a step that declared none), so it is
+ * a problem only when `required`: a named gate always declares one, and the command builder leaves
+ * it with none when its quoted text is blank (`:: id:"  "`). PURE.
+ */
+function inlineCriteriaProblem(
+  criteria: readonly unknown[] | undefined,
+  required = false
+): string | undefined {
+  if (criteria === undefined || criteria.length === 0) {
+    return required ? 'carries no criterion: the text between its quotes is blank' : undefined;
+  }
+  const index = criteria.findIndex((item) => typeof item !== 'string' || item.trim().length === 0);
+  if (index === -1) {
+    return undefined;
+  }
+  const item = criteria[index];
+  return typeof item === 'string'
+    ? `has the criterion ${JSON.stringify(item)}, which is ${item.length === 0 ? 'empty' : 'blank'}`
+    : `has criterion ${index + 1}, which is not text`;
+}
+
+/** The refusal text for `subject` whose criteria have `problem`: what, why, and the accepted syntax. */
+function criteriaRefusalDetail(subject: string, problem: string): string {
+  return (
+    `${subject} ${problem}. A criterion is the text the output is reviewed against, so without ` +
+    `one the gate could neither pass nor fail, and running without it would enforce nothing you ` +
+    `asked for. ${INLINE_GATE_SYNTAX}`
+  );
+}
+
+/**
+ * Assert stage 05's guarantee (R11.8): it refuses a command whose inline criteria cannot register
+ * ({@link InlineGateProcessor.invalidCriteria}) before anything registers, so reaching here with
+ * one means a caller registered inline gates without asking it — a server fault, never a skip.
+ */
+function assertRegistrable(
+  criteria: readonly string[] | undefined,
+  subject: string,
+  required = false
+): void {
+  const problem = inlineCriteriaProblem(criteria, required);
+  if (problem !== undefined) {
+    throw new Error(
+      `[InlineGateProcessor] ${subject} ${problem}; stage 05 refuses such a command before ` +
+        'registration, so a caller registered inline gates without InlineGateProcessor.invalidCriteria.'
+    );
+  }
+}
+
 /**
  * Type guard for validating step has inline gate criteria.
  */
@@ -183,23 +244,21 @@ export class InlineGateProcessor {
 
         const occurrence = (occurrences.get(namedGate.gateId) ?? 0) + 1;
         occurrences.set(namedGate.gateId, occurrence);
-        if (namedGate.gateId && isValidGateCriteria(namedGate.criteria)) {
-          const bindingKey = namedGateBindingKey(namedGate.gateId, occurrence);
-          const gateId =
-            declaredNamedGates(bindingKey) ??
-            this.createNamedInlineGate(context, namedGate.gateId, namedGate.criteria, {
-              promptId: parsedCommand.promptId,
-              bindingKey,
-            });
-          if (gateId) {
-            parsedCommand.inlineGateIds = this.appendGateId(parsedCommand.inlineGateIds, gateId);
-            createdIds.push(gateId);
-          }
-        }
+        assertRegistrable(namedGate.criteria, `named inline gate "${namedGate.gateId}"`, true);
+        const bindingKey = namedGateBindingKey(namedGate.gateId, occurrence);
+        const gateId =
+          declaredNamedGates(bindingKey) ??
+          this.createNamedInlineGate(context, namedGate.gateId, namedGate.criteria, {
+            promptId: parsedCommand.promptId,
+            bindingKey,
+          });
+        parsedCommand.inlineGateIds = this.appendGateId(parsedCommand.inlineGateIds, gateId);
+        createdIds.push(gateId);
       }
     }
 
-    // Validate and create inline gate for the main command (anonymous criteria)
+    // Create the inline gate for the main command (anonymous criteria); absent criteria are no gate
+    assertRegistrable(parsedCommand.inlineGateCriteria, 'inline gate');
     if (isValidGateCriteria(parsedCommand.inlineGateCriteria)) {
       const result = await this.applyGateCriteria(
         context,
@@ -213,6 +272,7 @@ export class InlineGateProcessor {
     // Validate and create inline gates for chain steps
     if (Array.isArray(parsedCommand.steps) && parsedCommand.steps.length > 0) {
       for (const step of parsedCommand.steps) {
+        assertRegistrable(step.inlineGateCriteria, `inline gate on step ${step.stepNumber}`);
         if (hasInlineGateCriteria(step)) {
           const result = await this.applyGateCriteria(
             context,
@@ -246,6 +306,41 @@ export class InlineGateProcessor {
         ? []
         : [{ detail: `named inline gate "${namedGate.gateId}": ${refusal}` }];
     });
+  }
+
+  /**
+   * The refusals for this command's inline gates whose criteria cannot register (R11.8): an empty
+   * or blank criterion, or a named gate left with none. Stage 05 refuses the call on any, before
+   * anything registers, so `processInlineGates` never meets one. A `verify:` gate carries a
+   * command rather than criteria, so it is not judged.
+   */
+  invalidCriteria(parsedCommand: ParsedCommand): InlineCriteriaRefusal[] {
+    const refusals: InlineCriteriaRefusal[] = [];
+    for (const namedGate of parsedCommand.namedInlineGates ?? []) {
+      const problem =
+        namedGate.shellVerify === undefined
+          ? inlineCriteriaProblem(namedGate.criteria, true)
+          : undefined;
+      if (problem !== undefined) {
+        refusals.push({
+          detail: criteriaRefusalDetail(`named inline gate "${namedGate.gateId}"`, problem),
+        });
+      }
+    }
+    const commandProblem = inlineCriteriaProblem(parsedCommand.inlineGateCriteria);
+    if (commandProblem !== undefined) {
+      refusals.push({ detail: criteriaRefusalDetail('inline gate', commandProblem) });
+    }
+    for (const step of parsedCommand.steps ?? []) {
+      const problem = inlineCriteriaProblem(step.inlineGateCriteria);
+      if (problem !== undefined) {
+        refusals.push({
+          detail: criteriaRefusalDetail(`inline gate on step ${step.stepNumber}`, problem),
+          ...(step.nodeId !== undefined ? { nodeId: step.nodeId } : {}),
+        });
+      }
+    }
+    return refusals;
   }
 
   /**
@@ -459,10 +554,7 @@ export class InlineGateProcessor {
     let temporaryGateId: string | undefined;
 
     if (partitioned.inlineCriteria.length > 0) {
-      const gateId = this.createInlineGate(context, partitioned.inlineCriteria, scope);
-      if (gateId) {
-        temporaryGateId = gateId;
-      }
+      temporaryGateId = this.createInlineGate(context, partitioned.inlineCriteria, scope);
     }
 
     if (temporaryGateId !== undefined) {
@@ -511,21 +603,14 @@ export class InlineGateProcessor {
   }
 
   /**
-   * Creates an inline gate with auto-generated ID for anonymous criteria.
+   * Creates an inline gate with auto-generated ID for anonymous criteria. A registration failure
+   * propagates: a gate the client asked for is never dropped from the run (R11.8).
    */
   private createInlineGate(
     context: ExecutionContext,
     criteria: readonly string[],
     scope: InlineGateScope
-  ): string | null {
-    if (!isValidGateCriteria(criteria)) {
-      this.logger.warn('[InlineGateProcessor] Invalid gate criteria', {
-        criteria,
-        scope,
-      });
-      return null;
-    }
-
+  ): string {
     const guidance = formatCriteriaAsGuidance(criteria);
     const description = scope.stepNumber
       ? `Inline criteria for step ${scope.stepNumber}`
@@ -534,87 +619,58 @@ export class InlineGateProcessor {
     const gateScope: GateScope = scope.stepNumber !== undefined ? 'step' : 'execution';
     const scopeId = this.getScopeId(context, scope.stepNumber);
 
-    try {
-      const gateId = this.temporaryGateRegistry.createTemporaryGate(
-        {
-          name: 'Inline Validation Criteria',
-          type: 'validation',
-          scope: gateScope,
-          description,
-          guidance,
-          pass_criteria: [...criteria],
-          source: 'automatic',
-        },
-        scopeId
-      );
-
-      return gateId;
-    } catch (error) {
-      this.logger.warn('[InlineGateProcessor] Failed to register inline gate', {
-        error: error instanceof Error ? error.message : String(error),
-        criteria,
-        scope,
-      });
-      return null;
-    }
+    return this.temporaryGateRegistry.createTemporaryGate(
+      {
+        name: 'Inline Validation Criteria',
+        type: 'validation',
+        scope: gateScope,
+        description,
+        guidance,
+        pass_criteria: [...criteria],
+        source: 'automatic',
+      },
+      scopeId
+    );
   }
 
   /**
-   * Creates a named inline gate with explicit ID from symbolic syntax.
+   * Creates a named inline gate with explicit ID from symbolic syntax. A registration failure
+   * propagates: a gate the client asked for is never dropped from the run (R11.8).
    */
   private createNamedInlineGate(
     context: ExecutionContext,
     explicitId: string,
     criteria: readonly string[],
     scope: InlineGateScope & { readonly bindingKey: string }
-  ): string | null {
-    if (!explicitId || !isValidGateCriteria(criteria)) {
-      this.logger.warn('[InlineGateProcessor] Invalid named gate input', {
-        explicitId,
-        criteria,
-        scope,
-      });
-      return null;
-    }
-
+  ): string {
     const guidance = formatCriteriaAsGuidance(criteria);
     const description = `Named inline gate "${explicitId}" from symbolic syntax`;
     const gateScope: GateScope = scope.stepNumber !== undefined ? 'step' : 'execution';
     const scopeId = this.getScopeId(context, scope.stepNumber);
 
-    try {
-      const gateId = this.temporaryGateRegistry.createTemporaryGate(
-        {
-          id: explicitId,
-          declared_key: scope.bindingKey,
-          name: explicitId,
-          type: 'validation',
-          scope: gateScope,
-          description,
-          guidance,
-          pass_criteria: [...criteria],
-          source: 'automatic',
-        } as any,
-        scopeId,
-        { onIdCollision: 'fresh-id' }
-      );
+    const gateId = this.temporaryGateRegistry.createTemporaryGate(
+      {
+        id: explicitId,
+        declared_key: scope.bindingKey,
+        name: explicitId,
+        type: 'validation',
+        scope: gateScope,
+        description,
+        guidance,
+        pass_criteria: [...criteria],
+        source: 'automatic',
+      } as any,
+      scopeId,
+      { onIdCollision: 'fresh-id' }
+    );
 
-      this.logger.debug('[InlineGateProcessor] Created named inline gate', {
-        requestedId: explicitId,
-        actualId: gateId,
-        criteria,
-      });
+    this.logger.debug('[InlineGateProcessor] Created named inline gate', {
+      requestedId: explicitId,
+      actualId: gateId,
+      criteria,
+    });
 
-      return gateId;
-    } catch (error) {
-      this.logger.warn('[InlineGateProcessor] Failed to create named inline gate', {
-        error: error instanceof Error ? error.message : String(error),
-        explicitId,
-        criteria,
-        scope,
-      });
-      return null;
-    }
+    return gateId;
   }
 
   private async partitionGateCriteria(
@@ -624,11 +680,9 @@ export class InlineGateProcessor {
     const inlineCriteria: string[] = [];
     const registeredGateIds: string[] = [];
 
+    // Every entry is non-blank: both callers pass only criteria `isValidGateCriteria` accepts.
     for (const entry of criteria) {
-      const trimmed = typeof entry === 'string' ? entry.trim() : '';
-      if (!trimmed) {
-        continue;
-      }
+      const trimmed = entry.trim();
 
       const registryGateId = declaredNamedGates(trimmed) ?? this.lookupTemporaryGateId(trimmed);
       if (registryGateId) {

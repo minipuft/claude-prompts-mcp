@@ -434,6 +434,12 @@ prompt_engine(command:"code_review", gates:[
 `"` or `'`, and there is no escape, so `:: "it's fine"` is refused at parse, naming `::` and the
 quote. Reword the text without it: `:: "it is fine"`.
 
+**A criterion cannot be empty or blank.** `:: security:"  "`, or a step's `inlineGateCriteria`
+holding `""` or `"   "`, refuses the whole call before any gate registers, with a
+`[gate-criteria-invalid]` line quoting the criterion and the accepted forms (`:: "criterion"`,
+`:: id:"criterion"`, `:: verify:"command"`). A gate with no criterion could neither pass nor fail,
+so the call is refused rather than run without the gate you asked for.
+
 **Named inline gates** (`:: id:"criteria"`) are useful when you want:
 
 - Trackable gate IDs in output (shows as "security" not "Inline Validation Criteria")

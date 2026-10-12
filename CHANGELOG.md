@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A gate can ask a semantic question, and the server checks the client's answer against the output it grades.** A gate's `pass_criteria` accepts `semantic_evaluation` criteria with a boolean, category or anchored-score result, and a review of that gate takes a structured report in `gate_verdict` `per_gate[].evaluation`: one observation per criterion, with quoted evidence, bound to the server-issued review and to the exact output captured for it. A missing or failing report holds a blocking review even when the client sends PASS, and a report bound to an old attempt or another step is refused without spending an attempt. `resource_manager` gate operations take a new `calibration_suite_id` parameter that associates a gate with a calibration suite without exposing the suite's cases.
 - **Skipping an exhausted gate review is recorded as a bypass, not as a pass.** `gate_action: skip` now records an operational BYPASS for each gate it skips, and `system_control` `execution_history` and `analytics` report evaluated grades, tool checks, reminder attestations and bypasses separately, so a skipped gate no longer reads as one that passed.
 
+### Fixed
+
+- **An inline gate with an empty or blank criterion refuses the call instead of running without the gate.** `>>p :: security:"  "`, a workflow node whose `inlineGateCriteria` holds a blank entry such as `"   "`, or a chain prompt step with an empty or blank one used to start the run with that gate silently missing. Such a call now registers nothing and answers with a `[gate-criteria-invalid]` line quoting the criterion and the accepted forms (`:: "criterion"`, `:: id:"criterion"`, `:: verify:"command"`). A request gate, inline gate or prompt-declared gate whose registration fails inside the server now fails the call with that error, where it used to be logged and left out of the run.
+
 ## [5.1.1](https://github.com/minipuft/claude-prompts-mcp/compare/v5.1.0...v5.1.1) (2026-10-06)
 
 ### Added

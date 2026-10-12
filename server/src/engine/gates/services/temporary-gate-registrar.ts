@@ -165,181 +165,176 @@ export class TemporaryGateRegistrar {
     const seenStringInputs = new Set<string>();
     const seenGateSignatures = new Set<string>();
 
+    // No catch in this loop: a request gate whose registration throws fails the call rather than
+    // running without it (R11.8).
     for (const rawGate of tempGateInputs) {
-      try {
-        if (typeof rawGate === 'string') {
-          const trimmed = rawGate.trim();
-          if (!trimmed || seenStringInputs.has(trimmed)) {
-            continue;
-          }
-          seenStringInputs.add(trimmed);
-
-          if (this.gateReferenceResolver) {
-            const resolution = await this.gateReferenceResolver.resolve(trimmed);
-            if (resolution.referenceType === 'registered') {
-              canonicalGateIds.add(resolution.gateId);
-              resolvedGateIds.add(resolution.gateId);
-              this.logger.debug(
-                '[TemporaryGateRegistrar] Resolved string gate to canonical definition',
-                { input: trimmed, gateId: resolution.gateId }
-              );
-              continue;
-            }
-          }
-
-          this.logger.debug(
-            '[TemporaryGateRegistrar] String gate not canonical, treating as criteria',
-            { input: trimmed }
-          );
+      if (typeof rawGate === 'string') {
+        const trimmed = rawGate.trim();
+        if (!trimmed || seenStringInputs.has(trimmed)) {
+          continue;
         }
+        seenStringInputs.add(trimmed);
 
-        if (typeof rawGate === 'object' && rawGate !== null) {
-          const canonicalCandidate = await this.resolveCanonicalGateId(rawGate, resolvedGateIds);
-          if (canonicalCandidate) {
-            canonicalGateIds.add(canonicalCandidate);
-            resolvedGateIds.add(canonicalCandidate);
+        if (this.gateReferenceResolver) {
+          const resolution = await this.gateReferenceResolver.resolve(trimmed);
+          if (resolution.referenceType === 'registered') {
+            canonicalGateIds.add(resolution.gateId);
+            resolvedGateIds.add(resolution.gateId);
             this.logger.debug(
-              '[TemporaryGateRegistrar] Resolved object gate to canonical definition',
-              { gateId: canonicalCandidate }
+              '[TemporaryGateRegistrar] Resolved string gate to canonical definition',
+              { input: trimmed, gateId: resolution.gateId }
             );
             continue;
           }
         }
 
-        const { normalized: gate, isValid } = this.normalizeGateInput(
-          rawGate,
-          isChainExecution,
-          currentStep,
-          nodeIds
+        this.logger.debug(
+          '[TemporaryGateRegistrar] String gate not canonical, treating as criteria',
+          { input: trimmed }
         );
+      }
 
-        if (!isValid) {
-          this.logger.warn('[TemporaryGateRegistrar] Invalid gate format, skipping', {
-            gate: rawGate,
-          });
+      if (typeof rawGate === 'object' && rawGate !== null) {
+        const canonicalCandidate = await this.resolveCanonicalGateId(rawGate, resolvedGateIds);
+        if (canonicalCandidate) {
+          canonicalGateIds.add(canonicalCandidate);
+          resolvedGateIds.add(canonicalCandidate);
+          this.logger.debug(
+            '[TemporaryGateRegistrar] Resolved object gate to canonical definition',
+            { gateId: canonicalCandidate }
+          );
           continue;
         }
+      }
 
-        const criteria = gate.criteria ?? gate.pass_criteria ?? [];
-        const criteriaArray = Array.isArray(criteria)
-          ? criteria.filter((c): c is string => typeof c === 'string')
-          : [];
+      const { normalized: gate, isValid } = this.normalizeGateInput(
+        rawGate,
+        isChainExecution,
+        currentStep,
+        nodeIds
+      );
 
-        const signatureParts = [
-          gate.type ?? 'validation',
-          gate.scope ?? 'execution',
-          (gate.name ?? '').toLowerCase(),
-          (gate.description ?? '').toLowerCase(),
-          (gate.guidance ?? '').toLowerCase(),
-          criteriaArray.join('|').toLowerCase(),
-          (gate.apply_to_steps ?? []).join(','),
-          gate.target_step_number ?? '',
-          gate.target_step_id ?? '',
-        ];
-        const gateSignature = signatureParts.join('||');
-        if (seenGateSignatures.has(gateSignature)) {
-          this.logger.debug('[TemporaryGateRegistrar] Skipping duplicate temporary gate', {
-            signature: gateSignature,
-          });
-          continue;
-        }
-        seenGateSignatures.add(gateSignature);
-
-        const effectiveGuidance = this.resolveGateGuidance(gate, criteriaArray);
-
-        if (effectiveGuidance && !gate.guidance) {
-          this.logger.debug('[TemporaryGateRegistrar] Resolved guidance from fallback', {
-            source: criteriaArray.length > 0 ? 'criteria' : 'description',
-            guidanceLength: effectiveGuidance.length,
-          });
-        }
-
-        if (!effectiveGuidance) {
-          this.logger.warn('[TemporaryGateRegistrar] Skipping gate with no usable content', {
-            gate,
-          });
-          continue;
-        }
-
-        if (!registryAvailable) {
-          continue;
-        }
-
-        const gateIdCandidate =
-          typeof rawGate === 'object' &&
-          rawGate !== null &&
-          'id' in rawGate &&
-          typeof rawGate.id === 'string'
-            ? rawGate.id
-            : null;
-
-        // The same gate again — a resume re-sending it, or a repeat in this request (P6.107) —
-        // resolves through the run's declared ids, so a run holding `<id>-2` keeps it (R49). An
-        // id another run holds is not this gate: it registers under a fresh id below.
-        const heldId =
-          gateIdCandidate === null
-            ? undefined
-            : this.resolveHeldForThisRun(context, gateIdCandidate, createdIds);
-        if (heldId !== undefined) {
-          this.logger.debug('[TemporaryGateRegistrar] Skipping gate already registered', {
-            gateId: heldId,
-          });
-          createdIds.push(heldId);
-          continue;
-        }
-
-        const tempGateDefinition: Omit<TemporaryGateDefinition, 'id' | 'created_at'> & {
-          id?: string;
-        } = {
-          name: gate.name,
-          type: gate.type,
-          scope: gate.scope,
-          description: gate.description ?? effectiveGuidance.substring(0, 100),
-          guidance: effectiveGuidance,
-          source: gate.source,
-          origin: 'request',
-        };
-
-        if (gateIdCandidate) {
-          tempGateDefinition.id = gateIdCandidate;
-        }
-        if (criteriaArray.length > 0) {
-          tempGateDefinition.pass_criteria = criteriaArray;
-        } else if (gate.pass_criteria !== undefined) {
-          tempGateDefinition.pass_criteria = gate.pass_criteria;
-        }
-        if (gate.context !== undefined) {
-          tempGateDefinition.context = gate.context;
-        }
-        if (gate.target_step_number !== undefined) {
-          tempGateDefinition.target_step_number = gate.target_step_number;
-        }
-        if (gate.target_step_id !== undefined) {
-          tempGateDefinition.target_step_id = gate.target_step_id;
-        }
-        if (gate.apply_to_steps !== undefined) {
-          tempGateDefinition.apply_to_steps = gate.apply_to_steps;
-        }
-
-        const gateId = registry.createTemporaryGate(tempGateDefinition, scopeId, {
-          onIdCollision: 'fresh-id',
-        });
-
-        createdIds.push(gateId);
-
-        this.logger.debug('[TemporaryGateRegistrar] Registered temporary gate', {
-          gateId,
-          name: gate.name,
-          hasGuidance: !!effectiveGuidance,
-          guidanceLength: effectiveGuidance.length,
-          criteriaCount: criteriaArray.length,
-        });
-      } catch (error) {
-        this.logger.warn('[TemporaryGateRegistrar] Failed to register temporary gate', {
+      if (!isValid) {
+        this.logger.warn('[TemporaryGateRegistrar] Invalid gate format, skipping', {
           gate: rawGate,
-          error: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
+
+      const criteria = gate.criteria ?? gate.pass_criteria ?? [];
+      const criteriaArray = Array.isArray(criteria)
+        ? criteria.filter((c): c is string => typeof c === 'string')
+        : [];
+
+      const signatureParts = [
+        gate.type ?? 'validation',
+        gate.scope ?? 'execution',
+        (gate.name ?? '').toLowerCase(),
+        (gate.description ?? '').toLowerCase(),
+        (gate.guidance ?? '').toLowerCase(),
+        criteriaArray.join('|').toLowerCase(),
+        (gate.apply_to_steps ?? []).join(','),
+        gate.target_step_number ?? '',
+        gate.target_step_id ?? '',
+      ];
+      const gateSignature = signatureParts.join('||');
+      if (seenGateSignatures.has(gateSignature)) {
+        this.logger.debug('[TemporaryGateRegistrar] Skipping duplicate temporary gate', {
+          signature: gateSignature,
+        });
+        continue;
+      }
+      seenGateSignatures.add(gateSignature);
+
+      const effectiveGuidance = this.resolveGateGuidance(gate, criteriaArray);
+
+      if (effectiveGuidance && !gate.guidance) {
+        this.logger.debug('[TemporaryGateRegistrar] Resolved guidance from fallback', {
+          source: criteriaArray.length > 0 ? 'criteria' : 'description',
+          guidanceLength: effectiveGuidance.length,
         });
       }
+
+      if (!effectiveGuidance) {
+        this.logger.warn('[TemporaryGateRegistrar] Skipping gate with no usable content', {
+          gate,
+        });
+        continue;
+      }
+
+      if (!registryAvailable) {
+        continue;
+      }
+
+      const gateIdCandidate =
+        typeof rawGate === 'object' &&
+        rawGate !== null &&
+        'id' in rawGate &&
+        typeof rawGate.id === 'string'
+          ? rawGate.id
+          : null;
+
+      // The same gate again — a resume re-sending it, or a repeat in this request (P6.107) —
+      // resolves through the run's declared ids, so a run holding `<id>-2` keeps it (R49). An
+      // id another run holds is not this gate: it registers under a fresh id below.
+      const heldId =
+        gateIdCandidate === null
+          ? undefined
+          : this.resolveHeldForThisRun(context, gateIdCandidate, createdIds);
+      if (heldId !== undefined) {
+        this.logger.debug('[TemporaryGateRegistrar] Skipping gate already registered', {
+          gateId: heldId,
+        });
+        createdIds.push(heldId);
+        continue;
+      }
+
+      const tempGateDefinition: Omit<TemporaryGateDefinition, 'id' | 'created_at'> & {
+        id?: string;
+      } = {
+        name: gate.name,
+        type: gate.type,
+        scope: gate.scope,
+        description: gate.description ?? effectiveGuidance.substring(0, 100),
+        guidance: effectiveGuidance,
+        source: gate.source,
+        origin: 'request',
+      };
+
+      if (gateIdCandidate) {
+        tempGateDefinition.id = gateIdCandidate;
+      }
+      if (criteriaArray.length > 0) {
+        tempGateDefinition.pass_criteria = criteriaArray;
+      } else if (gate.pass_criteria !== undefined) {
+        tempGateDefinition.pass_criteria = gate.pass_criteria;
+      }
+      if (gate.context !== undefined) {
+        tempGateDefinition.context = gate.context;
+      }
+      if (gate.target_step_number !== undefined) {
+        tempGateDefinition.target_step_number = gate.target_step_number;
+      }
+      if (gate.target_step_id !== undefined) {
+        tempGateDefinition.target_step_id = gate.target_step_id;
+      }
+      if (gate.apply_to_steps !== undefined) {
+        tempGateDefinition.apply_to_steps = gate.apply_to_steps;
+      }
+
+      const gateId = registry.createTemporaryGate(tempGateDefinition, scopeId, {
+        onIdCollision: 'fresh-id',
+      });
+
+      createdIds.push(gateId);
+
+      this.logger.debug('[TemporaryGateRegistrar] Registered temporary gate', {
+        gateId,
+        name: gate.name,
+        hasGuidance: !!effectiveGuidance,
+        guidanceLength: effectiveGuidance.length,
+        criteriaCount: criteriaArray.length,
+      });
     }
 
     if (registryAvailable && createdIds.length) {
@@ -812,6 +807,8 @@ export class TemporaryGateRegistrar {
    * A declared id this run already holds is the same gate (P6.107): re-registering it on a resume
    * is a no-op, and only a body that differs merges over the held one (ADR 0001 (b)). An id
    * another run holds is that run's gate, never merged over: this one registers under a fresh id.
+   * A registration that throws propagates and fails the call: the run never goes on without the
+   * gate its prompt declared (R11.8).
    */
   private registerOneInlineDefinition(
     context: ExecutionContext,
@@ -832,46 +829,37 @@ export class TemporaryGateRegistrar {
     const declaredId = typeof definition['id'] === 'string' ? definition['id'] : undefined;
     const scope = readInlineScope(definition);
 
-    try {
-      // Declared or slug-derived (`withDefinitionIds`), the id is the definition's by now.
-      // The registry refuses a canonical id for every caller (P6.193); refused here first, so the
-      // warning names the definition as well as the id (P6.183).
-      if (declaredId !== undefined && registry.shadowsCanonicalGate(declaredId)) {
-        this.logger.warn(
-          `[TemporaryGateRegistrar] Refusing inline gate definition '${name}': a temporary gate ` +
-            `may not shadow a canonical gate id ('${declaredId}'). Give it another id or name.`,
-          { promptId }
-        );
-        return undefined;
-      }
-
-      const heldId =
-        declaredId === undefined
-          ? undefined
-          : this.resolveHeldForThisRun(context, declaredId, source.thisCall);
-      const held = heldId === undefined ? undefined : registry.getTemporaryGate(heldId);
-      const body =
-        held === undefined ? definition : mergeGateBody(held as unknown as GateBody, definition);
-      const gate = buildInlineTemporaryGate(body, name, scope, declaredId);
-
-      if (held !== undefined) {
-        if (isSameInlineGate(held, gate)) {
-          return held.id;
-        }
-        registry.removeTemporaryGate(held.id);
-      }
-
-      return registry.createTemporaryGate(gate, inlineScopeId(context, scope), {
-        onIdCollision: 'fresh-id',
-      });
-    } catch (error) {
-      this.logger.warn('[TemporaryGateRegistrar] Failed to register inline gate definition', {
-        promptId,
-        gate: name,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    // Declared or slug-derived (`withDefinitionIds`), the id is the definition's by now.
+    // The registry refuses a canonical id for every caller (P6.193); refused here first, so the
+    // warning names the definition as well as the id (P6.183).
+    if (declaredId !== undefined && registry.shadowsCanonicalGate(declaredId)) {
+      this.logger.warn(
+        `[TemporaryGateRegistrar] Refusing inline gate definition '${name}': a temporary gate ` +
+          `may not shadow a canonical gate id ('${declaredId}'). Give it another id or name.`,
+        { promptId }
+      );
       return undefined;
     }
+
+    const heldId =
+      declaredId === undefined
+        ? undefined
+        : this.resolveHeldForThisRun(context, declaredId, source.thisCall);
+    const held = heldId === undefined ? undefined : registry.getTemporaryGate(heldId);
+    const body =
+      held === undefined ? definition : mergeGateBody(held as unknown as GateBody, definition);
+    const gate = buildInlineTemporaryGate(body, name, scope, declaredId);
+
+    if (held !== undefined) {
+      if (isSameInlineGate(held, gate)) {
+        return held.id;
+      }
+      registry.removeTemporaryGate(held.id);
+    }
+
+    return registry.createTemporaryGate(gate, inlineScopeId(context, scope), {
+      onIdCollision: 'fresh-id',
+    });
   }
 
   /**
