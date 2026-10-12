@@ -273,6 +273,20 @@ export class ExecutionContext {
   }
 
   /**
+   * Returns executionPlan with runtime validation.
+   * Throws if called before a stage that provides `executionPlan` has run: CommandParsingStage
+   * restores it from a run's blueprint, PlanningStage creates it for every other request.
+   */
+  requireExecutionPlan(): ExecutionPlan {
+    if (!this.executionPlan) {
+      throw new Error(
+        'ExecutionPlan not available - neither CommandParsingStage nor PlanningStage provided it'
+      );
+    }
+    return this.executionPlan;
+  }
+
+  /**
    * Ensures script state is initialized and returns a typed reference.
    * Guarantees results and autoExecuteResults Maps exist.
    * Use this instead of `context.state.scripts ??= {}` to centralize initialization.

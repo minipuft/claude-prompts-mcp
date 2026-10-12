@@ -32,6 +32,7 @@ import { currentOrdinal, mintSequentialIds, totalOf } from '#shared/utils/node-o
  */
 export class SessionManagementStage extends BasePipelineStage {
   readonly name = 'SessionManagement';
+  readonly requires = ['executionPlan'] as const;
   readonly provides = ['sessionContext.currentStep'] as const;
 
   constructor(
@@ -44,7 +45,7 @@ export class SessionManagementStage extends BasePipelineStage {
   async execute(context: ExecutionContext): Promise<void> {
     this.logEntry(context);
 
-    if (!context.executionPlan?.requiresSession) {
+    if (!context.requireExecutionPlan().requiresSession) {
       this.logExit({ skipped: 'Session not required' });
       return;
     }
@@ -391,12 +392,12 @@ export class SessionManagementStage extends BasePipelineStage {
   }
 
   private buildSessionBlueprint(context: ExecutionContext): SessionBlueprint | undefined {
-    if (!context.parsedCommand || !context.executionPlan) {
+    if (!context.parsedCommand) {
       return undefined;
     }
 
     const parsedClone = this.cloneParsedCommand(context.parsedCommand);
-    const planClone = this.cloneExecutionPlan(context.executionPlan);
+    const planClone = this.cloneExecutionPlan(context.requireExecutionPlan());
     // The run's framework is decided once, here at its first call (R176): every resume decides
     // from this record, so switching the active framework later moves none of the run's steps.
     const runFrameworkId = context.frameworkAuthority.getCachedFrameworkId();

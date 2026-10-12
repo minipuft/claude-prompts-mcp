@@ -33,6 +33,7 @@ import { processTemplateWithRefs } from '#shared/utils/jsonUtils.js';
  */
 export class StepExecutionStage extends BasePipelineStage {
   readonly name = 'StepExecution';
+  readonly requires = ['executionPlan'] as const;
 
   constructor(
     private readonly chainOperatorExecutor: ChainOperatorExecutor,
@@ -72,9 +73,7 @@ export class StepExecutionStage extends BasePipelineStage {
       }
     }
 
-    if (!context.executionPlan) {
-      this.handleError(new Error('Execution plan missing before step execution'));
-    }
+    const executionPlan = context.requireExecutionPlan();
 
     // Session-completion check for ANY session-based execution (chains and gated single prompts).
     // Latched on run identity (terminal runStatus, or the run standing past its last node),
@@ -106,7 +105,7 @@ export class StepExecutionStage extends BasePipelineStage {
     // Execute the prompt/chain step regardless of pending review
     // The ResponseFormattingStage will handle appending gate instructions
     // Use type guard for type-safe chain detection
-    if (context.executionPlan.strategy === 'chain' && context.hasChainCommand()) {
+    if (executionPlan.strategy === 'chain' && context.hasChainCommand()) {
       await this.executeChainStep(context, context.parsedCommand.steps);
       return;
     }
@@ -202,7 +201,6 @@ export class StepExecutionStage extends BasePipelineStage {
   ): Promise<void> {
     // Type-safe access using direct field access with proper null checks
     const session = context.sessionContext;
-    const executionPlan = context.executionPlan;
 
     if (!session) {
       throw new Error('Session context not available for chain execution');
@@ -212,9 +210,7 @@ export class StepExecutionStage extends BasePipelineStage {
       throw new Error('Chain steps not available for chain execution');
     }
 
-    if (!executionPlan) {
-      throw new Error('Execution plan not available for chain execution');
-    }
+    const executionPlan = context.requireExecutionPlan();
 
     // Render order comes from the RUN's node list, not from the parse-time array (P4 row 3.4,
     // DEV-T3-7). Indexing `steps` by the run's ordinal was correct only while the two lists were
@@ -392,15 +388,12 @@ export class StepExecutionStage extends BasePipelineStage {
   private async executeSinglePrompt(context: ExecutionContext): Promise<void> {
     // Type-safe access using direct field access with proper null checks
     const prompt = context.parsedCommand?.convertedPrompt;
-    const executionPlan = context.executionPlan;
 
     if (!prompt) {
       throw new Error('Converted prompt not available for single prompt execution');
     }
 
-    if (!executionPlan) {
-      throw new Error('Execution plan not available for single prompt execution');
-    }
+    const executionPlan = context.requireExecutionPlan();
 
     // Build template args, enriched with script tool results if available
     const args = this.buildTemplateArgs(context);

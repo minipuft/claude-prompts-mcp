@@ -356,6 +356,7 @@ const buildPipeline = (options: {
     if (name === 'ExecutionPlanning') {
       return {
         name,
+        provides: ['executionPlan'],
         execute: async (context: ExecutionContext) => {
           if (!context.parsedCommand) return;
           context.executionPlan = {

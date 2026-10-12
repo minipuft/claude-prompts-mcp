@@ -70,6 +70,7 @@ export interface OptionalParsingCollaborators {
  */
 export class CommandParsingStage extends BasePipelineStage {
   readonly name = 'CommandParsing';
+  readonly provides = ['executionPlan'] as const;
 
   constructor(
     private readonly commandParser: UnifiedCommandParser,

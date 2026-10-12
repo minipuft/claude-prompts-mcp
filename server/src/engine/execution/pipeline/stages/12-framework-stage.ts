@@ -33,6 +33,7 @@ type FrameworkEnabledProvider = (scope: StateStoreOptions | undefined) => boolea
  */
 export class FrameworkResolutionStage extends BasePipelineStage {
   readonly name = 'FrameworkResolution';
+  readonly requires = ['executionPlan'] as const;
 
   constructor(
     private readonly frameworkManager: FrameworkManager,
@@ -75,11 +76,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       return;
     }
 
-    const plan = context.executionPlan;
-    if (!plan) {
-      this.logExit({ skipped: 'Execution plan missing' });
-      return;
-    }
+    const plan = context.requireExecutionPlan();
 
     // Use FrameworkDecisionAuthority for centralized decision making
     const decisionInput = this.buildDecisionInput(context);

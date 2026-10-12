@@ -70,6 +70,22 @@ describe('validateStageOrder', () => {
       ]);
     });
 
+    test('a stage requiring executionPlan before its provider', () => {
+      const parsing = stage({ name: 'CommandParsing', provides: ['executionPlan'] });
+      const planning = stage({ name: 'ExecutionPlanning', provides: ['executionPlan'] });
+      const gates = stage({ name: 'GateEnhancement', requires: ['executionPlan'] });
+
+      expect(validateStageOrder([parsing, planning, gates])).toEqual([]);
+      expect(validateStageOrder([gates, parsing, planning])).toEqual([
+        {
+          stage: 'GateEnhancement',
+          missing: 'executionPlan',
+          producedBy: 'CommandParsing',
+          producedAtIndex: 1,
+        },
+      ]);
+    });
+
     test('PromptGuidance before InjectionControl', () => {
       expect(validateStageOrder([JUDGE, SESSION, GUIDANCE, INJECTION])).toEqual([
         {
