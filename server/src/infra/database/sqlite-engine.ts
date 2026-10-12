@@ -52,7 +52,10 @@ import type { DatabasePort, TransactionMode } from '#shared/types/persistence.js
 import type { Logger } from '../logging/index.js';
 
 import { sweepUnreferencedObjects } from '#cli-shared/object-store.js';
-import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js';
+import {
+  STATE_DB_BUSY_TIMEOUT_MS,
+  STATE_DB_WRITER_PRAGMAS,
+} from '#shared/utils/runtime-state-location.js';
 
 /**
  * Bump this when changing the embedded schema. Triggers drop-and-recreate.
@@ -491,6 +494,35 @@ type SchemaOutcome =
   | { readonly kind: 'current' }
   | { readonly kind: 'created' | 'recreated'; readonly preserved: readonly PreservedTable[] };
 
+/** What to do about a lock another connection held past `busy_timeout`. */
+const LOCK_REMEDY =
+  `Another process held a lock on this file for longer than ${STATE_DB_BUSY_TIMEOUT_MS} ms ` +
+  '(busy_timeout); the file itself is not damaged. Retry once that process finishes, or set ' +
+  'MCP_RUNTIME_ROOT to a directory no other process uses.';
+
+/**
+ * A thrown value's message. Duck-typed, not `instanceof Error`: `node:sqlite` errors can come from
+ * another realm (Jest's VM context is one), where `instanceof` is false and `String(error)` would
+ * prefix the text with "Error: ".
+ */
+function messageOf(error: unknown): string {
+  const message = (error as { message?: unknown } | null)?.message;
+  return typeof message === 'string' ? message : String(error);
+}
+
+/**
+ * Whether a `node:sqlite` error is a lock another connection held past `busy_timeout`. Classified by
+ * `errcode` (the extended result code), whose low byte is the primary code: 5 is `SQLITE_BUSY`, 6 is
+ * `SQLITE_LOCKED`. The same rule as `isTransientLockError` in `modules/chains/manager.ts`, which
+ * cannot be imported from here (`modules/` sits above `infra/`).
+ */
+function isSqliteLockError(error: unknown): boolean {
+  const errcode = (error as { errcode?: unknown } | null)?.errcode;
+  if (typeof errcode !== 'number') return false;
+  const primary = errcode & 0xff;
+  return primary === 5 || primary === 6;
+}
+
 /**
  * The history key a row belongs to, as one string.
  *
@@ -648,20 +680,25 @@ export class SqliteEngine implements DatabasePort {
       // Open file-backed database (creates file if not exists)
       this.db = new DatabaseSync(this.dbPath);
 
+      // The per-connection pragmas every WRITER of this file sets, from the one list both writers
+      // read (`STATE_DB_WRITER_PRAGMAS`) — this server and `cpm` cannot share a module tree, so a
+      // hand-typed copy on either side is how the two would drift into disagreeing about how
+      // patient this file is, or about whether its foreign keys hold. `journal_mode` is not in it:
+      // it is written into the file and persists, so it belongs to whoever creates it.
+      //
+      // FIRST, before any read: these touch only this connection, and `busy_timeout` governs every
+      // statement after it. Until 2026-10-12 the schema-version read below ran before them, with
+      // SQLite's default patience of zero, so a server starting while another process held the
+      // file failed in ~2 ms with "database is locked" instead of waiting its turn.
+      for (const pragma of STATE_DB_WRITER_PRAGMAS) {
+        this.db.exec(pragma);
+      }
+
       // Refuse incompatible or malformed authority before even changing the journal mode.
       this.getSupportedSchemaVersion();
 
       // Enable WAL mode for concurrent reader access (Python hooks, skills-sync CLI)
       this.db.exec('PRAGMA journal_mode=WAL');
-
-      // The per-connection pragmas every WRITER of this file sets, from the one list both writers
-      // read (`STATE_DB_WRITER_PRAGMAS`) — this server and `cpm` cannot share a module tree, so a
-      // hand-typed copy on either side is how the two would drift into disagreeing about how
-      // patient this file is, or about whether its foreign keys hold. `journal_mode` stays here:
-      // it is written into the file and persists, so it belongs to whoever creates it.
-      for (const pragma of STATE_DB_WRITER_PRAGMAS) {
-        this.db.exec(pragma);
-      }
 
       // Ensure schema is current (creates fresh or recreates an older version)
       const schemaOutcome = this.ensureSchema();
@@ -1648,6 +1685,10 @@ export class SqliteEngine implements DatabasePort {
    *
    * Missing authority means fresh only when no application schema exists. An existing authority
    * must contain exactly one positive integer; failed reads and malformed rows refuse startup.
+   *
+   * The recovery hint ("use a compatible runtime…") is attached only where it is true: a read that
+   * failed because another process held the file past `busy_timeout` says so instead, because the
+   * file is fine and the remedy is to wait, not to recover it.
    */
   getSchemaVersion(): number {
     try {
@@ -1680,10 +1721,12 @@ export class SqliteEngine implements DatabasePort {
       }
       return version;
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const prefix = `Cannot read schema authority at ${this.dbPath} (supported schema ${SCHEMA_VERSION}): ${messageOf(error)}.`;
+      if (isSqliteLockError(error)) {
+        throw new Error(`${prefix} ${LOCK_REMEDY}`, { cause: error });
+      }
       throw new Error(
-        `Cannot read schema authority at ${this.dbPath} (supported schema ${SCHEMA_VERSION}): ${msg}. ` +
-          'Use a compatible runtime to inspect/recover this database, or set MCP_RUNTIME_ROOT to an isolated directory.',
+        `${prefix} Use a compatible runtime to inspect/recover this database, or set MCP_RUNTIME_ROOT to an isolated directory.`,
         { cause: error }
       );
     }

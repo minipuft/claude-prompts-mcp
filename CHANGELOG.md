@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **A schema upgrade that cannot carry its durable rows across no longer loses them.** When the rows that exist nowhere else (rollback history, its stored file bytes, skills-sync manifests) could not be restored into the new schema, the server reported the failure but left `state.db` at the new version with those rows gone, so the next start ran normally over empty history. The upgrade is now one transaction: a failed restore leaves the old tables, rows and version in place, and every start reports the same failure until the schema change ships a migration.
+- **A server starting while another process holds `state.db` now waits its turn.** The first read of the file ran before the connection's 5-second lock timeout was set, so a start that met a lock failed in milliseconds with "database is locked" and a hint to recover the database. It now waits, and if the lock outlasts the timeout the error says the file was busy, not damaged.
 
 ## [5.1.1](https://github.com/minipuft/claude-prompts-mcp/compare/v5.1.0...v5.1.1) (2026-10-06)
 

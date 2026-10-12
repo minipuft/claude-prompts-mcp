@@ -558,6 +558,12 @@ current-version reopening and older-version upgrades remain supported; upgrades 
 durable tables through snapshot/drop/recreate/restore. Failure clears initialization state and closes
 the handle; if closing also fails, the original initialization error remains the reported failure.
 
+The connection's `busy_timeout` and `foreign_keys` pragmas (`STATE_DB_WRITER_PRAGMAS`) are set
+before the first read, so a start that meets another process's lock waits up to
+`STATE_DB_BUSY_TIMEOUT_MS` instead of failing at once. A read that still times out says the file
+was locked and is not damaged; the compatible-runtime remedy above is reserved for an authority that
+is missing, malformed or newer.
+
 **The check belongs to initialization, not every operation.** An already-open process does not
 revalidate a schema another writer replaces. Legacy binaries without this guard can still recreate
 a newer database and discard durable tables they do not know. Isolate or retire incompatible writers;
