@@ -144,3 +144,8 @@ Tier 2 row 2.1 records the owner's requested consolidated diagnosis. Dispatch on
 - Finding (0.9 → 0.7): `pipeline-builder.ts` says `PipelinePorts` is "uniformly optional"; `metricsProvider` no longer is.
 - 0.10 dropped the icon instead of keeping it beside the tier: a surviving ✓ would still imply a check runs. Accepted.
 - Finding (0.10): `resource://gates` renders `id: name (type)` from the authored type → row 0.12.
+
+## 2026-10-12 — 0.12 and 0.13 accepted
+
+- The authored-type mislabel had four human-facing surfaces: inspect (0.6), list (0.10), `resource://gate/` (0.12), `resource://gate/{id}` (0.13). Enumeration by shape (`rg "\.type\b"` over `gate-manager/services`, `resources/handlers/gate-resources.ts`, `gates/guidance`) leaves only writers and structured metadata fields named `type`, which carry the declared value.
+- Finding (0.13): `ResourceDependencies.gateManager` declared `getDefinition()` on `list()` items but not on `get()`, which is why only one of the two resource views could derive the tier. Both now declare it.
