@@ -15,6 +15,7 @@ import chokidar, { type ChokidarOptions, type FSWatcher } from 'chokidar';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 
+import { formatAttempt } from '#shared/utils/attempt-number.js';
 import { USER_CONFIG_FILENAMES } from '#shared/utils/config-file-format.js';
 
 /**
@@ -401,7 +402,7 @@ export class FileObserver extends EventEmitter {
         this.retryCount++;
         this.stats.retryCount++;
         this.logger.info(
-          `Retrying in ${this.config.retryDelayMs}ms (attempt ${this.retryCount}/${this.config.maxRetries})`
+          `Retrying in ${this.config.retryDelayMs}ms (${formatAttempt(this.retryCount, this.config.maxRetries)})`
         );
         setTimeout(() => this.watchDirectory(directoryPath, category), this.config.retryDelayMs);
       } else {

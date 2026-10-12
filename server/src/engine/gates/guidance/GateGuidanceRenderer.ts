@@ -47,14 +47,14 @@ const GATE_ADVISORY_LINE =
 export interface GateGuidanceRendererOptions {
   gateLoader: GateDefinitionProvider;
   temporaryGateRegistry?: TemporaryGateRegistry;
-  frameworkIdentifierProvider?: () => readonly string[] | undefined;
+  frameworkIdentifierProvider: () => readonly string[] | undefined;
   /**
    * Reads the live `gates` config. A provider, not a snapshot: `system_control` can change
    * `gates.harnessCovers` / `gates.reminderTokenBudget` at runtime, and a value captured at
    * construction would pin the renderer to the config that existed at server start. Same shape
    * as `frameworkIdentifierProvider` above and as `GatesConfigProvider` in the pipeline stages.
    */
-  gatesConfigProvider?: () => GateGuidanceConfig | undefined;
+  gatesConfigProvider: () => GateGuidanceConfig | undefined;
 }
 
 /** Severity ordering weights, most severe first. */
@@ -81,7 +81,8 @@ interface ReminderEntry {
 
 type GateGuidanceEntry =
   | { kind: 'check'; line: string }
-  | { kind: 'evaluation'; line: string }
+  /** A mixed gate's tool check rides along as `checkLine`, rendered under `### Checks`. */
+  | { kind: 'evaluation'; line: string; checkLine?: string }
   | { kind: 'reminder'; reminder: ReminderEntry }
   | { kind: 'suppressed' }
   | { kind: 'skipped' };
@@ -98,8 +99,8 @@ export class GateGuidanceRenderer {
   private readonly logger: Logger;
   private readonly gateLoader: GateDefinitionProvider;
   private readonly temporaryGateRegistry: TemporaryGateRegistry | undefined;
-  private readonly frameworkIdentifierProvider: (() => readonly string[] | undefined) | undefined;
-  private readonly gatesConfigProvider: (() => GateGuidanceConfig | undefined) | undefined;
+  private readonly frameworkIdentifierProvider: () => readonly string[] | undefined;
+  private readonly gatesConfigProvider: () => GateGuidanceConfig | undefined;
 
   constructor(logger: Logger, options: GateGuidanceRendererOptions) {
     if (!options?.gateLoader) {
@@ -165,6 +166,7 @@ export class GateGuidanceRenderer {
             break;
           case 'evaluation':
             evaluationLines.push(entry.line);
+            if (entry.checkLine !== undefined) checkLines.push(entry.checkLine);
             break;
           case 'reminder':
             reminders.push(entry.reminder);
@@ -253,29 +255,20 @@ export class GateGuidanceRenderer {
       return { kind: 'skipped' };
     }
 
-    // Issued semantic requirements retain full guidance, independently of reminder budgets.
+    // Issued semantic requirements retain full guidance, independently of reminder budgets. A
+    // mixed gate's tool check is a check, not part of the rubric: it renders under `### Checks`,
+    // the same split the skills export makes for the same gate.
     if (hasSemanticEvaluation(gate))
       return {
         kind: 'evaluation',
-        line: [
-          `### ${gate.name}`,
-          gate.guidance ?? '',
-          hasToolCheck(gate) ? formatCheckLine(gate.name, gate.pass_criteria ?? []) : '',
-        ]
-          .filter((part) => part !== '')
-          .join('\n'),
+        line: [`### ${gate.name}`, gate.guidance ?? ''].filter((part) => part !== '').join('\n'),
+        ...(hasToolCheck(gate) ? { checkLine: this.renderCheckLine(gate, context) } : {}),
       };
 
-    // Check lines are never suppressed or budgeted. Their classification does not establish
-    // execution: single prompts keep the configured command visible with an explicit caveat.
+    // Check lines are never suppressed or budgeted.
     if (deriveGateTier(gate) === 'check') {
-      const checkLine = formatCheckLine(gate.name, gate.pass_criteria ?? []);
       this.logger.debug('[GATE GUIDANCE RENDERER] Added check line for gate:', gateId);
-      return {
-        kind: 'check',
-        line:
-          context.criteriaExecution === 'pipeline' ? checkLine : `${checkLine} (not executed here)`,
-      };
+      return { kind: 'check', line: this.renderCheckLine(gate, context) };
     }
 
     // Harness coverage outranks explicit reminder requests (B2); a missing subject is not
@@ -308,6 +301,17 @@ export class GateGuidanceRenderer {
   }
 
   /**
+   * One check's line. Its classification does not establish execution: single prompts keep the
+   * configured command visible with an explicit caveat.
+   */
+  private renderCheckLine(gate: GuidanceDefinition, context: GateContext): string {
+    const checkLine = formatCheckLine(gate.name, gate.pass_criteria ?? []);
+    return context.criteriaExecution === 'pipeline'
+      ? checkLine
+      : `${checkLine} (not executed here)`;
+  }
+
+  /**
    * Resolve the `gates` settings this renderer reads, calling the provider on every render so a
    * runtime `system_control` config change takes effect without rebuilding the renderer.
    */
@@ -315,10 +319,10 @@ export class GateGuidanceRenderer {
     harnessCovers: readonly string[];
     reminderTokenBudget: number;
   } {
-    const gatesConfig = this.gatesConfigProvider?.();
-    // No provider means no wiring, not a second opinion about what the defaults are:
+    const gatesConfig = this.gatesConfigProvider();
+    // A provider that returns nothing is not a second opinion about what the defaults are:
     // `DEFAULT_GATES_CONFIG` is the same object `ConfigManager` folds into `getGatesConfig()`,
-    // so an unwired renderer and a wired one with an empty config.json render identically.
+    // so a provider returning nothing and one backed by an empty config.json render identically.
     return {
       harnessCovers: gatesConfig?.harnessCovers ?? DEFAULT_GATES_CONFIG.harnessCovers,
       reminderTokenBudget:
@@ -438,7 +442,7 @@ export class GateGuidanceRenderer {
     // write-back — so trimming for display keeps the section spacing below unchanged from before
     // that fix, one blank line between gates rather than two.
     let guidance = (gate.guidance ?? '').trim();
-    const frameworkNames = this.frameworkIdentifierProvider?.();
+    const frameworkNames = this.frameworkIdentifierProvider();
 
     if (context.framework && hasFrameworkSpecificContent(guidance, frameworkNames)) {
       guidance = filterFrameworkGuidance(guidance, context.framework, frameworkNames);

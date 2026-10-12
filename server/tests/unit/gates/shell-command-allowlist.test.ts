@@ -113,7 +113,10 @@ describe('isCommandAllowed', () => {
 
 describe('ShellVerifyExecutor allowlist enforcement', () => {
   it('refuses an unlisted command without running it, and names the setting', async () => {
-    const executor = new ShellVerifyExecutor({ allowlist: ['npm test'] });
+    const executor = new ShellVerifyExecutor({
+      gateSystemEnabled: () => true,
+      allowlist: ['npm test'],
+    });
     const result = await executor.execute({ command: 'echo should-not-run' });
 
     expect(result.refused).toBe(true);
@@ -123,7 +126,10 @@ describe('ShellVerifyExecutor allowlist enforcement', () => {
   });
 
   it('runs a command the operator allowlisted', async () => {
-    const executor = new ShellVerifyExecutor({ allowlist: ['echo allowlisted'] });
+    const executor = new ShellVerifyExecutor({
+      gateSystemEnabled: () => true,
+      allowlist: ['echo allowlisted'],
+    });
     const result = await executor.execute({ command: 'echo allowlisted' });
 
     expect(result.refused).toBeUndefined();
@@ -134,7 +140,10 @@ describe('ShellVerifyExecutor allowlist enforcement', () => {
   it('marks a genuine command failure as failed but NOT refused', async () => {
     // A refusal and a verified negative must stay distinguishable: only the
     // second one is evidence about the thing being verified.
-    const executor = new ShellVerifyExecutor({ allowlist: ['sh -c "exit 3"'] });
+    const executor = new ShellVerifyExecutor({
+      gateSystemEnabled: () => true,
+      allowlist: ['sh -c "exit 3"'],
+    });
     const result = await executor.execute({ command: 'sh -c "exit 3"' });
 
     expect(result.refused).toBeUndefined();

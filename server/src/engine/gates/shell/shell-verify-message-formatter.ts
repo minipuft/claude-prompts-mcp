@@ -11,6 +11,7 @@
 
 import type { ShellVerifyResult, PendingShellVerification } from './types.js';
 
+import { formatAttempt } from '#shared/utils/attempt-number.js';
 import { resolveSignalName, resolveSignalDescription } from '#shared/utils/process.js';
 
 /**
@@ -87,6 +88,18 @@ export function extractErrorOutput(result: ShellVerifyResult): string {
 }
 
 /**
+ * The last run a pending shell check spent, 1-based: `attemptCount` is charged before
+ * the command runs, so once a run has happened it IS that run's ordinal; 0 means none has.
+ */
+export function formatLastShellRun(
+  pending: Pick<PendingShellVerification, 'attemptCount' | 'maxAttempts'>
+): string {
+  return pending.attemptCount === 0
+    ? 'none yet'
+    : formatAttempt(pending.attemptCount, pending.maxAttempts);
+}
+
+/**
  * Format bounce-back message for retry attempts.
  *
  * Displayed when verification fails but attempts remain.
@@ -98,7 +111,7 @@ export function formatBounceBackMessage(
   errorOutput: string
 ): string {
   const lines = [
-    `## Shell Verification FAILED (Attempt ${pending.attemptCount}/${pending.maxAttempts})`,
+    `## Shell Verification FAILED (${formatAttempt(pending.attemptCount, pending.maxAttempts, 'Attempt')})`,
     '',
     `**Command:** \`${result.command}\``,
     `**Exit Code:** ${formatExitCode(result.exitCode)}`,
@@ -136,7 +149,7 @@ export function formatEscalationMessage(
     '## Shell Verification FAILED - Maximum Attempts Reached',
     '',
     `**Command:** \`${result.command}\``,
-    `**Attempts:** ${pending.attemptCount}/${pending.maxAttempts}`,
+    `**Last run:** ${formatLastShellRun(pending)}`,
     `**Exit Code:** ${formatExitCode(result.exitCode)}`,
   ];
 

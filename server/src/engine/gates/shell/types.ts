@@ -158,15 +158,15 @@ export interface ShellVerifyExecutorConfig {
    * serves — an unscoped read resolves to the process default while a client's
    * toggle wrote to its own row.
    *
-   * Omit to leave execution ungoverned by the switch (tests, embedders that
-   * have no gate system).
+   * Required: an executor built without it would run commands the operator disabled the gate
+   * system to stop. A caller with no gate system passes `() => true`.
    *
    * Takes the caller's scope rather than closing over one: the executor is built once per
    * pipeline and serves every request, so a resolver with no parameter can only answer for the
    * launch workspace, and under Streamable HTTP a workspace that disabled gates kept running
    * commands. `execute(gate, scope)` supplies it.
    */
-  gateSystemEnabled?: (scope: StateStoreOptions | undefined) => boolean;
+  gateSystemEnabled: (scope: StateStoreOptions | undefined) => boolean;
 }
 
 /**

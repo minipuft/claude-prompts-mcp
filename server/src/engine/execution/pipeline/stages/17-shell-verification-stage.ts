@@ -27,6 +27,7 @@ import {
   type VerifyActiveStateStore,
   createBounceBackFeedback,
   createEscalationFeedback,
+  formatLastShellRun,
 } from '../../../gates/shell/index.js';
 import { reviewHolding } from '../../capture/step-capture-service.js';
 import { BasePipelineStage } from '../stage.js';
@@ -39,6 +40,8 @@ import type {
   GateVerdictProcessor,
 } from '../../../gates/services/gate-verdict-processor.js';
 import type { ExecutionContext } from '../../context/index.js';
+
+import { formatAttempt } from '#shared/utils/attempt-number.js';
 
 /**
  * Shell Verification Stage - thin orchestration layer.
@@ -292,7 +295,7 @@ export class ShellVerificationStage extends BasePipelineStage {
       content: [
         {
           type: 'text',
-          text: `## Shell Verification — Still Pending\n\nThe skip answered the step's gate review. The shell check still holds the step.\n\n**Command:** \`${String(pending.shellVerify.command)}\`\n**Attempts:** ${pending.attemptCount}/${pending.maxAttempts}\n\nSubmit your fix to re-run verification, or send \`gate_action: "skip"\` again to skip the check.${resumeHint}`,
+          text: `## Shell Verification — Still Pending\n\nThe skip answered the step's gate review. The shell check still holds the step.\n\n**Command:** \`${String(pending.shellVerify.command)}\`\n**Last run:** ${formatLastShellRun(pending)}\n\nSubmit your fix to re-run verification, or send \`gate_action: "skip"\` again to skip the check.${resumeHint}`,
         },
       ],
     });
@@ -334,7 +337,7 @@ export class ShellVerificationStage extends BasePipelineStage {
 
     context.state.gates.pendingShellVerification = restored;
     this.logger.info?.(
-      `[${this.name}] Restored pending shell verification from session (attempt ${restored.attemptCount}/${restored.maxAttempts})`
+      `[${this.name}] Restored pending shell verification from session (last run: ${formatLastShellRun(restored)})`
     );
     return restored;
   }
@@ -547,7 +550,7 @@ export class ShellVerificationStage extends BasePipelineStage {
           content: [
             {
               type: 'text',
-              text: `## Shell Verification — Attempts Reset\n\n**Command:** \`${pending.shellVerify.command}\`\n**Attempts:** 0/${pending.maxAttempts}\n\nSubmit your fix to re-run verification.${resumeHint}`,
+              text: `## Shell Verification — Attempts Reset\n\n**Command:** \`${pending.shellVerify.command}\`\n**Next run:** ${formatAttempt(1, pending.maxAttempts)}\n\nSubmit your fix to re-run verification.${resumeHint}`,
             },
           ],
         });

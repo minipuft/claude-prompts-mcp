@@ -1,5 +1,5 @@
 /**
- * P4.67 — a `gate.yaml` update that changes one key must leave every other key alone, including
+ * A `gate.yaml` update that changes one key must leave every other key alone, including
  * one `GateDefinitionSchema` does not declare at all.
  *
  * WHAT WENT WRONG

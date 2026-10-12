@@ -1,5 +1,6 @@
 /**
- * P4.4 — `severity` and `enforcementMode` are authorable through the tool.
+ * Gate fields authored through the tool (`severity`, `enforcementMode`, `subject`,
+ * `blockResponseOnFail`, `evaluation`) reach `gate.yaml`.
  *
  * WHY THIS MEASURES THE FILE, NOT A TOOL RESPONSE. The natural home for this proof is the
  * conformance corpus, which drives a real server and asserts on what comes back. It cannot cover

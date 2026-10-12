@@ -212,19 +212,31 @@ describe('PromptExecutionPipeline stage-order enforcement', () => {
 
   test('constructs when a declared requirement is met by an earlier stage', () => {
     expect(
-      () => new PromptExecutionPipeline([session, injection], { logger: createLogger() })
+      () =>
+        new PromptExecutionPipeline([session, injection], {
+          metricsProvider: () => undefined,
+          logger: createLogger(),
+        })
     ).not.toThrow();
   });
 
   test('throws when a declared requirement is produced by a later stage', () => {
     expect(
-      () => new PromptExecutionPipeline([injection, session], { logger: createLogger() })
+      () =>
+        new PromptExecutionPipeline([injection, session], {
+          metricsProvider: () => undefined,
+          logger: createLogger(),
+        })
     ).toThrow(/InjectionControl requires "sessionContext\.currentStep"/);
   });
 
   test('the throw names the count and the producing stage, so the fix is the message', () => {
     expect(
-      () => new PromptExecutionPipeline([injection, session], { logger: createLogger() })
+      () =>
+        new PromptExecutionPipeline([injection, session], {
+          metricsProvider: () => undefined,
+          logger: createLogger(),
+        })
     ).toThrow(/1 declared ordering constraint\(s\)[\s\S]*SessionManagement at index 1/);
   });
 });
@@ -441,7 +453,7 @@ describe('PromptExecutionPipeline — the run-completion point', () => {
  */
 describe('PromptExecutionPipeline — a call that throws after the run exists', () => {
   const setup = (throwAt: StageName | undefined) => {
-    const registry = new TemporaryGateRegistry(createLogger());
+    const registry = new TemporaryGateRegistry(createLogger(), { isCanonicalGateId: () => false });
     let gateId = '';
     const registers = createStage('GateEnhancement', (context) => {
       gateId = registry.createTemporaryGate({
@@ -527,7 +539,7 @@ describe('PromptExecutionPipeline — a call that throws, and the call after it'
   type Decision = 'create-new' | 'resume-chain-id' | 'resume-completed';
 
   const setup = () => {
-    const registry = new TemporaryGateRegistry(createLogger());
+    const registry = new TemporaryGateRegistry(createLogger(), { isCanonicalGateId: () => false });
     const records: Array<Record<string, unknown> & { executionId: string }> = [];
     let sequence = 0;
     const nextId = (): string => `r${String((sequence += 1)).padStart(6, '0')}`;

@@ -105,7 +105,7 @@ const resolveGateIds = async (scenario: Scenario = {}): Promise<readonly string[
     () => (scenario.activeFrameworkId === undefined ? 'cageerf' : scenario.activeFrameworkId),
     () => undefined as never,
     undefined,
-    new GateMetricsRecorder(undefined),
+    new GateMetricsRecorder(() => undefined),
     createLogger()
   );
 
@@ -337,7 +337,7 @@ const resolveChainStepGateIds = async (
     () => 'cageerf',
     () => undefined as never,
     undefined,
-    new GateMetricsRecorder(undefined),
+    new GateMetricsRecorder(() => undefined),
     createLogger()
   );
 

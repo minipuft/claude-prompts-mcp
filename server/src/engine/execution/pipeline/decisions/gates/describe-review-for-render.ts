@@ -1,12 +1,15 @@
 // @lifecycle canonical - What a gate review's render reads off the review record.
 /**
- * Review render facts (primitive rework row 3.5).
+ * Review render facts.
  *
  * A gate review re-renders the step it grades, and that render reads the review in two places:
  * which step it grades and which gates it names (before the body), and what the attempts so far
  * left behind — retry hints, the last recorded reasoning, the retry budget (after it). Both reads
  * are decided here, from the record `ChainSession.reviews[nodeId]` holds, so the executor that
  * renders the template owns no review semantics of its own.
+ *
+ * The same module projects the frozen semantic protocol of a review (judge review, action,
+ * resume), the structured verdict template and the fallback gate guidance.
  *
  * Pure: reads the review it is given, writes nothing.
  */
@@ -259,8 +262,8 @@ const MAX_GATE_VERDICT_ENTRIES = 10;
  * directly. Rationale placeholders are single-line, which is what the
  * schema requires.
  *
- * A module function, not a method: a detached node's review (row 4.8) renders the same template
- * from `StepResponseCaptureStage`, which holds no assembler.
+ * A module function, not a method: a detached node's review renders the same template from
+ * `StepResponseCaptureStage`, which holds no assembler.
  */
 export function buildStructuredVerdictTemplate(
   gateIds: readonly string[],
@@ -333,7 +336,7 @@ export function buildStructuredVerdictTemplate(
   });
 
   const perGate = entries.length > 0 ? `,\n  "per_gate": [\n${entries.join(',\n')}\n  ]` : '';
-  // One field for every reminder, never one entry each (ruling B4). Pre-listed under
+  // One field for every reminder, never one entry each. Pre-listed under
   // `satisfied` because that is the common answer; an id that did not apply moves to
   // `not_applicable` WITH a reason, which the schema requires.
   const reminders =

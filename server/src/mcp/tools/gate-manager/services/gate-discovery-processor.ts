@@ -14,6 +14,7 @@ import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput } from '../core/types.js';
 
 import { projectPublicGateCriteria } from '#engine/gates/core/gate-definition-converter.js';
+import { formatGateTierLabel } from '#engine/gates/core/gate-tier.js';
 
 export class GateDiscoveryProcessor {
   constructor(private readonly ctx: GateResourceContext) {}
@@ -66,10 +67,11 @@ export class GateDiscoveryProcessor {
     }
 
     const gateList = gates
-      .map((gate) => {
-        const typeIcon = gate.type === 'validation' ? '✓' : '📖';
-        return `  ${typeIcon} ${gate.gateId}: ${gate.name}`;
-      })
+      // The tier comes from what the criteria require (same derivation as inspect). The authored
+      // `type` chose an icon that claimed a check runs for a semantic-only gate declared `validation`.
+      .map(
+        (gate) => `  ${gate.gateId}: ${gate.name} [${formatGateTierLabel(gate.getDefinition())}]`
+      )
       .join('\n');
 
     return this.success(
@@ -102,7 +104,6 @@ export class GateDiscoveryProcessor {
       return this.error(`Gate '${id}' not found`);
     }
 
-    const typeIcon = gate.type === 'validation' ? '✓' : '📖';
     const guidance = gate.getGuidance();
     const guidancePreview = guidance.length > 500 ? guidance.substring(0, 500) + '...' : guidance;
 
@@ -151,7 +152,10 @@ export class GateDiscoveryProcessor {
       `🚦 Gate: ${gate.name}\n\n` +
         `📋 Details:\n` +
         `  - ID: ${gate.gateId}\n` +
-        `  - Type: ${typeIcon} ${gate.type}\n` +
+        // The tier is derived from what the criteria require. The authored `type` stays
+        // visible under its own name, but a semantic-only gate declared `validation` runs no check.
+        `  - Tier: ${formatGateTierLabel(definition)}\n` +
+        `  - Declared Type: ${gate.type}\n` +
         `  - Description: ${gate.description}` +
         `${severityLine}${enforcementModeLine}${gateTypeLine}${blockResponseLine}${evaluationLine}${calibrationSuiteLine}${criteriaBlock}\n\n` +
         `📝 Guidance:\n${guidancePreview}` +

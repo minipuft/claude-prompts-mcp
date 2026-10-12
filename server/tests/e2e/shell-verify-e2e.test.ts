@@ -28,6 +28,7 @@ describe('Shell Verify E2E', () => {
     // `allowedDirs` is the same statement for WHERE (row 1.6): these tests run in a fresh
     // mkdtemp directory, which is outside the executor's default root by construction.
     executor = createShellVerifyExecutor({
+      gateSystemEnabled: () => true,
       defaultTimeout: 30000, // 30 seconds for E2E tests
       debug: false,
       allowlist: ['UNSAFE_ALLOW_ALL'],
@@ -207,6 +208,7 @@ describe('Shell Verify E2E', () => {
   describe('Timeout Behavior', () => {
     test('handles command timeout', async () => {
       const shortTimeoutExecutor = createShellVerifyExecutor({
+        gateSystemEnabled: () => true,
         defaultTimeout: 500, // Very short - will be clamped to 1000ms
         allowlist: ['UNSAFE_ALLOW_ALL'],
       });

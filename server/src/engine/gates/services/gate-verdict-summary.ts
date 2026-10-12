@@ -10,6 +10,33 @@ import type {
 import type { ReviewEvent } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
 import type { ParsedGateVerdict } from '../core/gate-verdict-contract.js';
 
+/**
+ * An operational bypass (`gate_action: skip`) recorded for a gate. It carries server facts and
+ * never an evaluated PASS or FAIL, so every reader keeps it apart from graded outcomes.
+ */
+export function isGateBypass(
+  summary: Pick<GateVerdictSummary, 'verdict' | 'disposition'>
+): boolean {
+  return summary.verdict === 'BYPASS' || summary.disposition === 'bypassed';
+}
+
+/** What the semantic report contract decided; acceptance is not model accuracy. */
+export type SemanticReportAcceptance = 'accepted' | 'rejected' | 'invalid';
+
+export function classifySemanticReportAcceptance(
+  result: SemanticEvaluationResult
+): SemanticReportAcceptance {
+  if (!result.valid) return 'invalid';
+  return result.passed ? 'accepted' : 'rejected';
+}
+
+/** A recorded grade with no semantic or tool component behind it: the reviewer's word alone. */
+export function isLegacyUnverifiedAcceptance(
+  summary: Pick<GateVerdictSummary, 'semanticResult' | 'toolChecks'>
+): boolean {
+  return summary.semanticResult === undefined && (summary.toolChecks?.length ?? 0) === 0;
+}
+
 /** Facts retained from the existing kernel call; this projector does not adjudicate. */
 export interface SemanticGateSummaryFacts {
   readonly gateId: string;

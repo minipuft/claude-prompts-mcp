@@ -87,7 +87,12 @@ describe('GateEnforcementAuthority', () => {
     jest.clearAllMocks();
     mockLogger = createMockLogger();
     mockSessionManager = createMockChainSessionStore();
-    authority = new GateEnforcementAuthority(mockSessionManager as any, mockLogger as any);
+    authority = new GateEnforcementAuthority(
+      mockSessionManager as any,
+      mockLogger as any,
+      undefined,
+      () => ({ evaluation: {} })
+    );
   });
 
   describe('parseVerdict', () => {
@@ -933,7 +938,8 @@ GATE_REVIEW: FAIL - Tests missing`;
       const authorityWithLoader = new GateEnforcementAuthority(
         mockSessionManager as any,
         mockLogger as any,
-        mockGateLoader
+        mockGateLoader,
+        () => ({ evaluation: {} })
       );
 
       const review = await authorityWithLoader.createReview('session-1', 'gate', 'n1', {
@@ -966,7 +972,8 @@ GATE_REVIEW: FAIL - Tests missing`;
       const authorityWithLoader = new GateEnforcementAuthority(
         mockSessionManager as any,
         mockLogger as any,
-        mockGateLoader
+        mockGateLoader,
+        () => ({ evaluation: {} })
       );
 
       const review = await authorityWithLoader.createReview('session-1', 'gate', 'n1', {
@@ -1002,7 +1009,8 @@ GATE_REVIEW: FAIL - Tests missing`;
       const authorityWithLoader = new GateEnforcementAuthority(
         mockSessionManager as any,
         mockLogger as any,
-        mockGateLoader
+        mockGateLoader,
+        () => ({ evaluation: {} })
       );
 
       const review = await authorityWithLoader.createReview('session-1', 'gate', 'n1', {
@@ -1021,7 +1029,8 @@ GATE_REVIEW: FAIL - Tests missing`;
       const authorityWithLoader = new GateEnforcementAuthority(
         mockSessionManager as any,
         mockLogger as any,
-        mockGateLoader
+        mockGateLoader,
+        () => ({ evaluation: {} })
       );
 
       const review = await authorityWithLoader.createReview('session-1', 'gate', 'n1', {
@@ -1086,7 +1095,8 @@ GATE_REVIEW: FAIL - Tests missing`;
         mockLogger as any,
         {
           loadGates: async (ids: string[]) => ids.map((id) => ({ id, enforcementMode: modes[id] })),
-        } as never
+        } as never,
+        () => ({ evaluation: {} })
       );
 
     test("a review's own advisory gates decide, not a constant", async () => {

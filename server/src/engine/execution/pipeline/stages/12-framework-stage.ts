@@ -36,7 +36,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
 
   constructor(
     private readonly frameworkManager: FrameworkManager,
-    private readonly frameworkEnabled: FrameworkEnabledProvider | null,
+    private readonly frameworkEnabled: FrameworkEnabledProvider,
     logger: Logger,
     private readonly gateLoader?: GateDefinitionProvider
   ) {
@@ -98,7 +98,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       // Allow @ operator override even when framework system is globally disabled
       const hasFrameworkOverride = Boolean(context.parsedCommand?.executionPlan?.frameworkOverride);
 
-      if (!this.frameworkEnabled?.(context.getScopeOptions()) && !hasFrameworkOverride) {
+      if (!this.frameworkEnabled(context.getScopeOptions()) && !hasFrameworkOverride) {
         this.logExit({
           skipped: 'Framework system disabled and no override specified',
           decision: { source: decision.source, reason: decision.reason },

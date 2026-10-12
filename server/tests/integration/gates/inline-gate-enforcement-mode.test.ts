@@ -77,7 +77,7 @@ describe('an inline gate declares its own enforcement mode (row 1.5)', () => {
   /** Load, register and read back one twin; return its definition and the step's mode. */
   async function resolveTwin(gateId: string, modeLine: string | undefined) {
     dir = mkdtempSync(path.join(tmpdir(), 'inline-gate-mode-'));
-    registry = new TemporaryGateRegistry(logger as never);
+    registry = new TemporaryGateRegistry(logger as never, { isCanonicalGateId: () => false });
     const prompt = loadPromptWithInlineGate(dir, gateId, modeLine);
     const context = {
       state: { gates: { temporaryGateIds: [] } },
@@ -121,7 +121,7 @@ describe('an inline gate declares its own enforcement mode (row 1.5)', () => {
 
   test('an unknown mode refuses the prompt at load, naming the key', () => {
     dir = mkdtempSync(path.join(tmpdir(), 'inline-gate-mode-'));
-    registry = new TemporaryGateRegistry(logger as never);
+    registry = new TemporaryGateRegistry(logger as never, { isCanonicalGateId: () => false });
     logger.error.mockClear();
     logger.warn.mockClear();
 

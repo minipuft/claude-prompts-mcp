@@ -219,6 +219,7 @@ describe('Shell Verification Flow Integration', () => {
       // The operator allowlist is default-deny (Tier 1), so without it every command here
       // is refused and the suite proves the refusal rather than the behaviour it tests.
       executor = createShellVerifyExecutor({
+        gateSystemEnabled: () => true,
         defaultTimeout: 5000,
         debug: false,
         allowlist: ['UNSAFE_ALLOW_ALL'],
@@ -436,7 +437,7 @@ Please fix the issues and submit again.`;
       const escalationMessage = `## Shell Verification FAILED - Maximum Attempts Reached
 
 **Command:** \`${result.command}\`
-**Attempts:** 5/5
+**Last run:** attempt 5/5
 **Exit Code:** ${result.exitCode}
 
 ### Recent Error Output

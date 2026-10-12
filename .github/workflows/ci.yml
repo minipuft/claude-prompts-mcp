@@ -440,6 +440,28 @@ jobs:
         run: npm run test:integration
         timeout-minutes: 15
 
+      # `evaluations/` declares `engines.node >=24` (native TypeScript stripping), so its checks
+      # run on the Node 24 leg only. The job already runs on the `full` scope alone, and its
+      # gate tests load the server's own dev dependencies, installed by "Install dependencies"
+      # above -- nothing here installs a second time.
+      - name: Evaluations core controls
+        if: matrix.node == '24'
+        working-directory: .
+        run: npm --prefix evaluations run test:core
+        timeout-minutes: 5
+
+      - name: Evaluations gate controls
+        if: matrix.node == '24'
+        working-directory: .
+        run: npm --prefix evaluations run test:gates
+        timeout-minutes: 5
+
+      - name: Evaluations strict types
+        if: matrix.node == '24'
+        working-directory: .
+        run: npm --prefix evaluations run typecheck
+        timeout-minutes: 5
+
   e2e:
     name: E2E (Node ${{ matrix.node }})
     needs: [classify, build]

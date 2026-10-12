@@ -28,7 +28,7 @@ export class ExecutionPlanningStage extends BasePipelineStage {
 
   constructor(
     private readonly executionPlanner: ExecutionPlanner,
-    private readonly frameworkEnabled: FrameworkEnabledProvider | null,
+    private readonly frameworkEnabled: FrameworkEnabledProvider,
     logger: Logger
   ) {
     super(logger);
@@ -66,7 +66,7 @@ export class ExecutionPlanningStage extends BasePipelineStage {
     const plan = await this.executionPlanner.createPlan({
       parsedCommand,
       convertedPrompt,
-      frameworkEnabled: this.frameworkEnabled?.(context.getScopeOptions()) ?? false,
+      frameworkEnabled: this.frameworkEnabled(context.getScopeOptions()),
       gateOverrides: this.buildGateOverrides(context),
     });
 
@@ -94,7 +94,7 @@ export class ExecutionPlanningStage extends BasePipelineStage {
     const { chainPlan, stepPlans } = await this.executionPlanner.createChainPlan({
       parsedCommand,
       steps,
-      frameworkEnabled: this.frameworkEnabled?.(context.getScopeOptions()) ?? false,
+      frameworkEnabled: this.frameworkEnabled(context.getScopeOptions()),
       gateOverrides,
     });
 

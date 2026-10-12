@@ -40,7 +40,9 @@ const everyField: Required<Omit<TemporaryGateDefinition, 'created_at'>> = {
 
 describe('TemporaryGateRegistry stored record', () => {
   test('a gate read back carries every field its definition declared', () => {
-    const registry = new TemporaryGateRegistry(createLogger() as never);
+    const registry = new TemporaryGateRegistry(createLogger() as never, {
+      isCanonicalGateId: () => false,
+    });
 
     const gateId = registry.createTemporaryGate(everyField);
 

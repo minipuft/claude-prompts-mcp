@@ -283,7 +283,10 @@ const buildPipeline = (options: {
               provider,
               agentResponse,
               {
-                shellVerifyExecutor: createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] }),
+                shellVerifyExecutor: createShellVerifyExecutor({
+                  gateSystemEnabled: () => true,
+                  allowlist: ['UNSAFE_ALLOW_ALL'],
+                }),
               },
               scope,
               definitions
@@ -316,7 +319,7 @@ const buildPipeline = (options: {
       sessionStore,
       provider ?? null,
       logger,
-      undefined,
+      () => undefined,
       {
         executionRecordStore: recordStore,
       }
@@ -394,7 +397,9 @@ const buildPipeline = (options: {
   return new PromptExecutionPipeline(stages, {
     logger,
     metricsProvider: () => undefined,
-    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, provider),
+    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, provider, () => ({
+      evaluation: {},
+    })),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
   });

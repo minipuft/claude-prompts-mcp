@@ -2490,10 +2490,10 @@ function renderEvaluationRequirements(evaluations: readonly TieredGateRef[]): st
  * Builds the Quality Gates markdown section for SKILL.md.
  *
  * Registered gates split into tool `### Checks`, independent `### Evaluation Requirements`,
- * and `### Reminders` (the criteria table, as before) by `deriveGateTier` — mirroring
+ * and `### Reminders` (the criteria table) by `deriveGateTier` — mirroring
  * `GateGuidanceRenderer.renderGuidance`'s runtime split, so an exported skill reads like a live
  * dispatch. `partition` already excludes a reminder whose `subject` this installation's harness
- * covers; tool and semantic requirements are never suppressed (ruling B2).
+ * covers; tool and semantic requirements are never suppressed.
  */
 function buildQualityGatesSection(partition: PartitionedGateRefs, hookEnforced: boolean): string {
   const { checks, evaluations, reminders, omitted, passthrough } = partition;

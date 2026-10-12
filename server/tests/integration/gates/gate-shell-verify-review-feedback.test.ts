@@ -5,7 +5,7 @@
  * Uses real ShellVerifyExecutor with real shell commands (echo, exit)
  * and mock GateDefinitionProvider returning controlled gate definitions.
  *
- * These tests verify the NEW feature: shell_verify output surfaced in
+ * These tests verify shell_verify output surfaced in
  * gate review feedback (runGateShellVerifications + formatGateShellVerifySection).
  */
 
@@ -65,7 +65,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['echo-gate'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       expect(results).toHaveLength(1);
@@ -97,7 +100,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['fail-gate'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       expect(results).toHaveLength(1);
@@ -127,7 +133,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['timeout-gate'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       // `timedOut`/`exitCode: -1` are the direct observation that the process was KILLED by the
@@ -179,7 +188,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['preset-gate'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       expect(results).toHaveLength(1);
@@ -213,7 +225,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['mixed-gate'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       // Only shell_verify criteria should produce results
@@ -247,7 +262,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['multi-shell'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       expect(results).toHaveLength(2);
@@ -282,7 +300,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['shell-gate', 'llm-gate'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       expect(results).toHaveLength(1);
@@ -304,7 +325,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['empty-gate'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       expect(results).toHaveLength(0);
@@ -324,7 +348,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['no-criteria'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       expect(results).toHaveLength(0);
@@ -337,7 +364,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['nonexistent'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       expect(results).toHaveLength(0);
@@ -370,7 +400,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['test-suite'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
       const section = formatGateShellVerifySection(results);
 
@@ -406,7 +439,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['lint-check'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
       const section = formatGateShellVerifySection(results);
 
@@ -450,7 +486,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['test-suite', 'lint'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
       const section = formatGateShellVerifySection(results);
 
@@ -474,7 +513,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['llm-only'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
       const section = formatGateShellVerifySection(results);
 
@@ -502,7 +544,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['md-gate'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
       const section = formatGateShellVerifySection(results);
 
@@ -541,7 +586,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['test-gate'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
       const section = formatGateShellVerifySection(results);
 
@@ -575,7 +623,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         ['llm-only'],
         provider,
         undefined,
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
       const section = formatGateShellVerifySection(results);
 
@@ -612,7 +663,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         {
           agentResponse,
         },
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       expect(results).toHaveLength(1);
@@ -644,7 +698,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         {
           agentResponse: 'should-not-appear',
         },
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       expect(results).toHaveLength(1);
@@ -679,7 +736,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         {
           agentResponse,
         },
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       expect(results).toHaveLength(1);
@@ -721,7 +781,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         {
           agentResponse,
         },
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       expect(results).toHaveLength(1);
@@ -761,7 +824,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         {
           agentResponse: truthful,
         },
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
       expect(truthfulResults[0]?.passed).toBe(true);
 
@@ -772,7 +838,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         {
           agentResponse: fabricated,
         },
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
       expect(fabricatedResults[0]?.passed).toBe(false);
     });
@@ -803,7 +872,10 @@ describe('Gate Shell Verify Review Feedback (Integration)', () => {
         {
           agentResponse: largeResponse,
         },
-        createShellVerifyExecutor({ allowlist: ['UNSAFE_ALLOW_ALL'] })
+        createShellVerifyExecutor({
+          gateSystemEnabled: () => true,
+          allowlist: ['UNSAFE_ALLOW_ALL'],
+        })
       );
 
       const pipedBytes = parseInt((results[0]?.stdout ?? '0').trim(), 10);

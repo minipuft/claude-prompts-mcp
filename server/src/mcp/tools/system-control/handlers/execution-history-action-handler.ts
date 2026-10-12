@@ -6,15 +6,18 @@ import type { ExecutionRecord, GateVerdictSummary } from '#shared/types/chain-ex
 import type { ToolResponse } from '#shared/types/index.js';
 
 import { resolveFrozenReviewDefinition } from '#engine/execution/pipeline/decisions/gates/frozen-review-definitions.js';
+import {
+  classifySemanticReportAcceptance,
+  isGateBypass,
+  isLegacyUnverifiedAcceptance,
+} from '#engine/gates/services/gate-verdict-summary.js';
+import { formatAttempt } from '#shared/utils/attempt-number.js';
 
 /**
  * Reader for `execution_records`, the append-only chain execution ledger.
  *
- * The ledger had a writer (pipeline stages 18 and 21) and no reader for its entire
- * existence: `queryBySession` and `queryByChain` had zero callers, and the one documented
- * consumer — the `v_execution_status` view — selects FROM `chain_sessions`, which is
- * deleted per-PID at cleanup, so it reported 0 rows against 64 stored records. This action
- * is that missing reader.
+ * The ledger is written by pipeline stages 18 and 21. The `v_execution_status` view cannot
+ * serve as its reader: it selects FROM `chain_sessions`, which is deleted per-PID at cleanup.
  */
 export class ExecutionHistoryActionHandler extends ActionHandler {
   async execute(args: Record<string, unknown>): Promise<ToolResponse> {
@@ -229,7 +232,7 @@ function formatGateVerdictLines(record: ExecutionRecord): string[] {
 }
 
 function formatGateSummaryLines(summary: GateVerdictSummary): string[] {
-  const bypass = summary.verdict === 'BYPASS' || summary.disposition === 'bypassed';
+  const bypass = isGateBypass(summary);
   const icon = bypass
     ? '↪'
     : summary.tier === 'reminder'
@@ -237,7 +240,7 @@ function formatGateSummaryLines(summary: GateVerdictSummary): string[] {
       : summary.verdict === 'PASS'
         ? '✓'
         : '✗';
-  const attempt = summary.attempt !== undefined ? ` (attempt ${summary.attempt})` : '';
+  const attempt = formatLedgerAttempt(summary, bypass);
   const rationale =
     summary.rationale !== undefined && summary.rationale.length > 0
       ? ` — ${summary.rationale}`
@@ -249,18 +252,30 @@ function formatGateSummaryLines(summary: GateVerdictSummary): string[] {
   ];
 }
 
+/**
+ * The attempt a ledger line names, 1-based like every other attempt render. A PASS/FAIL
+ * summary stores the review's CONSUMED count at grading, so the graded attempt is one more; a
+ * BYPASS stores the exhausted review's spent count, which is the last attempt the skip followed.
+ */
+function formatLedgerAttempt(summary: GateVerdictSummary, bypass: boolean): string {
+  if (summary.attempt === undefined) return '';
+  return bypass
+    ? ` (after ${formatAttempt(summary.attempt, summary.bypassReview?.maxAttempts)})`
+    : ` (${formatAttempt(summary.attempt + 1)})`;
+}
+
 function formatAcceptanceFacts(summary: GateVerdictSummary): string[] {
   const lines: string[] = [];
   if (summary.disposition !== undefined) lines.push(`    Disposition: ${summary.disposition}`);
-  if (summary.verdict === 'BYPASS' || summary.disposition === 'bypassed') return lines;
+  if (isGateBypass(summary)) return lines;
   if (summary.tier === 'reminder')
     lines.push('    Reminder attestation: self-declared, not graded.');
-  else if (summary.semanticResult === undefined && (summary.toolChecks?.length ?? 0) === 0) {
+  else if (isLegacyUnverifiedAcceptance(summary)) {
     lines.push('    Legacy unverified acceptance: no recorded semantic or tool component.');
   }
   const semantic = summary.semanticResult;
   if (semantic !== undefined) {
-    const acceptance = !semantic.valid ? 'invalid' : semantic.passed ? 'accepted' : 'rejected';
+    const acceptance = classifySemanticReportAcceptance(semantic);
     lines.push(`    Semantic report contract: ${acceptance} (not model accuracy)`);
     lines.push(
       `    Criterion states: ${semantic.criteria.map((criterion) => `${criterion.criterion_id}: ${criterion.state}`).join('; ')}`

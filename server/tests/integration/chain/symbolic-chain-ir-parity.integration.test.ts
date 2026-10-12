@@ -169,7 +169,7 @@ const buildPipeline = (options: {
   const { sessionStore, recordStore, logger } = options;
   const parsingSystem = createParsingSystem(logger);
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
-  const gateRegistry = new TemporaryGateRegistry(logger);
+  const gateRegistry = new TemporaryGateRegistry(logger, { isCanonicalGateId: () => false });
   const runStepViewProvider = createRunStepViewProvider(sessionStore);
 
   const realStages: Record<string, PipelineStage> = {
@@ -194,13 +194,15 @@ const buildPipeline = (options: {
         () => undefined,
         () => undefined as never,
         undefined,
-        new GateMetricsRecorder(undefined),
+        new GateMetricsRecorder(() => undefined),
         logger,
         runStepViewProvider
       ),
       new TemporaryGateRegistrar(gateRegistry, undefined, logger, runStepViewProvider),
       () => ({ enabled: true, definitionsDirectory: 'gates', enableFrameworkGates: true }),
-      logger
+      logger,
+      () => true,
+      async () => undefined
     ),
     SessionManagement: new SessionManagementStage(sessionStore, logger),
     StepResponseCapture: new StepResponseCaptureStage(
@@ -218,7 +220,7 @@ const buildPipeline = (options: {
       undefined,
       recordStore
     ),
-    GateReview: new GateReviewStage(chainExecutor, sessionStore, null, logger, undefined, {
+    GateReview: new GateReviewStage(chainExecutor, sessionStore, null, logger, () => undefined, {
       executionRecordStore: recordStore,
     }),
     ResponseFormatting: new ResponseFormattingStage(
@@ -256,7 +258,9 @@ const buildPipeline = (options: {
   return new PromptExecutionPipeline(stages, {
     logger,
     metricsProvider: () => undefined,
-    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger),
+    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, undefined, () => ({
+      evaluation: {},
+    })),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
   });

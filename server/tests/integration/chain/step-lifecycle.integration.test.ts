@@ -1,11 +1,10 @@
-// @lifecycle test - P3 Tier 3 row 17: the three P2 lifecycle defects, driven as a client drives them.
+// @lifecycle test - Chain run lifecycle driven as a client drives it: ledger, reviews, mutation and cold load.
 /**
  * Chain run lifecycle, from the client's side of the tool boundary.
  *
- * The P2 live drive found three defects that every test in the repo missed, and it missed them
- * for one reason: the suites reached completion by *constructing* `currentStep > totalSteps`,
- * a state no client that obeys the rendered footer ever produces. So this suite never writes
- * session state. It hands `PromptExecutionPipeline` the same request shapes a client sends —
+ * A suite that reaches completion by *constructing* `currentStep > totalSteps` drives a state no
+ * client that obeys the rendered footer ever produces. So this suite never writes session
+ * state. It hands `PromptExecutionPipeline` the same request shapes a client sends —
  * `{command}`, then `{chain_id, user_response, gate_verdict}` — and reads back only what a
  * client can read: the rendered text, the `execution_records` ledger, and the store's own
  * `runStatus`.
@@ -303,7 +302,8 @@ const buildPipeline = (options: {
   gateRegistry?: TemporaryGateRegistry;
 }): PromptExecutionPipeline => {
   const { sessionStore, recordStore, logger } = options;
-  const registry = options.gateRegistry ?? new TemporaryGateRegistry(logger);
+  const registry =
+    options.gateRegistry ?? new TemporaryGateRegistry(logger, { isCanonicalGateId: () => false });
   for (const id of [GATE_ID, 'phase-guard']) {
     if (registry.getTemporaryGate(id) === undefined)
       registry.createTemporaryGate({
@@ -328,7 +328,7 @@ const buildPipeline = (options: {
     () => undefined,
     () => undefined,
     gateLoader,
-    new GateMetricsRecorder(undefined),
+    new GateMetricsRecorder(() => undefined),
     logger,
     createRunStepViewProvider(sessionStore)
   );
@@ -372,9 +372,16 @@ const buildPipeline = (options: {
       recordStore
     ),
     PhaseGuardVerification: phaseGuardVerificationStage,
-    GateReview: new GateReviewStage(chainExecutor, sessionStore, gateLoader, logger, undefined, {
-      executionRecordStore: recordStore,
-    }),
+    GateReview: new GateReviewStage(
+      chainExecutor,
+      sessionStore,
+      gateLoader,
+      logger,
+      () => undefined,
+      {
+        executionRecordStore: recordStore,
+      }
+    ),
     ResponseFormatting: new ResponseFormattingStage(
       new ResponseFormatter(logger),
       new ResponseAssembler(),
@@ -452,7 +459,9 @@ const buildPipeline = (options: {
   return new PromptExecutionPipeline(stages, {
     logger,
     metricsProvider: () => undefined,
-    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader),
+    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader, () => ({
+      evaluation: {},
+    })),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
   });
@@ -515,7 +524,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     sessionStore = new ChainSessionStore(logger, new StubTextReferenceStore() as any, {
       cleanupIntervalMs: 60_000,
     });
-    gateRegistry = new TemporaryGateRegistry(logger);
+    gateRegistry = new TemporaryGateRegistry(logger, { isCanonicalGateId: () => false });
 
     pipeline = buildPipeline({
       sessionStore,
@@ -1313,7 +1322,8 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       const authority = new GateEnforcementAuthority(
         sessionStore,
         createLogger(),
-        new GateLoader(createLogger(), undefined, gateRegistry)
+        new GateLoader(createLogger(), undefined, gateRegistry),
+        () => ({ evaluation: {} })
       );
       await authority.createReview(sessionId, 'structural', 'draft', {
         gateIds: ['phase-guard'],
@@ -1428,7 +1438,8 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       await new GateEnforcementAuthority(
         sessionStore,
         createLogger(),
-        new GateLoader(createLogger(), undefined, gateRegistry)
+        new GateLoader(createLogger(), undefined, gateRegistry),
+        () => ({ evaluation: {} })
       ).createReview(sessionId, 'gate', 'draft', {
         gateIds: [GATE_ID],
         instructions: 'Check step 1.',
@@ -1462,7 +1473,8 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
           new GateEnforcementAuthority(
             sessionStore,
             createLogger(),
-            new GateLoader(createLogger(), undefined, gateRegistry)
+            new GateLoader(createLogger(), undefined, gateRegistry),
+            () => ({ evaluation: {} })
           ),
           sessionId
         );

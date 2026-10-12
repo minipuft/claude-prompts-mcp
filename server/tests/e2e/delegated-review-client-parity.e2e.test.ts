@@ -1,5 +1,6 @@
 // @lifecycle test - Native delegated review transitions agree across pinned STDIO and fresh HTTP servers.
-/** Unlike the own-args control, this exercises the first blocking review and its transport identity.
+/** Unlike the own-args control, this exercises the first blocking review and its transport identity,
+ * then renders frozen semantic sources against the source owners with no transport.
  * The worker is a fixture that reads the rendered trailer; no claim about LLM obedience is made.
  * STDIO uses the repo smoke test's newline JSON-RPC pattern with the modern HTTP helper's envelope.
  */
@@ -441,6 +442,7 @@ describe('frozen semantic source rendering', () => {
       isGateActive: () => true,
     } as unknown as GateDefinitionProvider;
     const renderer = new GateGuidanceRenderer(logger, {
+      frameworkIdentifierProvider: () => undefined,
       gateLoader: liveProvider,
       gatesConfigProvider: () => ({ harnessCovers: ['code'], reminderTokenBudget: 0 }),
     });

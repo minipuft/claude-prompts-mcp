@@ -40,7 +40,9 @@ function roundTrip(submission: GateVerdictSubmission): {
     {} as ConstructorParameters<typeof GateEnforcementAuthority>[0],
     { warn: () => undefined } as unknown as ConstructorParameters<
       typeof GateEnforcementAuthority
-    >[1]
+    >[1],
+    undefined,
+    () => ({ evaluation: {} })
   );
 
   // The parser resolves `[n]` against the list the review advertised, so the round trip needs

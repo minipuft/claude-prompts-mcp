@@ -1,5 +1,5 @@
 /**
- * One refusal, three tools: an argument key no contract declares (P4.93 / R50).
+ * One refusal, three tools: an argument key no contract declares.
  *
  * The defect this pins is a SILENT SUCCESS. Measured on `f711401b` over both transports,
  * `prompt_engine {command, force_restrt:true}` and `system_control {action:"status", previw:true}`

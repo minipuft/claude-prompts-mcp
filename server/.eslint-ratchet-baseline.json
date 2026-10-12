@@ -3,12 +3,12 @@
   "generatedAt": "2026-10-08T16:51:57.662Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2440,
+    "errors": 2436,
     "warnings": 706
   },
   "byRule": {
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 1644,
+      "errors": 1642,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
@@ -44,7 +44,7 @@
       "warnings": 150
     },
     "@typescript-eslint/no-explicit-any": {
-      "errors": 239,
+      "errors": 238,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-member-access": {
@@ -72,7 +72,7 @@
       "warnings": 5
     },
     "@typescript-eslint/explicit-module-boundary-types": {
-      "errors": 44,
+      "errors": 43,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-call": {
@@ -98,6 +98,10 @@
     "max-lines": {
       "errors": 0,
       "warnings": 1
+    },
+    "claude/no-optional-collaborator-call": {
+      "errors": 0,
+      "warnings": 0
     }
   },
   "overrideLog": [
@@ -112,6 +116,32 @@
       "after": {
         "errors": 0,
         "warnings": 2
+      }
+    },
+    {
+      "date": "2026-10-12T00:00:00.000Z",
+      "ruleId": "claude/no-optional-collaborator-call",
+      "reason": "new rule (row 0.8): 15 sites measured, 8 made required in the same change; the 7 left are wired at every production construction site and belong to a follow-up row that lowers this to 0",
+      "before": {
+        "errors": 0,
+        "warnings": 0
+      },
+      "after": {
+        "errors": 7,
+        "warnings": 0
+      }
+    },
+    {
+      "date": "2026-10-12T00:00:00.000Z",
+      "ruleId": "claude/no-optional-collaborator-call",
+      "reason": "row 0.9: the 7 baselined sites made required at their declarations (pipeline metricsProvider, TemporaryGateRegistry isCanonicalGateId, GateGuidanceRenderer gatesConfigProvider and frameworkIdentifierProvider, JudgeResourceCollector promptsProvider and frameworkLookup, McpToolManager onRestart); createLightweightGateSystem and createScriptAutoExecuteStage deleted with no caller. Deleting createLightweightGateSystem also lowers strict-boolean-expressions, no-explicit-any and explicit-module-boundary-types by 1 each, re-measured with the check",
+      "before": {
+        "errors": 7,
+        "warnings": 0
+      },
+      "after": {
+        "errors": 0,
+        "warnings": 0
       }
     }
   ]

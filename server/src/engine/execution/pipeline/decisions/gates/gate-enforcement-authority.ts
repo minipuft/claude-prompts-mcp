@@ -45,6 +45,14 @@ import { parseStepForNode } from '#shared/utils/node-order.js';
 // VerdictPattern type is now imported from gates/config
 
 /**
+ * The resolved gates section a new review's judge defaults come from. Required: an authority
+ * built without it would issue every review with no configured defaults and say nothing.
+ */
+export type GateEvaluationSettingsProvider = () => {
+  readonly evaluation: Partial<JudgeEvaluationDefaults>;
+};
+
+/**
  * Single source of truth for gate enforcement decisions.
  *
  * All pipeline stages MUST consult this authority for:
@@ -60,8 +68,7 @@ export class GateEnforcementAuthority {
   private readonly logger: Logger;
   private readonly chainSessionStore: ChainSessionService;
   private readonly gateLoader: GateDefinitionProvider | undefined;
-  private readonly gatesConfigProvider:
-    (() => { evaluation?: Partial<JudgeEvaluationDefaults> } | undefined) | undefined;
+  private readonly gatesConfigProvider: GateEvaluationSettingsProvider;
 
   // Verdict patterns loaded from YAML configuration
   private verdictPatterns: VerdictPattern[] | null = null;
@@ -69,8 +76,8 @@ export class GateEnforcementAuthority {
   constructor(
     chainSessionStore: ChainSessionService,
     logger: Logger,
-    gateLoader?: GateDefinitionProvider,
-    gatesConfigProvider?: () => { evaluation?: Partial<JudgeEvaluationDefaults> } | undefined
+    gateLoader: GateDefinitionProvider | undefined,
+    gatesConfigProvider: GateEvaluationSettingsProvider
   ) {
     this.chainSessionStore = chainSessionStore;
     this.logger = logger;
@@ -361,7 +368,7 @@ export class GateEnforcementAuthority {
     options: CreateReviewOptions & Pick<GateReview, 'reviewedOutput' | 'gateTiers'>
   ): Promise<GateReview> {
     const { reviewedOutput, gateTiers, ...reviewOptions } = options;
-    const defaults = { ...this.gatesConfigProvider?.()?.evaluation };
+    const defaults = { ...this.gatesConfigProvider().evaluation };
     const definitions = await this.loadReviewDefinitions(reviewOptions.gateIds);
     const resolvedGateTiers = {
       ...this.deriveGateTiers(definitions),
@@ -513,7 +520,7 @@ export class GateEnforcementAuthority {
       throw new Error(
         `Gate '${collision}' conflicts with frozen authority; open a fresh server-issued review before joining it`
       );
-    const defaults = { ...this.gatesConfigProvider?.()?.evaluation };
+    const defaults = { ...this.gatesConfigProvider().evaluation };
     const definitions = await this.loadReviewDefinitions(added);
     const issued = createSemanticReviewContext(
       review.nodeId,

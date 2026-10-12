@@ -154,7 +154,7 @@ describe('GateManagerProvider carries the gate file (P4.133)', () => {
   });
 
   test('a temporary gate converts through the same function as its gate.yaml twin', async () => {
-    const registry = new TemporaryGateRegistry(logger as never);
+    const registry = new TemporaryGateRegistry(logger as never, { isCanonicalGateId: () => false });
     const tempId = registry.createTemporaryGate({
       name: 'Temp Twin',
       type: 'validation',

@@ -1,4 +1,4 @@
-// @lifecycle test - Tier 1: the delegation handoff contract's pure functions.
+// @lifecycle test - The delegation handoff contract's pure functions.
 import { describe, expect, test } from '@jest/globals';
 
 import {

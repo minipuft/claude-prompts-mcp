@@ -625,6 +625,37 @@ test("verified target UTF8 preserves BOM/Unicode bytes; invalid UTF8 and unsuppo
       "unsupported_target",
     );
   }));
+test("target bytes that do not hash to the bound digest grade as a digest mismatch, not invalid UTF-8", async () =>
+  withCalibration(async ({ archive, archiveInput }) => {
+    const selected = archiveInput.suite.payload.cases.find(
+      (item) => item.case_id === "synthetic-positive",
+    )!;
+    // Well-formed UTF-8 whose hash differs from the bound digest: the archive's own digest check
+    // is bypassed so only the calibration kernel's comparison stands between it and the adapter.
+    const tampered = Object.create(archive, {
+      getBlob: {
+        value: async (ref: Extract<ContentRef, { type: "blob" }>) =>
+          ref.digest === selected.target_ref.digest
+            ? Buffer.from("substituted target bytes")
+            : archive.getBlob(ref),
+      },
+    }) as typeof archive;
+    let calls = 0;
+    const run = await runGateCalibration({
+      ...archiveInput,
+      archive: tampered,
+      attempts: [requested("synthetic-positive", 20)],
+      adapter: async () => {
+        calls++;
+        assert.fail("a mismatched target must not reach the adapter");
+      },
+    });
+    const grade = (await replayGateCalibration(archive, run.invocation_ref))
+      .attempts[0]!.grade;
+    assert.equal(calls, 0);
+    assert.equal(grade.status, "error");
+    assert.equal(grade.error!.code, "target_digest_mismatch");
+  }));
 function objectDefinition(
   input: Awaited<ReturnType<typeof calibrationFixture>>["archiveInput"],
 ) {

@@ -38,12 +38,12 @@ type FrameworkLookup = (id: string) => unknown;
  */
 export class JudgeResourceCollector {
   constructor(
-    private readonly promptsProvider: PromptsProvider | null,
+    private readonly promptsProvider: PromptsProvider,
     private readonly gateLoader: GateDefinitionProvider | null,
     private readonly logger: Logger,
-    private readonly frameworksProvider?: FrameworkResourceProvider | null,
-    private readonly styleManager?: StyleManagerPort | null,
-    private readonly frameworkLookup?: FrameworkLookup | null
+    private readonly frameworksProvider: FrameworkResourceProvider | null,
+    private readonly styleManager: StyleManagerPort | null,
+    private readonly frameworkLookup: FrameworkLookup
   ) {}
 
   /**
@@ -59,7 +59,7 @@ export class JudgeResourceCollector {
 
   private async loadAllStyles(): Promise<ConvertedPrompt[]> {
     if (!this.styleManager) {
-      const allPrompts = this.promptsProvider?.() ?? [];
+      const allPrompts = this.promptsProvider();
       const guidancePrompts = allPrompts.filter((p) => p.category === 'guidance');
       return guidancePrompts.filter((p) => !this.isFrameworkPromptId(p.id));
     }
@@ -84,7 +84,7 @@ export class JudgeResourceCollector {
   }
 
   private isFrameworkPromptId(id: string): boolean {
-    const framework = this.frameworkLookup?.(id);
+    const framework = this.frameworkLookup(id);
     return framework !== undefined && framework !== null;
   }
 

@@ -277,7 +277,7 @@ const buildPipeline = (options: {
     steps = parsedChainSteps(true, options.phaseGuards === true),
     evidenceMode,
   } = options;
-  const gateRegistry = new TemporaryGateRegistry(logger);
+  const gateRegistry = new TemporaryGateRegistry(logger, { isCanonicalGateId: () => false });
   gateRegistry.createTemporaryGate({
     id: GATE_ID,
     name: 'Step Quality',
@@ -351,9 +351,16 @@ const buildPipeline = (options: {
       undefined,
       recordStore
     ),
-    GateReview: new GateReviewStage(chainExecutor, sessionStore, gateLoader, logger, undefined, {
-      executionRecordStore: recordStore,
-    }),
+    GateReview: new GateReviewStage(
+      chainExecutor,
+      sessionStore,
+      gateLoader,
+      logger,
+      () => undefined,
+      {
+        executionRecordStore: recordStore,
+      }
+    ),
     ResponseFormatting: new ResponseFormattingStage(
       new ResponseFormatter(logger),
       new ResponseAssembler(),
@@ -450,7 +457,9 @@ const buildPipeline = (options: {
   return new PromptExecutionPipeline(stages, {
     logger,
     metricsProvider: () => undefined,
-    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader),
+    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader, () => ({
+      evaluation: {},
+    })),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
   });

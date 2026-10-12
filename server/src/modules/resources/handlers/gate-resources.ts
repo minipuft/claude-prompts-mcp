@@ -17,6 +17,8 @@ import { ResourceNotFoundError, RESOURCE_URI_PATTERNS } from '../types.js';
 import type { GateResourceMetadata, ResourceDependencies } from '../types.js';
 import type { McpServer, ReadResourceResult } from '@modelcontextprotocol/server';
 
+import { formatGateTierLabel, type GateTierSource } from '#engine/gates/core/gate-tier.js';
+
 /**
  * Build resource URI from pattern and optional ID
  * Patterns already include the full URI scheme (resource://...)
@@ -70,9 +72,13 @@ export function registerGateResources(server: McpServer, dependencies: ResourceD
     },
     async (): Promise<ReadResourceResult> => {
       // When reading the list resource itself, return compact text format
-      // Format: id: name (type) - 4x more token-efficient than JSON
+      // Format: id: name [tier] - 4x more token-efficient than JSON. The tier is derived from the
+      // criteria (same label as resource_manager gate list); the authored `type` cannot say
+      // whether a semantic-only gate declared `validation` runs a check.
       const guides = gateManager.list(false);
-      const lines = guides.map((g) => `${g.gateId}: ${g.name} (${g.type})`);
+      const lines = guides.map(
+        (g) => `${g.gateId}: ${g.name} [${formatGateTierLabel(g.getDefinition())}]`
+      );
 
       return {
         contents: [
@@ -170,6 +176,7 @@ function buildGateContent(guide: {
   type: 'validation' | 'guidance';
   severity: 'critical' | 'high' | 'medium' | 'low';
   getGuidance(): string;
+  getDefinition(): GateTierSource;
 }): string {
   const lines: string[] = [];
 
@@ -177,7 +184,10 @@ function buildGateContent(guide: {
   lines.push(`# ${guide.name}`);
   lines.push('');
   lines.push(`**ID:** \`${guide.gateId}\``);
-  lines.push(`**Type:** ${guide.type}`);
+  // The tier is derived from what the criteria require; the authored `type` stays visible under
+  // its own name, since a semantic-only gate declared `validation` runs no check.
+  lines.push(`**Tier:** ${formatGateTierLabel(guide.getDefinition())}`);
+  lines.push(`**Declared Type:** ${guide.type}`);
   lines.push(`**Severity:** ${guide.severity}`);
 
   if (guide.description !== '') {

@@ -4,17 +4,18 @@ import type { ChainSession } from '#shared/types/chain-session.js';
 import type { GateAction } from '../../execution/pipeline/decisions/gates/gate-enforcement-types.js';
 import type { resolveReviewTarget } from '../../execution/pipeline/decisions/gates/review-target.js';
 
+import { attemptInHand, formatAttempt } from '#shared/utils/attempt-number.js';
 import { ordinalOf } from '#shared/utils/node-order.js';
 
 /**
  * The sentence a refused event reads (`advanceReview` refused it, and nothing was charged).
  *
- * - `failing-check` — a PASS over a check the engine recorded as failing (ruling B4): the stage
+ * - `failing-check` — a PASS over a check the engine recorded as failing: the stage
  *   that runs a gate's `shell_verify` / `script_tool` criteria writes `checkResults`, and a model
  *   PASS over a recorded exit code is an unnoticed contradiction. `gate_action: skip` is the
  *   operator's override, behind exhaustion; a FAIL is the submitter agreeing with the check.
  * - `phase` — the review is not waiting for this kind of call: an exhausted review answers only
- *   `gate_action` (R9), and a detached review never `abort`s — `cancel: true` stops a run.
+ *   `gate_action`, and a detached review never `abort`s — `cancel: true` stops a run.
  */
 export function describeRefusal(reason: 'phase' | 'failing-check', review: GateReview): string {
   if (reason === 'failing-check') {
@@ -35,8 +36,8 @@ export function describeRefusal(reason: 'phase' | 'failing-check', review: GateR
         : 'gate_action "retry", "skip" or "abort"',
   };
   return (
-    `❌ The gate review of node '${review.nodeId}' (${review.attemptCount}/${review.maxAttempts} ` +
-    `attempts) is waiting for ${waitingFor[review.phase]}. Nothing was recorded.`
+    `❌ The gate review of node '${review.nodeId}' (${formatAttempt(attemptInHand(review.attemptCount, review.maxAttempts), review.maxAttempts)}) ` +
+    `is waiting for ${waitingFor[review.phase]}. Nothing was recorded.`
   );
 }
 
@@ -76,7 +77,7 @@ export function describeInBudgetAction(
   const ordinal = ordinalOf(session.state.nodes, review.nodeId);
   return (
     `❌ gate_action "${action}" is accepted only on an exhausted review; the review of step ` +
-    `${ordinal} is at ${review.attemptCount}/${review.maxAttempts} attempts — answer it or send ` +
+    `${ordinal} is on ${formatAttempt(attemptInHand(review.attemptCount, review.maxAttempts), review.maxAttempts)} — answer it or send ` +
     'a gate_verdict. Nothing was recorded.'
   );
 }

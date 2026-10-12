@@ -1527,6 +1527,10 @@ was reviewed with a `per_gate` list now renders one indented line per graded gat
   - ≡ `style-guide` PASS — attested satisfied
 ```
 
+The attempt is 1-based and is the number the review showed when it was graded (`attempt 2/2` in
+the footer reads `(attempt 2)` here). A `↪` BYPASS line names the attempt the skip followed
+instead: `(after attempt 2/2)`.
+
 `≡` marks a **reminder-tier** gate: one with no evaluator, which the reviewer attested to via the
 verdict's `reminders` field rather than being graded against. It is recorded because the
 attestation is a fact worth auditing, and marked differently because it is not a check that

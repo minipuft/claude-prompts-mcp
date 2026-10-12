@@ -3,8 +3,7 @@
  * Chain Execution Types
  *
  * Types that are consumed across multiple architectural layers (engine, modules, mcp).
- * Relocated from mcp/tools/prompt-engine/core/types.ts and engine/execution/types.ts
- * to shared/ to respect the dependency direction: shared → engine → modules → mcp.
+ * Lives in shared/ to respect the dependency direction: shared → engine → modules → mcp.
  */
 
 import type {
@@ -117,6 +116,11 @@ export interface GateVerdictSummary {
   verdict: 'PASS' | 'FAIL' | 'BYPASS';
   rationale?: string;
   timestamp: number;
+  /**
+   * Stored, not displayed: on a PASS/FAIL, the review's CONSUMED `attemptCount` when the verdict
+   * was graded (0 on the first attempt); on a BYPASS, the exhausted review's spent count. Renders
+   * go through `formatAttempt` (`#shared/utils/attempt-number.js`), never this raw value.
+   */
   attempt?: number;
   /** Original client report retained for later adjudication; custody alone grants no authority. */
   evaluation?: SemanticEvaluationReport;

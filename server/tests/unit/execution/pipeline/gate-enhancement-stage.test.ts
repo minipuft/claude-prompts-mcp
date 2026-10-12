@@ -133,7 +133,7 @@ function createStage(options: {
   gateSystemEnabled?: (scope: unknown) => boolean;
 }): GateEnhancementStage {
   const logger = options.logger ?? createLogger();
-  const metricsRecorder = new GateMetricsRecorder(undefined);
+  const metricsRecorder = new GateMetricsRecorder(() => undefined);
   const registrar = new TemporaryGateRegistrar(
     options.temporaryRegistry,
     options.gateReferenceResolver,
@@ -151,9 +151,10 @@ function createStage(options: {
   return new GateEnhancementStage(
     enhancementService,
     registrar,
-    options.gatesConfigProvider,
+    options.gatesConfigProvider ?? (() => undefined),
     logger,
-    options.gateSystemEnabled
+    options.gateSystemEnabled ?? (() => true),
+    async () => undefined
   );
 }
 

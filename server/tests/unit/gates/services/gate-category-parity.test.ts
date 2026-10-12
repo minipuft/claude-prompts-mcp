@@ -103,7 +103,7 @@ const enhance = async (args: {
     () => 'cageerf',
     () => gateManager,
     undefined,
-    new GateMetricsRecorder(undefined),
+    new GateMetricsRecorder(() => undefined),
     createLogger()
   );
 

@@ -66,7 +66,7 @@ const foldedChain = (criteria: string): ParsedCommand =>
 
 describe('TemporaryGateRegistry: a caller-chosen id already held', () => {
   test('throws by default', () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     registry.createTemporaryGate(newGate(['ONE']));
     expect(() => registry.createTemporaryGate(newGate(['TWO']))).toThrow(
       'Temporary gate ID already exists: g97'
@@ -74,7 +74,7 @@ describe('TemporaryGateRegistry: a caller-chosen id already held', () => {
   });
 
   test("'fresh-id' registers under the first free suffix and leaves the held gate untouched", () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const fresh = { onIdCollision: 'fresh-id' } as const;
     expect(registry.createTemporaryGate(newGate(['ONE']), undefined, fresh)).toBe('g97');
     expect(registry.createTemporaryGate(newGate(['TWO']), undefined, fresh)).toBe('g97-2');
@@ -86,7 +86,7 @@ describe('TemporaryGateRegistry: a caller-chosen id already held', () => {
 
 describe('InlineGateProcessor: two runs declaring one named gate id', () => {
   test("each run's steps bind the gate that run declared", async () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const processor = new InlineGateProcessor(registry, inlineResolver, logger(), {
       remapRunGates: async () => undefined,
     });
@@ -140,7 +140,7 @@ describe('InlineGateProcessor: one name declared in two segments', () => {
     }) as unknown as ParsedCommand;
 
   test('each segment binds the gate it declared', async () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const processor = new InlineGateProcessor(registry, inlineResolver, logger(), {
       remapRunGates: async () => undefined,
     });
@@ -153,7 +153,7 @@ describe('InlineGateProcessor: one name declared in two segments', () => {
   });
 
   test('control: a second segment naming the plain id binds the first declaration', async () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const processor = new InlineGateProcessor(registry, inlineResolver, logger(), {
       remapRunGates: async () => undefined,
     });
@@ -180,7 +180,7 @@ describe('InlineGateProcessor: a run parsing its command again', () => {
   };
 
   test('(b) a named gate the run holds resolves to it, and nothing registers', async () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const processor = new InlineGateProcessor(registry, inlineResolver, logger(), {
       remapRunGates: async () => undefined,
     });
@@ -200,7 +200,7 @@ describe('InlineGateProcessor: a run parsing its command again', () => {
   });
 
   test('(c) control: another live run declaring the name gets its own', async () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const processor = new InlineGateProcessor(registry, inlineResolver, logger(), {
       remapRunGates: async () => undefined,
     });
@@ -215,7 +215,7 @@ describe('InlineGateProcessor: a run parsing its command again', () => {
   });
 
   test('(d) both occurrence keys of a two-segment command resolve per run; nothing new mints', async () => {
-    const registry = new TemporaryGateRegistry(logger());
+    const registry = new TemporaryGateRegistry(logger(), { isCanonicalGateId: () => false });
     const processor = new InlineGateProcessor(registry, inlineResolver, logger(), {
       remapRunGates: async () => undefined,
     });

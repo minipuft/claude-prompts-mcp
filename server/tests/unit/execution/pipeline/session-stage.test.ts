@@ -277,7 +277,12 @@ describe('SessionManagementStage', () => {
     context.state.gates.accumulatedGateIds = ['gate-alpha', 'gate-beta'];
 
     // Initialize the authority on context (normally done by DI stage)
-    context.gateEnforcement = new GateEnforcementAuthority(manager as any, createLogger() as any);
+    context.gateEnforcement = new GateEnforcementAuthority(
+      manager as any,
+      createLogger() as any,
+      undefined,
+      () => ({ evaluation: {} })
+    );
 
     const dateSpy = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     manager.getRunHistory.mockReturnValue([]);
@@ -307,7 +312,12 @@ describe('SessionManagementStage', () => {
     // Set up gate state with authority - triggers upfront review
     context.state.gates.hasBlockingGates = true;
     context.state.gates.accumulatedGateIds = ['gate-alpha'];
-    context.gateEnforcement = new GateEnforcementAuthority(manager as any, createLogger() as any);
+    context.gateEnforcement = new GateEnforcementAuthority(
+      manager as any,
+      createLogger() as any,
+      undefined,
+      () => ({ evaluation: {} })
+    );
 
     manager.getRunHistory.mockReturnValue([]);
 
@@ -335,7 +345,12 @@ describe('SessionManagementStage', () => {
     // Run-wide: both gates have been accumulated by now. Step-scoped: only beta applies here.
     context.state.gates.accumulatedGateIds = ['gate-alpha', 'gate-beta'];
     context.state.gates.reviewGateIds = ['gate-beta'];
-    context.gateEnforcement = new GateEnforcementAuthority(manager as any, createLogger() as any);
+    context.gateEnforcement = new GateEnforcementAuthority(
+      manager as any,
+      createLogger() as any,
+      undefined,
+      () => ({ evaluation: {} })
+    );
 
     manager.getRunHistory.mockReturnValue([]);
 
@@ -356,7 +371,12 @@ describe('SessionManagementStage', () => {
     context.state.gates.hasBlockingGates = true;
     context.state.gates.accumulatedGateIds = ['gate-alpha'];
     context.state.gates.reviewGateIds = [];
-    context.gateEnforcement = new GateEnforcementAuthority(manager as any, createLogger() as any);
+    context.gateEnforcement = new GateEnforcementAuthority(
+      manager as any,
+      createLogger() as any,
+      undefined,
+      () => ({ evaluation: {} })
+    );
 
     manager.getRunHistory.mockReturnValue([]);
 

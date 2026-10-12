@@ -435,7 +435,7 @@ async function invoke(
     return errorGrade(base, "invalid_utf8");
   }
   if (hashBytes(content) !== bound.target_digest)
-    return errorGrade(base, "invalid_utf8");
+    return errorGrade(base, "target_digest_mismatch");
   const pinned = context(publicRubric, bound, content);
   const input = frozen({
     target: { content, ref: projection.target_ref },

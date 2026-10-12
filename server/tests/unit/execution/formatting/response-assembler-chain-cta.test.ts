@@ -461,7 +461,7 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
 
       const result = assembler.formatBlockedResponse(context);
 
-      expect(result).toContain('**Attempt 2 of 3** — 1 attempt remains after this one.');
+      expect(result).toContain('**Attempt 2/3** — 1 attempt remains after this one.');
     });
 
     test('the blocked reply and the review footer read ONE counter', () => {
@@ -480,7 +480,7 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       const blocked = assembler.formatBlockedResponse(context);
       const footer = assembler.formatChainResponse(context, { isChainFormatting: true } as never);
 
-      expect(blocked).toContain('**Attempt 3 of 5**');
+      expect(blocked).toContain('**Attempt 3/5**');
       expect(footer).toContain('(attempt 3/5)');
     });
 
@@ -496,11 +496,11 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
 
       const result = assembler.formatBlockedResponse(context);
 
-      // "Attempt 1 of 1" is not a budget, and the review footer has always omitted it in this
+      // "Attempt 1/1" is not a budget, and the review footer has always omitted it in this
       // state. Positive control for the absence: the reply IS a block and DOES carry a resume.
       expect(result).toContain('Response Blocked');
       expect(result).toContain('Resume:');
-      expect(result).not.toContain('Attempt 1 of 1');
+      expect(result).not.toMatch(/attempt 1(\/| of )1/i);
     });
 
     test('offers the structured verdict form, not only the legacy string', () => {

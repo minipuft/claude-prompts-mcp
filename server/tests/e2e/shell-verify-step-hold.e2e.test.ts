@@ -362,7 +362,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     await call({ user_response: 'still missing' });
 
     const retried = await call({ gate_action: 'retry' });
-    expect(retried.text).toContain('Attempts:** 0/2');
+    expect(retried.text).toContain('Next run:** attempt 1/2');
     expect(count(retried, STEP_COMPLETE)).toBe(0);
   }, 180000);
 
@@ -379,7 +379,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect(start.text).toContain('Progress 1/3');
     expect(runs()).toBe(0);
 
-    // The check the render saved survives to the first answer, at attempt 0
+    // The check the render saved survives to the first answer, which runs it as attempt 1/5
     const bounced = await answer(call, 'Step 1');
     expect(bounced.text).toContain('Shell Verification FAILED (Attempt 1/5)');
     expect(count(bounced, STEP_COMPLETE)).toBe(0);
@@ -440,7 +440,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
 
     const again = await call({ user_response: 'one more try' });
     expect(again.text).toContain('Maximum Attempts Reached');
-    expect(again.text).toContain('**Attempts:** 2/2');
+    expect(again.text).toContain('**Last run:** attempt 2/2');
     expect(count(again, STEP_COMPLETE)).toBe(0);
     expect(runs()).toBe(2);
   }, 180000);
@@ -449,7 +449,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     const { call, runs } = await startVerifiedChain(false, ' max:2');
     await answer(call, 'Step 1');
     await call({ user_response: 'still missing' });
-    expect((await call({ gate_action: 'retry' })).text).toContain('Attempts:** 0/2');
+    expect((await call({ gate_action: 'retry' })).text).toContain('Next run:** attempt 1/2');
 
     const rerun = await call({ user_response: 'fixed now' });
     expect(rerun.text).toContain('Shell Verification FAILED (Attempt 1/2)');
@@ -508,7 +508,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     // The skip answers the exhausted review only: nothing moves, the check is named as pending
     const skipped = await call({ gate_action: 'skip' });
     expect(skipped.text).toContain('Shell Verification — Still Pending');
-    expect(skipped.text).toContain('**Attempts:** 2/5');
+    expect(skipped.text).toContain('**Last run:** attempt 2/5');
     expect(skipped.text).not.toContain('Progress 2/3');
     expect(count(skipped, STEP_COMPLETE)).toBe(0);
     expect(runs()).toBe(2);

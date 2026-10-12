@@ -279,7 +279,7 @@ describe.each([
     // `2 of 5`, not merely "an attempt line": one attempt has been consumed by the verdict that
     // caused this block, and 5 is the gate's own `retry_config`, not the built-in default of 2.
     // Both halves of the number distinguish this from a counter reading a wrong source.
-    expect(blocked.text).toContain('**Attempt 2 of 5** — 3 attempts remain after this one.');
+    expect(blocked.text).toContain('**Attempt 2/5** — 3 attempts remain after this one.');
     expect(blocked.text).toContain('"overall": "PASS"');
     expect(blocked.text).toContain('A legacy string form is still accepted');
   }, 120000);
@@ -319,7 +319,7 @@ describe.each([
 
     expect(blocked.text).toContain('Response Blocked');
     expect(blocked.text).toContain(BLOCK_GATE);
-    expect(blocked.text).toContain('**Attempt 2 of 5** — 3 attempts remain after this one.');
+    expect(blocked.text).toContain('**Attempt 2/5** — 3 attempts remain after this one.');
   }, 120000);
 
   test("max_attempts comes from the gate's retry_config, not the built-in default", async () => {
@@ -339,7 +339,7 @@ describe.each([
         user_response: cageerfAnswer(`${OUTPUT_MARKER}: attempt ${attempt}.`),
         gate_verdict: `GATE_REVIEW: FAIL - attempt ${attempt} is not good enough`,
       });
-      counters.push(/\*\*Attempt \d+ of \d+\*\*/.exec(outcome.text)?.[0] ?? '(no counter)');
+      counters.push(/\*\*Attempt \d+\/\d+\*\*/.exec(outcome.text)?.[0] ?? '(no counter)');
       replies.push(outcome.text);
       const event = outcome.notifications.find(
         (n) => n.method === 'notifications/gate/retry_exhausted'
@@ -359,11 +359,11 @@ describe.each([
     // five independent "a number appeared" checks. It climbs, it clamps at the ceiling on the
     // call that exhausts the budget, and it never reads past it.
     expect(counters).toEqual([
-      '**Attempt 2 of 5**',
-      '**Attempt 3 of 5**',
-      '**Attempt 4 of 5**',
-      '**Attempt 5 of 5**',
-      '**Attempt 5 of 5**',
+      '**Attempt 2/5**',
+      '**Attempt 3/5**',
+      '**Attempt 4/5**',
+      '**Attempt 5/5**',
+      '**Attempt 5/5**',
     ]);
 
     // P6.23 — the exhausting reply names the moves an exhausted review accepts, not a verdict

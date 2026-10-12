@@ -259,7 +259,7 @@ const buildPipeline = (options: {
     logger
   );
   const chainExecutor = new ChainOperatorExecutor(logger as never, PROMPTS);
-  const gateRegistry = new TemporaryGateRegistry(logger);
+  const gateRegistry = new TemporaryGateRegistry(logger, { isCanonicalGateId: () => false });
   const gateLoader = new GateLoader(logger, undefined, gateRegistry);
   const loadRegisteredGate = gateLoader.loadGate.bind(gateLoader);
   // The named resource in this fixture's authored binding is a real definition; registry
@@ -304,13 +304,15 @@ const buildPipeline = (options: {
         () => undefined,
         () => undefined as never,
         gateLoader,
-        new GateMetricsRecorder(undefined),
+        new GateMetricsRecorder(() => undefined),
         logger,
         runStepViewProvider
       ),
       new TemporaryGateRegistrar(gateRegistry, undefined, logger, runStepViewProvider),
       () => ({ enabled: true, definitionsDirectory: 'gates', enableFrameworkGates: true }),
-      logger
+      logger,
+      () => true,
+      async () => undefined
     ),
     SessionManagement: new SessionManagementStage(sessionStore, logger),
     StepResponseCapture: new StepResponseCaptureStage(
@@ -328,9 +330,16 @@ const buildPipeline = (options: {
       undefined,
       recordStore
     ),
-    GateReview: new GateReviewStage(chainExecutor, sessionStore, gateLoader, logger, undefined, {
-      executionRecordStore: recordStore,
-    }),
+    GateReview: new GateReviewStage(
+      chainExecutor,
+      sessionStore,
+      gateLoader,
+      logger,
+      () => undefined,
+      {
+        executionRecordStore: recordStore,
+      }
+    ),
     ResponseFormatting: new ResponseFormattingStage(
       new ResponseFormatter(logger),
       new ResponseAssembler(),
@@ -366,7 +375,9 @@ const buildPipeline = (options: {
   return new PromptExecutionPipeline(stages, {
     logger,
     metricsProvider: () => undefined,
-    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader),
+    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader, () => ({
+      evaluation: {},
+    })),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
   });

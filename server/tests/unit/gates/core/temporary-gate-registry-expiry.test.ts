@@ -27,7 +27,9 @@ describe('TemporaryGateRegistry expiry', () => {
   });
 
   test('cleanupExpiredGates removes a gate whose own expiry passed, and leaves its scope sibling', () => {
-    const registry = new TemporaryGateRegistry(createLogger() as never);
+    const registry = new TemporaryGateRegistry(createLogger() as never, {
+      isCanonicalGateId: () => false,
+    });
     const start = Date.now();
     const timed = registry.createTemporaryGate(gate('timed', start + 1_000), 'run-a');
     const kept = registry.createTemporaryGate(gate('kept', start + 60_000), 'run-a');

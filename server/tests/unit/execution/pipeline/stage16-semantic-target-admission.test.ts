@@ -107,7 +107,9 @@ function fixture(body: string | undefined, polarity: 'PASS' | 'FAIL' = 'FAIL') {
     },
     logger
   );
-  context.gateEnforcement = new GateEnforcementAuthority(service, logger);
+  context.gateEnforcement = new GateEnforcementAuthority(service, logger, undefined, () => ({
+    evaluation: {},
+  }));
   context.sessionContext = {
     sessionId: 'session',
     chainId: 'chain',

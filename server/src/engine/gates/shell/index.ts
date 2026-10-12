@@ -33,6 +33,7 @@ export {
   extractErrorOutput,
   formatBounceBackMessage,
   formatEscalationMessage,
+  formatLastShellRun,
   createBounceBackFeedback,
   createEscalationFeedback,
   formatGateShellVerifySection,

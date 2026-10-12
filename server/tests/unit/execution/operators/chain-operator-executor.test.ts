@@ -953,7 +953,8 @@ describe('P6.152: a review render of a step follows the steps target, like the n
       new ChainOperatorExecutor(mockLogger, prompts as never),
       store,
       null,
-      mockLogger
+      mockLogger,
+      () => undefined
     );
     const context = new ExecutionContext({ command: '>>analyze' });
     context.parsedCommand = { steps: [step] } as any;

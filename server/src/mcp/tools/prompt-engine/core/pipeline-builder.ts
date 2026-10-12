@@ -336,7 +336,7 @@ export class PipelineBuilder {
       deps.hookRegistry,
       deps.notificationEmitter,
       // A detached node's review runs its gates' checks against the node's recorded output
-      // (row 4.8, R10.3) through the same runners and executor stage 20 uses.
+      // through the same runners and executor stage 20 uses.
       async (gateIds, agentResponse, scope, issuedDefinitions) =>
         (
           await runGateReviewEvidence(
@@ -533,7 +533,7 @@ export class PipelineBuilder {
       metricsProvider: deps.getAnalyticsService,
       hookRegistry: deps.hookRegistry,
       gateEnforcement,
-      // Stages take `| null`; PipelinePorts is uniformly optional, so normalize here
+      // Stages take `| null`; `PipelinePorts.executionRecordStore` is optional, so normalize here
       // rather than admitting both empty representations into the ports interface.
       executionRecordStore: deps.executionRecordStore ?? undefined,
       chainSessionStore: deps.chainSessionStore,

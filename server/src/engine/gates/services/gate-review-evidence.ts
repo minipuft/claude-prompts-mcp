@@ -4,9 +4,9 @@
  * declare, run and flattened into what the verdict processor and the review render need.
  *
  * One implementation, two callers. `GateReviewStage` runs it for the current step's review with
- * this call's reply; a detached node's review (row 4.8) runs it when its verdict arrives, with
+ * this call's reply; a detached node's review runs it when its verdict arrives, with
  * the node's RECORDED output (`PendingGateReview.reviewedOutput`), never the text of the call
- * that answers it (R10.3). Both runners report an unrunnable check as failed — never a skip.
+ * that answers it. Both runners report an unrunnable check as failed — never a skip.
  */
 import {
   formatGateScriptToolSection,

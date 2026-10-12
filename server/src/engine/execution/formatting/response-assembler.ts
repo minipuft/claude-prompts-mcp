@@ -33,6 +33,7 @@ import type { DelegationPayload } from '../delegation/types.js';
 import type { GateOperator } from '../parsers/types/operator-types.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
 
+import { attemptInHand, formatAttempt } from '#shared/utils/attempt-number.js';
 import { ordinalOf, parseStepForNode } from '#shared/utils/node-order.js';
 
 /**
@@ -305,7 +306,7 @@ export class ResponseAssembler {
       const remaining = Math.max(attempt.max - attempt.current, 0);
       sections.push('');
       sections.push(
-        `**Attempt ${attempt.current} of ${attempt.max}** — ${remaining} ${
+        `**${formatAttempt(attempt.current, attempt.max, 'Attempt')}** — ${remaining} ${
           remaining === 1 ? 'attempt remains' : 'attempts remain'
         } after this one.`
       );
@@ -326,12 +327,11 @@ export class ResponseAssembler {
    * Where this call stands in the gate's retry budget, or `undefined` when no review is pending.
    *
    * ONE reader of `pendingReview.attemptCount`/`maxAttempts` for both the review footer and the
-   * blocked reply, so the two cannot disagree about which attempt a caller is on. The `+1` and
-   * the clamp are the footer's own arithmetic: `attemptCount` is how many attempts have been
-   * CONSUMED, so the attempt now in the caller's hands is the next one, and it never reads past
-   * the ceiling on the call that exhausts it.
+   * blocked reply, so the two cannot disagree about which attempt a caller is on. `attemptCount`
+   * is how many attempts have been CONSUMED, so the attempt now in the caller's hands is the next
+   * one (`attemptInHand`), and it never reads past the ceiling on the call that exhausts it.
    *
-   * `maxAttempts <= 1` answers `undefined`: "attempt 1 of 1" is not a budget, and the footer
+   * `maxAttempts <= 1` answers `undefined`: "attempt 1/1" is not a budget, and the footer
    * omits the counter in that state for the same reason.
    */
   private resolveAttemptCounter(
@@ -342,7 +342,7 @@ export class ResponseAssembler {
       return undefined;
     }
     return {
-      current: Math.min(pendingReview.attemptCount + 1, pendingReview.maxAttempts),
+      current: attemptInHand(pendingReview.attemptCount, pendingReview.maxAttempts),
       max: pendingReview.maxAttempts,
     };
   }
@@ -861,12 +861,12 @@ export class ResponseAssembler {
     }
 
     const chainId = context.sessionContext?.chainId ?? '';
-    // Same counter the blocked reply reads (`resolveAttemptCounter`), rendered in this footer's
-    // own long-standing `N/M` shorthand. One source of the numbers, two renderings — a second
-    // computation here is how the two surfaces would come to disagree about which attempt a
-    // caller is on.
+    // Same counter the blocked reply reads (`resolveAttemptCounter`), through the same
+    // `formatAttempt`. One source of the numbers and one rendering — a second computation here
+    // is how the two surfaces would come to disagree about which attempt a caller is on.
     const attempt = this.resolveAttemptCounter(context);
-    const attemptInfo = attempt !== undefined ? ` (attempt ${attempt.current}/${attempt.max})` : '';
+    const attemptInfo =
+      attempt !== undefined ? ` (${formatAttempt(attempt.current, attempt.max)})` : '';
 
     const isPhaseGuardReview = hasStructuralFinding(pendingReview);
     const hasOtherGates =

@@ -1,23 +1,23 @@
-// @lifecycle test - P4.116 / P4.119: a gate review's record and reply state one truth, driven live.
+// @lifecycle test - A gate review's record and reply state one truth, driven live.
 /**
- * Two rows, driven against a real spawned server under shipped defaults (CAGEERF, the bundled
+ * Driven against a real spawned server under shipped defaults (CAGEERF, the bundled
  * gates, the packaged config), reading only what a client can read plus the run's own row.
  *
- * P4.119 / R96 — the phase guard grades the final step's answer AFTER the capture has walked the
+ * Final step — the phase guard grades the final step's answer AFTER the capture has walked the
  * run past its last node, so the store had already latched `completed` when the guard opened a
  * review. MEASURED before the fix on `acaf76c6`: that reply carried `✓ Chain complete (3/3)` AND
  * `Next: …, gate_verdict=…`, and the next call — the verdict it asked for — was answered
  * "✓ Chain run already complete." The verdict could never land.
  *
- * P4.116 — a FAIL verdict that arrives with the step's answer while no review is open was
+ * Single-call FAIL — a FAIL verdict that arrives with the step's answer while no review is open was
  * recorded twice in one call: MEASURED before the fix, one such call left `attemptCount: 2` of 2
  * and the reply already reported the retry budget spent. Under the bundled gates a chain step's
  * review is opened up front, so the no-review path is reached where no review opens at render: a
- * single prompt, whose FAIL opens its review on the verdict. These pins lived on a `%clean` run
- * until P6.76 (R38): a FAIL on a step with no gates now opens no review and is refused by name
- * (MEASURED 2026-09-25: `%clean >>quick_decision` + answer + FAIL → "Step 1 carries no gates"),
- * so they moved to `>>review` with the shipped blocking `pr-security` gate, where the same call
- * shapes measured 1/2 and then 2/2 exhausted.
+ * single prompt, whose FAIL opens its review on the verdict. These pins run on `>>review` with
+ * the shipped blocking `pr-security` gate, not on a `%clean` run, because a FAIL on a step with no
+ * gates opens no review and is refused by name (MEASURED 2026-09-25: `%clean >>quick_decision` +
+ * answer + FAIL → "Step 1 carries no gates"). The same call shapes on `>>review` measured 1/2 and
+ * then 2/2 exhausted.
  */
 
 import { afterEach, describe, expect, test } from '@jest/globals';
@@ -491,7 +491,7 @@ describe('Streamable HTTP: a gate review states one state', () => {
     expect(steps).toContain(
       'Latest-known gate facts (historical; not a grade of a newer empty row or target)'
     );
-    expect(steps).toContain('`reader-mixed` PASS (attempt 2)');
+    expect(steps).toContain('`reader-mixed` PASS (attempt 3)');
     expect(steps).toContain(new Date(123460).toISOString());
     expect(steps).toContain('old-target-A');
     expect(steps).not.toContain('`reader-mixed` FAIL');
