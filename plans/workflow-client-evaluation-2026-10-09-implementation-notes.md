@@ -136,3 +136,11 @@ Tier 2 row 2.1 records the owner's requested consolidated diagnosis. Dispatch on
 - Finding (0.6): `gate list` still shows the authored-type icon → row 0.10. Pluralization class → row 0.11 killed with reason.
 - 0.8: the rule covers `?`, `| undefined` and `| null` because stage 11's motivating site was `| undefined`; the brief's narrower predicate would have missed it. Seven class-(a) sites baselined → row 0.9. 74 `this.x?.method()` dereference sites are outside the rule → row 0C1.14.
 - DEV-T0-5: 0.8 hand-edited the ESLint baseline (the regenerate command would have absorbed 0.6's in-flight counts) and ran Prettier over 0.6's two handler files; 0.6 re-checked formatting after. Accepted.
+
+## 2026-10-12 — 0.9 and 0.10 accepted
+
+- 0.9: all 7 baselined sites plus the alias-typed `ShellVerifyExecutor.gateSystemEnabled` are required; about 110 test constructions changed (found through `typecheck:tests`, which `typecheck` cannot see). `McpToolsManager.onRestart` uses a definite-assignment `!` because it is set in `initialize()`, not the constructor. Combined tree: lint 2436/706, tests-typecheck 338, knip 1065, all OK.
+- DEV-T0-6: 0.9 lowered the knip baseline (two deleted factories) and changed `JudgeResourceCollector` parameters to explicit `| null` so a required parameter could follow them. Accepted.
+- Finding (0.9 → 0.7): `pipeline-builder.ts` says `PipelinePorts` is "uniformly optional"; `metricsProvider` no longer is.
+- 0.10 dropped the icon instead of keeping it beside the tier: a surviving ✓ would still imply a check runs. Accepted.
+- Finding (0.10): `resource://gates` renders `id: name (type)` from the authored type → row 0.12.
