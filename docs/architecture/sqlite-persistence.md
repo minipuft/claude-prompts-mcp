@@ -272,6 +272,17 @@ recreated and its DDL freezes permanently.
 Adding a `NOT NULL` column with no default to a durable table makes the restore throw, naming the
 table. That is intended: the change needs a real migration.
 
+**The whole sequence is one `BEGIN IMMEDIATE` transaction**, from the version read through the
+restore, and `applySchema()` writes the new `schema_version` row inside it. A restore that throws
+rolls back the drop and the apply with it: the file keeps its old tables, its durable rows and its
+old version, and every later start fails the same way until the change ships a migration. Before
+2026-10-12 the steps ran unwrapped, so a failed restore left the file at the new version with the
+durable table empty, and the next start read it as current. Reading the version under the write
+lock also serializes two processes starting on one file: the second waits out `busy_timeout`, then
+sees the version the first committed. Nothing in the sequence may commit implicitly (`VACUUM`, a
+`journal_mode` change); `journal_mode=WAL` is set in `initialize()` before the transaction opens.
+Covered by `tests/integration/database/schema-recreate-atomicity.test.ts`.
+
 ## The Object Store Is Additive — Schema v29
 
 `objects` holds raw file bytes keyed `(tenant_id, hash)`; `version_entries` is the manifest, one

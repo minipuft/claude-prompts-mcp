@@ -480,6 +480,17 @@ const DROPPED_AT_VERSION: number = 19;
 /** Rows carried across a schema recreate, keyed by table name. */
 type DurableSnapshot = Map<string, Array<Record<string, unknown>>>;
 
+/** One durable table the recreate carried across, and how many rows came with it. */
+interface PreservedTable {
+  readonly table: string;
+  readonly rows: number;
+}
+
+/** What `ensureSchema` did inside its transaction, reported once the transaction commits. */
+type SchemaOutcome =
+  | { readonly kind: 'current' }
+  | { readonly kind: 'created' | 'recreated'; readonly preserved: readonly PreservedTable[] };
+
 /**
  * The history key a row belongs to, as one string.
  *
@@ -795,24 +806,56 @@ export class SqliteEngine implements DatabasePort {
    * The three outcomes are named rather than returned as a boolean because a caller needs to tell
    * "this database already existed" from "this call created it" — a startup check over rows has
    * nothing to do in the second case, and `false` said both.
+   *
+   * **The whole decision is ONE `BEGIN IMMEDIATE` transaction**, version read included. The
+   * recreate is drop → apply → restore, and `applySchema` writes the new `schema_version` row, so
+   * without a transaction a restore that threw left the file at the NEW version with the durable
+   * table empty — the next start read it as current, and the rows were gone (measured 2026-10-12).
+   * SQLite DDL is transactional, and nothing in the sequence commits implicitly (no `VACUUM`, no
+   * `journal_mode` change — that one runs in `initialize` before this), so a ROLLBACK restores the
+   * old tables, rows and version together. Reading the version under the write lock also means two
+   * processes starting on one file cannot both decide to recreate it: the second waits
+   * (`busy_timeout`) and then reads the version the first committed.
    */
   private ensureSchema(): 'current' | 'created' | 'recreated' {
+    this.beginTransaction('immediate');
+    let outcome: SchemaOutcome;
+    try {
+      outcome = this.bringSchemaCurrent();
+      this.commit();
+    } catch (error) {
+      this.rollbackAfterFailure(error);
+      throw error;
+    }
+
+    // Logged only once the transaction has committed: before that, nothing here was true yet.
+    if (outcome.kind === 'current') {
+      this.logger.info(`Database schema is up to date (version ${SCHEMA_VERSION})`);
+    } else {
+      for (const { table, rows } of outcome.preserved) {
+        this.logger.info(`Preserved ${rows} row(s) in durable table ${table}`);
+      }
+      this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
+    }
+    return outcome.kind;
+  }
+
+  /** The body of {@link ensureSchema}; runs inside its transaction and must not commit. */
+  private bringSchemaCurrent(): SchemaOutcome {
     const currentVersion = this.getSupportedSchemaVersion();
 
     if (currentVersion === SCHEMA_VERSION) {
       // Tables are current, but views must still refresh: a stale view survives every
       // version-match boot otherwise (see applyViews docblock).
       this.applyViews();
-      this.logger.info(`Database schema is up to date (version ${currentVersion})`);
-      return 'current';
+      return { kind: 'current' };
     }
 
     if (currentVersion === 0) {
       this.applySchema();
-      this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
       // Not a recreate: a fresh database has no durable rows to protect, so the purge below runs
       // as a no-op and records its marker.
-      return 'created';
+      return { kind: 'created', preserved: [] };
     }
 
     this.logger.info(
@@ -822,9 +865,25 @@ export class SqliteEngine implements DatabasePort {
     this.normalizeVersionHistorySnapshot(preserved);
     this.dropAllTables();
     this.applySchema();
-    this.restoreDurableTables(preserved);
-    this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
-    return 'recreated';
+    return { kind: 'recreated', preserved: this.restoreDurableTables(preserved) };
+  }
+
+  /**
+   * Roll back after a failed schema transaction without masking why it failed.
+   *
+   * SQLite rolls some failures back on its own (`SQLITE_FULL`, `SQLITE_IOERR`, …), and then the
+   * explicit ROLLBACK throws "no transaction is active". That second error says nothing about the
+   * first, so it is logged and the caller rethrows the original.
+   */
+  private rollbackAfterFailure(cause: unknown): void {
+    try {
+      this.rollback();
+    } catch (rollbackError) {
+      const reason = cause instanceof Error ? cause.message : String(cause);
+      this.logger.warn(
+        `Schema transaction rollback after "${reason}" also failed: ${String(rollbackError)}`
+      );
+    }
   }
 
   /**
@@ -953,8 +1012,12 @@ export class SqliteEngine implements DatabasePort {
    * dropped from the DDL is discarded, and a column added to it takes its default. A
    * restore failure rethrows with the table named rather than losing the rows quietly —
    * the schema change needs a real migration at that point.
+   *
+   * Returns what it carried rather than logging it: this runs inside the schema transaction, and a
+   * "preserved" line written before that transaction commits would be false if it then rolled back.
    */
-  private restoreDurableTables(snapshot: DurableSnapshot): void {
+  private restoreDurableTables(snapshot: DurableSnapshot): PreservedTable[] {
+    const preserved: PreservedTable[] = [];
     for (const [table, rows] of snapshot) {
       const newColumns = this.getTableColumns(table);
       const carried = Object.keys(rows[0] ?? {}).filter((column) => newColumns.has(column));
@@ -986,8 +1049,9 @@ export class SqliteEngine implements DatabasePort {
         );
       }
 
-      this.logger.info(`Preserved ${rows.length} row(s) in durable table ${table}`);
+      preserved.push({ table, rows: rows.length });
     }
+    return preserved;
   }
 
   /**
