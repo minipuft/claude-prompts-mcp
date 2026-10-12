@@ -31,6 +31,7 @@ import type {
 import type { HandoffEvidenceMode } from './handoff-contract.js';
 
 import { unreportedDetachedNodeIds } from '#shared/types/chain-execution.js';
+import { formatAttempt } from '#shared/utils/attempt-number.js';
 import { ordinalOf } from '#shared/utils/node-order.js';
 
 /** One detached (`await: run`) node of a run, as the router needs it. */
@@ -470,7 +471,7 @@ export function describeDetachedReview(
   return [
     '---',
     `**Gate Review Required — detached node ${node.token} (step ${node.stepNumber})** ` +
-      `(attempt ${review.attempt}/${review.maxAttempts})`,
+      `(${formatAttempt(review.attempt, review.maxAttempts)})`,
     '',
     ...(hints.length > 0
       ? [
@@ -508,7 +509,7 @@ export function describeDetachedReviewOutcome(
   }
 ): string {
   const label = `detached node ${node.token} (step ${node.stepNumber})`;
-  const counter = `(attempt ${outcome.attempt}/${outcome.maxAttempts})`;
+  const counter = `(${formatAttempt(outcome.attempt, outcome.maxAttempts)})`;
   const replace =
     'Re-run the worker; resume with its new result as user_response, ending with the same ' +
     `trailer — it replaces the first:\n${trailerBlock(node.token)}`;

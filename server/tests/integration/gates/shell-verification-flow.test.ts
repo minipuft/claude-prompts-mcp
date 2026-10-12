@@ -436,7 +436,7 @@ Please fix the issues and submit again.`;
       const escalationMessage = `## Shell Verification FAILED - Maximum Attempts Reached
 
 **Command:** \`${result.command}\`
-**Attempts:** 5/5
+**Last run:** attempt 5/5
 **Exit Code:** ${result.exitCode}
 
 ### Recent Error Output

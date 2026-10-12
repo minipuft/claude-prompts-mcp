@@ -419,6 +419,10 @@ describe('evaluateSemanticEvaluation', () => {
       'evidence_required'
     );
     expect(result.criteria[0]).toMatchObject({ state: 'invalid', valid: false, passed: false });
+    // R10.6: a requirement of one names one span, in the singular.
+    expect(result.issues.map((entry) => entry.message)).toContain(
+      'Requires 1 distinct target-bound evidence span'
+    );
   });
 
   test('unmet still requires grounded evidence', () => {
@@ -438,10 +442,13 @@ describe('evaluateSemanticEvaluation', () => {
       start: first.start,
       end: first.end,
     };
-    expectInvalid(
+    const repeated = expectInvalid(
       pinned,
       report(pinned, [observation(pinned, { evidence: [first, repeatedWithoutQuote] })]),
       'evidence_required'
+    );
+    expect(repeated.issues.map((entry) => entry.message)).toContain(
+      'Requires 2 distinct target-bound evidence spans'
     );
     const second = evidence(pinned, { start: 4, end: 12, quote: 'contract' });
     expect(

@@ -327,7 +327,7 @@ describe('ShellVerificationStage', () => {
       expect(executor.execute).not.toHaveBeenCalled();
       const text = JSON.stringify(context.response);
       expect(text).toContain('Maximum Attempts Reached');
-      expect(text).toContain('**Attempts:** 2/2');
+      expect(text).toContain('**Last run:** attempt 2/2');
       expect(context.state.gates.pendingShellVerification?.attemptCount).toBe(2);
       expect(context.state.gates.pendingShellVerification?.previousResults).toHaveLength(2);
     });
@@ -403,7 +403,7 @@ describe('ShellVerificationStage', () => {
 
       const retried = replyCall({ gate_action: 'retry' });
       await stage.execute(retried);
-      expect(JSON.stringify(retried.response)).toContain('0/2');
+      expect(JSON.stringify(retried.response)).toContain('**Next run:** attempt 1/2');
       const [, saved] = (sessionService.setPendingShellVerification as jest.Mock).mock.calls[0];
       (sessionService.getPendingShellVerification as jest.Mock).mockReturnValue(saved);
 
@@ -724,7 +724,7 @@ describe('ShellVerificationStage', () => {
       const text = context.response!.content[0].text;
       expect(text).toContain('Attempts Reset');
       expect(text).toContain('npm test');
-      expect(text).toContain('0/1');
+      expect(text).toContain('**Next run:** attempt 1/1');
 
       // Should save reset state to session
       expect(sessionService.setPendingShellVerification).toHaveBeenCalled();

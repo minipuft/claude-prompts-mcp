@@ -277,7 +277,7 @@ After max attempts, the user is prompted for a decision:
 ## Shell Verification FAILED - Maximum Attempts Reached
 
 **Command:** `npm test`
-**Attempts:** 5/5
+**Last run:** attempt 5/5
 **Last Exit Code:** 1
 
 ### Error Output:

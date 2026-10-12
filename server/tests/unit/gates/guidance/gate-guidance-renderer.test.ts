@@ -389,6 +389,48 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
 
       expect(guidance).toContain('- **Lint Tool** — check: runs tool `lint-runner`');
     });
+
+    // R10.6: a mixed gate's tool check rendered inside its evaluation block, so the bullet sat
+    // under whichever heading preceded it — a reader saw a check listed with the reminders.
+    test("a mixed gate's check renders under Checks, its rubric under Evaluations", async () => {
+      const renderer = new GateGuidanceRenderer(logger as any, {
+        gateLoader: loaderFor({
+          'sem-mixed': {
+            id: 'sem-mixed',
+            name: 'Sem Mixed',
+            type: 'validation',
+            description: 'mixed',
+            guidance: 'MIXED RUBRIC GUIDANCE',
+            pass_criteria: [
+              { type: 'shell_verify', shell_command: ['true'] },
+              { type: 'semantic_evaluation' },
+            ],
+            activation: {},
+          },
+          rem: reminderGate('rem'),
+        }) as any,
+        gatesConfigProvider: () => ({ harnessCovers: [], reminderTokenBudget: 800 }),
+      });
+
+      const guidance = await renderer.renderGuidance(['rem', 'sem-mixed'], {
+        criteriaExecution: 'pipeline',
+      });
+
+      const checkLine = '- **Sem Mixed** — check: runs `true`';
+      const headings = guidance
+        .split('\n')
+        .filter((line) => ['### Checks', '### Reminders', '### Evaluations'].includes(line));
+      expect(headings).toEqual(['### Checks', '### Reminders', '### Evaluations']);
+      const checks = guidance.slice(
+        guidance.indexOf('### Checks'),
+        guidance.indexOf('### Reminders')
+      );
+      const evaluations = guidance.slice(guidance.indexOf('### Evaluations'));
+      expect(checks).toContain(checkLine);
+      expect(evaluations).toContain('### Sem Mixed\nMIXED RUBRIC GUIDANCE');
+      expect(evaluations).not.toContain(checkLine);
+      expect(guidance.split(checkLine)).toHaveLength(2);
+    });
   });
 
   describe('reminderTokenBudget degrades, never drops', () => {

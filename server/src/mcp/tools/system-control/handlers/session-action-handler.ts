@@ -4,6 +4,7 @@ import { ActionHandler } from '../core/action-handler-base.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 
+import { attemptInHand, formatAttempt } from '#shared/utils/attempt-number.js';
 import { currentOrdinal, ordinalOf, totalOf } from '#shared/utils/node-order.js';
 
 export class SessionActionHandler extends ActionHandler {
@@ -168,7 +169,8 @@ export class SessionActionHandler extends ActionHandler {
         const step = ordinalOf(session.state.nodes, review.nodeId);
         response +=
           `- \`${review.nodeId}\` (step ${step}, ${review.kind}, ${review.phase}): ` +
-          `gates ${review.gateIds.join(', ') || 'none'} · attempts ${review.attemptCount}/${review.maxAttempts}\n`;
+          `gates ${review.gateIds.join(', ') || 'none'} · ` +
+          `${formatAttempt(attemptInHand(review.attemptCount, review.maxAttempts), review.maxAttempts)}\n`;
       }
       response += '\n';
     }

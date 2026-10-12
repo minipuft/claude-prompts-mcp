@@ -491,7 +491,7 @@ describe('Streamable HTTP: a gate review states one state', () => {
     expect(steps).toContain(
       'Latest-known gate facts (historical; not a grade of a newer empty row or target)'
     );
-    expect(steps).toContain('`reader-mixed` PASS (attempt 2)');
+    expect(steps).toContain('`reader-mixed` PASS (attempt 3)');
     expect(steps).toContain(new Date(123460).toISOString());
     expect(steps).toContain('old-target-A');
     expect(steps).not.toContain('`reader-mixed` FAIL');

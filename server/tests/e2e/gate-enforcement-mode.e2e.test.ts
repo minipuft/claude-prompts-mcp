@@ -653,7 +653,7 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
       const refused = await call({ gate_action: action });
       expect(refused.isError).toBe(true);
       expect(refused.text).toContain(
-        `gate_action "${action}" is accepted only on an exhausted review; the review of step 1 is at 1/2 attempts`
+        `gate_action "${action}" is accepted only on an exhausted review; the review of step 1 is on attempt 2/2`
       );
       expect(refused.notifications).toEqual([]);
     }

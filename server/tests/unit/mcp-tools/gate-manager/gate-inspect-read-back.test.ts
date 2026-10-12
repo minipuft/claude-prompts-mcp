@@ -241,3 +241,36 @@ describe('complete public criterion read-back', () => {
     }
   );
 });
+
+// R10.6: inspect read "Type: ✓ validation" for a semantic-only gate — the authored `type`, under
+// an icon that claims a check runs. The tier comes from the criteria; the authored value keeps
+// its own label.
+describe('inspect names the tier the criteria require', () => {
+  const semantic = SemanticCriterionSchema.parse({
+    type: 'semantic_evaluation',
+    id: 'public-criterion',
+    question: 'Does the output preserve the public contract?',
+    evidence_requirements: { min_items: 1 },
+    result: { kind: 'boolean' },
+    acceptance: { kind: 'equals', value: true },
+    target: { kind: 'step_output' },
+    allow_not_applicable: false,
+  });
+  const shell = { type: 'shell_verify' as const, shell_command: ['true'] };
+
+  it.each([
+    ['evaluation', [semantic]],
+    ['check', [shell]],
+    ['check + evaluation', [shell, semantic]],
+    ['reminder', []],
+  ] as const)('reads Tier: %s', async (tier, criteria) => {
+    const processor = buildProcessor(
+      new Map([['test-gate', { ...baseDefinition, pass_criteria: [...criteria] }]])
+    );
+    const result = await processor.handleInspect({ action: 'inspect', id: 'test-gate' });
+    const lines = (result.content[0] as { text: string }).text.split('\n');
+    expect(lines).toContain(`  - Tier: ${tier}`);
+    expect(lines).toContain('  - Declared Type: validation');
+    expect(lines.some((line) => line.startsWith('  - Type:'))).toBe(false);
+  });
+});

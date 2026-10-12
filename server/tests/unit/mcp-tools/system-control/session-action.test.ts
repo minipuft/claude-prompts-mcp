@@ -249,10 +249,10 @@ describe('System Control session action scope propagation', () => {
 
     expect(text).toContain('### ⚠️ Open Reviews');
     expect(text).toContain(
-      '- `n1` (step 1, detached, awaiting-replacement): gates dr-block · attempts 1/2'
+      '- `n1` (step 1, detached, awaiting-replacement): gates dr-block · attempt 2/2'
     );
     expect(text).toContain(
-      '- `n2` (step 2, structural, awaiting-verdict): gates __phase_guard__ · attempts 1/2'
+      '- `n2` (step 2, structural, awaiting-verdict): gates __phase_guard__ · attempt 2/2'
     );
   });
 

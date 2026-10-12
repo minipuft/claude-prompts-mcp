@@ -40,6 +40,15 @@ export function deriveGateTier(definition: GateTierSource): GateTier {
 }
 
 /**
+ * The tier a person reads for one gate, naming both requirements of a mixed gate: the display
+ * tier alone would call a check-plus-evaluation gate a check and hide the rubric it also issues.
+ */
+export function formatGateTierLabel(definition: GateTierSource): string {
+  const tier = deriveGateTier(definition);
+  return tier === 'check' && hasSemanticEvaluation(definition) ? 'check + evaluation' : tier;
+}
+
+/**
  * One `pass_criteria` entry, as read by `formatCheckLine` — the fields it actually inspects,
  * not the full gate schema. `shell_command` accepts a bare string alongside the argv array the
  * current schema requires: a gate.yaml written before the 2026-08-29 argv migration is refused

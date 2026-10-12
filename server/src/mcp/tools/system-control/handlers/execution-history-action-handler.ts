@@ -11,6 +11,7 @@ import {
   isGateBypass,
   isLegacyUnverifiedAcceptance,
 } from '#engine/gates/services/gate-verdict-summary.js';
+import { formatAttempt } from '#shared/utils/attempt-number.js';
 
 /**
  * Reader for `execution_records`, the append-only chain execution ledger.
@@ -242,7 +243,7 @@ function formatGateSummaryLines(summary: GateVerdictSummary): string[] {
       : summary.verdict === 'PASS'
         ? '✓'
         : '✗';
-  const attempt = summary.attempt !== undefined ? ` (attempt ${summary.attempt})` : '';
+  const attempt = formatLedgerAttempt(summary, bypass);
   const rationale =
     summary.rationale !== undefined && summary.rationale.length > 0
       ? ` — ${summary.rationale}`
@@ -252,6 +253,18 @@ function formatGateSummaryLines(summary: GateVerdictSummary): string[] {
     ...formatAcceptanceFacts(summary),
     ...formatReviewClaims(summary),
   ];
+}
+
+/**
+ * The attempt a ledger line names, 1-based like every other attempt render (R10.6). A PASS/FAIL
+ * summary stores the review's CONSUMED count at grading, so the graded attempt is one more; a
+ * BYPASS stores the exhausted review's spent count, which is the last attempt the skip followed.
+ */
+function formatLedgerAttempt(summary: GateVerdictSummary, bypass: boolean): string {
+  if (summary.attempt === undefined) return '';
+  return bypass
+    ? ` (after ${formatAttempt(summary.attempt, summary.bypassReview?.maxAttempts)})`
+    : ` (${formatAttempt(summary.attempt + 1)})`;
 }
 
 function formatAcceptanceFacts(summary: GateVerdictSummary): string[] {

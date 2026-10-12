@@ -4,6 +4,7 @@ import type { ChainSession } from '#shared/types/chain-session.js';
 import type { GateAction } from '../../execution/pipeline/decisions/gates/gate-enforcement-types.js';
 import type { resolveReviewTarget } from '../../execution/pipeline/decisions/gates/review-target.js';
 
+import { attemptInHand, formatAttempt } from '#shared/utils/attempt-number.js';
 import { ordinalOf } from '#shared/utils/node-order.js';
 
 /**
@@ -35,8 +36,8 @@ export function describeRefusal(reason: 'phase' | 'failing-check', review: GateR
         : 'gate_action "retry", "skip" or "abort"',
   };
   return (
-    `❌ The gate review of node '${review.nodeId}' (${review.attemptCount}/${review.maxAttempts} ` +
-    `attempts) is waiting for ${waitingFor[review.phase]}. Nothing was recorded.`
+    `❌ The gate review of node '${review.nodeId}' (${formatAttempt(attemptInHand(review.attemptCount, review.maxAttempts), review.maxAttempts)}) ` +
+    `is waiting for ${waitingFor[review.phase]}. Nothing was recorded.`
   );
 }
 
@@ -76,7 +77,7 @@ export function describeInBudgetAction(
   const ordinal = ordinalOf(session.state.nodes, review.nodeId);
   return (
     `❌ gate_action "${action}" is accepted only on an exhausted review; the review of step ` +
-    `${ordinal} is at ${review.attemptCount}/${review.maxAttempts} attempts — answer it or send ` +
+    `${ordinal} is on ${formatAttempt(attemptInHand(review.attemptCount, review.maxAttempts), review.maxAttempts)} — answer it or send ` +
     'a gate_verdict. Nothing was recorded.'
   );
 }

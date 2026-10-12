@@ -176,7 +176,8 @@ function evidenceIssues(
     issues.push(
       issue(
         'evidence_required',
-        `Requires ${criterion.evidence_requirements.min_items} distinct target-bound evidence spans`,
+        `Requires ${criterion.evidence_requirements.min_items} distinct target-bound evidence ` +
+          (criterion.evidence_requirements.min_items === 1 ? 'span' : 'spans'),
         criterion.id
       )
     );

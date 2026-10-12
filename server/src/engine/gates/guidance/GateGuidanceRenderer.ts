@@ -81,7 +81,8 @@ interface ReminderEntry {
 
 type GateGuidanceEntry =
   | { kind: 'check'; line: string }
-  | { kind: 'evaluation'; line: string }
+  /** A mixed gate's tool check rides along as `checkLine`, rendered under `### Checks`. */
+  | { kind: 'evaluation'; line: string; checkLine?: string }
   | { kind: 'reminder'; reminder: ReminderEntry }
   | { kind: 'suppressed' }
   | { kind: 'skipped' };
@@ -165,6 +166,7 @@ export class GateGuidanceRenderer {
             break;
           case 'evaluation':
             evaluationLines.push(entry.line);
+            if (entry.checkLine !== undefined) checkLines.push(entry.checkLine);
             break;
           case 'reminder':
             reminders.push(entry.reminder);
@@ -253,29 +255,20 @@ export class GateGuidanceRenderer {
       return { kind: 'skipped' };
     }
 
-    // Issued semantic requirements retain full guidance, independently of reminder budgets.
+    // Issued semantic requirements retain full guidance, independently of reminder budgets. A
+    // mixed gate's tool check is a check, not part of the rubric: it renders under `### Checks`
+    // (R10.6), the same split the skills export makes for the same gate.
     if (hasSemanticEvaluation(gate))
       return {
         kind: 'evaluation',
-        line: [
-          `### ${gate.name}`,
-          gate.guidance ?? '',
-          hasToolCheck(gate) ? formatCheckLine(gate.name, gate.pass_criteria ?? []) : '',
-        ]
-          .filter((part) => part !== '')
-          .join('\n'),
+        line: [`### ${gate.name}`, gate.guidance ?? ''].filter((part) => part !== '').join('\n'),
+        ...(hasToolCheck(gate) ? { checkLine: this.renderCheckLine(gate, context) } : {}),
       };
 
-    // Check lines are never suppressed or budgeted. Their classification does not establish
-    // execution: single prompts keep the configured command visible with an explicit caveat.
+    // Check lines are never suppressed or budgeted.
     if (deriveGateTier(gate) === 'check') {
-      const checkLine = formatCheckLine(gate.name, gate.pass_criteria ?? []);
       this.logger.debug('[GATE GUIDANCE RENDERER] Added check line for gate:', gateId);
-      return {
-        kind: 'check',
-        line:
-          context.criteriaExecution === 'pipeline' ? checkLine : `${checkLine} (not executed here)`,
-      };
+      return { kind: 'check', line: this.renderCheckLine(gate, context) };
     }
 
     // Harness coverage outranks explicit reminder requests (B2); a missing subject is not
@@ -305,6 +298,17 @@ export class GateGuidanceRenderer {
         inputOrder,
       },
     };
+  }
+
+  /**
+   * One check's line. Its classification does not establish execution: single prompts keep the
+   * configured command visible with an explicit caveat.
+   */
+  private renderCheckLine(gate: GuidanceDefinition, context: GateContext): string {
+    const checkLine = formatCheckLine(gate.name, gate.pass_criteria ?? []);
+    return context.criteriaExecution === 'pipeline'
+      ? checkLine
+      : `${checkLine} (not executed here)`;
   }
 
   /**

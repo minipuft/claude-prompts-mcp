@@ -592,7 +592,7 @@ describe('run telemetry, session counters through the ledger', () => {
     const text = await renderHistory(recordStore);
 
     expect(text).toContain('✓ `api-documentation` PASS — contract annotated');
-    expect(text).toContain('✗ `test-coverage` FAIL (attempt 2) — error path untested');
+    expect(text).toContain('✗ `test-coverage` FAIL (attempt 3) — error path untested');
   });
 
   test('positive control: a record with no verdicts renders the record line unchanged', async () => {

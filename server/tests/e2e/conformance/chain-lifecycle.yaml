@@ -264,7 +264,7 @@ scenarios:
         args: { chain_id: '${cid}', gate_action: 'retry' }
     # `Attempts: 0/1` is the reset itself. The preceding response read `1/1`, so this substring
     # cannot appear unless the counter actually moved backwards.
-    expect: { text_contains: 'Attempts:** 0/1' }
+    expect: { text_contains: 'Next run:** attempt 1/1' }
 
   - id: gate-action-abort-stops-verification
     claim_source: >-

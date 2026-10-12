@@ -59,7 +59,7 @@ describe('execution_history steps selects the latest gate fact by creation order
     const text = await steps([latestRow], [passed, latestRow, failed]);
 
     expect(text).toContain('Latest-known gate facts');
-    expect(text).toContain('`g` PASS (attempt 2)');
+    expect(text).toContain('`g` PASS (attempt 3)');
     expect(text).toContain(`record \`${passed.executionId}\``);
     expect(text).not.toContain('`g` FAIL');
   });
