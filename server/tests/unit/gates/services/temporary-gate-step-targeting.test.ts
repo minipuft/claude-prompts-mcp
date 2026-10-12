@@ -55,7 +55,10 @@ const createRegistry = () => {
 const NODE_IDS = ['draft-outline', 'write-body', 'final-review'];
 
 const createContext = (gateSpecs: unknown[]) => ({
-  state: { gates: { requestedOverrides: { gates: gateSpecs } } as Record<string, unknown> },
+  state: {
+    gates: { requestedOverrides: { gates: gateSpecs } } as Record<string, unknown>,
+    session: {},
+  },
   mcpRequest: { chain_id: 'chain-demo#1' },
   getSessionId: () => 'session-1',
   hasChainCommand: () => true,

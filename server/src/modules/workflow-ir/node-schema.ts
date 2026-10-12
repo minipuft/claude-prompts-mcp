@@ -296,7 +296,9 @@ export type WorkflowRejectionReason =
    * An inline gate criterion is empty or blank, or a named inline gate carries no criterion
    * (R11.8): registered, it could neither pass nor fail, and skipped, the client would believe a
    * gate it asked for was enforced. Produced by stage 05 before anything registers; addressed to
-   * the step's node when the criterion is a step's, otherwise run-level.
+   * the step's node when the criterion is a step's, otherwise run-level. Stage 11 raises it, run-
+   * level, for a request gate (`gates` / `workflow.gates`) that cannot register as sent: blank, a
+   * blank criteria entry, or a bare id naming no gate.
    */
   | 'gate-criteria-invalid'
   | 'required-argument-missing'

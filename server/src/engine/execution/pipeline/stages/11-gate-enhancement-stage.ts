@@ -21,8 +21,8 @@ type GateSystemSwitch = (scope: StateStoreOptions | undefined) => boolean;
  *
  * Dependencies: context.executionPlan, context.convertedPrompt or context.parsedCommand.steps
  * Output: Enhanced prompts with gate instructions, context.activeGateIds
- * Can Early Exit: Yes (a request gate targeting a step a resume can no longer reach, R65, or
- * carrying a canonical gate's id, R100)
+ * Can Early Exit: Yes (a request gate that cannot register as sent, R11.8, targeting a step a
+ * resume can no longer reach, R65, or carrying a canonical gate's id, R100)
  */
 export class GateEnhancementStage extends BasePipelineStage {
   readonly name = 'GateEnhancement';
@@ -75,7 +75,12 @@ export class GateEnhancementStage extends BasePipelineStage {
     // R65: a resume's request gate targeting a step it can no longer reach is refused here, before
     // any registration, in stage 04's rejection shape — the registrar alone knows the run's
     // position and the gates it holds. R100: so is a request gate under a canonical gate's id.
+    // R11.8: so is one that cannot register as sent (blank, or a bare id naming no gate).
     const refused = [
+      ...(await this.registrar.invalidRequestGates(context)).map((refusal) => ({
+        reason: 'gate-criteria-invalid' as const,
+        ...refusal,
+      })),
       ...this.registrar
         .canonicalIdCollisions(context)
         .map((refusal) => ({ reason: 'gate-id-canonical' as const, ...refusal })),

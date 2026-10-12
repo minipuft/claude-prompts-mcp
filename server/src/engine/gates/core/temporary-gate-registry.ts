@@ -260,11 +260,16 @@ export class TemporaryGateRegistry {
       throw new Error(`Temporary gate ID already exists: ${gateId}`);
     }
 
-    // Check memory limits
+    // At capacity: expired gates make room; an unexpired one never does (R11.8, R11.13).
     if (this.temporaryGates.size >= this.maxMemoryGates) {
-      this.performCleanup();
+      this.cleanupExpiredGates();
       if (this.temporaryGates.size >= this.maxMemoryGates) {
-        throw new Error(`Temporary gate registry at capacity (${this.maxMemoryGates})`);
+        throw new Error(
+          `Temporary gate registry is full (${this.maxMemoryGates} gates, none expired), so gate ` +
+            `'${definition.id ?? definition.name}' was not registered. No unexpired gate is ` +
+            `evicted to make room: a run or a call in progress may still review it. Complete or ` +
+            `cancel an open run, or send fewer gates, and retry.`
+        );
       }
     }
 
@@ -489,34 +494,6 @@ export class TemporaryGateRegistry {
     }
 
     return cleanedCount;
-  }
-
-  /**
-   * Force cleanup to free memory
-   */
-  private performCleanup(): void {
-    this.logger.debug('[TEMP GATE REGISTRY] Performing forced cleanup');
-
-    // First try cleaning expired gates
-    this.cleanupExpiredGates();
-
-    // If still at capacity, remove oldest gates
-    if (this.temporaryGates.size >= this.maxMemoryGates) {
-      const gates = Array.from(this.temporaryGates.values()).sort(
-        (a, b) => a.created_at - b.created_at
-      );
-
-      const toRemove = Math.min(100, gates.length - Math.floor(this.maxMemoryGates * 0.8));
-      for (let i = 0; i < toRemove; i++) {
-        const gate = gates[i];
-        if (!gate) {
-          continue;
-        }
-        this.removeTemporaryGate(gate.id);
-      }
-
-      this.logger.warn(`[TEMP GATE REGISTRY] Force removed ${toRemove} oldest gates`);
-    }
   }
 
   /** Drop a gate's expiry: a run-owned gate ends with its run, not with a timer. */
