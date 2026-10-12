@@ -88,7 +88,7 @@ export function extractErrorOutput(result: ShellVerifyResult): string {
 }
 
 /**
- * The last run a pending shell check spent, 1-based (R10.6): `attemptCount` is charged before
+ * The last run a pending shell check spent, 1-based: `attemptCount` is charged before
  * the command runs, so once a run has happened it IS that run's ordinal; 0 means none has.
  */
 export function formatLastShellRun(

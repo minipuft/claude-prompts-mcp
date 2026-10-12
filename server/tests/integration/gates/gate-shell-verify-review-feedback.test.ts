@@ -5,7 +5,7 @@
  * Uses real ShellVerifyExecutor with real shell commands (echo, exit)
  * and mock GateDefinitionProvider returning controlled gate definitions.
  *
- * These tests verify the NEW feature: shell_verify output surfaced in
+ * These tests verify shell_verify output surfaced in
  * gate review feedback (runGateShellVerifications + formatGateShellVerifySection).
  */
 

@@ -259,7 +259,7 @@ describe('GateReviewStage — recording check evidence on the pending review', (
  * real, so two reviews are open at once: step 1's, opened FIRST, and the review of step 2, the
  * node the run stands on.
  */
-describe('GateReviewStage — renders and clears the review of the node it names (row 3.12)', () => {
+describe('GateReviewStage — renders and clears the review of the node it names', () => {
   const coveredGate: LightweightGateDefinition = {
     id: 'test-suite',
     name: 'Test Suite',

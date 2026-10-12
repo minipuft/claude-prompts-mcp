@@ -1,16 +1,9 @@
-// @lifecycle canonical - R10.6: one attempt numbering, and no render that builds its own.
+// @lifecycle canonical - formatAttempt, attemptInHand, and the scan for renders that bypass them.
 /**
- * Owner ruling R10.6: "fix the numbering to consolidate, and only reveal the truth". Measured on
- * 6889b015 (live STDIO + HTTP drive, 2026-10-11): the execution-history ledger printed
- * `(attempt 0)` for the first attempt of a review whose prompt said `attempt 1/2`, a blocked
- * reply said `Attempt 1 of 2` beside a footer saying `attempt 1/2`, and an in-budget refusal said
- * `is at 1/2 attempts` while the footer of the same state said `attempt 2/2`.
- *
- * Every site found by shape (`rg` for an attempt word or counter beside an interpolation) now
- * renders through `formatAttempt`. The scan below is the gate for the class: a new render that
- * builds an attempt number in a string of its own fails it. The planted sources prove each
- * pattern fires; the counts (`N attempts`, `attempt${s}`) prove it does not fire on prose that
- * counts attempts rather than numbering one.
+ * The scan fails when a string in `src/` builds an attempt number outside `formatAttempt` (an
+ * attempt word or counter beside an interpolation). The planted sources prove each pattern fires;
+ * the counts (`N attempts`, `attempt${s}`) prove it does not fire on prose that counts attempts
+ * rather than numbering one.
  */
 import { describe, expect, test } from '@jest/globals';
 
@@ -64,7 +57,7 @@ describe('formatAttempt', () => {
   });
 });
 
-describe('R10.6: every attempt number in src/ renders through formatAttempt', () => {
+describe('every attempt number in src/ renders through formatAttempt', () => {
   test('positive control: each shape fires on a planted bypass', () => {
     const planted = [
       'const a = `(attempt ${review.attemptCount})`;',

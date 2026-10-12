@@ -1,4 +1,4 @@
-// @lifecycle test - P6.112 / R54: a run resumed in a process that never registered its temporary gates (a claimed handoff) re-registers them from its blueprint, over Streamable HTTP.
+// @lifecycle test - A claimed handoff re-registers the run's temporary gates from its blueprint, over Streamable HTTP.
 /**
  * MEASURED 2026-09-27 on `ff936b05`, two servers over one runtime root (`chain_runs` read beside
  * every reply):
@@ -13,20 +13,20 @@
  *     anonymous criterion and the request gate were gone, and a FAIL opened `{b: ["sv-block"]}`.
  *     The registry is in memory, and stage 05 skips on a restored blueprint.
  *
- * Now `InlineGateProcessor.restoreRunGates` (stage 05, on every restored blueprint) re-registers
+ * `InlineGateProcessor.restoreRunGates` (stage 05, on every restored blueprint) re-registers
  * each temporary gate the blueprint references and this process does not hold, under the id the
  * blueprint recorded, and hands the start call's request gates (`parsedCommand.requestGates`,
  * written by stage 13) back to stage 11 when the run owns none.
  *
- * P6.129 / R60 (measured 2026-09-27 on `1c1603d5`): when the claiming server already ran another
+ * Id collision (measured 2026-09-27 on `1c1603d5`): when the claiming server already ran another
  * run declaring `g129`, the claimed step 2 rendered that run's `B-ONE`, not its own `A-ONE` — the
  * recorded id was held, so nothing restored, and the steps carry registered ids, not declared
- * names. Now it registers under `g129-2` and this call's restored command references that id.
+ * names. It registers under `g129-2` and this call's restored command references that id.
  *
- * P6.130 / R61 (measured 2026-09-27 on `b7a08753`): after a claim `chain_sessions` held the dead
+ * Projection rows (measured 2026-09-27 on `b7a08753`): after a claim `chain_sessions` held the dead
  * first owner's row (step 1) and the claimer's (step 2) until a later startup's cleanup. The hooks
  * loader already served the claimer's (its PID-liveness check skips the dead row); the projection
- * now drops another PID's row for a run it projects, so it holds exactly the owner's.
+ * drops another PID's row for a run it projects, so it holds exactly the owner's.
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 

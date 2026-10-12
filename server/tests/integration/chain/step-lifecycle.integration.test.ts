@@ -1,11 +1,10 @@
-// @lifecycle test - P3 Tier 3 row 17: the three P2 lifecycle defects, driven as a client drives them.
+// @lifecycle test - Chain run lifecycle driven as a client drives it: ledger, reviews, mutation and cold load.
 /**
  * Chain run lifecycle, from the client's side of the tool boundary.
  *
- * The P2 live drive found three defects that every test in the repo missed, and it missed them
- * for one reason: the suites reached completion by *constructing* `currentStep > totalSteps`,
- * a state no client that obeys the rendered footer ever produces. So this suite never writes
- * session state. It hands `PromptExecutionPipeline` the same request shapes a client sends —
+ * A suite that reaches completion by *constructing* `currentStep > totalSteps` drives a state no
+ * client that obeys the rendered footer ever produces. So this suite never writes session
+ * state. It hands `PromptExecutionPipeline` the same request shapes a client sends —
  * `{command}`, then `{chain_id, user_response, gate_verdict}` — and reads back only what a
  * client can read: the rendered text, the `execution_records` ledger, and the store's own
  * `runStatus`.

@@ -1,4 +1,4 @@
-// @lifecycle test - Unit test for the sole enumerator of a resource's files (plan row O.1)
+// @lifecycle test - Unit test for the sole enumerator of a resource's files
 /**
  * What a checkpoint records, and what a restore may write.
  *

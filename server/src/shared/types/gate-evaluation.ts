@@ -105,14 +105,12 @@ export interface GateVerdictReminderExemption {
 }
 
 /**
- * The whole attestation for a review's reminder-tier gates — one field, not one entry per gate
- * (ruling B4).
+ * The whole attestation for a review's reminder-tier gates — one field, not one entry per gate.
  *
  * A reminder has no evaluator, so a per-gate rationale for one is the model grading its own
- * output: nine measured dispatches produced five "not applicable" rationales per run and caught
- * nothing. `satisfied` lists the ids the reviewer attests to; `not_applicable` carries the ids
- * that did not apply, each with its reason, because "n/a" without one is the same empty token
- * the per-gate slots were collecting.
+ * output and catches nothing. `satisfied` lists the ids the reviewer attests to; `not_applicable`
+ * carries the ids that did not apply, each with its reason, because "n/a" without one is an
+ * empty token.
  */
 export interface GateVerdictReminders {
   readonly satisfied: readonly string[];

@@ -16,11 +16,8 @@ import { formatAttempt } from '#shared/utils/attempt-number.js';
 /**
  * Reader for `execution_records`, the append-only chain execution ledger.
  *
- * The ledger had a writer (pipeline stages 18 and 21) and no reader for its entire
- * existence: `queryBySession` and `queryByChain` had zero callers, and the one documented
- * consumer — the `v_execution_status` view — selects FROM `chain_sessions`, which is
- * deleted per-PID at cleanup, so it reported 0 rows against 64 stored records. This action
- * is that missing reader.
+ * The ledger is written by pipeline stages 18 and 21. The `v_execution_status` view cannot
+ * serve as its reader: it selects FROM `chain_sessions`, which is deleted per-PID at cleanup.
  */
 export class ExecutionHistoryActionHandler extends ActionHandler {
   async execute(args: Record<string, unknown>): Promise<ToolResponse> {
@@ -256,7 +253,7 @@ function formatGateSummaryLines(summary: GateVerdictSummary): string[] {
 }
 
 /**
- * The attempt a ledger line names, 1-based like every other attempt render (R10.6). A PASS/FAIL
+ * The attempt a ledger line names, 1-based like every other attempt render. A PASS/FAIL
  * summary stores the review's CONSUMED count at grading, so the graded attempt is one more; a
  * BYPASS stores the exhausted review's spent count, which is the last attempt the skip followed.
  */

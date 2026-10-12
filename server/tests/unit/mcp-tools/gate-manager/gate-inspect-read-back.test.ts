@@ -1,6 +1,7 @@
 /**
- * P4.11 — gate `inspect` reads `severity`/`enforcementMode` from the definition
- * (`GateGuide.getDefinition()`), not from `gate.severity`/`gate.enforcementMode`.
+ * Gate `inspect` and `list` read-back: `inspect` reads `severity`/`enforcementMode` from the
+ * definition (`GateGuide.getDefinition()`), not from `gate.severity`/`gate.enforcementMode`; both
+ * name the tier the criteria require; `inspect` renders the complete public criterion set.
  *
  * Each fixture is authored the way a `gate.yaml` is and then run through
  * `GateDefinitionSchema.parse`, so every double is an object `GateDefinitionLoader` could
@@ -242,9 +243,8 @@ describe('complete public criterion read-back', () => {
   );
 });
 
-// R10.6: inspect read "Type: ✓ validation" for a semantic-only gate — the authored `type`, under
-// an icon that claims a check runs. The tier comes from the criteria; the authored value keeps
-// its own label.
+// The tier comes from the criteria; the authored `type` keeps its own label, because a
+// semantic-only gate declared `validation` runs no check.
 describe('inspect names the tier the criteria require', () => {
   const semantic = SemanticCriterionSchema.parse({
     type: 'semantic_evaluation',
@@ -275,9 +275,8 @@ describe('inspect names the tier the criteria require', () => {
   });
 });
 
-// R10.10: list drew its icon from the authored `type`, so a semantic-only gate declared
-// `validation` listed as `✓` — the same claim inspect stopped making in R10.6. List derives the
-// tier through the same function inspect does.
+// List derives the tier through the same function inspect does, so a semantic-only gate declared
+// `validation` is not listed with the check icon.
 describe('list names the tier the criteria require', () => {
   const semantic = SemanticCriterionSchema.parse({
     type: 'semantic_evaluation',

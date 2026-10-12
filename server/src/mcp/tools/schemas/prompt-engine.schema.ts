@@ -2,8 +2,7 @@
 /**
  * Prompt Engine Input Schema
  *
- * Extracted from inline schema in index.ts. This is the SSOT for prompt_engine
- * parameter validation — replaces the generated mcp-schemas.ts.
+ * The SSOT for prompt_engine parameter validation.
  *
  * The schema structure is fixed; parameter `.describe()` text is injected via
  * a resolver callback so framework overlays can customize what the LLM sees.

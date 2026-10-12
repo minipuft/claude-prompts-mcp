@@ -152,7 +152,7 @@ export class GateDiscoveryProcessor {
       `🚦 Gate: ${gate.name}\n\n` +
         `📋 Details:\n` +
         `  - ID: ${gate.gateId}\n` +
-        // R10.6: the tier is derived from what the criteria require. The authored `type` stays
+        // The tier is derived from what the criteria require. The authored `type` stays
         // visible under its own name, but a semantic-only gate declared `validation` runs no check.
         `  - Tier: ${formatGateTierLabel(definition)}\n` +
         `  - Declared Type: ${gate.type}\n` +

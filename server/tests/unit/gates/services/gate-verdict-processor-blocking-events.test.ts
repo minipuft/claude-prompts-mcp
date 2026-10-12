@@ -1,5 +1,6 @@
 /**
- * P4.117: a blocking FAIL announces its gate events in one order, inside the call.
+ * GateVerdictProcessor: attempt renewal, pinned semantic adjudication, typed report custody, and
+ * a blocking FAIL announcing its gate events in one order, inside the call.
  *
  * `handleBlockingFail` fired its three `emitGateEvents` with `void` — the fire-and-forget shape
  * row B.54 removed from the advisory and informational handlers. The events then interleaved,

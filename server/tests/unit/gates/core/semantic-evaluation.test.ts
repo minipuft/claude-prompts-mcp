@@ -419,7 +419,7 @@ describe('evaluateSemanticEvaluation', () => {
       'evidence_required'
     );
     expect(result.criteria[0]).toMatchObject({ state: 'invalid', valid: false, passed: false });
-    // R10.6: a requirement of one names one span, in the singular.
+    // A requirement of one names one span, in the singular.
     expect(result.issues.map((entry) => entry.message)).toContain(
       'Requires 1 distinct target-bound evidence span'
     );

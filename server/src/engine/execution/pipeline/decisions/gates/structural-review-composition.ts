@@ -1,13 +1,13 @@
 // @lifecycle canonical - Decides the one review a structural (phase-guard) failure produces.
 /**
- * Structural review composition (P4.156 / R103).
+ * Structural review composition.
  *
  * A structural failure on a gated step joins the gate review already open for that step: ONE
  * review names the gate, the missing sections and the attempt counter. The gate's criteria
  * (`prompts`), its `retry_config` (`maxAttempts`), the attempts already spent, its history and
  * its recorded evidence all survive, because the merged review is the gate's own review with the
- * structural findings added — not a second review, and not a replacement. Replacing it (the rule
- * before R103) dropped the gate from the reply and reset the retry budget to the phase guard's.
+ * structural findings added — not a second review, and not a replacement. Replacing it would drop
+ * the gate from the reply and reset the retry budget to the phase guard's.
  *
  * A function beside `resolveGroundTruthCoverage` for the same reason that one is: the decision is
  * stateless, and stage 19 only persists what it returns.

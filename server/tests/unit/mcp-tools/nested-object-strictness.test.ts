@@ -1,5 +1,5 @@
 /**
- * Every object schema reachable from a registered tool schema refuses an unknown key (P4.97/R59).
+ * Every object schema reachable from a registered tool schema refuses an unknown key.
  *
  * P4.93 closed the TOP-LEVEL class: a key no contract declares is refused by name. One level down
  * the same silent strip survived — zod's default for `z.object` is to drop an unknown key — so a

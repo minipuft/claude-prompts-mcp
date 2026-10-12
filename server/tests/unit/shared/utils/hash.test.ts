@@ -1,4 +1,4 @@
-// @lifecycle canonical - Unit tests for the canonical hash family (S1.2).
+// @lifecycle canonical - Unit tests for the canonical hash family.
 /**
  * Canonical hashing
  *

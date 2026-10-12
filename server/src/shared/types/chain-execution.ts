@@ -3,8 +3,7 @@
  * Chain Execution Types
  *
  * Types that are consumed across multiple architectural layers (engine, modules, mcp).
- * Relocated from mcp/tools/prompt-engine/core/types.ts and engine/execution/types.ts
- * to shared/ to respect the dependency direction: shared → engine → modules → mcp.
+ * Lives in shared/ to respect the dependency direction: shared → engine → modules → mcp.
  */
 
 import type {

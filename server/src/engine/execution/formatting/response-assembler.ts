@@ -862,9 +862,8 @@ export class ResponseAssembler {
 
     const chainId = context.sessionContext?.chainId ?? '';
     // Same counter the blocked reply reads (`resolveAttemptCounter`), through the same
-    // `formatAttempt` (R10.6). One source of the numbers and one rendering — a second
-    // computation here is how the two surfaces would come to disagree about which attempt a
-    // caller is on.
+    // `formatAttempt`. One source of the numbers and one rendering — a second computation here
+    // is how the two surfaces would come to disagree about which attempt a caller is on.
     const attempt = this.resolveAttemptCounter(context);
     const attemptInfo =
       attempt !== undefined ? ` (${formatAttempt(attempt.current, attempt.max)})` : '';

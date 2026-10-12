@@ -1,4 +1,4 @@
-// @lifecycle canonical - Pins the auto-clear rule moved out of GateReviewStage in Tier 13.
+// @lifecycle canonical - Ground-truth coverage: the resolver and the stage callers that apply it.
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
@@ -114,7 +114,7 @@ function stageFixture(
     state: { currentNodeId: 'n1', nodes: [{ id: 'n1', promptId: 'draft' }] },
   } as unknown as ChainSession;
   // Decision-only stub: it records what the stage hands the store and persists nothing. A charged
-  // attempt or cleared review over a real store is pinned in execution-record-store.integration.
+  // attempt or cleared review over a real store is pinned in review-capture-custody.integration.
   const store = {
     getReview: jest.fn(() => run.reviews?.['n1'] ?? review),
     getSession: jest.fn(() => run),

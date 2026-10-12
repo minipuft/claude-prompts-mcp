@@ -1,6 +1,6 @@
 // @lifecycle canonical - The one human-facing rendering of a review or verification attempt number.
 /**
- * Attempt numbering (owner ruling R10.6): every surface a person reads names an attempt the same
+ * Attempt numbering: every surface a person reads names an attempt the same
  * way, 1-based and against its budget when the budget is known — `attempt 2/3`. Storage keeps its
  * own counts; this module is where a stored count becomes the number a reader sees, so the
  * execution-history ledger, the review footer, the refusals and the shell-verification messages

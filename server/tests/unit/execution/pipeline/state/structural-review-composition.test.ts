@@ -1,4 +1,4 @@
-// @lifecycle canonical - Pins which open review a structural failure joins (R103 / P4.156).
+// @lifecycle canonical - Pins which open review a structural failure joins.
 import { describe, expect, test } from '@jest/globals';
 
 import {

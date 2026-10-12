@@ -7,8 +7,8 @@
  * reasoning, chain history, or framework context. This prevents context
  * contamination and self-evaluation bias.
  *
- * Uses the same `GATE_REVIEW: PASS|FAIL - reason` verdict format as
- * self-review, so existing verdict parsing works unchanged.
+ * Uses the same verdict contract as self-review (`GATE_VERDICT_REQUIRED_FORMAT`, plus structured
+ * `per_gate` reports for semantic gates), so existing verdict parsing works unchanged.
  */
 
 import { GATE_VERDICT_REQUIRED_FORMAT } from '../core/gate-verdict-contract.js';

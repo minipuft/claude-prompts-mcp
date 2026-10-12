@@ -413,8 +413,6 @@ describe('GateGuidanceRenderer tier partition, harnessCovers, and reminder budge
       expect(guidance).toContain('- **Lint Tool** — check: runs tool `lint-runner`');
     });
 
-    // R10.6: a mixed gate's tool check rendered inside its evaluation block, so the bullet sat
-    // under whichever heading preceded it — a reader saw a check listed with the reminders.
     test("a mixed gate's check renders under Checks, its rubric under Evaluations", async () => {
       const renderer = new GateGuidanceRenderer(logger as any, {
         frameworkIdentifierProvider: () => undefined,

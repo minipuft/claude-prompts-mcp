@@ -256,8 +256,8 @@ export class GateGuidanceRenderer {
     }
 
     // Issued semantic requirements retain full guidance, independently of reminder budgets. A
-    // mixed gate's tool check is a check, not part of the rubric: it renders under `### Checks`
-    // (R10.6), the same split the skills export makes for the same gate.
+    // mixed gate's tool check is a check, not part of the rubric: it renders under `### Checks`,
+    // the same split the skills export makes for the same gate.
     if (hasSemanticEvaluation(gate))
       return {
         kind: 'evaluation',
