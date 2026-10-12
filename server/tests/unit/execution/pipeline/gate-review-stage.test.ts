@@ -292,7 +292,9 @@ describe('GateReviewStage — renders and clears the review of the node it names
     jest
       .spyOn(loader, 'loadGates')
       .mockImplementation(async (ids) => definitions.filter((gate) => ids.includes(gate.id)));
-    const authority = new GateEnforcementAuthority(store, logger(), loader);
+    const authority = new GateEnforcementAuthority(store, logger(), loader, () => ({
+      evaluation: {},
+    }));
     const first = await authority.createReview('s1', 'gate', 'n1', {
       gateIds: ['step-one-gate'],
       instructions: 'Check step 1.',

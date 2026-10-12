@@ -14,7 +14,6 @@ import {
 } from '../../../../../src/engine/execution/pipeline/decisions/gates/structural-review-composition.js';
 
 import { ExecutionContext } from '../../../../../src/engine/execution/context/execution-context.js';
-import { GateEnforcementAuthority } from '../../../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import {
   bindSemanticReviewTarget,
   resolvePinnedSemanticContext,
@@ -22,7 +21,6 @@ import {
 } from '../../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
 import { GateReviewStage } from '../../../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { evaluateSemanticEvaluation } from '../../../../../src/engine/gates/core/semantic-evaluation.js';
-import { GateVerdictProcessor } from '../../../../../src/engine/gates/services/gate-verdict-processor.js';
 import { runGateReviewEvidence } from '../../../../../src/engine/gates/services/gate-review-evidence.js';
 import { ShellVerifyExecutor } from '../../../../../src/engine/gates/shell/shell-verify-executor.js';
 
@@ -33,10 +31,6 @@ import type { LightweightGateDefinition } from '../../../../../src/engine/gates/
 import type { Logger } from '../../../../../src/infra/logging/index.js';
 import type { GateReview } from '../../../../../src/shared/types/chain-execution.js';
 import type { SemanticCriterionInput } from '../../../../../src/shared/types/gate-evaluation.js';
-import type {
-  GateVerdictSubmission,
-  SemanticEvaluationReport,
-} from '../../../../../src/shared/types/gate-evaluation.js';
 import type {
   ChainSession,
   ChainSessionService,
@@ -119,6 +113,8 @@ function stageFixture(
     reviews: { n1: review },
     state: { currentNodeId: 'n1', nodes: [{ id: 'n1', promptId: 'draft' }] },
   } as unknown as ChainSession;
+  // Decision-only stub: it records what the stage hands the store and persists nothing. A charged
+  // attempt or cleared review over a real store is pinned in execution-record-store.integration.
   const store = {
     getReview: jest.fn(() => run.reviews?.['n1'] ?? review),
     getSession: jest.fn(() => run),
@@ -129,9 +125,6 @@ function stageFixture(
     setReview: jest.fn(async (_sessionId: string, stored: GateReview) => {
       run.reviews = { ...run.reviews, [stored.nodeId]: stored };
     }),
-    recordGateReviewOutcome: jest.fn(async () => undefined),
-    advanceStep: jest.fn(async () => false),
-    isStepComplete: jest.fn(() => true),
     getChainContext: jest.fn(() => ({ step_results: {} })),
   };
   // Deliberately changed live catalog: semantic/mixed review snapshots retain their obligation.
@@ -565,54 +558,6 @@ describe('ordinary frozen tool evidence caller and legacy response I/O', () => {
       expect(held?.checkResults?.filter((result) => result.gateId === 'gate-a')).toMatchObject([
         { gateId: 'gate-a', passed: false, summary: expect.stringContaining('did not run') },
       ]);
-      if (semantic && held?.semanticContext !== undefined) {
-        const expected = resolvePinnedSemanticContext(held.semanticContext, 'gate-a');
-        const report: SemanticEvaluationReport = {
-          binding: expected.binding,
-          observations: [
-            {
-              criterion_id: 'quality',
-              state: 'met',
-              value: true,
-              evidence: [
-                {
-                  target_digest: expected.binding.target_digest,
-                  start: 0,
-                  end: 6,
-                  quote: 'Actual',
-                },
-              ],
-              rationale: 'Complete evidence',
-            },
-          ],
-        };
-        expect(evaluateSemanticEvaluation(expected, report).passed).toBe(true);
-        const verdict: GateVerdictSubmission = {
-          overall: 'PASS',
-          rationale: 'Valid semantic report',
-          per_gate: [{ index: 1, passed: true, rationale: 'Met', evaluation: report }],
-        };
-        const context = new ExecutionContext(
-          { chain_id: 'chain-1', gate_verdict: verdict },
-          f.logger
-        );
-        context.gateEnforcement = new GateEnforcementAuthority(
-          f.store as unknown as ChainSessionService,
-          f.logger
-        );
-        context.sessionContext = f.context.sessionContext;
-        context.state.gates.enforcementMode = 'blocking';
-        const result = await new GateVerdictProcessor(
-          f.store as unknown as ChainSessionService,
-          f.logger
-        ).processReviewVerdict(context, f.run, context.sessionContext!, 'Actual output');
-        expect(result.passClearedThisCall).toBe(false);
-        expect(context.response?.content[0]).toMatchObject({
-          text: expect.stringContaining('did not run'),
-        });
-        expect(f.store.clearReview).not.toHaveBeenCalled();
-        expect(f.store.recordGateReviewOutcome).not.toHaveBeenCalled();
-      }
     }
   );
 

@@ -93,6 +93,34 @@ describe('analytics reports gate outcomes from the ledger', () => {
     expect(text).toContain('**Reminder Attestations**: 1 (self-declared, not graded)');
   });
 
+  test('a bypass is counted as bypassed, never as a passed or failed grade', async () => {
+    // `gate_action: skip` records an operational BYPASS: no evaluation ran. Either marker alone
+    // identifies it — the verdict, or the disposition on an entry whose verdict field says PASS.
+    const text = await render([
+      record({
+        gateVerdicts: [
+          { gateId: 'skipped-gate', verdict: 'BYPASS', disposition: 'bypassed', timestamp: 0 },
+        ],
+      }),
+      record({
+        executionId: 'y',
+        gateVerdicts: [
+          { gateId: 'skipped-gate', verdict: 'PASS', disposition: 'bypassed', timestamp: 0 },
+        ],
+      }),
+      record({
+        executionId: 'z',
+        gateVerdicts: [{ gateId: 'graded-gate', verdict: 'PASS', timestamp: 0 }],
+      }),
+    ]);
+
+    expect(text).toContain(
+      '- `skipped-gate`: effective acceptance 0 passed / 0 failed\n  - Bypassed: 2; reminder attestations: 0'
+    );
+    // Control: the same fold over an ordinary PASS does count it as passed.
+    expect(text).toContain('- `graded-gate`: effective acceptance 1 passed / 0 failed');
+  });
+
   test('positive control: records with no verdicts keep the section absent and the count at 0', async () => {
     // The absence is evidence only because the same handler, over the same shape of record
     // WITH verdicts, does render the section — the case above.

@@ -133,7 +133,9 @@ function fixture(
     { chain_id: 'chain-1', gate_verdict: verdict, user_response: 'Unrelated current-node carrier' },
     noopLogger
   );
-  context.gateEnforcement = new GateEnforcementAuthority(service, noopLogger);
+  context.gateEnforcement = new GateEnforcementAuthority(service, noopLogger, undefined, () => ({
+    evaluation: {},
+  }));
   context.state.gates.enforcementMode = 'blocking';
   context.sessionContext = {
     sessionId: 'session-1',

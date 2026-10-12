@@ -75,7 +75,9 @@ const session = {
 async function submit(rendered: string): Promise<ExecutionContext> {
   const store = createStore();
   const context = new ExecutionContext({ chain_id: 'chain-demo', gate_verdict: rendered } as never);
-  context.gateEnforcement = new GateEnforcementAuthority(store, createLogger());
+  context.gateEnforcement = new GateEnforcementAuthority(store, createLogger(), undefined, () => ({
+    evaluation: {},
+  }));
   context.sessionContext = {
     sessionId: 'sess-verdict',
     chainId: 'chain-demo',

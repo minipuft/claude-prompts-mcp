@@ -310,7 +310,9 @@ const buildPipeline = (options: {
       ),
       new TemporaryGateRegistrar(gateRegistry, undefined, logger, runStepViewProvider),
       () => ({ enabled: true, definitionsDirectory: 'gates', enableFrameworkGates: true }),
-      logger
+      logger,
+      undefined,
+      async () => undefined
     ),
     SessionManagement: new SessionManagementStage(sessionStore, logger),
     StepResponseCapture: new StepResponseCaptureStage(
@@ -366,7 +368,9 @@ const buildPipeline = (options: {
   return new PromptExecutionPipeline(stages, {
     logger,
     metricsProvider: () => undefined,
-    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader),
+    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader, () => ({
+      evaluation: {},
+    })),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
   });

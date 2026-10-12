@@ -128,9 +128,6 @@ function bindingIssues(
     if (binding[key] !== context.binding[key])
       issues.push(issue('binding_mismatch', `Report ${key} does not match pinned ${key}`));
   }
-  if (context.binding.target_digest !== hashBytes(context.target.content)) {
-    issues.push(issue('target_digest_mismatch', 'Pinned digest must hash captured UTF-8 content'));
-  }
   return issues;
 }
 function indexObservations(

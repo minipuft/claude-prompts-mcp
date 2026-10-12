@@ -264,7 +264,9 @@ const buildPipeline = (options: {
   return new PromptExecutionPipeline(stages, {
     logger,
     metricsProvider: () => undefined,
-    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger),
+    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, undefined, () => ({
+      evaluation: {},
+    })),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
   });

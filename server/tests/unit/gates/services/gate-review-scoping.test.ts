@@ -178,7 +178,9 @@ const reviewGatesFor = async (options: {
     ),
     new TemporaryGateRegistrar(registry as never, undefined, logger as never, provider as never),
     () => ({ enabled: true, definitionsDirectory: 'gates', enableFrameworkGates: true }),
-    logger as never
+    logger as never,
+    undefined,
+    async () => undefined
   );
 
   const steps = NODE_IDS.map((nodeId, index) =>

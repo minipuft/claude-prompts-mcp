@@ -6,6 +6,11 @@ import type { ExecutionRecord, GateVerdictSummary } from '#shared/types/chain-ex
 import type { ToolResponse } from '#shared/types/index.js';
 
 import { resolveFrozenReviewDefinition } from '#engine/execution/pipeline/decisions/gates/frozen-review-definitions.js';
+import {
+  classifySemanticReportAcceptance,
+  isGateBypass,
+  isLegacyUnverifiedAcceptance,
+} from '#engine/gates/services/gate-verdict-summary.js';
 
 /**
  * Reader for `execution_records`, the append-only chain execution ledger.
@@ -229,7 +234,7 @@ function formatGateVerdictLines(record: ExecutionRecord): string[] {
 }
 
 function formatGateSummaryLines(summary: GateVerdictSummary): string[] {
-  const bypass = summary.verdict === 'BYPASS' || summary.disposition === 'bypassed';
+  const bypass = isGateBypass(summary);
   const icon = bypass
     ? '↪'
     : summary.tier === 'reminder'
@@ -252,15 +257,15 @@ function formatGateSummaryLines(summary: GateVerdictSummary): string[] {
 function formatAcceptanceFacts(summary: GateVerdictSummary): string[] {
   const lines: string[] = [];
   if (summary.disposition !== undefined) lines.push(`    Disposition: ${summary.disposition}`);
-  if (summary.verdict === 'BYPASS' || summary.disposition === 'bypassed') return lines;
+  if (isGateBypass(summary)) return lines;
   if (summary.tier === 'reminder')
     lines.push('    Reminder attestation: self-declared, not graded.');
-  else if (summary.semanticResult === undefined && (summary.toolChecks?.length ?? 0) === 0) {
+  else if (isLegacyUnverifiedAcceptance(summary)) {
     lines.push('    Legacy unverified acceptance: no recorded semantic or tool component.');
   }
   const semantic = summary.semanticResult;
   if (semantic !== undefined) {
-    const acceptance = !semantic.valid ? 'invalid' : semantic.passed ? 'accepted' : 'rejected';
+    const acceptance = classifySemanticReportAcceptance(semantic);
     lines.push(`    Semantic report contract: ${acceptance} (not model accuracy)`);
     lines.push(
       `    Criterion states: ${semantic.criteria.map((criterion) => `${criterion.criterion_id}: ${criterion.state}`).join('; ')}`

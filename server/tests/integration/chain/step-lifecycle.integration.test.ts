@@ -452,7 +452,9 @@ const buildPipeline = (options: {
   return new PromptExecutionPipeline(stages, {
     logger,
     metricsProvider: () => undefined,
-    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader),
+    gateEnforcement: new GateEnforcementAuthority(sessionStore, logger, gateLoader, () => ({
+      evaluation: {},
+    })),
     executionRecordStore: recordStore,
     chainSessionStore: sessionStore,
   });
@@ -1313,7 +1315,8 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       const authority = new GateEnforcementAuthority(
         sessionStore,
         createLogger(),
-        new GateLoader(createLogger(), undefined, gateRegistry)
+        new GateLoader(createLogger(), undefined, gateRegistry),
+        () => ({ evaluation: {} })
       );
       await authority.createReview(sessionId, 'structural', 'draft', {
         gateIds: ['phase-guard'],
@@ -1428,7 +1431,8 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       await new GateEnforcementAuthority(
         sessionStore,
         createLogger(),
-        new GateLoader(createLogger(), undefined, gateRegistry)
+        new GateLoader(createLogger(), undefined, gateRegistry),
+        () => ({ evaluation: {} })
       ).createReview(sessionId, 'gate', 'draft', {
         gateIds: [GATE_ID],
         instructions: 'Check step 1.',
@@ -1462,7 +1466,8 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
           new GateEnforcementAuthority(
             sessionStore,
             createLogger(),
-            new GateLoader(createLogger(), undefined, gateRegistry)
+            new GateLoader(createLogger(), undefined, gateRegistry),
+            () => ({ evaluation: {} })
           ),
           sessionId
         );

@@ -153,7 +153,8 @@ function createStage(options: {
     registrar,
     options.gatesConfigProvider,
     logger,
-    options.gateSystemEnabled
+    options.gateSystemEnabled,
+    async () => undefined
   );
 }
 

@@ -178,7 +178,9 @@ function fixture(
     getPendingShellVerification: jest.fn(() => undefined),
   };
   const service = store as unknown as ChainSessionService;
-  const authority = new GateEnforcementAuthority(service, logger);
+  const authority = new GateEnforcementAuthority(service, logger, undefined, () => ({
+    evaluation: {},
+  }));
   // Detached review enforcement is resolved by the authority's IO boundary, not its current node.
   jest.spyOn(authority, 'resolveReviewEnforcement').mockResolvedValue(mode);
   context.gateEnforcement = authority;

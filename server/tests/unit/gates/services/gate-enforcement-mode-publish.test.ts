@@ -102,7 +102,9 @@ function buildStage(view: RunStepView | undefined) {
     ),
     new TemporaryGateRegistrar(registry as never, undefined, logger as never, provider as never),
     () => ({ enabled: true, definitionsDirectory: 'gates', enableFrameworkGates: false }),
-    logger as never
+    logger as never,
+    undefined,
+    async () => undefined
   );
 }
 

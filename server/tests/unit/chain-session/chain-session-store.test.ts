@@ -431,6 +431,44 @@ describe('ChainSessionStore.remapRunGates (R60 amended)', () => {
     expect(manager.getSession('run-1')?.gateRemap).toBeUndefined();
     expect(inlineIdsOf(manager)).toEqual({ summary: ['g1', 'sv'], metadata: ['g1', 'sv'] });
   });
+
+  test('gate ids naming Object.prototype members alias to themselves, not to inherited functions', async () => {
+    await claimedRun();
+    const old = manager.getReview('run-1', 'n1');
+    if (old === undefined) throw new Error('Missing review');
+    const ids = ['constructor', 'toString'];
+    const issued = bindSemanticReviewTarget(
+      createSemanticReviewContext(
+        'n1',
+        'prototype-attempt',
+        ids.map((id) => ({
+          id,
+          name: id,
+          type: 'validation',
+          description: 'Prototype-named rubric',
+          guidance: id,
+        }))
+      ),
+      'original target'
+    );
+    // An alias table that exists but has no own entry for either id: only an own-property
+    // lookup keeps `aliases['constructor']` from reading Object.prototype.constructor.
+    await manager.setReview('run-1', {
+      ...old,
+      gateIds: ids,
+      prompts: [],
+      gateTiers: { constructor: 'evaluation' as const, toString: 'evaluation' as const },
+      semanticContext: { ...issued, definitionAliases: {} },
+    });
+    await manager.remapRunGates('run-1', new Map([['constructor', 'constructor-2']]));
+
+    const current = manager.getReview('run-1', 'n1');
+    expect(current?.gateIds).toEqual(['constructor-2', 'toString']);
+    expect(current?.semanticContext?.definitionAliases).toEqual({
+      'constructor-2': 'constructor',
+      toString: 'toString',
+    });
+  });
 });
 
 describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {

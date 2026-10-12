@@ -155,7 +155,9 @@ function fixture(kind: 'gate' | 'detached', polarity: 'PASS' | 'FAIL', body?: st
       ],
     };
   }
-  context.gateEnforcement = new GateEnforcementAuthority(service, logger);
+  context.gateEnforcement = new GateEnforcementAuthority(service, logger, undefined, () => ({
+    evaluation: {},
+  }));
   context.state.gates.enforcementMode = 'blocking';
   context.state.gates.reviewGateIds = ['semantic'];
   context.sessionContext = { sessionId: 'session', isChainExecution: true, currentStep: 1 };
@@ -238,6 +240,22 @@ describe('semantic response target admission before direct grading', () => {
       expect(f.held.semanticContext?.target?.content).toBe(BODY);
     }
   );
+  test('a server review context issued for another node refuses without charging an attempt', async () => {
+    const f = fixture('gate', 'PASS');
+    if (f.held.semanticContext === undefined) throw new Error('Missing fixture context');
+    // Twin of the admitted report-only PASS above, differing only in the context's node id.
+    f.held.semanticContext = { ...f.held.semanticContext, nodeId: 'b' };
+    const before = JSON.stringify(f.session);
+    await f.submit();
+    expect(JSON.stringify(f.context.response)).toContain(
+      'Server review context names a different node; no attempt was charged.'
+    );
+    expect(f.checks).not.toHaveBeenCalled();
+    expect(f.store.recordGateReviewOutcome).not.toHaveBeenCalled();
+    expect(f.store.setReview).not.toHaveBeenCalled();
+    expect(f.store.clearReview).not.toHaveBeenCalled();
+    expect(JSON.stringify(f.session)).toBe(before);
+  });
   test('detached direct untagged work at another known node remains separate from review A', async () => {
     const f = fixture('detached', 'PASS', 'Other node B');
     await f.submit();
@@ -263,7 +281,12 @@ describe('semantic response target admission before direct grading', () => {
     expect(renewed?.semanticContext?.target).toBeUndefined();
     f.store.getStepState.mockReturnValue({ state: 'completed', isPlaceholder: false });
     const captureContext = new ExecutionContext({ user_response: 'Replacement B' }, logger);
-    captureContext.gateEnforcement = new GateEnforcementAuthority(f.service, logger);
+    captureContext.gateEnforcement = new GateEnforcementAuthority(
+      f.service,
+      logger,
+      undefined,
+      () => ({ evaluation: {} })
+    );
     await new StepCaptureService(f.service, logger).captureStep(
       captureContext,
       'session',

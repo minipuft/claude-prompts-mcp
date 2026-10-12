@@ -99,7 +99,8 @@ async function reviewFixture() {
     get records() {
       return new ExecutionRecordStore(engine, logger);
     },
-    authority: () => new GateEnforcementAuthority(store, logger, provider),
+    authority: () =>
+      new GateEnforcementAuthority(store, logger, provider, () => ({ evaluation: {} })),
     async cold() {
       await store.cleanup();
       await engine.shutdown();
@@ -1241,6 +1242,72 @@ const createInMemoryDb = (): { db: DatabaseSync; port: DatabasePort } => {
 
   return { db, port };
 };
+
+/**
+ * The persisted half of `ground-truth-coverage.test.ts`'s frozen false→true case. That unit test
+ * pins the stage decision (the changed command does not run and the held review records it); its
+ * session store is a stub, so whether a valid semantic PASS over that held review charges an
+ * attempt, clears it, or moves the run counters is only observable against a real store.
+ */
+describe('held tool evidence refuses a semantic PASS without persisting a charge (real SQLite)', () => {
+  test('a valid met report over a did-not-run check leaves review, attempts and run counters unchanged through cold load', async () => {
+    const f = await reviewFixture();
+    try {
+      const opened = await openReview(f);
+      const drafted = await draftReview(f, f.authority().bindReviewOutput(opened, REVIEW_OUTPUT));
+      await f.store.setReview('review-session', {
+        ...drafted,
+        checkResults: [
+          { gateId: REVIEW_GATE.id, passed: false, summary: 'shell_verify did not run: changed' },
+        ],
+      });
+      const held = currentReview(f);
+      const met = retainedVerdict(held);
+      const entry = met.per_gate?.[0];
+      const observation = entry?.evaluation?.observations[0];
+      if (entry?.evaluation === undefined || observation === undefined)
+        throw new Error('Missing fixture report');
+      const verdict: GateVerdictSubmission = {
+        overall: 'PASS',
+        rationale: 'Valid semantic report',
+        per_gate: [
+          {
+            ...entry,
+            passed: true,
+            evaluation: {
+              ...entry.evaluation,
+              observations: [{ ...observation, state: 'met', value: true }],
+            },
+          },
+        ],
+      };
+      const context = reviewContext(f, REVIEW_OUTPUT, verdict);
+      context.state.gates.enforcementMode = 'blocking';
+      const session = f.store.getSession('review-session', REVIEW_SCOPE);
+      if (session === undefined || context.sessionContext === undefined)
+        throw new Error('Missing review session');
+      const counters = { fired: session.gatesFiredCount, retries: session.gateRetriesCount };
+
+      const result = await new GateVerdictProcessor(f.store, f.logger).processReviewVerdict(
+        context,
+        session,
+        context.sessionContext,
+        REVIEW_OUTPUT
+      );
+
+      expect(result.passClearedThisCall).toBe(false);
+      expect(context.response?.content[0]).toMatchObject({
+        text: expect.stringContaining('did not run'),
+      });
+      await f.cold();
+      expect(currentReview(f)).toEqual(held);
+      const cold = f.store.getSession('review-session', REVIEW_SCOPE);
+      expect({ fired: cold?.gatesFiredCount, retries: cold?.gateRetriesCount }).toEqual(counters);
+    } finally {
+      await f.close();
+    }
+  });
+});
 
 describe('ExecutionRecordStore (integration)', () => {
   let db: DatabaseSync;

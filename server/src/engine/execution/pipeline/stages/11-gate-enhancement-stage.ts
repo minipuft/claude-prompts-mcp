@@ -32,8 +32,8 @@ export class GateEnhancementStage extends BasePipelineStage {
     private readonly registrar: TemporaryGateRegistrar,
     private readonly gatesConfigProvider: GateSystemSettingsProvider | undefined,
     logger: Logger,
-    private readonly gateSystemEnabled?: GateSystemSwitch,
-    private readonly remapInlineDefinitions?: (
+    private readonly gateSystemEnabled: GateSystemSwitch | undefined,
+    private readonly remapInlineDefinitions: (
       context: ExecutionContext,
       registered: ReadonlyMap<string, string>
     ) => Promise<void>
@@ -122,7 +122,7 @@ export class GateEnhancementStage extends BasePipelineStage {
       executeDefinitions,
       inlineRemap
     );
-    await this.remapInlineDefinitions?.(context, inlineRemap);
+    await this.remapInlineDefinitions(context, inlineRemap);
 
     if (gateContext.type === 'chain') {
       await this.enhancementService.enhanceChainSteps(

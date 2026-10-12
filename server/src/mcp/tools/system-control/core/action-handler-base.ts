@@ -12,6 +12,12 @@ import type {
 } from '#shared/types/index.js';
 import type { SystemControlContext } from './types.js';
 
+import {
+  classifySemanticReportAcceptance,
+  isGateBypass,
+  isLegacyUnverifiedAcceptance,
+} from '#engine/gates/services/gate-verdict-summary.js';
+
 export interface GateOutcomeTally {
   passed: number;
   failed: number;
@@ -48,7 +54,7 @@ function emptyGateTally(): GateOutcomeTally {
 }
 
 function foldGateOutcome(verdict: GateVerdictSummary, gate: GateOutcomeTally): void {
-  if (verdict.verdict === 'BYPASS' || verdict.disposition === 'bypassed') {
+  if (isGateBypass(verdict)) {
     gate.bypassed += 1;
     return; // Contextual bypassReview.checkResults belong to older attempts, never this action.
   }
@@ -83,13 +89,11 @@ function foldSemanticReport(
   tally: GateOutcomeTally['semanticReportAcceptance']
 ): void {
   if (result === undefined) return;
-  if (!result.valid) tally.invalid += 1;
-  else if (result.passed) tally.accepted += 1;
-  else tally.rejected += 1;
+  tally[classifySemanticReportAcceptance(result)] += 1;
 }
 
 function foldLegacyAcceptance(verdict: GateVerdictSummary, gate: GateOutcomeTally): void {
-  if (verdict.semanticResult !== undefined || (verdict.toolChecks?.length ?? 0) > 0) return;
+  if (!isLegacyUnverifiedAcceptance(verdict)) return;
   if (verdict.verdict === 'PASS') gate.legacyUnverifiedAcceptance.passed += 1;
   if (verdict.verdict === 'FAIL') gate.legacyUnverifiedAcceptance.failed += 1;
 }
@@ -101,12 +105,7 @@ function foldVerdicts(record: ExecutionRecord, tally: LedgerTally): void {
     const gate = tally.byGate.get(verdict.gateId) ?? emptyGateTally();
     foldGateOutcome(verdict, gate);
     tally.byGate.set(verdict.gateId, gate);
-    if (
-      verdict.tier === 'reminder' &&
-      verdict.verdict !== 'BYPASS' &&
-      verdict.disposition !== 'bypassed'
-    )
-      tally.attestations += 1;
+    if (verdict.tier === 'reminder' && !isGateBypass(verdict)) tally.attestations += 1;
   }
 }
 

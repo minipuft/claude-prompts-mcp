@@ -188,7 +188,9 @@ function custodyFixture(kind: 'ordinary' | 'detached', verdict: McpToolRequest['
     isStepComplete: jest.fn(() => true),
   };
   const service = store as unknown as ChainSessionService;
-  const authority = new GateEnforcementAuthority(service, logger);
+  const authority = new GateEnforcementAuthority(service, logger, undefined, () => ({
+    evaluation: {},
+  }));
   const context = new ExecutionContext(
     { chain_id: 'chain-review#1', gate_verdict: verdict },
     logger
