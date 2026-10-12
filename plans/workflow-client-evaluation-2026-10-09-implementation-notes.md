@@ -200,3 +200,10 @@ Tier 2 row 2.1 records the owner's requested consolidated diagnosis. Dispatch on
 - DEV-T0C-2: 0C1.8 also declared `requires` on stage 13 and added `provides` to nine integration-test stubs of stage 07 (stubs are name-keyed and carry no contract — a stub helper that copies the real stage's declarations would close that class).
 - Finding (0C1.7 → 0D.2): `parseCriteria` corrupts any criterion containing "and"; blank criteria die in the parser. → 0D.3: the registrar's remaining silent skips and registry force-eviction.
 - Finding (0C1.13 → 0C1.18, 0C1.19): stage 12's framework context changes no rendered text; shutdown leaves the metrics interval running.
+
+## 2026-10-12 — 0C1 merged as #478; 0D.1 at its boundary
+
+- #478 merged (squash `ca0df3bf`) with every required check green on its head on the first CI run.
+- 0D.1 accepted: six commits. R11.9 detail: a store-init failure is logged once at construction (no unhandled rejection, no shutdown) and every awaiting operation still rejects with the port's error; a port-less store refuses its first persist naming the missing port. Requiring the port was not taken: every production path passes one, and requiring it ripples through three production signatures and 56 test constructions; `runRegistry` is now optional behind one accessor, so a new unchecked read fails typecheck.
+- Finding (0D.1): Jest cannot observe `unhandledRejection` from inside a test (its sandbox catches it first); the test runs the scenario in a child process with its own positive control.
+- Finding (0D.1): the SQLite lock classifier now exists in the engine and the chains manager (infra cannot import modules); `instanceof Error` fails on `node:sqlite` errors under Jest. Both belong with Q11's `errorText` helper.
