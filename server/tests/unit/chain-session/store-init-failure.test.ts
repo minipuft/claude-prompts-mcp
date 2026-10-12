@@ -197,3 +197,40 @@ describe('a chain-session store whose database port fails to initialize', () => 
     }
   });
 });
+
+/**
+ * A store built with no port at all (every test that keeps sessions in memory, and any
+ * composition that binds the port late) used to log "persistence disabled" and then fail its
+ * first persist with `TypeError: Cannot read properties of undefined (reading 'save')`. The first
+ * persisting call now says what is missing. Production always passes a port
+ * (`openToolsDatabase` → `createMcpToolsManager` → `createPromptExecutor`).
+ */
+describe('a chain-session store with no database port', () => {
+  let schedulerSpy: ReturnType<typeof jest.spyOn>;
+
+  beforeEach(() => {
+    schedulerSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'startCleanupScheduler')
+      .mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    schedulerSpy.mockRestore();
+  });
+
+  test('refuses the first persist by naming the missing port', async () => {
+    const store = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {});
+
+    const error: unknown = await store.createSession('s-1', 'chain-a', 2).catch((e: unknown) => e);
+
+    expect(error).not.toBeInstanceOf(TypeError);
+    expect((error as Error).message).toMatch(/no DatabasePort/);
+    expect((error as Error).message).toMatch(/setDatabasePort/);
+  });
+
+  test('refuses a handoff claim the same way', async () => {
+    const store = new ChainSessionStore(createLogger(), new StubTextReferenceStore() as any, {});
+
+    await expect(store.claimHandoff('hnd_token')).rejects.toThrow(/no DatabasePort/);
+  });
+});

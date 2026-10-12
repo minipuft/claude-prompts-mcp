@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-08T16:51:57.662Z",
+  "generatedAt": "2026-10-12T22:27:06.959Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2436,
+    "errors": 2433,
     "warnings": 706
   },
   "byRule": {
@@ -20,7 +20,7 @@
       "warnings": 71
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 332,
+      "errors": 329,
       "warnings": 0
     },
     "max-params": {
@@ -98,10 +98,6 @@
     "max-lines": {
       "errors": 0,
       "warnings": 1
-    },
-    "claude/no-optional-collaborator-call": {
-      "errors": 0,
-      "warnings": 0
     }
   },
   "overrideLog": [

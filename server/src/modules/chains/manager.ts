@@ -257,7 +257,7 @@ export class ChainSessionStore implements ChainSessionService {
   private chainSessionMapping: Map<string, Set<string>> = new Map(); // chainId -> sessionIds
   private baseChainMapping: Map<string, string[]> = new Map(); // baseChainId -> ordered runIds
   private runChainToBase: Map<string, string> = new Map(); // runChainId -> baseChainId
-  private runRegistry!: ChainRunRegistry;
+  private runRegistry?: ChainRunRegistry;
   private readonly sessionClearedCallbacks: SessionClearedCallback[] = [];
   private readonly runEndedCallbacks: Array<(sessionId: string) => void> = [];
   private readonly defaultSessionTimeoutMs: number;
@@ -418,7 +418,11 @@ export class ChainSessionStore implements ChainSessionService {
     if (!this.runRegistry) {
       const dbManager = this.injectedDbEngine;
       if (!dbManager) {
-        this.logger.warn('ChainSessionStore: no DatabasePort provided, persistence disabled');
+        // Not an error yet: a composition may bind the port late through `setDatabasePort`. The
+        // first persisting call before then is refused by `requireRunRegistry`, naming the port.
+        this.logger.warn(
+          'ChainSessionStore: no DatabasePort provided, persistence disabled until setDatabasePort(); a persisting call before then is refused'
+        );
         return;
       }
       await dbManager.initialize();
@@ -490,7 +494,7 @@ export class ChainSessionStore implements ChainSessionService {
    */
   private async loadSessions(): Promise<void> {
     try {
-      const sessions = await this.runRegistry.load(this.runScope);
+      const sessions = await this.requireRunRegistry().load(this.runScope);
 
       for (const session of sessions) {
         if (!(session.state.stepStates instanceof Map)) {
@@ -682,8 +686,33 @@ export class ChainSessionStore implements ChainSessionService {
     };
   }
 
+  /**
+   * The run registry every persisting call writes through, or a refusal that names what is missing.
+   *
+   * `runRegistry` is unassigned until a database port has initialized (or a registry was passed
+   * in). Reading it bare made the first persist on a port-less store throw
+   * `TypeError: Cannot read properties of undefined (reading 'save')`, which says nothing about
+   * the port. A port that was bound but has not initialized is a different state, and says so.
+   */
+  private requireRunRegistry(): ChainRunRegistry {
+    if (this.runRegistry !== undefined) return this.runRegistry;
+    if (this.injectedDbEngine !== undefined || this.resolvedDbEngine !== undefined) {
+      throw new Error(
+        'ChainSessionStore cannot persist chain sessions: its DatabasePort has not finished ' +
+          'initializing. Await the operation that triggered initialization, or check the ' +
+          'initialization error logged for this store.'
+      );
+    }
+    throw new Error(
+      'ChainSessionStore cannot persist chain sessions: it has no DatabasePort. Pass ' +
+        'options.databasePort at construction, or call setDatabasePort() before the first ' +
+        'session write.'
+    );
+  }
+
   /** One transactional write of the live set; only {@link persistSessionsOrThrow} calls it. */
   private async writeSessions(): Promise<void> {
+    const registry = this.requireRunRegistry();
     const db = this.resolvedDbEngine;
     const sessions = Array.from(this.activeSessions.values());
     // An evicted session releases what a removed one does except its argument history, once this
@@ -691,7 +720,7 @@ export class ChainSessionStore implements ChainSessionService {
     const evicted = emptyRunRelease('keep');
     if (!db) {
       // No DB engine wired — fall back to non-transactional save (test contexts).
-      this.evictClaimedSessions(await this.runRegistry.save(sessions, this.runScope), evicted);
+      this.evictClaimedSessions(await registry.save(sessions, this.runScope), evicted);
       this.unreservedRuns.clear();
       await this.releaseRemovedRuns(evicted);
       return;
@@ -702,7 +731,7 @@ export class ChainSessionStore implements ChainSessionService {
     db.beginTransaction(reserving ? 'immediate' : 'deferred');
     try {
       if (reserving) this.reserveRunNumbers(db);
-      const claimedElsewhere = await this.runRegistry.save(sessions, this.runScope);
+      const claimedElsewhere = await registry.save(sessions, this.runScope);
       // Evict BEFORE the projection so the hook view does not re-advertise a run this
       // process no longer owns.
       this.evictClaimedSessions(claimedElsewhere, evicted);
@@ -926,7 +955,7 @@ export class ChainSessionStore implements ChainSessionService {
         'SELECT DISTINCT run_owner_pid FROM chain_runs',
         true
       );
-      this.runRegistry.deleteRunsForOwners(staleRuns);
+      this.requireRunRegistry().deleteRunsForOwners(staleRuns);
 
       const totalCleaned = staleSessions.length + staleRuns.length;
       if (totalCleaned > 0) {
@@ -1404,7 +1433,7 @@ export class ChainSessionStore implements ChainSessionService {
       this.logger.warn(`[Handoff] Refusing claim: ${heldChainId} already names another run here`);
       return { status: 'chain-id-held', chainId: heldChainId };
     }
-    const result = this.runRegistry.claimRunByToken(token, this.runScope);
+    const result = this.requireRunRegistry().claimRunByToken(token, this.runScope);
     if (result.status !== 'claimed') return result;
 
     const session = result.session;
