@@ -126,3 +126,13 @@ Tier 2 row 2.1 records the owner's requested consolidated diagnosis. Dispatch on
 - Finding (0.4): `sync-diff-commands.test.ts:208` passes without creating the stale directory it claims to keep (row 0C3.3).
 - Finding (0.4): `chainSessions.reviewTimeoutMinutes` feeds a cleanup for `prompt-review-*` ids nothing mints; removing it changes `config.json` (breaking). Not proposed.
 - Finding (0.4): the error-text shape recurs at 163 sites in 76 files → Q11; 0C rows do not sweep it piecemeal (R192 scope rule).
+
+## 2026-10-12 — 0.6 and 0.8 accepted
+
+- Combined tree after both rows: typecheck clean; `lint:ratchet` 2446 errors / 706 warnings, no regressions; `typecheck:tests:ratchet` 338; `validate:arch` 0 errors; `hooks/tests` 402 passed.
+- 0.6: every attempt render routes through `shared/utils/attempt-number.ts` (1-based `attempt N/M`; `attemptInHand` = min(consumed+1, max)); storage unchanged. R10.11: the formatter stays in `shared/utils` — the review-render owner would form a cycle through `delegation/detached.ts` (measured with depcruise). `N/M` was chosen because `hooks/lib/session_state.py:248,282` parses `(attempt X/Y)` and `Attempt X/Y`.
+- DEV-T0-4: 0.6 also edited docs (`ralph-loops.md`, `mcp-tools.md`), renamed shell `**Attempts:**` to `**Last run:**`/`**Next run:**` and inspect `Type:` to `Declared Type:` beside a derived `Tier:`. Defect 2's premise was wrong: the check line sat inside the `### Evaluations` block, not under Reminders (flat h3 headings); it now renders under `### Checks`. e2e expectations were updated but not run (PR boundary).
+- Finding (0.6 → Tier 1, row 1.3 inventory): the blocked reply's `**Attempt 2/5**` now matches the hook regex `Attempt\s+(\d+)/(\d+)` (`session_state.py:282`), which writes gate-review attempts into the `shell_verify_attempts` field. The hook already did the same for `(attempt X/Y)`; the field conflates gate and shell attempts. Hook tests pass.
+- Finding (0.6): `gate list` still shows the authored-type icon → row 0.10. Pluralization class → row 0.11 killed with reason.
+- 0.8: the rule covers `?`, `| undefined` and `| null` because stage 11's motivating site was `| undefined`; the brief's narrower predicate would have missed it. Seven class-(a) sites baselined → row 0.9. 74 `this.x?.method()` dereference sites are outside the rule → row 0C1.14.
+- DEV-T0-5: 0.8 hand-edited the ESLint baseline (the regenerate command would have absorbed 0.6's in-flight counts) and ran Prettier over 0.6's two handler files; 0.6 re-checked formatting after. Accepted.
