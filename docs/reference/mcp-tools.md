@@ -481,10 +481,12 @@ that gate, so a resume may re-send `{id:"cites"}` alone. A run resumed in anothe
 re-registers the gates it recorded when it started and is never refused for them. Each of these
 used to start the run without the gate: skipped, or registered with nothing to review.
 
-**A full temporary gate registry refuses rather than evicts.** The server keeps up to 100
-temporary gates. At that limit it drops expired gates only; a gate that has not expired, whether a
-run or a call in progress holds it, is never evicted to make room. When none has expired, the
-registration fails the call with a message saying so: complete or cancel an open run, or send
+**A full temporary gate registry releases idle runs, then refuses.** The server keeps up to 100
+temporary gates. At that limit it drops expired gates, then releases the gates of runs that have
+gone an hour without a call, oldest first, until there is room. A released run loses nothing: its
+next call re-registers its gates, and they render and review as before. A gate
+of a run used within the hour, or of a call in progress, is never evicted. When that frees no
+room, the registration fails the call with a message saying so: complete an open run, or send
 fewer gates, and retry.
 
 ### Chain Step Targeting

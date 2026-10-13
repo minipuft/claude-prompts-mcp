@@ -971,10 +971,12 @@ function resolveProjectRoot(paths: SkillsSyncPaths): string {
     );
   }
 
+  // A `server/` directory is a checkout's package when its parent carries `.git`; in a linked
+  // worktree `.git` is a file, which `existsSync` accepts as it does a directory.
   const serverRoot = paths.packageRoot;
   if (path.basename(serverRoot) === 'server') {
     const repoRoot = path.dirname(serverRoot);
-    if (existsSync(path.join(repoRoot, 'AGENTS.md'))) {
+    if (existsSync(path.join(repoRoot, '.git'))) {
       return repoRoot;
     }
   }

@@ -8,10 +8,12 @@ import type { ToolResponse } from '#shared/types/index.js';
  * Every line names the offending node or edge and the rule violated, because acceptance clause
  * (b) is "actionable", and a client that has to guess WHICH node failed fixes its submission one
  * error per round trip — the failure mode the rejection vocabulary exists to remove. One render
- * for every stage that refuses a command (04 for its shape and targets, 11 for a target a resume
- * can no longer reach, R65, 05 and 11 for a named or request gate under a canonical gate id,
- * R100, and 05 for an inline gate criterion and 11 for a request gate that cannot register, R11.8), so a client parses one
- * shape whichever stage answered.
+ * for every stage that refuses a command (04 for its shape and targets; 05 for every refusal of
+ * the call's own gates — an inline criterion or request gate that cannot register, a named or
+ * request gate under a canonical id, a target a resume can no longer reach, a gate a switch
+ * withholds; 11 for a gate withheld by the planner's default `%clean`), so a client parses one
+ * shape whichever stage answered. "Nothing was executed" holds because every refusal but that
+ * last lands before stage 08 runs a script tool.
  *
  * `resumedChainId` is the run a refused resume names, or `undefined` for a first call. It is
  * required so every refusing stage decides it: a refused resume leaves an existing run where it

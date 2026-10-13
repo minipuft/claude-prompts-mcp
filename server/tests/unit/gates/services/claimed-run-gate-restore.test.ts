@@ -322,3 +322,64 @@ describe('P6.226: the fresh id stage 05 hands back is the id stage 11 registers'
     expect(registered.temporaryGateIds).toEqual([`${CANONICAL}-2-2`]);
   });
 });
+
+/**
+ * A full registry releases the gates of runs idle past `idleRunReleaseMs`. A run resuming after
+ * that long still holds its gates until something registers, so the resume marks the run used
+ * before it registers anything: a registration the same call makes is refused rather than
+ * paid for with the run's own gates.
+ */
+describe('restoreRunGates marks its run used before anything registers', () => {
+  const IDLE_MS = 60 * 60 * 1000;
+  const START = 5_000_000;
+  const extraGate = (id: string) => ({
+    id,
+    name: id,
+    type: 'validation' as const,
+    scope: 'execution' as const,
+    description: id,
+    guidance: id,
+    source: 'manual' as const,
+    // Past the test's clock, so expiry frees no room and only an idle run's release can.
+    expires_at: START + 10 * IDLE_MS,
+  });
+
+  const idleRunAtCapacity = async () => {
+    let now = START;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    const registry = new TemporaryGateRegistry(logger(), {
+      maxMemoryGates: 6,
+      idleRunReleaseMs: IDLE_MS,
+      isCanonicalGateId: () => false,
+    });
+    const processor = new InlineGateProcessor(registry, resolver, logger(), runGateStore());
+    const started = gatedChain();
+    const result = await processor.processInlineGates(
+      new ExecutionContext({ command: 'start' }),
+      started
+    );
+    registry.adoptIntoRun('run-idle', result.createdIds);
+    const owned = registry.getRunGates('run-idle').map((gate) => gate.id);
+    for (let i = owned.length; i < 6; i += 1) registry.createTemporaryGate(extraGate(`call-${i}`));
+    now = START + 2 * IDLE_MS;
+    return { registry, processor, started, owned };
+  };
+
+  test('a resume after the threshold keeps its gates; its own new registration is refused', async () => {
+    const { registry, processor, started, owned } = await idleRunAtCapacity();
+    expect(owned.length).toBeGreaterThan(0);
+    const { context, parsed } = restoredOn(started, 'run-idle');
+    expect(await processor.restoreRunGates(context, parsed)).toEqual([]);
+
+    expect(() => registry.createTemporaryGate(extraGate('same-call'))).toThrow(/registry is full/);
+    expect(registry.getRunGates('run-idle').map((gate) => gate.id)).toEqual(owned);
+    jest.restoreAllMocks();
+  });
+
+  test('control: with no resume, the idle run is released to admit the registration', async () => {
+    const { registry } = await idleRunAtCapacity();
+    expect(registry.createTemporaryGate(extraGate('same-call'))).toBe('same-call');
+    expect(registry.getRunGates('run-idle')).toEqual([]);
+    jest.restoreAllMocks();
+  });
+});

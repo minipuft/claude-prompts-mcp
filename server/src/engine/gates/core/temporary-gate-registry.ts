@@ -139,8 +139,14 @@ export class TemporaryGateRegistry {
    */
   private runGates: Map<string, Set<string>>;
   private gateOwners: Map<string, string>;
+  /**
+   * Run (session id) -> when it last made a call, as this registry saw it. At capacity the gates
+   * of a run idle longer than {@link idleRunReleaseMs} are released to make room.
+   */
+  private runLastUse: Map<string, number>;
   private maxMemoryGates: number;
   private defaultExpirationMs: number;
+  private idleRunReleaseMs: number;
   private isCanonicalGateId: (gateId: string) => boolean;
 
   constructor(
@@ -148,6 +154,11 @@ export class TemporaryGateRegistry {
     options: {
       maxMemoryGates?: number;
       defaultExpirationMs?: number;
+      /**
+       * How long a run may go without a call before a full registry releases its gates to admit
+       * a new one. A released run's next call re-registers them (stage 05's restore).
+       */
+      idleRunReleaseMs?: number;
       /**
        * Whether an id names a canonical gate (P6.193, R94). Gate loading reads this registry
        * first and it is keyed by id per process, so a temporary gate under a canonical id would
@@ -165,8 +176,10 @@ export class TemporaryGateRegistry {
     this.cleanupTimers = new Map();
     this.runGates = new Map();
     this.gateOwners = new Map();
+    this.runLastUse = new Map();
     this.maxMemoryGates = options.maxMemoryGates || 1000;
     this.defaultExpirationMs = options.defaultExpirationMs || 3600000; // 1 hour
+    this.idleRunReleaseMs = options.idleRunReleaseMs ?? 3600000; // 1 hour
     this.isCanonicalGateId = options.isCanonicalGateId;
 
     this.logger.debug('[TEMP GATE REGISTRY] Initialized with max gates:', this.maxMemoryGates);
@@ -260,15 +273,19 @@ export class TemporaryGateRegistry {
       throw new Error(`Temporary gate ID already exists: ${gateId}`);
     }
 
-    // At capacity: expired gates make room; an unexpired one never does (R11.8, R11.13).
+    // At capacity: expired gates make room, then the gates of runs gone idle. No other gate is
+    // evicted: a run used recently, or a call in progress, may still review it.
     if (this.temporaryGates.size >= this.maxMemoryGates) {
       this.cleanupExpiredGates();
+      this.releaseIdleRunsUntilRoom();
       if (this.temporaryGates.size >= this.maxMemoryGates) {
+        const idleMinutes = Math.round(this.idleRunReleaseMs / 60000);
         throw new Error(
           `Temporary gate registry is full (${this.maxMemoryGates} gates, none expired), so gate ` +
-            `'${definition.id ?? definition.name}' was not registered. No unexpired gate is ` +
-            `evicted to make room: a run or a call in progress may still review it. Complete or ` +
-            `cancel an open run, or send fewer gates, and retry.`
+            `'${definition.id ?? definition.name}' was not registered. A run's gates are ` +
+            `released to make room only once the run has gone ${idleMinutes} minutes without a ` +
+            `call, and no run has; no other unexpired gate is evicted, since a run or a call in ` +
+            `progress may still review it. Complete an open run, or send fewer gates, and retry.`
         );
       }
     }
@@ -356,6 +373,7 @@ export class TemporaryGateRegistry {
    * reached every run's at once. `chainId` absent re-keys nothing.
    */
   adoptIntoRun(runId: string, gateIds: readonly string[], chainId?: string): void {
+    this.markRunUsed(runId);
     for (const gateId of gateIds) {
       const gate = this.temporaryGates.get(gateId);
       if (gate === undefined || this.gateOwners.has(gateId)) {
@@ -370,6 +388,48 @@ export class TemporaryGateRegistry {
         this.fileUnderChain(gate, chainId);
       }
     }
+  }
+
+  /**
+   * Record that `runId` is making a call now. The pipeline's adoption marks every call of a run as
+   * it ends; a resume also marks its run as it starts (stage 05), so a run idle until this call
+   * cannot have its own gates released by a registration the same call makes.
+   */
+  markRunUsed(runId: string): void {
+    this.runLastUse.set(runId, Date.now());
+  }
+
+  /**
+   * Release the gates of runs last used longer than `idleRunReleaseMs` ago, oldest first, until the
+   * registry has room. A run used within the threshold is never released.
+   */
+  private releaseIdleRunsUntilRoom(): void {
+    const now = Date.now();
+    const released: Array<{ runId: string; gates: number; idleMinutes: number }> = [];
+    for (const [runId, lastUse] of this.idleRunsOldestFirst(now)) {
+      if (this.temporaryGates.size < this.maxMemoryGates) {
+        break;
+      }
+      const idleMinutes = Math.round((now - lastUse) / 60000);
+      released.push({ runId, gates: this.releaseRun(runId), idleMinutes });
+    }
+    if (released.length > 0) {
+      this.logger.info(
+        '[TEMP GATE REGISTRY] Registry full: released the gates of runs idle past the threshold; ' +
+          'each run re-registers them on its next call',
+        { maxMemoryGates: this.maxMemoryGates, idleRunReleaseMs: this.idleRunReleaseMs, released }
+      );
+    }
+  }
+
+  /** Runs holding gates whose last use is older than the idle threshold, oldest first. */
+  private idleRunsOldestFirst(now: number): Array<[string, number]> {
+    return [...this.runLastUse.entries()]
+      .filter(
+        ([runId, lastUse]) =>
+          now - lastUse > this.idleRunReleaseMs && (this.runGates.get(runId)?.size ?? 0) > 0
+      )
+      .sort(([, a], [, b]) => a - b);
   }
 
   /** Move a `chain`-scoped gate's scope association to `chain:<chainId>`. */
@@ -414,13 +474,17 @@ export class TemporaryGateRegistry {
     return gates;
   }
 
-  /** Remove every gate `runId` owns — the run completed, was cancelled, pruned or cleared. */
+  /**
+   * Remove every gate `runId` owns — the run completed, was cancelled, pruned or cleared, or went
+   * idle while the registry was full.
+   */
   releaseRun(runId: string): number {
     const owned = [...(this.runGates.get(runId) ?? [])];
     for (const gateId of owned) {
       this.removeTemporaryGate(gateId);
     }
     this.runGates.delete(runId);
+    this.runLastUse.delete(runId);
     return owned.length;
   }
 
