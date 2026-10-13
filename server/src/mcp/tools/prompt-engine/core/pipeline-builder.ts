@@ -62,10 +62,7 @@ import {
 } from '#engine/execution/pipeline/index.js';
 import { resolveDeclaredSections } from '#engine/frameworks/declared-sections.js';
 import { getDefaultRuntimeLoader } from '#engine/frameworks/definitions/index.js';
-import {
-  JudgeMenuFormatter,
-  type FrameworkJudgePromptProvider,
-} from '#engine/gates/judge/judge-menu-formatter.js';
+import { JudgeMenuFormatter } from '#engine/gates/judge/judge-menu-formatter.js';
 import { JudgeResourceCollector } from '#engine/gates/judge/judge-resource-collector.js';
 import { GateEnhancementService } from '#engine/gates/services/gate-enhancement-service.js';
 import { GateMetricsRecorder } from '#engine/gates/services/gate-metrics-recorder.js';
@@ -249,16 +246,6 @@ export class PipelineBuilder {
       }
     };
 
-    const judgePromptProvider: FrameworkJudgePromptProvider = (frameworkId) => {
-      try {
-        const loader = getDefaultRuntimeLoader();
-        const definition = loader.loadFramework(frameworkId);
-        return definition?.judgePrompt;
-      } catch {
-        return undefined;
-      }
-    };
-
     const judgeResourceCollector = new JudgeResourceCollector(
       deps.getConvertedPrompts,
       deps.lightweightGateSystem.gateLoader,
@@ -268,7 +255,7 @@ export class PipelineBuilder {
       // Per call, no cache: the manager can be late-bound or reloaded after this stage is built.
       (frameworkId) => deps.frameworkManager?.getFramework(frameworkId)
     );
-    const judgeMenuFormatter = new JudgeMenuFormatter(deps.logger, judgePromptProvider);
+    const judgeMenuFormatter = new JudgeMenuFormatter();
     const judgeSelectionStage = new JudgeSelectionStage(
       judgeResourceCollector,
       judgeMenuFormatter,
