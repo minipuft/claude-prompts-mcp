@@ -2,6 +2,7 @@
 import {
   describeRefusal,
   describeMissingReview,
+  describeMissingSemanticReport,
   describeGatelessStep,
   describeInBudgetAction,
   describeUnansweredStep,
@@ -997,6 +998,9 @@ export class GateVerdictProcessor {
     const report = claim?.evaluation;
     const result = evaluateSemanticEvaluation(expected, report);
     const faults = semanticAttributionFaults(result);
+    if (faults.some((entry) => entry.code === 'missing_report')) {
+      return { kind: 'refused', message: describeMissingSemanticReport(review, gateId, verdict) };
+    }
     if (faults.length > 0) {
       return {
         kind: 'refused',

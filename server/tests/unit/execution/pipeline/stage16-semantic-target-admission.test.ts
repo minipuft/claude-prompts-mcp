@@ -8,6 +8,7 @@ import { GateEnforcementAuthority } from '../../../../src/engine/execution/pipel
 import {
   bindSemanticReviewTarget,
   createSemanticReviewContext,
+  resolvePinnedSemanticContext,
 } from '../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
 import { GateVerdictProcessor } from '../../../../src/engine/gates/services/gate-verdict-processor.js';
 
@@ -52,6 +53,39 @@ function fixture(body: string | undefined, polarity: 'PASS' | 'FAIL' = 'FAIL') {
       'Captured A'
     ),
   };
+  // A complete unmet report against review A's own binding: a verdict the review can grade, so a
+  // derived FAIL proves admission. A string verdict cannot carry a report and is refused after
+  // admission (R11.2), so it can no longer serve as this positive.
+  const pinned = resolvePinnedSemanticContext(held.semanticContext!, 'semantic');
+  const verdict = {
+    overall: polarity,
+    rationale: 'reviewed',
+    per_gate: [
+      {
+        index: 1,
+        passed: polarity === 'PASS',
+        rationale: 'reviewed',
+        evaluation: {
+          binding: pinned.binding,
+          observations: [
+            {
+              criterion_id: 'preserves-contract',
+              state: 'unmet' as const,
+              value: false,
+              evidence: [
+                {
+                  target_digest: pinned.binding.target_digest,
+                  start: 0,
+                  end: 'Captured A'.length,
+                },
+              ],
+              rationale: 'reviewed',
+            },
+          ],
+        },
+      },
+    ],
+  };
   const session = {
     sessionId: 'session',
     chainId: 'chain',
@@ -94,7 +128,7 @@ function fixture(body: string | undefined, polarity: 'PASS' | 'FAIL' = 'FAIL') {
   const context = new ExecutionContext(
     {
       command: '>>chain',
-      gate_verdict: `GATE_REVIEW: ${polarity} - reviewed`,
+      gate_verdict: verdict,
       ...(body !== undefined ? { user_response: body } : {}),
       observations: [
         {
@@ -241,7 +275,7 @@ describe('Stage16 admits semantic target before effectful resume phases', () => 
       const f = fixture(body);
       await f.stage.execute(f.context);
       expect(f.store.applyUnknownObservations).toHaveBeenCalledTimes(1);
-      // Legacy text on required semantic gates derives FAIL; this positive proves admission only.
+      // An unmet report derives FAIL; this positive proves admission only.
       expect(f.store.recordGateReviewOutcome).toHaveBeenCalledWith('session', { verdict: 'FAIL' });
     }
   );

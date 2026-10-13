@@ -568,10 +568,16 @@ describe('GateVerdictProcessor pinned semantic adjudication', () => {
       const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
       const enforcement = jest.spyOn(fixture.authority, 'resolveReviewEnforcement');
       const result = await fixture.submit();
-      const stale = ['stale-attempt', 'stale-definition', 'wrong-node', 'wrong-target'].includes(
-        issue
-      );
-      if (stale) {
+      // A missing report cannot be attributed to the attempt either, so it refuses without
+      // charge like a stale one (R11.2) instead of grading as a FAIL.
+      const refused = [
+        'stale-attempt',
+        'stale-definition',
+        'wrong-node',
+        'wrong-target',
+        'missing-report',
+      ].includes(issue);
+      if (refused) {
         expect(fixture.store.recordGateReviewOutcome).not.toHaveBeenCalled();
         expect(fixture.store.setReview).not.toHaveBeenCalled();
         expect(renew).not.toHaveBeenCalled();
@@ -584,10 +590,6 @@ describe('GateVerdictProcessor pinned semantic adjudication', () => {
         expect(fixture.store.setReview.mock.calls.at(-1)?.[1]?.retryHints?.join(' ')).toContain(
           'Semantic gate'
         );
-        if (issue === 'missing-report')
-          expect(fixture.store.setReview.mock.calls.at(-1)?.[1]?.retryHints?.join(' ')).toContain(
-            'structured per_gate'
-          );
         if (kind === 'detached') expect(enforcement.mock.calls[0]?.[1]).toEqual(['gate-a']);
         expect(fixture.context.state.gates.verdictDetection?.verdict).toBe('FAIL');
         const derived = fixture.context.state.gates.perGateVerdicts?.[0];
@@ -632,6 +634,67 @@ describe('GateVerdictProcessor pinned semantic adjudication', () => {
       else expect(result).toMatchObject({ earlyExit: true, passClearedThisCall: false });
     }
   );
+
+  // R11.2: a verdict that cannot carry the required report is refused as an error. No attempt is
+  // spent, the captured target stays, nothing is recorded, and the reply says what to send.
+  const reportless: Record<string, McpToolRequest['gate_verdict']> = {
+    'string PASS': 'GATE_REVIEW: PASS - The output preserves the contract',
+    'string FAIL': 'GATE_REVIEW: FAIL - The output breaks the contract',
+    'object entry without evaluation': semanticSubmission('missing-report'),
+    'object without per_gate': { overall: 'PASS', rationale: 'Reviewed the captured output' },
+  };
+  test.each(
+    (['ordinary', 'detached'] as const).flatMap((kind) =>
+      Object.keys(reportless).map((shape) => ({ kind, shape }))
+    )
+  )('refuses a $shape on a $kind semantic review without charge', async ({ kind, shape }) => {
+    const fixture = custodyFixture(kind, reportless[shape]);
+    const held = pinReview(fixture);
+    const before = { ...structuredClone(held), semanticContext: held.semanticContext };
+    const renew = jest.spyOn(fixture.authority, 'renewReviewAttempt');
+    const result = await fixture.submit();
+    expect(fixture.store.recordGateReviewOutcome).not.toHaveBeenCalled();
+    expect(fixture.store.setReview).not.toHaveBeenCalled();
+    expect(fixture.store.clearReview).not.toHaveBeenCalled();
+    expect(renew).not.toHaveBeenCalled();
+    expect(held).toEqual(before);
+    expect(held.attemptCount).toBe(before.attemptCount);
+    expect(held.semanticContext?.target?.content).toBe('A😀é Z');
+    let message: string;
+    if (kind === 'detached') {
+      expect(result).toMatchObject({ kind: 'refused' });
+      message = (result as { message: string }).message;
+    } else {
+      expect(result).toMatchObject({ earlyExit: true, passClearedThisCall: false });
+      expect(fixture.context.response).toMatchObject({ isError: true });
+      message = fixture.context.response?.content.map((part) => part.text).join('\n') ?? '';
+    }
+    expect(message).toContain("Semantic gate 'gate-a' needs gate_verdict.per_gate[1].evaluation");
+    expect(message).toContain(
+      shape.startsWith('string')
+        ? 'a string verdict cannot carry it'
+        : 'the submitted verdict carries none'
+    );
+    expect(message).toContain('No attempt was used. Resubmit:');
+    // The resubmit template carries the review's own binding, ready to fill in.
+    expect(message).toContain('"attempt_id":"attempt-1"');
+    expect(message).not.toContain('GATE_REVIEW');
+    expect(message).not.toContain('Invalid input');
+    expect(message).not.toMatch(/failed: :/);
+  });
+
+  test('an exhausted semantic review answers a string verdict with its retry limit, not a resubmit', async () => {
+    const fixture = custodyFixture('ordinary', reportless['string PASS']);
+    const held = pinReview(fixture);
+    held.phase = 'exhausted';
+    held.attemptCount = held.maxAttempts;
+    const result = await fixture.submit();
+    expect(result).toMatchObject({ earlyExit: true });
+    const text = fixture.context.response?.content.map((part) => part.text).join('\n') ?? '';
+    expect(fixture.context.response).toMatchObject({ isError: true });
+    expect(text).not.toContain('Resubmit:');
+    expect(fixture.store.recordGateReviewOutcome).not.toHaveBeenCalled();
+  });
 
   test.each(
     (['ordinary', 'detached'] as const).flatMap((kind) =>

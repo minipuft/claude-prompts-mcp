@@ -313,6 +313,7 @@ describe.each(['stdio', 'http'] as const)(
     ): Promise<{
       call: Call;
       chainId: string;
+      started: ToolReply;
       runtimeRoot: string;
       contextTrace: string;
       rollingHandoff: (token: string) => Promise<{ oldPid: number; newPid: number }>;
@@ -477,6 +478,7 @@ describe.each(['stdio', 'http'] as const)(
       return {
         call,
         chainId,
+        started,
         runtimeRoot: roots.runtimeRoot,
         contextTrace,
         rollingHandoff: async (token) => {
@@ -548,7 +550,13 @@ describe.each(['stdio', 'http'] as const)(
       expect(reviewA.semanticContext?.definitions[GATE]?.definition['calibration_suite_id']).toBe(
         '../opaque-public-association'
       );
-      expect((await resume({ gate_verdict: submitted() })).isError).toBe(false);
+      // R11.2: an entry without its report is refused — no attempt, capture kept, nothing recorded.
+      expect((await resume({ gate_verdict: submitted() })).isError).toBe(true);
+      expect(issuedState(runtimeRoot, chainId).reviews[reviewA.nodeId]).toEqual(reviewA);
+      expect(captured(runtimeRoot, chainId)).toEqual([]);
+      expect(
+        (await resume({ gate_verdict: submitted(issuedReport(reviewA, false)) })).isError
+      ).toBe(false);
       const renewed = issuedState(runtimeRoot, chainId).reviews[reviewA.nodeId]!;
       expect(renewed.attemptCount).toBe(1);
       expect(renewed.semanticContext?.attemptId).not.toBe(reportA.binding.attempt_id);
@@ -742,8 +750,16 @@ describe.each(['stdio', 'http'] as const)(
       ).toBe(false);
       const review = Object.values(issuedState(runtimeRoot, chainId).reviews)[0]!;
       expect(review.checkResults?.some((check) => check.passed)).toBe(true);
+      // No report: refused without charge, even beside a passing tool check (R11.2).
       expect(
         (await call('prompt_engine', { chain_id: chainId, gate_verdict: submitted() })).isError
+      ).toBe(true);
+      expect(issuedState(runtimeRoot, chainId).reviews[review.nodeId]).toEqual(review);
+      expect(captured(runtimeRoot, chainId)).toEqual([]);
+      const failed = issuedReport(review, false);
+      expect(
+        (await call('prompt_engine', { chain_id: chainId, gate_verdict: submitted(failed) }))
+          .isError
       ).toBe(false);
       const renewed = issuedState(runtimeRoot, chainId).reviews[review.nodeId]!;
       expect(renewed.attemptCount).toBe(1);
@@ -751,6 +767,62 @@ describe.each(['stdio', 'http'] as const)(
         verdict: 'FAIL',
         toolChecks: [expect.objectContaining({ passed: true })],
       });
+    }, 90000);
+
+    // R11.2 class closure: a reply about a semantic review never teaches the string a semantic
+    // review refuses. Every real render path is driven — the start render (capture-first review,
+    // its CTA and footer), the captured review render, both refusals, and the renewed review.
+    test('built semantic replies never advertise GATE_REVIEW; a string or report-less verdict is refused without charge', async () => {
+      const { call, chainId, started, runtimeRoot } = await fixture({ built: true });
+      const resume = (args: Record<string, unknown>) =>
+        call('prompt_engine', { chain_id: chainId, ...args });
+      const replies: Array<[string, ToolReply]> = [['start', started]];
+      const preCapture = await resume({ user_response: OUTPUT, gate_verdict: submitted() });
+      replies.push(['pre-capture refusal', preCapture]);
+      expect(preCapture.isError).toBe(true);
+      expect(preCapture.text).toContain('Send user_response alone (no gate_verdict)');
+      replies.push(['captured review', await resume({ user_response: OUTPUT })]);
+      const held = Object.values(issuedState(runtimeRoot, chainId).reviews)[0]!;
+      expect(held.semanticContext?.target?.content).toBe(OUTPUT);
+      for (const [label, verdict] of [
+        ['string refusal', 'GATE_REVIEW: PASS - The contract holds'],
+        ['report-less refusal', submitted()],
+      ] as const) {
+        const refused = await resume({ gate_verdict: verdict });
+        replies.push([label, refused]);
+        expect(refused.isError).toBe(true);
+        expect(refused.text).toContain(
+          `Semantic gate '${GATE}' needs gate_verdict.per_gate[1].evaluation`
+        );
+        expect(refused.text).toContain('No attempt was used. Resubmit:');
+        expect(refused.text).toContain(held.semanticContext!.attemptId);
+        expect(refused.text).not.toContain('Invalid input');
+        expect(issuedState(runtimeRoot, chainId).reviews[held.nodeId]).toEqual(held);
+        expect(captured(runtimeRoot, chainId)).toEqual([]);
+      }
+      const failed = await resume({ gate_verdict: submitted(issuedReport(held, false)) });
+      replies.push(['renewed review', failed]);
+      expect(failed.isError).toBe(false);
+      expect(issuedState(runtimeRoot, chainId).reviews[held.nodeId]?.attemptCount).toBe(1);
+      for (const [label, reply] of replies) {
+        expect({ label, leaks: reply.text.includes('GATE_REVIEW') }).toEqual({
+          label,
+          leaks: false,
+        });
+      }
+      // Positive control, same server and prompt, one identifier different: a node gated by the
+      // bundled reminder gate opens a legacy review, and its reply does carry the string.
+      const legacy = await call('prompt_engine', {
+        workflow: {
+          version: 1,
+          nodes: [
+            { id: 'legacy-node', promptId: 'registered_custody', inlineGateIds: ['code-quality'] },
+          ],
+        },
+      });
+      expect(legacy.isError).toBe(false);
+      expect(legacy.text).toContain('Review Required');
+      expect(legacy.text).toContain('GATE_REVIEW');
     }, 90000);
 
     test('built advisory acceptance failure advances with recorded FAIL facts', async () => {

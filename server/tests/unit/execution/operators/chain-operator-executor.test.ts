@@ -437,7 +437,12 @@ describe('ChainOperatorExecutor', () => {
     expect(result.content).toContain('### Required Response Format');
     expect(result.content).toContain('**Summary**: What was implemented');
     expect(result.content).toContain('**Gate Coverage**:');
-    expect(result.content).toContain('[1] PASS|FAIL: rationale');
+    // A normal render holds the step's gate text, not its gate list, so it asks for one line per
+    // gate shown instead of printing a count: two fixed lines asked a one-gate step for a second.
+    expect(result.content).toContain(
+      '- [n] PASS|FAIL: rationale (one line per gate listed above, numbered in order)'
+    );
+    expect(result.content).not.toContain('[2] PASS|FAIL');
     expect(result.content).toContain('**GATE_REVIEW: PASS|FAIL - overall assessment**');
     expect(result.asksVerdict).toBe(true);
   });

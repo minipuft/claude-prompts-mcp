@@ -16,8 +16,13 @@ import type {
 
 import { hashBytes } from '#shared/utils/hash.js';
 
-/** Canonical faults that cannot be attributed to a report's current review attempt. */
+/**
+ * Canonical faults that cannot be attributed to a report's current review attempt. An absent
+ * report (`missing_report`, a string verdict or an evaluation-less per_gate entry) is one: there
+ * is nothing to grade, so it refuses without charge rather than grading as a FAIL (R11.2).
+ */
 const ATTRIBUTION_FAULTS = new Set([
+  'missing_report',
   'binding_mismatch',
   'target_digest_mismatch',
   'invalid_context',
@@ -100,8 +105,15 @@ export function isSemanticEvaluationReport(report: unknown): report is SemanticE
 function issue(code: string, message: string, criterion_id?: string): SemanticEvaluationIssue {
   return { code, message, ...(criterion_id === undefined ? {} : { criterion_id }) };
 }
+/** A fault at the report's root names no field, so it carries no `<path>: ` prefix. */
 function schemaIssues(error: z.ZodError, code: string, id?: string): SemanticEvaluationIssue[] {
-  return error.issues.map((entry) => issue(code, `${entry.path.join('.')}: ${entry.message}`, id));
+  return error.issues.map((entry) =>
+    issue(
+      code,
+      entry.path.length === 0 ? entry.message : `${entry.path.join('.')}: ${entry.message}`,
+      id
+    )
+  );
 }
 function invalid(id: string, issues: readonly SemanticEvaluationIssue[]): SemanticCriterionResult {
   return { criterion_id: id, state: 'invalid', valid: false, passed: false, issues };
@@ -318,27 +330,32 @@ export function evaluateSemanticEvaluation(
       authority.criteria.map((criterion) => invalid(criterion.id, [])),
       contextIssues
     );
-  const parsed = reportSchema.safeParse(report);
-  if (!parsed.success) {
-    const faults = schemaIssues(parsed.error, 'invalid_report');
-    if (report === undefined) {
-      faults.push(
+  // Absence is one fault, stated once: the schema's own "expected object, received undefined"
+  // beside it would say the same thing twice in a reply the client reads.
+  if (report === undefined) {
+    return result(
+      authority.criteria.map((criterion) => invalid(criterion.id, [])),
+      [
         issue(
           'missing_report',
           'Supply a structured per_gate evaluation report for the captured review'
-        )
-      );
-    } else {
-      const supplied = z.object({ binding: bindingSchema }).safeParse(report);
-      faults.push(
-        ...(supplied.success
-          ? bindingIssues(authority, supplied.data.binding)
-          : [issue('invalid_binding', 'Report binding cannot be attributed to the current review')])
-      );
-    }
+        ),
+      ]
+    );
+  }
+  const parsed = reportSchema.safeParse(report);
+  if (!parsed.success) {
+    const supplied = z.object({ binding: bindingSchema }).safeParse(report);
     return result(
       authority.criteria.map((criterion) => invalid(criterion.id, [])),
-      faults
+      [
+        ...schemaIssues(parsed.error, 'invalid_report'),
+        ...(supplied.success
+          ? bindingIssues(authority, supplied.data.binding)
+          : [
+              issue('invalid_binding', 'Report binding cannot be attributed to the current review'),
+            ]),
+      ]
     );
   }
   const issues = bindingIssues(authority, parsed.data.binding);

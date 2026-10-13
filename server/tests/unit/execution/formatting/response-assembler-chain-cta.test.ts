@@ -321,6 +321,19 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       expect(footer).toContain('gate_verdict');
     });
 
+    test('a gated render with no review pending offers the object verdict, never the string', () => {
+      // R11.2: the string cannot carry a semantic report, and this line is what clients copy.
+      const context = createChainContext({ currentStep: 1, totalSteps: 2 });
+      context.executionResults!.metadata = { asksVerdict: true };
+
+      const footer = assembler.buildChainFooter(context);
+
+      expect(footer).toContain(
+        'Next: chain_id="chain-test#1", user_response="<your step output>", gate_verdict={"overall": "PASS|FAIL", "rationale": "<why>"}'
+      );
+      expect(footer).not.toContain('GATE_REVIEW');
+    });
+
     test('final step with no review still asks for the step output', () => {
       const context = createChainContext({
         currentStep: 3,
