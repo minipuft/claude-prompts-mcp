@@ -21,21 +21,21 @@
 # A client id that is ABSENT, commented out, or mapped to anything else resolves to
 # `unregistered` and is skipped with a message — it is not an error.
 #
-# <key> is `prompt:<category>/<id>` — exactly what `manifestKey` builds (service.ts:1269).
+# <key> is `prompt:<category>/<id>` — exactly what `manifestKey` builds (in `server/src/modules/skills-sync/service.ts`).
 # Run `npm run skills:diff` to see the keys available in your workspace before guessing one.
 
 # ── Client ids and where each writes ───────────────────────────────────────────────────────────
 #
-# | client id     | user scope                 | project scope   | scripts | refs | assets | subagents |
-# | ------------- | -------------------------- | --------------- | ------- | ---- | ------ | --------- |
-# | claude-code   | ~/.claude/skills           | .claude/skills  | yes     | yes  | no     | yes       |
-# | cursor        | ~/.cursor/skills           | .cursor/skills  | yes     | yes  | yes    | yes       |
-# | codex         | ~/.codex/skills            | .codex/skills   | yes     | yes  | yes    | no        |
-# | opencode      | ~/.config/opencode/skills  | .opencode/skills| no      | no   | no     | yes       |
-# | agent-plugins | ~/.agent-plugins/skills    | skills          | yes     | yes  | yes    | no        |
+# | client id     | user scope                 | project scope   | subagents |
+# | ------------- | -------------------------- | --------------- | --------- |
+# | claude-code   | ~/.claude/skills           | .claude/skills  | yes       |
+# | cursor        | ~/.cursor/skills           | .cursor/skills  | yes       |
+# | codex         | ~/.codex/skills            | .codex/skills   | no        |
+# | opencode      | ~/.config/opencode/skills  | .opencode/skills| yes       |
+# | agent-plugins | ~/.agent-plugins/skills    | skills          | no        |
 #
-# A capability marked `no` is dropped during export, not an error — an opencode skill loses its
-# scripts and references because the client cannot load them.
+# Every client's export ships a skill's scripts, references and assets. A client without
+# subagents gets no subagent output, which is not an error.
 
 # ── Example: enabling the Agent Plugins native package ─────────────────────────────────────────
 #

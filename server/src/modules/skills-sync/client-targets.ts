@@ -297,7 +297,7 @@ function resolveProjectRoot(paths: PackageRootPaths): string {
 }
 
 /**
- * Where the commands' target walks differ. Ruling R0C3.2: one walk, no change to any command's
+ * Where the commands' target walks differ. One walk, no change to any command's
  * output, so each difference is a stated policy rather than a unified behaviour.
  */
 export interface ClientTargetPolicy {

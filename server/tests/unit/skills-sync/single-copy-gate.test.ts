@@ -1,10 +1,10 @@
-// @lifecycle canonical - R0C3.2: the skills-sync target walk and the skill emitters exist once across the module.
+// @lifecycle canonical - The skills-sync target walk and the skill emitters exist once across the module.
 /**
  * MEASURED 2026-10-13 on `eefe1c59`: `export`, `sync`, `diff` and `pull` each carried their own
  * copy of the client-target walk (four "no registrations" skip lines, three symlink-collision
  * guards, four duplicate-id counts), and the Claude Code and Agent Skills adapters each carried
  * their own copy of every SKILL.md section and the tool-file emission. Copies drift: the two
- * adapters' bodies were byte-identical only by care. R0C3.2 moved each to one definition; this
+ * adapters' bodies were byte-identical only by care. The module now holds each to one definition; this
  * test holds the class by counting, across every `.ts` file in the module, a literal each copy
  * would necessarily carry. The planted controls prove a second copy is reported.
  */
@@ -73,7 +73,7 @@ function extraCopies(sources: ReadonlyMap<string, string>): Record<string, strin
   return offenders;
 }
 
-describe('skills-sync single-copy gate (R0C3.2)', () => {
+describe('skills-sync single-copy gate', () => {
   test('the module is read from its directory, not a hard-coded file list', () => {
     const files = [...moduleSources().keys()];
     expect(files).toEqual(expect.arrayContaining(['service.ts', 'client-targets.ts']));

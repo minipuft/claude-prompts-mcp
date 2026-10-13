@@ -599,7 +599,7 @@ describe('Pull Command Integration', () => {
     );
     expect(sysContent).toBe('Be helpful and accurate.');
   });
-  // ─── Branch coverage tier (row 0C3.6): agent-skills clients, non-prompt guidance, skips ────────
+  // ─── Branch coverage tier: agent-skills clients, non-prompt guidance, skips ────────
 
   /** A `gate.yaml` + `guidance.md` pair under `resources/gates/<id>/`. */
   async function writeGateResource(id: string, guidance: string): Promise<string> {
@@ -858,11 +858,11 @@ describe('Pull Command Integration', () => {
   });
 
   /**
-   * Row 0C3.10. A pull writes the edit to the location the type's loader reads. Each case
+   * A pull writes the edit to the location the type's loader reads. Each case
    * re-exports after the pull: the export reloads the resource, so an edit written anywhere the
    * loader does not read reverts to the old text in the regenerated SKILL.md.
    */
-  describe('0C3.10 a guidance pull lands where the loader reads it', () => {
+  describe('a guidance pull lands where the loader reads it', () => {
     async function exportFor(clientId: string): Promise<void> {
       await runSkillsSyncCommand(
         { command: 'export', client: clientId, scope: 'user' } as SkillsSyncOptions,

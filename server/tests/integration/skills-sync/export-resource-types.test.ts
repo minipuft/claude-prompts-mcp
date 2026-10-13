@@ -310,7 +310,7 @@ describe('Export resource types', () => {
     });
   });
 
-  // ─── One bad gate does not block unrelated output (row 0C3.12) ───────────────
+  // ─── One bad gate does not block unrelated output ───────────────
 
   describe('one unusable gate does not abort the prompts around it', () => {
     const badGateYaml = (): string =>

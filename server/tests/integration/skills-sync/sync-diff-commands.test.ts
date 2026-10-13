@@ -437,7 +437,7 @@ describe('sync and diff commands end to end (F11)', () => {
       expect(await exists(skillMdPath('alpha_prompt'))).toBe(true);
     });
 
-    // R0C3.5: the prune plan is built from the resources the run loaded, so a filter that narrows
+    // The prune plan is built from the resources the run loaded, so a filter that narrows
     // the load made every unfiltered skill look stale. Each case syncs the full tree first, so the
     // directory a filtered run must leave alone is present, marked and managed; the unfiltered
     // case is the positive control that the same directory IS removable.
@@ -774,7 +774,7 @@ describe('sync and diff commands end to end (F11)', () => {
     expect(versions).toEqual({ 'gate:twin': 2, 'prompt:general/solo': 1 });
   });
 
-  describe('0C3.13 a filtered run keeps the manifest rows of the skills it did not touch', () => {
+  describe('a filtered run keeps the manifest rows of the skills it did not touch', () => {
     const rowsByKey = (db: ReturnType<typeof manifestDatabase>) =>
       Object.fromEntries(
         db

@@ -1,10 +1,10 @@
 // @lifecycle canonical - Exports canonical YAML resources to client-native skill packages.
-/* Rule-scoped exceptions for this file (P4.123), each measured 2026-09-22 with every other rule
+/* Rule-scoped exceptions for this file (P4.123), each measured 2026-10-13 with every other rule
  * of the project in force here. An entry whose count reaches 0 is reported as an unused
  * directive, which is the cue to delete it. */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions -- 191 sites, as of 2026-09-22: truthiness tests over values read from `yaml.load(...) as T` casts, where each rewrite has to choose what '' / 0 / null mean at that site — a behaviour decision per site, not a mechanical fix. Flips when a site-by-site pass (or the decomposition below) takes the count to 0. */
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- 15 sites, as of 2026-09-22: the types those checks call impossible come from unvalidated `yaml.load(...) as T` casts, so the check is live against malformed YAML and deleting it changes behaviour. Flips when parsed input is schema-validated instead of cast. */
-/* eslint-disable @typescript-eslint/no-non-null-assertion, max-depth, max-params, max-lines, sonarjs/cognitive-complexity -- 23 / 32 / 2 / 1 / 19 warnings, as of 2026-09-22: structural, from one ~5,100-line module lifted whole from the CLI. Flips when the module is decomposed by responsibility (export, sync, diff, pull, adoption). */
+/* eslint-disable @typescript-eslint/strict-boolean-expressions -- 153 sites, as of 2026-10-13: truthiness tests over values read from `yaml.load(...) as T` casts, where each rewrite has to choose what '' / 0 / null mean at that site — a behaviour decision per site, not a mechanical fix. Flips when a site-by-site pass (or the decomposition below) takes the count to 0. */
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- 11 sites, as of 2026-10-13: the types those checks call impossible come from unvalidated `yaml.load(...) as T` casts, so the check is live against malformed YAML and deleting it changes behaviour. Flips when parsed input is schema-validated instead of cast. */
+/* eslint-disable @typescript-eslint/no-non-null-assertion, max-depth, max-params, max-lines, sonarjs/cognitive-complexity -- 25 / 14 / 2 / 1 / 16 warnings, as of 2026-10-13: structural, from one ~5,060-line module lifted whole from the CLI. Flips when the module is decomposed by responsibility (export, sync, diff, pull, adoption). */
 /**
  * Skills Sync CLI
  *

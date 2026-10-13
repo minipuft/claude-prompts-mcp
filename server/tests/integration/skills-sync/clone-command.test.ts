@@ -633,7 +633,7 @@ describe('Clone Command Integration', () => {
     });
   });
 
-  // ─── Branch coverage tier (row 0C3.6): typed resources, existing targets, companion files ─────
+  // ─── Branch coverage tier: typed resources, existing targets, companion files ─────
 
   const cloneOptions = (overrides: Partial<SkillsSyncOptions>): SkillsSyncOptions =>
     ({ command: 'clone', ...overrides }) as SkillsSyncOptions;
