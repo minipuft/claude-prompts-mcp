@@ -162,7 +162,7 @@ It is a compact semantic projection, not a concatenation: the handbook sections 
 | Codex       | Hierarchical `AGENTS.md`; no per-path rule activation           |
 | OpenCode    | `AGENTS.md` or `CLAUDE.md`, plus files named in `instructions`  |
 
-The [pre-commit hook](#git-hooks) renders the file from the Git index (`--from-index`), so a partially staged source cannot leak unstaged text into the commit.
+The [pre-commit hook](#git-hooks) renders the file from the Git index rather than the working tree, so a partially staged source cannot leak unstaged text into the commit.
 
 ## How to Contribute
 
