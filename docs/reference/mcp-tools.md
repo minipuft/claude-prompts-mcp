@@ -314,6 +314,17 @@ prompt_engine(command:"#procedural @CAGEERF tutorial subject:'React hooks'")
 | `%judge`     | Show guidance menu, don't execute |
 | `%framework` | Framework only, skip gates        |
 
+**`%clean` and `%framework` withhold every gate, so a call that also asks for one is refused.** A
+`gates` entry, a `::` operator (`:: "criterion"`, `:: id:"criterion"`, a canonical id), or a gate
+on a submitted workflow node, sent together with `%clean` or `%framework`, refuses the whole call
+before any gate registers, with a `[gate-suppressed]` line naming the modifier and every gate the
+call requested. `gates.enabled: false` in config and the runtime switch (`system_control`
+`action:"gates", operation:"disable"`) are refused the same way. Drop the modifier, or the gates;
+`%lean` keeps your gates without the framework. Gates a prompt's author configured are not your
+request: `%clean >>chain` still runs, without them. A `:: verify:"command"` gate is not refused,
+because shell verification runs whatever the modifier. Before this, each of these ran the prompt
+with no gate and no warning.
+
 ```bash
 # Skip all injection for quick iteration
 prompt_engine(command:"%clean my_prompt input:'test'")
