@@ -244,3 +244,11 @@ Rulings for this tier:
 - **R0C2.3 — 0C2.2 closes the optional-logger class in manager.ts by enumeration** (`rg "this\.logger\?\.|if \(this\.logger\)"` over the file = 0); sites in other modules are a count in the findings, not rows here.
 - **R0C2.4 — `transitionStepState` is deleted with its tests** (no consumer). Whether a live path can overwrite a terminal step is probed by 0C2.1 and reported as a finding; this tier changes no step-lifecycle behaviour.
 - **R0C2.5 — file sequencing in the shared tree:** 0C2.5 waits for 0C2.1 (both edit `tenant-isolation.test.ts`); 0C2.9 waits for 0C2.1 and 0C2.2 (`chain-session-store.test.ts`, the scheduler); 0C2.6 and 0C2.7 write new or untouched files and must not test the five dead methods.
+
+## 2026-10-12 — 0C2 wave 1: 0C2.8 accepted
+
+- 0C2.8 accepted (diff read): one real SQLite engine, a donor `DirectChainRunRegistry` and a claiming store; the pre-R62 pair is built by persisting the claimer's run before the donor writes the same chain id. 5 mutations red→green. Probe mid-wave: 614/717 (the denominator already shrank by 0C2.1's concurrent deletions, so not comparable to the baseline until the tier total is measured).
+- DEV-T0C2-P1 (planner): the 0C2.1 brief went out with a literal `$(cat preamble)` instead of the operating facts (no git restrictions, no shared-tree notice); sent by SendMessage within its first tool rounds. Briefs are now pasted whole.
+- Finding (not cut, R192): `findHeldChainIdForToken` reads through `this.resolvedDbEngine?.queryOne`, so a store with an injected registry and no engine skips the R62 check silently; production always has an engine. Its `row === undefined` arm is reachable only there.
+- Finding: ESLint ignores `server/tests/**`, so "lint your file" is no check for a test row; dropped from later briefs.
+- Feedback adopted: planted mutations in a shared tree collide (0C2.8 saw another row's planted `!` in `getSessionForMutation` once); later briefs require plant-run-revert in one command.
