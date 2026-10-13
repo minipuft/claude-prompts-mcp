@@ -208,8 +208,6 @@ export class FrameworkResolutionStage extends BasePipelineStage {
       });
 
     context.frameworkContext = frameworkContext;
-    // Coordination flag: system prompt already applied via framework context for single prompts
-    context.state.framework.systemPromptApplied = true;
 
     // Note: InjectionControlStage now controls system prompt injection.
     // Downstream stages read from context.state.injection for injection decisions.

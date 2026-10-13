@@ -66,6 +66,7 @@ const originalEnv = new Map(PATH_ENV_KEYS.map((key) => [key, process.env[key]]))
 
 const PASS = 'GATE_REVIEW: PASS - ok';
 const FRAMEWORK_HEADER = 'C.A.G.E.E.R.F Framework Active';
+const FWS2_FRAMEWORK_ID = 'fws2fw';
 
 type ToolCallback = (args: Record<string, unknown>, extra: unknown) => Promise<unknown>;
 interface Reply {
@@ -201,6 +202,33 @@ function writeWorkspace(workspace: string): void {
     'userMessageTemplate: FWS-PLAIN-OWN',
     ...optOut,
     ...fwSteps(null),
+  ]);
+  // A workspace framework whose guidance names template placeholders, so a builder that inserts
+  // the guidance after substituting renders them literally. `type` lowercases to `id` because the
+  // guidance service resolves a framework by its type.
+  const fws2FrameworkDir = path.join(workspace, 'resources', 'frameworks', FWS2_FRAMEWORK_ID);
+  mkdirSync(fws2FrameworkDir, { recursive: true });
+  writeFileSync(
+    path.join(fws2FrameworkDir, 'framework.yaml'),
+    [
+      `id: ${FWS2_FRAMEWORK_ID}`,
+      'name: FWS2 Probe',
+      'type: FWS2FW',
+      'version: 1.0.0',
+      'enabled: true',
+      'description: single-prompt guidance probe',
+      'systemPromptGuidance: FWS2-GUIDANCE for {PROMPT_NAME} in {PROMPT_CATEGORY}',
+      '',
+    ].join('\n')
+  );
+  prompt('fws2_single', ['description: fws2 single', 'userMessageTemplate: BODY-fws2', ...optOut]);
+  // A system message that already carries a framework's guidance: the framework block is not
+  // injected a second time.
+  prompt('fws2_carries_react', [
+    'description: fws2 single whose system message already applies react',
+    'systemMessage: Apply the ReACT framework systematically, as the author wrote it.',
+    'userMessageTemplate: BODY-fws2-carries',
+    ...optOut,
   ]);
   // A workspace config overlays the packaged one key by key. This switch is what sends a chain's
   // own gate definitions through registration and the run's gate remap.
@@ -794,5 +822,92 @@ describe('a chain step renders the framework guidance of the framework it runs u
 
     const declared = await promptEngine({ command: '@react >>fws_declared' });
     expectOneBlock(declared, 'ReACT@fws_a');
+  });
+});
+
+/**
+ * A single prompt's framework system prompt has one builder, `PromptGuidanceService` (stage 15).
+ * Before 2026-10-12 stage 12 also built it through `FrameworkManager`, stage 18 rendered that copy,
+ * and a flag told stage 15 to stand down. The two builders disagreed: the manager substituted the
+ * template's placeholders BEFORE inserting the framework's guidance, so a placeholder the guidance
+ * itself names rendered literally, and a template without `{FRAMEWORK_GUIDANCE}` lost the guidance
+ * outright where the service appends it under a heading.
+ */
+describe('a single prompt renders its framework guidance through one builder', () => {
+  const FWS2_GUIDANCE = 'FWS2-GUIDANCE for fws2_single in general';
+  const FWS2_HEADING = '## FWS2FW Framework';
+
+  const count = (text: string, needle: string): number => text.split(needle).length - 1;
+
+  test('guidance that names template placeholders renders them substituted, once', async () => {
+    const reply = await promptEngine({ command: `@${FWS2_FRAMEWORK_ID} >>fws2_single` });
+    expect(reply.isError).toBe(false);
+    expect(count(reply.text, FWS2_GUIDANCE)).toBe(1);
+    expect(reply.text).not.toContain('{PROMPT_NAME}');
+    expect(reply.text).toContain(
+      'You are operating under the FWS2 Probe framework for fws2_single.'
+    );
+    expect(reply.text).toContain('BODY-fws2');
+  });
+
+  test('a framework template without `{FRAMEWORK_GUIDANCE}` renders the same guidance once, under its heading', async () => {
+    // No loaded framework reaches this shape — every definition's template is generated with the
+    // placeholder — so the definition the server holds is edited in place and restored.
+    const definition = modules.mcpToolsManager
+      .getFrameworkManager()
+      ?.getFramework(FWS2_FRAMEWORK_ID);
+    if (definition === undefined) throw new Error(`${FWS2_FRAMEWORK_ID} was never loaded`);
+    const withPlaceholder = await promptEngine({ command: `@${FWS2_FRAMEWORK_ID} >>fws2_single` });
+    const original = definition.systemPromptTemplate;
+    definition.systemPromptTemplate = 'FWS2-TEMPLATE-WITHOUT-PLACEHOLDER for {PROMPT_NAME}.';
+    try {
+      const reply = await promptEngine({ command: `@${FWS2_FRAMEWORK_ID} >>fws2_single` });
+      expect(reply.isError).toBe(false);
+      expect(count(reply.text, 'FWS2-TEMPLATE-WITHOUT-PLACEHOLDER for fws2_single.')).toBe(1);
+      expect(count(reply.text, FWS2_HEADING)).toBe(1);
+      expect(count(reply.text, FWS2_GUIDANCE)).toBe(1);
+      // The same guidance text the placeholder template renders.
+      expect(count(withPlaceholder.text, FWS2_GUIDANCE)).toBe(1);
+      expect(count(withPlaceholder.text, FWS2_HEADING)).toBe(0);
+    } finally {
+      definition.systemPromptTemplate = original;
+    }
+  });
+
+  test('`@react` renders ReACT once; `%clean` renders none', async () => {
+    const react = await promptEngine({ command: '@react >>fws2_single' });
+    expect(react.isError).toBe(false);
+    expect(count(react.text, 'You are operating under the ReACT Framework for fws2_single.')).toBe(
+      1
+    );
+    expect(count(react.text, 'Apply the ReACT framework systematically:')).toBe(1);
+    expect(react.text).not.toContain(FWS2_GUIDANCE);
+
+    const clean = await promptEngine({ command: '%clean >>fws2_single' });
+    expect(clean.isError).toBe(false);
+    expect(clean.text).toContain('BODY-fws2');
+    expect(clean.text).not.toContain('You are operating under');
+    expect(clean.text).not.toMatch(/Apply the \S+ framework systematically/);
+  });
+
+  test('a system message that already applies a framework is not given the block again', async () => {
+    const reply = await promptEngine({ command: '@react >>fws2_carries_react' });
+    expect(reply.isError).toBe(false);
+    expect(reply.text).toContain('BODY-fws2-carries');
+    expect(count(reply.text, 'Apply the ReACT framework systematically')).toBe(1);
+    expect(reply.text).not.toContain('You are operating under');
+  });
+
+  test('with the framework system disabled, a single prompt renders no framework guidance', async () => {
+    await modules.frameworkStateStore.disableFrameworkSystem('fws2 probe');
+    try {
+      const reply = await promptEngine({ command: '>>fws2_single' });
+      expect(reply.isError).toBe(false);
+      expect(reply.text).toContain('BODY-fws2');
+      expect(reply.text).not.toContain('You are operating under');
+      expect(reply.text).not.toMatch(/Apply the \S+ framework systematically/);
+    } finally {
+      await modules.frameworkStateStore.enableFrameworkSystem('fws2 probe');
+    }
   });
 });

@@ -166,17 +166,16 @@ describe('PromptGuidanceStage', () => {
   });
 
   describe('System prompt duplication prevention', () => {
-    test('skips system prompt injection when framework stage already applied it', async () => {
+    test('skips system prompt injection when the system message already applies a framework', async () => {
       const context = new ExecutionContext({ command: '@CAGEERF >>demo' });
-      const convertedPrompt = createConvertedPrompt();
+      const convertedPrompt = createConvertedPrompt({
+        systemMessage: 'Apply the C.A.G.E.E.R.F framework systematically, as authored.',
+      });
       context.executionPlan = createExecutionPlan();
       context.parsedCommand = {
         commandType: 'single',
         convertedPrompt,
       } as any;
-
-      // Simulate Framework Stage having already applied system prompt
-      context.state.framework.systemPromptApplied = true;
 
       service.applyGuidance.mockResolvedValue(
         createGuidanceResult(convertedPrompt, {
@@ -194,7 +193,7 @@ describe('PromptGuidanceStage', () => {
       });
     });
 
-    test('includes system prompt injection when framework stage has not run', async () => {
+    test('includes system prompt injection for a single prompt: this stage is its only builder', async () => {
       const context = new ExecutionContext({ command: '>>demo' });
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = createExecutionPlan();
@@ -202,9 +201,6 @@ describe('PromptGuidanceStage', () => {
         commandType: 'single',
         convertedPrompt,
       } as any;
-
-      // No framework coordination flag set
-      // context.state.framework.systemPromptApplied is false by default
 
       service.applyGuidance.mockResolvedValue(
         createGuidanceResult(convertedPrompt, {
@@ -223,14 +219,17 @@ describe('PromptGuidanceStage', () => {
       });
     });
 
-    test('prevents duplication for chain steps when framework already applied', async () => {
+    test('prevents duplication for a chain step whose system message already applies a framework', async () => {
       const context = new ExecutionContext({ command: '@ReACT >>chain' });
       context.executionPlan = createExecutionPlan({
         strategy: 'chain',
         requiresSession: true,
       });
 
-      const firstStepPrompt = createConvertedPrompt({ id: 'step-one' });
+      const firstStepPrompt = createConvertedPrompt({
+        id: 'step-one',
+        systemMessage: 'You are operating under the ReACT framework, as authored.',
+      });
 
       const chainSteps = [
         {
@@ -246,9 +245,6 @@ describe('PromptGuidanceStage', () => {
         commandType: 'chain',
         steps: chainSteps,
       } as any;
-
-      // Simulate Framework Stage having already applied system prompt
-      context.state.framework.systemPromptApplied = true;
 
       service.applyGuidance.mockResolvedValue(
         createGuidanceResult(firstStepPrompt, {
@@ -284,19 +280,15 @@ describe('PromptGuidanceStage', () => {
         },
       } as any;
 
-      // Framework Stage has already processed this
-      context.state.framework.systemPromptApplied = true;
-
       service.applyGuidance.mockResolvedValue(createGuidanceResult(convertedPrompt) as any);
 
       await stage.execute(context);
 
-      // Verify framework override is passed through even though system prompt injection is disabled
       // FrameworkDecisionAuthority normalizes framework IDs to lowercase
       expect(service.applyGuidance).toHaveBeenCalledWith(
         convertedPrompt,
         expect.objectContaining({
-          includeSystemPromptInjection: false,
+          includeSystemPromptInjection: true,
           includeTemplateEnhancement: true,
           frameworkOverride: 'scamper',
         })

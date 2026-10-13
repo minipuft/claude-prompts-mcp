@@ -1,5 +1,4 @@
 // @lifecycle canonical - Runs operator executors and orchestrates outputs.
-import { hasFrameworkGuidance } from '../../../frameworks/utils/framework-detection.js';
 import { recordedStep } from '../../capture/step-capture-service.js';
 import {
   collectDetachedNodeFacts,
@@ -412,34 +411,8 @@ export class StepExecutionStage extends BasePipelineStage {
     const renderedTemplate = templateResult.content;
     const sections: string[] = [];
 
-    // Use injection decision from InjectionControlStage (state.injection)
-    // This is the authoritative source with 7-level hierarchical resolution
-    const injectionDecision = context.state.injection?.systemPrompt;
-    const injectionSuppressed = injectionDecision?.inject === false;
-
-    // Deduplication: Skip frameworkContext.systemPrompt if prompt.systemMessage already contains framework guidance
-    const systemMessageHasFramework = hasFrameworkGuidance(prompt.systemMessage);
-
-    if (
-      context.frameworkContext?.systemPrompt &&
-      !systemMessageHasFramework &&
-      !injectionSuppressed
-    ) {
-      sections.push(context.frameworkContext.systemPrompt.trim());
-      this.logger.debug('StepExecution: Added framework system prompt from context');
-    } else if (injectionSuppressed) {
-      this.logger.debug(
-        'StepExecution: Skipped framework injection (suppressed by injection decision)',
-        {
-          source: injectionDecision?.source,
-        }
-      );
-    } else if (systemMessageHasFramework) {
-      this.logger.debug(
-        'StepExecution: Skipped framework context injection (already in prompt.systemMessage)'
-      );
-    }
-
+    // The framework system prompt, when injected, already sits at the head of
+    // `prompt.systemMessage`: PromptGuidanceService (stage 15) is its only builder.
     if (prompt.systemMessage?.trim()) {
       sections.push(prompt.systemMessage.trim());
     }
@@ -464,8 +437,8 @@ export class StepExecutionStage extends BasePipelineStage {
     context.diagnostics.info(this.name, 'Single prompt executed', {
       promptId: prompt.id,
       contentLength: combinedContent.length,
-      hasFrameworkContext: Boolean(context.frameworkContext?.systemPrompt),
-      injectionSuppressed,
+      hasFrameworkContext: context.frameworkContext !== undefined,
+      injectionSuppressed: context.state.injection?.systemPrompt?.inject === false,
       gateCount: executionPlan.gates?.length ?? 0,
     });
 

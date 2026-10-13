@@ -59,8 +59,6 @@ export interface PipelineInternalState {
     judgePhaseTriggered: boolean;
     /** Whether style guidance has been applied */
     styleEnhancementApplied: boolean;
-    /** Coordination flag to prevent duplicate system prompt injection */
-    systemPromptApplied?: boolean;
     /** The specific style guidance text applied */
     selectedStyleGuidance?: string;
     /** Results from prompt guidance service, keyed by prompt ID */

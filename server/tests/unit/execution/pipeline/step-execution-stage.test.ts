@@ -68,11 +68,17 @@ const samplePrompt: ConvertedPrompt = {
 };
 
 describe('StepExecutionStage', () => {
-  test('renders single prompts with framework system prompt when not already present', async () => {
+  // Stage 15 (PromptGuidanceService) is the single prompt's only framework system prompt builder
+  // and writes it into `systemMessage`; stage 12's `frameworkContext.systemPrompt` is not rendered.
+  test('renders the single prompt framework guidance from its system message, not from frameworkContext', async () => {
     const { executor: chainExecutor } = createChainExecutor();
     const { sessionManager } = createSessionManager();
     const stage = new StepExecutionStage(chainExecutor, sessionManager, createLogger());
 
+    const guidedPrompt: ConvertedPrompt = {
+      ...samplePrompt,
+      systemMessage: 'You are operating under the FWS2 Probe framework for demo.',
+    };
     const context = new ExecutionContext({ command: '>>demo topic="AI"' });
     context.executionPlan = {
       strategy: 'prompt',
@@ -83,19 +89,19 @@ describe('StepExecutionStage', () => {
     } as any;
     context.parsedCommand = {
       commandType: 'single',
-      convertedPrompt: samplePrompt,
+      convertedPrompt: guidedPrompt,
       promptArgs: { topic: 'AI' },
     };
     context.frameworkContext = {
-      systemPrompt: 'Apply the C.A.G.E.E.R.F framework systematically.',
+      systemPrompt: 'STAGE-12-FRAMEWORK-COPY',
     } as any;
 
     await stage.execute(context);
 
-    expect(context.executionResults?.content).toContain(
-      'Apply the C.A.G.E.E.R.F framework systematically.'
-    );
-    expect(context.executionResults?.content).toContain('Process AI');
+    const content = String(context.executionResults?.content ?? '');
+    expect(content.split('operating under the FWS2 Probe framework')).toHaveLength(2);
+    expect(content).not.toContain('STAGE-12-FRAMEWORK-COPY');
+    expect(content).toContain('Process AI');
   });
 
   test('does not duplicate framework guidance when prompt system message already contains it', async () => {

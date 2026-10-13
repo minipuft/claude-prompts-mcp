@@ -1,4 +1,5 @@
 // @lifecycle canonical - Injects prompt guidance metadata into the execution context.
+import { hasFrameworkGuidance } from '../../../frameworks/utils/framework-detection.js';
 import { withResponseStyle } from '../../formatting/response-style.js';
 import { BasePipelineStage } from '../stage.js';
 
@@ -268,10 +269,12 @@ export class PromptGuidanceStage extends BasePipelineStage {
     try {
       // Use injection decision from InjectionControlStage (now runs BEFORE this stage)
       // InjectionControlStage populates context.state.injection with clear boolean semantics:
-      // inject=true means INJECT, inject=false means SKIP
+      // inject=true means INJECT, inject=false means SKIP.
+      // This stage is the framework system prompt's only builder, single prompt and chain step
+      // alike; a system message that already applies a framework is not given a second block.
       const injectionDecision = context.state.injection?.systemPrompt;
       const includeSystemPrompt =
-        (injectionDecision?.inject ?? true) && context.state.framework.systemPromptApplied !== true;
+        (injectionDecision?.inject ?? true) && !hasFrameworkGuidance(prompt.systemMessage);
 
       const guidanceOptions: Parameters<PromptGuidanceService['applyGuidance']>[1] = {
         includeSystemPromptInjection: includeSystemPrompt,
