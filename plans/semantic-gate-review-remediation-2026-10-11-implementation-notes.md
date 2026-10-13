@@ -247,3 +247,13 @@ Moved from `plans/workflow-client-evaluation-2026-10-09-implementation-notes.md`
 - Finding 4 (0C3.6) → folded into 0C3.10: dead arms in `cloneCommand` (`transactionResult.error ?? 'Clone failed'`; the unreachable step-dir skip; the step name fallbacks pre-empted by verification).
 - Finding 3 (0C3.6), not cut: `clone --resource-type gate|framework` never succeeds — the cloned yaml carries only id/name/description and verification rolls it back with a schema message. The failure is loud and rolled back; making it succeed is a capability this plan's objective does not cover. Revives if a user reports needing gate/framework clone. Tests pin today's refusal.
 - Findings not cut: rollback can rethrow `ENOTDIR` from `restoreSnapshots` and mask the original error (low; message similar); pull's `if (!yamlContent) continue` is reachable only by mid-run truncation.
+
+## 2026-10-13 — 0C3.1 accepted; wave 2 dispatched
+
+- 0C3.1 accepted (artifact read: wrapper exits `err.exitCode` for `SkillsSyncCommandError`, else 1; `exitCode` narrowed to the type `2`; `resolveClientConfig` returns `ClientConfig` and throws an invariant; `primarySourcePath` replaces both silent `!firstSourcePath` skips; docs §Commands states both statuses). Real `server/skills-sync.yaml` in the main checkout unmodified (mtime 2026-10-05). Commits on the branch: 0C3.1, 0C3.3, 0C3.6, one per concern.
+- DEV-T0C3-1: pre-empted arms became invariant throws rather than deletions (TypeScript narrowing needs them, and a throw replaces what was a silent skip); accepted — a loud failure at the cause. The exit-code test is a new integration file (`cli-exit-code.test.ts`, spawns the script under `createHermeticRoots`), not the unit CLI file.
+- DEV-T0C3-P1 (planner): the brief said to point `MCP_SERVER_ROOT` at "a fresh temp dir"; `locateSkillsSyncPackageRoot` accepts it only when `<dir>/resources` exists and otherwise falls back to cwd, the real `server/`. Wave 2 briefs carry the corrected fact.
+- Finding (0C3.1) → 0C3.2: `--client toString` passes validation (`CLIENT_REGISTRY['toString'] != null`) and dies with `Cannot read properties of undefined (reading 'user')`, exit 1. `Object.hasOwn` in validation and `resolveClientConfig`; the client-target preamble is 0C3.2's domain.
+- Finding (0C3.1) → split: the two other `ir.sourcePaths[0]` reads route through `primarySourcePath` in 0C3.4; typing `sourcePaths` as a non-empty tuple (closing the class at compile time; one fixture, `export-template-compile.test.ts:43`, breaks) goes to 0C3.2, after 0C3.8 releases that file.
+- Finding (0C3.1) → 0C3.2: `compileTemplate`'s `_args` parameter has no reader.
+- Wave 2: 0C3.4 (sole writer of `service.ts`), 0C3.7 (CLI, WS), 0C3.8 (TC, NS); disjoint files.
