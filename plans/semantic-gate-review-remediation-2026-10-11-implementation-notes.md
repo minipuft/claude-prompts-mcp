@@ -204,3 +204,10 @@ Moved from `plans/workflow-client-evaluation-2026-10-09-implementation-notes.md`
 - DEV-T7-P2 (planner): the brief's exit-site list kept only signal and stdin handlers from an `rg` whose output also held the decisive site, a plain `process.exit` inside a shutdown method. A brief about competing exits lists every exit reachable from the shutdown path. The planner also read "nothing logged on STDIO" as evidence about shutdown; the log file is empty after startup on HTTP too (0C1.31), so the WAL file was the probe that measured the property.
 - Deviation accepted: an HTTP-only server does not treat stdin end as a shutdown (systemd/nohup give it `/dev/null`); dual mode does.
 - Rows: 0C1.30 (the file observer's own signal handlers duplicate the graceful path; this PR), 0C1.31 (file logger drops shutdown lines; needs a `flush` on the `Logger` type, later slice), 0C1.32 (dual mode's port-taken fallback cannot run; later slice). Not cut: `TransportRouter` has no `shutdown()`, so `shutdownIfSupported(this.transportRouter, …)` does nothing — connections close through `ServerLifecycle.shutdown` only.
+
+## 2026-10-13 — owner rulings R13.1–R13.3; slice 7 to its PR
+
+- R13.1 (0D.6): when the registry is full, release the gates of runs idle past a threshold measured from each run's last use, then admit the new gate. The row proves the released run's resume restores its gates before relying on it.
+- R13.2: no experimental tier in the Public API Contract. A tier only protects surfaces marked experimental before they ship; removing an already-stable parameter stays breaking whatever it is called, so the label would blur the contract without saving a major.
+- R13.3: release PR #473 is not merged from this plan; the owner cuts releases.
+- Owner direction: finish this session here. Slice 7 ships as one PR; 0D.6, 0D.5, 0C1.31, 0C1.32, the coverage slices 0C2/0C3 and the errorText helper remain for the next planner session.
