@@ -100,6 +100,28 @@ describe('FileObserver', () => {
   });
 });
 
+describe('FileObserver leaves process shutdown to the graceful path', () => {
+  test('start() and stop() add no SIGINT or SIGTERM listener', async () => {
+    const observer = createFileObserver(createSimpleLogger('stdio'), {
+      debounceMs: 25,
+      usePolling: true,
+      pollingInterval: 25,
+    });
+    const before = {
+      sigint: process.listenerCount('SIGINT'),
+      sigterm: process.listenerCount('SIGTERM'),
+    };
+
+    await observer.start();
+    try {
+      expect(process.listenerCount('SIGINT')).toBe(before.sigint);
+      expect(process.listenerCount('SIGTERM')).toBe(before.sigterm);
+    } finally {
+      await observer.stop();
+    }
+  });
+});
+
 /**
  * Every event `FileObserver` emits has a production listener.
  *

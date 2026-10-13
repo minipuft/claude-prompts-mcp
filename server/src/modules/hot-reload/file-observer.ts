@@ -186,8 +186,6 @@ export class FileObserver extends EventEmitter {
   private directoriesCreatedLate: Set<string> = new Set();
   private configManager: ConfigManager | undefined;
   private auxiliaryDirectories: string[] = [];
-  private sigintHandler: (() => void) | undefined;
-  private sigtermHandler: (() => void) | undefined;
   private shouldUsePolling: boolean = false;
 
   constructor(logger: Logger, config?: Partial<FileObserverConfig>, configManager?: ConfigManager) {
@@ -245,20 +243,6 @@ export class FileObserver extends EventEmitter {
     this.startTime = Date.now();
     this.isStarted = true;
 
-    // Listen for process termination to clean up watchers
-    if (!this.sigintHandler) {
-      this.sigintHandler = () => {
-        void this.stop();
-      };
-      process.on('SIGINT', this.sigintHandler);
-    }
-    if (!this.sigtermHandler) {
-      this.sigtermHandler = () => {
-        void this.stop();
-      };
-      process.on('SIGTERM', this.sigtermHandler);
-    }
-
     const pollingStatus = this.shouldUsePolling
       ? `polling enabled (interval: ${this.config.pollingInterval}ms)`
       : 'native fs events';
@@ -309,15 +293,6 @@ export class FileObserver extends EventEmitter {
     this.stats.watchersActive = 0;
 
     this.logger.info('✅ FileObserver stopped and resources cleaned up');
-
-    if (this.sigintHandler) {
-      process.off('SIGINT', this.sigintHandler);
-      this.sigintHandler = undefined;
-    }
-    if (this.sigtermHandler) {
-      process.off('SIGTERM', this.sigtermHandler);
-      this.sigtermHandler = undefined;
-    }
   }
 
   /**
