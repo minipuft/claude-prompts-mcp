@@ -122,9 +122,7 @@ describe('Delegation Operator (==>) Flow', () => {
         currentStepIndex: 0,
       });
 
-      expect(result.callToAction).toContain('⚡ Note');
-      expect(result.callToAction).toContain('Summarizer');
-      expect(result.callToAction).not.toContain('HANDOFF INSTRUCTIONS');
+      expect(result.content).not.toContain('HANDOFF INSTRUCTIONS');
 
       // Step 5 (S7): the authoritative handoff — HANDOFF INSTRUCTIONS, Tool call, subagent_type
       // — renders WITH the delegated step's own EXECUTION BRIEF, one resume later.
@@ -216,8 +214,7 @@ describe('Delegation Operator (==>) Flow', () => {
         stepPrompts,
         currentStepIndex: 0,
       });
-      expect(step1Result.callToAction).not.toContain('HANDOFF');
-      expect(step1Result.callToAction).toContain('resume shortcut');
+      expect(step1Result.content).not.toContain('HANDOFF');
 
       // Step 2 → Step 3 IS delegated → one-line advisory (S7), not a full CTA
       const step2Result = await executor.renderStep({
@@ -225,8 +222,7 @@ describe('Delegation Operator (==>) Flow', () => {
         stepPrompts,
         currentStepIndex: 1,
       });
-      expect(step2Result.callToAction).toContain('⚡ Note');
-      expect(step2Result.callToAction).not.toContain('HANDOFF INSTRUCTIONS');
+      expect(step2Result.content).not.toContain('HANDOFF INSTRUCTIONS');
 
       // Step 3 is final AND delegated: the delegated-current-step handoff wins over the
       // final-step "deliver" branch (S7) — a delegated final step still needs its sub-agent
@@ -239,7 +235,6 @@ describe('Delegation Operator (==>) Flow', () => {
       });
       expect(step3Result.content).toContain('HANDOFF INSTRUCTIONS');
       expect(step3Result.content).toContain('subagent_type: "general-purpose"');
-      expect(step3Result.callToAction).toContain('HANDOFF INSTRUCTIONS');
       expect(step3Result.currentStepDelegated).toBe(true);
     });
 
@@ -297,8 +292,7 @@ describe('Delegation Operator (==>) Flow', () => {
         stepPrompts: context.parsedCommand!.steps!,
         currentStepIndex: 0,
       });
-      expect(result.callToAction).toContain('resume shortcut');
-      expect(result.callToAction).not.toContain('HANDOFF');
+      expect(result.content).not.toContain('HANDOFF');
     });
   });
 
@@ -363,8 +357,7 @@ describe('Delegation Operator (==>) Flow', () => {
         stepPrompts: context.parsedCommand!.steps!,
         currentStepIndex: 0,
       });
-      expect(result.callToAction).toContain('⚡ Note');
-      expect(result.callToAction).not.toContain('HANDOFF INSTRUCTIONS');
+      expect(result.content).not.toContain('HANDOFF INSTRUCTIONS');
 
       const delegatedResult = await executor.renderStep({
         executionType: 'normal',
@@ -413,15 +406,14 @@ describe('Delegation Operator (==>) Flow', () => {
       expect(context.parsedCommand!.steps![1].delegated).toBe(true);
       expect(context.parsedCommand!.steps![2].delegated).not.toBe(true);
 
-      // Step 2 is itself delegated (S7): rendering it now always produces the spawn-handoff
-      // CTA regardless of step 3's status — a delegated CURRENT step's callToAction no longer
-      // depends on the NEXT step, only on `step.delegated` of the step being rendered.
+      // Step 2 is itself delegated (S7): rendering it always produces the spawn-handoff
+      // regardless of step 3's status — a delegated CURRENT step's render depends only on
+      // `step.delegated` of the step being rendered, not on the NEXT step.
       const step2Result = await executor.renderStep({
         executionType: 'normal',
         stepPrompts: context.parsedCommand!.steps!,
         currentStepIndex: 1,
       });
-      expect(step2Result.callToAction).toContain('HANDOFF INSTRUCTIONS');
       expect(step2Result.currentStepDelegated).toBe(true);
     });
   });
@@ -616,8 +608,7 @@ describe('Delegation Operator (==>) Flow', () => {
       });
 
       expect(result.nextStepDelegated).toBe(true);
-      expect(result.callToAction).toContain('⚡ Note');
-      expect(result.callToAction).not.toContain('HANDOFF INSTRUCTIONS');
+      expect(result.content).not.toContain('HANDOFF INSTRUCTIONS');
 
       // The full handoff — HANDOFF INSTRUCTIONS, Tool: Task — renders WITH the marked step's
       // own EXECUTION BRIEF, one resume later.
@@ -647,7 +638,7 @@ describe('Delegation Operator (==>) Flow', () => {
         currentStepIndex: 0,
       });
       expect(result.nextStepDelegated).toBeUndefined();
-      expect(result.callToAction).not.toContain('HANDOFF');
+      expect(result.content).not.toContain('HANDOFF');
     });
   });
 });

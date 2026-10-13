@@ -155,7 +155,7 @@ export type ChainStepExecutionInput = NormalStepInput | GateReviewInput;
  * Result of rendering a chain step for execution.
  *
  * Contains all information needed to present the step to the user or LLM,
- * including the rendered content, step metadata, and call-to-action guidance.
+ * including the rendered content and step metadata.
  */
 export interface ChainStepRenderResult {
   stepNumber: number;
@@ -163,7 +163,6 @@ export interface ChainStepRenderResult {
   promptId: string;
   promptName: string;
   content: string;
-  callToAction: string;
   /** True when the next step in the chain is delegated to a sub-agent */
   nextStepDelegated?: boolean;
   /**

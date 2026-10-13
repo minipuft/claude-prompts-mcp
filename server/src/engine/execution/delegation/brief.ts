@@ -161,14 +161,10 @@ export interface DelegatedStepPayloadInputs {
  * without it the parent was handed a delegated step with nothing to hand a worker. Only the
  * worker lines differ between the two; everything after them is identical and lives here.
  *
- * `hasGates` is returned rather than recomputed by callers: it is `buildQualityGatesSection`'s own
- * verdict, the same one {@link assembleBriefBody} renders the section on, so the handoff's gate
- * wording and the brief's gate section cannot disagree.
+ * The handoff's gate wording reads `buildQualityGatesSection`'s own verdict, the same one
+ * {@link assembleBriefBody} renders the section on, so the two cannot disagree.
  */
-export function buildDelegatedStepLines(inputs: DelegatedStepPayloadInputs): {
-  readonly lines: readonly string[];
-  readonly hasGates: boolean;
-} {
+export function buildDelegatedStepLines(inputs: DelegatedStepPayloadInputs): readonly string[] {
   const { step } = inputs;
   const stepGateText =
     typeof step.metadata?.['gateInstructions'] === 'string'
@@ -176,53 +172,28 @@ export function buildDelegatedStepLines(inputs: DelegatedStepPayloadInputs): {
       : undefined;
   const hasGates = buildQualityGatesSection(stepGateText) !== null;
   const nodeToken = handoffNodeToken(step);
-  return {
-    lines: [
-      BRIEF_START,
-      assembleBriefBody({
-        workerLines: inputs.workerLines,
-        stepGateText,
-        historyEntries: inputs.historyEntries,
-        manifest: inputs.manifest,
-        nodeToken,
-      }),
-      BRIEF_END,
-      renderDelegatedStepHandoff({
-        stepNumber: step.stepNumber,
-        totalSteps: inputs.totalSteps,
-        promptName: inputs.promptName,
-        agentType: step.agentType ?? step.convertedPrompt?.agentType,
-        subagentModel: step.subagentModel ?? step.convertedPrompt?.subagentModel,
-        clientProfile: inputs.clientProfile,
-        inlineGateCount: step.inlineGateIds?.length,
-        hasGates,
-        gateGuidanceEnabled: inputs.gateGuidanceEnabled,
-        nodeToken,
-        mode: step.await === 'run' ? 'detached' : 'blocking',
-      }),
-    ],
-    hasGates,
-  };
-}
-
-/**
- * The one-line call to action under a CURRENT delegated step's render: what the parent does
- * after spawning the worker. A blocking step waits for the worker's result; a detached step
- * (`await: run`, Tier 4) moves on at once and reports the result later, routed by its token.
- */
-export function buildDelegatedStepCallToAction(
-  step: DelegatedStepFacts,
-  hasGates: boolean
-): string {
-  if (step.await === 'run') {
-    return (
-      'Spawn the sub-agent in the background per the HANDOFF INSTRUCTIONS above, then resume ' +
-      'with chain_id and NO user_response to continue without waiting. When the worker finishes, ' +
-      `resume with its result as user_response — its "node: ${handoffNodeToken(step)}" line ` +
-      'routes it back to this step.'
-    );
-  }
-  return `Spawn the sub-agent per the HANDOFF INSTRUCTIONS above, then resume with chain_id and user_response="<sub-agent result>"${
-    hasGates ? ' — review its Proposed Gate Review before submitting your gate_verdict' : ''
-  }.`;
+  return [
+    BRIEF_START,
+    assembleBriefBody({
+      workerLines: inputs.workerLines,
+      stepGateText,
+      historyEntries: inputs.historyEntries,
+      manifest: inputs.manifest,
+      nodeToken,
+    }),
+    BRIEF_END,
+    renderDelegatedStepHandoff({
+      stepNumber: step.stepNumber,
+      totalSteps: inputs.totalSteps,
+      promptName: inputs.promptName,
+      agentType: step.agentType ?? step.convertedPrompt?.agentType,
+      subagentModel: step.subagentModel ?? step.convertedPrompt?.subagentModel,
+      clientProfile: inputs.clientProfile,
+      inlineGateCount: step.inlineGateIds?.length,
+      hasGates,
+      gateGuidanceEnabled: inputs.gateGuidanceEnabled,
+      nodeToken,
+      mode: step.await === 'run' ? 'detached' : 'blocking',
+    }),
+  ];
 }

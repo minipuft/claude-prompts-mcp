@@ -227,3 +227,11 @@ Moved from `plans/workflow-client-evaluation-2026-10-09-implementation-notes.md`
 - 0C1.31 accepted, then found defective by the e2e run of a sibling row: DEV-T8-P1 (planner) — the brief's test bar was order and flush, and neither the worker nor the planner asked what a per-line promise chain costs under sustained logging. A 0D.5 worker's full `chain-prompt-sources` run crashed the server; a scratch-worktree bisect (control `adc6054b` green) named 0fbe398c, heap 61 MB → 2040 MB → V8 abort. Fixed by coalescing (0C1.33). The e2e helper pipes and never reads the server's output, so the abort surfaced only as "socket hang up".
 - 0C1.32 accepted, with the deviation that a listener `error` after bind logs instead of exiting.
 - 0D.11 accepted: workflow nodes never run script tools, so only the `::` command path had the false "nothing executed" claim.
+
+## 2026-10-13 — slice 9: semantic reply rendering (1.9, 1.11, 1.16, 1.17)
+
+- 1.9 (R13.4) accepted: the single-owner pattern (as `buildJudgeReviewSection` documents) rather than the "section identity dedup" the brief named, which does not exist — DEV-T9-P1, a brief that names a mechanism must have seen it. `formatBlockedResponse` used the step render as instructions, so blocked semantic replies are fixed by the same change.
+- 1.16 accepted: `callToAction` surplus. Three places read render text as wire text (an e2e assertion, a hook comment, an executor doc comment).
+- 1.11 accepted: the audit's suspected empty `gate_verdict=` was not the reproducing defect; the duplicated fence without the HANDOFF trailer and the verdict fence on a FAIL were.
+- 1.17 accepted: finding 1 (stale target digest after a detached FAIL) did not reproduce — a detached review renews at the replacement report, not at FAIL; the earlier probe's snapshot was read after the replacement. DEV-T9-P2: the planner passed a probe claim on without its observed values. Finding 2 fixed, plus `withoutStructuralFinding` no longer erasing semantic hints.
+- Findings not cut: `projectFrozenReview` ignores `review.phase` (callers must check it); the `%judge` menu returns after script stages 08/09 have run, so a judge call runs a prompt's scripts and the follow-up runs them again.
