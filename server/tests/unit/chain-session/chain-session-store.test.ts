@@ -702,6 +702,19 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     expect(manager.getStepState('s1', 'n1')?.declaredSections).toEqual([]);
   });
 
+  /**
+   * Every construction site (createSession, and the registry's `toStepStates` behind load and
+   * claim) gives a run its step map, so a run without one is a defect upstream. It fails loudly,
+   * naming the run, rather than being handed a fresh empty map that forgets every recorded step.
+   */
+  test('a run whose step map is missing refuses a step write, naming the run', async () => {
+    manager = newManager('missing-step-map');
+    await manager.createSession('s-no-map', 'chain-a', 2);
+    delete (manager as any).activeSessions.get('s-no-map').state.stepStates;
+
+    expect(() => manager.setStepState('s-no-map', 'n1', 'rendered')).toThrow(/s-no-map/);
+  });
+
   test('promoteSessionLifecycle refuses promotion of terminal sessions', async () => {
     manager = newManager('promote-refuse');
     await manager.createSession('s1', 'chain-a', 1);
