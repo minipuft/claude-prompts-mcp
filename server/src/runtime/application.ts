@@ -557,6 +557,7 @@ export class Application {
 
       await this.shutdownIfSupported(this.apiRouter, 'API manager');
       await this.shutdownIfSupported(this.mcpToolsManager, 'MCP tools manager');
+      await this.shutdownMetricsCollector();
       await this.shutdownIfSupported(this.conversationStore, 'conversation manager');
       await this.shutdownIfSupported(this.textReferenceStore, 'text reference manager');
 
@@ -631,6 +632,19 @@ export class Application {
    */
   private reportTeardownFailure(label: string, error: unknown): void {
     this.logger?.warn(`Error shutting down ${label}:`, error);
+  }
+
+  /**
+   * Stop the metrics collector's memory-sampling interval. The collector is built by the
+   * module initializer and owned through the tool router, which has no teardown of it; it
+   * stops after the router so nothing records into a collector that is already stopped. The
+   * router itself is unset when startup failed before modules initialized.
+   */
+  private async shutdownMetricsCollector(): Promise<void> {
+    if (!this.mcpToolsManager) {
+      return;
+    }
+    await this.shutdownIfSupported(this.mcpToolsManager.getMetricsCollector(), 'metrics collector');
   }
 
   /**

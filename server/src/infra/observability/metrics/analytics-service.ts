@@ -125,10 +125,12 @@ export class InMemoryMetricsCollector extends EventEmitter implements MetricsCol
    * Start performance monitoring
    */
   private startPerformanceMonitoring(): void {
-    // Monitor memory usage every 30 seconds
+    // Monitor memory usage every 30 seconds. unref(): a background sampler must not be the
+    // reason a process stays alive -- an in-process server exits once its real work is done.
     this.memoryCheckInterval = setInterval(() => {
       this.recordMemoryUsage();
     }, 30000);
+    this.memoryCheckInterval.unref();
   }
 
   /**
@@ -701,6 +703,7 @@ export class InMemoryMetricsCollector extends EventEmitter implements MetricsCol
   shutdown(): void {
     if (this.memoryCheckInterval) {
       clearInterval(this.memoryCheckInterval);
+      delete this.memoryCheckInterval;
     }
     this.removeAllListeners();
     this.logger.info('AnalyticsService shutdown complete');
