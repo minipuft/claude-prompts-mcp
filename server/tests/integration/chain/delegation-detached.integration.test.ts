@@ -848,6 +848,110 @@ describe('detached delegation (await: run) through the pipeline', () => {
       expect(run().runStatus).toBe('completed');
     });
 
+    describe('a semantic gate: one resume block per reply, routed by the trailer', () => {
+      const semanticGate = (): LightweightGateDefinition =>
+        ({
+          ...reminderGate('dr-semantic'),
+          subject: 'code',
+          evaluation: { mode: 'self', strict: true },
+          pass_criteria: [
+            {
+              type: 'semantic_evaluation',
+              id: 'criterion-A',
+              target: { kind: 'step_output' },
+              question: 'PUBLIC QUESTION A',
+              result: { kind: 'boolean' },
+              acceptance: { kind: 'equals', value: true },
+              evidence_requirements: { min_items: 1 },
+              allow_not_applicable: false,
+            },
+          ],
+        }) as unknown as LightweightGateDefinition;
+      const count = (haystack: string, needle: string) => haystack.split(needle).length - 1;
+      /** A FAIL report bound to the open review's issued pins, with one evidence span. */
+      const failReport = (sessionId: string) => {
+        const open = detachedReview(sessionId)!;
+        const issued = open.semanticContext!;
+        const target = issued.target!;
+        return {
+          overall: 'FAIL',
+          rationale: 'misses the criterion',
+          per_gate: [
+            {
+              index: 1,
+              passed: false,
+              rationale: 'misses the criterion',
+              evaluation: {
+                binding: {
+                  gate_id: 'dr-semantic',
+                  node_id: DETACHED,
+                  attempt_id: issued.attemptId,
+                  definition_digest: issued.definitions['dr-semantic']!.definitionDigest,
+                  target_digest: target.digest,
+                },
+                observations: [
+                  {
+                    criterion_id: 'criterion-A',
+                    state: 'unmet',
+                    value: false,
+                    evidence: [
+                      { target_digest: target.digest, start: 0, end: target.content.length },
+                    ],
+                    rationale: 'the result does not answer the question',
+                  },
+                ],
+              },
+            },
+          ],
+        };
+      };
+      /** One fenced resume call, carrying one filled verdict and the routing trailer. */
+      const expectOneRoutedResume = (reply: string) => {
+        expect(count(reply, '```\nchain_id=')).toBe(1);
+        expect(count(reply, 'gate_verdict=')).toBe(1);
+        expect(reply).not.toMatch(/gate_verdict=\s*\n/);
+        expect(count(reply, 'Public rubric')).toBe(1);
+        expect(reply).toContain(`user_response="${TRAILER}"`);
+        // The ordinary review's "omit user_response" would drop the trailer the verdict routes by.
+        expect(reply).not.toContain('Omit user_response');
+      };
+
+      test('the late report and its replacement each render one fence; the FAIL renders none', async () => {
+        const { pipeline, chainId, sessionId, brief } = await heldAtEnd({
+          gates: [semanticGate()],
+        });
+        const landed = text(
+          await pipeline.execute({
+            chain_id: chainId,
+            user_response: runFakeWorker(brief, { body: 'first attempt' }),
+          } as any)
+        );
+        expect(landed).toContain(`Gate Review Required — detached node ${DETACHED} (step 2)`);
+        expectOneRoutedResume(landed);
+
+        const failed = await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: failReport(sessionId),
+          user_response: TRAILER,
+        } as any);
+        expect(failed.isError).not.toBe(true);
+        expect(text(failed)).toContain('it replaces the first');
+        expect(detachedReview(sessionId)?.phase).toBe('awaiting-replacement');
+        // The review now waits for a replacement report, so no verdict call is offered.
+        expect(text(failed)).not.toContain('gate_verdict=');
+        expect(text(failed)).not.toContain('Public rubric');
+
+        const replaced = text(
+          await pipeline.execute({
+            chain_id: chainId,
+            user_response: runFakeWorker(brief, { body: 'second attempt' }),
+          } as any)
+        );
+        expect(replaced).toContain('its result replaces its first result');
+        expectOneRoutedResume(replaced);
+      });
+    });
+
     test('ground truth reads the recorded output, never the text of the call that answers', async () => {
       // The check passes only on text carrying MARK. The recorded output carries it; the verdict
       // call's own text (the trailer) does not — so the PASS is accepted only if the check read
