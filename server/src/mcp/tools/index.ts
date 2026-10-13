@@ -1028,75 +1028,72 @@ export class McpToolRouter {
             };
 
             if (args.gates != null) {
-              const normalizedGates = args.gates
-                .map((gate): GateSpecification | null => {
-                  if (typeof gate === 'string') {
-                    return gate;
-                  }
+              // One entry out per entry in: a gate this cannot use is still passed on, so stage 11
+              // refuses it by position rather than the run starting without it (R11.8).
+              const normalizedGates = args.gates.map((gate): GateSpecification => {
+                if (typeof gate === 'string') {
+                  return gate;
+                }
 
-                  // A `{name, description}` quick gate is exactly that shape, read by the tool's
-                  // strict schema: a full definition carrying `name` and `description` beside an
-                  // `id` or `criteria` is not one, and keeps every key below (P6.203).
-                  if (isQuickGate(gate)) {
-                    // Validate non-empty name and description
-                    const trimmedName = gate.name.trim();
-                    const trimmedDescription = gate.description.trim();
-                    if (trimmedName && trimmedDescription) {
-                      return {
-                        name: trimmedName,
-                        description: trimmedDescription,
-                      };
-                    }
-                    return null;
-                  }
+                // A `{name, description}` quick gate is exactly that shape, read by the tool's
+                // strict schema: a full definition carrying `name` and `description` beside an
+                // `id` or `criteria` is not one, and keeps every key below (P6.203). Trimmed
+                // when both fields carry text; a blank field is kept as sent, for the refusal
+                // to quote.
+                if (isQuickGate(gate)) {
+                  const trimmedName = gate.name.trim();
+                  const trimmedDescription = gate.description.trim();
+                  return trimmedName && trimmedDescription
+                    ? { name: trimmedName, description: trimmedDescription }
+                    : { name: gate.name, description: gate.description };
+                }
 
-                  const normalized: Record<string, unknown> = {};
-                  if (gate['id'] !== undefined) {
-                    normalized['id'] = gate['id'];
-                  }
-                  if (gate['name'] !== undefined) {
-                    normalized['name'] = gate['name'];
-                  }
-                  if (gate['description'] !== undefined) {
-                    normalized['description'] = gate['description'];
-                  }
-                  if (gate['criteria'] !== undefined) {
-                    normalized['criteria'] = gate['criteria'];
-                  }
-                  if (gate['pass_criteria'] !== undefined) {
-                    normalized['pass_criteria'] = gate['pass_criteria'];
-                  }
-                  if (gate['severity'] !== undefined) {
-                    normalized['severity'] = gate['severity'];
-                  }
-                  if (gate['type'] !== undefined) {
-                    normalized['type'] = gate['type'];
-                  }
-                  if (gate['scope'] !== undefined) {
-                    normalized['scope'] = gate['scope'];
-                  }
-                  if (gate['context'] !== undefined) {
-                    normalized['context'] = gate['context'];
-                  }
-                  if (gate['guidance'] !== undefined) {
-                    normalized['guidance'] = gate['guidance'];
-                  }
-                  if (gate['source'] !== undefined) {
-                    normalized['source'] = gate['source'];
-                  }
-                  if (gate['target_step_number'] !== undefined) {
-                    normalized['target_step_number'] = gate['target_step_number'];
-                  }
-                  if (gate['target_step_id'] !== undefined) {
-                    normalized['target_step_id'] = gate['target_step_id'];
-                  }
-                  if (gate['apply_to_steps'] !== undefined) {
-                    normalized['apply_to_steps'] = gate['apply_to_steps'];
-                  }
+                const normalized: Record<string, unknown> = {};
+                if (gate['id'] !== undefined) {
+                  normalized['id'] = gate['id'];
+                }
+                if (gate['name'] !== undefined) {
+                  normalized['name'] = gate['name'];
+                }
+                if (gate['description'] !== undefined) {
+                  normalized['description'] = gate['description'];
+                }
+                if (gate['criteria'] !== undefined) {
+                  normalized['criteria'] = gate['criteria'];
+                }
+                if (gate['pass_criteria'] !== undefined) {
+                  normalized['pass_criteria'] = gate['pass_criteria'];
+                }
+                if (gate['severity'] !== undefined) {
+                  normalized['severity'] = gate['severity'];
+                }
+                if (gate['type'] !== undefined) {
+                  normalized['type'] = gate['type'];
+                }
+                if (gate['scope'] !== undefined) {
+                  normalized['scope'] = gate['scope'];
+                }
+                if (gate['context'] !== undefined) {
+                  normalized['context'] = gate['context'];
+                }
+                if (gate['guidance'] !== undefined) {
+                  normalized['guidance'] = gate['guidance'];
+                }
+                if (gate['source'] !== undefined) {
+                  normalized['source'] = gate['source'];
+                }
+                if (gate['target_step_number'] !== undefined) {
+                  normalized['target_step_number'] = gate['target_step_number'];
+                }
+                if (gate['target_step_id'] !== undefined) {
+                  normalized['target_step_id'] = gate['target_step_id'];
+                }
+                if (gate['apply_to_steps'] !== undefined) {
+                  normalized['apply_to_steps'] = gate['apply_to_steps'];
+                }
 
-                  return normalized;
-                })
-                .filter((entry): entry is GateSpecification => entry !== null);
+                return normalized;
+              });
               normalizedArgs.gates = normalizedGates;
             }
 

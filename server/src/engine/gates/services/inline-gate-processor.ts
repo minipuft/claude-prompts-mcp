@@ -4,7 +4,7 @@ import { formatCriteriaAsGuidance } from '../../execution/pipeline/criteria-guid
 import { loadShellPresets } from '../config/index.js';
 import { SHELL_VERIFY_DEFAULTS } from '../constants.js';
 import { criteriaRefusalDetail, inlineCriteriaProblem } from './inline-criteria-refusal.js';
-import { gateInputContainsInlineContent } from './temporary-gate-registrar.js';
+import { gateInputContainsInlineContent } from './request-gate-refusal.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ChainSessionService } from '#shared/types/chain-session.js';

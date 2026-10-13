@@ -425,6 +425,49 @@ describe('an anonymous inline criterion through the composition root', () => {
   });
 });
 
+/**
+ * R11.8 through the router's `gates` normalization. MEASURED 2026-10-12 on `0881c79f` (built server,
+ * STDIO and HTTP): a `{name, description}` quick gate with either field blank was turned into `null`
+ * and filtered out in `mcp/tools/index.ts` before the pipeline, so stage 11 never saw it and the
+ * prompt ran with no gate and no warning.
+ */
+describe('a request gate the server cannot register, sent through prompt_engine', () => {
+  test.each([
+    [
+      'a quick gate with a blank description',
+      [{ name: 'Tone', description: '   ' }],
+      'request gate 1 (name "Tone")',
+    ],
+    [
+      'a quick gate with a blank name',
+      [{ name: '  ', description: 'Plain and direct' }],
+      'request gate 1 (name "  ")',
+    ],
+    [
+      'a blank quick gate beside a canonical one',
+      [{ name: 'Tone', description: '   ' }, 'code-quality'],
+      'request gate 1 (name "Tone")',
+    ],
+  ])('%s is refused by entry, and the prompt does not run', async (_, gates, address) => {
+    const reply = await promptEngine({ command: '>>cr_a', gates });
+    expect(reply.isError).toBe(true);
+    expect(reply.text).toContain(`[gate-criteria-invalid] workflow: ${address}`);
+    expect(reply.text).toContain('{name:"…", description:"…"}');
+    expect(reply.text).not.toContain('BODY-cr_a');
+  });
+
+  test('control: a quick gate with text, and a canonical gate, render', async () => {
+    const reply = await promptEngine({
+      command: '>>cr_a',
+      gates: [{ name: 'Tone', description: 'Plain and direct' }, 'code-quality'],
+    });
+    expect(reply.isError).toBe(false);
+    expect(reply.text).toContain('BODY-cr_a');
+    expect(reply.text).toContain('Plain and direct');
+    expect(reply.text).toMatch(/code.quality/i);
+  });
+});
+
 describe('a routed command before the composition root assigns the resource_manager router', () => {
   test('is refused as an ordering defect rather than answered from a second catalog', async () => {
     const early = new PromptExecutor(

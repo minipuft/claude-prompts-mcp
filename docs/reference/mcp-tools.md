@@ -461,7 +461,8 @@ skipped with a logged warning naming the id, and the run keeps the canonical gat
 
 **A `gates` entry the server cannot register refuses the call.** A blank string (`"   "`), a
 blank `criteria` or `pass_criteria` entry, an object whose every criterion, guidance and
-description is blank (`{name:"Tone", description:"  "}`), or a bare `{id:"…"}` naming neither a
+description is blank (`{name:"Tone", description:"  "}`), an `id` or `name` sent blank
+(`{name:"  ", description:"Plain and direct"}`), or a bare `{id:"…"}` naming neither a
 registered gate nor one the run already holds is refused before any gate registers, with a
 `[gate-criteria-invalid]` line naming the entry by position (counted across `gates`, then
 `workflow.gates`) and its id or name, and the accepted forms. An entry whose id the run holds is

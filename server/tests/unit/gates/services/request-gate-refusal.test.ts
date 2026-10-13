@@ -67,6 +67,12 @@ describe('a request gate that cannot register is refused, by entry (R11.8)', () 
       'has the criteria entry "  ", which is blank',
     ],
     [
+      'a blank id beside real criteria',
+      [{ id: '  ', criteria: ['Cites a source'] }],
+      'request gate 1 (id "  ")',
+      'has a blank id',
+    ],
+    [
       'an id naming no gate and carrying nothing',
       [{ id: 'no-such-gate' }],
       'request gate 1 (id "no-such-gate")',
