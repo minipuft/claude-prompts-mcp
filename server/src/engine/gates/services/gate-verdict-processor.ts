@@ -20,6 +20,7 @@ import {
 } from '../../execution/capture/step-capture-service.js';
 import { collectDetachedNodeFacts, collectRunHolds } from '../../execution/delegation/detached.js';
 import { physicalReviewDefinitionIndex } from '../../execution/pipeline/decisions/gates/frozen-review-definitions.js';
+import { formatSemanticGateHint } from '../../execution/pipeline/decisions/gates/review-hints.js';
 import { advanceReview } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
 import { resolveReviewTarget } from '../../execution/pipeline/decisions/gates/review-target.js';
 import {
@@ -1013,8 +1014,11 @@ export class GateVerdictProcessor {
       kind: 'failed',
       ...facts,
       hint: result.passed
-        ? `Semantic gate '${gateId}' held by explicit per-gate FAIL: ${claim?.rationale ?? verdict.rationale}`
-        : `Semantic gate '${gateId}' failed: ${semanticFailureReasons(result).join('; ')}`,
+        ? formatSemanticGateHint(
+            gateId,
+            `held by explicit per-gate FAIL: ${claim?.rationale ?? verdict.rationale}`
+          )
+        : formatSemanticGateHint(gateId, `failed: ${semanticFailureReasons(result).join('; ')}`),
     };
   }
 

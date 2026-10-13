@@ -498,21 +498,20 @@ export function describeDetachedReview(
      * guard merged into this review. Empty or absent when the result has every required section.
      */
     readonly structuralHints?: readonly string[];
+    /**
+     * What a semantic FAIL of an earlier result recorded on this review. Only a replacement
+     * report can carry them, and they describe the result it replaced, not this one.
+     */
+    readonly semanticHints?: readonly string[];
   }
 ): string {
-  const hints = review.structuralHints ?? [];
   const head = [
     '---',
     `**Gate Review Required — detached node ${node.token} (step ${node.stepNumber})** ` +
       `(${formatAttempt(review.attempt, review.maxAttempts)})`,
     '',
-    ...(hints.length > 0
-      ? [
-          'The reported result is missing required structure:',
-          ...hints.map((hint) => `- ${hint}`),
-          '',
-        ]
-      : []),
+    ...hintSection('The reported result is missing required structure:', review.structuralHints),
+    ...hintSection('An earlier result failed the semantic review:', review.semanticHints),
   ];
   if (review.semanticResume !== undefined) {
     return [...head, review.semanticResume].join('\n');
@@ -531,6 +530,11 @@ export function describeDetachedReview(
     'Shell and script checks of these gates run against that recorded result when the verdict ' +
       'arrives. Set `"overall": "FAIL"` to ask the worker for a replacement result.',
   ].join('\n');
+}
+
+/** A headed bullet list of `hints` followed by a blank line; nothing when there are none. */
+function hintSection(heading: string, hints: readonly string[] = []): string[] {
+  return hints.length === 0 ? [] : [heading, ...hints.map((hint) => `- ${hint}`), ''];
 }
 
 /** What a verdict (or `gate_action`) on a detached node's review answers. */

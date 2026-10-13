@@ -23,6 +23,7 @@ import {
   describeReviewForRender,
   semanticReviewResume,
 } from '../decisions/gates/describe-review-for-render.js';
+import { partitionReviewHints } from '../decisions/gates/review-hints.js';
 import {
   decideInterrupt,
   decideMutation,
@@ -590,6 +591,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       review === null
         ? undefined
         : semanticReviewResume(review, after.chainId, describeDetachedResumeRoute(node));
+    const hints = partitionReviewHints(review?.retryHints ?? []);
     const text = describeLandedReport(node, {
       runCompleted,
       held: isRunHeldOpen(after),
@@ -610,7 +612,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 describeReviewForRender(review).protocol
               ),
               ...(semanticResume !== undefined ? { semanticResume } : {}),
-              structuralHints: review.retryHints ?? [],
+              structuralHints: hints.structural,
+              semanticHints: hints.semantic,
             }),
           }
         : {}),

@@ -534,6 +534,37 @@ describe('the words a detached review says (row 3.8)', () => {
       'missing required structure'
     );
   });
+
+  test('a semantic FAIL hint renders under its own heading, never as missing structure', () => {
+    const review = { chainId: 'c', attempt: 2, maxAttempts: 2, verdictTemplate: '{}' };
+    const semanticHint = "Semantic gate 'sem' failed: criterion-A: unmet";
+    const structuralHint = 'Ensure your response includes the required "## Context" section';
+    const semanticOnly = describeDetachedReview(node, {
+      ...review,
+      semanticHints: [semanticHint],
+      structuralHints: [],
+    });
+    expect(semanticOnly).toContain(
+      `An earlier result failed the semantic review:\n- ${semanticHint}`
+    );
+    expect(semanticOnly).not.toContain('missing required structure');
+
+    // Both kinds: each list sits under its own heading, structural first.
+    const both = describeDetachedReview(node, {
+      ...review,
+      semanticHints: [semanticHint],
+      structuralHints: [structuralHint],
+    });
+    const structuralAt = both.indexOf(
+      `The reported result is missing required structure:\n- ${structuralHint}`
+    );
+    const semanticAt = both.indexOf(
+      `An earlier result failed the semantic review:\n- ${semanticHint}`
+    );
+    expect(structuralAt).toBeGreaterThan(-1);
+    expect(semanticAt).toBeGreaterThan(structuralAt);
+    expect(both.split(semanticHint)).toHaveLength(2);
+  });
 });
 
 describe("a detached semantic review renders one resume call, routed by the node's trailer", () => {
