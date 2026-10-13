@@ -34,6 +34,8 @@ import type { SemanticEvaluationReport } from '../../../src/shared/types/gate-ev
 const SERVER_ROOT = path.join(PROJECT_ROOT, 'server');
 const GATE = 'registered-custody-check';
 const OUTPUT = 'A😀e\u0301 Z';
+/** The client-visible refusal a string `gate_verdict` reads, on either transport. */
+const STRING_VERDICT_REFUSAL = 'gate_verdict takes the structured object, not a string';
 
 interface ContextObservation {
   chainId: string | null;
@@ -783,7 +785,7 @@ describe.each(['stdio', 'http'] as const)(
     // R11.2 class closure: a reply about a semantic review never teaches the string a semantic
     // review refuses. Every real render path is driven — the start render (capture-first review,
     // its CTA and footer), the captured review render, both refusals, and the renewed review.
-    test('built semantic replies never advertise GATE_REVIEW; a string or report-less verdict is refused without charge', async () => {
+    test('built semantic replies never advertise a string verdict; a string or report-less verdict is refused without charge', async () => {
       const { call, chainId, started, runtimeRoot } = await fixture({ built: true });
       const resume = (args: Record<string, unknown>) =>
         call('prompt_engine', { chain_id: chainId, ...args });
@@ -795,10 +797,17 @@ describe.each(['stdio', 'http'] as const)(
       replies.push(['captured review', await resume({ user_response: OUTPUT })]);
       const held = Object.values(issuedState(runtimeRoot, chainId).reviews)[0]!;
       expect(held.semanticContext?.target?.content).toBe(OUTPUT);
-      for (const [label, verdict] of [
-        ['string refusal', 'GATE_REVIEW: PASS - The contract holds'],
-        ['report-less refusal', submitted()],
-      ] as const) {
+      // A string verdict is refused at the boundary with the object form, before the review is
+      // read: nothing is recorded and no attempt is spent.
+      const stringRefused = await resume({
+        gate_verdict: 'GATE_REVIEW: PASS - The contract holds',
+      });
+      expect(stringRefused.isError).toBe(true);
+      expect(stringRefused.text).toContain(STRING_VERDICT_REFUSAL);
+      expect(stringRefused.text).toContain('"overall"');
+      expect(issuedState(runtimeRoot, chainId).reviews[held.nodeId]).toEqual(held);
+      expect(captured(runtimeRoot, chainId)).toEqual([]);
+      for (const [label, verdict] of [['report-less refusal', submitted()]] as const) {
         const refused = await resume({ gate_verdict: verdict });
         replies.push([label, refused]);
         expect(refused.isError).toBe(true);
@@ -854,8 +863,8 @@ describe.each(['stdio', 'http'] as const)(
           leaks: false,
         });
       }
-      // Positive control, same server and prompt, one identifier different: a node gated by the
-      // bundled reminder gate opens a legacy review, and its reply does carry the string.
+      // Control, same server and prompt, one identifier different: a node gated by the bundled
+      // reminder gate opens an ordinary review whose reply asks for a verdict — as the object.
       const legacy = await call('prompt_engine', {
         workflow: {
           version: 1,
@@ -866,7 +875,9 @@ describe.each(['stdio', 'http'] as const)(
       });
       expect(legacy.isError).toBe(false);
       expect(legacy.text).toContain('Review Required');
-      expect(legacy.text).toContain('GATE_REVIEW');
+      expect(legacy.text).toContain('gate_verdict=');
+      expect(legacy.text).toContain('"overall"');
+      expect(legacy.text).not.toContain('GATE_REVIEW');
     }, 90000);
 
     // R11.16 sibling and control: a node-scoped SEMANTIC gate opens its review on the call that
@@ -889,8 +900,8 @@ describe.each(['stdio', 'http'] as const)(
         return { chainId, reply, state: issuedState(runtimeRoot, chainId) };
       };
 
-      // Reminder tier (no semantic criterion): the review-less render already carries the legacy
-      // footer its review accepts, so the review still opens on the call capturing the output.
+      // Reminder tier (no semantic criterion): the review-less render already asks for the
+      // verdict its review accepts, so the review still opens on the call capturing the output.
       const reminder = await advanceIntoGatedNode({
         workflow: {
           version: 1,
@@ -902,7 +913,8 @@ describe.each(['stdio', 'http'] as const)(
       });
       expect(reminder.state.currentNode).toBe('gated-node');
       expect(reminder.state.reviews).toEqual({});
-      expect(reminder.reply.text).toContain('GATE_REVIEW');
+      expect(reminder.reply.text).toMatch(/gate_verdict=\{"overall"/);
+      expect(reminder.reply.text).not.toContain('GATE_REVIEW');
       const reminderCapture = await call('prompt_engine', {
         chain_id: reminder.chainId,
         user_response: OUTPUT,
@@ -1073,7 +1085,7 @@ describe.each(['stdio', 'http'] as const)(
       const whitespace = await call('prompt_engine', {
         chain_id: chainId,
         user_response: String.fromCharCode(32, 9, 10, 32),
-        gate_verdict: 'GATE_REVIEW: FAIL - No replacement output',
+        gate_verdict: { overall: 'FAIL', rationale: 'No replacement output' },
       });
       expect(whitespace.isError).toBe(false);
       const supplied = observedContexts(contextTrace, chainId).at(-1);
@@ -1081,7 +1093,7 @@ describe.each(['stdio', 'http'] as const)(
       expect(answeredNodes(runtimeRoot, chainId)).toEqual(before);
       const omitted = await call('prompt_engine', {
         chain_id: chainId,
-        gate_verdict: 'GATE_REVIEW: FAIL - Report-only review',
+        gate_verdict: { overall: 'FAIL', rationale: 'Report-only review' },
       });
       expect(omitted.isError).toBe(false);
       const absent = observedContexts(contextTrace, chainId).at(-1);
@@ -1096,7 +1108,7 @@ describe.each(['stdio', 'http'] as const)(
       const invalid = {
         chain_id: chainId,
         user_response: '',
-        gate_verdict: 'GATE_REVIEW: FAIL - Empty input',
+        gate_verdict: { overall: 'FAIL', rationale: 'Empty input' },
       };
       const refused = await call('prompt_engine', invalid);
       expect(refused.isError).toBe(true);
@@ -1107,7 +1119,7 @@ describe.each(['stdio', 'http'] as const)(
       const accepted = await call('prompt_engine', {
         chain_id: chainId,
         user_response: `  ${unicode}${String.fromCharCode(10)}`,
-        gate_verdict: 'GATE_REVIEW: FAIL - Unicode output supplied',
+        gate_verdict: { overall: 'FAIL', rationale: 'Unicode output supplied' },
       });
       expect(accepted.isError).toBe(false);
       expect(observedContexts(contextTrace, chainId).at(-1)).toMatchObject({
@@ -1176,13 +1188,27 @@ describe.each(['stdio', 'http'] as const)(
       // Public rich history rendering is later; exact JSON above observes actual persistence.
     }, 90000);
 
-    test('legacy string control reaches the same registered capture path', async () => {
+    test('a string verdict on a check-tier review is refused with the object form; the object twin records', async () => {
       const { call, chainId, runtimeRoot } = await fixture();
+      const refused = await call('prompt_engine', {
+        chain_id: chainId,
+        user_response: OUTPUT,
+        gate_verdict: 'GATE_REVIEW: FAIL - String carrier\n\nGATE_VERDICTS:\n[1] FAIL - String',
+      });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain(STRING_VERDICT_REFUSAL);
+      expect(refused.text).toContain('"per_gate"');
+      expect(captured(runtimeRoot, chainId)).toEqual([]);
+      expect(answeredNodes(runtimeRoot, chainId).answered).toBe(0);
+      // Positive control: the same call with the verdict as an object reaches capture.
       const reply = await call('prompt_engine', {
         chain_id: chainId,
         user_response: OUTPUT,
-        gate_verdict:
-          'GATE_REVIEW: FAIL - Legacy carrier\n\nGATE_VERDICTS:\n[1] FAIL - Legacy criterion',
+        gate_verdict: {
+          overall: 'FAIL',
+          rationale: 'Object carrier',
+          per_gate: [{ index: 1, passed: false, rationale: 'Object criterion' }],
+        },
       });
       expect(reply.isError).toBe(false);
       const entries = captured(runtimeRoot, chainId);
@@ -1190,7 +1216,7 @@ describe.each(['stdio', 'http'] as const)(
       expect(entries[0]).toMatchObject({
         gateId: GATE,
         verdict: 'FAIL',
-        rationale: 'Legacy criterion',
+        rationale: 'Object criterion',
       });
       expect(entries[0]).not.toHaveProperty('evaluation');
     }, 90000);

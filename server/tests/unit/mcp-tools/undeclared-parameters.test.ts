@@ -144,7 +144,7 @@ describe('undeclared parameter refusal', () => {
       // already right.
       const message = describeUndeclaredParameterRefusal(
         'prompt_engine',
-        { command: '>>demo', gate_verdict: 'GATE_REVIEW: PASS - ok' },
+        { command: '>>demo', gate_verdict: { overall: 'PASS', rationale: 'ok' } },
         GATE_PARAMETERS_UNAVAILABLE
       );
 
@@ -157,7 +157,7 @@ describe('undeclared parameter refusal', () => {
       expect(
         describeUndeclaredParameterRefusal('prompt_engine', {
           command: '>>demo',
-          gate_verdict: 'GATE_REVIEW: PASS - ok',
+          gate_verdict: { overall: 'PASS', rationale: 'ok' },
         })
       ).toBeNull();
     });
@@ -176,22 +176,17 @@ describe('undeclared parameter refusal', () => {
  * The same class one level down: a key a NESTED object does not declare (P4.103).
  *
  * The top-level refusal names a key because the key ARRIVES. Inside a parameter, zod does the
- * refusing — and for a UNION it reports one `invalid_union` issue whose sub-issues are nested,
- * while the SDK renders top-level issues only. `gate_verdict` is the union that matters: it is
- * the safety-review submission, and `{pased: true}` also leaves `passed` absent, which reads as
- * FAIL. The client saw exactly `gate_verdict: Invalid input`.
+ * refusing, and its default message names neither the key's full path nor a correction.
+ * `gate_verdict` is the object that matters: it is the safety-review submission, and
+ * `{pased: true}` also leaves `passed` absent, which reads as FAIL.
  */
 describe('nested key refusal (P4.103)', () => {
   const parse = (value: unknown): { ok: boolean; message: string } => {
-    const schema = buildPromptEngineSchema(
-      (v) => /^GATE_REVIEW:/.test(v),
-      'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"'
-    );
+    const schema = buildPromptEngineSchema();
     const result = schema.safeParse({ command: '>>demo', gate_verdict: value });
     return {
       ok: result.success,
-      // The SDK prefixes each top-level issue with its path. Refinements may report directly,
-      // while union failures already carry nested paths inside their message.
+      // The SDK prefixes each top-level issue with its path.
       message: result.success
         ? ''
         : result.error.issues
@@ -295,10 +290,6 @@ describe('nested key refusal (P4.103)', () => {
       expect(parse({ overall: 'PASS', rationale: 'all good' }).ok).toBe(true);
     });
 
-    it('CONTROL: the legacy string form is still accepted', () => {
-      expect(parse('GATE_REVIEW: PASS - fine').ok).toBe(true);
-    });
-
     it('a misspelled nested key reaches the client with its path and a suggestion', () => {
       const { ok, message } = parse({
         overall: 'FAIL',
@@ -325,22 +316,23 @@ describe('nested key refusal (P4.103)', () => {
       expect(message).toContain("did you mean 'satisfied'?");
     });
 
-    it('a bad string is answered by the STRING branch, not the object branch', () => {
-      // Branch selection is by the value's JS type. Reporting "expected object" at a string, or
-      // an object's field errors at a string, would name a shape the sender never sent.
-      const { ok, message } = parse('nonsense');
+    it('a string is refused with the object to resend, not zod\'s bare "expected object"', () => {
+      const { ok, message } = parse('GATE_REVIEW: PASS - fine');
 
       expect(ok).toBe(false);
-      expect(message).toContain('GATE_REVIEW');
+      expect(message).toContain('gate_verdict takes the structured object, not a string.');
+      expect(message).toContain('"overall": "PASS"|"FAIL"');
+      expect(message).toContain('"per_gate"');
+      expect(message).not.toContain('expected object');
       expect(message).not.toContain('is not a declared key');
     });
 
-    it('a value that is neither is told what the parameter takes', () => {
-      const { ok, message } = parse(42);
-
-      expect(ok).toBe(false);
-      expect(message).toContain('structured object');
-      expect(message).toContain('legacy string form');
+    it('any other non-object kind is named the same way', () => {
+      expect(parse(42).message).toContain(
+        'gate_verdict takes the structured object, not a number.'
+      );
+      expect(parse([]).message).toContain('not an array.');
+      expect(parse(null).message).toContain('not null.');
     });
 
     it('pass_criteria carries no `description` — the fork is SURPLUS, not a missing declaration', () => {
@@ -399,7 +391,7 @@ describe('nested key refusal (P4.103)', () => {
       })),
     ])('retains the rich report with optional reviewer %j', (reviewer) => {
       const report = { ...evaluation, ...(reviewer === undefined ? {} : { reviewer }) };
-      const schema = buildPromptEngineSchema((value) => /^GATE_REVIEW:/.test(value), 'Bad verdict');
+      const schema = buildPromptEngineSchema();
       const parsed = schema.parse({ command: '>>demo', gate_verdict: verdict(report) });
       expect(parsed['gate_verdict']).toEqual(verdict(report));
       if (reviewer === undefined)

@@ -336,20 +336,20 @@ prompt_engine(command:"%judge analysis_report")
 <details>
 <summary><strong>Parameters</strong></summary>
 
-| Parameter       | Type    | Purpose                                                                                                                                                                                                                                                             |
-| --------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `command`       | string  | Prompt ID with operators and arguments                                                                                                                                                                                                                              |
-| `chain_id`      | string  | Resume token for continuing chains                                                                                                                                                                                                                                  |
-| `user_response` | string  | Your output from previous step (for chain resume)                                                                                                                                                                                                                   |
-| `gate_verdict`  | union   | Structured review object or legacy verdict string. Required semantic criteria use `per_gate[].evaluation` with server-issued binding and captured evidence; legacy strings remain supported. See [Gate Verdict Formats](#gate-verdict-formats). Rationale required. |
-| `gate_action`   | enum    | Your move on a run that is waiting for one. After a FAILED GATE with retries exhausted: `retry`, `skip`, `abort`. On a run PAUSED by a blocking unknown: `resume`, `accept_alternative`, `abort`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt).    |
-| `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                                                              |
-| `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                                                           |
-| `inputs`        | object  | Typed prompt arguments. Nested objects and arrays stay structured; explicit inline arguments win on key conflicts.                                                                                                                                                  |
-| `options`       | object  | Legacy prompt values and execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) when transport metadata is unavailable.                                                                                      |
-| `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                                                         |
-| `workflow`      | object  | A structured multi-step run submitted instead of a command string. Mutually exclusive with `command` and `chain_id`. See [Workflow Submission](#workflow-submission).                                                                                               |
-| `remainder`     | object  | Rewrite the rest of a running chain after a blocking unknown invalidated its shape. `{mode:'replace'\|'append', nodes:[…], edges?:[…]}`, requires `chain_id`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt).                                        |
+| Parameter       | Type    | Purpose                                                                                                                                                                                                                                                          |
+| --------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `command`       | string  | Prompt ID with operators and arguments                                                                                                                                                                                                                           |
+| `chain_id`      | string  | Resume token for continuing chains                                                                                                                                                                                                                               |
+| `user_response` | string  | Your output from previous step (for chain resume)                                                                                                                                                                                                                |
+| `gate_verdict`  | object  | Structured review object; a string is refused. Required semantic criteria use `per_gate[].evaluation` with server-issued binding and captured evidence. See [Gate Verdict Formats](#gate-verdict-formats). Rationale required.                                   |
+| `gate_action`   | enum    | Your move on a run that is waiting for one. After a FAILED GATE with retries exhausted: `retry`, `skip`, `abort`. On a run PAUSED by a blocking unknown: `resume`, `accept_alternative`, `abort`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt). |
+| `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                                                           |
+| `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                                                        |
+| `inputs`        | object  | Typed prompt arguments. Nested objects and arrays stay structured; explicit inline arguments win on key conflicts.                                                                                                                                               |
+| `options`       | object  | Legacy prompt values and execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) when transport metadata is unavailable.                                                                                   |
+| `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                                                      |
+| `workflow`      | object  | A structured multi-step run submitted instead of a command string. Mutually exclusive with `command` and `chain_id`. See [Workflow Submission](#workflow-submission).                                                                                            |
+| `remainder`     | object  | Rewrite the rest of a running chain after a blocking unknown invalidated its shape. `{mode:'replace'\|'append', nodes:[…], edges?:[…]}`, requires `chain_id`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt).                                     |
 
 </details>
 
@@ -387,17 +387,17 @@ prompt_engine(
 ````bash
 prompt_engine(
   chain_id:"chain-research#2",
-  gate_verdict:"GATE_REVIEW: PASS - All sources cited"
+  gate_verdict:{overall:"PASS", rationale:"All sources cited"}
 )
 ```
 
-**Combined resume for ordinary legacy reviews:**
+**Combined resume for ordinary reviews:**
 
 ```bash
 prompt_engine(
   chain_id:"chain-research#2",
   user_response:"Step 2 output...",
-  gate_verdict:"GATE_REVIEW: PASS - criteria met"
+  gate_verdict:{overall:"PASS", rationale:"criteria met"}
 )
 ```
 
@@ -1091,15 +1091,11 @@ you mean 'description'?` rather than `gates.0: Invalid input`. The loader shares
   - the three tools' top-level parameters, so the refusal above can name the key and suggest a fix;
   - `chain_steps[]` and `chain_step_data`, because a chain step is an opaque object by decision
     (contrast the sibling `arguments`, which is a typed contract).
-- **`gate_verdict` names the full path and the nearest declared key.** It is a union of the
-  structured object and the legacy string, and a union failure is reported as ONE issue whose
-  sub-issues are nested, which the SDK does not render — so this parameter alone used to answer
-  `gate_verdict: Invalid input`, naming neither the key nor its position. It now answers
-  `'gate_verdict.per_gate[0].pased' is not a declared key — did you mean 'passed'?`, built from
-  the sub-issues that one validation pass already produced. Which branch reports is decided by the
-  value's own type: an object gets the structured branch's errors, a string gets the verdict-format
-  message, anything else is told what the parameter takes. The legacy string form is unchanged, and
-  the published `anyOf` is byte-identical to what it was.
+- **`gate_verdict` names the full path and the nearest declared key.** It is one strict object,
+  so a misspelled nested key answers
+  `'gate_verdict.per_gate[0].pased' is not a declared key — did you mean 'passed'?`. A value that
+  is not an object — a string included — answers
+  `gate_verdict takes the structured object, not a string.` followed by the object to resend.
 - **A criterion has no `description`.** `pass_criteria[]` declares the fields each `type` reads and
   nothing else; a `description` on a criterion is refused. Nothing reads one — the reviewer-facing
   prose is the gate's own `guidance`, which is what the criteria summary renders.
@@ -1716,7 +1712,8 @@ prompt_engine(command:"%lean code_review file:'api.ts'")
 
 ## Gate Verdict Formats
 
-When a chain pauses for gate review, prefer a structured verdict:
+When a chain pauses for gate review, answer with the structured verdict — the only shape
+`gate_verdict` accepts:
 
 ```bash
 prompt_engine(
@@ -1736,17 +1733,9 @@ Reminder-tier gates are attested once through optional
 Both reminder arrays default to empty when omitted inside a supplied `reminders` object. See
 [Verdicts and reminders](../guides/gates.md#verdicts-and-reminders) for attestation rules.
 
-Overall and per-gate rationales are trimmed, nonempty and single-line. The formatted-string
-branch remains accepted, with these case-insensitive formats:
-
-| Format       | Example                      |
-| ------------ | ---------------------------- |
-| Full         | `GATE_REVIEW: PASS - reason` |
-| Full (colon) | `GATE_REVIEW: FAIL: reason`  |
-| Simplified   | `GATE PASS - reason`         |
-| Minimal\*    | `PASS - reason`              |
-
-\*Minimal format only works via `gate_verdict` parameter, not in `user_response`.
+Overall and per-gate rationales are trimmed, nonempty and single-line. A string verdict
+(including `GATE_REVIEW: PASS - reason`, which earlier majors accepted) is refused at the schema
+with a message showing the object form; nothing is recorded and no attempt is spent.
 
 **Requirements:**
 
@@ -2094,7 +2083,7 @@ prompt_engine(command:"@CAGEERF research topic:'X' --> analysis --> report")
 prompt_engine(chain_id:"chain-research#1", user_response:"Research complete: ...")
 
 # 3. Handle gate review if needed
-prompt_engine(chain_id:"chain-research#2", gate_verdict:"GATE_REVIEW: PASS - Sources verified")
+prompt_engine(chain_id:"chain-research#2", gate_verdict:{overall:"PASS", rationale:"Sources verified"})
 
 # 4. Continue to completion
 prompt_engine(chain_id:"chain-research#3", user_response:"Analysis complete: ...")
@@ -2362,7 +2351,7 @@ success. The same check applies to `transport` in your config file.
 | `MCP_CONFIG_PATH`           | Override the config file path (`.jsonc` or `.json`); must name a readable file, or the server refuses to start      |
 | `MCP_SERVER_ROOT`           | Server package root, used by skills export                                                                          |
 | `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file                                                                     |
-| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict-pattern definitions file                                                                  |
+| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict validation settings file (rationale requirements)                                         |
 
 Per-resource-type variables (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_FRAMEWORKS_PATH`,
 `MCP_STYLES_PATH`, `MCP_SCRIPTS_PATH`) were documented here but are read nowhere in the server.

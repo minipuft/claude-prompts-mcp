@@ -516,7 +516,7 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       expect(result).not.toMatch(/attempt 1(\/| of )1/i);
     });
 
-    test('offers the structured verdict form, not only the legacy string', () => {
+    test('offers the structured verdict form and nothing else', () => {
       const context = createChainContext({
         currentStep: 1,
         totalSteps: 2,
@@ -528,12 +528,12 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
 
       const result = assembler.formatBlockedResponse(context);
 
-      // The object form is schema-validated and cannot be malformed; the string form is read
-      // back with five fallback regexes. Steering a blocked caller into the fragile one, on the
-      // reply where getting it wrong costs an attempt, is what this reverses.
+      // The object form is the only shape gate_verdict accepts; a reply that taught any other
+      // would cost the caller an attempt on the call where getting it wrong matters.
       expect(result).toContain('"overall": "PASS"');
       expect(result).toContain('"rationale"');
-      expect(result).toContain('A legacy string form is still accepted');
+      expect(result).not.toContain('GATE_REVIEW');
+      expect(result).not.toContain('legacy');
     });
 
     test('falls back to the bare resume line when no review is pending', () => {
@@ -548,9 +548,10 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       const result = assembler.formatBlockedResponse(context);
 
       // No pending review means no advertised gate list, so there is no template to key to.
-      // Inventing an empty one would advertise a shape the caller cannot fill.
-      expect(result).toContain('gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"');
-      expect(result).not.toContain('"overall": "PASS"');
+      // Inventing per-gate slots would advertise a shape the caller cannot fill.
+      expect(result).toContain('gate_verdict={"overall": "PASS"|"FAIL", "rationale": "<reason>"}');
+      expect(result).not.toContain('"per_gate"');
+      expect(result).not.toContain('GATE_REVIEW');
     });
   });
 

@@ -5,10 +5,6 @@ import { UnknownObservationProcessor } from '../../../src/engine/execution/captu
 import { ExecutionContext } from '../../../src/engine/execution/context/index.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
-import {
-  GATE_VERDICT_VALIDATION_MESSAGE,
-  isValidGateVerdict,
-} from '../../../src/engine/gates/core/gate-verdict-contract.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
 import { createRunStepViewProvider } from '../../../src/engine/gates/services/run-step-view.js';
 import { buildPromptEngineSchema } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
@@ -42,7 +38,7 @@ const createLogger = (): Logger =>
     error: jest.fn(),
   }) as unknown as Logger;
 
-const schema = buildPromptEngineSchema(isValidGateVerdict, GATE_VERDICT_VALIDATION_MESSAGE);
+const schema = buildPromptEngineSchema();
 
 describe('unknown observations, schema through ledger', () => {
   let store: ChainSessionStore;

@@ -129,7 +129,7 @@ Execute the phase—research docs, build inventory:
 ```bash
 prompt_engine(
   chain_id: "chain-skill_from_docs#1",
-  gate_verdict: "GATE_REVIEW: PASS - Version 4.3.5 confirmed, 6 priority docs mapped",
+  gate_verdict: { overall: "PASS", rationale: "Version 4.3.5 confirmed, 6 priority docs mapped" },
   user_response: "[Phase 1 inventory output]"
 )
 ```

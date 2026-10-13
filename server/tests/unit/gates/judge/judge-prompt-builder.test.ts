@@ -4,12 +4,12 @@ import {
   renderJudgePrompt,
   isJudgeMode,
   renderSemanticReviewPrompt,
+  JUDGE_VERDICT_FORMAT,
 } from '../../../../src/engine/gates/judge/judge-prompt-builder.js';
 import {
   composeJudgeReviewPrompt,
   composeReviewPrompt,
 } from '../../../../src/engine/gates/core/review-utils.js';
-import { GATE_VERDICT_REQUIRED_FORMAT } from '../../../../src/engine/gates/core/gate-verdict-contract.js';
 
 import type {
   JudgeEvaluationConfig,
@@ -89,7 +89,7 @@ describe('buildJudgeEnvelope', () => {
     expect(envelope.gateId).toBe('code-quality');
     expect(envelope.criteria).toEqual(['Check for proper error handling', 'Validate input types']);
     expect(envelope.strict).toBe(true);
-    expect(envelope.verdictFormat).toBe(GATE_VERDICT_REQUIRED_FORMAT);
+    expect(envelope.verdictFormat).toBe(JUDGE_VERDICT_FORMAT);
   });
 
   it('defaults strict to true', () => {
@@ -110,7 +110,7 @@ describe('renderJudgePrompt', () => {
     gateName: 'Code Quality',
     gateId: 'code-quality',
     strict: true,
-    verdictFormat: GATE_VERDICT_REQUIRED_FORMAT,
+    verdictFormat: JUDGE_VERDICT_FORMAT,
   };
 
   it('renders header with independent reviewer framing', () => {
@@ -151,7 +151,7 @@ describe('renderJudgePrompt', () => {
 
   it('includes verdict format', () => {
     const prompt = renderJudgePrompt(baseEnvelope);
-    expect(prompt).toContain(GATE_VERDICT_REQUIRED_FORMAT);
+    expect(prompt).toContain(JUDGE_VERDICT_FORMAT);
   });
 
   it('does not include chain history, framework context, or reasoning', () => {
@@ -307,15 +307,16 @@ describe('public semantic review projection', () => {
     const finalInstruction = prompt.split('\n').at(-1);
     expect(finalInstruction).toContain('Respond with structured gate_verdict.per_gate entries');
     expect(finalInstruction).toContain('unchanged server-issued binding and observations');
-    expect(finalInstruction).toContain('companion only and is insufficient');
+    expect(finalInstruction).not.toContain('GATE_REVIEW');
     expect(finalInstruction).not.toContain('Respond with:');
   });
 
-  it('retains the exact legacy judge final instruction when semantic reviews are absent or empty', () => {
+  it('asks a non-semantic judge for a one-line verdict reply, never a submission format', () => {
     const legacy = composeJudgeReviewPrompt([gate], 'OUTPUT').judgePrompt;
-    expect(legacy.split('\n').at(-1)).toBe(`Respond with: \`${GATE_VERDICT_REQUIRED_FORMAT}\``);
+    expect(legacy.split('\n').at(-1)).toBe(`Respond with: \`${JUDGE_VERDICT_FORMAT}\``);
     expect(composeJudgeReviewPrompt([gate], 'OUTPUT', []).judgePrompt).toBe(legacy);
     expect(legacy).not.toContain('structured gate_verdict.per_gate');
+    expect(legacy).not.toContain('GATE_REVIEW');
   });
 
   it('keeps multiple gate rubrics and binding attribution separate', () => {

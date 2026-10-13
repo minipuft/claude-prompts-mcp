@@ -89,40 +89,6 @@ scenarios:
             rationale: 'listed three options with one-line descriptions'
     expect: { text_contains: 'Progress 2/3' }
 
-  # The RETIRING shape. CLAUDE.md commits to deleting the string branch and the four non-primary
-  # regexes in verdict-patterns.yaml "once no client has submitted a string verdict for one
-  # release cycle", and calls that deletion breaking. This row is the dated measurement that the
-  # branch still works — when it is deleted, this row must be deleted in the SAME commit, which is
-  # what makes the retirement observable instead of folklore.
-  - id: chain-gate-verdict-legacy-string
-    claim_source: >-
-      prompt_engine gate_verdict parameter — "Also accepts the legacy string
-      \"GATE_REVIEW: PASS - rationale\"". CLAUDE.md § Public API Contract, retirement clause.
-    requests:
-      - tool: prompt_engine
-        args: { command: '>>quick_decision topic:"pick a cache"' }
-        capture:
-          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
-      - tool: prompt_engine
-        args:
-          chain_id: '${cid}'
-          user_response: |-
-            Options: Redis, Memcached, Dragonfly.
-
-            ## Context
-            The ask is to choose one option for the stated need, and the answer below lists the viable candidates with enough detail to weigh them.
-
-            ## Analysis
-            Each candidate differs in operating cost, maturity and fit; the list names them so the next step can compare them on those terms.
-
-            ## Goals
-            Name every viable option in one line each, so the comparison step starts from a complete list.
-
-            ## Execution
-            List the options, give each a one-line description, and leave the weighing to the step that follows this one.
-          gate_verdict: 'GATE_REVIEW: PASS - three options listed'
-    expect: { text_contains: 'Progress 2/3' }
-
   - id: chain-gated-resume-without-verdict
     claim_source: >-
       prompt_engine chain_id parameter — "RESUME: chain_id + user_response only. Omit command."
@@ -282,17 +248,15 @@ scenarios:
         args: { chain_id: '${cid}', gate_action: 'abort' }
     expect: { text_contains: 'No further verification will run' }
 
-  # ── Malformed gate_verdict (Tier 0.5b row C6) ──────────────────────────────
+  # ── String gate_verdict (Tier 0.5b row C6) ─────────────────────────────────
   #
-  # The failure mode the structured object exists to remove. CLAUDE.md § Public API Contract says
-  # the legacy string "is read back by five regexes and can fail to parse", and the retirement
-  # clause depends on the `source` field being trustworthy — which it is not if unparseable input
-  # is silently accepted as a pass. Measured 2026-08-11: it is rejected, at the SCHEMA layer,
-  # before any of the five regexes see it. The claim holds and this row now guards it.
-  - id: malformed-gate-verdict-string-is-rejected
+  # gate_verdict takes only the structured object. A string — including the once-accepted
+  # `GATE_REVIEW: PASS - reason` form — is refused at the SCHEMA layer, before any review is read,
+  # with a message that names the object to send instead.
+  - id: string-gate-verdict-is-rejected
     claim_source: >-
-      prompt_engine gate_verdict parameter — the legacy shape is documented as
-      "GATE_REVIEW: PASS|FAIL - reason". A string outside that shape must not be read as a verdict.
+      prompt_engine gate_verdict parameter — "Review object {overall:'PASS'|'FAIL',rationale,
+      per_gate?,reminders?}; a string is refused."
     requests:
       - tool: prompt_engine
         args: { command: '>>quick_decision topic:"pick a database"' }
@@ -302,7 +266,7 @@ scenarios:
         args:
           chain_id: '${cid}'
           user_response: 'Options: PostgreSQL, SQLite, DuckDB.'
-          gate_verdict: 'total nonsense here'
-    # Names the format requirement, so the row cannot be satisfied by an unrelated failure on the
+          gate_verdict: 'GATE_REVIEW: PASS - three options listed'
+    # Names the refusal itself, so the row cannot be satisfied by an unrelated failure on the
     # same input — the wrong-reason class that made `rejects: true` unusable.
-    expect: { error_contains: 'Gate verdict must follow format' }
+    expect: { error_contains: 'gate_verdict takes the structured object, not a string' }

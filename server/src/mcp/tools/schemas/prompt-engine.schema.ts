@@ -26,13 +26,9 @@ import type {
 
 import { isAppendCommand } from '#engine/execution/parsers/append-command-parser.js';
 import { COMMAND_SOURCE_EXCLUSIVITY_MESSAGE } from '#engine/execution/validation/schemas.js';
+import { describeGateVerdictRefusal } from '#engine/gates/core/gate-verdict-contract.js';
 import { CHAIN_ID_FORMAT_MESSAGE, CHAIN_ID_PATTERN } from '#shared/utils/chain-id-codec.js';
-import {
-  describeNestedSchemaRefusal,
-  refuseUndeclaredKey,
-  refuseUnionMismatch,
-  type NestedSchemaIssue,
-} from '#shared/utils/nested-key-refusal.js';
+import { refuseUndeclaredKey, refuseUnionMismatch } from '#shared/utils/nested-key-refusal.js';
 
 // ---------------------------------------------------------------------------
 // Gate sub-schemas (defined in gate-spec.schema.ts; shared with resource_manager
@@ -148,17 +144,14 @@ const _remainderSchemaMatchesModuleType: RemainderSubmission =
 void _remainderSchemaMatchesModuleType;
 
 // ---------------------------------------------------------------------------
-// Gate verdict submission (structured alternative to the formatted string)
+// Gate verdict submission
 // ---------------------------------------------------------------------------
 
 /**
- * A rationale that survives a render/parse round trip unchanged.
+ * A rationale that renders as one display line unchanged.
  *
- * `parseGateVerdict` reads only the first non-empty line and its pattern's
- * `(.+)$` has no `s` flag, so an embedded newline would truncate the rationale
- * silently. Rejecting here is deliberate: the renderer could collapse newlines
- * instead, but that would quietly rewrite the reviewer's words — the same class
- * of loss the structured form exists to remove.
+ * Rejecting a line break here is deliberate: the display renderer could collapse newlines
+ * instead, but that would quietly rewrite the reviewer's words.
  */
 const singleLineRationale = z
   .string()
@@ -248,12 +241,12 @@ export const gateVerdictEntrySchema = z.strictObject(
 );
 
 /**
- * A gate id as it appears in the rendered `REMINDERS:` line.
+ * A gate id as it appears in the rendered reminders display line.
  *
  * The line is a flat format — ids joined by `,`, segments split on `;`, a reason wrapped in
- * `()` — so an id carrying any of those characters would not survive the round trip. Rejected
- * here rather than escaped in the renderer, for the same reason the rationale rules above are:
- * the constraints belong on the input.
+ * `()` — so an id carrying any of those characters would render ambiguously. Rejected here
+ * rather than escaped in the renderer, for the same reason the rationale rules above are: the
+ * constraints belong on the input.
  */
 const reminderGateId = z
   .string()
@@ -282,11 +275,10 @@ export const gateVerdictReminderExemptionSchema = z.strictObject(
 );
 
 /**
- * The reminder attestation: one field for every reminder-tier gate the review advertised
- * (ruling B4, `~/.claude/plans/gate-checks-and-reminders.md`).
+ * The reminder attestation: one field for every reminder-tier gate the review advertised.
  *
  * Both arrays default to empty so a client may send `reminders: {}` to say "nothing to attest"
- * — present-and-empty renders as `REMINDERS: none`, which is a different statement from the
+ * — present-and-empty renders as `Reminders: none`, which is a different statement from the
  * field being absent, and the renderer keeps them distinguishable.
  */
 export const gateVerdictRemindersSchema = z.strictObject(
@@ -298,12 +290,26 @@ export const gateVerdictRemindersSchema = z.strictObject(
 );
 
 /**
- * A structured gate review.
+ * The submission's own refusal for a value that is not an object, or carries an undeclared key.
  *
- * The formatted-string form remains accepted, but a client using this one
- * cannot submit an unparseable verdict: there is no format to get wrong, so
- * the five fallback patterns never come into play.
+ * A string is the wrong kind a client most often sends, so the refusal names the kind that was
+ * sent and the object to resend instead of zod's bare `expected object`. Only the object itself
+ * raises `invalid_type` through this callback; a nested field's wrong type is raised by that
+ * field's schema, keeps zod's message and already names its path. A key the object does not
+ * declare keeps the shared full-path refusal.
  */
+function refuseGateVerdictShape(issue: {
+  readonly code?: string;
+  readonly input?: unknown;
+  readonly path?: readonly PropertyKey[];
+}): string | undefined {
+  if (issue.code === 'invalid_type') {
+    return describeGateVerdictRefusal(issue.input);
+  }
+  return refuseUndeclaredKey(issue);
+}
+
+/** A structured gate review — the only shape `gate_verdict` accepts. */
 export const gateVerdictSubmissionSchema = z.strictObject(
   {
     overall: z.enum(['PASS', 'FAIL']),
@@ -311,7 +317,7 @@ export const gateVerdictSubmissionSchema = z.strictObject(
     per_gate: z.array(gateVerdictEntrySchema).optional(),
     reminders: gateVerdictRemindersSchema.optional(),
   },
-  { error: refuseUndeclaredKey }
+  { error: refuseGateVerdictShape }
 );
 
 /**
@@ -401,7 +407,7 @@ const PARAM_DEFAULTS = {
   cancel:
     "Stop the run named by 'chain_id' and block further progression. Requires 'chain_id'; nothing else is read. Distinct from 'force_restart': cancel ENDS this run and starts nothing, while force_restart abandons it and immediately begins a new one. The session's state and artifacts survive a cancel — remove them with system_control(action:\"session\", operation:\"clear\").",
   gate_verdict:
-    'Gate review result when resuming. PREFERRED (structured, cannot be malformed): {overall:"PASS"|"FAIL", rationale:"...", per_gate:[{index:1, passed:true, rationale:"..."}], reminders:{satisfied:["id"], not_applicable:[{id:"id", reason:"..."}]}}. per_gate carries only check-tier gates; reminders attests the rest in one field. Also accepts the legacy string "GATE_REVIEW: PASS - rationale". Rationales are single-line. Keep user_response for actual step output.',
+    'Gate review result when resuming, as a structured object: {overall:"PASS"|"FAIL", rationale:"...", per_gate:[{index:1, passed:true, rationale:"..."}], reminders:{satisfied:["id"], not_applicable:[{id:"id", reason:"..."}]}}. per_gate carries only check-tier gates; reminders attests the rest in one field. Rationales are single-line. Keep user_response for actual step output.',
   gate_action:
     'Your move on a run that is waiting for one. AFTER A FAILED GATE exhausts its retry limit: "retry" resets the attempt count, "skip" bypasses the gate, "abort" stops execution. ON A RUN PAUSED BY A BLOCKING UNKNOWN (only when budget.pauseOnBlocking was declared): "resume" clears the pause and issues the investigation step as written, "accept_alternative" replaces the rest of the run with the nodes supplied in `remainder` on the SAME call (refused by name without one). "abort" and cancel:true exit either state.',
   user_response:
@@ -507,45 +513,6 @@ function buildCoreFields(resolve: DescriptionResolver) {
 }
 
 /**
- * The message a failed `gate_verdict` reports, built from the branch the sender clearly meant.
- *
- * Branch selection is by the value's own JS type, not by "whichever branch produced fewer
- * issues": an object sent to this parameter is a structured submission, and reporting the string
- * branch's `expected string, received object` beside the real defect buries it. A value that is
- * neither says so plainly, because there the type IS the defect.
- */
-function describeGateVerdictFailure(issue: {
-  readonly input?: unknown;
-  readonly path?: readonly PropertyKey[];
-  readonly errors?: readonly (readonly NestedSchemaIssue[])[];
-}): string {
-  const value = issue.input;
-  const parameterPath = (issue.path ?? []).filter(
-    (segment): segment is string | number =>
-      typeof segment === 'string' || typeof segment === 'number'
-  );
-
-  if (typeof value === 'string') {
-    const stringIssues = issue.errors?.[1] ?? [];
-    return stringIssues[0]?.message ?? 'gate_verdict is not a recognised verdict string.';
-  }
-
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return (
-      'gate_verdict takes either the structured object ' +
-      '({"overall": "PASS"|"FAIL", "rationale": "...", "per_gate": [...]}) ' +
-      'or the legacy string form `GATE_REVIEW: PASS - <assessment>`.'
-    );
-  }
-
-  return describeNestedSchemaRefusal(
-    parameterPath,
-    issue.errors?.[0] ?? [],
-    gateVerdictSubmissionSchema
-  );
-}
-
-/**
  * Parameters that exist only while the gate system is enabled.
  *
  * These three are the whole of the tool's gate surface a client can drive:
@@ -553,38 +520,14 @@ function describeGateVerdictFailure(issue: {
  * parameters answer a gate review already in flight.
  */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-function buildGateFields(
-  resolve: DescriptionResolver,
-  verdictValidator: (v: string) => boolean,
-  verdictMessage: string
-) {
+function buildGateFields(resolve: DescriptionResolver) {
   return {
     gates: z.array(gateSpecUnionSchema).optional().describe(resolve('gates', PARAM_DEFAULTS.gates)),
 
-    // Structured branch first: a client sending an object gets its own
-    // validation errors rather than "expected string", which is what it would
-    // see if the legacy branch were tried first and reported the union failure.
-    //
-    // The `error` override is what carries a NESTED key's path to the client (P4.103). Zod
-    // reports a union failure as ONE `invalid_union` issue whose sub-issues sit under `errors`,
-    // and the SDK's `formatIssue` renders top-level issues only — so `{per_gate: [{pased: true}]}`
-    // reached a client as exactly `gate_verdict: Invalid input`, on the SAFETY REVIEW submission,
-    // where a lost key also leaves `passed` absent and an absent boolean reads as FAIL.
-    //
-    // Reported from the sub-issues zod has ALREADY produced, rather than re-parsing the value in
-    // a refusal layer: one validation pass, and the published `anyOf` is untouched, which is what
-    // the alternatives (a `z.custom` root, or a second pass at the handler) each cost.
-    gate_verdict: z
-      .union(
-        [
-          gateVerdictSubmissionSchema,
-          z
-            .string()
-            .trim()
-            .refine((v) => verdictValidator(v), verdictMessage),
-        ],
-        { error: (issue) => describeGateVerdictFailure(issue) }
-      )
+    // Object only. A non-object (the retired string form included) and an undeclared key are
+    // refused by `gateVerdictSubmissionSchema`'s own `error` option, so the message reaches the
+    // client through the one parse zod makes, and the published schema is a single object.
+    gate_verdict: gateVerdictSubmissionSchema
       .optional()
       .describe(resolve('gate_verdict', PARAM_DEFAULTS.gate_verdict)),
 
@@ -610,14 +553,8 @@ function buildGateFields(
  * `{…} | {…, gates?}` and lose property access on the gate fields.
  */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-function buildWidestSchema(
-  resolve: DescriptionResolver,
-  verdictValidator: (v: string) => boolean,
-  verdictMessage: string
-) {
-  return z
-    .object(buildCoreFields(resolve))
-    .extend(buildGateFields(resolve, verdictValidator, verdictMessage));
+function buildWidestSchema(resolve: DescriptionResolver) {
+  return z.object(buildCoreFields(resolve)).extend(buildGateFields(resolve));
 }
 
 /**
@@ -645,16 +582,10 @@ function buildWidestSchema(
  * same reasoning `resource_manager.schema.ts` records for its own
  * `.passthrough()`.
  *
- * @param verdictValidator - `(v: string) => boolean` for gate_verdict format validation
- * @param verdictMessage - validation error message for gate_verdict
  * @param surface - description overlay and the state the shape depends on
  */
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type, @typescript-eslint/explicit-module-boundary-types
-export function buildPromptEngineSchema(
-  verdictValidator: (v: string) => boolean,
-  verdictMessage: string,
-  surface: ToolSurfaceResolver = {}
-) {
+export function buildPromptEngineSchema(surface: ToolSurfaceResolver = {}) {
   const resolve = surface.describe ?? identity;
 
   // Absent state means "widest", matching `isGateSystemEnabled()`, which
@@ -663,9 +594,7 @@ export function buildPromptEngineSchema(
     return withSourceExclusivity(z.object(buildCoreFields(resolve)).passthrough());
   }
 
-  return withSourceExclusivity(
-    buildWidestSchema(resolve, verdictValidator, verdictMessage).passthrough()
-  );
+  return withSourceExclusivity(buildWidestSchema(resolve).passthrough());
 }
 
 /** The four command sources, in the order the rejection message names them. */

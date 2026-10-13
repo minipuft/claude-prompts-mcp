@@ -39,12 +39,12 @@ import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/2
 import { GateLoader } from '../../../src/engine/gates/core/gate-loader.js';
 import { TemporaryGateRegistry } from '../../../src/engine/gates/core/temporary-gate-registry.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
-import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 
+import type { GateVerdictSubmission } from '../../../src/shared/types/gate-evaluation.js';
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
@@ -380,11 +380,11 @@ describe('a delegated step resumed through the real blueprint restore (Tier 2 ro
   const text = (response: { content?: Array<{ text?: string }> }): string =>
     (response.content ?? []).map((c) => c.text ?? '').join('\n');
 
-  const passVerdict = renderGateVerdict({
+  const passVerdict: GateVerdictSubmission = {
     overall: 'PASS',
     rationale: 'meets the gate',
     per_gate: [{ index: 1, passed: true, rationale: `${GATE_ID}: satisfied` }],
-  });
+  };
 
   test('step 2 (`==>`-marked) renders EXECUTION BRIEF + a general-purpose handoff on resume', async () => {
     const first = await pipeline.execute({ command: `>>draft ==> >>review` } as any);

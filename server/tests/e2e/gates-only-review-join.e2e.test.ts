@@ -39,8 +39,8 @@ import {
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');
 
-const PASS = 'GATE_REVIEW: PASS - ok';
-const FAIL = 'GATE_REVIEW: FAIL - the step misses its gate';
+const PASS = { overall: 'PASS', rationale: 'ok' };
+const FAIL = { overall: 'FAIL', rationale: 'the step misses its gate' };
 const OPT_OUT = { exclude: ['content-structure'], framework_gates: false };
 const CRITERION = 'TGT-279-J';
 

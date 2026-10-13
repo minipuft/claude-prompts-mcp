@@ -85,11 +85,7 @@ function projectGate(input: {
     tools.every((check) => check.passed) &&
     reported?.verdict !== 'FAIL';
   const requested = requestedEvaluation(review, gateId);
-  const claim =
-    reported ??
-    (original.submission === undefined
-      ? { verdict: original.verdict, rationale: original.rationale }
-      : undefined);
+  const claim = reported;
   return {
     ...(reported ?? { gateId, timestamp: input.timestamp, attempt: review.attemptCount }),
     verdict: passed ? 'PASS' : 'FAIL',
@@ -102,8 +98,8 @@ function projectGate(input: {
         }
       : {}),
     reportedReview: {
-      overall: original.submission?.overall ?? original.verdict,
-      rationale: original.submission?.rationale ?? original.rationale,
+      overall: original.submission.overall,
+      rationale: original.submission.rationale,
     },
     ...(semantic !== undefined
       ? { semanticResult: semantic.result, reviewBinding: semantic.binding }

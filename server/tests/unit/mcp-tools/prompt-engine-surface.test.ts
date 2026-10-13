@@ -21,14 +21,8 @@ import type { ToolSurfaceState } from '../../../src/mcp/tools/schemas/prompt-eng
 const GATE_PARAMS = ['gates', 'gate_verdict', 'gate_action'] as const;
 const CORE_PARAMS = ['command', 'force_restart', 'chain_id', 'user_response', 'options'] as const;
 
-const acceptAnyVerdict = (): boolean => true;
-
 function build(state?: ToolSurfaceState) {
-  return buildPromptEngineSchema(
-    acceptAnyVerdict,
-    'invalid verdict',
-    state != null ? { state } : {}
-  );
+  return buildPromptEngineSchema(state != null ? { state } : {});
 }
 
 /** The JSON Schema a client actually sees on `tools/list`. */
@@ -177,7 +171,7 @@ describe('prompt_engine parameter surface', () => {
     // The two halves of the resolver are independent by design: an overlay that
     // silently reshaped the surface would make every framework switch a
     // breaking change under the semver ruling.
-    const overlaid = buildPromptEngineSchema(acceptAnyVerdict, 'invalid verdict', {
+    const overlaid = buildPromptEngineSchema({
       describe: (name, fallback) => `[OVERLAY ${name}] ${fallback}`,
       state: { gateSystemEnabled: true },
     });

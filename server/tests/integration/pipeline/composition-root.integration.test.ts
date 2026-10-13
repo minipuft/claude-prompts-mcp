@@ -64,7 +64,7 @@ const PATH_ENV_KEYS = [
 ];
 const originalEnv = new Map(PATH_ENV_KEYS.map((key) => [key, process.env[key]]));
 
-const PASS = 'GATE_REVIEW: PASS - ok';
+const PASS = { overall: 'PASS', rationale: 'ok' };
 const FRAMEWORK_HEADER = 'C.A.G.E.E.R.F Framework Active';
 const FWS2_FRAMEWORK_ID = 'fws2fw';
 

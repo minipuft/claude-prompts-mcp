@@ -471,11 +471,10 @@ export class PromptExecutor {
     }
 
     const normalizedCommand = typeof args.command === 'string' ? args.command.trim() : '';
-    const normalizedGateVerdict =
-      typeof args.gate_verdict === 'string' ? args.gate_verdict.trim() : args.gate_verdict;
+    const gateVerdict = args.gate_verdict;
     const chainIdFromCommand = this.extractChainId(normalizedCommand);
     const hasResumePayload = Boolean(
-      (args.user_response && args.user_response.trim().length > 0) || normalizedGateVerdict
+      (args.user_response && args.user_response.trim().length > 0) || gateVerdict
     );
     const shouldTreatAsResumeOnly =
       Boolean(chainIdFromCommand) && hasResumePayload && args.force_restart !== true;
@@ -546,7 +545,7 @@ export class PromptExecutor {
     const request = {
       ...(commandValue && { command: commandValue }),
       ...(chainIdValue && { chain_id: chainIdValue }),
-      ...(normalizedGateVerdict && { gate_verdict: normalizedGateVerdict }),
+      ...(gateVerdict && { gate_verdict: gateVerdict }),
       ...(args.gate_action && { gate_action: args.gate_action }),
       ...(args.user_response !== undefined && { user_response: args.user_response }),
       ...(args.force_restart !== undefined && { force_restart: args.force_restart }),

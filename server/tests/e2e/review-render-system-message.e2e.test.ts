@@ -33,7 +33,7 @@ import {
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');
 
-const PASS = 'GATE_REVIEW: PASS - ok';
+const PASS = { overall: 'PASS', rationale: 'ok' };
 const OPT_OUT = { exclude: ['content-structure'], framework_gates: false };
 const SYSTEM_MESSAGE = 'SYSMSG-288-A';
 

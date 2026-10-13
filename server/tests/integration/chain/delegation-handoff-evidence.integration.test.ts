@@ -53,7 +53,6 @@ import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/2
 import { GateLoader } from '../../../src/engine/gates/core/gate-loader.js';
 import { TemporaryGateRegistry } from '../../../src/engine/gates/core/temporary-gate-registry.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
-import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
@@ -64,6 +63,7 @@ import { DEFAULT_WORKFLOW_CAPS } from '../../../src/modules/workflow-ir/node-sch
 import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
 import { runFakeWorker } from '../../helpers/delegation/fake-worker.js';
 
+import type { GateVerdictSubmission } from '../../../src/shared/types/gate-evaluation.js';
 import type { HandoffEvidenceMode } from '../../../src/engine/execution/delegation/handoff-contract.js';
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
@@ -507,11 +507,11 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
   const text = (response: { content?: Array<{ text?: string }> }): string =>
     (response.content ?? []).map((c) => c.text ?? '').join('\n');
 
-  const passVerdict = renderGateVerdict({
+  const passVerdict: GateVerdictSubmission = {
     overall: 'PASS',
     rationale: 'meets the gate',
     per_gate: [{ index: 1, passed: true, rationale: `${GATE_ID}: satisfied` }],
-  });
+  };
 
   const onlySession = (): {
     sessionId: string;
@@ -645,7 +645,7 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
       await call({
         chain_id: onlySession().chainId,
         user_response: runFakeWorker(briefBody(initial), { body: workerProduct }),
-        gate_verdict: 'GATE_REVIEW: FAIL - needs correction',
+        gate_verdict: { overall: 'FAIL', rationale: 'needs correction' },
       })
     );
     expect(reply).toContain('Review Context');
@@ -910,11 +910,11 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
         return [r.nodeId, r.phase, r.attemptCount];
       });
 
-    const failVerdict = renderGateVerdict({
+    const failVerdict: GateVerdictSubmission = {
       overall: 'FAIL',
       rationale: 'the section is missing',
       per_gate: [{ index: 1, passed: false, rationale: `${GATE_ID}: not satisfied` }],
-    });
+    };
 
     test("P6.15 (a): a verdict alone answers step 1's review; the delegated node is not captured", async () => {
       const { pipeline, chainId, sessionId } = await resumeStep1With('step 1 output');
@@ -1112,11 +1112,11 @@ describe('delegation handoff evidence at resume (Tier 2 row 2.7)', () => {
    * it advances nothing — before P6.35 it finished the chain past a step nobody answered.
    */
   describe('an advisory FAIL sent with no answer advances nothing (R19, P6.35)', () => {
-    const failVerdict = renderGateVerdict({
+    const failVerdict: GateVerdictSubmission = {
       overall: 'FAIL',
       rationale: 'misses the gate',
       per_gate: [{ index: 1, passed: false, rationale: `${GATE_ID}: unmet` }],
-    });
+    };
     const plainSteps = () => parsedChainSteps().map((step) => ({ ...step, delegated: false }));
 
     test('at the delegated step: the FAIL is recorded, and the run stays on the step', async () => {

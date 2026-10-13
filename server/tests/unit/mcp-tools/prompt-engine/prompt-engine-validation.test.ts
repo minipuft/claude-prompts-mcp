@@ -230,36 +230,16 @@ describe('PromptEngine Validation', () => {
       }
     );
 
-    test.each(['chain_id', 'command'] as const)(
-      'trims a legacy verdict and preserves %s resume detection',
-      async (source) => {
-        const execute = stubPipeline();
+    test('an absent verdict does not trigger a command resume', async () => {
+      const execute = stubPipeline();
 
-        await engine.executePromptCommand(
-          { [source]: 'chain-contract#4', gate_verdict: ' \nGATE_REVIEW: PASS - checked\t ' },
-          {}
-        );
+      await engine.executePromptCommand({ command: 'chain-contract#4' }, {});
 
-        const request = execute.mock.calls[0]?.[0];
-        expect(request?.chain_id).toBe('chain-contract#4');
-        expect(request?.command).toBeUndefined();
-        expect(request?.gate_verdict).toBe('GATE_REVIEW: PASS - checked');
-      }
-    );
-
-    test.each(['', ' \n\t '])(
-      'drops a blank verdict %j without triggering a command resume',
-      async (blank) => {
-        const execute = stubPipeline();
-
-        await engine.executePromptCommand({ command: 'chain-contract#4', gate_verdict: blank }, {});
-
-        const request = execute.mock.calls[0]?.[0];
-        expect(request?.command).toBe('chain-contract#4');
-        expect(request?.chain_id).toBeUndefined();
-        expect(request).not.toHaveProperty('gate_verdict');
-      }
-    );
+      const request = execute.mock.calls[0]?.[0];
+      expect(request?.command).toBe('chain-contract#4');
+      expect(request?.chain_id).toBeUndefined();
+      expect(request).not.toHaveProperty('gate_verdict');
+    });
   });
 
   /**
