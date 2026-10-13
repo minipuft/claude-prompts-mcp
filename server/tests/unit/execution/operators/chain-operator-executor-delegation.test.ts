@@ -123,7 +123,7 @@ describe('ChainOperatorExecutor delegation rendering (R-1)', () => {
     );
   });
 
-  test('S7: next-step-delegated response carries an advisory, not a handoff', async () => {
+  test('S7: a next-step-delegated render flags the delegation without carrying the handoff', async () => {
     const executor = new ChainOperatorExecutor(mockLogger, prompts);
     const stepPrompts = [
       { stepNumber: 1, promptId: 'step1', args: {} },
@@ -136,9 +136,8 @@ describe('ChainOperatorExecutor delegation rendering (R-1)', () => {
       currentStepIndex: 0,
     });
 
-    expect(result.callToAction).not.toContain('HANDOFF INSTRUCTIONS');
-    expect(result.callToAction).not.toContain('Pass ALL content above');
-    expect(result.callToAction).toContain('⚡ Note');
+    expect(result.content).not.toContain('HANDOFF INSTRUCTIONS');
+    expect(result.content).not.toContain('Pass ALL content above');
     expect(result.nextStepDelegated).toBe(true);
     expect(result.currentStepDelegated).toBeUndefined();
   });
@@ -278,8 +277,8 @@ describe('ChainOperatorExecutor delegation rendering (R-1)', () => {
     // ...but no advisory line may leave this producer carrying those coordinates.
     expect(result.content).not.toContain('⚡ Note');
     expect(result.content).not.toContain('is delegated');
-    expect(result.callToAction).not.toContain('⚡ Note');
-    expect(result.callToAction).not.toContain('is delegated');
+    expect(result.content).not.toContain('⚡ Note');
+    expect(result.content).not.toContain('is delegated');
   });
 
   test('a gate-review render whose TARGET step is delegated carries that step’s brief', async () => {
@@ -388,7 +387,5 @@ describe('ChainOperatorExecutor delegation rendering (R-1)', () => {
     const briefBody = result.content.slice(briefStart, briefEnd);
 
     expect(briefBody).toContain('Proposed Gate Review');
-    expect(result.callToAction).toContain('Proposed Gate Review');
-    expect(result.callToAction).toContain('before submitting your gate_verdict');
   });
 });

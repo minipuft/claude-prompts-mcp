@@ -447,7 +447,6 @@ export class GateReviewStage extends BasePipelineStage {
           totalSteps: renderResult.totalSteps,
           promptId: renderResult.promptId,
           promptName: renderResult.promptName,
-          callToAction: renderResult.callToAction,
           gateReview: {
             gateIds: pendingReview.gateIds,
             attemptCount: pendingReview.attemptCount,

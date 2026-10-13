@@ -572,9 +572,6 @@ describe('frozen semantic source rendering', () => {
       expect(result.assembled).not.toContain('A legacy string form is still accepted');
       expect(result.assembled).not.toContain('gate_verdict="GATE_REVIEW');
       expect(result.assembled).not.toContain('**GATE_REVIEW:');
-      expect(result.context.executionResults?.metadata?.callToAction).not.toContain(
-        'both your step output'
-      );
       if (mode === 'judge') {
         expect(result.assembled).toContain('Independent Quality Audit');
         expect(result.assembled).toContain('server-captured output already included');
@@ -825,9 +822,7 @@ describe('frozen semantic source rendering', () => {
     expect(result.assembled).not.toContain('PUBLIC QUESTION A');
     expect(result.assembled).not.toContain('gate_verdict=');
     expect(result.assembled).not.toContain('Independent Quality Audit');
-    expect(result.context.executionResults?.metadata?.callToAction).toContain(
-      'no verdict is accepted'
-    );
+    expect(result.assembled).toContain('gate_action: "retry"');
   });
 
   test('contextless legacy protocol and template remain unchanged', () => {

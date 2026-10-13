@@ -77,7 +77,6 @@ function createRenderResult(content = 'Generated output') {
     promptId: '__gate_review__',
     promptName: 'Quality Gate Validation',
     content,
-    callToAction: 'Return with GATE_REVIEW: PASS or FAIL.',
   };
 }
 

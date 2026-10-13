@@ -1,14 +1,11 @@
 // @lifecycle canonical - Executes chain operator steps within the pipeline.
 import { declaresFrameworkSections } from '../../frameworks/declared-sections.js';
 import { hasFrameworkGuidance } from '../../frameworks/utils/framework-detection.js';
-import { buildDelegatedStepCallToAction, buildDelegatedStepLines } from '../delegation/brief.js';
-import { handoffNodeToken } from '../delegation/handoff-contract.js';
-import { DelegationRenderer } from '../delegation/renderer.js';
+import { buildDelegatedStepLines } from '../delegation/brief.js';
 import { withResponseStyle } from '../formatting/response-style.js';
 import {
   describeReviewForRender,
   renderReviewSupplements,
-  semanticReviewAction,
   renderFallbackGateGuidance,
 } from '../pipeline/decisions/gates/describe-review-for-render.js';
 import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
@@ -30,7 +27,6 @@ import type {
 } from './types.js';
 import type { DeclaredSection } from '../../frameworks/declared-sections.js';
 import type { BriefHistoryEntry } from '../delegation/brief.js';
-import type { DelegationPayload } from '../delegation/types.js';
 import type { ReviewRenderFacts } from '../pipeline/decisions/gates/describe-review-for-render.js';
 import type { InjectionState } from '../pipeline/decisions/injection/types.js';
 import type { VisibilityDecision } from '../pipeline/decisions/visibility/index.js';
@@ -72,7 +68,6 @@ export class ChainOperatorExecutor {
         promptId: '',
         promptName: '',
         content: 'No executable steps detected in symbolic chain.',
-        callToAction: '',
       };
     }
 
@@ -122,14 +117,6 @@ export class ChainOperatorExecutor {
       explicitGateIds.length > 0 ||
       gateIdsToRender.some((gateId) => this.isInlineGateId(gateId)) ||
       Boolean(inlineGuidanceText);
-    // `semanticReviewAction` answers every non-legacy protocol, so only a legacy review reaches
-    // the generic sentence — and even there the example is the structured form the review's
-    // template shows: a string example taught clients to send a string to a review that cannot
-    // accept one (R11.2).
-    const callToAction =
-      semanticReviewAction(review.protocol) ??
-      'Use the resume shortcut below and include both your step output and a gate_verdict, in the structured form the review template shows, to resume the workflow.';
-
     // Get the last actual step that was executed
     const fallbackIndex = stepPrompts.length - 1;
     // By identity: `reviewStep` is an element of `stepPrompts`, never matched back by ordinal.
@@ -254,7 +241,7 @@ export class ChainOperatorExecutor {
               (part) => part.trim().length > 0
             ),
             gateGuidanceEnabled,
-          }).lines
+          })
         : null;
 
     const contentParts = [
@@ -272,7 +259,6 @@ export class ChainOperatorExecutor {
       promptId: '__gate_review__',
       promptName: 'Quality Gate Validation',
       content: reviewContent,
-      callToAction,
       // What this review told the model, for the node it reviewed (P4.115). A gated step's review
       // IS that step's render — stage 18 skips it — so without these the reviewed node recorded no
       // declaration and stage 19 graded it against the run's union instead of its own headers.
@@ -589,7 +575,6 @@ export class ChainOperatorExecutor {
     // (Required Response Format, footer) stay outside, because the parent ratifies and submits
     // the gate verdict (R-2) — the worker only proposes.
     const isCurrentDelegated = step.delegated === true;
-    let briefHasGates = false;
     if (isCurrentDelegated) {
       const brief = buildDelegatedStepLines({
         step,
@@ -606,8 +591,7 @@ export class ChainOperatorExecutor {
         workerLines: lines.splice(0, lines.length),
         gateGuidanceEnabled,
       });
-      briefHasGates = brief.hasGates;
-      lines.push(...brief.lines);
+      lines.push(...brief);
     }
 
     // Required Response Format — guides structured output for delivery verification.
@@ -626,25 +610,7 @@ export class ChainOperatorExecutor {
       )
     );
 
-    // NEXT-step delegation gets a one-line ADVISORY, never a full handoff (S7): the old full CTA
-    // here described step N+1 while "Pass ALL content above" pointed at step N's content — an
-    // obedient parent handed the sub-agent the wrong step's prompt. The authoritative handoff
-    // renders WITH step N+1's own brief, one resume later.
     const nextStep = !isFinalStep ? stepPrompts[currentStepIndex + 1] : undefined;
-    const callToAction = isCurrentDelegated
-      ? buildDelegatedStepCallToAction(step, briefHasGates)
-      : nextStep?.delegated === true
-        ? this.buildDelegationCTA(
-            stepPrompts,
-            currentStepIndex + 1,
-            gateGuidanceEnabled,
-            chainContext
-          )
-        : !isFinalStep
-          ? `Use the resume shortcut below and include your step output in user_response${
-              asksVerdict ? ' and your gate_verdict' : ''
-            } so Step ${stepNumber + 1} can begin.`
-          : 'Deliver the final response to the user (no user_response needed once the chain completes).';
 
     const content = lines.filter(Boolean).join('\n\n').trimEnd();
 
@@ -654,7 +620,6 @@ export class ChainOperatorExecutor {
       promptId: step.promptId,
       promptName,
       content,
-      callToAction,
       nextStepDelegated: nextStep?.delegated === true || undefined,
       ...(isCurrentDelegated ? { currentStepDelegated: true } : {}),
       ...(asksVerdict ? { asksVerdict: true } : {}),
@@ -914,48 +879,6 @@ export class ChainOperatorExecutor {
       }
     }
     return entries;
-  }
-
-  /**
-   * Build the NEXT-step delegation advisory using the existing DelegationRenderer
-   * infrastructure. Emits a one-line preview (S7) — the full handoff is phase-shifted here: it
-   * would describe step N+1 while "Pass ALL content above" points at step N's content. The
-   * authoritative handoff renders one resume later, with the delegated step's own brief
-   * (`buildCurrentStepHandoff`).
-   *
-   * Takes the whole `stepPrompts` array plus the delegated step's index rather than the step
-   * alone: the payload's `promptName`/`stepNumber` describe the step being HANDED OFF, which is
-   * a decision over that step's identity, not over the step currently rendering.
-   */
-  private buildDelegationCTA(
-    stepPrompts: readonly ChainStepPrompt[],
-    nextStepIndex: number,
-    gateGuidanceEnabled: boolean,
-    chainContext: Record<string, unknown>
-  ): string {
-    const nextStep = stepPrompts[nextStepIndex];
-    if (nextStep === undefined) {
-      return '';
-    }
-    const totalSteps = stepPrompts.length;
-    const agentType = nextStep.agentType ?? nextStep.convertedPrompt?.agentType;
-    const subagentModel = nextStep.subagentModel ?? nextStep.convertedPrompt?.subagentModel;
-    const clientProfile = this.extractClientProfile(chainContext);
-
-    const payload: DelegationPayload = {
-      stepNumber: nextStep.stepNumber,
-      totalSteps,
-      promptName: this.getPromptDisplayName(nextStep),
-      ...(agentType != null ? { agentType } : {}),
-      ...(clientProfile != null ? { clientProfile } : {}),
-      ...(subagentModel != null ? { subagentModel } : {}),
-      gateCount: 0,
-      hasGates: gateGuidanceEnabled,
-      nodeToken: handoffNodeToken(nextStep),
-      mode: 'blocking',
-    };
-
-    return new DelegationRenderer().renderNextStepAdvisory(payload);
   }
 
   private extractClientProfile(
