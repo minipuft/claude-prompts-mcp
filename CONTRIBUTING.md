@@ -80,7 +80,7 @@ repo/
 │   └── package.json    # Scripts + dependencies
 ├── docs/               # Canonical documentation (Diataxis)
 ├── plans/              # Living migration plans + guardrails
-├── AGENTS.md           # Agent automation rules
+├── AGENTS.md           # Generated from CLAUDE.md + .claude/rules (do not edit)
 └── CONTRIBUTING.md     # This file
 ```
 
@@ -150,6 +150,20 @@ Root-level `README.md` is governed by the [README Charter](docs/portfolio/readme
 
 Docs under `docs/` follow the Diátaxis split documented in [docs/README.md](docs/README.md): tutorials (learning), how-to (problem-solving), reference (lookup), concepts (understanding).
 
+### Project guidance projection (AGENTS.md)
+
+`AGENTS.md` at the repo root is generated, not authored. `npm run guidance:sync` (root `package.json`) renders it from `CLAUDE.md` plus `.claude/rules/*.md`; `npm run guidance:check` and CI's `validate:agent-guidance` fail when the committed file is stale. Edit the sources and regenerate; do not edit `AGENTS.md` by hand.
+
+It is a compact semantic projection, not a concatenation: the handbook sections listed in `PROJECTED_HANDBOOK_SECTIONS` (`scripts/sync-project-guidance.js`) plus one dispatch entry per scoped rule, under a 32 KiB ceiling (`MAX_PROJECT_GUIDANCE_BYTES`). The ceiling and the dispatch entries exist because clients differ in what they load natively:
+
+| Client      | Loads natively                                                  |
+| ----------- | --------------------------------------------------------------- |
+| Claude Code | `CLAUDE.md` plus `.claude/rules/*.md` with `paths:` frontmatter |
+| Codex       | Hierarchical `AGENTS.md`; no per-path rule activation           |
+| OpenCode    | `AGENTS.md` or `CLAUDE.md`, plus files named in `instructions`  |
+
+The [pre-commit hook](#git-hooks) renders the file from the Git index (`--from-index`), so a partially staged source cannot leak unstaged text into the commit.
+
 ## How to Contribute
 
 ### Contribution Types
@@ -168,7 +182,7 @@ Choose the path that matches your change:
 
 1. Read [Architecture Overview](docs/architecture/overview.md) for the pipeline, transports, and runtime model.
 2. Identify the correct domain from the ownership matrix in `CLAUDE.md` -- stages are thin orchestration, domain logic lives in services.
-3. Make focused, reversible changes. Respect [AGENTS.md](AGENTS.md) guardrails.
+3. Make focused, reversible changes. Respect the guardrails in `CLAUDE.md` (`AGENTS.md` is generated from it; see [Project guidance projection](#project-guidance-projection-agentsmd)).
 4. Keep STDIO and Streamable HTTP behavior in parity.
 5. Register new modules through the `Application` orchestrator (`server/src/runtime/`).
 
@@ -691,7 +705,7 @@ Check `plans/` before touching a subsystem -- there may be an active migration t
 | Understand the architecture       | [Architecture Overview](docs/architecture/overview.md)                 |
 | Look up MCP tool syntax           | [MCP Tools Reference](docs/reference/mcp-tools.md)                     |
 | Debug a common error              | [Troubleshooting](docs/guides/troubleshooting.md)                      |
-| Understand agent automation       | [AGENTS.md](AGENTS.md)                                                 |
+| Understand agent guidance         | [Project guidance projection](#project-guidance-projection-agentsmd)   |
 | Find any doc by topic             | [Docs Index](docs/README.md)                                           |
 | Report a bug or request a feature | [GitHub Issues](https://github.com/minipuft/claude-prompts-mcp/issues) |
 
