@@ -10,7 +10,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as yaml from 'js-yaml';
@@ -598,5 +598,323 @@ describe('Pull Command Integration', () => {
       'utf-8'
     );
     expect(sysContent).toBe('Be helpful and accurate.');
+  });
+  // ─── Branch coverage tier (row 0C3.6): agent-skills clients, non-prompt guidance, skips ────────
+
+  /** A `gate.yaml` + `guidance.md` pair under `resources/gates/<id>/`. */
+  async function writeGateResource(id: string, guidance: string): Promise<string> {
+    const gateDir = path.join(serverRoot, 'resources', 'gates', id);
+    await mkdir(gateDir, { recursive: true });
+    await writeFile(
+      path.join(gateDir, 'gate.yaml'),
+      yaml.dump({ id, name: `Gate ${id}`, description: `The ${id} gate`, type: 'guidance' })
+    );
+    await writeFile(path.join(gateDir, 'guidance.md'), guidance);
+    return gateDir;
+  }
+
+  /** A `style.yaml` + `guidance.md` pair under `resources/styles/<id>/`. */
+  async function writeStyleResource(id: string, guidance: string): Promise<string> {
+    const styleDir = path.join(serverRoot, 'resources', 'styles', id);
+    await mkdir(styleDir, { recursive: true });
+    await writeFile(
+      path.join(styleDir, 'style.yaml'),
+      yaml.dump({ id, name: `Style ${id}`, description: `The ${id} style` })
+    );
+    await writeFile(path.join(styleDir, 'guidance.md'), guidance);
+    return styleDir;
+  }
+
+  async function pullFor(
+    clientId: string,
+    out = silentOutput()
+  ): Promise<{
+    out: ReturnType<typeof silentOutput>;
+    report: Awaited<ReturnType<typeof runSkillsSyncCommand>>;
+  }> {
+    const report = await runSkillsSyncCommand(
+      { command: 'pull', client: clientId, scope: 'user' } as SkillsSyncOptions,
+      out,
+      resolveSkillsSyncPaths()
+    );
+    return { out, report };
+  }
+
+  function listTree(root: string): string[] {
+    return readdirSync(root, { recursive: true }).map(String).sort();
+  }
+
+  it('pulls a codex (agent-skills) edit back with plain {arg} placeholders reverse-compiled', async () => {
+    await writePromptResource(serverRoot, 'test', 'codex-pull', {
+      name: 'Codex Pull',
+      description: 'Pulled through an agent-skills client',
+      systemMessage: 'Review {{language}} code.',
+      userMessage: 'Check: {{input}}',
+      arguments: [
+        { name: 'language', type: 'string', description: 'Language', required: true },
+        { name: 'input', type: 'string', description: 'Input', required: true },
+      ],
+    });
+    await writeSyncConfig(serverRoot, outputDir, 'codex');
+
+    const skillPath = await exportAndGetSkillPath('codex-pull', 'codex');
+    const exported = await readFile(skillPath, 'utf-8');
+    // Precondition: this is the agent-skills adapter's file, and it carries the sections to edit.
+    expect(exported).toContain('compatibility:');
+    expect(exported).toContain('Review {language} code.');
+    expect(exported).toContain('Check: {input}');
+    const edited = exported
+      .replace('Review {language} code.', 'Audit {language} code thoroughly.')
+      .replace('Check: {input}', 'Inspect: {input}');
+    expect(edited).not.toBe(exported);
+    await writeFile(skillPath, edited);
+
+    const promptDir = path.join(serverRoot, 'resources', 'prompts', 'test', 'codex-pull');
+    expect(await readFile(path.join(promptDir, 'system-message.md'), 'utf-8')).toBe(
+      'Review {{language}} code.'
+    );
+
+    const { report } = await pullFor('codex');
+
+    expect(report.failures).toEqual([]);
+    expect(await readFile(path.join(promptDir, 'system-message.md'), 'utf-8')).toBe(
+      'Audit {{language}} code thoroughly.'
+    );
+    expect(await readFile(path.join(promptDir, 'user-message.md'), 'utf-8')).toBe(
+      'Inspect: {{input}}'
+    );
+    expect(report.written).toBe(2);
+  });
+
+  describe.each(['claude-code', 'codex'])(
+    "a %s guidance pull writes into the resource's own directory",
+    (clientId) => {
+      it('lands a gate and a style edit beside gate.yaml and style.yaml, never in the prompts root', async () => {
+        await writePromptResource(serverRoot, 'test', 'decoy', {
+          name: 'Decoy',
+          description: 'A prompt that must stay untouched',
+          systemMessage: 'Stay put.',
+        });
+        const gateDir = await writeGateResource('tone-gate', 'Keep the tone neutral.');
+        const styleDir = await writeStyleResource('terse-style', 'Answer in short lines.');
+        await writeSyncConfig(serverRoot, outputDir, clientId);
+        await runSkillsSyncCommand(
+          { command: 'export', client: clientId, scope: 'user' } as SkillsSyncOptions,
+          silentOutput(),
+          resolveSkillsSyncPaths()
+        );
+
+        const gateSkill = path.join(outputDir, 'gates-tone-gate', 'SKILL.md');
+        const styleSkill = path.join(outputDir, 'styles-terse-style', 'SKILL.md');
+        const gateExported = await readFile(gateSkill, 'utf-8');
+        const styleExported = await readFile(styleSkill, 'utf-8');
+        // Precondition: each SKILL.md carries the guidance, and the edit makes it differ.
+        expect(gateExported).toContain('Keep the tone neutral.');
+        expect(styleExported).toContain('Answer in short lines.');
+        await writeFile(
+          gateSkill,
+          gateExported.replace('Keep the tone neutral.', 'Keep the tone warm.')
+        );
+        await writeFile(
+          styleSkill,
+          styleExported.replace('Answer in short lines.', 'Answer in one line.')
+        );
+        const gateYamlBefore = await readFile(path.join(gateDir, 'gate.yaml'), 'utf-8');
+        const styleYamlBefore = await readFile(path.join(styleDir, 'style.yaml'), 'utf-8');
+        const promptsBefore = listTree(path.join(serverRoot, 'resources', 'prompts'));
+
+        const { out, report } = await pullFor(clientId);
+
+        expect(report.failures).toEqual([]);
+        expect(await readFile(path.join(gateDir, 'guidance.md'), 'utf-8')).toBe(
+          'Keep the tone warm.'
+        );
+        expect(await readFile(path.join(styleDir, 'guidance.md'), 'utf-8')).toBe(
+          'Answer in one line.'
+        );
+        // Only the guidance file moved: the YAML beside it is byte-identical.
+        expect(await readFile(path.join(gateDir, 'gate.yaml'), 'utf-8')).toBe(gateYamlBefore);
+        expect(await readFile(path.join(styleDir, 'style.yaml'), 'utf-8')).toBe(styleYamlBefore);
+        // Control: nothing leaked into the prompts root, and the log names the typed directories.
+        expect(listTree(path.join(serverRoot, 'resources', 'prompts'))).toEqual(promptsBefore);
+        expect(
+          out.logs.some((l) => l.includes(path.join('gates', 'tone-gate', 'guidance.md')))
+        ).toBe(true);
+        expect(
+          out.logs.some((l) => l.includes(path.join('styles', 'terse-style', 'guidance.md')))
+        ).toBe(true);
+        expect(report.written).toBe(2);
+      });
+
+      it('writes a gate description edit into gate.yaml and leaves its guidance alone', async () => {
+        const gateDir = await writeGateResource('tone-gate', 'Keep the tone neutral.');
+        await writeSyncConfig(serverRoot, outputDir, clientId);
+        await runSkillsSyncCommand(
+          { command: 'export', client: clientId, scope: 'user' } as SkillsSyncOptions,
+          silentOutput(),
+          resolveSkillsSyncPaths()
+        );
+        const gateSkill = path.join(outputDir, 'gates-tone-gate', 'SKILL.md');
+        const exported = await readFile(gateSkill, 'utf-8');
+        expect(exported).toContain('description: The tone-gate gate');
+        await writeFile(
+          gateSkill,
+          exported.replace('description: The tone-gate gate', 'description: A reworded gate')
+        );
+
+        const { report } = await pullFor(clientId);
+
+        expect(report.failures).toEqual([]);
+        const gateDoc = yaml.load(
+          await readFile(path.join(gateDir, 'gate.yaml'), 'utf-8')
+        ) as Record<string, unknown>;
+        expect(gateDoc['description']).toBe('A reworded gate');
+        expect(await readFile(path.join(gateDir, 'guidance.md'), 'utf-8')).toBe(
+          'Keep the tone neutral.'
+        );
+        expect(report.written).toBe(1);
+      });
+    }
+  );
+
+  it('writes nothing for a resource whose SKILL.md is absent or identical to its export', async () => {
+    for (const id of ['absent-skill', 'identical-skill', 'edited-skill']) {
+      await writePromptResource(serverRoot, 'test', id, {
+        name: id,
+        description: `The ${id} prompt`,
+        systemMessage: `Original ${id}.`,
+        userMessage: `Usage of ${id}.`,
+      });
+    }
+    await writeSyncConfig(serverRoot, outputDir);
+    await exportAndGetSkillPath('absent-skill');
+    const absentPath = path.join(outputDir, 'absent-skill', 'SKILL.md');
+    const editedPath = path.join(outputDir, 'edited-skill', 'SKILL.md');
+    const identicalPath = path.join(outputDir, 'identical-skill', 'SKILL.md');
+    // Precondition: all three exist after the export; then one is removed and one is edited.
+    expect(existsSync(absentPath) && existsSync(editedPath) && existsSync(identicalPath)).toBe(
+      true
+    );
+    const identicalExported = await readFile(identicalPath, 'utf-8');
+    await rm(absentPath);
+    await writeFile(
+      editedPath,
+      (await readFile(editedPath, 'utf-8')).replace('Original edited-skill.', 'Rewritten.')
+    );
+    const promptsRoot = path.join(serverRoot, 'resources', 'prompts', 'test');
+    const sysPath = (id: string) => path.join(promptsRoot, id, 'system-message.md');
+
+    const { out, report } = await pullFor('claude-code');
+
+    expect(report.failures).toEqual([]);
+    expect(await readFile(sysPath('edited-skill'), 'utf-8')).toBe('Rewritten.');
+    // Only the section that was edited is rewritten: the usage beside it is as it was.
+    expect(await readFile(path.join(promptsRoot, 'edited-skill', 'user-message.md'), 'utf-8')).toBe(
+      'Usage of edited-skill.'
+    );
+    expect(await readFile(sysPath('absent-skill'), 'utf-8')).toBe('Original absent-skill.');
+    expect(await readFile(sysPath('identical-skill'), 'utf-8')).toBe('Original identical-skill.');
+    // The pull neither recreated the missing file nor touched the identical one, and counted one.
+    expect(existsSync(absentPath)).toBe(false);
+    expect(await readFile(identicalPath, 'utf-8')).toBe(identicalExported);
+    expect(out.logs.some((l) => l.includes('pulled 1 resource(s)'))).toBe(true);
+    expect(report.written).toBe(1);
+  });
+
+  it('writes nothing when the prompt.yaml has emptied between loading and writing', async () => {
+    const promptDir = await writePromptResource(serverRoot, 'test', 'emptied-yaml', {
+      name: 'Emptied Yaml',
+      description: 'Original description',
+      systemMessage: 'Be helpful.',
+    });
+    const yamlPath = path.join(promptDir, 'prompt.yaml');
+    await writeSyncConfig(serverRoot, outputDir);
+    const skillPath = await exportAndGetSkillPath('emptied-yaml');
+    const exported = await readFile(skillPath, 'utf-8');
+    await writeFile(
+      skillPath,
+      exported.replace('description: Original description', 'description: Updated desc')
+    );
+    // Precondition: the file the pull is about to write into holds a document.
+    expect((await readFile(yamlPath, 'utf-8')).length).toBeGreaterThan(0);
+
+    // The pull announces the change after it loaded the resource and before it writes: emptying the
+    // file at that line is the one way a loaded resource reaches the write with a blank YAML.
+    const out = silentOutput();
+    const log = out.log;
+    out.log = (...args: unknown[]) => {
+      log(...args);
+      if (args.map(String).join(' ').includes('[description] → prompt.yaml')) {
+        writeFileSync(yamlPath, '');
+      }
+    };
+
+    const { report } = await pullFor('claude-code', out);
+
+    expect(await readFile(yamlPath, 'utf-8')).toBe('');
+    expect(report.failures).toEqual([]);
+    expect(report.written).toBe(0);
+    expect(out.logs.some((l) => l.includes('no prose changes to pull'))).toBe(true);
+  });
+
+  describe('a pull that would edit the bundled package tree', () => {
+    it('is refused naming the resources directory when no workspace is set, and a library prompt still pulls', async () => {
+      // `MCP_RESOURCES_PATH` moves the write root without setting a workspace; the bundled tree
+      // (`<serverRoot>/resources`) stays loaded underneath.
+      const libraryParent = path.join(tmpDir, 'library');
+      const libraryResources = path.join(libraryParent, 'resources');
+      await mkdir(path.join(libraryResources, 'prompts'), { recursive: true });
+      process.env['MCP_RESOURCES_PATH'] = libraryResources;
+      const writeRoot = path.join(libraryResources, 'prompts');
+
+      const bundledDir = await writePromptResource(serverRoot, 'test', 'bundled-one', {
+        name: 'Bundled One',
+        description: 'Lives in the package tree',
+        systemMessage: 'Bundled original.',
+      });
+      const libraryDir = await writePromptResource(libraryParent, 'test', 'library-one', {
+        name: 'Library One',
+        description: 'Lives in the operator library',
+        systemMessage: 'Library original.',
+      });
+      await writeSyncConfig(serverRoot, outputDir);
+      await runSkillsSyncCommand(
+        { command: 'export', client: 'claude-code', scope: 'user' } as SkillsSyncOptions,
+        silentOutput(),
+        resolveSkillsSyncPaths()
+      );
+      for (const [id, from, to] of [
+        ['bundled-one', 'Bundled original.', 'Bundled edited.'],
+        ['library-one', 'Library original.', 'Library edited.'],
+      ] as const) {
+        const skillPath = path.join(outputDir, id, 'SKILL.md');
+        const exported = await readFile(skillPath, 'utf-8');
+        // Precondition: the section being edited is in the file.
+        expect(exported).toContain(from);
+        await writeFile(skillPath, exported.replace(from, to));
+      }
+      const bundledSys = path.join(bundledDir, 'system-message.md');
+      const librarySys = path.join(libraryDir, 'system-message.md');
+
+      const { out, report } = await pullFor('claude-code');
+
+      const refusal = out.warns.find((w) => w.includes('Refusing to pull prompt bundled-one'));
+      expect(refusal).toBeDefined();
+      expect(refusal).toContain(`${bundledSys} is in the bundled package tree`);
+      expect(refusal).toContain(`while the resources directory ${writeRoot} is configured`);
+      expect(refusal).toContain(`Copy the prompt into ${writeRoot} and pull again.`);
+      expect(refusal).not.toContain('the workspace');
+      expect(report.failures).toEqual([{ id: 'bundled-one', reason: refusal }]);
+      expect(await readFile(bundledSys, 'utf-8')).toBe('Bundled original.');
+      // The prompt that lives in the write root is not bundled, so it is not refused.
+      expect(await readFile(librarySys, 'utf-8')).toBe('Library edited.');
+
+      // Control: with no resources override the write root IS the bundled tree, and the same
+      // edited SKILL.md pulls.
+      delete process.env['MCP_RESOURCES_PATH'];
+      const second = await pullFor('claude-code');
+      expect(second.report.failures).toEqual([]);
+      expect(await readFile(bundledSys, 'utf-8')).toBe('Bundled edited.');
+    });
   });
 });
