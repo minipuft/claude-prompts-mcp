@@ -69,6 +69,14 @@ export class EnhancedLogger implements Logger {
   private nextEntryId: number = 1;
   private bufferLevel: LogLevel;
 
+  // Every file write chains onto this one promise, so writes land in call order and `flush()`
+  // can wait for all of them. It never rejects: a failed write is reported and the chain goes on.
+  private pendingWrites: Promise<void> = Promise.resolve();
+  // Log lines wait here for the queued drain, which appends all of them in one write. One append
+  // per line cannot keep up with a busy server: the unwritten lines pile up on the heap.
+  private unwrittenLines: string[] = [];
+  private drainQueued = false;
+
   constructor(config: EnhancedLoggingConfig) {
     this.logFile = config.logFile;
     this.transport = config.transport;
@@ -122,34 +130,63 @@ export class EnhancedLogger implements Logger {
    * Initialize the log file with a clean start
    */
   async initLogFile(): Promise<void> {
-    try {
-      const timestamp = new Date().toISOString();
-      await writeFile(this.logFile, `--- MCP Server Log Started at ${timestamp} ---\n`, 'utf8');
-    } catch (error) {
-      console.error(`Error initializing log file:`, error);
-    }
+    const timestamp = new Date().toISOString();
+    this.enqueueWrite(
+      () => writeFile(this.logFile, `--- MCP Server Log Started at ${timestamp} ---\n`, 'utf8'),
+      'Error initializing log file:'
+    );
+    await this.pendingWrites;
+  }
+
+  /**
+   * Resolve once every file write queued before this call has settled. Call it before
+   * `process.exit`, which discards writes still in flight.
+   */
+  flush(): Promise<void> {
+    return this.pendingWrites;
   }
 
   /**
    * Write a message to the log file
    */
-  private async logToFile(level: LogLevel, message: string, ...args: any[]): Promise<void> {
+  private logToFile(level: LogLevel, message: string, ...args: any[]): void {
     // Check if this log level should be output based on configuration
     if (!this.shouldLog(level)) {
       return;
     }
 
+    // Format now, not when the write runs, so the timestamp and arguments are the call's own.
+    // An argument JSON.stringify refuses (a cycle, a BigInt) is reported, never thrown.
+    let logMessage = `[${new Date().toISOString()}] [${level}] ${message}`;
     try {
-      let logMessage = `[${new Date().toISOString()}] [${level}] ${message}`;
       if (args.length > 0) {
         logMessage += ` ${args
           .map((arg) => (typeof arg === 'object' ? JSON.stringify(arg) : arg))
           .join(' ')}`;
       }
-      await appendFile(this.logFile, logMessage + '\n', 'utf8');
     } catch (error) {
       console.error('Error writing to log file:', error);
+      return;
     }
+    this.unwrittenLines.push(logMessage + '\n');
+    if (!this.drainQueued) {
+      this.drainQueued = true;
+      this.enqueueWrite(() => this.appendUnwrittenLines(), 'Error writing to log file:');
+    }
+  }
+
+  /** One append per drain, however many lines arrived while the previous write ran. */
+  private appendUnwrittenLines(): Promise<void> {
+    this.drainQueued = false;
+    const chunk = this.unwrittenLines.join('');
+    this.unwrittenLines = [];
+    return appendFile(this.logFile, chunk, 'utf8');
+  }
+
+  private enqueueWrite(write: () => Promise<void>, failureMessage: string): void {
+    this.pendingWrites = this.pendingWrites.then(write).catch((error: unknown) => {
+      console.error(failureMessage, error);
+    });
   }
 
   /**
@@ -393,6 +430,27 @@ export class EnhancedLogger implements Logger {
  */
 export function createLogger(config: EnhancedLoggingConfig): EnhancedLogger {
   return new EnhancedLogger(config);
+}
+
+/**
+ * Wait for `logger`'s queued file writes, for at most `timeoutMs`, so a stuck disk cannot hold
+ * the process open. Never rejects. Only `EnhancedLogger` queues writes; every other `Logger`
+ * either prints synchronously or discards, so there is nothing to wait for.
+ */
+export async function flushLogger(logger: Logger | null, timeoutMs: number = 1000): Promise<void> {
+  if (!(logger instanceof EnhancedLogger)) {
+    return;
+  }
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, timeoutMs);
+    timer.unref();
+  });
+  try {
+    await Promise.race([logger.flush(), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**

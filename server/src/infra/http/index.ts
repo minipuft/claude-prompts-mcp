@@ -131,11 +131,16 @@ export class ServerLifecycle {
         });
 
         httpServer.on('error', (error: NodeJS.ErrnoException) => {
-          if (error.code === 'EADDRINUSE') {
-            this.logger.error(`Port ${this.port} is already in use. HTTP transport disabled.`);
-            // Don't reject - STDIO is still working
+          if (httpServer.listening) {
+            this.logger.error('HTTP server error:', error);
+          } else if (error.code === 'EADDRINUSE') {
+            // STDIO is already serving; losing the HTTP listener must not take it down.
+            this.logger.warn(
+              `Port ${this.port} is already in use. HTTP transport disabled; STDIO keeps serving.`
+            );
             resolve();
           } else {
+            this.logger.error('HTTP server failed to start:', error);
             reject(error);
           }
         });
@@ -191,13 +196,19 @@ export class ServerLifecycle {
         resolve();
       });
 
+      // HTTP is the only transport here, so a listener that cannot bind fails startup; the
+      // application's startup failure path owns the non-zero exit.
       httpServer.on('error', (error: NodeJS.ErrnoException) => {
+        if (httpServer.listening) {
+          this.logger.error('HTTP server error:', error);
+          return;
+        }
         if (error.code === 'EADDRINUSE') {
           this.logger.error(
             `Port ${this.port} is already in use. Please choose a different port or stop the other service.`
           );
         } else {
-          this.logger.error('Server error:', error);
+          this.logger.error('HTTP server failed to start:', error);
         }
         reject(error);
       });
@@ -205,23 +216,11 @@ export class ServerLifecycle {
   }
 
   /**
-   * Setup HTTP server event handlers
+   * Log the listener closing. Listen errors are decided where each transport mode starts the
+   * listener, because the modes disagree: dual mode survives a taken port, HTTP-only cannot.
    */
   private setupHttpServerEventHandlers(): void {
-    if (this.httpServer === undefined) return;
-
-    this.httpServer.on('error', (error: NodeJS.ErrnoException) => {
-      if (error.code === 'EADDRINUSE') {
-        this.logger.error(
-          `Port ${this.port} is already in use. Please choose a different port or stop the other service.`
-        );
-      } else {
-        this.logger.error('Server error:', error);
-      }
-      process.exit(1);
-    });
-
-    this.httpServer.on('close', () => {
+    this.httpServer?.on('close', () => {
       this.logger.info('HTTP server closed');
     });
   }

@@ -21,7 +21,7 @@ exports; near 1, it is a leaf that is cheap to change.
 | `execution-engine` | `src/engine` | layer | canonical | 0.67 | Client-guided execution, framework, and gate decision logic. | — | — | — | — |
 | `engine-execution` | `src/engine/execution` | domain | canonical | 0.71 | Parses commands and coordinates the staged client-guided execution pipeline. | — | — | chains<br>engine-frameworks<br>engine-gates<br>infra-database<br>infra-logging<br>shared-types<br>shared-utils<br>workflow-ir | automation<br>chains<br>cli-shared<br>engine-frameworks<br>engine-gates<br>mcp-http<br>mcp-tools<br>prompts<br>runtime<br>workflow-ir |
 | `engine-frameworks` | `src/engine/frameworks` | domain | canonical | 0.40 | Loads, validates, selects, and applies reasoning frameworks. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>mcp-tools<br>resources<br>runtime |
-| `engine-gates` | `src/engine/gates` | domain | canonical | 0.56 | Selects, enhances, and evaluates quality-gate guidance. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>mcp-tools<br>prompts<br>resources<br>runtime<br>skills-sync<br>versioning |
+| `engine-gates` | `src/engine/gates` | domain | canonical | 0.56 | Selects, enhances, and evaluates quality-gate guidance. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils<br>workflow-ir | cli-shared<br>engine-execution<br>mcp-tools<br>prompts<br>resources<br>runtime<br>skills-sync<br>versioning |
 | `engine-interfaces` | `src/engine/interfaces` | protocol | canonical | — | Contracts exposed by the execution engine to collaborating layers. | — | — | — | — |
 | `infrastructure` | `src/infra` | layer | canonical | 0.39 | Configuration, persistence, transport support, logging, and observability infrastructure. | — | — | — | — |
 | `infra-config` | `src/infra/config` | domain | canonical | 0.66 | Loads and resolves server configuration. | — | `index.ts` | infra-logging<br>shared-types<br>shared-utils | infra-http<br>runtime<br>server-source |
@@ -45,7 +45,7 @@ exports; near 1, it is a leaf that is cheap to change.
 | `skills-sync` | `src/modules/skills-sync` | domain | canonical | 0.81 | Exports and synchronizes skills across supported clients. | — | — | cli-shared<br>engine-gates<br>resources<br>shared-types<br>shared-utils | mcp-tools<br>runtime |
 | `text-references` | `src/modules/text-refs` | domain | canonical | 0.29 | Tracks and resolves reusable text argument references. | — | `index.ts` | shared-types<br>shared-utils | chains<br>mcp-tools<br>prompts<br>runtime |
 | `versioning` | `src/modules/versioning` | domain | canonical | 0.40 | Owns version history, comparison, rollback, and resource snapshots. | — | `index.ts` | cli-shared<br>engine-gates<br>prompts<br>resources<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime<br>shared-utils |
-| `workflow-ir` | `src/modules/workflow-ir` | domain | canonical | 0.35 | Validates and compiles planner-submitted workflow graphs. | `docs/reference/workflow-ir.md` | — | engine-execution<br>shared-types<br>shared-utils | engine-execution<br>mcp-tools<br>prompts<br>shared-types |
+| `workflow-ir` | `src/modules/workflow-ir` | domain | canonical | 0.33 | Validates and compiles planner-submitted workflow graphs. | `docs/reference/workflow-ir.md` | — | engine-execution<br>shared-types<br>shared-utils | engine-execution<br>engine-gates<br>mcp-tools<br>prompts<br>shared-types |
 | `runtime` | `src/runtime` | runtime | canonical | 0.98 | Application composition and process lifecycle entrypoints. | — | — | automation<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-tools<br>prompts<br>resources<br>shared-core<br>shared-types<br>shared-utils<br>skills-sync<br>text-references<br>versioning | server-source |
 | `shared` | `src/shared` | layer | canonical | 0.06 | Foundation types and pure utilities available to every source layer. | — | — | — | — |
 | `shared-core` | `src/shared/core` | shared | canonical | 0.33 | Core abstractions shared without importing upper layers. | — | — | shared-types<br>shared-utils | engine-frameworks<br>engine-gates<br>mcp-tools<br>runtime |
@@ -198,6 +198,7 @@ flowchart LR
   module_engine_gates --> module_shared_core
   module_engine_gates --> module_shared_types
   module_engine_gates --> module_shared_utils
+  module_engine_gates -. type .-> module_workflow_ir
   module_formatting -. type .-> module_shared_types
   module_formatting --> module_shared_utils
   module_hot_reload -. type .-> module_shared_types
@@ -285,7 +286,7 @@ flowchart LR
   module_runtime -. type .-> module_versioning
   module_server_source --> module_cli_shared
   module_server_source --> module_infra_config
-  module_server_source -. type .-> module_infra_logging
+  module_server_source --> module_infra_logging
   module_server_source --> module_runtime
   module_server_source --> module_shared_utils
   module_shared_core -. type .-> module_shared_types

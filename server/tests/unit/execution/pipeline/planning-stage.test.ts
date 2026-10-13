@@ -39,6 +39,7 @@ const createParsedCommand = () => ({
 describe('ExecutionPlanningStage', () => {
   let planner: jest.Mocked<ExecutionPlanner>;
   let frameworkEnabled: jest.Mock<boolean, []>;
+  let gatesRequested: jest.Mock<(context: ExecutionContext) => boolean>;
   let stage: ExecutionPlanningStage;
 
   beforeEach(() => {
@@ -47,7 +48,8 @@ describe('ExecutionPlanningStage', () => {
       createChainPlan: jest.fn(),
     } as unknown as jest.Mocked<ExecutionPlanner>;
     frameworkEnabled = jest.fn().mockReturnValue(true);
-    stage = new ExecutionPlanningStage(planner, frameworkEnabled, createLogger());
+    gatesRequested = jest.fn<(context: ExecutionContext) => boolean>().mockReturnValue(false);
+    stage = new ExecutionPlanningStage(planner, frameworkEnabled, gatesRequested, createLogger());
   });
 
   test('plans chain executions and aggregates step gates', async () => {
@@ -105,6 +107,7 @@ describe('ExecutionPlanningStage', () => {
       parsedCommand: context.parsedCommand,
       steps: context.parsedCommand?.steps,
       frameworkEnabled: true,
+      gatesRequested: false,
       gateOverrides: {
         llmValidation: undefined,
         gates: undefined,
@@ -149,6 +152,7 @@ describe('ExecutionPlanningStage', () => {
       parsedCommand: context.parsedCommand,
       convertedPrompt: basePrompt,
       frameworkEnabled: true,
+      gatesRequested: false,
       gateOverrides: {
         llmValidation: undefined,
         gates: [
@@ -166,6 +170,27 @@ describe('ExecutionPlanningStage', () => {
       'Parsed command requires either convertedPrompt or steps.'
     );
     expect(planner.createPlan).not.toHaveBeenCalled();
+  });
+
+  test('tells the planner when the call requested a gate', async () => {
+    const context = new ExecutionContext({ command: '>>prompt :: "cite"' });
+    context.parsedCommand = {
+      ...createParsedCommand(),
+      commandType: 'single',
+      convertedPrompt: basePrompt,
+    } as any;
+    planner.createPlan.mockResolvedValue({
+      strategy: 'prompt',
+      gates: [],
+      requiresFramework: false,
+      requiresSession: false,
+    } as ExecutionPlan);
+    gatesRequested.mockReturnValue(true);
+
+    await stage.execute(context);
+
+    expect(gatesRequested.mock.calls[0]?.[0]).toBe(context);
+    expect(planner.createPlan.mock.calls[0]?.[0].gatesRequested).toBe(true);
   });
 
   test('forwards unified gates parameter to planner', async () => {
@@ -194,6 +219,7 @@ describe('ExecutionPlanningStage', () => {
       parsedCommand: context.parsedCommand,
       convertedPrompt: basePrompt,
       frameworkEnabled: true,
+      gatesRequested: false,
       gateOverrides: expect.objectContaining({
         gates: ['toxicity', 'code-quality'],
       }),
@@ -231,6 +257,7 @@ describe('ExecutionPlanningStage', () => {
       parsedCommand: context.parsedCommand,
       convertedPrompt: basePrompt,
       frameworkEnabled: true,
+      gatesRequested: false,
       gateOverrides: expect.objectContaining({
         gates: [
           'toxicity',
