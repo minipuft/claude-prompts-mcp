@@ -1,26 +1,26 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-13T01:56:15.568Z",
+  "generatedAt": "2026-10-13T03:42:52.370Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2388,
-    "warnings": 702
+    "errors": 2369,
+    "warnings": 695
   },
   "byRule": {
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 1614,
+      "errors": 1608,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
       "errors": 0,
-      "warnings": 74
+      "warnings": 73
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
       "warnings": 71
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 318,
+      "errors": 314,
       "warnings": 0
     },
     "max-params": {
@@ -44,19 +44,19 @@
       "warnings": 149
     },
     "@typescript-eslint/no-explicit-any": {
-      "errors": 234,
+      "errors": 230,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-member-access": {
       "errors": 0,
-      "warnings": 333
+      "warnings": 329
     },
     "max-depth": {
       "errors": 0,
       "warnings": 26
     },
     "@typescript-eslint/no-unused-vars": {
-      "errors": 13,
+      "errors": 11,
       "warnings": 0
     },
     "no-useless-escape": {
@@ -73,7 +73,7 @@
     },
     "@typescript-eslint/no-unsafe-call": {
       "errors": 0,
-      "warnings": 26
+      "warnings": 24
     },
     "@typescript-eslint/no-unsafe-return": {
       "errors": 0,
@@ -83,12 +83,8 @@
       "errors": 7,
       "warnings": 0
     },
-    "@typescript-eslint/await-thenable": {
-      "errors": 2,
-      "warnings": 0
-    },
     "@typescript-eslint/no-misused-promises": {
-      "errors": 5,
+      "errors": 4,
       "warnings": 0
     },
     "max-lines": {
