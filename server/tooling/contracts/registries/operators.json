@@ -44,7 +44,7 @@
       "description": "Quality gate for validation",
       "purpose": "Add inline validation criteria",
       "pattern": {
-        "typescript": "\\s+(::|=)\\s*(?:([a-z][a-z0-9_-]*):[\"']([^\"']+)[\"']|[\"']([^\"']+)[\"']|([^\\s\"']+))",
+        "typescript": "\\s+(::|=(?![=>]))\\s*(?:([a-z][a-z0-9_-]*):[\"']([^\"']+)[\"']|[\"']([^\"']+)[\"']|([^\\s\"']+))",
         "flags": "gi"
       },
       "variants": [

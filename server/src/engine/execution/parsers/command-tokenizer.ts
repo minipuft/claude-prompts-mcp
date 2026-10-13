@@ -176,7 +176,7 @@ function detectGates(
   delimiterRanges: ReadonlyArray<readonly [number, number]>
 ): void {
   const gatePattern =
-    /\s+(::|=)\s*(?:([a-z][a-z0-9_-]*):["']([^"']+)["']|[a-z][a-z0-9_-]*\([^)]+\)|["']([^"']+)["']|([^\s"']+))/gi;
+    /\s+(::|=(?![=>]))\s*(?:([a-z][a-z0-9_-]*):["']([^"']+)["']|[a-z][a-z0-9_-]*\([^)]+\)|["']([^"']+)["']|([^\s"']+))/gi;
   for (const m of findMatchesOutsideQuotes(trimmed, gatePattern)) {
     if (overlapsRanges(m.index, m[0].length, delimiterRanges)) continue;
     const namedId = m[2];

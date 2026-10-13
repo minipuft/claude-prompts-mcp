@@ -180,6 +180,14 @@ class TestDelegationDetection:
         matches = detect_operator(">>a --> >>b ==> >>c", "delegation")
         assert len(matches) > 0
 
+    def test_delegation_is_not_a_deprecated_equals_gate(self):
+        """`==>` once matched the gate pattern as `=` plus the criterion `=>`."""
+        assert detect_operator(">>step1 ==> >>step2", "gate") == []
+        assert detect_operator('>>step1 ==> >>step2 = "cite sources"', "gate") == [
+            "=",
+            "cite sources",
+        ]
+
 
 # ── Framework/Style Detection Tests ──
 
