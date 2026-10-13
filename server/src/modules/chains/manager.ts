@@ -25,7 +25,6 @@ import type {
   PendingShellVerificationSnapshot,
   RunTelemetry,
   StepMetadata,
-  GateReviewPrompt,
 } from '#shared/types/chain-execution.js';
 import type {
   ChainHandoffClaimResult,
@@ -3238,31 +3237,13 @@ function deleteReview(session: ChainSession, nodeId: string): void {
   else delete session.reviews;
 }
 
-/** A copy that shares no array or object with `review`, so neither side can mutate the other. */
+/**
+ * A deep copy that shares no array or object with `review`, so neither side can mutate the other:
+ * the store keeps what `setReview` was given and `getReview` hands out, and neither the caller's
+ * object nor a returned one can reach it. One `structuredClone` instead of a field list, so a field
+ * added to {@link GateReview} is copied without anyone editing this function. A review is persisted
+ * as JSON, so it holds only data a structured clone accepts.
+ */
 function cloneReview(review: GateReview): GateReview {
-  return {
-    ...review,
-    gateIds: [...review.gateIds],
-    ...(review.structuralGateIds !== undefined && {
-      structuralGateIds: [...review.structuralGateIds],
-    }),
-    prompts: review.prompts.map((prompt) => {
-      const mappedPrompt: GateReviewPrompt = { ...prompt };
-      if (prompt.explicitInstructions !== undefined) {
-        mappedPrompt.explicitInstructions = [...prompt.explicitInstructions];
-      }
-      if (prompt.metadata !== undefined) {
-        mappedPrompt.metadata = { ...prompt.metadata };
-      }
-      return mappedPrompt;
-    }),
-    ...(review.retryHints !== undefined && { retryHints: [...review.retryHints] }),
-    ...(review.history !== undefined && {
-      history: review.history.map((entry) => ({ ...entry })),
-    }),
-    ...(review.metadata !== undefined && { metadata: { ...review.metadata } }),
-    ...(review.semanticContext !== undefined && {
-      semanticContext: structuredClone(review.semanticContext),
-    }),
-  };
+  return structuredClone(review);
 }

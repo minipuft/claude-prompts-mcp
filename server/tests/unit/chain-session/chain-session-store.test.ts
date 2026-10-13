@@ -1403,6 +1403,40 @@ describe('ChainSessionStore — run creation, review writes, pending verificatio
     expect(manager.getReview('s-clone', 'n1')).toEqual(pristine);
   });
 
+  test('a review shares no nested value with what was written or with what was read', async () => {
+    await manager.createSession('s-deep', 'chain-deep', 2);
+    const nested = (): Record<string, unknown> => ({
+      prompts: [
+        { gateId: 'g1', criteriaSummary: 'ONE', retryHints: ['try again'] },
+        { gateId: 'g2', criteriaSummary: 'TWO', retryHints: ['and again'] },
+      ],
+      gateIds: ['g1', 'g2'],
+      gateTiers: { g1: 'check', g2: 'reminder' },
+      checkResults: [{ gateId: 'g1', passed: false, summary: 'npm test exit 1' }],
+    });
+    const mutate = (review: any, marker: string): void => {
+      review.prompts[0].retryHints[0] = marker;
+      review.prompts[1].retryHints.push(marker);
+      review.gateTiers.g1 = marker;
+      review.gateTiers[marker] = 'check';
+      review.checkResults[0].passed = true;
+      review.checkResults[0].summary = marker;
+      review.checkResults.push({ gateId: marker, passed: true, summary: marker });
+    };
+    const pristine = structuredClone(reviewOf(nested()));
+
+    // Written side: changing the object after `setReview` leaves what is stored unchanged.
+    const written = reviewOf(nested());
+    await manager.setReview('s-deep', written);
+    mutate(written, 'mutated-after-write');
+    expect(manager.getReview('s-deep', 'n1')).toEqual(pristine);
+
+    // Read side: changing what `getReview` returned leaves a second read unchanged.
+    const read = manager.getReview('s-deep', 'n1');
+    mutate(read, 'mutated-after-read');
+    expect(manager.getReview('s-deep', 'n1')).toEqual(pristine);
+  });
+
   // --- pending shell verification --------------------------------------------------------
 
   const pendingVerification = (): any => ({
