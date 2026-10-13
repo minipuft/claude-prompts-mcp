@@ -2404,26 +2404,13 @@ export class ChainSessionStore implements ChainSessionService {
     return this.activeSessions.has(sessionId);
   }
 
+  /**
+   * The base chain's held runs, oldest registration first. Every held chain id is in its base's
+   * history (the run-index invariant, `tests/unit/chain-session/run-index-invariant.test.ts`), so
+   * a base with no history holds no run.
+   */
   getRunHistory(baseChainId: string): string[] {
-    const normalized = stripRunNumber(baseChainId);
-    const history = this.baseChainMapping.get(normalized);
-    if (history && history.length > 0) {
-      return [...history];
-    }
-
-    if (this.chainSessionMapping.has(normalized)) {
-      return [normalized];
-    }
-
-    const fallbackRuns = Array.from(this.chainSessionMapping.keys()).filter(
-      (chainId) => stripRunNumber(chainId) === normalized
-    );
-
-    return fallbackRuns.sort((a, b) => {
-      const runA = parseRunNumber(a) ?? 0;
-      const runB = parseRunNumber(b) ?? 0;
-      return runA - runB;
-    });
+    return [...(this.baseChainMapping.get(stripRunNumber(baseChainId)) ?? [])];
   }
 
   getSessionByChainIdentifier(
@@ -2560,11 +2547,7 @@ export class ChainSessionStore implements ChainSessionService {
   async clearSessionsForChain(chainId: string, scope?: StateStoreOptions): Promise<void> {
     const scopeFilter = this.resolveScopeFilter(scope);
     const baseChainId = stripRunNumber(chainId);
-    const runChainIds = chainId === baseChainId ? [...this.getRunHistory(baseChainId)] : [chainId];
-
-    if (runChainIds.length === 0 && this.chainSessionMapping.has(chainId)) {
-      runChainIds.push(chainId);
-    }
+    const runChainIds = chainId === baseChainId ? this.getRunHistory(baseChainId) : [chainId];
 
     const snapshot = this.snapshotRunMembership();
     const release = emptyRunRelease();
@@ -2779,21 +2762,6 @@ export class ChainSessionStore implements ChainSessionService {
 
       if (!this.runChainToBase.has(chainId)) {
         this.runChainToBase.set(chainId, baseChainId);
-      }
-    }
-
-    for (const [runChainId, baseChainId] of Array.from(this.runChainToBase.entries())) {
-      if (!this.chainSessionMapping.has(runChainId)) {
-        this.runChainToBase.delete(runChainId);
-        const history = this.baseChainMapping.get(baseChainId);
-        if (history) {
-          const filtered = history.filter((entry) => entry !== runChainId);
-          if (filtered.length > 0) {
-            this.baseChainMapping.set(baseChainId, filtered);
-          } else {
-            this.baseChainMapping.delete(baseChainId);
-          }
-        }
       }
     }
   }
