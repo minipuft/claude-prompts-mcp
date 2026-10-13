@@ -272,6 +272,17 @@ recreated and its DDL freezes permanently.
 Adding a `NOT NULL` column with no default to a durable table makes the restore throw, naming the
 table. That is intended: the change needs a real migration.
 
+**The whole sequence is one `BEGIN IMMEDIATE` transaction**, from the version read through the
+restore, and `applySchema()` writes the new `schema_version` row inside it. A restore that throws
+rolls back the drop and the apply with it: the file keeps its old tables, its durable rows and its
+old version, and every later start fails the same way until the change ships a migration. Before
+2026-10-12 the steps ran unwrapped, so a failed restore left the file at the new version with the
+durable table empty, and the next start read it as current. Reading the version under the write
+lock also serializes two processes starting on one file: the second waits out `busy_timeout`, then
+sees the version the first committed. Nothing in the sequence may commit implicitly (`VACUUM`, a
+`journal_mode` change); `journal_mode=WAL` is set in `initialize()` before the transaction opens.
+Covered by `tests/integration/database/schema-recreate-atomicity.test.ts`.
+
 ## The Object Store Is Additive — Schema v29
 
 `objects` holds raw file bytes keyed `(tenant_id, hash)`; `version_entries` is the manifest, one
@@ -546,6 +557,15 @@ authority means a fresh database only when no application tables or views exist.
 current-version reopening and older-version upgrades remain supported; upgrades carry the declared
 durable tables through snapshot/drop/recreate/restore. Failure clears initialization state and closes
 the handle; if closing also fails, the original initialization error remains the reported failure.
+
+The connection's `busy_timeout` and `foreign_keys` pragmas (`STATE_DB_WRITER_PRAGMAS`) are set
+before the first read, so a start that meets another process's lock waits up to
+`STATE_DB_BUSY_TIMEOUT_MS` instead of failing at once. A read that still times out says the file
+was locked and is not damaged; the compatible-runtime remedy above is reserved for an authority that
+is missing, malformed or newer.
+Every initialization failure names the `state.db` path: one that cannot be opened (an uncreatable
+directory, a directory at the file's path) says what to check, and any other failure that did not
+already name the file is prefixed with it, the original error kept as `cause`.
 
 **The check belongs to initialization, not every operation.** An already-open process does not
 revalidate a schema another writer replaces. Legacy binaries without this guard can still recreate

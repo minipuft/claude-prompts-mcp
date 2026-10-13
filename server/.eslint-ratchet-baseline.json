@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-13T00:22:42.963Z",
+  "generatedAt": "2026-10-13T00:40:51.109Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2397,
+    "errors": 2394,
     "warnings": 702
   },
   "byRule": {
@@ -20,7 +20,7 @@
       "warnings": 71
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 323,
+      "errors": 320,
       "warnings": 0
     },
     "max-params": {

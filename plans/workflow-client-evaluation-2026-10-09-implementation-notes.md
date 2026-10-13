@@ -201,6 +201,13 @@ Tier 2 row 2.1 records the owner's requested consolidated diagnosis. Dispatch on
 - Finding (0C1.7 → 0D.2): `parseCriteria` corrupts any criterion containing "and"; blank criteria die in the parser. → 0D.3: the registrar's remaining silent skips and registry force-eviction.
 - Finding (0C1.13 → 0C1.18, 0C1.19): stage 12's framework context changes no rendered text; shutdown leaves the metrics interval running.
 
+## 2026-10-12 — 0C1 merged as #478; 0D.1 at its boundary
+
+- #478 merged (squash `ca0df3bf`) with every required check green on its head on the first CI run.
+- 0D.1 accepted: six commits. R11.9 detail: a store-init failure is logged once at construction (no unhandled rejection, no shutdown) and every awaiting operation still rejects with the port's error; a port-less store refuses its first persist naming the missing port. Requiring the port was not taken: every production path passes one, and requiring it ripples through three production signatures and 56 test constructions; `runRegistry` is now optional behind one accessor, so a new unchecked read fails typecheck.
+- Finding (0D.1): Jest cannot observe `unhandledRejection` from inside a test (its sandbox catches it first); the test runs the scenario in a child process with its own positive control.
+- Finding (0D.1): the SQLite lock classifier now exists in the engine and the chains manager (infra cannot import modules); `instanceof Error` fails on `node:sqlite` errors under Jest. Both belong with Q11's `errorText` helper.
+
 ## 2026-10-12 — 0D.3 accepted; R11.13, R11.14
 
 - 0D.3 accepted (`ec02d149`): every request-gate skip path is a stage-11 refusal (`gate-criteria-invalid`) naming the entry and the accepted shapes; a bare unknown id is refused (it used to register a placeholder enforcing nothing). R11.13: the temporary gate registry evicts expired gates only and otherwise refuses the new registration — never an unexpired gate, since a concurrent call's not-yet-adopted gates are indistinguishable from abandoned ones. A run resumed in another process re-registers the gates it recorded and is never refused for them; a client's new entries on that resume are still judged.
