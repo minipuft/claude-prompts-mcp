@@ -9,7 +9,7 @@
  * the enum would reintroduce the ambiguity the two-tier model exists to remove.
  *
  * Reports `StepState` only when it stands alone, so the surviving method names
- * (`setStepState`, `getStepState`, `transitionStepState`) do not trip it. Those names are
+ * (`setStepState`, `getStepState`) do not trip it. Those names are
  * deliberately kept — they describe the operation, not the retired type.
  *
  * rg uses the Rust regex engine, which has no look-around, so the standalone test runs in JS
@@ -62,7 +62,7 @@ function runCheck() {
       .trim()
       .split('\n')
       .filter((row) => row.trim() !== '')
-      // Drop setStepState / getStepState / transitionStepState — kept on purpose.
+      // Drop setStepState / getStepState — kept on purpose.
       .filter((row) => STANDALONE.test(row))
       // Comments that explain the retirement are the one legitimate mention.
       .filter((row) => !/:\s*(\/\/|\*|\/\*)/.test(row));

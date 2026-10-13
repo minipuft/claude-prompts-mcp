@@ -229,7 +229,9 @@ describe('SessionManagementStage', () => {
     expect(manager.getSessionByChainIdentifier).not.toHaveBeenCalled();
     expect(manager.createSession).toHaveBeenCalledTimes(1);
     expect(context.state.session.lifecycleDecision).toBe('create-new');
-    expect(context.sessionContext?.chainId).not.toBe(existingSession.chainId);
+    // The stage mints the run after the last one in the base history (#4 -> #5). Read the id it
+    // passed to createSession: `sessionContext.chainId` echoes the mock's return value instead.
+    expect(manager.createSession.mock.calls[0]?.[1]).toBe('chain-chain_prompt#5');
   });
 
   test('forces restart when force_restart flag is set even if prior session exists', async () => {
