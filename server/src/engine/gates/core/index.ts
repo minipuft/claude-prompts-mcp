@@ -118,36 +118,4 @@ export class LightweightGateSystem {
   getTemporaryGateRegistry(): TemporaryGateRegistry | undefined {
     return this.temporaryGateRegistry;
   }
-
-  /**
-   * Cleanup the lightweight gate system and sub-components
-   * Prevents async handle leaks by delegating to sub-component cleanup
-   */
-  async cleanup(): Promise<void> {
-    // Cleanup gate system manager if present
-    if (
-      this.gateStateStore &&
-      'cleanup' in this.gateStateStore &&
-      typeof (this.gateStateStore as any).cleanup === 'function'
-    ) {
-      try {
-        await (this.gateStateStore as any).cleanup();
-      } catch (error) {
-        // Errors are already logged by sub-components
-      }
-    }
-
-    // Cleanup temporary gate registry if present
-    if (
-      this.temporaryGateRegistry &&
-      'cleanup' in this.temporaryGateRegistry &&
-      typeof (this.temporaryGateRegistry as any).cleanup === 'function'
-    ) {
-      try {
-        await (this.temporaryGateRegistry as any).cleanup();
-      } catch (error) {
-        // Errors are already logged by sub-components
-      }
-    }
-  }
 }

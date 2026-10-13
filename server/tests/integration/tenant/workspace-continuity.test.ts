@@ -307,8 +307,6 @@ describe('Shared Workspace Continuity', () => {
     expect(isolatedHealth.enabled).toBe(true);
     expect(isolatedHealth.totalValidations).toBe(1);
     expect(isolatedHealth.averageValidationTime).toBe(500);
-
-    await manager.cleanup();
   });
 
   test('same workspace + chain_id resumes shared session, different workspace stays isolated', async () => {

@@ -164,7 +164,6 @@ describe('ChainSessionStore + ArgumentHistoryTracker (integration)', () => {
     await tracker2.initialize();
     const history = tracker2.getSessionHistory('sess-1');
     expect(history.length).toBeGreaterThan(0);
-    await tracker2.shutdown();
 
     await manager.cleanup();
   });

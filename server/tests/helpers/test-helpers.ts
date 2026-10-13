@@ -318,7 +318,6 @@ export class MockPromptGuidanceService {
   getConfig: any;
   setFrameworkManager: any;
   initialize: any;
-  shutdown: any;
   isInitialized: any;
 
   private initialized: boolean = false;
@@ -336,15 +335,6 @@ export class MockPromptGuidanceService {
       if (this.logger) {
         this.logger.debug('MockPromptGuidanceService initialized');
       }
-      return Promise.resolve();
-    });
-
-    this.shutdown = jest.fn(async () => {
-      this.initialized = false;
-      if (this.logger) {
-        this.logger.debug('MockPromptGuidanceService shutdown (no timers to clean)');
-      }
-      // NO TIMERS TO CLEAN UP - this is the key fix
       return Promise.resolve();
     });
 

@@ -315,20 +315,6 @@ export class PromptGuidanceService {
   }
 
   /**
-   * Shutdown the service
-   */
-  async shutdown(): Promise<void> {
-    if (!this.initialized) {
-      return;
-    }
-
-    this.logger.info('Shutting down PromptGuidanceService...');
-
-    this.initialized = false;
-    this.logger.info('PromptGuidanceService shutdown complete');
-  }
-
-  /**
    * Check if service is initialized
    */
   isInitialized(): boolean {

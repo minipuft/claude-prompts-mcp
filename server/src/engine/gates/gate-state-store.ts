@@ -452,9 +452,9 @@ export class GateStateStore extends EventEmitter {
    * fields, so no reader is left describing a number nothing computes.
    *
    * Reviving it also needs a flush at teardown, because this is the only writer here that
-   * batches: up to nine recorded validations sit in memory unpersisted. {@link cleanup} no
-   * longer saves, and the save it used to make covered the wrong scope anyway — restore one
-   * that iterates `scopedStates`, not one that takes no argument.
+   * batches: up to nine recorded validations sit in memory unpersisted. No teardown method
+   * saves, so add one that iterates `scopedStates`; an unscoped save resolves to the
+   * pre-isolation `default` key, which a later start reads as an operator's own choice.
    */
   recordValidation(success: boolean, executionTime: number, scope?: StateStoreOptions): void {
     const currentState = this.getOrCreateScopedState(scope);
@@ -492,30 +492,6 @@ export class GateStateStore extends EventEmitter {
    */
   getCurrentState(scope?: StateStoreOptions): GateSystemState {
     return { ...this.getOrCreateScopedState(scope) };
-  }
-
-  /**
-   * Cleanup resources. This store currently holds none, and the method is the lifecycle
-   * hook its two callers invoke rather than work it has to do.
-   *
-   * It deliberately persists nothing, for the reason
-   * `FrameworkStateStore.shutdown` gives: `enableGateSystem` and `disableGateSystem`
-   * each await `saveStateToFile(scope)` before returning, so no toggle reaches here
-   * unpersisted. The final save that used to sit here took no scope, so it resolved to the
-   * literal `default` key — the pre-isolation bucket that nothing reads for gates except
-   * {@link adoptLegacyGlobalState}. It therefore wrote unchanged default state into the one
-   * key a later start reads as "an operator's pre-isolation choice".
-   *
-   * The one writer a final flush could have served is `recordValidation`, which
-   * batches every tenth call — and it has no caller. Reviving it means restoring a flush
-   * that covers every scope in `scopedStates`, not the `default` one.
-   *
-   * It also used to clear a 30-second health-polling interval. That interval emitted
-   * `health-changed` to nobody and is gone (B.97); anything scheduled here in future must
-   * be cleared here, which is why the hook stays.
-   */
-  async cleanup(): Promise<void> {
-    this.logger.debug('GateStateStore cleanup completed');
   }
 }
 

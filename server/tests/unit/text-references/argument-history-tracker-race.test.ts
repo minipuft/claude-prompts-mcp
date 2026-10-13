@@ -90,8 +90,6 @@ describe('ArgumentHistoryTracker (race condition)', () => {
     const history = tracker.getSessionHistory('sess-race-1');
     expect(history).toHaveLength(1);
     expect(history[0].originalArgs).toEqual({ input: 'hello world' });
-
-    await tracker.shutdown();
   });
 
   test('trackExecution data persists to SQLite even without prior initialize()', async () => {
@@ -107,7 +105,6 @@ describe('ArgumentHistoryTracker (race condition)', () => {
       stepNumber: 1,
       stepResult: 'result-1',
     });
-    await trackerA.shutdown();
 
     // Tracker B: should restore data from the same mock db
     const trackerB = new ArgumentHistoryTracker(logger, 10, store);
@@ -117,8 +114,6 @@ describe('ArgumentHistoryTracker (race condition)', () => {
     expect(history).toHaveLength(1);
     expect(history[0].originalArgs).toEqual({ q: 'persist test' });
     expect(history[0].stepResult).toBe('result-1');
-
-    await trackerB.shutdown();
   });
 
   test('multiple trackExecution calls without initialize() are idempotent', async () => {
@@ -143,7 +138,5 @@ describe('ArgumentHistoryTracker (race condition)', () => {
 
     const history = tracker.getSessionHistory('sess-race-3');
     expect(history).toHaveLength(2);
-
-    await tracker.shutdown();
   });
 });
