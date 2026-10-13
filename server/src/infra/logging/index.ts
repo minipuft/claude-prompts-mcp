@@ -69,9 +69,13 @@ export class EnhancedLogger implements Logger {
   private nextEntryId: number = 1;
   private bufferLevel: LogLevel;
 
-  // Every file write chains onto this one promise, so lines land in call order and `flush()`
+  // Every file write chains onto this one promise, so writes land in call order and `flush()`
   // can wait for all of them. It never rejects: a failed write is reported and the chain goes on.
   private pendingWrites: Promise<void> = Promise.resolve();
+  // Log lines wait here for the queued drain, which appends all of them in one write. One append
+  // per line cannot keep up with a busy server: the unwritten lines pile up on the heap.
+  private unwrittenLines: string[] = [];
+  private drainQueued = false;
 
   constructor(config: EnhancedLoggingConfig) {
     this.logFile = config.logFile;
@@ -164,10 +168,19 @@ export class EnhancedLogger implements Logger {
       console.error('Error writing to log file:', error);
       return;
     }
-    this.enqueueWrite(
-      () => appendFile(this.logFile, logMessage + '\n', 'utf8'),
-      'Error writing to log file:'
-    );
+    this.unwrittenLines.push(logMessage + '\n');
+    if (!this.drainQueued) {
+      this.drainQueued = true;
+      this.enqueueWrite(() => this.appendUnwrittenLines(), 'Error writing to log file:');
+    }
+  }
+
+  /** One append per drain, however many lines arrived while the previous write ran. */
+  private appendUnwrittenLines(): Promise<void> {
+    this.drainQueued = false;
+    const chunk = this.unwrittenLines.join('');
+    this.unwrittenLines = [];
+    return appendFile(this.logFile, chunk, 'utf8');
   }
 
   private enqueueWrite(write: () => Promise<void>, failureMessage: string): void {

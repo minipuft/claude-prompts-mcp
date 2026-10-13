@@ -79,6 +79,60 @@ describe('EnhancedLogger file writes', () => {
   });
 });
 
+describe('EnhancedLogger write backlog', () => {
+  const BURST_LINES = 50_000;
+  // Lines that arrive while a write runs share the next one, so a burst needs a handful of
+  // appends (the first line, then whatever piled up), never one per line.
+  const MAX_APPENDS = 10;
+
+  let dir: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'logger-burst-'));
+  });
+
+  afterEach(() => {
+    jest.resetModules();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  // `appendFile` is a statically linked ESM binding of a built-in: `jest.spyOn` cannot see it.
+  // `unstable_mockModule` plus a dynamic import re-links the logger against a counting wrapper
+  // that still writes for real.
+  it('coalesces a synchronous burst into a few appends and keeps every line in order', async () => {
+    const actualFsPromises = jest.requireActual(
+      'node:fs/promises'
+    ) as typeof import('node:fs/promises');
+    const appendFileMock = jest.fn(actualFsPromises.appendFile);
+
+    jest.resetModules();
+    jest.unstable_mockModule('node:fs/promises', () => ({
+      ...actualFsPromises,
+      appendFile: appendFileMock,
+    }));
+    const { EnhancedLogger: CountedLogger } =
+      await import('../../../../src/infra/logging/index.js');
+
+    const logFile = path.join(dir, 'mcp-server.log');
+    const logger = new CountedLogger({ logFile, transport: TransportType.STDIO });
+    await logger.initLogFile();
+
+    for (let i = 0; i < BURST_LINES; i++) {
+      logger.info(`burst-${i}`);
+    }
+    await logger.flush();
+
+    expect(appendFileMock.mock.calls.length).toBeLessThanOrEqual(MAX_APPENDS);
+
+    const logged = readFileSync(logFile, 'utf8')
+      .split('\n')
+      .map((line) => /burst-(\d+)$/.exec(line)?.[1])
+      .filter((n): n is string => n !== undefined);
+    expect(logged).toHaveLength(BURST_LINES);
+    expect(logged.every((n, i) => n === String(i))).toBe(true);
+  });
+});
+
 describe('flushLogger', () => {
   it('stops waiting at the timeout when a write never settles', async () => {
     const logger = new EnhancedLogger({ logFile: '/dev/null', transport: TransportType.STDIO });
