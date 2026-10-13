@@ -911,3 +911,131 @@ describe('a single prompt renders its framework guidance through one builder', (
     }
   });
 });
+
+/**
+ * A run's temporary gates can leave the registry while the run lives: the registry releases an idle
+ * run's gates to admit a new one when it is full. The run's next call must find them again — stage
+ * 05 re-registers a restored run's missing gates under the ids its blueprint recorded — so a
+ * released gate still renders, still opens a review, and a FAIL on it still holds the step.
+ */
+describe('a run whose temporary gates were released gets them back when it resumes', () => {
+  const FAIL = 'GATE_REVIEW: FAIL - the answer misses the criterion';
+  const registryAndStore = () => {
+    const executor = (modules.mcpToolsManager as unknown as { promptExecutor: unknown })
+      .promptExecutor as {
+      lightweightGateSystem: { getTemporaryGateRegistry(): TemporaryGateRegistry | undefined };
+    };
+    const registry = executor.lightweightGateSystem.getTemporaryGateRegistry();
+    const store = modules.mcpToolsManager.getChainSessionStore();
+    if (registry === undefined || store === undefined) throw new Error('no registry or store');
+    return { registry, store };
+  };
+
+  const drive = async (release: boolean) => {
+    const { registry, store } = registryAndStore();
+    const started = await promptEngine({
+      command: '>>cr_a :: "RESTORE-CRIT" --> >>cr_b',
+      gates: [{ name: 'Restore', description: 'RESTORE-REQUEST-GATE' }],
+    });
+    expect(started.isError).toBe(false);
+    expect(started.text).toContain('RESTORE-CRIT');
+    expect(started.text).toContain('RESTORE-REQUEST-GATE');
+    const chainId = /chain-[A-Za-z0-9_]+#\d+/.exec(started.text)?.[0];
+    if (chainId === undefined) throw new Error(`no chain id in:\n${started.text}`);
+    const sessionId = store.getSessionByChainIdentifier(chainId)?.sessionId;
+    if (sessionId === undefined) throw new Error(`no session for ${chainId}`);
+    const heldAtStart = registry.getRunGates(sessionId).map((gate) => gate.id);
+    expect(heldAtStart.length).toBeGreaterThanOrEqual(2);
+
+    if (release) expect(registry.releaseRun(sessionId)).toBe(heldAtStart.length);
+    const answered = await promptEngine({ chain_id: chainId, user_response: 'ANSWER-A' });
+    if (release) expect(registry.releaseRun(sessionId)).toBeGreaterThanOrEqual(2);
+    const failed = await promptEngine({ chain_id: chainId, gate_verdict: FAIL });
+    const held = registry.getRunGates(sessionId).map((gate) => gate.id);
+    if (release) registry.releaseRun(sessionId);
+    const satisfied = JSON.parse(
+      /"satisfied": (\[[^\]]*\])/.exec(failed.text)?.[1] ?? '[]'
+    ) as string[];
+    const passed = await promptEngine({
+      chain_id: chainId,
+      gate_verdict: {
+        overall: 'PASS',
+        rationale: 'ok',
+        reminders: { satisfied, not_applicable: [] },
+      },
+    });
+    return { answered, failed, passed, held };
+  };
+
+  for (const release of [true, false]) {
+    test(`${release ? '' : 'control: '}a run ${release ? 'released before each call' : 'never released'} renders its gates, and a FAIL holds the step`, async () => {
+      const { answered, failed, passed, held } = await drive(release);
+      expect(answered.isError).toBe(false);
+      expect(answered.text).toContain('Gate Review Required');
+      expect(answered.text).toContain('RESTORE-CRIT');
+      expect(answered.text).toContain('RESTORE-REQUEST-GATE');
+      expect(failed.text).not.toContain('BODY-cr_b');
+      expect(failed.text).toContain('RESTORE-CRIT');
+      expect(held.length).toBeGreaterThanOrEqual(2);
+      expect(passed.isError).toBe(false);
+      expect(passed.text).toContain('BODY-cr_b');
+    });
+  }
+
+  test('a full registry releases a run idle past the threshold, and the run resumes with its gates', async () => {
+    const { registry, store } = registryAndStore();
+    const started = await promptEngine({
+      command: '>>cr_a :: "IDLE-CRIT" --> >>cr_b',
+      gates: [{ name: 'Idle', description: 'IDLE-REQUEST-GATE' }],
+    });
+    const chainId = /chain-[A-Za-z0-9_]+#\d+/.exec(started.text)?.[0];
+    if (chainId === undefined) throw new Error(`no chain id in:\n${started.text}`);
+    const sessionId = store.getSessionByChainIdentifier(chainId)?.sessionId;
+    if (sessionId === undefined) throw new Error(`no session for ${chainId}`);
+    const heldAtStart = registry.getRunGates(sessionId).map((gate) => gate.id);
+    expect(heldAtStart.length).toBeGreaterThanOrEqual(2);
+
+    // Two hours on, every run this suite started is idle past the server's one-hour threshold.
+    const realNow = Date.now.bind(Date);
+    const clock = jest.spyOn(Date, 'now').mockImplementation(() => realNow() + 2 * 60 * 60 * 1000);
+    const filler: string[] = [];
+    try {
+      for (let index = 0; index < 200; index += 1) {
+        try {
+          filler.push(
+            registry.createTemporaryGate(
+              {
+                name: `idle-fill-${index}`,
+                type: 'validation',
+                scope: 'execution',
+                description: 'filler',
+                guidance: 'filler',
+                source: 'manual',
+              },
+              'idle-fill'
+            )
+          );
+        } catch {
+          break;
+        }
+      }
+      // Filling past capacity released the idle runs, this one among them.
+      expect(registry.getRunGates(sessionId)).toEqual([]);
+      expect(heldAtStart.filter((id) => registry.getTemporaryGate(id) !== undefined)).toEqual([]);
+      registry.releaseUnowned(filler);
+
+      const answered = await promptEngine({ chain_id: chainId, user_response: 'ANSWER-A' });
+      expect(answered.isError).toBe(false);
+      expect(answered.text).toContain('Gate Review Required');
+      expect(answered.text).toContain('IDLE-CRIT');
+      expect(answered.text).toContain('IDLE-REQUEST-GATE');
+      const failed = await promptEngine({ chain_id: chainId, gate_verdict: FAIL });
+      expect(failed.text).toContain('IDLE-CRIT');
+      expect(failed.text).not.toContain('BODY-cr_b');
+      expect(registry.getRunGates(sessionId).length).toBeGreaterThanOrEqual(2);
+    } finally {
+      registry.releaseUnowned(filler);
+      clock.mockRestore();
+    }
+  });
+});

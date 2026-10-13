@@ -109,3 +109,113 @@ describe('TemporaryGateRegistry at capacity', () => {
     expect(registry.getTemporaryGate('cites')?.pass_criteria).toEqual(['Cites a source']);
   });
 });
+
+/**
+ * A run's gates have no expiry, so runs nobody resumes could hold the registry full until the
+ * stale-session sweep prunes them a day later. At capacity the registry therefore releases the
+ * gates of runs whose last use is older than `idleRunReleaseMs`, oldest first, until there is
+ * room. A run used within the threshold is never released, and a released run's next call
+ * re-registers its gates (stage 05's restore).
+ */
+describe('TemporaryGateRegistry at capacity, with runs gone idle', () => {
+  const IDLE_MS = 60 * 60 * 1000;
+  const idleRegistry = (): { registry: TemporaryGateRegistry; setNow: (ms: number) => void } => {
+    let now = START;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    return {
+      registry: new TemporaryGateRegistry(createLogger() as never, {
+        maxMemoryGates: MAX,
+        idleRunReleaseMs: IDLE_MS,
+        isCanonicalGateId: () => false,
+      }),
+      setNow: (ms) => {
+        now = ms;
+      },
+    };
+  };
+  /** `count` gates registered and adopted by `runId`, at whatever the clock reads. */
+  const ownedBy = (registry: TemporaryGateRegistry, runId: string, count: number): string[] => {
+    const ids = Array.from({ length: count }, (_, i) =>
+      registry.createTemporaryGate(gate(`${runId}-g${i}`), 'call')
+    );
+    registry.adoptIntoRun(runId, ids);
+    return ids;
+  };
+  const heldIds = (registry: TemporaryGateRegistry, runId: string): string[] =>
+    registry.getRunGates(runId).map((held) => held.id);
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test("a registry full of idle runs' gates admits the new one, releasing the oldest-idle run only", () => {
+    const { registry, setNow } = idleRegistry();
+    ownedBy(registry, 'run-old', 5);
+    setNow(START + 10 * 60 * 1000);
+    const newer = ownedBy(registry, 'run-newer', 5);
+    setNow(START + 3 * IDLE_MS);
+
+    expect(registry.createTemporaryGate(gate('new'), 'call')).toBe('new');
+    expect(heldIds(registry, 'run-old')).toEqual([]);
+    expect(registry.getTemporaryGate('run-old-g0')).toBeUndefined();
+    expect(heldIds(registry, 'run-newer')).toEqual(newer);
+  });
+
+  test('a registry full of runs used within the threshold refuses, and releases nothing', () => {
+    const { registry, setNow } = idleRegistry();
+    const first = ownedBy(registry, 'run-1', 5);
+    const second = ownedBy(registry, 'run-2', 5);
+    setNow(START + IDLE_MS - 1);
+
+    expect(() => registry.createTemporaryGate(gate('new'), 'call')).toThrow(
+      /registry is full \(10 gates, none expired\).*'new' was not registered/s
+    );
+    expect(heldIds(registry, 'run-1')).toEqual(first);
+    expect(heldIds(registry, 'run-2')).toEqual(second);
+  });
+
+  test('mixed: only the idle run is released; once it is gone the registry refuses again', () => {
+    const { registry, setNow } = idleRegistry();
+    ownedBy(registry, 'run-idle', 3);
+    setNow(START + 2 * IDLE_MS);
+    const recent = ownedBy(registry, 'run-recent', 3);
+    for (let i = 0; i < 4; i += 1) registry.createTemporaryGate(gate(`call-${i}`), 'call');
+    setNow(START + 2 * IDLE_MS + 10 * 60 * 1000);
+
+    for (let i = 0; i < 3; i += 1) registry.createTemporaryGate(gate(`new-${i}`), 'call');
+    expect(heldIds(registry, 'run-idle')).toEqual([]);
+    expect(() => registry.createTemporaryGate(gate('one-more'), 'call')).toThrow(
+      /registry is full/
+    );
+    expect(heldIds(registry, 'run-recent')).toEqual(recent);
+    for (let i = 0; i < 4; i += 1) expect(registry.getTemporaryGate(`call-${i}`)).toBeDefined();
+  });
+
+  test('a run marked used at the start of its call is not idle, whenever it adopted its gates', () => {
+    const { registry, setNow } = idleRegistry();
+    const owned = ownedBy(registry, 'run-resuming', 5);
+    ownedBy(registry, 'run-other', 5);
+    setNow(START + 2 * IDLE_MS);
+    registry.markRunUsed('run-resuming');
+
+    expect(registry.createTemporaryGate(gate('new'), 'call')).toBe('new');
+    expect(heldIds(registry, 'run-other')).toEqual([]);
+    expect(heldIds(registry, 'run-resuming')).toEqual(owned);
+  });
+
+  test('a released run that adopts its gates again is protected by that use', () => {
+    const { registry, setNow } = idleRegistry();
+    ownedBy(registry, 'run-back', 5);
+    ownedBy(registry, 'run-other', 4);
+    setNow(START + 2 * IDLE_MS);
+    registry.createTemporaryGate(gate('call-a'), 'call');
+    registry.createTemporaryGate(gate('call-b'), 'call');
+    expect(heldIds(registry, 'run-back')).toEqual([]);
+
+    const back = ownedBy(registry, 'run-back', 1);
+    registry.releaseUnowned(['call-a', 'call-b']);
+    for (let i = 0; i < 6; i += 1) registry.createTemporaryGate(gate(`fill-${i}`), 'call');
+    expect(heldIds(registry, 'run-other')).toEqual([]);
+    expect(heldIds(registry, 'run-back')).toEqual(back);
+  });
+});
