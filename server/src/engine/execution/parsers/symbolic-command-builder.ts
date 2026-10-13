@@ -248,7 +248,13 @@ export class SymbolicCommandBuilder {
 
         namedGates.push(namedGate);
       } else {
-        anonymousCriteria.push(...cleanedCriteria);
+        // A blank anonymous criterion (`:: "   "`) is kept as written: filtered here, the command
+        // ran with no gate and no warning. Stage 05 refuses it as `gate-criteria-invalid`, quoting
+        // it. A named gate's blank text is still filtered: stage 05 refuses the empty list it
+        // leaves as "carries no criterion".
+        anonymousCriteria.push(
+          ...criteria.map((item) => (item.trim().length > 0 ? item.trim() : item))
+        );
       }
     }
 
@@ -510,8 +516,10 @@ export class SymbolicCommandBuilder {
     inlineCriteriaSeed: string[] = [],
     fallbackArgs?: Record<string, any>
   ): Promise<ParsedArgumentsResult & { inlineCriteria: string[] }> {
+    // Blank entries are kept: a step's `:: "   "` reaches stage 05's `gate-criteria-invalid`
+    // refusal instead of being dropped here with the step run ungated.
     const seed = Array.isArray(inlineCriteriaSeed)
-      ? inlineCriteriaSeed.filter((item): item is string => Boolean(item && item.trim()))
+      ? inlineCriteriaSeed.filter((item): item is string => typeof item === 'string')
       : [];
 
     const normalizedSeed = Array.from(new Set(seed));

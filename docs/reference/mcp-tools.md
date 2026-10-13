@@ -434,11 +434,15 @@ prompt_engine(command:"code_review", gates:[
 `"` or `'`, and there is no escape, so `:: "it's fine"` is refused at parse, naming `::` and the
 quote. Reword the text without it: `:: "it is fine"`.
 
-**A criterion cannot be empty or blank.** `:: security:"  "`, or a step's `inlineGateCriteria`
-holding `""` or `"   "`, refuses the whole call before any gate registers, with a
-`[gate-criteria-invalid]` line quoting the criterion and the accepted forms (`:: "criterion"`,
-`:: id:"criterion"`, `:: verify:"command"`). A gate with no criterion could neither pass nor fail,
-so the call is refused rather than run without the gate you asked for.
+**One quoted text can hold several criteria.** `,`, `;` and `|` separate them, so
+`:: 'cite sources, note confidence'` is two criteria, each listed as its own item in the response.
+The word `and` does not: `:: "errors and warnings are logged"` is one criterion.
+
+**A criterion cannot be empty or blank.** `:: ""`, `:: "   "`, `:: security:"  "`, or a step's
+`inlineGateCriteria` holding `""` or `"   "`, refuses the whole call before any gate registers,
+with a `[gate-criteria-invalid]` line quoting the criterion and the accepted forms
+(`:: "criterion"`, `:: id:"criterion"`, `:: verify:"command"`). A gate with no criterion could
+neither pass nor fail, so the call is refused rather than run without the gate you asked for.
 
 **Named inline gates** (`:: id:"criteria"`) are useful when you want:
 
@@ -454,6 +458,23 @@ starts or advances, with a `[gate-id-canonical]` line naming the gate in the add
 ([Workflow IR](workflow-ir.md)); `gates:[{id:"content-structure"}]` alone is a reference to the
 canonical gate and is not refused. A prompt's inline gate definition under a canonical id is
 skipped with a logged warning naming the id, and the run keeps the canonical gate.
+
+**A `gates` entry the server cannot register refuses the call.** A blank string (`"   "`), a
+blank `criteria` or `pass_criteria` entry, an object whose every criterion, guidance and
+description is blank (`{name:"Tone", description:"  "}`), an `id` or `name` sent blank
+(`{name:"  ", description:"Plain and direct"}`), or a bare `{id:"…"}` naming neither a
+registered gate nor one the run already holds is refused before any gate registers, with a
+`[gate-criteria-invalid]` line naming the entry by position (counted across `gates`, then
+`workflow.gates`) and its id or name, and the accepted forms. An entry whose id the run holds is
+that gate, so a resume may re-send `{id:"cites"}` alone. A run resumed in another server process
+re-registers the gates it recorded when it started and is never refused for them. Each of these
+used to start the run without the gate: skipped, or registered with nothing to review.
+
+**A full temporary gate registry refuses rather than evicts.** The server keeps up to 100
+temporary gates. At that limit it drops expired gates only; a gate that has not expired, whether a
+run or a call in progress holds it, is never evicted to make room. When none has expired, the
+registration fails the call with a message saying so: complete or cancel an open run, or send
+fewer gates, and retry.
 
 ### Chain Step Targeting
 

@@ -18,6 +18,7 @@ import { normalizeSymbolicPrefixes } from './parser-utils.js';
 import {
   SymbolicCommandParser,
   createSymbolicCommandParser,
+  rejectEmptyGateText,
   rejectQuoteInGateText,
   type FrameworkIdLookup,
 } from './symbolic-operator-parser.js';
@@ -451,6 +452,7 @@ export class UnifiedCommandParser {
   private rejectUnparseableOperators(command: string, tokens: TokenizedCommand): void {
     if (tokens.format !== 'json') {
       rejectReservedOperators(tokens);
+      rejectEmptyGateText(command);
       rejectQuoteInGateText(command);
       return;
     }
@@ -458,6 +460,7 @@ export class UnifiedCommandParser {
     if (unwrapped === null) return;
     const inner = this.extractModifier(unwrapped.command).command;
     rejectReservedOperators(tokenizeCommand(inner));
+    rejectEmptyGateText(inner);
     rejectQuoteInGateText(inner);
   }
 

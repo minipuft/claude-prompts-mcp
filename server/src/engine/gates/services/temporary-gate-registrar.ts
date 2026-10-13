@@ -1,5 +1,13 @@
 // @lifecycle canonical - Registers temporary gates from normalized specifications.
 import { mergeGateBody } from './gate-body-merge.js';
+import {
+  admitRequestGate,
+  assertNotBareReference,
+  gateInputContainsInlineContent,
+  isNonBlank,
+  requestGateRefusalDetail,
+  requestGateShape,
+} from './request-gate-refusal.js';
 import { formatCriteriaAsGuidance } from '../../execution/pipeline/criteria-guidance.js';
 import { parseGateVerdict } from '../core/gate-verdict-contract.js';
 
@@ -120,7 +128,6 @@ export class TemporaryGateRegistrar {
       import('#shared/types/execution.js').GateSpecification[] | undefined;
 
     const canonicalGateIds = new Set<string>();
-    const resolvedGateIds = new Set<string>();
     const createdIds: string[] = [];
 
     const tempGateInputs: RawGateInput[] = normalizedGates ?? [];
@@ -164,62 +171,46 @@ export class TemporaryGateRegistrar {
 
     const seenStringInputs = new Set<string>();
     const seenGateSignatures = new Set<string>();
+    const recorded = this.recordedRequestGates(context);
 
     // No catch in this loop: a request gate whose registration throws fails the call rather than
     // running without it (R11.8).
     for (const rawGate of tempGateInputs) {
-      if (typeof rawGate === 'string') {
-        const trimmed = rawGate.trim();
-        if (!trimmed || seenStringInputs.has(trimmed)) {
-          continue;
-        }
-        seenStringInputs.add(trimmed);
+      const gateIdCandidate =
+        typeof rawGate === 'object' &&
+        rawGate !== null &&
+        'id' in rawGate &&
+        typeof rawGate.id === 'string'
+          ? rawGate.id
+          : null;
 
-        if (this.gateReferenceResolver) {
-          const resolution = await this.gateReferenceResolver.resolve(trimmed);
-          if (resolution.referenceType === 'registered') {
-            canonicalGateIds.add(resolution.gateId);
-            resolvedGateIds.add(resolution.gateId);
-            this.logger.debug(
-              '[TemporaryGateRegistrar] Resolved string gate to canonical definition',
-              { input: trimmed, gateId: resolution.gateId }
-            );
-            continue;
-          }
-        }
-
-        this.logger.debug(
-          '[TemporaryGateRegistrar] String gate not canonical, treating as criteria',
-          { input: trimmed }
-        );
-      }
-
-      if (typeof rawGate === 'object' && rawGate !== null) {
-        const canonicalCandidate = await this.resolveCanonicalGateId(rawGate, resolvedGateIds);
-        if (canonicalCandidate) {
-          canonicalGateIds.add(canonicalCandidate);
-          resolvedGateIds.add(canonicalCandidate);
-          this.logger.debug(
-            '[TemporaryGateRegistrar] Resolved object gate to canonical definition',
-            { gateId: canonicalCandidate }
-          );
-          continue;
-        }
-      }
-
-      const { normalized: gate, isValid } = this.normalizeGateInput(
+      const isRecorded = recorded.has(rawGate);
+      const disposition = this.requestGateDisposition(
+        context,
         rawGate,
-        isChainExecution,
-        currentStep,
-        nodeIds
+        gateIdCandidate,
+        isRecorded,
+        createdIds
       );
-
-      if (!isValid) {
-        this.logger.warn('[TemporaryGateRegistrar] Invalid gate format, skipping', {
-          gate: rawGate,
-        });
+      if (disposition === 'skip') {
         continue;
       }
+      if (disposition !== 'register') {
+        if (!createdIds.includes(disposition.held)) createdIds.push(disposition.held);
+        continue;
+      }
+
+      const reference = await this.resolveRequestReference(rawGate, seenStringInputs);
+      if (reference.kind === 'duplicate') {
+        continue;
+      }
+      if (reference.kind === 'canonical') {
+        canonicalGateIds.add(reference.gateId);
+        continue;
+      }
+      assertNotBareReference(rawGate, gateIdCandidate, isRecorded);
+
+      const gate = this.normalizeGateInput(rawGate, isChainExecution, currentStep, nodeIds);
 
       const criteria = gate.criteria ?? gate.pass_criteria ?? [];
       const criteriaArray = Array.isArray(criteria)
@@ -247,6 +238,15 @@ export class TemporaryGateRegistrar {
       seenGateSignatures.add(gateSignature);
 
       const effectiveGuidance = this.resolveGateGuidance(gate, criteriaArray);
+      if (effectiveGuidance === '' && isRecorded) {
+        continue;
+      }
+      if (effectiveGuidance === '') {
+        throw new Error(
+          `[TemporaryGateRegistrar] request gate "${gate.name}" has nothing to review; stage 11 ` +
+            'refuses it before registration (R11.8).'
+        );
+      }
 
       if (effectiveGuidance && !gate.guidance) {
         this.logger.debug('[TemporaryGateRegistrar] Resolved guidance from fallback', {
@@ -255,38 +255,11 @@ export class TemporaryGateRegistrar {
         });
       }
 
-      if (!effectiveGuidance) {
-        this.logger.warn('[TemporaryGateRegistrar] Skipping gate with no usable content', {
-          gate,
-        });
-        continue;
-      }
-
       if (!registryAvailable) {
-        continue;
-      }
-
-      const gateIdCandidate =
-        typeof rawGate === 'object' &&
-        rawGate !== null &&
-        'id' in rawGate &&
-        typeof rawGate.id === 'string'
-          ? rawGate.id
-          : null;
-
-      // The same gate again — a resume re-sending it, or a repeat in this request (P6.107) —
-      // resolves through the run's declared ids, so a run holding `<id>-2` keeps it (R49). An
-      // id another run holds is not this gate: it registers under a fresh id below.
-      const heldId =
-        gateIdCandidate === null
-          ? undefined
-          : this.resolveHeldForThisRun(context, gateIdCandidate, createdIds);
-      if (heldId !== undefined) {
-        this.logger.debug('[TemporaryGateRegistrar] Skipping gate already registered', {
-          gateId: heldId,
-        });
-        createdIds.push(heldId);
-        continue;
+        throw new Error(
+          `[TemporaryGateRegistrar] request gate "${gate.name}" must register, but this server ` +
+            'has no temporary gate registry; the run would go on without it (R11.8).'
+        );
       }
 
       const tempGateDefinition: Omit<TemporaryGateDefinition, 'id' | 'created_at'> & {
@@ -411,6 +384,89 @@ export class TemporaryGateRegistrar {
   }
 
   /**
+   * The refusals for this call's request gates that cannot register as sent (R11.8): a blank
+   * string, a blank criteria entry, an entry whose every criterion, guidance and description is
+   * blank, or a bare id naming neither a registered gate nor one this run holds. Each would
+   * otherwise start the run without the gate the client asked for — skipped, or registered with
+   * nothing to review. Stage 11 refuses the call on any, before anything registers, so
+   * {@link registerTemporaryGates} never meets one. Read from the same channel the registration
+   * loop reads, and addressed by position across `gates` then `workflow.gates`. Never judged: an
+   * entry whose id names a gate this run holds or declared earlier (a resume re-sending it is that
+   * gate), and a claimed run's recorded gates, accepted when the run started (R11.13).
+   */
+  async invalidRequestGates(
+    context: ExecutionContext
+  ): Promise<Array<{ readonly detail: string }>> {
+    const gates: readonly unknown[] = context.state.gates.requestedOverrides?.gates ?? [];
+    const recorded = this.recordedRequestGates(context);
+    // The run declared its recorded gates when it started; a re-send of one is that gate.
+    const declared = [...recorded].flatMap((gate) => {
+      const id = isRecord(gate) ? gate['id'] : undefined;
+      return isNonBlank(id) ? [id] : [];
+    });
+    const refusals: Array<{ readonly detail: string }> = [];
+    const own = gates.filter((gate) => !recorded.has(gate));
+    for (const [index, gate] of own.entries()) {
+      const problem = await this.requestGateProblem(context, gate, declared);
+      if (problem !== undefined) {
+        refusals.push({ detail: requestGateRefusalDetail(index, gate, problem) });
+      }
+    }
+    return refusals;
+  }
+
+  /**
+   * Why one of this call's own request gates cannot register, or undefined. An entry whose id the
+   * run holds, or that an earlier entry declared, is that gate and is not judged; an entry that
+   * declares an id adds it to `declared` for the entries after it.
+   */
+  private async requestGateProblem(
+    context: ExecutionContext,
+    gate: unknown,
+    declared: string[]
+  ): Promise<string | undefined> {
+    const id = isRecord(gate) && isNonBlank(gate['id']) ? gate['id'] : undefined;
+    if (id !== undefined && this.isHeldOrDeclared(context, id, declared)) {
+      return undefined;
+    }
+    const shape = requestGateShape(gate);
+    if (shape.kind === 'gate' && shape.id !== undefined) declared.push(shape.id);
+    if (shape.kind === 'invalid') return shape.problem;
+    return shape.kind === 'reference' ? this.unresolvedReferenceProblem(shape.id) : undefined;
+  }
+
+  /**
+   * The request gates a claimed run recorded when it started (R54, R11.13): on a call whose
+   * blueprint was restored, stage 05 (`restoreRequestGates`) hands these exact entries back to the
+   * `gates` channel for this stage to register. They were accepted with the run, so they are never
+   * judged as new requests; an entry the client sends on the same call is. Empty on every other
+   * call.
+   */
+  private recordedRequestGates(context: ExecutionContext): ReadonlySet<unknown> {
+    return context.state.session.isBlueprintRestored === true
+      ? new Set<unknown>(context.parsedCommand?.requestGates ?? [])
+      : new Set<unknown>();
+  }
+
+  /** Whether `id` names a gate this run holds, or one declared earlier (recorded or this call). */
+  private isHeldOrDeclared(
+    context: ExecutionContext,
+    id: string,
+    declared: readonly string[]
+  ): boolean {
+    return declared.includes(id) || this.resolveHeldForThisRun(context, id, []) !== undefined;
+  }
+
+  /** Why a bare id names no gate, or undefined when it is a registered gate. */
+  private async unresolvedReferenceProblem(id: string): Promise<string | undefined> {
+    const resolution = await this.gateReferenceResolver?.resolve(id);
+    return resolution?.referenceType === 'registered'
+      ? undefined
+      : 'names no registered gate and no gate this run holds, and carries no criterion, guidance ' +
+          'or description of its own';
+  }
+
+  /**
    * The refusals for this call's request gates that would register under a canonical gate id
    * (R100): a gate carrying its own content beside that id, which the registry refuses. Read from
    * the gates the client sent, so a restored run's recorded gates are not judged here; a gate
@@ -476,6 +532,69 @@ export class TemporaryGateRegistrar {
   }
 
   /**
+   * What the registration loop does with a request gate before anything resolves it: reuse the id
+   * this run holds for it, skip it, or go on to register it.
+   *
+   * The same gate again — a resume re-sending it, or a repeat in this request (P6.107) — resolves
+   * through the run's declared ids, so a run holding `<id>-2` keeps it (R49); an id another run
+   * holds is not this gate, and registers under a fresh id. Stage 11 refused every new entry that
+   * cannot register (`invalidRequestGates`), so one here throws; a claimed run's recorded entry
+   * that registered nothing when its run started registers nothing now (R11.13).
+   */
+  private requestGateDisposition(
+    context: ExecutionContext,
+    rawGate: RawGateInput,
+    gateId: string | null,
+    isRecorded: boolean,
+    thisCall: readonly string[]
+  ): { readonly held: string } | 'skip' | 'register' {
+    const held =
+      gateId === null ? undefined : this.resolveHeldForThisRun(context, gateId, thisCall);
+    if (held !== undefined) {
+      return { held };
+    }
+    if (admitRequestGate(rawGate, isRecorded)) {
+      return 'register';
+    }
+    this.logger.debug('[TemporaryGateRegistrar] Recorded request gate registers nothing', {
+      gate: rawGate,
+    });
+    return 'skip';
+  }
+
+  /**
+   * Whether a request gate references a canonical gate (by string or by a bare object id), repeats
+   * a string this call already handled, or is a gate of its own to register.
+   */
+  private async resolveRequestReference(
+    rawGate: RawGateInput,
+    seenStringInputs: Set<string>
+  ): Promise<
+    | { readonly kind: 'canonical'; readonly gateId: string }
+    | { readonly kind: 'duplicate' }
+    | { readonly kind: 'own' }
+  > {
+    if (typeof rawGate !== 'string') {
+      const gateId = await this.resolveCanonicalGateId(rawGate);
+      return gateId === undefined ? { kind: 'own' } : { kind: 'canonical', gateId };
+    }
+    const trimmed = rawGate.trim();
+    if (seenStringInputs.has(trimmed)) {
+      return { kind: 'duplicate' };
+    }
+    seenStringInputs.add(trimmed);
+    const resolution = await this.gateReferenceResolver?.resolve(trimmed);
+    if (resolution?.referenceType === 'registered') {
+      this.logger.debug('[TemporaryGateRegistrar] Resolved string gate to canonical definition', {
+        input: trimmed,
+        gateId: resolution.gateId,
+      });
+      return { kind: 'canonical', gateId: resolution.gateId };
+    }
+    return { kind: 'own' };
+  }
+
+  /**
    * Bind a gate's step target to BOTH addressing forms at registration time.
    *
    * `target_step_number` and `target_step_id` are two names for one step, and a gate may arrive
@@ -528,19 +647,16 @@ export class TemporaryGateRegistrar {
     isChainExecution: boolean = false,
     currentStep: number = 1,
     nodeIds: readonly string[] = []
-  ): { normalized: NormalizedGateInput; isValid: boolean } {
+  ): NormalizedGateInput {
     if (typeof gate === 'string') {
       return {
-        normalized: {
-          name: 'Inline Validation Criteria',
-          type: 'validation',
-          scope: 'execution',
-          description: 'Inline validation criteria',
-          source: 'automatic',
-          ...(gate ? { criteria: [gate] } : {}),
-          ...(isChainExecution ? { apply_to_steps: [currentStep] } : {}),
-        },
-        isValid: true,
+        name: 'Inline Validation Criteria',
+        type: 'validation',
+        scope: 'execution',
+        description: 'Inline validation criteria',
+        source: 'automatic',
+        ...(gate ? { criteria: [gate] } : {}),
+        ...(isChainExecution ? { apply_to_steps: [currentStep] } : {}),
       };
     }
 
@@ -644,21 +760,22 @@ export class TemporaryGateRegistrar {
       normalized.apply_to_steps = effectiveApplyToSteps;
     }
 
-    return { normalized, isValid: true };
+    return normalized;
   }
 
   /**
    * Resolve effective guidance using fallback chain.
-   * Priority: explicit guidance > criteria-derived > description.
+   * Priority: explicit guidance > criteria-derived > description. A blank field is absent: a
+   * guidance of spaces must not shadow a description that says something.
    */
   resolveGateGuidance(gate: NormalizedGateInput, criteria: string[]): string {
-    if (gate.guidance) {
+    if (isNonBlank(gate.guidance)) {
       return gate.guidance;
     }
     if (criteria.length > 0) {
       return formatCriteriaAsGuidance(criteria);
     }
-    if (gate.description) {
+    if (isNonBlank(gate.description)) {
       return gate.description;
     }
     return '';
@@ -878,31 +995,21 @@ export class TemporaryGateRegistrar {
     ]);
   }
 
-  private async resolveCanonicalGateId(
-    gate: RawGateInput,
-    requestedQualityGates: Set<string>
-  ): Promise<string | undefined> {
+  /**
+   * The canonical gate an object entry references, or undefined when it is a gate of its own. The
+   * same canonical gate named twice resolves twice to one id, which the caller's set keeps once —
+   * never a gate to register under that id.
+   */
+  private async resolveCanonicalGateId(gate: RawGateInput): Promise<string | undefined> {
     const candidate = this.extractGateReferenceCandidate(gate);
-    if (!candidate || requestedQualityGates.has(candidate)) {
+    if (!candidate || this.gateReferenceResolver === undefined) {
       return undefined;
     }
-
     if (typeof gate === 'object' && gate !== null && gateInputContainsInlineContent(gate)) {
       return undefined;
     }
-
-    if (!this.gateReferenceResolver) {
-      return undefined;
-    }
-
     const resolution = await this.gateReferenceResolver.resolve(candidate);
-    if (
-      resolution.referenceType === 'registered' &&
-      !requestedQualityGates.has(resolution.gateId)
-    ) {
-      return resolution.gateId;
-    }
-    return undefined;
+    return resolution.referenceType === 'registered' ? resolution.gateId : undefined;
   }
 
   private extractGateReferenceCandidate(gate: RawGateInput): string | undefined {
@@ -919,19 +1026,6 @@ export class TemporaryGateRegistrar {
 
     return undefined;
   }
-}
-
-/**
- * Whether a request gate carries content of its own. One that does is a gate, not a reference: under
- * a canonical id it is refused (R100), and a run's recorded one restores under a fresh id (R110).
- */
-export function gateInputContainsInlineContent(gate: Record<string, unknown>): boolean {
-  const hasCriteria = Array.isArray(gate['criteria']) && gate['criteria'].length > 0;
-  const hasPassCriteria = Array.isArray(gate['pass_criteria']) && gate['pass_criteria'].length > 0;
-  const hasGuidance = typeof gate['guidance'] === 'string' && gate['guidance'].trim().length > 0;
-  const hasDescription =
-    typeof gate['description'] === 'string' && gate['description'].trim().length > 0;
-  return hasCriteria || hasPassCriteria || hasGuidance || hasDescription;
 }
 
 // ============================================================================

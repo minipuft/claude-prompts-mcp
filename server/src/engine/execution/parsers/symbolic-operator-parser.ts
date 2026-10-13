@@ -20,6 +20,10 @@ import {
   type SymbolicOperator,
 } from './types/operator-types.js';
 import { SHELL_VERIFY_DEFAULT_TIMEOUT } from '../../gates/constants.js';
+import {
+  criteriaRefusalDetail,
+  inlineCriteriaProblem,
+} from '../../gates/services/inline-criteria-refusal.js';
 
 import type { ShellVerifyGate } from '../../gates/shell/types.js';
 
@@ -99,6 +103,36 @@ export function rejectQuoteInGateText(command: string): void {
         `Operator "${match[1] ?? '::'}" cannot take a ${kind} containing the quote character ${quote}. The text is delimited by " or ' and has no escape: reword it without ${quote}.`
       );
     }
+  }
+}
+
+/**
+ * `::` followed by an empty quoted text, optionally named (`:: ""`, `:: ''`, `:: id:""`). The gate
+ * grammar's quoted text is `[^"']+`, so this is never a gate token: it was left in the args and the
+ * prompt ran without the gate. `=` is not matched: `key = ""` is an argument (see
+ * `extractInlineGateTokens`).
+ */
+const EMPTY_QUOTED_GATE_TEXT = /\s::\s*(?:([a-z][a-z0-9_-]*):)?(["'])\2(?=\s|$)/gi;
+
+/**
+ * Refuse a `::` gate whose quoted text is empty, with stage 05's `gate-criteria-invalid` reason
+ * text and accepted forms. Thrown before any strategy runs, beside {@link rejectQuoteInGateText}.
+ * A blank text (`:: "   "`) IS a gate token, so it parses and stage 05 refuses it; a
+ * `verify:""` is left to the quote refusal, because this text describes a criterion.
+ */
+export function rejectEmptyGateText(command: string): void {
+  for (const match of command.matchAll(EMPTY_QUOTED_GATE_TEXT)) {
+    if (isPositionInsideQuotes(command, match.index)) continue;
+    const gateId = match[1];
+    if (gateId?.toLowerCase() === 'verify') continue;
+    const detail =
+      gateId === undefined
+        ? criteriaRefusalDetail('inline gate', inlineCriteriaProblem(['']) ?? '')
+        : criteriaRefusalDetail(
+            `named inline gate "${gateId}"`,
+            inlineCriteriaProblem([], true) ?? ''
+          );
+    throw new ValidationError(`[gate-criteria-invalid] ${detail}`);
   }
 }
 
@@ -790,11 +824,20 @@ export class SymbolicCommandParser {
     };
   }
 
+  /**
+   * One quoted gate text → its criteria. `,`, `;` and `|` separate criteria. `and` did too until
+   * 2026-10-12, inside a word as well, so `"handle errors"` became `h` and `le errors`; R11.14
+   * dropped it, since a criterion's own prose uses the word (`"errors and warnings are logged"`).
+   * A text holding no criterion at all (`"   "`) is returned as written rather than
+   * as nothing: filtered to `[]` it produced no gate operator, and the command failed as an unknown
+   * prompt instead of reaching stage 05's `gate-criteria-invalid` refusal.
+   */
   private parseCriteria(criteriaString: string): string[] {
-    return criteriaString
-      .split(/,|and|\||;/i)
+    const criteria = criteriaString
+      .split(/[,;|]/)
       .map((part) => part.trim())
       .filter((part) => part.length > 0);
+    return criteria.length > 0 ? criteria : [criteriaString];
   }
 
   /**

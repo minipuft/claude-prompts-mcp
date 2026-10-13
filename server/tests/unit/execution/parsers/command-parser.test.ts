@@ -640,3 +640,43 @@ describe('P6.218: the JSON command form carries its inner command operators', ()
     expect(wrapped.executionPlan).toBeUndefined();
   });
 });
+
+/**
+ * MEASURED 2026-10-12 on `ca0df3bf` through the built server: `>>minimal_prompt :: ""` rendered
+ * the prompt with no gate and no warning. The gate grammar's quoted text is `[^"']+`, so an empty
+ * quoted criterion matched no gate token and was left in the args. It is refused at parse, before
+ * any strategy runs, with stage 05's `gate-criteria-invalid` reason text and accepted forms.
+ */
+describe('an empty quoted inline gate criterion is refused at parse', () => {
+  const parser = new UnifiedCommandParser(mockLogger);
+  const refusal =
+    /^\[gate-criteria-invalid\] inline gate has the criterion "", which is empty\..*Accepted forms: `:: "criterion"`, `:: id:"criterion"`, `:: verify:"command"`\.$/;
+
+  test.each([
+    ['double-quoted', '>>analyze :: ""'],
+    ['single-quoted', ">>analyze :: ''"],
+    ['before a chain arrow', '>>analyze :: "" --> >>analyze'],
+    ['after a criterion', '>>analyze :: "plain" :: ""'],
+  ])('%s', async (_, command) => {
+    await expect(parser.parseCommand(command, basePrompts)).rejects.toThrow(refusal);
+  });
+
+  test('a named gate with empty quotes is refused naming the gate', async () => {
+    await expect(parser.parseCommand('>>analyze :: security:""', basePrompts)).rejects.toThrow(
+      /^\[gate-criteria-invalid\] named inline gate "security" carries no criterion: the text between its quotes is blank\./
+    );
+  });
+
+  test('the JSON command form is refused the same way', async () => {
+    await expect(
+      parser.parseCommand(JSON.stringify({ command: '>>analyze :: ""' }), basePrompts)
+    ).rejects.toThrow(refusal);
+  });
+
+  test('control: empty quotes inside an argument value, or as an argument, are not a gate', async () => {
+    const inArg = await parser.parseCommand('>>analyze text:"a :: \'\' b"', basePrompts);
+    expect(inArg.promptId).toBe('analyze');
+    const asArg = await parser.parseCommand('>>analyze text:""', basePrompts);
+    expect(asArg.promptId).toBe('analyze');
+  });
+});

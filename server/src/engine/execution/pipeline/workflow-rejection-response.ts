@@ -10,7 +10,7 @@ import type { ToolResponse } from '#shared/types/index.js';
  * error per round trip — the failure mode the rejection vocabulary exists to remove. One render
  * for every stage that refuses a command (04 for its shape and targets, 11 for a target a resume
  * can no longer reach, R65, 05 and 11 for a named or request gate under a canonical gate id,
- * R100, and 05 for an inline gate criterion that cannot register, R11.8), so a client parses one
+ * R100, and 05 for an inline gate criterion and 11 for a request gate that cannot register, R11.8), so a client parses one
  * shape whichever stage answered.
  *
  * `resumedChainId` is the run a refused resume names, or `undefined` for a first call. It is

@@ -43,7 +43,7 @@ export const prompt_engineParameters: ToolParameter[] = [
     name: 'command',
     type: 'string',
     description:
-      'Prompt ID to expand. Format: >>prompt_id key="value" | Chains: >>s1 --> >>s2 | Modifiers first: ^Framework :: "criteria" %clean/%lean | Shell verify: :: verify:"cmd" :preset',
+      'Prompt ID to expand. Format: >>prompt_id key="value" | Chains: >>s1 --> >>s2 | Modifiers first: ^Framework :: "criteria" %clean/%lean | Shell verify: :: verify:"cmd" :preset | Criteria inside one :: quote split on , ; or |',
     required: false,
     status: 'working',
     compatibility: 'canonical',

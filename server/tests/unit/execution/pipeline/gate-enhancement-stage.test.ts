@@ -3,6 +3,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { GateEnhancementStage } from '../../../../src/engine/execution/pipeline/stages/11-gate-enhancement-stage.js';
 import { GateDefinitionSchema } from '../../../../src/engine/gates/core/gate-schema.js';
+import { TemporaryGateRegistry as TemporaryGateRegistryImpl } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 import { GateEnhancementService } from '../../../../src/engine/gates/services/gate-enhancement-service.js';
 import { GateMetricsRecorder } from '../../../../src/engine/gates/services/gate-metrics-recorder.js';
 import { TemporaryGateRegistrar } from '../../../../src/engine/gates/services/temporary-gate-registrar.js';
@@ -450,8 +451,13 @@ describe('GateEnhancementStage', () => {
 
   test('processes string gates from unified gates parameter', async () => {
     const gateService = createGateService();
+    // A registry, as every server has one: a criterion string must register, and a registrar with
+    // none to register it in fails the call rather than dropping the gate (R11.8).
     const stage = createStage({
       gateService,
+      temporaryRegistry: new TemporaryGateRegistryImpl(createLogger(), {
+        isCanonicalGateId: () => false,
+      }),
       gatesConfigProvider: () => baseGatesConfig,
     });
 
@@ -771,7 +777,7 @@ describe('GateEnhancementStage', () => {
         pass_criteria: ['toxicity'],
       }),
       expect.any(String),
-      { onIdCollision: 'fresh-id' }
+      expect.objectContaining({ onIdCollision: 'fresh-id' })
     );
 
     // CustomCheck is converted to inline gate with description as guidance
@@ -781,7 +787,7 @@ describe('GateEnhancementStage', () => {
         description: 'Confirm exfil path',
       }),
       expect.any(String),
-      { onIdCollision: 'fresh-id' }
+      expect.objectContaining({ onIdCollision: 'fresh-id' })
     );
 
     // Full TemporaryGateInput was already registered by inline-gate-extraction stage
@@ -999,5 +1005,65 @@ describe('GateEnhancementStage', () => {
 
     expect(context.gates.getBlockingGateIds()).toContain('code-quality');
     expect(context.gates.getBlockingGateIds()).not.toContain('technical-accuracy');
+  });
+});
+
+describe('GateEnhancementStage refuses a request gate it cannot register (R11.8)', () => {
+  const singlePromptCall = (gates: unknown[]): ExecutionContext => {
+    const context = new ExecutionContext({ command: '>>demo', gates: gates as never });
+    context.state.gates.requestedOverrides = { gates };
+    context.executionPlan = {
+      strategy: 'single',
+      gates: [],
+      requiresFramework: false,
+      requiresSession: false,
+      category: 'analysis',
+    } as any;
+    context.parsedCommand = { commandType: 'single', convertedPrompt: samplePrompt } as any;
+    return context;
+  };
+
+  const realRegistry = () =>
+    new TemporaryGateRegistryImpl(createLogger(), { isCanonicalGateId: () => false });
+
+  test('a blank request gate refuses the call by entry, and nothing registers or renders', async () => {
+    const gateService = createGateService();
+    const temporaryRegistry = realRegistry();
+    const stage = createStage({
+      gateService,
+      temporaryRegistry,
+      gatesConfigProvider: () => baseGatesConfig,
+    });
+    const context = singlePromptCall([
+      { id: 'cites', criteria: ['Cites a source'] },
+      { name: 'Tone', description: '   ' },
+    ]);
+
+    await stage.execute(context);
+
+    expect(context.response?.isError).toBe(true);
+    const text = (context.response?.content?.[0] as { text: string }).text;
+    expect(text).toContain('• [gate-criteria-invalid] workflow: request gate 2 (name "Tone")');
+    expect(text).toContain('Nothing was executed and no run was created.');
+    expect(gateService.enhancePrompt).not.toHaveBeenCalled();
+    expect(temporaryRegistry.getTemporaryGate('cites')).toBeUndefined();
+  });
+
+  test('control: a valid request gate registers and renders', async () => {
+    const gateService = createGateService();
+    const temporaryRegistry = realRegistry();
+    const stage = createStage({
+      gateService,
+      temporaryRegistry,
+      gatesConfigProvider: () => baseGatesConfig,
+    });
+    const context = singlePromptCall([{ id: 'cites', criteria: ['Cites a source'] }]);
+
+    await stage.execute(context);
+
+    expect(context.response).toBeUndefined();
+    expect(temporaryRegistry.getTemporaryGate('cites')).toBeDefined();
+    const gateIdsPassed = (gateService.enhancePrompt as jest.Mock<any>).mock.calls[0]?.[1];
+    expect(gateIdsPassed).toContain('cites');
   });
 });
