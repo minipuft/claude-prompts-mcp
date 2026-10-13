@@ -547,7 +547,7 @@ export class Application {
       // still up, the transport stops before the stores it routes into, background services
       // stop before the surfaces that schedule work on them, and the database closes last.
       await this.shutdownTelemetry();
-      this.shutdownServerLifecycle();
+      await this.shutdownServerLifecycle();
       await this.shutdownIfSupported(this.transportRouter, 'transport manager');
       await this.shutdownIfSupported(this.frameworkStateStore, 'framework state manager');
       await this.shutdownIfSupported(this.promptManager, 'prompt assets');
@@ -598,17 +598,17 @@ export class Application {
   /**
    * Stop the server/listener layer.
    *
-   * Deliberately NOT routed through `shutdownIfSupported`: this call is synchronous and
-   * unguarded, so a failure here reaches the single outer boundary in `shutdown()` instead
-   * of being warned and swallowed.
+   * Deliberately NOT routed through `shutdownIfSupported`: this call is unguarded, so a
+   * failure here reaches the single outer boundary in `shutdown()` instead of being warned
+   * and swallowed.
    */
-  private shutdownServerLifecycle(): void {
+  private async shutdownServerLifecycle(): Promise<void> {
     if (!this.serverLifecycle) {
       return;
     }
 
     this.logger?.debug('Shutting down server manager...');
-    this.serverLifecycle.shutdown();
+    await this.serverLifecycle.shutdown();
   }
 
   /**

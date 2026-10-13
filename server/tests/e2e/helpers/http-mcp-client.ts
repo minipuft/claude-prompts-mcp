@@ -143,8 +143,8 @@ export function startServerWithHttp(
       // NODE_ENV stays unset — the server runs in normal mode.
       ...callerEnv,
     }),
-    // Use 'ignore' for stdin to avoid triggering 'end' event handler
-    // which exits the process (see logging/index.ts setupProcessEventHandlers)
+    // An HTTP-only server never reads stdin, so its EOF does not shut it down
+    // (src/index.ts); 'ignore' keeps the child from holding a pipe it never reads.
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: false, // Keep attached but without stdin
   });

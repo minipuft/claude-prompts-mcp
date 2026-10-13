@@ -253,6 +253,19 @@ function setupErrorHandlers(): void {
 
     void gracefulShutdown(0);
   });
+
+  // A STDIO client ends the server by closing its stdin, so EOF is a shutdown request like
+  // SIGTERM. Listening for 'end' reads nothing by itself: only the STDIO transport consumes
+  // stdin, so an HTTP-only server never sees EOF and keeps serving with stdin detached.
+  process.stdin.on('end', () => {
+    if (logger !== null) {
+      logger.info('STDIN ended (client disconnected), initiating graceful shutdown...');
+    } else {
+      console.error('STDIN ended (client disconnected), initiating graceful shutdown...');
+    }
+
+    void gracefulShutdown(0);
+  });
 }
 
 /**
