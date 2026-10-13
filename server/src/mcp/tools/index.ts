@@ -1394,14 +1394,6 @@ export class McpToolRouter {
       this.logger.info('✅ Tool description manager shut down');
     }
 
-    // Cleanup gate system manager
-    if (this.gateStateStore != null) {
-      this.gateStateStore.cleanup().catch((error) => {
-        this.logger.error('Error during gate system manager cleanup:', error);
-      });
-      this.logger.info('✅ Gate system manager cleanup initiated');
-    }
-
     this.logger.info('✅ MCP tools manager shutdown completed');
   }
 }

@@ -547,7 +547,7 @@ export class Application {
       // still up, the transport stops before the stores it routes into, background services
       // stop before the surfaces that schedule work on them, and the database closes last.
       await this.shutdownTelemetry();
-      this.shutdownServerLifecycle();
+      await this.shutdownServerLifecycle();
       await this.shutdownIfSupported(this.transportRouter, 'transport manager');
       await this.shutdownIfSupported(this.frameworkStateStore, 'framework state manager');
       await this.shutdownIfSupported(this.promptManager, 'prompt assets');
@@ -557,6 +557,7 @@ export class Application {
 
       await this.shutdownIfSupported(this.apiRouter, 'API manager');
       await this.shutdownIfSupported(this.mcpToolsManager, 'MCP tools manager');
+      await this.shutdownChainSessionStore();
       await this.shutdownMetricsCollector();
       await this.shutdownIfSupported(this.conversationStore, 'conversation manager');
       await this.shutdownIfSupported(this.textReferenceStore, 'text reference manager');
@@ -597,17 +598,17 @@ export class Application {
   /**
    * Stop the server/listener layer.
    *
-   * Deliberately NOT routed through `shutdownIfSupported`: this call is synchronous and
-   * unguarded, so a failure here reaches the single outer boundary in `shutdown()` instead
-   * of being warned and swallowed.
+   * Deliberately NOT routed through `shutdownIfSupported`: this call is unguarded, so a
+   * failure here reaches the single outer boundary in `shutdown()` instead of being warned
+   * and swallowed.
    */
-  private shutdownServerLifecycle(): void {
+  private async shutdownServerLifecycle(): Promise<void> {
     if (!this.serverLifecycle) {
       return;
     }
 
     this.logger?.debug('Shutting down server manager...');
-    this.serverLifecycle.shutdown();
+    await this.serverLifecycle.shutdown();
   }
 
   /**
@@ -632,6 +633,26 @@ export class Application {
    */
   private reportTeardownFailure(label: string, error: unknown): void {
     this.logger?.warn(`Error shutting down ${label}:`, error);
+  }
+
+  /**
+   * Stop the chain session store's expiry scheduler and persist its last state. The store is
+   * owned through the tool router's prompt executor, which nothing else tears down; it runs
+   * before the database closes because its final save is a write. The router is unset when
+   * startup failed before modules initialized, and the store is unset until the executor is
+   * wired.
+   */
+  private async shutdownChainSessionStore(): Promise<void> {
+    const router = this.mcpToolsManager as McpToolRouter | undefined;
+    const store = router === undefined ? undefined : router.getChainSessionStore();
+    if (store === undefined) {
+      return;
+    }
+    try {
+      await store.cleanup();
+    } catch (error) {
+      this.reportTeardownFailure('chain session store', error);
+    }
   }
 
   /**

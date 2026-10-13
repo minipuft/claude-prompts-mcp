@@ -269,9 +269,12 @@ export class MockFrameworkStateStore {
 export async function cleanupPromptExecutor(engine) {
   if (!engine) return;
 
-  if (typeof engine.cleanup === 'function') {
+  // The executor owns no teardown; the chain session store it holds is the one handle to stop.
+  const chainSessionStore =
+    typeof engine.getChainSessionStore === 'function' ? engine.getChainSessionStore() : undefined;
+  if (chainSessionStore && typeof chainSessionStore.cleanup === 'function') {
     try {
-      await engine.cleanup();
+      await chainSessionStore.cleanup();
     } catch (error) {
       // Log error but don't throw to prevent test failures
       console.error('Error cleaning up prompt execution service:', error);
@@ -315,7 +318,6 @@ export class MockPromptGuidanceService {
   getConfig: any;
   setFrameworkManager: any;
   initialize: any;
-  shutdown: any;
   isInitialized: any;
 
   private initialized: boolean = false;
@@ -333,15 +335,6 @@ export class MockPromptGuidanceService {
       if (this.logger) {
         this.logger.debug('MockPromptGuidanceService initialized');
       }
-      return Promise.resolve();
-    });
-
-    this.shutdown = jest.fn(async () => {
-      this.initialized = false;
-      if (this.logger) {
-        this.logger.debug('MockPromptGuidanceService shutdown (no timers to clean)');
-      }
-      // NO TIMERS TO CLEAN UP - this is the key fix
       return Promise.resolve();
     });
 

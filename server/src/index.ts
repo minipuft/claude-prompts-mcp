@@ -55,6 +55,7 @@ let applicationHealth: TrackedHealth = {
 let orchestrator: Application | null = null;
 let logger: Logger | null = null;
 let isShuttingDown = false;
+let healthMonitorTimer: NodeJS.Timeout | undefined;
 
 /**
  * Validate application health
@@ -173,10 +174,12 @@ function setupHealthMonitoring(runtimeOptions: RuntimeLaunchOptions): void {
     }
   };
 
-  // Health check every 30 seconds
-  setInterval(() => {
+  // Health check every 30 seconds. unref(): the monitor must not be the reason the process
+  // stays alive; `gracefulShutdown` clears it.
+  healthMonitorTimer = setInterval(() => {
     void runHealthCheck();
   }, 30000);
+  healthMonitorTimer.unref();
 
   logger.info('Health monitoring enabled (30-second intervals with performance tracking)');
 }
@@ -250,6 +253,19 @@ function setupErrorHandlers(): void {
 
     void gracefulShutdown(0);
   });
+
+  // A STDIO client ends the server by closing its stdin, so EOF is a shutdown request like
+  // SIGTERM. Listening for 'end' reads nothing by itself: only the STDIO transport consumes
+  // stdin, so an HTTP-only server never sees EOF and keeps serving with stdin detached.
+  process.stdin.on('end', () => {
+    if (logger !== null) {
+      logger.info('STDIN ended (client disconnected), initiating graceful shutdown...');
+    } else {
+      console.error('STDIN ended (client disconnected), initiating graceful shutdown...');
+    }
+
+    void gracefulShutdown(0);
+  });
 }
 
 /**
@@ -261,6 +277,11 @@ async function gracefulShutdown(exitCode: number = 0): Promise<void> {
   }
 
   isShuttingDown = true;
+
+  if (healthMonitorTimer !== undefined) {
+    clearInterval(healthMonitorTimer);
+    healthMonitorTimer = undefined;
+  }
 
   try {
     if (logger !== null) {

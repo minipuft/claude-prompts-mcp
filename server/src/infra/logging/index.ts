@@ -474,30 +474,3 @@ export function createNoopLogger(): Logger {
  * Use this when you need a logger instance but don't want any output.
  */
 export const noopLogger: Logger = createNoopLogger();
-
-/**
- * Setup process event handlers for logging
- */
-export function setupProcessEventHandlers(logger: Logger): void {
-  // Handle graceful shutdown
-  process.on('SIGINT', () => {
-    logger.info('Shutting down server...');
-    process.exit(0);
-  });
-
-  // Handle uncaught exceptions
-  process.on('uncaughtException', (error) => {
-    logger.error('Uncaught exception:', error);
-  });
-
-  // Handle unhandled promise rejections
-  process.on('unhandledRejection', (reason, promise) => {
-    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  });
-
-  // Log when the stdin closes (which happens when the parent process terminates)
-  process.stdin.on('end', () => {
-    logger.info('STDIN stream ended - parent process may have terminated');
-    process.exit(0);
-  });
-}

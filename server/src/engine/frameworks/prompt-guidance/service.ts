@@ -137,7 +137,7 @@ export class PromptGuidanceService {
         options.frameworkOverride,
         options.scope
       );
-      const frameworkGuide = await this.getFrameworkGuide(activeFramework.type);
+      const frameworkGuide = await this.getFrameworkGuide(activeFramework.id);
 
       // Surface framework guidance (read-only hints)
       const processingGuidance = frameworkGuide.guideTemplateProcessing(
@@ -315,20 +315,6 @@ export class PromptGuidanceService {
   }
 
   /**
-   * Shutdown the service
-   */
-  async shutdown(): Promise<void> {
-    if (!this.initialized) {
-      return;
-    }
-
-    this.logger.info('Shutting down PromptGuidanceService...');
-
-    this.initialized = false;
-    this.logger.info('PromptGuidanceService shutdown complete');
-  }
-
-  /**
    * Check if service is initialized
    */
   isInitialized(): boolean {
@@ -347,7 +333,7 @@ export class PromptGuidanceService {
     }
 
     const targetFramework =
-      frameworkOverride || this.frameworkManager.selectFramework({ scope }).type;
+      frameworkOverride || this.frameworkManager.selectFramework({ scope }).id;
 
     const framework = this.frameworkManager.getFramework(targetFramework);
     if (!framework) {

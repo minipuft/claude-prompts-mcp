@@ -133,9 +133,6 @@ export class TransportRouter {
   setupStdioTransport(): void {
     this.logger.info('Starting server with STDIO transport');
 
-    // Setup STDIO event handlers
-    this.setupStdioEventHandlers();
-
     this.stdioHandle = serveStdio(this.stdioServerFactory, {
       onerror: (error: Error) => {
         this.logger.error('STDIO transport error:', error);
@@ -145,17 +142,6 @@ export class TransportRouter {
     this.logger.info(
       'STDIO transport connected successfully - server ready for MCP client connections'
     );
-  }
-
-  /**
-   * Setup STDIO event handlers
-   */
-  private setupStdioEventHandlers(): void {
-    // Log when the stdin closes (which happens when the parent process terminates)
-    process.stdin.on('end', () => {
-      this.logger.info('STDIN stream ended - parent process may have terminated');
-      process.exit(0);
-    });
   }
 
   /**

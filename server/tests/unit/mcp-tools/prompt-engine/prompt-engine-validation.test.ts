@@ -88,8 +88,8 @@ describe('PromptEngine Validation', () => {
   });
 
   afterEach(async () => {
-    if (engine && typeof engine.cleanup === 'function') {
-      await engine.cleanup();
+    if (engine) {
+      await engine.getChainSessionStore().cleanup();
     }
   });
 

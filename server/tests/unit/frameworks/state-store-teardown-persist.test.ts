@@ -12,15 +12,16 @@
  * is written by a method that awaits `saveStateToFile(scope)` before returning, so no mutation
  * can reach teardown unpersisted. `GateStateStore.cleanup()` carried the identical unscoped
  * call, and its resolved key was the literal `default` — the pre-isolation bucket a later
- * start reads back as an operator's own choice. Both are gone.
+ * start reads back as an operator's own choice. That save is gone, and with it the method:
+ * `GateStateStore` has no teardown.
  *
  * WHAT THIS PINS, in both directions, because a store that persists nothing at all would pass
  * a one-sided "teardown wrote nothing" assertion:
  *
  *   1. a mutator writes before it returns (the positive control — the spy observes writes)
  *   2. a teardown method writes not at all
- *   3. the teardown methods these two classes expose are exactly the two driven here, read off
- *      the prototypes rather than listed from memory, so a third one added later fails until
+ *   3. the teardown methods these two classes expose are exactly the one driven here, read off
+ *      the prototypes rather than listed from memory, so another one added later fails until
  *      it is covered
  *
  * Classification: Unit (two real stores over a temp SQLite file, no server).
@@ -85,9 +86,9 @@ describe('a scoped state store persists on mutation, never at teardown', () => {
     }
   });
 
-  test('the teardown surface is exactly the two methods driven below', () => {
+  test('the teardown surface is exactly the one method driven below', () => {
     expect(teardownMethodsOf(FrameworkStateStore.prototype)).toEqual(['shutdown']);
-    expect(teardownMethodsOf(GateStateStore.prototype)).toEqual(['cleanup']);
+    expect(teardownMethodsOf(GateStateStore.prototype)).toEqual([]);
   });
 
   test('FrameworkStateStore: a toggle writes, shutdown does not', async () => {
@@ -126,7 +127,7 @@ describe('a scoped state store persists on mutation, never at teardown', () => {
     expect(save).toHaveBeenCalledTimes(0);
   });
 
-  test('GateStateStore: a toggle writes, cleanup does not', async () => {
+  test('GateStateStore: a toggle writes before it returns', async () => {
     const logger = createLogger();
     const backing = new SqliteStateStore<PersistedGateSystemState>(
       dbManager,
@@ -158,9 +159,5 @@ describe('a scoped state store persists on mutation, never at teardown', () => {
     await store.disableGateSystem('teardown-persist probe', scope);
     expect(save).toHaveBeenCalledTimes(1);
     expect(save.mock.calls[0]?.[1]).toEqual(scope);
-
-    save.mockClear();
-    await store.cleanup();
-    expect(save).toHaveBeenCalledTimes(0);
   });
 });

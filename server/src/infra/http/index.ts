@@ -237,40 +237,40 @@ export class ServerLifecycle {
   }
 
   /**
-   * Graceful shutdown
+   * Close every transport connection, then the HTTP listener.
+   *
+   * Exits nothing: the process exit belongs to the one graceful shutdown path in `src/index.ts`,
+   * which still has stores to flush and the database to close after this returns. Exiting here
+   * cut that path off on STDIO, where no listener close deferred it. Connections close first,
+   * because `Server.close()` waits for open exchanges and a stream the transport has not
+   * aborted would hold it open.
    */
-  shutdown(exitCode: number = 0): void {
+  async shutdown(): Promise<void> {
     this.logger.info('Initiating graceful shutdown...');
-
-    // Close HTTP server if running
-    if (this.httpServer !== undefined) {
-      this.httpServer.close((error) => {
-        if (error !== undefined) {
-          this.logger.error('Error closing HTTP server:', error);
-        } else {
-          this.logger.info('HTTP server closed successfully');
-        }
-        // Fire and forget - process.exit is called inside
-        void this.finalizeShutdown(exitCode);
-      });
-    } else {
-      // Fire and forget - process.exit is called inside
-      void this.finalizeShutdown(exitCode);
-    }
+    await this.transportRouter.closeAllConnections();
+    await this.closeHttpServer();
+    this.logger.info('Server shutdown complete');
   }
 
   /**
-   * Finalize shutdown process
+   * Stop the listener. A server that never bound (dual mode with its port taken) has nothing
+   * to close, and `close()` on it would fail with ERR_SERVER_NOT_RUNNING.
    */
-  private async finalizeShutdown(exitCode: number): Promise<void> {
-    // Close transport connections
-    const mode = this.transportRouter.getTransportType();
-    if (mode === 'streamable-http' || mode === 'both') {
-      await this.transportRouter.closeAllConnections();
+  private closeHttpServer(): Promise<void> {
+    const httpServer = this.httpServer;
+    if (httpServer?.listening !== true) {
+      return Promise.resolve();
     }
-
-    this.logger.info('Server shutdown complete');
-    process.exit(exitCode);
+    return new Promise<void>((resolve, reject) => {
+      httpServer.close((error) => {
+        if (error !== undefined) {
+          reject(error);
+          return;
+        }
+        this.logger.info('HTTP server closed successfully');
+        resolve();
+      });
+    });
   }
 
   // `restart()` lived here and was deleted 2026-09-21 (P4.91). `Application.restartServer`

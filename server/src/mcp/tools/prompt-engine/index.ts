@@ -10,11 +10,7 @@
  */
 
 // Core tool exports
-export {
-  PromptExecutor,
-  createPromptExecutor,
-  cleanupPromptExecutor,
-} from './core/prompt-executor.js';
+export { PromptExecutor, createPromptExecutor } from './core/prompt-executor.js';
 
 // Type definitions
 export type { FormatterExecutionContext, SimpleResponseFormatter } from './core/types.js';

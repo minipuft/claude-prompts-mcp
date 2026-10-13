@@ -180,12 +180,12 @@ export class FileObserver extends EventEmitter {
   private retryCount: number = 0;
   /** Directories registered before they exist, each with the timer waiting for it. */
   private pendingDirectories: Map<string, NodeJS.Timeout> = new Map();
+  /** Watch retries waiting out `retryDelayMs`; `stop()` clears them so none fires into a stopped observer. */
+  private retryTimers: Set<NodeJS.Timeout> = new Set();
   /** Directories that appeared after they were registered, whose existing files are reported. */
   private directoriesCreatedLate: Set<string> = new Set();
   private configManager: ConfigManager | undefined;
   private auxiliaryDirectories: string[] = [];
-  private sigintHandler: (() => void) | undefined;
-  private sigtermHandler: (() => void) | undefined;
   private shouldUsePolling: boolean = false;
 
   constructor(logger: Logger, config?: Partial<FileObserverConfig>, configManager?: ConfigManager) {
@@ -243,20 +243,6 @@ export class FileObserver extends EventEmitter {
     this.startTime = Date.now();
     this.isStarted = true;
 
-    // Listen for process termination to clean up watchers
-    if (!this.sigintHandler) {
-      this.sigintHandler = () => {
-        void this.stop();
-      };
-      process.on('SIGINT', this.sigintHandler);
-    }
-    if (!this.sigtermHandler) {
-      this.sigtermHandler = () => {
-        void this.stop();
-      };
-      process.on('SIGTERM', this.sigtermHandler);
-    }
-
     const pollingStatus = this.shouldUsePolling
       ? `polling enabled (interval: ${this.config.pollingInterval}ms)`
       : 'native fs events';
@@ -286,6 +272,11 @@ export class FileObserver extends EventEmitter {
     }
     this.pendingDirectories.clear();
 
+    for (const timer of this.retryTimers) {
+      clearTimeout(timer);
+    }
+    this.retryTimers.clear();
+
     // Close all watchers (chokidar close() returns a Promise)
     const closePromises = Array.from(this.watchers.entries()).map(async ([watchPath, watcher]) => {
       try {
@@ -302,15 +293,6 @@ export class FileObserver extends EventEmitter {
     this.stats.watchersActive = 0;
 
     this.logger.info('✅ FileObserver stopped and resources cleaned up');
-
-    if (this.sigintHandler) {
-      process.off('SIGINT', this.sigintHandler);
-      this.sigintHandler = undefined;
-    }
-    if (this.sigtermHandler) {
-      process.off('SIGTERM', this.sigtermHandler);
-      this.sigtermHandler = undefined;
-    }
   }
 
   /**
@@ -404,7 +386,11 @@ export class FileObserver extends EventEmitter {
         this.logger.info(
           `Retrying in ${this.config.retryDelayMs}ms (${formatAttempt(this.retryCount, this.config.maxRetries)})`
         );
-        setTimeout(() => this.watchDirectory(directoryPath, category), this.config.retryDelayMs);
+        this.scheduleRetry(() => {
+          this.watchDirectory(directoryPath, category).catch((retryError: unknown) => {
+            this.logger.error(`Failed to retry watching ${directoryPath}:`, retryError);
+          });
+        });
       } else {
         throw error;
       }
@@ -627,13 +613,26 @@ export class FileObserver extends EventEmitter {
     if (this.retryCount < this.config.maxRetries) {
       this.retryCount++;
       this.stats.retryCount++;
-      setTimeout(() => {
+      this.scheduleRetry(() => {
         this.logger.info(`Attempting to restart watcher for: ${directoryPath}`);
         this.watchDirectory(directoryPath).catch((retryError) => {
           this.logger.error(`Failed to restart watcher for ${directoryPath}:`, retryError);
         });
-      }, this.config.retryDelayMs);
+      });
     }
+  }
+
+  /**
+   * Run `retry` after `retryDelayMs`, tracked so `stop()` can cancel it. A retry that fired after
+   * `stop()` would reject (`watchDirectory` refuses an unstarted observer) from a callback no one
+   * awaits, or, after a restart, re-watch a directory the new session did not ask for.
+   */
+  private scheduleRetry(retry: () => void): void {
+    const timer = setTimeout(() => {
+      this.retryTimers.delete(timer);
+      retry();
+    }, this.config.retryDelayMs);
+    this.retryTimers.add(timer);
   }
 
   /**

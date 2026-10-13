@@ -4,17 +4,22 @@
  *
  * Why this exists
  * ---------------
- * `@modelcontextprotocol/sdk` converts our hand-written zod schemas to JSON Schema at
- * registration time, and it picks the converter by inspecting the zod major:
+ * `@modelcontextprotocol/server` (v2) converts our hand-written zod schemas to JSON Schema
+ * when it serves `tools/list`:
  *
- *   dist/esm/server/zod-json-schema-compat.js:19-28
- *     if (isZ4Schema(schema)) return z4mini.toJSONSchema(...)   // zod 4 path
- *     return zodToJsonSchema(...)                               // zod 3 path
+ *   `standardSchemaToJsonSchema(schema, 'input')` in the package's `dist/src-*.mjs`
+ *   (source: `core-internal/src/util/standardSchema.ts`), called from `dist/mcp-*.mjs`
+ *     std.jsonSchema.input({ target: 'draft-2020-12' })   // zod >= 4.2: zod's own converter
+ *     z.toJSONSchema(schema, { target, io })              // older zod 4 fallback
  *
- * So upgrading zod swaps the engine that produces our published tool surface, and
- * `CLAUDE.md` §Public API Contract puts that surface inside the contract a major version
- * protects. Neither typecheck nor the test suite observes it: both run against the zod
- * objects, not the emitted JSON Schema.
+ * So the zod release we install decides the engine and the dialect that produce our
+ * published tool surface, and `CLAUDE.md` §Public API Contract puts that surface inside the
+ * contract a major version protects. Neither typecheck nor the test suite observes it: both
+ * run against the zod objects, not the emitted JSON Schema.
+ *
+ * Published schemas are inline: no `$defs`, no `$ref`. Documented clients fail to resolve
+ * references in a tool `inputSchema`, so a converter change that starts emitting them is
+ * drift this snapshot must show.
  *
  * The capture is taken over the wire from a running server rather than by calling the
  * SDK converter directly. Calling the converter would test our belief about which code
@@ -26,8 +31,10 @@
  *   node scripts/capture-tool-schemas.mjs --check         # compare, exit 1 on drift
  *   node scripts/capture-tool-schemas.mjs --out <path>    # alternate destination
  *
- * `--check` prints a structural diff. That diff is the deliverable of the zod 4
- * migration: empty means the bump is a minor, non-empty means it is a major.
+ * `--check` prints a structural diff against the committed snapshot. It guards every change
+ * that can move the published surface (a zod or MCP SDK bump, a schema edit): empty means the
+ * surface is unchanged, non-empty means the diff is the change a client will see, to be
+ * classified against the Public API Contract.
  *
  * Size ceiling (B.87)
  * -------------------
@@ -213,10 +220,9 @@ function sortDeep(value) {
  * clean CI runner with none produce different strings for identical code — which made the
  * first version of this snapshot fail in CI while passing locally.
  *
- * The text is not what this snapshot is for. The SDK picks its JSON Schema converter by zod
- * major, and what a converter changes is STRUCTURE: types, `required`, `additionalProperties`,
- * `$ref` inlining, enum placement. Description prose is contract-owned and already covered by
- * `validate:contracts`.
+ * The text is not what this snapshot is for. What a converter change moves is STRUCTURE:
+ * types, `required`, `additionalProperties`, `$ref` inlining, enum placement. Description prose
+ * is contract-owned and already covered by `validate:contracts`.
  *
  * A marker rather than deletion, so "the converter stopped emitting descriptions at all"
  * still shows up as a diff — that is a structural change, and dropping the key would hide it.

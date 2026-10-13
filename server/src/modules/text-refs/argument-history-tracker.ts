@@ -363,12 +363,4 @@ export class ArgumentHistoryTracker {
       this.logger.error('Failed to load argument history:', error);
     }
   }
-
-  /**
-   * Stop tracker and cleanup resources
-   */
-  async shutdown(): Promise<void> {
-    await this.saveToStore();
-    this.logger.debug('ArgumentHistoryTracker shutdown complete');
-  }
 }

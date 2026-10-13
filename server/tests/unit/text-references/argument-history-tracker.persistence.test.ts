@@ -69,8 +69,6 @@ describe('ArgumentHistoryTracker (persistence)', () => {
       stepResult: 'R1',
     });
 
-    await trackerA.shutdown();
-
     // Second tracker: should restore previous state from the same mock db
     const trackerB = new ArgumentHistoryTracker(logger, 10, store);
     await trackerB.initialize();
@@ -80,8 +78,6 @@ describe('ArgumentHistoryTracker (persistence)', () => {
     expect(history[0].originalArgs).toEqual({ q: 'hello' });
     expect(history[0].stepNumber).toBe(1);
     expect(history[0].stepResult).toBe('R1');
-
-    await trackerB.shutdown();
   });
 
   /**
@@ -103,7 +99,6 @@ describe('ArgumentHistoryTracker (persistence)', () => {
       sessionId: 'sess-shared',
       originalArgs: { q: 'from-a' },
     });
-    await trackerA.shutdown();
 
     // Same store, same session id, different workspace: must not observe ws-a's entry.
     const trackerB = new ArgumentHistoryTracker(logger, 10, store, { workspaceId: 'ws-b' });
@@ -115,7 +110,6 @@ describe('ArgumentHistoryTracker (persistence)', () => {
       sessionId: 'sess-shared',
       originalArgs: { q: 'from-b' },
     });
-    await trackerB.shutdown();
 
     // ws-a's row survived ws-b's write rather than being overwritten by it.
     const reopenedA = new ArgumentHistoryTracker(logger, 10, store, { workspaceId: 'ws-a' });
@@ -123,7 +117,6 @@ describe('ArgumentHistoryTracker (persistence)', () => {
     const historyA = reopenedA.getSessionHistory('sess-shared');
     expect(historyA).toHaveLength(1);
     expect(historyA[0].originalArgs).toEqual({ q: 'from-a' });
-    await reopenedA.shutdown();
   });
 
   test('still persists when no workspace scope is configured', async () => {
@@ -139,11 +132,9 @@ describe('ArgumentHistoryTracker (persistence)', () => {
       sessionId: 'sess-unscoped',
       originalArgs: { q: 'no-scope' },
     });
-    await tracker.shutdown();
 
     const reopened = new ArgumentHistoryTracker(logger, 10, store);
     await reopened.initialize();
     expect(reopened.getSessionHistory('sess-unscoped')).toHaveLength(1);
-    await reopened.shutdown();
   });
 });
