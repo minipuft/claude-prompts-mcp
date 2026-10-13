@@ -235,7 +235,7 @@ export class FrameworkManager extends BaseResourceHandler<
     let activeFramework: string | null = null;
     if (this.frameworkStateStore?.isFrameworkSystemEnabled()) {
       const active = this.frameworkStateStore.getActiveFramework();
-      if (active) activeFramework = active.type;
+      if (active) activeFramework = active.id;
     }
 
     return {
@@ -378,7 +378,7 @@ export class FrameworkManager extends BaseResourceHandler<
     if (this.frameworkStateStore?.isFrameworkSystemEnabled(criteria.scope)) {
       const activeFramework = this.frameworkStateStore.getActiveFramework(criteria.scope);
       if (activeFramework) {
-        const framework = this.getFramework(activeFramework.type);
+        const framework = this.getFramework(activeFramework.id);
         if (framework?.enabled) {
           this.logger.debug(`Framework selected: ${framework.name} (from active state manager)`);
           return framework;
