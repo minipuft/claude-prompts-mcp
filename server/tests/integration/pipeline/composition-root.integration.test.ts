@@ -165,6 +165,43 @@ function writeWorkspace(workspace: string): void {
     '        - DEF-CRITERION',
     ...steps('CR Def'),
   ]);
+  // Ungated chains for per-step framework guidance. The system prompt injects on every step so a
+  // later step's framework block is observable, not thinned away by the default frequency.
+  const everyStepFramework = [
+    'injection:',
+    '  system-prompt:',
+    '    frequency:',
+    '      mode: every',
+  ];
+  // A chain step's injection block is its own prompt's, so the frequency sits on the step prompts.
+  for (const id of ['fws_a', 'fws_b']) {
+    prompt(id, [
+      `description: ${id}`,
+      `userMessageTemplate: BODY-${id}`,
+      ...optOut,
+      ...everyStepFramework,
+    ]);
+  }
+  const fwSteps = (firstStepFramework: string | null): string[] => [
+    'chainSteps:',
+    '  - promptId: fws_a',
+    '    stepName: A',
+    ...(firstStepFramework === null ? [] : [`    framework: ${firstStepFramework}`]),
+    '  - promptId: fws_b',
+    '    stepName: B',
+  ];
+  prompt('fws_declared', [
+    'description: ungated chain whose first step declares react',
+    'userMessageTemplate: FWS-DECLARED-OWN',
+    ...optOut,
+    ...fwSteps('react'),
+  ]);
+  prompt('fws_plain', [
+    'description: ungated chain with no step-level framework',
+    'userMessageTemplate: FWS-PLAIN-OWN',
+    ...optOut,
+    ...fwSteps(null),
+  ]);
   // A workspace config overlays the packaged one key by key. This switch is what sends a chain's
   // own gate definitions through registration and the run's gate remap.
   writeFileSync(
@@ -702,5 +739,60 @@ describe('a run the stale-session sweep prunes gives its temporary gates back', 
     const freed = await promptEngine({ command: '>>cr_a', gates: gate('NEW-GATE') });
     expect(freed.isError).toBe(false);
     expect(freed.text).toContain('NEW-GATE');
+  });
+});
+
+/**
+ * Stage 12 resolves a framework per chain step (operator `@framework` > the step's own
+ * `framework:` > the active framework), and the step's required sections and phase guard follow
+ * it. The framework guidance block a step renders must name that same framework: before
+ * 2026-10-12 stage 15 injected the run-wide framework into every step, so an ungated step that
+ * declared `react` rendered "operating under the C.A.G.E.E.R.F Framework".
+ */
+describe('a chain step renders the framework guidance of the framework it runs under', () => {
+  const OPERATING_UNDER = /You are operating under the (\S+) Framework for (\S+)\./g;
+  const APPLY_HEADING = /Apply the \S+ framework systematically:/g;
+
+  /** Every framework block in one reply, as `framework@prompt`. */
+  const frameworkBlocks = (text: string): string[] =>
+    [...text.matchAll(OPERATING_UNDER)].map((match) => `${match[1]}@${match[2]}`);
+
+  const expectOneBlock = (reply: Reply, expected: string): void => {
+    expect(reply.isError).toBe(false);
+    expect(frameworkBlocks(reply.text)).toEqual([expected]);
+    expect(reply.text.match(APPLY_HEADING) ?? []).toHaveLength(1);
+  };
+
+  async function runBothSteps(command: string, promptId: string): Promise<[Reply, Reply]> {
+    const first = await promptEngine({ command });
+    const second = await promptEngine({
+      chain_id: chainIdOf(first, promptId),
+      user_response: 'ANSWER-A',
+    });
+    return [first, second];
+  }
+
+  test('an ungated step that declares react renders ReACT; the undeclared step renders the active framework', async () => {
+    const [first, second] = await runBothSteps('>>fws_declared', 'fws_declared');
+    expectOneBlock(first, 'ReACT@fws_a');
+    expect(first.text).toContain('BODY-fws_a');
+    expect(first.text).not.toContain('C.A.G.E.E.R.F');
+    expectOneBlock(second, 'C.A.G.E.E.R.F@fws_b');
+    expect(second.text).toContain('BODY-fws_b');
+  });
+
+  test('control: a chain with no step-level framework renders the active framework on every step', async () => {
+    const [first, second] = await runBothSteps('>>fws_plain', 'fws_plain');
+    expectOneBlock(first, 'C.A.G.E.E.R.F@fws_a');
+    expectOneBlock(second, 'C.A.G.E.E.R.F@fws_b');
+  });
+
+  test('control: an `@react` override renders ReACT on every step, the declared one included', async () => {
+    const [first, second] = await runBothSteps('@react >>fws_plain', 'fws_plain');
+    expectOneBlock(first, 'ReACT@fws_a');
+    expectOneBlock(second, 'ReACT@fws_b');
+
+    const declared = await promptEngine({ command: '@react >>fws_declared' });
+    expectOneBlock(declared, 'ReACT@fws_a');
   });
 });
