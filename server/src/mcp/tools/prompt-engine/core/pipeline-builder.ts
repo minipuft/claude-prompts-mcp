@@ -72,7 +72,10 @@ import { runGateReviewEvidence } from '#engine/gates/services/gate-review-eviden
 import { GateServiceFactory } from '#engine/gates/services/gate-service-factory.js';
 import { GateVerdictProcessor } from '#engine/gates/services/gate-verdict-processor.js';
 import { InlineGateProcessor } from '#engine/gates/services/inline-gate-processor.js';
-import { RequestGateAdmission } from '#engine/gates/services/request-gate-admission.js';
+import {
+  callerRequestedGates,
+  RequestGateAdmission,
+} from '#engine/gates/services/request-gate-admission.js';
 import { createRunStepViewProvider } from '#engine/gates/services/run-step-view.js';
 import { TemporaryGateRegistrar } from '#engine/gates/services/temporary-gate-registrar.js';
 import {
@@ -191,12 +194,6 @@ export class PipelineBuilder {
       deps.frameworkValidator ?? null,
       deps.logger
     );
-    const planningStage = new ExecutionPlanningStage(
-      deps.executionPlanner,
-      deps.getFrameworkStateEnabled,
-      deps.logger
-    );
-
     // Script execution stage
     const scriptExecutor = createScriptExecutor({ debug: false });
     const toolDetectionService = createToolDetectionService({ debug: false });
@@ -305,6 +302,14 @@ export class PipelineBuilder {
       deps.logger,
       gateSystemEnabled,
       (context, registered) => inlineGateProcessor.remapRegisteredGateIds(context, registered)
+    );
+    // Stage 07 asks the predicate stage 05 refuses with: a call that requested a gate keeps the
+    // gates a script-tool prompt's default `%clean` would withhold.
+    const planningStage = new ExecutionPlanningStage(
+      deps.executionPlanner,
+      deps.getFrameworkStateEnabled,
+      (context) => callerRequestedGates(temporaryGateRegistrar, context).length > 0,
+      deps.logger
     );
     // Stage 05, built here because it refuses a call's gate requests with the same registrar and
     // switches stage 11 reads — before stage 08 runs any script tool.

@@ -92,7 +92,8 @@ const scriptRan = (name: string): boolean => existsSync(path.join(sentinelDir, n
 
 /**
  * One prompt with a prompt-local script tool, the only kind stage 08 runs. `schema_match` on a
- * required `go` plus `autoApproveOnValid` runs it on any call that passes `go`.
+ * required `go` plus `autoApproveOnValid` runs it on any call that passes `go`. The prompt also
+ * includes a gate, so whether a call keeps gates shows in whether it opens a review session.
  */
 function writeWorkspace(workspace: string): void {
   const dir = path.join(workspace, 'resources', 'prompts', 'general', 'sr_tool');
@@ -114,6 +115,8 @@ function writeWorkspace(workspace: string): void {
       '    description: the sentinel name',
       '    required: false',
       'gateConfiguration:',
+      '  include:',
+      '    - code-quality',
       '  exclude:',
       '    - content-structure',
       '  framework_gates: false',
@@ -301,6 +304,48 @@ describe('a refused gate request runs no script tool', () => {
     const ran = await promptEngine({ command: '%clean >>sr_tool go:"suppressed-control"' });
     expect(ran.isError).toBe(false);
     expect(scriptRan('suppressed-control')).toBe(true);
+  });
+
+  test('a `::` gate on a script-tool prompt with no modifier is enforced, not refused', async () => {
+    const reply = await promptEngine({ command: '>>sr_tool go:"inline-gated" :: "MUST-CITE"' });
+    expect(reply.isError).toBe(false);
+    expect(reply.text).not.toContain('Drop %clean');
+    expect(reply.text).toContain(BODY);
+    expect(reply.text).toContain('MUST-CITE');
+    expect(reply.text).toContain('chain_id=');
+    expect(scriptRan('inline-gated')).toBe(true);
+  });
+
+  test('a gate on a script-tool workflow node is enforced, not refused', async () => {
+    const reply = await promptEngine({
+      workflow: {
+        version: 1,
+        nodes: [
+          {
+            id: 'one',
+            promptId: 'sr_tool',
+            args: { go: 'node-gated' },
+            inlineGateCriteria: ['NODE-CRITERION'],
+          },
+        ],
+      },
+    });
+    expect(reply.isError).toBe(false);
+    expect(reply.text).not.toContain('Drop %clean');
+    expect(reply.text).toContain('NODE-CRITERION');
+    expect(reply.text).toContain('chain_id=');
+  });
+
+  test('an ungated script-tool call still runs under the default %clean', async () => {
+    const reply = await promptEngine({ command: '>>sr_tool go:"default-clean"' });
+    expect(reply.isError).toBe(false);
+    expect(reply.text).toContain(BODY);
+    // The prompt includes a gate: the default `%clean` withholds it (no review session opens),
+    // while `%lean` and a requested gate keep it, so the session line is what tells them apart.
+    expect(reply.text).not.toContain('chain_id=');
+    const lean = await promptEngine({ command: '%lean >>sr_tool go:"default-lean"' });
+    expect(lean.text).toContain('chain_id=');
+    expect(scriptRan('default-clean')).toBe(true);
   });
 
   test('with the gate switch off, a requested gate is refused before the script runs', async () => {

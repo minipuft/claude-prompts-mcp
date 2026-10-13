@@ -13,8 +13,8 @@
  *      longer reach, are each refused by entry.
  *
  * The modifiers read here are the call's own (`ExecutionContext.getExecutionModifiers`): the
- * planner's default `%clean` for a script-tool prompt is decided later, at stage 07, and only
- * gate enhancement sees it.
+ * planner's default `%clean` for a script-tool prompt is decided later, at stage 07, and is not
+ * applied to a call that requested a gate (`callerRequestedGates`), so it never needs a refusal.
  */
 import {
   gateSuppressionRefusalDetail,

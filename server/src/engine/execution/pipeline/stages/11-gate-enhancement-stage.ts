@@ -33,10 +33,10 @@ const SKIP_REASONS: Record<GateSuppression['kind'], string> = {
  *
  * Dependencies: context.executionPlan, context.convertedPrompt or context.parsedCommand.steps
  * Output: Enhanced prompts with gate instructions, context.activeGateIds
- * Can Early Exit: Yes, only for a gate the call requested while a switch withholds every gate and
- * stage 05 could not see that switch: the planner's default `%clean` for a script-tool prompt.
- * Every other refusal of a gate request is stage 05's (`RequestGateAdmission`), raised
- * before any script tool runs.
+ * Can Early Exit: Yes, only for a gate the call requested while a switch withholds every gate that
+ * changed after stage 05 read it. Every refusal of a gate request is stage 05's
+ * (`RequestGateAdmission`), raised before any script tool runs; the planner's default `%clean`
+ * for a script-tool prompt is not applied to a call that requested a gate.
  */
 export class GateEnhancementStage extends BasePipelineStage {
   readonly name = 'GateEnhancement';
@@ -136,8 +136,8 @@ export class GateEnhancementStage extends BasePipelineStage {
 
   /**
    * The step every gate-withholding switch shares: skip a call that requested no gate, refuse one
-   * that did. Stage 05 refuses the second for every switch it can read, so a refusal here means a
-   * switch decided after it (the planner's script-tool `%clean`) — and a script may have run.
+   * that did. Stage 05 refuses the second for every switch, so a refusal here means a switch
+   * changed after it — and a script may have run.
    */
   private skipOrRefuse(context: ExecutionContext, suppression: GateSuppression): void {
     const requested = callerRequestedGates(this.registrar, context);
