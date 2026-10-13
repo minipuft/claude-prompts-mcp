@@ -234,7 +234,7 @@ describe('ExecutionPlanner', () => {
       expect(plan.requiresFramework).toBe(true);
     });
 
-    test('does not apply clean default when user provides custom gates', async () => {
+    test('does not apply clean default when the call requested a gate', async () => {
       const planner = new ExecutionPlanner(logger);
 
       const promptWithScriptTools: ConvertedPrompt = {
@@ -261,6 +261,7 @@ describe('ExecutionPlanner', () => {
         gateOverrides: {
           gates: ['code-quality'], // User provided custom gates
         },
+        gatesRequested: true,
       });
 
       // Should NOT default to clean when user provides gates

@@ -6,6 +6,8 @@ import { OperatorValidationStage } from '../../../../src/engine/execution/pipeli
 import { SessionManagementStage } from '../../../../src/engine/execution/pipeline/stages/13-session-stage.js';
 import { FrameworkValidator } from '../../../../src/engine/frameworks/framework-validator.js';
 import { InlineGateProcessor } from '../../../../src/engine/gates/services/inline-gate-processor.js';
+import { RequestGateAdmission } from '../../../../src/engine/gates/services/request-gate-admission.js';
+import { TemporaryGateRegistrar } from '../../../../src/engine/gates/services/temporary-gate-registrar.js';
 
 import type { ChainSessionStore } from '../../../../src/modules/chains/manager.js';
 import type {
@@ -217,7 +219,12 @@ describe('Symbolic pipeline coverage', () => {
       logger,
       { remapRunGates: async () => undefined }
     );
-    const inlineStage = new InlineGateExtractionStage(inlineGateProcessor, logger);
+    const admission = new RequestGateAdmission(
+      new TemporaryGateRegistrar(registry as any, createResolver() as any, logger),
+      () => ({ enabled: true, definitionsDirectory: 'gates', enableFrameworkGates: true }),
+      () => true
+    );
+    const inlineStage = new InlineGateExtractionStage(inlineGateProcessor, logger, admission);
     await inlineStage.execute(context);
 
     expect(registry.createTemporaryGate).toHaveBeenCalledTimes(3);

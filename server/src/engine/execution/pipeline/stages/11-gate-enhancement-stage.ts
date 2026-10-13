@@ -1,10 +1,10 @@
 // @lifecycle canonical - Enriches prompts with gate instructions prior to execution.
 import { inlineDefinitionCarriers } from '../../../gates/services/gate-enhancement-service.js';
+import { resolveGateSuppression } from '../../../gates/services/gate-suppression-refusal.js';
 import {
-  gateSuppressionRefusalDetail,
-  requestedGateAddresses,
-  suppressingModifier,
-} from '../../../gates/services/gate-suppression-refusal.js';
+  callerRequestedGates,
+  gateSuppressionRejection,
+} from '../../../gates/services/request-gate-admission.js';
 import { BasePipelineStage } from '../stage.js';
 import { buildWorkflowRejectionResponse } from '../workflow-rejection-response.js';
 
@@ -20,6 +20,12 @@ type GateSystemSettingsProvider = () => GateSystemSettings | undefined;
 /** The runtime gate switch (`system_control gates`), read for a request's scope. */
 type GateSystemSwitch = (scope: StateStoreOptions | undefined) => boolean;
 
+const SKIP_REASONS: Record<GateSuppression['kind'], string> = {
+  config: 'Gate system disabled by configuration',
+  runtime: 'Gate system disabled at runtime',
+  modifier: 'Gate enhancement disabled by execution modifier',
+};
+
 /**
  * Pipeline Stage 11: Gate Enhancement
  *
@@ -27,9 +33,10 @@ type GateSystemSwitch = (scope: StateStoreOptions | undefined) => boolean;
  *
  * Dependencies: context.executionPlan, context.convertedPrompt or context.parsedCommand.steps
  * Output: Enhanced prompts with gate instructions, context.activeGateIds
- * Can Early Exit: Yes (a request gate that cannot register as sent, R11.8, targeting a step a
- * resume can no longer reach, R65, or carrying a canonical gate's id, R100; a gate the call
- * requested while `%clean`, `%framework` or a gate switch withholds every gate, R11.8)
+ * Can Early Exit: Yes, only for a gate the call requested while a switch withholds every gate that
+ * changed after stage 05 read it. Every refusal of a gate request is stage 05's
+ * (`RequestGateAdmission`), raised before any script tool runs; the planner's default `%clean`
+ * for a script-tool prompt is not applied to a call that requested a gate.
  */
 export class GateEnhancementStage extends BasePipelineStage {
   readonly name = 'GateEnhancement';
@@ -57,57 +64,18 @@ export class GateEnhancementStage extends BasePipelineStage {
       return;
     }
 
-    // Each switch below withholds every gate. A call that requested none skips; one that requested
-    // a gate is refused, naming the switch and the gates, rather than run without them (R11.8).
+    // Each switch withholds every gate. A call that requested none skips; one that requested a
+    // gate was refused at stage 05, except under a switch only the final plan carries.
     const gatesConfig = this.gatesConfigProvider();
-    if (gatesConfig?.enabled === false) {
-      this.skipOrRefuse(context, { kind: 'config' }, 'Gate system disabled by configuration');
-      return;
-    }
-
-    // The runtime switch too, for this request's scope. Reading only the config flag let a chain
-    // started with the switch off select its gates anyway: stage 13 opened a review on its first
-    // step and asked for a `gate_verdict` the tool refuses while the switch is off, so no answer
-    // could ever move the run (P6.292).
-    if (!this.gateSystemEnabled(context.getScopeOptions())) {
-      this.skipOrRefuse(context, { kind: 'runtime' }, 'Gate system disabled at runtime');
-      return;
-    }
-
-    const executionPlan = context.requireExecutionPlan();
-
-    const modifier = suppressingModifier(executionPlan.modifiers);
-    if (modifier !== undefined) {
-      this.skipOrRefuse(
-        context,
-        { kind: 'modifier', modifier },
-        'Gate enhancement disabled by execution modifier'
-      );
-      return;
-    }
-
-    // R65: a resume's request gate targeting a step it can no longer reach is refused here, before
-    // any registration, in stage 04's rejection shape — the registrar alone knows the run's
-    // position and the gates it holds. R100: so is a request gate under a canonical gate's id.
-    // R11.8: so is one that cannot register as sent (blank, or a bare id naming no gate).
-    const refused = [
-      ...(await this.registrar.invalidRequestGates(context)).map((refusal) => ({
-        reason: 'gate-criteria-invalid' as const,
-        ...refusal,
-      })),
-      ...this.registrar
-        .canonicalIdCollisions(context)
-        .map((refusal) => ({ reason: 'gate-id-canonical' as const, ...refusal })),
-      ...this.registrar
-        .unreachableStepTargets(context)
-        .map((refusal) => ({ reason: 'gate-target-passed' as const, ...refusal })),
-    ];
-    if (refused.length > 0) {
-      context.diagnostics.warn(this.name, 'Request gate refused', { count: refused.length });
-      context.setResponse(
-        buildWorkflowRejectionResponse(refused, context.state.session.resumeChainId)
-      );
-      this.logExit({ refusedRequestGates: refused.length });
+    const suppression = resolveGateSuppression({
+      configEnabled: gatesConfig?.enabled !== false,
+      // The runtime switch too, for this request's scope: reading only the config flag let a chain
+      // started with the switch off select its gates and then wait on a verdict the tool refuses.
+      runtimeEnabled: () => this.gateSystemEnabled(context.getScopeOptions()),
+      modifiers: () => context.requireExecutionPlan().modifiers,
+    });
+    if (suppression !== undefined) {
+      this.skipOrRefuse(context, suppression);
       return;
     }
 
@@ -168,23 +136,13 @@ export class GateEnhancementStage extends BasePipelineStage {
 
   /**
    * The step every gate-withholding switch shares: skip a call that requested no gate, refuse one
-   * that did. Only the call's own gates count — its request gates, the `::` operators of the command
-   * it sent (a resume sends none), and its workflow's node gates — never a prompt author's.
+   * that did. Stage 05 refuses the second for every switch, so a refusal here means a switch
+   * changed after it — and a script may have run.
    */
-  private skipOrRefuse(
-    context: ExecutionContext,
-    suppression: GateSuppression,
-    skip: string
-  ): void {
-    const requested = requestedGateAddresses({
-      requestGates: this.registrar.ownRequestGates(context),
-      commandOperators: context.state.session.isBlueprintRestored
-        ? undefined
-        : context.parsedCommand?.operators?.operators,
-      workflowNodes: context.mcpRequest.workflow?.nodes,
-    });
+  private skipOrRefuse(context: ExecutionContext, suppression: GateSuppression): void {
+    const requested = callerRequestedGates(this.registrar, context);
     if (requested.length === 0) {
-      this.logExit({ skipped: skip });
+      this.logExit({ skipped: SKIP_REASONS[suppression.kind] });
       return;
     }
     context.diagnostics.warn(this.name, 'Requested gate refused: gates withheld', {
@@ -193,12 +151,7 @@ export class GateEnhancementStage extends BasePipelineStage {
     });
     context.setResponse(
       buildWorkflowRejectionResponse(
-        [
-          {
-            reason: 'gate-suppressed',
-            detail: gateSuppressionRefusalDetail(suppression, requested),
-          },
-        ],
+        [gateSuppressionRejection(suppression, requested)],
         context.state.session.resumeChainId
       )
     );
