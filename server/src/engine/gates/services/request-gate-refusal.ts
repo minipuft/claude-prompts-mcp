@@ -144,8 +144,11 @@ export function assertNotBareReference(
   }
 }
 
-/** One refusal line's detail: the entry by position and id or name, the problem, the fix. PURE. */
-export function requestGateRefusalDetail(index: number, gate: unknown, problem: string): string {
+/**
+ * A request gate addressed by position and id or name — `request gate 1 (name "Tone")` — the way
+ * every refusal that names one addresses it. PURE.
+ */
+export function requestGateAddress(index: number, gate: unknown): string {
   const label =
     typeof gate === 'string'
       ? JSON.stringify(gate)
@@ -154,8 +157,13 @@ export function requestGateRefusalDetail(index: number, gate: unknown, problem: 
         : isRecord(gate) && typeof gate['name'] === 'string'
           ? `name ${JSON.stringify(gate['name'])}`
           : 'no id or name';
+  return `request gate ${index + 1} (${label})`;
+}
+
+/** One refusal line's detail: the entry by position and id or name, the problem, the fix. PURE. */
+export function requestGateRefusalDetail(index: number, gate: unknown, problem: string): string {
   return (
-    `request gate ${index + 1} (${label}) ${problem}. The server can neither address nor review ` +
+    `${requestGateAddress(index, gate)} ${problem}. The server can neither address nor review ` +
     `it, and skipping it would start the run without a gate you asked for. ${REQUEST_GATE_FORMS}`
   );
 }

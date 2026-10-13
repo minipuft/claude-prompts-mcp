@@ -301,12 +301,20 @@ export type WorkflowRejectionReason =
    * blank criteria entry, or a bare id naming no gate.
    */
   | 'gate-criteria-invalid'
+  /**
+   * The call requested a gate — a `gates` entry, a `::` operator, a gate on a workflow node — while
+   * something withholds every gate from it: `%clean`, `%framework`, `gates.enabled: false`, or the
+   * runtime gate switch (R11.8). Run, the call would hold none of the gates it asked for and say
+   * nothing. Produced by stage 11 before anything registers; run-level, addressed to no node.
+   */
+  | 'gate-suppressed'
   | 'required-argument-missing'
   | 'unknown-visibility-item';
 
 /**
- * One addressed rejection. At least one of `nodeId` / `edge` is set for every reason but the three
- * run-level ones, and for `gate-criteria-invalid` when the criterion belongs to a step.
+ * One addressed rejection. At least one of `nodeId` / `edge` is set for every reason but the
+ * run-level ones (each says so above), and for `gate-criteria-invalid` when the criterion belongs to
+ * a step.
  */
 export interface WorkflowRejection {
   readonly reason: WorkflowRejectionReason;

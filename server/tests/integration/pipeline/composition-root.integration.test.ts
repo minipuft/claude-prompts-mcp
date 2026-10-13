@@ -47,6 +47,7 @@ import { loadPromptData } from '../../../src/runtime/data-loader.js';
 import { initializeModules } from '../../../src/runtime/module-initializer.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 
+import type { TemporaryGateRegistry } from '../../../src/engine/gates/core/temporary-gate-registry.js';
 import type { ConfigLoader } from '../../../src/infra/config/index.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { RuntimeFoundation } from '../../../src/runtime/context.js';
@@ -249,8 +250,6 @@ afterAll(async () => {
   await foundation?.serviceOrchestrator.stopAll();
   await modules?.mcpToolsManager.getChainSessionStore()?.cleanup();
   modules?.mcpToolsManager.shutdown();
-  // Its 30s memory interval holds the process open; `Application.shutdown` never stops it.
-  modules?.mcpToolsManager.getMetricsCollector().shutdown();
   await SqliteEngine.shutdownInstance();
   rmSync(root, { recursive: true, force: true });
   for (const [key, value] of originalEnv) {
@@ -488,5 +487,220 @@ describe('a routed command before the composition root assigns the resource_mana
       // Not `early.cleanup()`: that shuts down the config and prompt managers this file shares.
       await early.getChainSessionStore().cleanup();
     }
+  });
+});
+
+/**
+ * R11.8: a gate the call requested is enforced as written or refused with a reason. MEASURED
+ * 2026-10-12 on `0a0c2e3d` through this composition root: `%clean` and `%framework` with a `::`
+ * criterion, a named `::` gate or a `gates` entry, and `gates.enabled: false` or the runtime switch
+ * off with a `::` criterion or a `gates` entry, each ran the prompt with no gate and `isError: false`
+ * — stage 11 skipped, and nothing told the client.
+ */
+describe('a gate the call requested while a switch withholds every gate', () => {
+  const refusedFor = (reply: Reply, cause: string, address: string): void => {
+    expect(reply.isError).toBe(true);
+    expect(reply.text).toContain('[gate-suppressed] workflow:');
+    expect(reply.text).toContain(cause);
+    expect(reply.text).toContain(address);
+    expect(reply.text).toContain('no run was created');
+    expect(reply.text).not.toContain('BODY-cr_a');
+  };
+  const QUICK_GATE = [{ name: 'Tone', description: 'PLAIN-DIRECT' }];
+
+  test.each([
+    ['%clean with a `::` criterion', { command: '%clean >>cr_a :: "MUST-CITE"' }, ':: "MUST-CITE"'],
+    ['%clean with a named `::` gate', { command: '%clean >>cr_a :: tone:"be plain"' }, ':: tone:'],
+    [
+      '%clean with a quick request gate',
+      { command: '%clean >>cr_a', gates: QUICK_GATE },
+      'request gate 1 (name "Tone")',
+    ],
+    [
+      '%clean with a criterion on an arrow-chain step',
+      { command: '%clean >>cr_a --> >>cr_b :: "STEP-B"' },
+      ':: "STEP-B"',
+    ],
+  ])('%s is refused, naming the clean modifier and the gate', async (_, args, address) => {
+    refusedFor(await promptEngine(args), '%clean runs without gates', address);
+  });
+
+  test.each([
+    ['a `::` criterion', { command: '%framework >>cr_a :: "MUST-CITE"' }, ':: "MUST-CITE"'],
+    [
+      'a canonical request gate',
+      { command: '%framework >>cr_a', gates: ['code-quality'] },
+      'request gate 1 ("code-quality")',
+    ],
+  ])(
+    'the framework modifier with %s is refused, naming it and the gate',
+    async (_, args, address) => {
+      refusedFor(await promptEngine(args), '%framework runs the framework without gates', address);
+    }
+  );
+
+  test('control: %lean keeps the requested gate', async () => {
+    const reply = await promptEngine({ command: '%lean >>cr_a :: "MUST-CITE"' });
+    expect(reply.isError).toBe(false);
+    expect(reply.text).toContain('BODY-cr_a');
+    expect(reply.text).toContain('MUST-CITE');
+  });
+
+  test('control: %clean with no requested gate runs, and withholds the chain author gates', async () => {
+    const single = await promptEngine({ command: '%clean >>cr_a' });
+    expect(single.isError).toBe(false);
+    expect(single.text).toContain('BODY-cr_a');
+
+    const chain = await promptEngine({ command: '%clean >>cr_chain' });
+    expect(chain.isError).toBe(false);
+    expect(chain.text).toContain('BODY-cr_a');
+    expect(chain.text).not.toContain('GUIDANCE-cr-block');
+  });
+
+  test('control: a `verify:` gate under %clean is not refused (stage 17 runs it)', async () => {
+    const reply = await promptEngine({ command: '%clean >>cr_a :: verify:"true"' });
+    expect(reply.isError).toBe(false);
+    expect(reply.text).toContain('Verification: `true`');
+  });
+
+  describe('with `gates.enabled: false` in config', () => {
+    let previous: boolean;
+    beforeEach(() => {
+      const gates = foundation.configManager.getConfig().gates;
+      previous = gates.enabled;
+      gates.enabled = false;
+    });
+    afterEach(() => {
+      foundation.configManager.getConfig().gates.enabled = previous;
+    });
+    const CAUSE = 'gates are disabled by configuration (`gates.enabled: false`)';
+
+    test('a `::` criterion is refused', async () => {
+      refusedFor(await promptEngine({ command: '>>cr_a :: "MUST-CITE"' }), CAUSE, ':: "MUST-CITE"');
+    });
+
+    test('a request gate is refused', async () => {
+      refusedFor(
+        await promptEngine({ command: '>>cr_a', gates: QUICK_GATE }),
+        CAUSE,
+        'request gate 1 (name "Tone")'
+      );
+    });
+
+    test('a gate on a submitted workflow node is refused', async () => {
+      const reply = await promptEngine({
+        workflow: {
+          version: 1,
+          nodes: [{ id: 'one', promptId: 'cr_a', inlineGateIds: ['cr-block'] }],
+        },
+      });
+      refusedFor(reply, CAUSE, 'node "one" gate "cr-block"');
+    });
+
+    test('control: a call with no requested gate runs', async () => {
+      const reply = await promptEngine({ command: '>>cr_a' });
+      expect(reply.isError).toBe(false);
+      expect(reply.text).toContain('BODY-cr_a');
+    });
+  });
+
+  describe('with the runtime gate switch off', () => {
+    const systemControl = (args: Record<string, unknown>): Promise<unknown> => {
+      const callback = tools.get('system_control');
+      if (callback === undefined) throw new Error('system_control was never registered');
+      return callback(args, {});
+    };
+    beforeEach(async () => {
+      await systemControl({ action: 'gates', operation: 'disable' });
+    });
+    afterEach(async () => {
+      await systemControl({ action: 'gates', operation: 'enable' });
+    });
+
+    test('a `::` criterion is refused', async () => {
+      refusedFor(
+        await promptEngine({ command: '>>cr_a :: "MUST-CITE"' }),
+        'the gate system is disabled for this workspace',
+        ':: "MUST-CITE"'
+      );
+    });
+
+    test('control: a call with no requested gate runs', async () => {
+      const reply = await promptEngine({ command: '>>cr_a' });
+      expect(reply.isError).toBe(false);
+      expect(reply.text).toContain('BODY-cr_a');
+    });
+  });
+});
+
+/**
+ * R11.13 made a full temporary gate registry a refusal, and a run-owned gate has no expiry: it
+ * lives as long as its run. So an abandoned run must give its gates back when the stale-session
+ * sweep prunes it (`chainSessions.timeoutMinutes`), or abandoned runs could hold the 100-gate
+ * registry full and refuse every gated call after them. Driven through the composed wiring:
+ * `ChainSessionStore.cleanupStaleSessions` → `onRunEnded` → `TemporaryGateRegistry.releaseRun`.
+ */
+describe('a run the stale-session sweep prunes gives its temporary gates back', () => {
+  test('a registry held full by an abandoned run frees when the run is pruned; a live run keeps its gate', async () => {
+    const executor = (modules.mcpToolsManager as unknown as { promptExecutor: unknown })
+      .promptExecutor as {
+      lightweightGateSystem: { getTemporaryGateRegistry(): TemporaryGateRegistry | undefined };
+    };
+    const registry = executor.lightweightGateSystem.getTemporaryGateRegistry();
+    const store = modules.mcpToolsManager.getChainSessionStore();
+    if (registry === undefined || store === undefined) throw new Error('no registry or store');
+    const sessionOf = (chainId: string) => {
+      const session = store.getSessionByChainIdentifier(chainId);
+      if (session === undefined) throw new Error(`no session for ${chainId}`);
+      return session;
+    };
+    const gate = (description: string) => [{ name: 'Sweep', description }];
+
+    const live = sessionOf(
+      chainIdOf(await promptEngine({ command: '>>cr_chain', gates: gate('LIVE-GATE') }), 'cr_chain')
+    );
+    const abandoned = sessionOf(
+      chainIdOf(await promptEngine({ command: '>>cr_chain', gates: gate('OLD-GATE') }), 'cr_chain')
+    );
+    const liveGateIds = registry.getRunGates(live.sessionId).map((held) => held.id);
+    expect(liveGateIds).toHaveLength(1);
+
+    // Fill the registry with gates the abandoned run owns, until a new gated call is refused.
+    const filler: string[] = [];
+    for (let index = 0; index < 100; index += 1) {
+      try {
+        filler.push(
+          registry.createTemporaryGate(
+            {
+              name: `fill-${index}`,
+              type: 'validation',
+              scope: 'execution',
+              description: 'filler',
+              guidance: 'filler',
+              source: 'manual',
+            },
+            'fill'
+          )
+        );
+      } catch {
+        break;
+      }
+    }
+    registry.adoptIntoRun(abandoned.sessionId, filler);
+    const full = await promptEngine({ command: '>>cr_a', gates: gate('NEW-GATE') });
+    expect(full.isError).toBe(true);
+    expect(full.text).toContain('Temporary gate registry is full');
+
+    // Past the sweep's threshold: the run is abandoned, and the sweep prunes it.
+    abandoned.lastActivity = Date.now() - 48 * 60 * 60 * 1000;
+    expect(await store.cleanupStaleSessions()).toBeGreaterThanOrEqual(1);
+
+    expect(registry.getRunGates(abandoned.sessionId)).toEqual([]);
+    expect(filler.filter((id) => registry.getTemporaryGate(id) !== undefined)).toEqual([]);
+    expect(registry.getRunGates(live.sessionId).map((held) => held.id)).toEqual(liveGateIds);
+
+    const freed = await promptEngine({ command: '>>cr_a', gates: gate('NEW-GATE') });
+    expect(freed.isError).toBe(false);
+    expect(freed.text).toContain('NEW-GATE');
   });
 });

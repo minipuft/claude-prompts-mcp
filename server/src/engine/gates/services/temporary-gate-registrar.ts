@@ -397,7 +397,6 @@ export class TemporaryGateRegistrar {
   async invalidRequestGates(
     context: ExecutionContext
   ): Promise<Array<{ readonly detail: string }>> {
-    const gates: readonly unknown[] = context.state.gates.requestedOverrides?.gates ?? [];
     const recorded = this.recordedRequestGates(context);
     // The run declared its recorded gates when it started; a re-send of one is that gate.
     const declared = [...recorded].flatMap((gate) => {
@@ -405,14 +404,24 @@ export class TemporaryGateRegistrar {
       return isNonBlank(id) ? [id] : [];
     });
     const refusals: Array<{ readonly detail: string }> = [];
-    const own = gates.filter((gate) => !recorded.has(gate));
-    for (const [index, gate] of own.entries()) {
+    for (const [index, gate] of this.ownRequestGates(context).entries()) {
       const problem = await this.requestGateProblem(context, gate, declared);
       if (problem !== undefined) {
         refusals.push({ detail: requestGateRefusalDetail(index, gate, problem) });
       }
     }
     return refusals;
+  }
+
+  /**
+   * The request gates this call sent itself (`gates`, then `workflow.gates`), in the order refusals
+   * count them: a claimed run's recorded gates, handed back to the same channel when the run
+   * started, are the run's, not this call's (R11.13).
+   */
+  ownRequestGates(context: ExecutionContext): readonly unknown[] {
+    const gates: readonly unknown[] = context.state.gates.requestedOverrides?.gates ?? [];
+    const recorded = this.recordedRequestGates(context);
+    return gates.filter((gate) => !recorded.has(gate));
   }
 
   /**

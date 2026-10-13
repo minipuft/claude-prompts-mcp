@@ -7,6 +7,7 @@ import {
   withStepGates,
 } from './chain-step-gate-bindings.js';
 import { DEFAULT_FRAMEWORK_GATE_ID, GateSetResolver } from './gate-set-resolver.js';
+import { suppressingModifier } from './gate-suppression-refusal.js';
 import { liveNodeIds } from './run-step-view.js';
 import {
   planNodeDrivenRender,
@@ -196,11 +197,9 @@ export class GateEnhancementService {
     return this.gateService !== null;
   }
 
+  /** `%clean` and `%framework` withhold every gate (`suppressingModifier`); `%lean` keeps them. */
   shouldSkip(modifiers?: ExecutionModifiers): boolean {
-    if (!modifiers) {
-      return false;
-    }
-    return modifiers.clean === true || modifiers.framework === true;
+    return suppressingModifier(modifiers) !== undefined;
   }
 
   /**
