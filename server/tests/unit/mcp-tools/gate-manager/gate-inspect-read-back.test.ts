@@ -517,6 +517,8 @@ describe('GateDiscoveryProcessor — list and inspect boundaries', () => {
         })
       );
       expect(silent).not.toContain('Blocks Response On Fail');
+      // The schema defaults `gate_type`, so an undeclared gate reads back the default, never `undefined`.
+      expect(silent).toContain('Classification: custom');
     });
 
     it.each([
