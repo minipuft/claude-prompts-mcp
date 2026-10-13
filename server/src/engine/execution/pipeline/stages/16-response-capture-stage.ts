@@ -5,6 +5,7 @@ import { UnknownObservationValidationError } from '../../capture/unknown-observa
 import {
   collectDetachedNodeFacts,
   collectRunHolds,
+  describeDetachedResumeRoute,
   describeDetachedReview,
   describeDetachedReviewOutcome,
   describeLandedReport,
@@ -22,6 +23,7 @@ import {
   describeReviewForRender,
   semanticReviewResume,
 } from '../decisions/gates/describe-review-for-render.js';
+import { partitionReviewHints } from '../decisions/gates/review-hints.js';
 import {
   decideInterrupt,
   decideMutation,
@@ -584,6 +586,12 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     const runCompleted = await this.chainSessionStore.completeHeldRun(sessionId);
     const after =
       this.chainSessionStore.getSession(sessionId, context.getScopeOptions()) ?? session;
+    // A semantic review's instructions and its one resume call, routed by the node's trailer.
+    const semanticResume =
+      review === null
+        ? undefined
+        : semanticReviewResume(review, after.chainId, describeDetachedResumeRoute(node));
+    const hints = partitionReviewHints(review?.retryHints ?? []);
     const text = describeLandedReport(node, {
       runCompleted,
       held: isRunHeldOpen(after),
@@ -603,7 +611,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
                 new Map(),
                 describeReviewForRender(review).protocol
               ),
-              structuralHints: review.retryHints ?? [],
+              ...(semanticResume !== undefined ? { semanticResume } : {}),
+              structuralHints: hints.structural,
+              semanticHints: hints.semantic,
             }),
           }
         : {}),
@@ -612,13 +622,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       content: [
         {
           type: 'text',
-          text: [
-            text,
-            review === null ? '' : (semanticReviewResume(review, after.chainId) ?? ''),
-            `Chain: ${after.chainId}`,
-          ]
-            .filter((part) => part !== '')
-            .join('\n\n'),
+          text: `${text}\n\nChain: ${after.chainId}`,
         },
       ],
       isError: false,
@@ -663,15 +667,18 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       detachedNodes: collectDetachedNodeFacts(context.parsedCommand?.steps, after),
       holds: collectRunHolds(after),
     });
+    // Only a review still awaiting a verdict has a verdict call to offer. After a FAIL the
+    // outcome names the replacement report, and at the retry limit the gate_action.
+    const open = after.reviews?.[node.nodeId];
+    const semanticResume =
+      open?.phase === 'awaiting-verdict'
+        ? semanticReviewResume(open, after.chainId, describeDetachedResumeRoute(node))
+        : undefined;
     context.setResponse({
       content: [
         {
           type: 'text',
-          text: [
-            text,
-            semanticReviewResume(after.reviews?.[node.nodeId], after.chainId) ?? '',
-            `Chain: ${after.chainId}`,
-          ]
+          text: [text, semanticResume ?? '', `Chain: ${after.chainId}`]
             .filter((part) => part !== '')
             .join('\n\n'),
         },

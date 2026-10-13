@@ -11,11 +11,17 @@ import { describe, expect, test } from '@jest/globals';
 import {
   collectDetachedNodeFacts,
   collectRunHolds,
+  describeDetachedResumeRoute,
   describeDetachedReview,
   describeDetachedReviewOutcome,
   describeHeldRun,
   resolveDetachedReport,
 } from '../../../../src/engine/execution/delegation/detached.js';
+import { semanticReviewResume } from '../../../../src/engine/execution/pipeline/decisions/gates/describe-review-for-render.js';
+import {
+  bindSemanticReviewTarget,
+  createSemanticReviewContext,
+} from '../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
 import { unreportedDetachedNodeIds } from '../../../../src/shared/types/chain-execution.js';
 import {
   nodesHoldingRunOpen,
@@ -24,6 +30,8 @@ import {
 } from '../../../../src/shared/types/chain-session.js';
 
 import type { DetachedNodeFacts } from '../../../../src/engine/execution/delegation/detached.js';
+import type { SemanticReviewDefinitionInput } from '../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
+import type { GateReview } from '../../../../src/shared/types/chain-execution.js';
 import type { StepMetadata } from '../../../../src/shared/types/chain-execution.js';
 
 const NODES = [{ id: 'n1' }, { id: 'rev' }, { id: 'n3' }];
@@ -525,5 +533,131 @@ describe('the words a detached review says (row 3.8)', () => {
     expect(describeDetachedReview(node, { ...review, structuralHints: [] })).not.toContain(
       'missing required structure'
     );
+  });
+
+  test('a semantic FAIL hint renders under its own heading, never as missing structure', () => {
+    const review = { chainId: 'c', attempt: 2, maxAttempts: 2, verdictTemplate: '{}' };
+    const semanticHint = "Semantic gate 'sem' failed: criterion-A: unmet";
+    const structuralHint = 'Ensure your response includes the required "## Context" section';
+    const semanticOnly = describeDetachedReview(node, {
+      ...review,
+      semanticHints: [semanticHint],
+      structuralHints: [],
+    });
+    expect(semanticOnly).toContain(
+      `An earlier result failed the semantic review:\n- ${semanticHint}`
+    );
+    expect(semanticOnly).not.toContain('missing required structure');
+
+    // Both kinds: each list sits under its own heading, structural first.
+    const both = describeDetachedReview(node, {
+      ...review,
+      semanticHints: [semanticHint],
+      structuralHints: [structuralHint],
+    });
+    const structuralAt = both.indexOf(
+      `The reported result is missing required structure:\n- ${structuralHint}`
+    );
+    const semanticAt = both.indexOf(
+      `An earlier result failed the semantic review:\n- ${semanticHint}`
+    );
+    expect(structuralAt).toBeGreaterThan(-1);
+    expect(semanticAt).toBeGreaterThan(structuralAt);
+    expect(both.split(semanticHint)).toHaveLength(2);
+  });
+});
+
+describe("a detached semantic review renders one resume call, routed by the node's trailer", () => {
+  const node: DetachedNodeFacts = {
+    token: 'rev',
+    nodeId: 'rev',
+    stepNumber: 2,
+    spawned: true,
+    reported: true,
+  };
+  const TRAILER = 'HANDOFF RESULT\nnode: rev';
+  const definition: SemanticReviewDefinitionInput = {
+    id: 'sem',
+    name: 'Semantic',
+    type: 'validation',
+    description: 'Public criterion',
+    guidance: 'Guidance',
+    pass_criteria: [
+      {
+        type: 'semantic_evaluation',
+        id: 'criterion-A',
+        target: { kind: 'step_output' },
+        question: 'PUBLIC QUESTION A',
+        result: { kind: 'boolean' },
+        acceptance: { kind: 'equals', value: true },
+        evidence_requirements: { min_items: 1 },
+        allow_not_applicable: false,
+      },
+    ],
+  };
+  const review = (target: 'bound' | 'capture-first' | 'unavailable'): GateReview => {
+    const issued = createSemanticReviewContext('rev', 'attempt-1', [definition]);
+    return {
+      nodeId: 'rev',
+      kind: 'detached',
+      phase: 'awaiting-verdict',
+      combinedPrompt: '',
+      gateIds: ['sem'],
+      prompts: [],
+      createdAt: 0,
+      attemptCount: 0,
+      maxAttempts: 2,
+      semanticContext:
+        target === 'bound'
+          ? bindSemanticReviewTarget(issued, 'WORKER RESULT')
+          : target === 'unavailable'
+            ? { ...issued, definitions: {} }
+            : issued,
+    };
+  };
+  const reply = (target: 'bound' | 'capture-first' | 'unavailable') => {
+    const semanticResume = semanticReviewResume(
+      review(target),
+      'chain#1',
+      describeDetachedResumeRoute(node)
+    );
+    return describeDetachedReview(node, {
+      chainId: 'chain#1',
+      attempt: 1,
+      maxAttempts: 2,
+      verdictTemplate: '',
+      ...(semanticResume !== undefined ? { semanticResume } : {}),
+    });
+  };
+  const count = (text: string, needle: string) => text.split(needle).length - 1;
+
+  test('a bound review: one fence with the filled verdict and the trailer as user_response', () => {
+    const text = reply('bound');
+    expect(count(text, '```\nchain_id=')).toBe(1);
+    expect(count(text, 'gate_verdict=')).toBe(1);
+    expect(text).not.toMatch(/gate_verdict=\s*\n/);
+    expect(count(text, 'Public rubric')).toBe(1);
+    expect(text).toContain(`user_response="${TRAILER}"`);
+    expect(text).not.toContain('Omit user_response');
+  });
+
+  test('an uncaptured review asks for the worker result ending in the trailer, with no verdict', () => {
+    const text = reply('capture-first');
+    expect(count(text, '```\nchain_id=')).toBe(1);
+    expect(text).not.toContain('gate_verdict=');
+    expect(text).toContain(`user_response="<the worker's result>\n\n${TRAILER}"`);
+    expect(text).not.toContain('with user_response alone');
+  });
+
+  test('an unavailable review offers no verdict call, so no empty gate_verdict', () => {
+    const text = reply('unavailable');
+    expect(text).not.toContain('gate_verdict=');
+    expect(text).toContain('No verdict can be accepted');
+  });
+
+  test('twin: without a route the ordinary review keeps its own action and no trailer', () => {
+    const text = semanticReviewResume(review('bound'), 'chain#1')!;
+    expect(text).toContain('Omit user_response');
+    expect(text).not.toContain(TRAILER);
   });
 });

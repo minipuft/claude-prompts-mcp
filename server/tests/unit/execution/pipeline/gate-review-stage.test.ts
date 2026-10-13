@@ -20,7 +20,6 @@ const createExecutionResult = () => ({
   promptId: '__gate_review__',
   promptName: 'Quality Gate Validation',
   content: 'Gate review content',
-  callToAction: 'Return with GATE_REVIEW: PASS or FAIL.',
 });
 
 describe('GateReviewStage', () => {
@@ -78,7 +77,6 @@ describe('GateReviewStage', () => {
       expect.objectContaining({ executionType: 'gate_review' })
     );
     expect(context.executionResults?.content).toContain('Gate review content');
-    expect(context.executionResults?.metadata?.callToAction).toContain('GATE_REVIEW');
     expect(context.sessionContext?.pendingReview).toEqual(
       expect.objectContaining({
         gateIds: ['inline_gate_focus'],

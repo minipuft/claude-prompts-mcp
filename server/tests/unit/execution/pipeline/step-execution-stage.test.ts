@@ -25,7 +25,6 @@ const createChainExecutor = () => {
     promptId: 'step',
     promptName: 'Step',
     content: 'chain content',
-    callToAction: 'next',
   });
   return {
     executor: { renderStep: renderStepMock } as unknown as ChainOperatorExecutor,
@@ -181,7 +180,6 @@ describe('StepExecutionStage', () => {
       promptId: 'step_two',
       promptName: 'Step Two',
       content: 'rendered chain step',
-      callToAction: 'Proceed to review',
     };
     renderStepMock.mockResolvedValueOnce(renderResult);
 

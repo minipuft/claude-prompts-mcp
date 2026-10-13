@@ -211,3 +211,11 @@ Moved from `plans/workflow-client-evaluation-2026-10-09-implementation-notes.md`
 - R13.2: no experimental tier in the Public API Contract. A tier only protects surfaces marked experimental before they ship; removing an already-stable parameter stays breaking whatever it is called, so the label would blur the contract without saving a major.
 - R13.3: release PR #473 is not merged from this plan; the owner cuts releases.
 - Owner direction: finish this session here. Slice 7 ships as one PR; 0D.6, 0D.5, 0C1.31, 0C1.32, the coverage slices 0C2/0C3 and the errorText helper remain for the next planner session.
+
+## 2026-10-13 — slice 9: semantic reply rendering (1.9, 1.11, 1.16, 1.17)
+
+- 1.9 (R13.4) accepted: the single-owner pattern (as `buildJudgeReviewSection` documents) rather than the "section identity dedup" the brief named, which does not exist — DEV-T9-P1, a brief that names a mechanism must have seen it. `formatBlockedResponse` used the step render as instructions, so blocked semantic replies are fixed by the same change.
+- 1.16 accepted: `callToAction` surplus. Three places read render text as wire text (an e2e assertion, a hook comment, an executor doc comment).
+- 1.11 accepted: the audit's suspected empty `gate_verdict=` was not the reproducing defect; the duplicated fence without the HANDOFF trailer and the verdict fence on a FAIL were.
+- 1.17 accepted: finding 1 (stale target digest after a detached FAIL) did not reproduce — a detached review renews at the replacement report, not at FAIL; the earlier probe's snapshot was read after the replacement. DEV-T9-P2: the planner passed a probe claim on without its observed values. Finding 2 fixed, plus `withoutStructuralFinding` no longer erasing semantic hints.
+- Findings not cut: `projectFrozenReview` ignores `review.phase` (callers must check it); the `%judge` menu returns after script stages 08/09 have run, so a judge call runs a prompt's scripts and the follow-up runs them again.

@@ -572,13 +572,40 @@ describe('frozen semantic source rendering', () => {
       expect(result.assembled).not.toContain('A legacy string form is still accepted');
       expect(result.assembled).not.toContain('gate_verdict="GATE_REVIEW');
       expect(result.assembled).not.toContain('**GATE_REVIEW:');
-      expect(result.context.executionResults?.metadata?.callToAction).not.toContain(
-        'both your step output'
-      );
       if (mode === 'judge') {
         expect(result.assembled).toContain('Independent Quality Audit');
         expect(result.assembled).toContain('server-captured output already included');
       }
+    }
+  );
+
+  test.each([
+    ['bound report', { bound: true }],
+    ['capture-first', { bound: false }],
+  ] as const)(
+    'a %s review renders its rubric and captured output once per reply',
+    async (_label, options) => {
+      const result = await fixture('self', options);
+      const count = (needle: string) => result.assembled.split(needle).length - 1;
+      expect(count('Public rubric')).toBe(1);
+      expect(count('Server-captured output under review')).toBe(options.bound ? 1 : 0);
+      expect(count('Requested evaluator configuration')).toBe(1);
+      expect(count('Resume:')).toBe(1);
+      // The step render points at the review call to action instead of repeating it.
+      const content = String(result.context.executionResults?.content);
+      expect(content).not.toContain('Public rubric');
+      expect(content).toContain(
+        '**Semantic review:** its instructions and resume call are in the review section below.'
+      );
+      // The footer carries the one-line resume pointer, after the progress line.
+      const footer = result.assembled.slice(result.assembled.lastIndexOf('Chain: chain-source#1'));
+      expect(footer.trim().split('\n')).toEqual([
+        'Chain: chain-source#1',
+        '→ Progress 1/2',
+        options.bound
+          ? 'Next: chain_id="chain-source#1", gate_verdict=<the structured report from the Resume block above>'
+          : 'Next: chain_id="chain-source#1", user_response="<complete node output>"',
+      ]);
     }
   );
 
@@ -658,7 +685,15 @@ describe('frozen semantic source rendering', () => {
       additionalGateIds: result.review.gateIds,
     });
     expect(rendered.content).toContain('FROZEN GUIDANCE A');
-    expect(rendered.content).toContain('PUBLIC QUESTION A');
+    // The rubric itself renders once, in the assembler's review call to action, which reads the
+    // pending review rather than the injection decision; the step render points at it.
+    expect(rendered.content).toContain('**Semantic review:** its instructions and resume call');
+    result.context.state.injection = { gateGuidance: { inject: false } } as never;
+    const assembled = new ResponseAssembler().formatChainResponse(result.context, {
+      isChainFormatting: true,
+    } as never);
+    expect(assembled).toContain('Public rubric');
+    expect(assembled).toContain('PUBLIC QUESTION A');
     expect(result.liveReads()).toBe(0);
   });
 
@@ -787,9 +822,7 @@ describe('frozen semantic source rendering', () => {
     expect(result.assembled).not.toContain('PUBLIC QUESTION A');
     expect(result.assembled).not.toContain('gate_verdict=');
     expect(result.assembled).not.toContain('Independent Quality Audit');
-    expect(result.context.executionResults?.metadata?.callToAction).toContain(
-      'no verdict is accepted'
-    );
+    expect(result.assembled).toContain('gate_action: "retry"');
   });
 
   test('contextless legacy protocol and template remain unchanged', () => {

@@ -143,7 +143,6 @@ function stageFixture(
     promptId: 'draft',
     promptName: 'Draft',
     content: 'Review the output',
-    callToAction: 'Submit verdict',
   }));
   const shell =
     options.shell ??

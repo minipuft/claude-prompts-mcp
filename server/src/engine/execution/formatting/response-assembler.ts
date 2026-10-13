@@ -10,6 +10,7 @@ import { rerunCommandText } from '../parsers/command-parser.js';
 import { formatShellVerifyToken } from '../parsers/symbolic-operator-parser.js';
 import {
   buildStructuredVerdictTemplate,
+  semanticResumePointer,
   semanticReviewResume,
 } from '../pipeline/decisions/gates/describe-review-for-render.js';
 import { projectFrozenReview } from '../pipeline/decisions/gates/semantic-review-context.js';
@@ -518,13 +519,14 @@ export class ResponseAssembler {
       // and a `Next:` asking for more step output would invite a step the run does not have.
     } else if (hasPendingReview || this.renderAsksVerdict(context)) {
       // Gate review, or a gated step's render: every render of a gated step asks for its verdict
-      // the same way (R171) — only when not delegating. A semantic review states its own resume
-      // (capture first, then the bound report). The fallback offers the object form, which
+      // the same way (R171) — only when not delegating. A semantic review's resume is one line
+      // here: the review call to action above carries its instructions and full resume fence,
+      // and a reply renders them once. The fallback offers the object form, which
       // carries what the legacy string carries and is the object a semantic report extends
       // (`per_gate[i].evaluation`); a string can never hold one, so advertising it taught
       // clients to send the shape a semantic review refuses (R11.2).
       lines.push(
-        semanticReviewResume(sessionContext.pendingReview, chainIdentifier) ??
+        semanticResumePointer(sessionContext.pendingReview, chainIdentifier) ??
           `Next: chain_id="${chainIdentifier}", user_response="<your step output>", gate_verdict={"overall": "PASS|FAIL", "rationale": "<why>"}`
       );
     } else if (sessionContext.currentStep && sessionContext.totalSteps) {
@@ -843,7 +845,9 @@ export class ResponseAssembler {
   /**
    * Builds gate review CTA with verdict template, attempt counter, and submit instructions.
    * Retry hints are NOT included here — they are SSOT in chain-operator-executor supplementalSections
-   * (already present in base content).
+   * (already present in base content). The reverse holds for a semantic review: its rubric,
+   * captured output and verdict template render here only, and the step render and footer point
+   * at them.
    */
   private buildGateReviewCTA(context: ExecutionContext): string | null {
     const pendingReview = context.sessionContext?.pendingReview;

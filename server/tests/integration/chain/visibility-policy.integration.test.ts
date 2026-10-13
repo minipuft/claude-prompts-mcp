@@ -302,20 +302,16 @@ describe('P5 visibility — delegation manifest', () => {
     expect(brief).toContain('unknowns_ledger');
     expect(render.content).not.toContain(STEP1_OUTPUT);
     expect(render.content).not.toContain('LEDGER_SECRET_STATEMENT');
-    expect(render.callToAction).not.toContain(STEP1_OUTPUT);
-    expect(render.callToAction).not.toContain('LEDGER_SECRET_STATEMENT');
   });
 
-  test('control: an undeclared chain’s next-step response carries the advisory and no envelope', async () => {
+  test('control: an undeclared chain’s next-step render carries no envelope', async () => {
     const render = await renderStep(delegatedSteps([]), 0);
 
-    // R-1: the pre-delegation position carries ONLY the one-line advisory — the authoritative
-    // handoff (brief + instructions) arrives with the delegated step's own render.
-    expect(render.callToAction).toContain('⚡ Note: Step 2');
-    expect(render.callToAction).toContain('is delegated');
-    expect(render.callToAction).not.toContain('HANDOFF INSTRUCTIONS');
-    expect(render.callToAction).not.toContain('EXECUTION CONTEXT');
-    expect(render.callToAction).not.toContain('CONTEXT WITHHELD');
+    // R-1: the pre-delegation position carries no brief or handoff — the authoritative handoff
+    // (brief + instructions) arrives with the delegated step's own render.
+    expect(render.content).not.toContain('HANDOFF INSTRUCTIONS');
+    expect(render.content).not.toContain('EXECUTION CONTEXT');
+    expect(render.content).not.toContain('CONTEXT WITHHELD');
     expect(render.content).not.toContain(BRIEF_START);
   });
 
@@ -323,11 +319,11 @@ describe('P5 visibility — delegation manifest', () => {
     // Step 2 (the delegated one) exposes what step 1 withheld. The manifest is computed at the
     // delegated step's OWN render (R-1), so its expose cancels the entry — a manifest computed
     // for an earlier step's view would still report `chain_history` here. The pre-delegation
-    // advisory position carries no manifest at all.
+    // preceding step's render carries no manifest at all.
     const steps = delegatedSteps([withhold('chain_history'), expose('chain_history')]);
 
     const advisory = await renderStep(steps, 0);
-    expect(advisory.callToAction).not.toContain('CONTEXT WITHHELD');
+    expect(advisory.content).not.toContain('CONTEXT WITHHELD');
 
     const render = await renderStep(steps, 1);
     expect(render.content).not.toContain('CONTEXT WITHHELD');
@@ -360,9 +356,6 @@ describe('P5 visibility — the no-declarations guarantee', () => {
         // `GATE_REVIEW` line, which this ungated final step printed before P6.286.
         '**Summary**: What was implemented (2-3 sentences)',
       ].join('\n')
-    );
-    expect(render.callToAction).toBe(
-      'Deliver the final response to the user (no user_response needed once the chain completes).'
     );
   });
 });

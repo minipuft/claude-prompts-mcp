@@ -47,6 +47,7 @@ import { createShellVerifyExecutor } from '../../../src/engine/gates/shell/shell
 import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
+import { hashBytes } from '../../../src/shared/utils/hash.js';
 import { runFakeWorker } from '../../helpers/delegation/fake-worker.js';
 
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
@@ -846,6 +847,205 @@ describe('detached delegation (await: run) through the pipeline', () => {
       expect(sessionStore.getReview(sessionId, 'n3')).toBeUndefined();
       expect(run().state.currentNodeId).toBeNull();
       expect(run().runStatus).toBe('completed');
+    });
+
+    describe('a semantic gate: one resume block per reply, routed by the trailer', () => {
+      const semanticGate = (): LightweightGateDefinition =>
+        ({
+          ...reminderGate('dr-semantic'),
+          subject: 'code',
+          evaluation: { mode: 'self', strict: true },
+          pass_criteria: [
+            {
+              type: 'semantic_evaluation',
+              id: 'criterion-A',
+              target: { kind: 'step_output' },
+              question: 'PUBLIC QUESTION A',
+              result: { kind: 'boolean' },
+              acceptance: { kind: 'equals', value: true },
+              evidence_requirements: { min_items: 1 },
+              allow_not_applicable: false,
+            },
+          ],
+        }) as unknown as LightweightGateDefinition;
+      const count = (haystack: string, needle: string) => haystack.split(needle).length - 1;
+      /** A FAIL report bound to the open review's issued pins, with one evidence span. */
+      const failReport = (sessionId: string) => {
+        const open = detachedReview(sessionId)!;
+        const issued = open.semanticContext!;
+        const target = issued.target!;
+        return {
+          overall: 'FAIL',
+          rationale: 'misses the criterion',
+          per_gate: [
+            {
+              index: 1,
+              passed: false,
+              rationale: 'misses the criterion',
+              evaluation: {
+                binding: {
+                  gate_id: 'dr-semantic',
+                  node_id: DETACHED,
+                  attempt_id: issued.attemptId,
+                  definition_digest: issued.definitions['dr-semantic']!.definitionDigest,
+                  target_digest: target.digest,
+                },
+                observations: [
+                  {
+                    criterion_id: 'criterion-A',
+                    state: 'unmet',
+                    value: false,
+                    evidence: [
+                      { target_digest: target.digest, start: 0, end: target.content.length },
+                    ],
+                    rationale: 'the result does not answer the question',
+                  },
+                ],
+              },
+            },
+          ],
+        };
+      };
+      /** One fenced resume call, carrying one filled verdict and the routing trailer. */
+      const expectOneRoutedResume = (reply: string) => {
+        expect(count(reply, '```\nchain_id=')).toBe(1);
+        expect(count(reply, 'gate_verdict=')).toBe(1);
+        expect(reply).not.toMatch(/gate_verdict=\s*\n/);
+        expect(count(reply, 'Public rubric')).toBe(1);
+        expect(reply).toContain(`user_response="${TRAILER}"`);
+        // The ordinary review's "omit user_response" would drop the trailer the verdict routes by.
+        expect(reply).not.toContain('Omit user_response');
+      };
+
+      test('the late report and its replacement each render one fence; the FAIL renders none', async () => {
+        const { pipeline, chainId, sessionId, brief } = await heldAtEnd({
+          gates: [semanticGate()],
+        });
+        const landed = text(
+          await pipeline.execute({
+            chain_id: chainId,
+            user_response: runFakeWorker(brief, { body: 'first attempt' }),
+          } as any)
+        );
+        expect(landed).toContain(`Gate Review Required — detached node ${DETACHED} (step 2)`);
+        expectOneRoutedResume(landed);
+
+        const failed = await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: failReport(sessionId),
+          user_response: TRAILER,
+        } as any);
+        expect(failed.isError).not.toBe(true);
+        expect(text(failed)).toContain('it replaces the first');
+        expect(detachedReview(sessionId)?.phase).toBe('awaiting-replacement');
+        // The review now waits for a replacement report, so no verdict call is offered.
+        expect(text(failed)).not.toContain('gate_verdict=');
+        expect(text(failed)).not.toContain('Public rubric');
+
+        const replaced = text(
+          await pipeline.execute({
+            chain_id: chainId,
+            user_response: runFakeWorker(brief, { body: 'second attempt' }),
+          } as any)
+        );
+        expect(replaced).toContain('its result replaces its first result');
+        expectOneRoutedResume(replaced);
+      });
+
+      test('a replacement that fixes its structure keeps the semantic hint and drops the structural one', async () => {
+        const held = await heldAtEnd({ gates: [semanticGate()], structure: true });
+        sessionStore.recordStepDeclaration(held.sessionId, DETACHED, GUARDED_HEADERS);
+        const { pipeline, chainId, sessionId, brief } = held;
+        const landed = text(
+          await pipeline.execute({
+            chain_id: chainId,
+            user_response: runFakeWorker(brief, { body: 'Looks fine to me.' }),
+          } as any)
+        );
+        expect(landed).toContain('The reported result is missing required structure:');
+        const failed = await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: failReport(sessionId),
+          user_response: TRAILER,
+        } as any);
+        expect(failed.isError).not.toBe(true);
+        expect(detachedReview(sessionId)?.phase).toBe('awaiting-replacement');
+
+        const replaced = text(
+          await pipeline.execute({
+            chain_id: chainId,
+            user_response: runFakeWorker(brief, {
+              body: '## Context\nThe draft argues one claim.\n\n## Analysis\nThe evidence holds.',
+            }),
+          } as any)
+        );
+        expect(replaced).toContain('its result replaces its first result');
+        expect(replaced).toContain(
+          "An earlier result failed the semantic review:\n- Semantic gate 'dr-semantic' failed"
+        );
+        expect(replaced).not.toContain('missing required structure');
+        expect(detachedReview(sessionId)?.retryHints).toEqual([
+          "Semantic gate 'dr-semantic' failed: criterion-A: unmet",
+        ]);
+      });
+
+      test('a replacement is graded against its own capture, never the failed one', async () => {
+        const { pipeline, chainId, sessionId, brief } = await heldAtEnd({
+          gates: [semanticGate()],
+        });
+        await pipeline.execute({
+          chain_id: chainId,
+          user_response: runFakeWorker(brief, { body: 'first attempt' }),
+        } as any);
+        const first = detachedReview(sessionId)!.semanticContext!;
+        const staleReport = failReport(sessionId);
+        await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: staleReport,
+          user_response: TRAILER,
+        } as any);
+        // The FAIL graded the first capture; its pins stand until a replacement arrives.
+        expect(detachedReview(sessionId)?.phase).toBe('awaiting-replacement');
+        expect(detachedReview(sessionId)?.semanticContext?.target?.digest).toBe(
+          first.target!.digest
+        );
+
+        const replaced = text(
+          await pipeline.execute({
+            chain_id: chainId,
+            user_response: runFakeWorker(brief, { body: 'second attempt' }),
+          } as any)
+        );
+        const renewed = detachedReview(sessionId)!.semanticContext!;
+        expect(renewed.attemptId).not.toBe(first.attemptId);
+        expect(renewed.target?.content).toContain('second attempt');
+        expect(renewed.target?.digest).toBe(hashBytes(renewed.target!.content));
+        expect(renewed.target?.digest).not.toBe(first.target!.digest);
+        expect(replaced).toContain(`"target_digest": "${renewed.target!.digest}"`);
+        expect(replaced).not.toContain(first.target!.digest);
+        // The earlier FAIL's hint is reported as a semantic failure, not as missing structure.
+        expect(replaced).toContain(
+          "An earlier result failed the semantic review:\n- Semantic gate 'dr-semantic' failed"
+        );
+        expect(replaced).not.toContain('missing required structure');
+
+        // A report still bound to the failed capture is refused and charges nothing.
+        const stale = await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: staleReport,
+          user_response: TRAILER,
+        } as any);
+        expect(stale.isError).toBe(true);
+        expect(detachedReview(sessionId)?.attemptCount).toBe(1);
+        // Twin: the same report bound to the replacement's capture is graded.
+        const fresh = await pipeline.execute({
+          chain_id: chainId,
+          gate_verdict: failReport(sessionId),
+          user_response: TRAILER,
+        } as any);
+        expect(fresh.isError).not.toBe(true);
+        expect(detachedReview(sessionId)).toMatchObject({ phase: 'exhausted', attemptCount: 2 });
+      });
     });
 
     test('ground truth reads the recorded output, never the text of the call that answers', async () => {
