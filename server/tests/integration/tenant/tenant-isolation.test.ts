@@ -1211,6 +1211,122 @@ describe('Tenant Isolation', () => {
       expect(tenantAAfterClear).toBeUndefined();
       expect(tenantBAfterClear?.sessionId).toBe('tenant-b-session');
     });
+
+    /**
+     * Cross-scope refusals. `system_control session` passes the request scope into these calls
+     * (`session-action-handler.ts`); `getSessionForMutation` is the single guard behind
+     * `cancelChain`, `transitionRunStatus` and `clearSession`, and `getSession` filters on its
+     * own. A `clearSession` once destroyed another workspace's run because it skipped the guard.
+     * Each case asserts the refusal AND that the run is left as it was (memory and `chain_runs`),
+     * beside a same-scope control that proceeds — a refusal with no control could be a store that
+     * refuses everything.
+     */
+    describe('a request scope that is not the run scope is refused and the run is left alone', () => {
+      const owner = { continuityScopeId: 'xs-owner' };
+      const foreign = { continuityScopeId: 'xs-foreign' };
+
+      const runStatusRow = (sessionId: string): string | undefined =>
+        dbManager.query<{ run_status: string }>(
+          `SELECT run_status FROM chain_runs WHERE session_id = ?`,
+          [sessionId]
+        )[0]?.run_status;
+
+      const seedRun = async (sessionId: string, scope: object) => {
+        const session = await chainSessionStore.createSession(
+          sessionId,
+          `chain-${sessionId}#1`,
+          2,
+          {},
+          scope
+        );
+        // Positive control for the row assertions below: the fixture persists the run.
+        expect(runStatusRow(sessionId)).toBe('working');
+        return session;
+      };
+
+      test('cancelChain: a foreign scope returns false and the run keeps working; the owner cancels', async () => {
+        const session = await seedRun('xs-cancel', owner);
+
+        await expect(chainSessionStore.cancelChain('xs-cancel', foreign)).resolves.toBe(false);
+        expect(session.runStatus).toBe('working');
+        expect(session.runCompletedAt).toBeUndefined();
+        expect(runStatusRow('xs-cancel')).toBe('working');
+        expect(chainSessionStore.getSession('xs-cancel', owner)).toBe(session);
+
+        await expect(chainSessionStore.cancelChain('xs-cancel', owner)).resolves.toBe(true);
+        expect(session.runStatus).toBe('cancelled');
+        expect(runStatusRow('xs-cancel')).toBe('cancelled');
+      });
+
+      test('transitionRunStatus: a foreign scope returns false and the status is unchanged; the owner transitions', async () => {
+        const session = await seedRun('xs-transition', owner);
+
+        await expect(
+          chainSessionStore.transitionRunStatus('xs-transition', 'failed', foreign)
+        ).resolves.toBe(false);
+        expect(session.runStatus).toBe('working');
+        expect(session.runCompletedAt).toBeUndefined();
+        expect(runStatusRow('xs-transition')).toBe('working');
+
+        await expect(
+          chainSessionStore.transitionRunStatus('xs-transition', 'failed', owner)
+        ).resolves.toBe(true);
+        expect(session.runStatus).toBe('failed');
+        expect(runStatusRow('xs-transition')).toBe('failed');
+      });
+
+      test('clearSession: a foreign scope returns false and the session stays listed and in SQLite; the owner clears it', async () => {
+        const session = await seedRun('xs-clear', owner);
+
+        await expect(chainSessionStore.clearSession('xs-clear', foreign)).resolves.toBe(false);
+        expect(chainSessionStore.getSession('xs-clear', owner)).toBe(session);
+        expect(session.runStatus).toBe('working');
+        expect(
+          chainSessionStore.listActiveSessions(50, owner).map((entry) => entry.sessionId)
+        ).toContain('xs-clear');
+        expect(runStatusRow('xs-clear')).toBe('working');
+
+        await expect(chainSessionStore.clearSession('xs-clear', owner)).resolves.toBe(true);
+        expect(chainSessionStore.getSession('xs-clear')).toBeUndefined();
+        expect(runStatusRow('xs-clear')).toBeUndefined();
+      });
+
+      test('getSession: a foreign scope sees nothing; the owner and an unscoped caller see the run', async () => {
+        const session = await seedRun('xs-get', owner);
+
+        expect(chainSessionStore.getSession('xs-get', foreign)).toBeUndefined();
+        expect(chainSessionStore.getSession('xs-get', owner)).toBe(session);
+        // The unscoped form is the internal-caller path (stale sweep, chain clear), not a scope.
+        expect(chainSessionStore.getSession('xs-get')).toBe(session);
+      });
+
+      test('a scope given only as workspaceId resolves to the run scope of that workspace', async () => {
+        const session = await seedRun('xs-ws', { workspaceId: 'ws-xs-a' });
+        expect(session.continuityScopeId).toBe('ws-xs-a');
+
+        // Refusals first: another workspace sees and changes nothing.
+        expect(chainSessionStore.getSession('xs-ws', { workspaceId: 'ws-xs-b' })).toBeUndefined();
+        await expect(
+          chainSessionStore.cancelChain('xs-ws', { workspaceId: 'ws-xs-b' })
+        ).resolves.toBe(false);
+        await expect(
+          chainSessionStore.clearSession('xs-ws', { workspaceId: 'ws-xs-b' })
+        ).resolves.toBe(false);
+        expect(session.runStatus).toBe('working');
+        expect(runStatusRow('xs-ws')).toBe('working');
+
+        // Controls: the same workspace, named only by workspaceId, reaches and mutates the run.
+        expect(chainSessionStore.getSession('xs-ws', { workspaceId: 'ws-xs-a' })).toBe(session);
+        await expect(
+          chainSessionStore.cancelChain('xs-ws', { workspaceId: 'ws-xs-a' })
+        ).resolves.toBe(true);
+        expect(runStatusRow('xs-ws')).toBe('cancelled');
+        await expect(
+          chainSessionStore.clearSession('xs-ws', { workspaceId: 'ws-xs-a' })
+        ).resolves.toBe(true);
+        expect(runStatusRow('xs-ws')).toBeUndefined();
+      });
+    });
   });
 
   /**
