@@ -1,8 +1,9 @@
 ---
 title: "Skills Sync boundary — product surfaces describe translation only — Implementation Notes"
 plan: skills-sync-boundary-2026-10-12.md
+# (both files moved to plans/reference/ at closure)
 date: 2026-10-12
-status: active
+status: reference
 tags: [skills-sync, docs, contributing, hooks, boundaries]
 ---
 
@@ -72,6 +73,15 @@ executing the plan. Conservative option taken, logged, work continued.
 `prompt:development/review` for `agent-plugins` project scope, `export --client agent-plugins
 --scope project` with no `MCP_WORKSPACE` → wrote `<worktree>/skills/review/…` (the checkout root,
 resolved by `.git`), nothing under `server/skills`. Temp config and output removed.
+
+- DEV-T2-1 (rows 2.1–2.3): the `~/.claude` tree carried other sessions' uncommitted edits, so
+  rows edited in place and the planner committed only the named files (`git add <file>`), no
+  branch. Row 2.2 was folded into 2.3 because both edit `hooks/README.md`. The full hook suite has
+  one pre-existing failure (`test_hidden_skill_callers.py`, `skills/evidence-report/SKILL.md:5`)
+  unrelated to this plan; the row check ran `test_framework_root.py` (8/8).
+- DEV-T2-2 (row 2.1): a linked worktree without the gitignored `server/skills-sync.yaml` makes the
+  drift hook silent (the CLI exits 1 on the missing file); the env-var proof used a symlink to the
+  main checkout instead.
 
 ## Findings
 
