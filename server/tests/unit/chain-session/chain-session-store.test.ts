@@ -677,18 +677,6 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     }
   });
 
-  test('transitionStepState refuses to overwrite a COMPLETED step', async () => {
-    manager = newManager('step-stickiness');
-    await manager.createSession('s1', 'chain-a', 2);
-    manager.setStepState('s1', 'n1', 'completed', false);
-
-    const result = await manager.transitionStepState('s1', 'n1', 'rendered');
-    expect(result).toBe(false);
-
-    const metadata = manager.getStepState('s1', 'n1');
-    expect(metadata?.state).toBe('completed');
-  });
-
   /**
    * P4.115. A gate review can re-render after the reviewed step's answer was captured; recording
    * what that render declared must not walk the node back to `rendered`.
@@ -712,15 +700,6 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
 
     expect(manager.getStepState('s1', 'n1')?.state).toBe('working');
     expect(manager.getStepState('s1', 'n1')?.declaredSections).toEqual([]);
-  });
-
-  test('transitionStepState allows re-asserting the same terminal state (idempotent no-op)', async () => {
-    manager = newManager('step-idempotent');
-    await manager.createSession('s1', 'chain-a', 2);
-    manager.setStepState('s1', 'n1', 'completed', false);
-
-    const result = await manager.transitionStepState('s1', 'n1', 'completed');
-    expect(result).toBe(true);
   });
 
   test('promoteSessionLifecycle refuses promotion of terminal sessions', async () => {
@@ -1056,15 +1035,6 @@ describe('ChainSessionStore — adaptive mutation (P4 Tier 2)', () => {
     expect(await manager.markNodeSkipped('s1', 'n3', 'u1')).toBe(true);
     expect(await manager.markNodeSkipped('s1', 'n3', 'u1')).toBe(true);
     expect(manager.getStepState('s1', 'n3')?.state).toBe('skipped');
-  });
-
-  test('a skipped node cannot be transitioned back out (terminal stickiness)', async () => {
-    manager = newManager('skip-sticky');
-    await manager.createSession('s1', 'chain-a', 3);
-    await manager.markNodeSkipped('s1', 'n2', 'u1');
-
-    expect(await manager.transitionStepState('s1', 'n2', 'rendered')).toBe(false);
-    expect(manager.getStepState('s1', 'n2')?.state).toBe('skipped');
   });
 
   // --- advanceStep over skipped nodes ---------------------------------------------------

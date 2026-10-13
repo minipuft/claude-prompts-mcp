@@ -64,11 +64,8 @@ const createChainSession = (overrides: Partial<ChainSession> = {}): ChainSession
 const createSessionManager = (): jest.Mocked<ChainSessionService> => {
   const manager: Partial<ChainSessionService> = {
     hasActiveSession: jest.fn().mockReturnValue(false),
-    hasActiveSessionForChain: jest.fn(),
     getSession: jest.fn(),
-    getActiveSessionForChain: jest.fn(),
     getSessionByChainIdentifier: jest.fn(),
-    getLatestSessionForBaseChain: jest.fn(),
     getRunHistory: jest.fn().mockReturnValue([]),
     createSession: jest.fn(async () => createChainSession()),
     getReview: jest.fn().mockReturnValue(undefined),
@@ -76,7 +73,6 @@ const createSessionManager = (): jest.Mocked<ChainSessionService> => {
     setReview: jest.fn(),
     clearPendingGateReview: jest.fn(),
     getChainContext: jest.fn(),
-    getOriginalArgs: jest.fn(),
     getSessionBlueprint: jest.fn(),
     getInlineGateIds: jest.fn(),
     clearSessionsForChain: jest.fn(),
@@ -84,7 +80,6 @@ const createSessionManager = (): jest.Mocked<ChainSessionService> => {
     updateSessionState: jest.fn(),
     setStepState: jest.fn(),
     getStepState: jest.fn(),
-    transitionStepState: jest.fn(),
     isStepComplete: jest.fn(),
     completeStep: jest.fn(),
     cleanup: jest.fn(),
@@ -223,7 +218,7 @@ describe('SessionManagementStage', () => {
       },
     });
 
-    manager.getLatestSessionForBaseChain.mockReturnValue(existingSession);
+    manager.getRunHistory.mockReturnValue([existingSession.chainId]);
 
     const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
     context.executionPlan = createExecutionPlan();
@@ -232,7 +227,6 @@ describe('SessionManagementStage', () => {
     await stage.execute(context);
 
     expect(manager.getSessionByChainIdentifier).not.toHaveBeenCalled();
-    expect(manager.getLatestSessionForBaseChain).not.toHaveBeenCalled();
     expect(manager.createSession).toHaveBeenCalledTimes(1);
     expect(context.state.session.lifecycleDecision).toBe('create-new');
     expect(context.sessionContext?.chainId).not.toBe(existingSession.chainId);

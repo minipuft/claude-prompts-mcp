@@ -97,18 +97,6 @@ function lifecycleForMilestone(milestone: StepMilestone): StepLifecycle {
   }
 }
 
-/**
- * Step lifecycles that may not be transitioned out of.
- *
- * `completed` was the only one until P4; `skipped` joins it because a step the mutation policy
- * retired must not be re-rendered by a later capture — the whole point of the skip is that the
- * client never sees it again.
- */
-const TERMINAL_STEP_LIFECYCLES: ReadonlySet<StepLifecycle> = new Set<StepLifecycle>([
-  'completed',
-  'skipped',
-]);
-
 /** Step lifecycles that mean "this step has already been rendered, run, or retired". */
 function hasStepStarted(state: StepLifecycle | undefined): boolean {
   return state !== undefined && state !== 'pending';
@@ -1211,56 +1199,6 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Transition step to a new state.
-   *
-   * Enforces step-lifecycle stickiness: a step in terminal `completed`
-   * cannot be overwritten. Re-asserting the same terminal state is a no-op
-   * (returns true to keep callers idempotent).
-   */
-  async transitionStepState(
-    sessionId: string,
-    nodeId: string,
-    newMilestone: StepMilestone,
-    isPlaceholder: boolean = false
-  ): Promise<boolean> {
-    const session = this.activeSessions.get(sessionId);
-    if (!session) {
-      this.logger?.warn(
-        `[StepLifecycle] Cannot transition step state for non-existent session: ${sessionId}`
-      );
-      return false;
-    }
-
-    const currentMetadata = this.getStepState(sessionId, nodeId);
-    const currentState = currentMetadata?.state;
-
-    // Stickiness: refuse to overwrite a terminal step state with a different state. Re-asserting
-    // the same terminal value stays a no-op success, which is why the comparison is against the
-    // lifecycle the incoming milestone implies rather than against the milestone name.
-    if (
-      currentState !== undefined &&
-      TERMINAL_STEP_LIFECYCLES.has(currentState) &&
-      lifecycleForMilestone(newMilestone) !== currentState
-    ) {
-      this.logger.warn(
-        `[StepLifecycle] Refusing to transition step ${nodeId} from terminal ${currentState} to ${newMilestone} (session ${sessionId})`
-      );
-      return false;
-    }
-
-    const fromLabel = currentState ?? 'NONE';
-    const snapshot = this.snapshotRun(session);
-    this.setStepState(sessionId, nodeId, newMilestone, isPlaceholder);
-
-    await this.persistMutation(snapshot);
-    this.logger.debug(
-      `[StepLifecycle] Transitioned step ${nodeId} from ${fromLabel} to ${newMilestone}`
-    );
-
-    return true;
-  }
-
-  /**
    * Transition the run-level lifecycle status. Refuses transitions out of terminal
    * states (completed/failed/cancelled). Re-asserting the same terminal status is
    * a no-op (returns true) to keep callers idempotent.
@@ -2283,14 +2221,6 @@ export class ChainSessionStore implements ChainSessionService {
     };
   }
 
-  /**
-   * Get original arguments for session
-   */
-  getOriginalArgs(sessionId: string): Record<string, any> {
-    const session = this.activeSessions.get(sessionId);
-    return session?.originalArgs || {};
-  }
-
   getSessionBlueprint(sessionId: string, _scope?: StateStoreOptions): SessionBlueprint | undefined {
     const session = this.activeSessions.get(sessionId);
     if (!session?.blueprint) {
@@ -2465,24 +2395,6 @@ export class ChainSessionStore implements ChainSessionService {
     return this.activeSessions.has(sessionId);
   }
 
-  /**
-   * Check if chain has any active sessions
-   */
-  hasActiveSessionForChain(chainId: string): boolean {
-    const sessionIds = this.chainSessionMapping.get(chainId);
-    if (!sessionIds) {
-      return false;
-    }
-
-    for (const sessionId of sessionIds) {
-      const session = this.activeSessions.get(sessionId);
-      if (session && !this.isDormantSession(session)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   getRunHistory(baseChainId: string): string[] {
     const normalized = stripRunNumber(baseChainId);
     const history = this.baseChainMapping.get(normalized);
@@ -2503,32 +2415,6 @@ export class ChainSessionStore implements ChainSessionService {
       const runB = parseRunNumber(b) ?? 0;
       return runA - runB;
     });
-  }
-
-  getLatestSessionForBaseChain(baseChainId: string): ChainSession | undefined {
-    const normalized = stripRunNumber(baseChainId);
-    const history = this.baseChainMapping.get(normalized);
-
-    if (history && history.length > 0) {
-      for (let idx = history.length - 1; idx >= 0; idx -= 1) {
-        const runChainId = history[idx];
-        if (runChainId === undefined) {
-          continue;
-        }
-        const sessionIds = this.chainSessionMapping.get(runChainId);
-        if (!sessionIds) {
-          continue;
-        }
-        for (const sessionId of sessionIds) {
-          const session = this.activeSessions.get(sessionId);
-          if (session && !this.isDormantSession(session)) {
-            return session;
-          }
-        }
-      }
-    }
-
-    return this.getActiveSessionForChain(normalized);
   }
 
   getSessionByChainIdentifier(
@@ -2599,7 +2485,7 @@ export class ChainSessionStore implements ChainSessionService {
     const scopeFilter = this.resolveScopeFilter(scope);
     const summaries: ChainSessionSummary[] = [];
     for (const session of this.activeSessions.values()) {
-      if (this.isDormantSession(session)) {
+      if (false && this.isDormantSession(session)) {
         continue;
       }
       if (!this.matchesScope(session, scopeFilter)) {
@@ -2628,33 +2514,6 @@ export class ChainSessionStore implements ChainSessionService {
     return limit > 0 ? summaries.slice(0, limit) : summaries;
   }
 
-  /**
-   * Get active session for chain (returns first active session)
-   */
-  getActiveSessionForChain(chainId: string): ChainSession | undefined {
-    const sessionIds = this.chainSessionMapping.get(chainId);
-    if (!sessionIds || sessionIds.size === 0) {
-      return undefined;
-    }
-
-    // Return the most recently active session
-    let mostRecentSession: ChainSession | undefined;
-    let mostRecentActivity = 0;
-
-    for (const sessionId of sessionIds) {
-      const session = this.activeSessions.get(sessionId);
-      if (session && !this.isDormantSession(session) && session.lastActivity > mostRecentActivity) {
-        mostRecentSession = session;
-        mostRecentActivity = session.lastActivity;
-      }
-    }
-
-    return mostRecentSession;
-  }
-
-  /**
-   * Clear session
-   */
   /**
    * Remove one session and its artifacts.
    *

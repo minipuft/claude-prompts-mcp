@@ -67,9 +67,6 @@ class StubChainSessionStore implements ChainSessionStore {
   getSessionByChainIdentifier(_chainId: string, _options?: any): ChainSession | undefined {
     return undefined;
   }
-  getLatestSessionForBaseChain(): ChainSession | undefined {
-    return undefined;
-  }
   getReview(): any {
     return undefined;
   }

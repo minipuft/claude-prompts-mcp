@@ -989,7 +989,7 @@ describe('Tenant Isolation', () => {
         const chainKept = await evictAfterClaim('p229a');
 
         expect(store.getRunHistory('chain-p229a')).toEqual([]);
-        expect(store.hasActiveSessionForChain('chain-p229a#1')).toBe(false);
+        expect(store.getSessionByChainIdentifier('chain-p229a#1')).toBeUndefined();
         // Two runs started, one evicted: only the kept run's chain id is counted.
         expect(store.getSessionStats().totalChains).toBe(chainsBefore + 1);
         // (b) control: the run this server still owns keeps its history.
@@ -1024,7 +1024,7 @@ describe('Tenant Isolation', () => {
         const renamed = await store.createSession('p236a-second', 'chain-p236a#1', 2, {}, scopeA);
 
         expect(renamed.chainId).toBe('chain-p236a#2');
-        expect(store.hasActiveSessionForChain('chain-p236a#1')).toBe(true);
+        expect(store.getSessionByChainIdentifier('chain-p236a#1')?.sessionId).toBe('p236a-first');
         expect(store.getRunHistory('chain-p236a')).toEqual(['chain-p236a#1', 'chain-p236a#2']);
       });
 
@@ -1054,7 +1054,7 @@ describe('Tenant Isolation', () => {
         const renamed = await store.createSession('p236b-here', 'chain-p236b#1', 2, {}, scopeA);
 
         expect(renamed.chainId).toBe('chain-p236b#2');
-        expect(store.hasActiveSessionForChain('chain-p236b#1')).toBe(false);
+        expect(store.getSessionByChainIdentifier('chain-p236b#1')).toBeUndefined();
         expect(store.getRunHistory('chain-p236b')).toEqual(['chain-p236b#2']);
       });
 
