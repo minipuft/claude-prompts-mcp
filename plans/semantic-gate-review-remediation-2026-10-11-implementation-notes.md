@@ -275,3 +275,9 @@ Moved from `plans/workflow-client-evaluation-2026-10-09-implementation-notes.md`
 - origin/main merged (#485, #487: `resolveProjectRoot` keys on `<repo>/.git` instead of `AGENTS.md`; docs). Clean merge; skills-sync suites 17/17, 368 tests green after it.
 - R0C3.6: 0C3.5's tests run before 0C3.2, not after. They assert exported output, which 0C3.2 must keep byte-identical, so writing them first gives the extraction a wider net; the audit's "after Row 2" ordering only saved writing helpers twice. 0C3.5 also takes the pass-criterion and removal-warning branches 0C3.8 could not reach (DEV-T0C3-2).
 - `service.ts` writers from here are sequential: 0C3.9 + 0C3.11 (one worker), then 0C3.10 + 0C3.12 (one worker), then 0C3.2.
+
+## 2026-10-13 — 0C3.9, 0C3.11 accepted; 0C3.13 cut
+
+- 0C3.9 and 0C3.11 accepted (artifact read: `describeLoadFilter` gates prune in `syncCommand`; parseArgs `ERR_PARSE_ARGS_*` rethrown as `usageError`; `Object.hasOwn` at both registry index sites; `ClientResourceSelection.source` and its type deleted). One commit, tests included. DEV-T0C3-4: the filtered skip line carries no stale count (the filtered plan would have counted out-of-scope skills as stale); accepted.
+- Finding (0C3.9) → row 0C3.13, verified by the planner: `saveManifestBatch` runs `DELETE FROM skills_sync_manifests WHERE client = ? AND scope = ?` then inserts only the run's entries, and both export and sync pass the filtered `scopedResources`. `skills_sync_manifests` is a durable table, so a filtered run over MCP (the route with a database) erases every other skill's manifest row; later diffs report them as untracked and prune loses its manifest-managed set.
+- Finding, not cut: `--id ""` counts as unfiltered for prune (truthiness) while `ignoreSelection` uses `!= null`; pre-existing, and an empty id selects nothing either way.
