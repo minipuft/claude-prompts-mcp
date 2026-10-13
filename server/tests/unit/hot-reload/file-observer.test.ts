@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { afterEach, beforeEach, describe, expect, test } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createSimpleLogger } from '../../../src/infra/logging/index.js';
 import * as fileObserverModule from '../../../src/modules/hot-reload/file-observer.js';
@@ -178,5 +178,77 @@ describe('isConfigFile recognizes both workspace config dialects', () => {
     expect(isConfigFile('config.json')).toBe(true);
     expect(isConfigFile('config.jsonc.bak')).toBe(false);
     expect(isConfigFile('myconfig.json')).toBe(false);
+  });
+});
+
+/**
+ * A retry scheduled by a failed watch outlives nothing: `stop()` clears it. Without that, the
+ * timer fires into an observer that is no longer started, and `watchDirectory` rejects with
+ * "must be started" from a callback no one awaits.
+ */
+describe('FileObserver stop() clears pending watch retries', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), 'file-observer-retry-'));
+  });
+
+  afterEach(async () => {
+    jest.useRealTimers();
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  test('a retry scheduled by a failed watchDirectory does not fire after stop()', async () => {
+    const observer = createFileObserver(createSimpleLogger('stdio'), { retryDelayMs: 1000 });
+    await observer.start();
+
+    // A path that exists but is not a directory fails the watch with a non-ENOENT error,
+    // which is the branch that schedules a retry.
+    const notADirectory = path.join(tempDir, 'file.txt');
+    await writeFile(notADirectory, 'x', 'utf8');
+
+    jest.useFakeTimers();
+    const watch = jest.spyOn(observer, 'watchDirectory');
+    await observer.watchDirectory(notADirectory);
+    expect(watch).toHaveBeenCalledTimes(1);
+    // Positive control: the failed watch did leave a timer behind.
+    expect(jest.getTimerCount()).toBe(1);
+
+    await observer.stop();
+    expect(jest.getTimerCount()).toBe(0);
+
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(watch).toHaveBeenCalledTimes(1);
+  });
+
+  test('a watcher-restart retry scheduled by a watcher error does not fire after stop()', async () => {
+    const observer = createFileObserver(createSimpleLogger('stdio'), {
+      retryDelayMs: 1000,
+      usePolling: true,
+      pollingInterval: 25,
+    });
+    await observer.start();
+    await observer.watchDirectory(tempDir);
+
+    const watchers = (
+      observer as unknown as { watchers: Map<string, EventEmitter & { close(): Promise<void> }> }
+    ).watchers;
+    const watcher = watchers.get(tempDir);
+    if (watcher === undefined) throw new Error('watcher was not registered');
+
+    jest.useFakeTimers();
+    const watch = jest.spyOn(observer, 'watchDirectory');
+    watcher.emit('error', new Error('watch failed'));
+    expect(jest.getTimerCount()).toBe(1);
+
+    await observer.stop();
+    expect(jest.getTimerCount()).toBe(0);
+
+    await jest.advanceTimersByTimeAsync(5000);
+    expect(watch).not.toHaveBeenCalled();
+
+    // The error handler dropped this watcher from the observer's map, so stop() never closed it.
+    jest.useRealTimers();
+    await watcher.close();
   });
 });
