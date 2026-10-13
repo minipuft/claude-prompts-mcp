@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-import {
-  cleanupPromptExecutor,
-  createPromptExecutor,
-} from '../../../src/mcp/tools/prompt-engine/index.js';
+import { createPromptExecutor } from '../../../src/mcp/tools/prompt-engine/index.js';
 import { createPromptResourceHandler } from '../../../src/mcp/tools/resource-manager/prompt/index.js';
 import { createConsolidatedSystemControl } from '../../../src/mcp/tools/system-control/index.js';
-import { MockLogger, MockMcpServer, testPrompts } from '../../helpers/test-helpers.js';
+import {
+  cleanupPromptExecutor,
+  MockLogger,
+  MockMcpServer,
+  testPrompts,
+} from '../../helpers/test-helpers.js';
 
 import type { GateManager } from '../../../src/engine/gates/gate-manager.js';
 

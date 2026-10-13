@@ -409,51 +409,6 @@ export class PromptExecutor {
     return this.executionRecordStore;
   }
 
-  async cleanup(): Promise<void> {
-    this.logger.debug('[PromptExecutor] Cleaning up');
-
-    if (this.analyticsService && 'shutdown' in this.analyticsService) {
-      await this.analyticsService.shutdown?.();
-    }
-
-    if (this.toolDescriptionLoader && 'shutdown' in this.toolDescriptionLoader) {
-      await this.toolDescriptionLoader.shutdown?.();
-    }
-
-    if ('shutdown' in this.configManager && typeof this.configManager.shutdown === 'function') {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call -- duck-typed shutdown on ConfigManager
-      this.configManager.shutdown();
-    }
-
-    if ('shutdown' in this.promptManager && typeof this.promptManager.shutdown === 'function') {
-      await this.promptManager.shutdown();
-    }
-
-    if (this.frameworkStateStore && 'shutdown' in this.frameworkStateStore) {
-      await this.frameworkStateStore.shutdown?.();
-    }
-
-    if (
-      'cleanup' in this.chainSessionStore &&
-      typeof this.chainSessionStore.cleanup === 'function'
-    ) {
-      await this.chainSessionStore.cleanup();
-    }
-
-    await this.argumentHistoryTracker.shutdown();
-
-    if (
-      'cleanup' in this.lightweightGateSystem &&
-      typeof this.lightweightGateSystem.cleanup === 'function'
-    ) {
-      await this.lightweightGateSystem.cleanup();
-    }
-
-    if (this.promptGuidanceService && 'shutdown' in this.promptGuidanceService) {
-      await this.promptGuidanceService.shutdown?.();
-    }
-  }
-
   async executePromptCommand(
     args: {
       command?: string; // Optional - not needed for chain resume (chain_id + user_response)
@@ -1152,8 +1107,4 @@ export function createPromptExecutor(
     promptGuidanceService,
     databasePort
   );
-}
-
-export async function cleanupPromptExecutor(tool: PromptExecutor): Promise<void> {
-  await tool.cleanup();
 }

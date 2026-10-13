@@ -269,9 +269,12 @@ export class MockFrameworkStateStore {
 export async function cleanupPromptExecutor(engine) {
   if (!engine) return;
 
-  if (typeof engine.cleanup === 'function') {
+  // The executor owns no teardown; the chain session store it holds is the one handle to stop.
+  const chainSessionStore =
+    typeof engine.getChainSessionStore === 'function' ? engine.getChainSessionStore() : undefined;
+  if (chainSessionStore && typeof chainSessionStore.cleanup === 'function') {
     try {
-      await engine.cleanup();
+      await chainSessionStore.cleanup();
     } catch (error) {
       // Log error but don't throw to prevent test failures
       console.error('Error cleaning up prompt execution service:', error);

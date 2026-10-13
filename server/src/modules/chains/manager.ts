@@ -710,6 +710,15 @@ export class ChainSessionStore implements ChainSessionService {
     );
   }
 
+  /** Whether a registry or a database port is bound, initialized or not. */
+  private hasPersistenceTarget(): boolean {
+    return (
+      this.runRegistry !== undefined ||
+      this.injectedDbEngine !== undefined ||
+      this.resolvedDbEngine !== undefined
+    );
+  }
+
   /** One transactional write of the live set; only {@link persistSessionsOrThrow} calls it. */
   private async writeSessions(): Promise<void> {
     const registry = this.requireRunRegistry();
@@ -3016,25 +3025,30 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Cleanup the chain session manager and persist state
-   * Prevents async handle leaks by finalizing all file operations
+   * Stop the expiry scheduler, persist the live sessions one last time, then drop the
+   * in-memory state.
+   *
+   * The scheduler stops first and unconditionally so a failing save cannot leave the
+   * interval running. A save that fails, including on a held lock, rejects and leaves the in-memory sessions in place:
+   * the caller decides what a lost final write means, and may retry.
    */
   async cleanup(): Promise<void> {
     this.logger.info('Shutting down ChainSessionStore...');
 
-    try {
-      if (this.cleanupIntervalHandle !== undefined) {
-        clearInterval(this.cleanupIntervalHandle);
-        // Use Object.assign to safely clear the optional property
-        Object.assign(this, { cleanupIntervalHandle: undefined });
-        this.logger.debug('Chain session cleanup scheduler cleared');
-      }
+    if (this.cleanupIntervalHandle !== undefined) {
+      clearInterval(this.cleanupIntervalHandle);
+      // Use Object.assign to safely clear the optional property
+      Object.assign(this, { cleanupIntervalHandle: undefined });
+      this.logger.debug('Chain session cleanup scheduler cleared');
+    }
 
-      // Perform final state save to persist any pending session data
-      await this.saveSessions();
+    // The final save throws on every failure, a held lock included: `saveSessions` reports
+    // success over a lock because the next persist heals it, and no next persist follows this one.
+    // A store built with no database port keeps its sessions in memory only (the test-context
+    // mode every port-less mutator refuses to leave), so it has no write to lose.
+    if (this.hasPersistenceTarget()) {
+      await this.persistSessionsOrThrow();
       this.logger.debug('Chain sessions persisted during cleanup');
-    } catch (error) {
-      this.logger.warn('Error persisting sessions during cleanup:', error);
     }
 
     // Clear in-memory state

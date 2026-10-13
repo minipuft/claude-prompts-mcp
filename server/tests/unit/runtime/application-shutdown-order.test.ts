@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, describe, expect, it, jest } from '@jest/globals';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
+import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { Application } from '../../../src/runtime/application.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { RuntimeLaunchOptions } from '../../../src/runtime/options.js';
@@ -102,7 +103,14 @@ interface Wiring {
  * ORDER `shutdown()` calls them in, and a real startup would make most of them optional and
  * the sequence partial.
  */
-function wireRecorders(options: { failing?: string; throwFrom?: string } = {}): Wiring {
+function wireRecorders(
+  options: {
+    failing?: string;
+    throwFrom?: string;
+    /** Builds the chain session store from the recorder, in place of the default stub. */
+    chainSessionStore?: (order: string[]) => { cleanup: () => Promise<void> };
+  } = {}
+): Wiring {
   const order: string[] = [];
   const logger = silentLogger();
   const app = buildApp(logger);
@@ -139,6 +147,12 @@ function wireRecorders(options: { failing?: string; throwFrom?: string } = {}): 
     mcpToolsManager: {
       ...stub('mcpToolsManager'),
       getMetricsCollector: () => stub('metricsCollector'),
+      getChainSessionStore: () =>
+        options.chainSessionStore?.(order) ?? {
+          cleanup: async (): Promise<void> => {
+            order.push('chainSessionStore.cleanup');
+          },
+        },
     },
     conversationStore: stub('conversationStore'),
     textReferenceStore: stub('textReferenceStore'),
@@ -173,6 +187,7 @@ const EXPECTED_ORDER = [
   'serviceOrchestrator.stopAll',
   'apiRouter',
   'mcpToolsManager',
+  'chainSessionStore.cleanup',
   'metricsCollector',
   'conversationStore',
   'textReferenceStore',
@@ -217,6 +232,36 @@ describe('Application.shutdown() teardown order', () => {
 });
 
 describe('Application.shutdown() error posture', () => {
+  it('warns and still closes the database when the real chain session store cannot save', async () => {
+    const failure = new Error('final save failed');
+    const { app, order, logger } = wireRecorders({
+      chainSessionStore: (recorded) => {
+        const store = new ChainSessionStore(silentLogger(), {} as never, {});
+        const internals = store as unknown as {
+          injectedDbEngine: unknown;
+          writeSessions: () => Promise<void>;
+        };
+        // A bound port makes the final save a write that can be lost.
+        internals.injectedDbEngine = {};
+        internals.writeSessions = async () => {
+          throw failure;
+        };
+        const realCleanup = store.cleanup.bind(store);
+        store.cleanup = async (): Promise<void> => {
+          recorded.push('chainSessionStore.cleanup');
+          await realCleanup();
+        };
+        return store;
+      },
+    });
+    await mountRealDatabase('chain-session-failing', order);
+
+    await app.shutdown();
+
+    expect(logger.warn).toHaveBeenCalledWith('Error shutting down chain session store:', failure);
+    expect(order).toEqual(EXPECTED_ORDER);
+  });
+
   it('warns and continues when an individual subsystem fails to stop', async () => {
     const { app, order, logger } = wireRecorders({ failing: 'frameworkStateStore' });
 
@@ -228,6 +273,7 @@ describe('Application.shutdown() error posture', () => {
       'serviceOrchestrator.stopAll',
       'apiRouter',
       'mcpToolsManager',
+      'chainSessionStore.cleanup',
       'metricsCollector',
       'conversationStore',
       'textReferenceStore',

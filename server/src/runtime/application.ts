@@ -557,6 +557,7 @@ export class Application {
 
       await this.shutdownIfSupported(this.apiRouter, 'API manager');
       await this.shutdownIfSupported(this.mcpToolsManager, 'MCP tools manager');
+      await this.shutdownChainSessionStore();
       await this.shutdownMetricsCollector();
       await this.shutdownIfSupported(this.conversationStore, 'conversation manager');
       await this.shutdownIfSupported(this.textReferenceStore, 'text reference manager');
@@ -632,6 +633,26 @@ export class Application {
    */
   private reportTeardownFailure(label: string, error: unknown): void {
     this.logger?.warn(`Error shutting down ${label}:`, error);
+  }
+
+  /**
+   * Stop the chain session store's expiry scheduler and persist its last state. The store is
+   * owned through the tool router's prompt executor, which nothing else tears down; it runs
+   * before the database closes because its final save is a write. The router is unset when
+   * startup failed before modules initialized, and the store is unset until the executor is
+   * wired.
+   */
+  private async shutdownChainSessionStore(): Promise<void> {
+    const router = this.mcpToolsManager as McpToolRouter | undefined;
+    const store = router === undefined ? undefined : router.getChainSessionStore();
+    if (store === undefined) {
+      return;
+    }
+    try {
+      await store.cleanup();
+    } catch (error) {
+      this.reportTeardownFailure('chain session store', error);
+    }
   }
 
   /**
