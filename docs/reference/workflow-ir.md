@@ -355,8 +355,11 @@ stage that would register the gate raises it before anything registers; `gate-cr
 covers command-string gates and chain prompt steps as well as workflow nodes, so the inline gate
 stage raises it, and for a `gates` entry the gate registrar does, before anything registers, rather
 than a gate the client asked for being left out of the run; `gate-suppressed` needs the server's
-gate switches and the call's modifier, so the gate enhancement stage raises it before anything
-registers. All five reach you through the same addressed-rejection channel.
+gate switches and the call's modifier, so the inline gate stage raises it too. The last four are
+raised before a prompt's script tools run, so a refused call has run no script, with one exception:
+a script-tool prompt sent with no modifier runs under a default `%clean` the planner applies later,
+and a `::` gate on it is refused only after its scripts ran. All five reach you through the same
+addressed-rejection channel.
 
 Id problems short-circuit the rest. With duplicate ids, "the node named X" is not a well-formed
 address, so every later rejection would be ambiguous about which node it meant.

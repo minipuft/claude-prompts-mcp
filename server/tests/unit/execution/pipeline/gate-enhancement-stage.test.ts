@@ -1008,7 +1008,8 @@ describe('GateEnhancementStage', () => {
   });
 });
 
-describe('GateEnhancementStage refuses a request gate it cannot register (R11.8)', () => {
+// A request gate that cannot register is refused at stage 05 (inline-gate-extraction-stage.test).
+describe('GateEnhancementStage registers a request gate stage 05 admitted', () => {
   const singlePromptCall = (gates: unknown[]): ExecutionContext => {
     const context = new ExecutionContext({ command: '>>demo', gates: gates as never });
     context.state.gates.requestedOverrides = { gates };
@@ -1026,30 +1027,7 @@ describe('GateEnhancementStage refuses a request gate it cannot register (R11.8)
   const realRegistry = () =>
     new TemporaryGateRegistryImpl(createLogger(), { isCanonicalGateId: () => false });
 
-  test('a blank request gate refuses the call by entry, and nothing registers or renders', async () => {
-    const gateService = createGateService();
-    const temporaryRegistry = realRegistry();
-    const stage = createStage({
-      gateService,
-      temporaryRegistry,
-      gatesConfigProvider: () => baseGatesConfig,
-    });
-    const context = singlePromptCall([
-      { id: 'cites', criteria: ['Cites a source'] },
-      { name: 'Tone', description: '   ' },
-    ]);
-
-    await stage.execute(context);
-
-    expect(context.response?.isError).toBe(true);
-    const text = (context.response?.content?.[0] as { text: string }).text;
-    expect(text).toContain('• [gate-criteria-invalid] workflow: request gate 2 (name "Tone")');
-    expect(text).toContain('Nothing was executed and no run was created.');
-    expect(gateService.enhancePrompt).not.toHaveBeenCalled();
-    expect(temporaryRegistry.getTemporaryGate('cites')).toBeUndefined();
-  });
-
-  test('control: a valid request gate registers and renders', async () => {
+  test('a valid request gate registers and renders', async () => {
     const gateService = createGateService();
     const temporaryRegistry = realRegistry();
     const stage = createStage({

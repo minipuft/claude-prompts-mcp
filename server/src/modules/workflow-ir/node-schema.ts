@@ -280,7 +280,7 @@ export type WorkflowRejectionReason =
   | 'gate-target-missing'
   /**
    * A resume's request gate targets a node the run has already passed, or the node the call
-   * answers (R59, R64), so it could never fire. Produced by the gate registrar (stage 11), which
+   * answers (R59, R64), so it could never fire. Produced from the gate registrar at stage 05, which
    * alone knows the run's position and which gates it holds (R65) — like
    * `mutually-exclusive-source`, outside the validator, through the same addressed channel.
    */
@@ -288,24 +288,25 @@ export type WorkflowRejectionReason =
   /**
    * A request gate or named inline gate would register under a canonical gate's id, replacing that
    * gate's criteria for every run on the server (P6.193, R100). Produced before anything registers,
-   * by the stage that registers each kind (05 for a named gate, 11 for a request gate); a run-level
-   * refusal, addressed to no node.
+   * by stage 05, for a named gate and a request gate alike; a run-level refusal, addressed to no
+   * node.
    */
   | 'gate-id-canonical'
   /**
    * An inline gate criterion is empty or blank, or a named inline gate carries no criterion
    * (R11.8): registered, it could neither pass nor fail, and skipped, the client would believe a
    * gate it asked for was enforced. Produced by stage 05 before anything registers; addressed to
-   * the step's node when the criterion is a step's, otherwise run-level. Stage 11 raises it, run-
-   * level, for a request gate (`gates` / `workflow.gates`) that cannot register as sent: blank, a
-   * blank criteria entry, or a bare id naming no gate.
+   * the step's node when the criterion is a step's, otherwise run-level. Stage 05 raises it, run-
+   * level, for a request gate (`gates` / `workflow.gates`) that cannot register as sent too: blank,
+   * a blank criteria entry, or a bare id naming no gate.
    */
   | 'gate-criteria-invalid'
   /**
    * The call requested a gate — a `gates` entry, a `::` operator, a gate on a workflow node — while
    * something withholds every gate from it: `%clean`, `%framework`, `gates.enabled: false`, or the
    * runtime gate switch (R11.8). Run, the call would hold none of the gates it asked for and say
-   * nothing. Produced by stage 11 before anything registers; run-level, addressed to no node.
+   * nothing. Produced by stage 05 before any script tool runs; run-level, addressed to no node.
+   * Stage 11 raises it only for a switch decided after stage 05: the planner's default `%clean`.
    */
   | 'gate-suppressed'
   | 'required-argument-missing'

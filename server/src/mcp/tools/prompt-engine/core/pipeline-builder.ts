@@ -17,6 +17,8 @@
 import { describeUndeclaredParameterRefusal } from '../../shared/undeclared-parameters.js';
 
 import type { GateService } from '#engine/gates/services/gate-service-interface.js';
+import type { GateSystemSettings } from '#shared/types/index.js';
+import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { PipelineDependencies } from './pipeline-dependencies.js';
 
 import { RemainderProcessor } from '#engine/execution/capture/remainder-processor.js';
@@ -70,6 +72,7 @@ import { runGateReviewEvidence } from '#engine/gates/services/gate-review-eviden
 import { GateServiceFactory } from '#engine/gates/services/gate-service-factory.js';
 import { GateVerdictProcessor } from '#engine/gates/services/gate-verdict-processor.js';
 import { InlineGateProcessor } from '#engine/gates/services/inline-gate-processor.js';
+import { RequestGateAdmission } from '#engine/gates/services/request-gate-admission.js';
 import { createRunStepViewProvider } from '#engine/gates/services/run-step-view.js';
 import { TemporaryGateRegistrar } from '#engine/gates/services/temporary-gate-registrar.js';
 import {
@@ -184,7 +187,6 @@ export class PipelineBuilder {
         return run.gateRemap ?? {};
       }
     );
-    const inlineGateStage = new InlineGateExtractionStage(inlineGateProcessor, deps.logger);
     const operatorValidationStage = new OperatorValidationStage(
       deps.frameworkValidator ?? null,
       deps.logger
@@ -292,13 +294,24 @@ export class PipelineBuilder {
       deps.logger,
       runStepViewProvider
     );
+    const gatesConfigProvider = (): GateSystemSettings | undefined =>
+      deps.configManager.getGatesConfig();
+    const gateSystemEnabled = (scope: StateStoreOptions | undefined): boolean =>
+      deps.lightweightGateSystem.isGateSystemEnabled(scope);
     const gateStage = new GateEnhancementStage(
       gateEnhancementService,
       temporaryGateRegistrar,
-      () => deps.configManager.getGatesConfig(),
+      gatesConfigProvider,
       deps.logger,
-      (scope) => deps.lightweightGateSystem.isGateSystemEnabled(scope),
+      gateSystemEnabled,
       (context, registered) => inlineGateProcessor.remapRegisteredGateIds(context, registered)
+    );
+    // Stage 05, built here because it refuses a call's gate requests with the same registrar and
+    // switches stage 11 reads — before stage 08 runs any script tool.
+    const inlineGateStage = new InlineGateExtractionStage(
+      inlineGateProcessor,
+      deps.logger,
+      new RequestGateAdmission(temporaryGateRegistrar, gatesConfigProvider, gateSystemEnabled)
     );
 
     const sessionStage = new SessionManagementStage(deps.chainSessionStore, deps.logger);

@@ -5,8 +5,9 @@
  * `::` operator in its command, a gate on a submitted workflow node. Stage 11 used to answer the
  * pair by skipping, so the call ran without the gates it asked for and said nothing (measured
  * 2026-10-12, composition root, every switch). R11.8: a requested gate is enforced as written or
- * refused with a reason, so stage 11 refuses this pair before anything registers, and skips only a
- * call that requested no gate. `%lean` withholds the framework, not gates, so it is not here.
+ * refused with a reason, so stage 05 refuses this pair before any script tool runs, and stage 11
+ * skips a call that requested no gate. `%lean` withholds the framework, not gates, so it is not
+ * here.
  *
  * Only what the CALL sent counts: a prompt author's gates are the author's, and a switch that
  * withholds them is doing its job. A `:: verify:"…"` gate is not counted either: shell
@@ -16,7 +17,7 @@ import { requestGateAddress } from './request-gate-refusal.js';
 
 import type { ExecutionModifiers } from '../../execution/types.js';
 
-/** Why stage 11 enforces no gate on a call. */
+/** Why no gate is enforced on a call. */
 export type GateSuppression =
   | { readonly kind: 'modifier'; readonly modifier: '%clean' | '%framework' }
   | { readonly kind: 'config' }
@@ -29,6 +30,25 @@ export function suppressingModifier(
   if (modifiers?.clean === true) return '%clean';
   if (modifiers?.framework === true) return '%framework';
   return undefined;
+}
+
+/**
+ * The three switches, in the order every caller reads them. Each later one is read only when the
+ * one before it is on: the runtime switch is a scoped store read, and a caller's modifiers may be
+ * an accessor that throws when its plan is missing.
+ */
+interface GateSwitches {
+  readonly configEnabled: boolean;
+  readonly runtimeEnabled: () => boolean;
+  readonly modifiers: () => ExecutionModifiers | undefined;
+}
+
+/** The switch that withholds every gate from a call, or undefined when gates run. PURE. */
+export function resolveGateSuppression(switches: GateSwitches): GateSuppression | undefined {
+  if (!switches.configEnabled) return { kind: 'config' };
+  if (!switches.runtimeEnabled()) return { kind: 'runtime' };
+  const modifier = suppressingModifier(switches.modifiers());
+  return modifier === undefined ? undefined : { kind: 'modifier', modifier };
 }
 
 /** The parts of a `::` operator this module reads (`GateOperator`). */

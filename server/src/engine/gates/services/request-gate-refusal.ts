@@ -1,6 +1,6 @@
 // @lifecycle canonical - Why a request gate (`gates` / `workflow.gates`) cannot register, and the refusal text that says so.
 /**
- * The shape rules stage 11 refuses a request gate by (R11.8), and the registration loop asserts
+ * The shape rules stage 05 refuses a request gate by (R11.8), and the registration loop asserts
  * (`TemporaryGateRegistrar`): one module, so the check that refuses and the loop that registers
  * read one definition of "cannot register". Imports nothing. The inline-criteria sibling is
  * `inline-criteria-refusal.ts`. PURE throughout.
@@ -104,7 +104,7 @@ function isRequestGateReference(gate: unknown): boolean {
 }
 
 /**
- * Whether a request gate goes on to register. A new entry that cannot register throws: stage 11
+ * Whether a request gate goes on to register. A new entry that cannot register throws: stage 05
  * refuses it before registration (R11.8), so meeting one here is a server fault, never a skip. A
  * recorded one (R11.13) was accepted when its run started; if it registered nothing then, it
  * registers nothing now, and the run resumes. A bare id is judged after canonical resolution.
@@ -118,7 +118,7 @@ export function admitRequestGate(gate: unknown, recorded: boolean): boolean {
     return false;
   }
   throw new Error(
-    `[TemporaryGateRegistrar] request gate ${shape.problem}; stage 11 refuses such a request ` +
+    `[TemporaryGateRegistrar] request gate ${shape.problem}; stage 05 refuses such a request ` +
       'before registration (R11.8), so a caller registered request gates without ' +
       'TemporaryGateRegistrar.invalidRequestGates.'
   );
@@ -138,7 +138,7 @@ export function assertNotBareReference(
   if (!recorded && isRequestGateReference(gate)) {
     throw new Error(
       `[TemporaryGateRegistrar] request gate "${gateId}" names no gate and carries no criteria; ` +
-        'stage 11 refuses it before registration (R11.8), so a caller registered request gates ' +
+        'stage 05 refuses it before registration (R11.8), so a caller registered request gates ' +
         'without TemporaryGateRegistrar.invalidRequestGates.'
     );
   }
