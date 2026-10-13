@@ -211,3 +211,11 @@ Moved from `plans/workflow-client-evaluation-2026-10-09-implementation-notes.md`
 - R13.2: no experimental tier in the Public API Contract. A tier only protects surfaces marked experimental before they ship; removing an already-stable parameter stays breaking whatever it is called, so the label would blur the contract without saving a major.
 - R13.3: release PR #473 is not merged from this plan; the owner cuts releases.
 - Owner direction: finish this session here. Slice 7 ships as one PR; 0D.6, 0D.5, 0C1.31, 0C1.32, the coverage slices 0C2/0C3 and the errorText helper remain for the next planner session.
+
+## 2026-10-13 — #483 merged; rulings R13.4–R13.6; slices 8 and 9 cut
+
+- #483 merged (squash `adc6054b`), CI 11/11 green. claude-code-config #69 merged on owner instruction (merge commit, that repo's convention). The four stale `workflow-client-evaluation-2026-10-09*` drafts in the main checkout were older than the client-workflow session's copies; backed up to `~/.local/share/claude-prompts-mcp/stale-plan-drafts-20261013/` and deleted on owner instruction, and the main checkout fast-forwarded.
+- R13.4 (Q1): semantic review instructions render once, in the ResponseAssembler review CTA; step footers and operator supplements carry only a resume line → 1.9, then 1.11.
+- R13.5 (Q3): no CI check for repeated reply content ("feels redundant") → 1.10 killed.
+- R13.6 (Q4): retire the string form of the `gate_verdict` parameter. Every gate kind already has an object answer: check-tier (inline `::` criteria, temporary `gates` entries) through `per_gate[{index, passed, rationale}]`, semantic through `per_gate[].evaluation`, reminders through `reminders`; `:: verify:` needs no verdict. Text-channel grammars are not the parameter and stay: the exported-skill Stop hook (`skills-sync/service.ts`), Ralph subagent output (`hooks/lib/ralph_subagent_contract.py`), the delegation trailer's `Proposed Gate Review:` line. `hooks/gate-enforce.py` detects FAIL only in the string parameter and must read `overall`; hooks belong to the client-workflow plan, so that edit is handed to that session. 1.15 lands after 1.9 (shared assembler sites) and merges with no release between it and the `cancel` removal, so one major carries both.
+- Slice 8 (shared-tree, 4 workers): 0D.6, 0D.5, 0C1.31, 0C1.32. Slice 9 (own worktree, 1 worker): 1.9.
