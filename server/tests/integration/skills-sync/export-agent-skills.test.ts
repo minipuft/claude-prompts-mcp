@@ -1282,7 +1282,7 @@ describe('Export to Agent Skills clients', () => {
       const { out } = await run('codex');
 
       expect(removals(out)).toEqual([
-        '  rich: export removes the frontmatter hooks block; set enforceGateHooks: true in the prompt YAML to keep it',
+        '  rich: export removes the frontmatter hooks block; codex does not carry a hooks block in SKILL.md, so no prompt setting keeps it',
       ]);
       expect(frontmatterOf(await readFile(skillPath, 'utf-8'))).not.toHaveProperty('hooks');
     });
