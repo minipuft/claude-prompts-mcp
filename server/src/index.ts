@@ -6,6 +6,7 @@
  */
 
 import { ConfigLoader, TransportConfigError } from './infra/config/index.js';
+import { flushLogger } from './infra/logging/index.js';
 import { startApplication } from './runtime/application.js';
 import { parseServerCliArgs, type ServerCliArgs } from './runtime/cli.js';
 import { RuntimeLaunchOptions, resolveRuntimeLaunchOptions } from './runtime/options.js';
@@ -209,7 +210,7 @@ function setupErrorHandlers(): void {
       console.error('Error during emergency shutdown:', shutdownError);
     }
 
-    process.exit(1);
+    await exitAfterLogFlush(1);
   };
 
   // Handle uncaught exceptions with rollback
@@ -323,6 +324,16 @@ async function gracefulShutdown(exitCode: number = 0): Promise<void> {
     exitCode = 1;
   }
 
+  await exitAfterLogFlush(exitCode);
+}
+
+/**
+ * Exit once the log file has caught up: `process.exit` discards file writes still in flight, so
+ * every line logged during shutdown would otherwise be lost. The wait is bounded by
+ * `flushLogger`, so a stuck disk delays exit rather than preventing it.
+ */
+async function exitAfterLogFlush(exitCode: number): Promise<void> {
+  await flushLogger(logger);
   process.exit(exitCode);
 }
 
@@ -644,7 +655,7 @@ async function main(): Promise<void> {
         console.error('✅ Health validation passed - server is ready for operation');
       }
       await activeOrchestrator.shutdown();
-      process.exit(0);
+      await exitAfterLogFlush(0);
     }
 
     // Log successful startup with details
@@ -692,7 +703,7 @@ async function main(): Promise<void> {
     await rollbackStartup(error instanceof Error ? error : new Error(String(error)));
 
     // Exit with error code
-    process.exit(1);
+    await exitAfterLogFlush(1);
   }
 }
 
@@ -754,6 +765,6 @@ if (!isTestEnvironment) {
 
     // Final fallback - attempt rollback and exit
     await rollbackStartup(error instanceof Error ? error : new Error(String(error)));
-    process.exit(1);
+    await exitAfterLogFlush(1);
   });
 }
