@@ -683,10 +683,11 @@ const VALID_COMMANDS = new Set(['export', 'sync', 'diff', 'patch', 'pull', 'clon
 const VALID_SCOPES = new Set(['user', 'project']);
 const VALID_RESOURCE_TYPES = new Set(['prompt', 'gate', 'framework', 'style']);
 
+/** A usage error: the CLI wrapper exits with `exitCode` (2); every other failure exits 1. */
 export class SkillsSyncCommandError extends Error {
   constructor(
     message: string,
-    public readonly exitCode: 1 | 2 = 1
+    public readonly exitCode: 2
   ) {
     super(message);
     this.name = 'SkillsSyncCommandError';
@@ -844,7 +845,13 @@ function shouldExportForScope(
   normalized: NormalizedExport[]
 ): boolean {
   const entry = normalized.find((e) => e.key === resourceKey);
-  if (!entry) return true; // Not in exports list → export to requested scope
+  // `filterResourcesForScope` narrows to the scoped allow-list first, and the allow-list and
+  // `normalized` are built from the same `user`/`project` lists, so every key has an entry.
+  if (!entry) {
+    throw new Error(
+      `skills-sync invariant: '${resourceKey}' passed the scoped allow-list but has no scope entry`
+    );
+  }
   return entry.scope === targetScope;
 }
 
@@ -912,10 +919,19 @@ function filterResourcesForScope(
   );
 }
 
-/** Resolve a client config from the hardcoded registry, applying user overrides. */
-function resolveClientConfig(clientId: string, config: SyncConfig): ClientConfig | null {
+/**
+ * Resolve a client config from the hardcoded registry, applying user overrides.
+ *
+ * Every command reaches this through `runSkillsSyncCommand`, whose `validateSkillsSyncOptions`
+ * refuses an unknown client as a usage error first, so a missing entry here is a broken invariant.
+ */
+function resolveClientConfig(clientId: string, config: SyncConfig): ClientConfig {
   const base = CLIENT_REGISTRY[clientId];
-  if (!base) return null;
+  if (!base) {
+    throw new Error(
+      `skills-sync invariant: client '${clientId}' passed validation but is not in CLIENT_REGISTRY`
+    );
+  }
 
   const overrides = config.overrides?.[clientId];
   if (!overrides?.outputDir) return base;
@@ -1028,7 +1044,7 @@ async function resolveActiveGateRefs(
   gateConfig: PromptYaml['gateConfiguration'],
   promptCategory: string,
   gateRoots: readonly string[],
-  chainSteps: PromptYamlChainStep[] = [],
+  chainSteps: PromptYamlChainStep[],
   declaredArtifacts?: ArtifactKind[]
 ): Promise<IRGateRef[]> {
   const refs: IRGateRef[] = [];
@@ -1488,7 +1504,6 @@ async function loadStyleIR(styleDir: string): Promise<SkillIR> {
 interface LoadFilters {
   resourceType?: ResourceType;
   id?: string;
-  exportAllowList?: Set<string>;
 }
 
 /**
@@ -1616,25 +1631,24 @@ async function loadAllResources(
   }
 
   // Filter disabled resources
-  const enabled = resources.filter((r) => {
+  return resources.filter((r) => {
     if (!r.enabled) {
       output.log(`  skip disabled: ${r.resourceType}/${r.id}`);
     }
     return r.enabled;
   });
+}
 
-  // Filter by export allow-list (if provided)
-  if (filters?.exportAllowList) {
-    const allowed = filters.exportAllowList;
-    const filtered = enabled.filter((r) => allowed.has(manifestKey(r)));
-    const skipped = enabled.length - filtered.length;
-    if (skipped > 0) {
-      output.log(`  ${skipped} resource(s) not in configured allow-list (skipped)`);
-    }
-    return filtered;
+/**
+ * The file a resource was loaded from. Every loader records `sourcePaths: [yamlPath]`, so an empty
+ * list is a broken invariant, and skipping the resource would silently drop its manifest entry.
+ */
+function primarySourcePath(ir: SkillIR): string {
+  const sourcePath = ir.sourcePaths[0];
+  if (sourcePath === undefined) {
+    throw new Error(`skills-sync invariant: ${ir.resourceType} ${ir.id} has no source path`);
   }
-
-  return enabled;
+  return sourcePath;
 }
 
 /** Qualified manifest key: prevents collisions across categories and resource types. */
@@ -1951,23 +1965,6 @@ function reportTemplateFidelityGaps(
   );
 }
 
-/**
- * Compiles Nunjucks templates to plain text for Agent Skills (no template syntax).
- * - {{argName}} → {argName} (readable placeholder)
- * - {% if %} chains → the selected branch text, via the shared compileIfChain rules
- */
-export function compileTemplateToPlaintext(
-  template: string,
-  _args: IRArgument[],
-  supplied?: Record<string, string>
-): string {
-  // Same else-branch preference as `compileTemplate` -- see the reasoning there.
-  return compileTemplateChains(template, supplied).replace(
-    /\{\{\s*(\w+)\s*\}\}/g,
-    (_match, varName: string) => `{${varName}}`
-  );
-}
-
 /** Output subdirectory for a resource. Flat structure — clients expect one level. */
 function outputSubDir(ir: SkillIR, duplicateIds?: Set<string>): string {
   if (ir.resourceType === 'prompt') {
@@ -1993,32 +1990,26 @@ function buildArgumentHint(args: IRArgument[]): string {
  * Used by pullCommand to detect which sections the user actually edited:
  * if parsed section matches expected → user didn't edit → skip (preserve conditionals).
  */
-function buildExpectedSectionContent(
-  ir: SkillIR,
-  isClaudeCode: boolean
-): { systemMessage: string | null; userMessage: string | null; guidanceContent: string | null } {
-  const compile = isClaudeCode ? compileTemplate : compileTemplateToPlaintext;
+function buildExpectedSectionContent(ir: SkillIR): {
+  systemMessage: string | null;
+  userMessage: string | null;
+  guidanceContent: string | null;
+} {
+  const compile = (section: string): string => compileTemplate(section.trim(), ir.arguments);
   return {
-    systemMessage: ir.systemMessage ? compile(ir.systemMessage.trim(), ir.arguments) : null,
-    userMessage: ir.userMessage ? compile(ir.userMessage.trim(), ir.arguments) : null,
-    guidanceContent: ir.guidanceContent ? compile(ir.guidanceContent.trim(), ir.arguments) : null,
+    systemMessage: ir.systemMessage ? compile(ir.systemMessage) : null,
+    userMessage: ir.userMessage ? compile(ir.userMessage) : null,
+    guidanceContent: ir.guidanceContent ? compile(ir.guidanceContent) : null,
   };
 }
 
 // ─── Reverse Template Compiler ────────────────────────────────────────────────
 
 /**
- * Reverse-compiles Claude Code {argName} syntax back to Nunjucks {{argName}}.
- * Same as Agent Skills reverse since both formats now use named placeholders.
+ * Reverse-compiles {argName} placeholders back to Nunjucks {{argName}}. One function serves both
+ * formats because Claude Code and Agent Skills exports use the same named placeholders.
  */
-function reverseCompileTemplate(compiled: string, _args: IRArgument[]): string {
-  return compiled.replace(/\{(\w+)\}/g, '{{$1}}');
-}
-
-/**
- * Reverse-compiles Agent Skills {argName} syntax back to Nunjucks {{argName}}.
- */
-function reverseCompilePlaintext(compiled: string): string {
+function reverseCompileTemplate(compiled: string): string {
   return compiled.replace(/\{(\w+)\}/g, '{{$1}}');
 }
 
@@ -2042,7 +2033,6 @@ interface ParsedSkillMd {
   guidanceContent: string | null;
   arguments: ParsedArgument[];
   qualityGates: Array<{ id: string; source: string }>;
-  chainResources: Array<{ stepId: string; promptId: string }>;
 }
 
 /**
@@ -2162,20 +2152,6 @@ function parseSkillMd(content: string): ParsedSkillMd {
     }
   }
 
-  // Parse Chain Workflow resource references: | N | name | [`resources/stepId/`] |
-  const chainResources: Array<{ stepId: string; promptId: string }> = [];
-  const chainSection = sections.get('Chain Workflow') ?? '';
-  if (chainSection) {
-    const resourceRegex = /resources\/([^/]+)\//g;
-    let resMatch;
-    while ((resMatch = resourceRegex.exec(chainSection)) !== null) {
-      const stepId = resMatch[1]!;
-      if (!chainResources.some((r) => r.stepId === stepId)) {
-        chainResources.push({ stepId, promptId: stepId });
-      }
-    }
-  }
-
   return {
     format,
     frontmatter,
@@ -2187,7 +2163,6 @@ function parseSkillMd(content: string): ParsedSkillMd {
     guidanceContent: sections.get('Guidance') ?? null,
     arguments: parsedArgs.sort((a, b) => a.index - b.index),
     qualityGates,
-    chainResources,
   };
 }
 
@@ -2758,9 +2733,9 @@ function buildPassCriteriaSection(passCriteria: unknown[]): string {
 /**
  * Builds the enhanced Chain Workflow section with arrow flow and resource links.
  */
-function buildEnhancedChainSection(ir: SkillIR, opts: { hasSubagents?: boolean } = {}): string {
+function buildEnhancedChainSection(ir: SkillIR, opts: { hasSubagents: boolean }): string {
   if (ir.chainSteps.length === 0) return '';
-  const hasSubagents = opts.hasSubagents ?? true;
+  const { hasSubagents } = opts;
 
   let section = `## Chain Workflow\n\n`;
 
@@ -3026,8 +3001,8 @@ function buildClaudeCodeSkill(
   ir: SkillIR,
   config: ClientConfig,
   placement: SkillPlacement,
-  duplicateIds?: Set<string>,
-  harnessCovers: readonly string[] = []
+  duplicateIds: Set<string>,
+  harnessCovers: readonly string[]
 ): OutputFile[] {
   const files: OutputFile[] = [];
   const subDir = outputSubDir(ir, duplicateIds);
@@ -3173,8 +3148,8 @@ function buildClaudeCodeSkill(
 function buildAgentSkillsSkill(
   ir: SkillIR,
   config: ClientConfig,
-  duplicateIds?: Set<string>,
-  harnessCovers: readonly string[] = []
+  duplicateIds: Set<string>,
+  harnessCovers: readonly string[]
 ): OutputFile[] {
   const files: OutputFile[] = [];
   const subDir = outputSubDir(ir, duplicateIds);
@@ -3207,16 +3182,16 @@ function buildAgentSkillsSkill(
 
   // Body content (compiled to plain markdown — Agent Skills has no template syntax)
   if (ir.systemMessage) {
-    body += `## Instructions\n\n${compileTemplateToPlaintext(ir.systemMessage.trim(), ir.arguments)}\n\n`;
+    body += `## Instructions\n\n${compileTemplate(ir.systemMessage.trim(), ir.arguments)}\n\n`;
   }
   if (ir.guidanceContent) {
-    body += `## Guidance\n\n${compileTemplateToPlaintext(ir.guidanceContent.trim(), ir.arguments)}\n\n`;
+    body += `## Guidance\n\n${compileTemplate(ir.guidanceContent.trim(), ir.arguments)}\n\n`;
   }
 
   // Arguments (descriptive — no positional syntax in Agent Skills)
   if (ir.arguments.length > 0) {
     body += `## Arguments\n\n`;
-    if (literalArgumentsAfterCompile(ir, compileTemplateToPlaintext).length > 0) {
+    if (literalArgumentsAfterCompile(ir, compileTemplate).length > 0) {
       body += `${LITERAL_ARGUMENT_NOTE}\n\n`;
     }
     for (const a of ir.arguments) {
@@ -3229,7 +3204,7 @@ function buildAgentSkillsSkill(
   body += buildQualityGatesSection(gatePartition, false);
 
   if (ir.userMessage) {
-    body += `## Usage\n\n${compileTemplateToPlaintext(ir.userMessage.trim(), ir.arguments)}\n`;
+    body += `## Usage\n\n${compileTemplate(ir.userMessage.trim(), ir.arguments)}\n`;
   }
 
   // Chain workflow with resource links (capability-aware)
@@ -3345,8 +3320,8 @@ function adaptResource(
   ir: SkillIR,
   clientConfig: ClientConfig,
   placement: SkillPlacement,
-  duplicateIds?: Set<string>,
-  harnessCovers: readonly string[] = []
+  duplicateIds: Set<string>,
+  harnessCovers: readonly string[]
 ): OutputFile[] {
   if (clientConfig.adapter === 'claude-code') {
     return buildClaudeCodeSkill(ir, clientConfig, placement, duplicateIds, harnessCovers);
@@ -3556,11 +3531,6 @@ async function exportCommand(
 
   for (const clientId of clientIds) {
     const clientConfig = resolveClientConfig(clientId, config);
-    if (!clientConfig) {
-      throw usageError(
-        `Unknown client: ${clientId} (available: ${Object.keys(CLIENT_REGISTRY).join(', ')}, all)`
-      );
-    }
     const selection = resolveClientResourceSelection(config, clientId);
     const ignoreSelection = opts.id != null;
     if (!ignoreSelection && selection.mode === 'unregistered') {
@@ -3661,8 +3631,7 @@ async function exportCommand(
         }
 
         // Load version history for the resource
-        const firstSourcePath = ir.sourcePaths[0];
-        if (!firstSourcePath) continue;
+        const firstSourcePath = primarySourcePath(ir);
         // The path only locates state.db; the rows are the IR's own type and id. Read from the
         // path, a gate under any directory named `prompts` was looked up as a prompt.
         const history = loadHistory(path.dirname(firstSourcePath), {
@@ -3910,11 +3879,6 @@ async function syncCommand(
 
   for (const clientId of clientIds) {
     const clientConfig = resolveClientConfig(clientId, config);
-    if (!clientConfig) {
-      throw usageError(
-        `Unknown client: ${clientId} (available: ${Object.keys(CLIENT_REGISTRY).join(', ')}, all)`
-      );
-    }
 
     const selection = resolveClientResourceSelection(config, clientId);
     const ignoreSelection = opts.id != null;
@@ -4062,8 +4026,7 @@ async function syncCommand(
           );
         }
 
-        const firstSourcePath = ir.sourcePaths[0];
-        if (!firstSourcePath) continue;
+        const firstSourcePath = primarySourcePath(ir);
         // The path only locates state.db; the rows are the IR's own type and id. Read from the
         // path, a gate under any directory named `prompts` was looked up as a prompt.
         const history = loadHistory(path.dirname(firstSourcePath), {
@@ -4169,11 +4132,6 @@ async function diffCommand(
 
   for (const clientId of clientIds) {
     const clientConfig = resolveClientConfig(clientId, config);
-    if (!clientConfig) {
-      throw usageError(
-        `Unknown client: ${clientId} (available: ${Object.keys(CLIENT_REGISTRY).join(', ')}, all)`
-      );
-    }
     const selection = resolveClientResourceSelection(config, clientId);
     const ignoreSelection = opts.id != null;
     if (!ignoreSelection && selection.mode === 'unregistered') {
@@ -4524,11 +4482,6 @@ async function pullCommand(
 
   for (const clientId of clientIds) {
     const clientConfig = resolveClientConfig(clientId, config);
-    if (!clientConfig) {
-      throw usageError(
-        `Unknown client: ${clientId} (available: ${Object.keys(CLIENT_REGISTRY).join(', ')}, all)`
-      );
-    }
     const selection = resolveClientResourceSelection(config, clientId);
     const ignoreSelection = opts.id != null;
     if (!ignoreSelection && selection.mode === 'unregistered') {
@@ -4563,7 +4516,9 @@ async function pullCommand(
           harnessCovers
         );
         const skillFile = outputFiles.find((f) => f.relativePath.endsWith('/SKILL.md'));
-        if (!skillFile) continue;
+        if (!skillFile) {
+          throw new Error(`skills-sync invariant: the ${ir.id} adapter output has no SKILL.md`);
+        }
 
         const fullPath = path.join(baseDir, skillFile.relativePath);
         const existing = await readOptionalFile(fullPath);
@@ -4572,14 +4527,10 @@ async function pullCommand(
         // Parse the local (edited) SKILL.md
         const parsed = parseSkillMd(existing);
 
-        // Build reverse argument mapping for template decompilation
-        const reverseArgs = ir.arguments.map((a, i) => ({ ...a, index: i }));
-        const isClaudeCode = clientConfig.adapter === 'claude-code';
-
         // Forward-compile canonical sections to detect actual edits.
         // Comparing parsed SKILL.md against expected output (not raw canonical)
         // prevents false positives from lossy forward compilation (Nunjucks conditionals).
-        const expected = buildExpectedSectionContent(ir, isClaudeCode);
+        const expected = buildExpectedSectionContent(ir);
 
         // Compute diffs for each prose section
         const changes: Array<{
@@ -4611,9 +4562,7 @@ async function pullCommand(
         if (parsed.systemMessage !== null && ir.systemMessage !== null) {
           // Skip if section matches expected output (user didn't edit — preserves conditionals)
           if (parsed.systemMessage.trim() !== expected.systemMessage?.trim()) {
-            const reversed = isClaudeCode
-              ? reverseCompileTemplate(parsed.systemMessage, reverseArgs)
-              : reverseCompilePlaintext(parsed.systemMessage);
+            const reversed = reverseCompileTemplate(parsed.systemMessage);
             changes.push({
               section: 'systemMessage',
               file: 'system-message.md',
@@ -4626,9 +4575,7 @@ async function pullCommand(
         // User message (## Usage) → user-message.md
         if (parsed.userMessage !== null && ir.userMessage !== null) {
           if (parsed.userMessage.trim() !== expected.userMessage?.trim()) {
-            const reversed = isClaudeCode
-              ? reverseCompileTemplate(parsed.userMessage, reverseArgs)
-              : reverseCompilePlaintext(parsed.userMessage);
+            const reversed = reverseCompileTemplate(parsed.userMessage);
             changes.push({
               section: 'userMessage',
               file: 'user-message.md',
@@ -4641,9 +4588,7 @@ async function pullCommand(
         // Guidance (## Guidance) → guidance.md
         if (parsed.guidanceContent !== null && ir.guidanceContent !== null) {
           if (parsed.guidanceContent.trim() !== expected.guidanceContent?.trim()) {
-            const reversed = isClaudeCode
-              ? reverseCompileTemplate(parsed.guidanceContent, reverseArgs)
-              : reverseCompilePlaintext(parsed.guidanceContent);
+            const reversed = reverseCompileTemplate(parsed.guidanceContent);
             changes.push({
               section: 'guidanceContent',
               file: 'guidance.md',
@@ -4789,7 +4734,9 @@ async function cloneCommand(
 ): Promise<void> {
   const filePath = opts.file;
   if (!filePath) {
-    throw usageError('clone requires --file <path> to a SKILL.md');
+    throw new Error(
+      'skills-sync invariant: clone reached without --file, which validation refuses'
+    );
   }
 
   const content = await readOptionalFile(filePath);
@@ -4818,27 +4765,18 @@ async function cloneCommand(
     throw usageError(`Target directory exists: ${targetDir}. Use --force to overwrite.`);
   }
 
-  // Reverse-compile templates if arguments were detected
+  // The arguments the SKILL.md declares, as canonical argument entries for the written YAML.
   const reverseArgs = parsed.arguments.map((a) => ({
     name: a.name,
     type: 'string' as const,
     description: a.description,
     required: a.required,
   }));
-  const isClaudeCode = parsed.format === 'claude-code';
-
-  let systemMessage = parsed.systemMessage;
-  let userMessage = parsed.userMessage;
-  if (systemMessage && isClaudeCode) {
-    systemMessage = reverseCompileTemplate(systemMessage, reverseArgs);
-  } else if (systemMessage) {
-    systemMessage = reverseCompilePlaintext(systemMessage);
-  }
-  if (userMessage && isClaudeCode) {
-    userMessage = reverseCompileTemplate(userMessage, reverseArgs);
-  } else if (userMessage) {
-    userMessage = reverseCompilePlaintext(userMessage);
-  }
+  // Both export formats write {argName}; reverse-compile it back to {{argName}}.
+  const systemMessage =
+    parsed.systemMessage !== null ? reverseCompileTemplate(parsed.systemMessage) : null;
+  const userMessage =
+    parsed.userMessage !== null ? reverseCompileTemplate(parsed.userMessage) : null;
 
   if (opts.preview) {
     output.log(`[preview] Would create ${resourceType} "${resourceId}" at ${targetDir}`);
@@ -5014,9 +4952,7 @@ async function cloneCommand(
       }
 
       if (parsed.guidanceContent && (resourceType === 'gate' || resourceType === 'style')) {
-        const guidanceContent = isClaudeCode
-          ? reverseCompileTemplate(parsed.guidanceContent, reverseArgs)
-          : reverseCompilePlaintext(parsed.guidanceContent);
+        const guidanceContent = reverseCompileTemplate(parsed.guidanceContent);
         const guidancePath = path.join(targetDir, 'guidance.md');
         await writeFile(guidancePath, guidanceContent);
         writtenPaths.add(guidancePath);
@@ -5298,7 +5234,10 @@ export async function runSkillsSyncCommand(
       if (!opts.json) printSkillsSyncHelp(commandOutput);
       break;
     default:
-      throw usageError(`Unknown command: ${opts.command}. Run skills-sync help for usage.`);
+      // `validateSkillsSyncOptions` refuses every command outside VALID_COMMANDS before this switch.
+      throw new Error(
+        `skills-sync invariant: command '${opts.command}' passed validation but has no handler`
+      );
   }
 
   if (opts.json) {

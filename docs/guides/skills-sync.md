@@ -353,6 +353,9 @@ it examined, each with `client`, `scope`, and an `entries` array of `{ type, id,
 element is present with `entries: []` when that client and scope are clean, because "examined and
 in step" and "never looked at" are different answers and only a present element says the first.
 
+The CLI exits 2 on a usage error (an unknown command or client, a flag the command does not take,
+a `clone` source or target it cannot use) and 1 on any other failure.
+
 The same operations are reachable over MCP as `system_control` with
 `action: "skills_sync"` and `operation: "status" | "export" | "sync" | "diff" | "pull" | "clone"`.
 Prefer that path when a database is attached: it is the route that persists manifests. Without one,

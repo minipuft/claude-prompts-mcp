@@ -2,7 +2,8 @@
  * Export template compilation: if/elif/else chain selection and complex expressions.
  *
  * Covers row 1.2 of plans/opencode-parity-p1-close-client-gaps-2026-08-21.md — the
- * shared compileIfChain rules both client compilers delegate to. Production callers
+ * compileIfChain rules that the one export compiler, shared by every client adapter,
+ * delegates to. Production callers
  * never supply argument values (export renders the reader's view), so the no-supply
  * cases assert the F18 else-preference; supplied-value cases exercise first-truthy
  * selection that only tests can reach.
@@ -11,7 +12,6 @@ import { describe, expect, it } from '@jest/globals';
 
 import {
   compileTemplate,
-  compileTemplateToPlaintext,
   emitGateFiles,
   findTemplateFidelityGaps,
   type SkillIR,
@@ -117,15 +117,9 @@ describe('compileTemplate complex expressions', () => {
   });
 });
 
-describe('compileTemplateToPlaintext parity', () => {
-  it('applies identical chain selection to the Agent Skills compiler', () => {
-    const tpl = '{% if a %}A{% elif b %}B{% else %}C{% endif %}';
-    expect(compileTemplateToPlaintext(tpl, NO_ARGS)).toBe('C');
-    expect(compileTemplateToPlaintext(tpl, NO_ARGS, { a: '1' })).toBe('A');
-  });
-
-  it('still renders {{arg}} as a literal {arg} placeholder', () => {
-    expect(compileTemplateToPlaintext('Hello {{name}}', NO_ARGS)).toBe('Hello {name}');
+describe('compileTemplate placeholders', () => {
+  it('renders {{arg}} as a literal {arg} placeholder', () => {
+    expect(compileTemplate('Hello {{name}}', NO_ARGS)).toBe('Hello {name}');
   });
 });
 
