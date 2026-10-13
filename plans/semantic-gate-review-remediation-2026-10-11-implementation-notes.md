@@ -252,3 +252,4 @@ Rulings for this tier:
 - Finding (not cut, R192): `findHeldChainIdForToken` reads through `this.resolvedDbEngine?.queryOne`, so a store with an injected registry and no engine skips the R62 check silently; production always has an engine. Its `row === undefined` arm is reachable only there.
 - Finding: ESLint ignores `server/tests/**`, so "lint your file" is no check for a test row; dropped from later briefs.
 - Feedback adopted: planted mutations in a shared tree collide (0C2.8 saw another row's planted `!` in `getSessionForMutation` once); later briefs require plant-run-revert in one command.
+- 0C2.6 accepted (header and table read). Nine methods answer an unknown id without a branch of their own (optional chaining); the file names them. Finding: the `replaceRemainder` re-check after `refuseRemainder` is unreachable — already region 18 in 0C2.2.
