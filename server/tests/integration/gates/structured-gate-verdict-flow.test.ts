@@ -87,6 +87,12 @@ class RpcRefusal extends Error {
     super(message);
   }
 }
+/** The chain id a start reply names; throws on a reply that started no run. */
+function chainIdOf(reply: ToolReply): string {
+  const chainId = /chain_id="(chain-[A-Za-z0-9_#-]+)"/.exec(reply.text)?.[1];
+  if (chainId === undefined) throw new Error(`No registered chain id: ${reply.text}`);
+  return chainId;
+}
 function toolReply(value: unknown): ToolReply {
   if (typeof value !== 'object' || value === null) throw new Error('No MCP tool result');
   const result = value as { content?: Array<{ text?: string }>; isError?: boolean };
@@ -309,6 +315,8 @@ describe.each(['stdio', 'http'] as const)(
         mode?: 'blocking' | 'advisory';
         detached?: boolean;
         disabled?: boolean;
+        /** Start the built workflow node without its gate (a call that requests no gate). */
+        ungated?: boolean;
       } = {}
     ): Promise<{
       call: Call;
@@ -460,15 +468,18 @@ describe.each(['stdio', 'http'] as const)(
                 workflow: {
                   version: 1,
                   nodes: [
-                    { id: 'reviewed-node', promptId: 'registered_custody', inlineGateIds: [GATE] },
+                    {
+                      id: 'reviewed-node',
+                      promptId: 'registered_custody',
+                      ...(options.ungated === true ? {} : { inlineGateIds: [GATE] }),
+                    },
                   ],
                 },
               }
             : { command: '>>registered_custody', gates: [GATE] }
       );
       expect(started.isError).toBe(false);
-      const chainId = /chain_id="(chain-[A-Za-z0-9_#-]+)"/.exec(started.text)?.[1];
-      if (chainId === undefined) throw new Error(`No registered chain id: ${started.text}`);
+      const chainId = chainIdOf(started);
       if (process.env['SEMANTIC_WIRE_TRACE'] !== undefined)
         appendFileSync(
           process.env['SEMANTIC_WIRE_TRACE'],
@@ -804,6 +815,39 @@ describe.each(['stdio', 'http'] as const)(
       replies.push(['renewed review', failed]);
       expect(failed.isError).toBe(false);
       expect(issuedState(runtimeRoot, chainId).reviews[held.nodeId]?.attemptCount).toBe(1);
+      // R11.16: the same gate on a LATER node (`inlineGateIds`). The call answering the plain node
+      // advances into the gated one and renders it, so its review must already be open there.
+      const nodeRun = await call('prompt_engine', {
+        workflow: {
+          version: 1,
+          nodes: [
+            { id: 'plain-node', promptId: 'registered_custody' },
+            { id: 'gated-node', promptId: 'registered_custody', inlineGateIds: [GATE] },
+          ],
+        },
+      });
+      replies.push(['node-scoped start', nodeRun]);
+      expect(nodeRun.isError).toBe(false);
+      const nodeChain = chainIdOf(nodeRun);
+      expect(issuedState(runtimeRoot, nodeChain).reviews).toEqual({});
+      const advanced = await call('prompt_engine', { chain_id: nodeChain, user_response: OUTPUT });
+      replies.push(['node-scoped advance render', advanced]);
+      expect(advanced.isError).toBe(false);
+      const nodeState = issuedState(runtimeRoot, nodeChain);
+      expect(nodeState.currentNode).toBe('gated-node');
+      expect(nodeState.reviews['gated-node']?.semanticContext?.nodeId).toBe('gated-node');
+      replies.push([
+        'node-scoped captured review',
+        await call('prompt_engine', { chain_id: nodeChain, user_response: OUTPUT }),
+      ]);
+      const nodeReview = issuedState(runtimeRoot, nodeChain).reviews['gated-node']!;
+      expect(nodeReview.semanticContext?.target?.content).toBe(OUTPUT);
+      const nodePass = await call('prompt_engine', {
+        chain_id: nodeChain,
+        gate_verdict: submitted(issuedReport(nodeReview)),
+      });
+      expect(nodePass.isError).toBe(false);
+      expect(captured(runtimeRoot, nodeChain).at(-1)).toMatchObject({ verdict: 'PASS' });
       for (const [label, reply] of replies) {
         expect({ label, leaks: reply.text.includes('GATE_REVIEW') }).toEqual({
           label,
@@ -823,6 +867,60 @@ describe.each(['stdio', 'http'] as const)(
       expect(legacy.isError).toBe(false);
       expect(legacy.text).toContain('Review Required');
       expect(legacy.text).toContain('GATE_REVIEW');
+    }, 90000);
+
+    // R11.16 sibling and control: a node-scoped SEMANTIC gate opens its review on the call that
+    // advances into its node however the node was declared; a reminder gate keeps its timing.
+    test('built node-scoped review timing: a --> segment semantic gate opens on the advance, a reminder gate on capture', async () => {
+      const { call, runtimeRoot } = await fixture({ built: true });
+      const advanceIntoGatedNode = async (
+        start: Record<string, unknown>
+      ): Promise<{
+        chainId: string;
+        reply: ToolReply;
+        state: ReturnType<typeof issuedState>;
+      }> => {
+        const started = await call('prompt_engine', start);
+        expect(started.isError).toBe(false);
+        const chainId = chainIdOf(started);
+        expect(issuedState(runtimeRoot, chainId).reviews).toEqual({});
+        const reply = await call('prompt_engine', { chain_id: chainId, user_response: OUTPUT });
+        expect(reply.isError).toBe(false);
+        return { chainId, reply, state: issuedState(runtimeRoot, chainId) };
+      };
+
+      // Reminder tier (no semantic criterion): the review-less render already carries the legacy
+      // footer its review accepts, so the review still opens on the call capturing the output.
+      const reminder = await advanceIntoGatedNode({
+        workflow: {
+          version: 1,
+          nodes: [
+            { id: 'plain-node', promptId: 'registered_custody' },
+            { id: 'gated-node', promptId: 'registered_custody', inlineGateIds: ['code-quality'] },
+          ],
+        },
+      });
+      expect(reminder.state.currentNode).toBe('gated-node');
+      expect(reminder.state.reviews).toEqual({});
+      expect(reminder.reply.text).toContain('GATE_REVIEW');
+      const reminderCapture = await call('prompt_engine', {
+        chain_id: reminder.chainId,
+        user_response: OUTPUT,
+      });
+      expect(reminderCapture.isError).toBe(false);
+      expect(issuedState(runtimeRoot, reminder.chainId).reviews['gated-node']?.gateIds).toEqual([
+        'code-quality',
+      ]);
+
+      // A symbolic `-->` segment's `::` gate lands on that step's inline gates: the same path.
+      const segment = await advanceIntoGatedNode({
+        command: `>>registered_custody --> >>registered_custody :: ${GATE}`,
+      });
+      const [segmentReview, ...others] = Object.values(segment.state.reviews);
+      expect(others).toEqual([]);
+      expect(segmentReview?.nodeId).toBe(segment.state.currentNode);
+      expect(segmentReview?.semanticContext?.nodeId).toBe(segment.state.currentNode);
+      expect(segment.reply.text).not.toContain('GATE_REVIEW');
     }, 90000);
 
     test('built advisory acceptance failure advances with recorded FAIL facts', async () => {
@@ -935,8 +1033,30 @@ describe.each(['stdio', 'http'] as const)(
       expect(captured(runtimeRoot, chainId)).toEqual([]);
     }, 90000);
 
-    test('built disabled gates retain ordinary capture without fabricated semantic acceptance', async () => {
-      const { call, chainId, runtimeRoot } = await fixture({ built: true, disabled: true });
+    // R11.8 (row 0D.4): with gates disabled, a call that requests a gate is refused, not run
+    // ungated. The original property — ordinary capture survives a disabled gate system — is the
+    // ungated case below.
+    test('built disabled gates refuse a requested node gate as gate-suppressed', async () => {
+      const { call } = await fixture({ built: true, disabled: true, ungated: true });
+      const refused = await call('prompt_engine', {
+        workflow: {
+          version: 1,
+          nodes: [{ id: 'reviewed-node', promptId: 'registered_custody', inlineGateIds: [GATE] }],
+        },
+      });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain(
+        `[gate-suppressed] workflow: gates are disabled by configuration (\`gates.enabled: false\`), but this call requested 1 gate: node "reviewed-node" gate "${GATE}".`
+      );
+      expect(refused.text).toContain('no run was created.');
+    }, 90000);
+
+    test('built disabled gates retain ordinary capture without fabricated semantic acceptance when no gate is requested', async () => {
+      const { call, chainId, runtimeRoot } = await fixture({
+        built: true,
+        disabled: true,
+        ungated: true,
+      });
       expect(
         (await call('prompt_engine', { chain_id: chainId, user_response: OUTPUT })).isError
       ).toBe(false);

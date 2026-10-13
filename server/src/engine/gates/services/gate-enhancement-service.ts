@@ -16,6 +16,7 @@ import {
 import { parseChainGateDefinitionRef } from '../../execution/parsers/chain-step-projection.js';
 import { resolveEnforcementMode } from '../../execution/pipeline/decisions/index.js';
 import { isFrameworkInjected } from '../../execution/pipeline/decisions/injection/index.js';
+import { hasSemanticEvaluation } from '../core/gate-tier.js';
 import { resolveDeclaredArtifacts } from '../utils/artifact-kinds.js';
 
 import type { StateStoreOptions } from '#infra/database/stores/interface.js';
@@ -725,6 +726,13 @@ export class GateEnhancementService {
    *
    * TRIGGERED only when the step-applicable set contains at least one EXPLICITLY step-targeted
    * gate that specifically matches the new step — never by an untargeted (run-wide) gate alone.
+   * A SEMANTIC gate the step declares inline targets that step too (R11.16): its `inlineGateIds`,
+   * which also carry the step gate its `inlineGateCriteria` (or a `-->` segment's `::`) registers.
+   * Neither carries a registry step target, so the run advanced into such a node and rendered it
+   * with no review open — the legacy `GATE_REVIEW` footer, which the semantic review then refused
+   * one call later. Semantic only: a reminder or check gate's review-less render already carries
+   * the footer its later review accepts, so it keeps its timing (the review opens on the call
+   * that captures the step's output), as do run-wide gates.
    * An untargeted gate already got its one opportunity to review when its id first entered
    * `reviewGateIds` at the step the request started on, and the NEXT call's ordinary pre-advance
    * creation (`SessionManagementStage`, which by then sees this step's identity as its OWN
@@ -778,12 +786,14 @@ export class GateEnhancementService {
       return;
     }
 
+    const walkSettings = context.state.gates.chainWalkSettings;
     const runStepView = this.resolveRunStepView(context);
     const gateIds = this.resolveStepReviewGateIds(
       accumulatedGateIds,
       { nodeId: sessionContext.currentNodeId, stepNumber: sessionContext.currentStep },
       runStepView,
-      context.state.gates.chainWalkSettings?.stepBindings ?? NO_STEP_BINDINGS
+      walkSettings?.stepBindings ?? NO_STEP_BINDINGS,
+      await this.semanticNodeGateIds(target, walkSettings?.stepDefinitionIds)
     );
     if (gateIds.length === 0) {
       return;
@@ -811,15 +821,17 @@ export class GateEnhancementService {
   /**
    * The full step-applicable set for `target` (targeted matches + untargeted pass-through, via
    * `filterGatesForTarget` — identical semantics to the per-step walk), but returned ONLY when at
-   * least one member of that set carries an EXPLICIT step target that specifically matched
-   * `target`. An all-untargeted match returns `[]`, which is what keeps
-   * {@link ensurePostAdvanceReview} from firing on a run-wide gate alone (see its doc comment).
+   * least one member of that set targets `target`: an EXPLICIT registry step target, or a
+   * semantic gate the step declares inline (`nodeGateIds`, R11.16). An all-untargeted match
+   * returns `[]`, which is what keeps {@link ensurePostAdvanceReview} from firing on a run-wide
+   * gate alone (see its doc comment).
    */
   private resolveStepReviewGateIds(
     gateIds: readonly string[],
     target: { readonly nodeId?: string | null; readonly stepNumber?: number },
     runStepView: RunStepView | undefined,
-    stepBindings: StepGateBindings
+    stepBindings: StepGateBindings,
+    nodeGateIds: ReadonlySet<string>
   ): string[] {
     const matched = filterGatesForTarget(
       [...gateIds],
@@ -828,8 +840,25 @@ export class GateEnhancementService {
       stepBindings,
       this.acceptsTemporaryGateTarget.bind(this)
     );
-    const hasNewlyTargetedGate = matched.some((gateId) => this.hasExplicitStepTarget(gateId));
+    const hasNewlyTargetedGate = matched.some(
+      (gateId) => nodeGateIds.has(gateId) || this.hasExplicitStepTarget(gateId)
+    );
     return hasNewlyTargetedGate ? matched : [];
+  }
+
+  /**
+   * The semantic gates `step` declares inline (R11.16), resolved as the walk resolved them and
+   * read through the loader the review authority snapshots definitions from.
+   */
+  private async semanticNodeGateIds(
+    step: ChainStepPrompt | undefined,
+    stepDefinitionIds: ReadonlyMap<string, string> = new Map()
+  ): Promise<ReadonlySet<string>> {
+    const declared =
+      step === undefined ? [] : (resolvedInlineGateIds(step, stepDefinitionIds) ?? []);
+    if (declared.length === 0 || this.gateLoader === undefined) return new Set();
+    const definitions = await this.gateLoader.loadGates(declared);
+    return new Set(definitions.filter((gate) => hasSemanticEvaluation(gate)).map(({ id }) => id));
   }
 
   /** Whether `gateId` carries a declared step target in the temporary gate registry. */

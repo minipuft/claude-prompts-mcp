@@ -749,6 +749,104 @@ describe('gate review scoping (P4-F3)', () => {
       expect(authority.createReviewForStep).not.toHaveBeenCalled();
     });
 
+    /**
+     * R11.16: a SEMANTIC gate a node declares inline (`inlineGateIds`, or the step gate its
+     * `inlineGateCriteria` / a `-->` segment's `::` registers) targets that node. Neither carries
+     * a temporary-registry step target, so before R11.16 the run advanced into the node and
+     * rendered it with no review open — the legacy footer the semantic review then refused. A
+     * reminder gate keeps its timing: its review-less render already carries the footer it takes.
+     */
+    const NODE_GATE = 'node-scoped-gate';
+    const SEMANTIC_CRITERIA = [{ type: 'semantic_evaluation' }];
+    const loaderOf = (criteria: Record<string, readonly unknown[]>) => ({
+      loadGates: jest.fn(async (ids: string[]) =>
+        ids.flatMap((id) =>
+          criteria[id] === undefined ? [] : [{ id, pass_criteria: criteria[id] }]
+        )
+      ),
+    });
+    const buildLoadingService = (
+      registry: ReturnType<typeof createRegistry>,
+      loader: ReturnType<typeof loaderOf>
+    ) =>
+      new GateEnhancementService(
+        createGateService(),
+        registry as never,
+        () => undefined,
+        () => undefined as never,
+        loader as never,
+        new GateMetricsRecorder(() => undefined),
+        createLogger() as never,
+        undefined
+      );
+    const withNodeGate = (context: ExecutionContext, gateId: string) => {
+      context.parsedCommand = {
+        steps: [
+          { stepNumber: 1, nodeId: 'draft-outline', promptId: 'outline' },
+          { stepNumber: 2, nodeId: 'write-body', promptId: 'body', inlineGateIds: [gateId] },
+        ],
+      } as never;
+      context.state.gates.chainWalkSettings = {
+        stepDefinitionIds: new Map(),
+        stepBindings: new Map([[gateId, [{ nodeId: 'write-body', stepNumber: 2 }]]]),
+      } as never;
+      return context;
+    };
+
+    test("(5) a semantic gate the node declares in inlineGateIds opens that node's review on the advance into it", async () => {
+      const registry = createRegistry();
+      const service = buildLoadingService(registry, loaderOf({ [NODE_GATE]: SEMANTIC_CRITERIA }));
+      const authority = buildAuthority();
+      const context = withNodeGate(
+        buildContext({ accumulatedGateIds: [NODE_GATE], gateEnforcement: authority }),
+        NODE_GATE
+      );
+
+      await service.ensurePostAdvanceReview(context, sessionContextAt(1, 'draft-outline') as never);
+      expect(authority.createReviewForStep).not.toHaveBeenCalled();
+
+      const atNode = sessionContextAt(2, 'write-body');
+      await service.ensurePostAdvanceReview(context, atNode as never);
+      expect(authority.createReviewForStep).toHaveBeenCalledWith(context, atNode, [NODE_GATE]);
+    });
+
+    test("(5b) a node's step-scoped criteria gate (inlineGateCriteria, `-->` segment `::`) opens the same way", async () => {
+      const registry = createRegistry();
+      const stepGate = registry.createTemporaryGate({
+        name: 'Inline Validation Criteria',
+        scope: 'step',
+        criteria: ['cite sources'],
+      });
+      const service = buildLoadingService(registry, loaderOf({ [stepGate]: SEMANTIC_CRITERIA }));
+      const authority = buildAuthority();
+      const context = withNodeGate(
+        buildContext({ accumulatedGateIds: [stepGate], gateEnforcement: authority }),
+        stepGate
+      );
+      const atNode = sessionContextAt(2, 'write-body');
+
+      await service.ensurePostAdvanceReview(context, atNode as never);
+
+      expect(authority.createReviewForStep).toHaveBeenCalledWith(context, atNode, [stepGate]);
+    });
+
+    test('(5c) a reminder gate the node declares keeps its timing — no review on the advance', async () => {
+      const registry = createRegistry();
+      const service = buildLoadingService(
+        registry,
+        loaderOf({ [NODE_GATE]: [{ type: 'inline_guidance' }] })
+      );
+      const authority = buildAuthority();
+      const context = withNodeGate(
+        buildContext({ accumulatedGateIds: [NODE_GATE], gateEnforcement: authority }),
+        NODE_GATE
+      );
+
+      await service.ensurePostAdvanceReview(context, sessionContextAt(2, 'write-body') as never);
+
+      expect(authority.createReviewForStep).not.toHaveBeenCalled();
+    });
+
     test('no blocking gates on the run short-circuits before any lookup', async () => {
       const registry = createRegistry();
       registry.createTemporaryGate({
