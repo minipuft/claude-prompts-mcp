@@ -221,6 +221,24 @@ describe('gate-review render of a current-step review is byte-identical (row 3.5
     `);
   });
 
+  test('a last review that repeats a rendered hint is quoted once', async () => {
+    const failure = 'covers: the captured output never mentions apples.';
+    const content = await render({
+      attemptCount: 1,
+      retryHints: [failure],
+      history: [{ timestamp: 1, status: 'fail', reasoning: failure }],
+    });
+    expect(content.split(failure)).toHaveLength(2);
+    expect(content).not.toContain('**Last Review:**');
+    // Control: a last review that differs from every hint still renders.
+    const distinct = await render({
+      attemptCount: 1,
+      retryHints: [failure],
+      history: [{ timestamp: 1, status: 'fail', reasoning: 'Another reason.' }],
+    });
+    expect(distinct).toContain('**Last Review:** Another reason.');
+  });
+
   // R165 (P6.72): the moves only. The retry abbreviation, the inline fix line and the hint the
   // review holds are not rendered: they ask for a fix against criteria the render withholds.
   test('an exhausted review offers the three gate actions', async () => {

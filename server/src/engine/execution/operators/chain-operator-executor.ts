@@ -173,7 +173,8 @@ export class ChainOperatorExecutor {
     });
 
     // Retry hints, the last review and the retry-limit prompt, read off the review record.
-    // Attempt display is handled by ResponseAssembler.buildGateReviewCTA()
+    // Attempt display and a semantic review's instructions are rendered once, by
+    // ResponseAssembler.buildGateReviewCTA(); this render carries a one-line pointer to them.
     const supplementalSections = renderReviewSupplements(review, hasInlineGateFocus);
 
     // Framework guidance for the review, whenever the call's decision injects it — retries

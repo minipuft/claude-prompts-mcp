@@ -9,7 +9,9 @@
  * renders the template owns no review semantics of its own.
  *
  * The same module projects the frozen semantic protocol of a review (judge review, action,
- * resume), the structured verdict template and the fallback gate guidance.
+ * resume), the structured verdict template and the fallback gate guidance. A semantic review's
+ * instructions render once per reply, in the review call to action; the step render and the
+ * chain footer carry a one-line pointer to them instead.
  *
  * Pure: reads the review it is given, writes nothing.
  */
@@ -112,8 +114,8 @@ export function renderReviewSupplements(
     ];
   }
   const sections: string[] = [];
-  const frozen = renderFrozenReviewInstructions(facts.protocol);
-  if (frozen !== '') sections.push(frozen);
+  const pointer = semanticReviewPointer(facts.protocol);
+  if (pointer !== undefined) sections.push(pointer);
   if (inlineGateFocus) {
     sections.push(
       '**Inline Gate Priority:** These inline gates triggered the review. Fix them before checking framework standards.'
@@ -123,7 +125,8 @@ export function renderReviewSupplements(
     const heading = inlineGateFocus ? '**Inline Fix Guidance:**' : '**Improvements Needed:**';
     sections.push(`${heading}\n` + facts.retryHints.map((hint) => `- ${hint}`).join('\n'));
   }
-  if (facts.lastReasoning !== undefined) {
+  // A semantic failure records the same sentence as its hint and its reasoning; quote it once.
+  if (facts.lastReasoning !== undefined && !facts.retryHints.includes(facts.lastReasoning)) {
     sections.push(`**Last Review:** ${facts.lastReasoning}`);
   }
   return sections;
@@ -201,6 +204,41 @@ export function semanticReviewAction(protocol: FrozenReviewProjection): string |
   }
 }
 
+/**
+ * The line a review's step render carries in place of the semantic instructions, which the
+ * review call to action renders after it. An exhausted review has no call to action, so its own
+ * one-line action stands in. PURE.
+ */
+function semanticReviewPointer(protocol: FrozenReviewProjection): string | undefined {
+  const action = semanticReviewAction(protocol);
+  if (action === undefined) return undefined;
+  if (protocol.exhausted === true) return action;
+  return '**Semantic review:** its instructions and resume call are in the review section below.';
+}
+
+/**
+ * The chain footer's resume line for a semantic review: one line, because the review call to
+ * action in the same reply carries the instructions and the full resume fence. PURE.
+ */
+export function semanticResumePointer(
+  review: PendingGateReview | undefined,
+  chainId: string
+): string | undefined {
+  if (review === undefined) return undefined;
+  const protocol = projectFrozenReview(review);
+  const action = semanticReviewAction(protocol);
+  if (action === undefined) return undefined;
+  if (protocol.exhausted === true) return action;
+  switch (protocol.submission) {
+    case 'capture-first':
+      return `Next: chain_id=${JSON.stringify(chainId)}, user_response="<complete node output>"`;
+    case 'report':
+      return `Next: chain_id=${JSON.stringify(chainId)}, gate_verdict=<the structured report from the Resume block above>`;
+    default:
+      return 'Next: no verdict can be accepted until the semantic review above is available.';
+  }
+}
+
 function renderFrozenReviewInstructions(protocol: FrozenReviewProjection): string {
   const action = semanticReviewAction(protocol);
   if (action === undefined) return '';
@@ -221,7 +259,11 @@ function renderFrozenReviewInstructions(protocol: FrozenReviewProjection): strin
     .join('\n\n');
 }
 
-/** Shared resume instructions for ordinary, blocked and detached semantic reviews. */
+/**
+ * A semantic review's instructions and resume fence, for the one review call to action a reply
+ * carries: the ordinary review, the blocked reply, the single-prompt gate action, or a detached
+ * node's reply.
+ */
 export function semanticReviewResume(
   review: PendingGateReview | undefined,
   chainId: string
