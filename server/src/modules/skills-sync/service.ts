@@ -774,6 +774,7 @@ async function loadToolsCache(
   output: SkillsSyncOutput,
   dbManager?: DatabasePort
 ): Promise<Record<string, ToolIndexEntry>> {
+  let readFailure: string | undefined;
   if (dbManager?.isInitialized()) {
     try {
       const rows = dbManager.query<{
@@ -810,13 +811,13 @@ async function loadToolsCache(
         }
       }
       if (Object.keys(result).length > 0) return result;
-    } catch (_error) {
-      // DB read failed
+    } catch (error) {
+      readFailure = error instanceof Error ? error.message : String(error);
     }
   }
 
   output.warn(
-    '  Tools not found in resource index — run server once to index, or tools will export without schemas'
+    `  Tools not found in resource index${readFailure === undefined ? '' : ` (index read failed: ${readFailure})`} — run server once to index, or tools will export without schemas`
   );
   return {};
 }
@@ -1060,13 +1061,18 @@ async function resolveActiveGateRefs(
   );
 
   const gatesById = new Map<string, GateYaml>();
+  // The registry key is the declared id, which need not be the directory name: step 3 resolves a
+  // registered id back to its directory through this map, not through `gateDirs`.
+  const gateDirById = new Map<string, string>();
   for (const [dirName, gateDir] of gateDirs) {
     const gateYamlRaw = await readOptionalFile(path.join(gateDir, 'gate.yaml'));
     if (!gateYamlRaw) continue;
     const gate = yaml.load(gateYamlRaw) as GateYaml;
     // `getAllGuides(enabledOnly)` defaults to true in `selectGates`; match it.
     if (gate.enabled === false) continue;
-    gatesById.set(gate.id ?? dirName, gate);
+    const gateId = gate.id ?? dirName;
+    gatesById.set(gateId, gate);
+    gateDirById.set(gateId, gateDir);
   }
 
   /** Registers a gate id unless it is excluded, unknown, or unhonourable in a skill. */
@@ -1104,8 +1110,8 @@ async function resolveActiveGateRefs(
 
   // 3. Load registered gate content
   for (const gateId of registeredIds) {
-    const gateDir = gateDirs.get(gateId);
-    if (gateDir === undefined) continue;
+    // Registered only from `gatesById`, which fills this map in the same step.
+    const gateDir = gateDirById.get(gateId)!;
     const gateYamlRaw = await readOptionalFile(path.join(gateDir, 'gate.yaml'));
     if (!gateYamlRaw) continue;
     const gate = yaml.load(gateYamlRaw) as GateYaml;
@@ -1554,6 +1560,25 @@ async function collectPromptDirs(
   return prompts;
 }
 
+/**
+ * A resource whose files could not be loaded: logged for the operator AND recorded in the run
+ * report, so a run (and its `--json` output) cannot read as clean while a resource was skipped.
+ */
+function recordSkippedResource(
+  kind: ResourceType,
+  id: string,
+  error: unknown,
+  output: SkillsSyncOutput,
+  report: SkillsSyncRunReport | undefined
+): void {
+  const message = (error as Error).message;
+  output.error(`  skip ${kind} ${id}: ${message}`);
+  report?.failures.push({
+    id: `${kind === 'prompt' ? '' : `${kind}/`}${id}`,
+    reason: `${kind} skipped: ${message}`,
+  });
+}
+
 async function loadAllResources(
   filters: LoadFilters | undefined,
   output: SkillsSyncOutput,
@@ -1582,11 +1607,7 @@ async function loadAllResources(
           )
         );
       } catch (e) {
-        output.error(`  skip prompt ${prompt.category}/${prompt.id}: ${(e as Error).message}`);
-        report?.failures.push({
-          id: `${prompt.category}/${prompt.id}`,
-          reason: `prompt skipped: ${(e as Error).message}`,
-        });
+        recordSkippedResource('prompt', `${prompt.category}/${prompt.id}`, e, output, report);
       }
     }
   }
@@ -1601,7 +1622,7 @@ async function loadAllResources(
       try {
         resources.push(await loadGateIR(dir));
       } catch (e) {
-        output.error(`  skip gate ${name}: ${(e as Error).message}`);
+        recordSkippedResource('gate', name, e, output, report);
       }
     }
   }
@@ -1613,7 +1634,7 @@ async function loadAllResources(
       try {
         resources.push(await loadFrameworkIR(dir));
       } catch (e) {
-        output.error(`  skip framework ${name}: ${(e as Error).message}`);
+        recordSkippedResource('framework', name, e, output, report);
       }
     }
   }
@@ -1625,7 +1646,7 @@ async function loadAllResources(
       try {
         resources.push(await loadStyleIR(dir));
       } catch (e) {
-        output.error(`  skip style ${name}: ${(e as Error).message}`);
+        recordSkippedResource('style', name, e, output, report);
       }
     }
   }
@@ -2378,6 +2399,28 @@ interface PartitionedGateRefs {
 }
 
 /**
+ * Parses the yaml a registered gate ref carries, or warns and returns null.
+ *
+ * The loader has already parsed this text once, so a failure here is not expected; if it happens
+ * the gate would otherwise export with no criteria and no word, which reads as a gate with nothing
+ * to check. The prompt still exports — the warning is the only signal the gate degraded.
+ */
+function parseRegisteredGateYaml(
+  ref: IRGateRef,
+  content: string,
+  output: SkillsSyncOutput | undefined
+): Record<string, unknown> | null {
+  try {
+    return (yaml.load(content) as Record<string, unknown> | null) ?? {};
+  } catch (error) {
+    output?.warn(
+      `  ${ref.id}: gates/${ref.id}/gate.yaml could not be parsed (${error instanceof Error ? error.message : String(error)}) — exported without its criteria`
+    );
+    return null;
+  }
+}
+
+/**
  * Parses each `registered` gate ref's yaml once and splits the result into checks and independent semantic requirements,
  * live reminders, and reminders this installation's harness already covers.
  *
@@ -2388,7 +2431,8 @@ interface PartitionedGateRefs {
  */
 function partitionGateRefs(
   gateRefs: IRGateRef[],
-  harnessCovers: readonly string[]
+  harnessCovers: readonly string[],
+  output?: SkillsSyncOutput
 ): PartitionedGateRefs {
   const registered = gateRefs.filter((g) => g.source === 'registered');
   const passthrough = gateRefs.filter((g) => g.source !== 'registered');
@@ -2397,12 +2441,9 @@ function partitionGateRefs(
   // the raw yaml text each registered ref already carries — so this constructs the minimal
   // `{ pass_criteria }` structure `deriveGateTier` actually reads.
   const tiered: TieredGateRef[] = registered.map((ref) => {
-    let parsed: GateYaml | null;
-    try {
-      parsed = ref.gateYamlContent ? (yaml.load(ref.gateYamlContent) as GateYaml) : null;
-    } catch {
-      parsed = null;
-    }
+    const parsed = ref.gateYamlContent
+      ? (parseRegisteredGateYaml(ref, ref.gateYamlContent, output) as GateYaml | null)
+      : null;
     const passCriteria = parsed?.pass_criteria ?? [];
     return {
       ref,
@@ -2863,7 +2904,8 @@ function publicGateManifestEntry(
 export function emitGateFiles(
   gateRefs: IRGateRef[],
   subDir: string,
-  skillId?: string
+  skillId?: string,
+  output?: SkillsSyncOutput
 ): OutputFile[] {
   const files: OutputFile[] = [];
   const manifestGates: Array<Record<string, unknown>> = [];
@@ -2881,12 +2923,7 @@ export function emitGateFiles(
     }
     // Machine-readable manifest entry — lets enforcement tooling (opencode-prompts
     // plugin) read gate ids and criteria without a YAML dependency. Plan row 2.3.
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = (yaml.load(ref.gateYamlContent) as Record<string, unknown>) ?? {};
-    } catch {
-      parsed = {};
-    }
+    const parsed = parseRegisteredGateYaml(ref, ref.gateYamlContent, output) ?? {};
     manifestGates.push(publicGateManifestEntry(ref, parsed));
   }
   if (skillId && manifestGates.length > 0) {
@@ -3002,7 +3039,8 @@ function buildClaudeCodeSkill(
   config: ClientConfig,
   placement: SkillPlacement,
   duplicateIds: Set<string>,
-  harnessCovers: readonly string[]
+  harnessCovers: readonly string[],
+  output?: SkillsSyncOutput
 ): OutputFile[] {
   const files: OutputFile[] = [];
   const subDir = outputSubDir(ir, duplicateIds);
@@ -3010,7 +3048,7 @@ function buildClaudeCodeSkill(
     config.capabilities.skillFrontmatterHooks &&
     ir.gateRefs.length > 0 &&
     ir.enforceGateHooks === true;
-  const gatePartition = partitionGateRefs(ir.gateRefs, harnessCovers);
+  const gatePartition = partitionGateRefs(ir.gateRefs, harnessCovers, output);
 
   // Frontmatter
   const fm: Record<string, unknown> = { name: ir.name, description: ir.description };
@@ -3132,7 +3170,7 @@ function buildClaudeCodeSkill(
 
   // Gate files (gate.yaml + guidance.md) — same partition the section above rendered from, so
   // a reminder this harness covers ships neither the SKILL.md line nor its gates/<id>/ files.
-  files.push(...emitGateFiles(gateRefsForEmit(gatePartition), subDir, ir.id));
+  files.push(...emitGateFiles(gateRefsForEmit(gatePartition), subDir, ir.id, output));
 
   // Doc files (docs/*.md bundled from source prompt)
   files.push(...emitDocFiles(ir.docFiles, subDir));
@@ -3149,12 +3187,13 @@ function buildAgentSkillsSkill(
   ir: SkillIR,
   config: ClientConfig,
   duplicateIds: Set<string>,
-  harnessCovers: readonly string[]
+  harnessCovers: readonly string[],
+  output?: SkillsSyncOutput
 ): OutputFile[] {
   const files: OutputFile[] = [];
   const subDir = outputSubDir(ir, duplicateIds);
   const variant = config.variant ?? 'codex';
-  const gatePartition = partitionGateRefs(ir.gateRefs, harnessCovers);
+  const gatePartition = partitionGateRefs(ir.gateRefs, harnessCovers, output);
 
   // Core Agent Skills frontmatter
   const fm: Record<string, unknown> = {
@@ -3301,7 +3340,7 @@ function buildAgentSkillsSkill(
 
   // Gate files (gate.yaml + guidance.md) — same partition the section above rendered from, so
   // a reminder this harness covers ships neither the SKILL.md line nor its gates/<id>/ files.
-  files.push(...emitGateFiles(gateRefsForEmit(gatePartition), subDir, ir.id));
+  files.push(...emitGateFiles(gateRefsForEmit(gatePartition), subDir, ir.id, output));
 
   // Doc files (behind assets capability)
   if (config.capabilities.assets) {
@@ -3321,12 +3360,13 @@ function adaptResource(
   clientConfig: ClientConfig,
   placement: SkillPlacement,
   duplicateIds: Set<string>,
-  harnessCovers: readonly string[]
+  harnessCovers: readonly string[],
+  output?: SkillsSyncOutput
 ): OutputFile[] {
   if (clientConfig.adapter === 'claude-code') {
-    return buildClaudeCodeSkill(ir, clientConfig, placement, duplicateIds, harnessCovers);
+    return buildClaudeCodeSkill(ir, clientConfig, placement, duplicateIds, harnessCovers, output);
   }
-  return buildAgentSkillsSkill(ir, clientConfig, duplicateIds, harnessCovers);
+  return buildAgentSkillsSkill(ir, clientConfig, duplicateIds, harnessCovers, output);
 }
 
 // ─── Section 7: Manifest Operations (SQLite-backed) ────────────────────────
@@ -3568,7 +3608,8 @@ async function exportCommand(
           clientConfig,
           { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
           duplicateIds,
-          harnessCovers
+          harnessCovers,
+          output
         );
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
         const outputHash = hashOutputFiles(outputFiles);
@@ -3780,20 +3821,15 @@ async function adoptUnmarkedSkillDirs(
   baseDir: string,
   clientId: string,
   scope: 'user' | 'project',
-  markerManagedSkillDirs: ManagedSkillDirMap,
   preview: boolean,
   output: SkillsSyncOutput,
   report: SkillsSyncRunReport
 ): Promise<string[]> {
-  const alreadyMarked = new Set<string>();
-  for (const dirs of markerManagedSkillDirs.values()) {
-    for (const dir of dirs) alreadyMarked.add(dir);
-  }
-
+  // `findAdoptableSkillDirs` already excludes every directory carrying a marker
+  // (`isAdoptableSkillMarkdown` rejects any SKILL.md `parseManagedSkillMarker` reads), so the
+  // marked set needs no second check here.
   const adopted: string[] = [];
   for (const skillDir of await findAdoptableSkillDirs(baseDir)) {
-    if (alreadyMarked.has(skillDir)) continue;
-
     const skillPath = path.join(baseDir, skillDir, 'SKILL.md');
     const content = await readOptionalFile(skillPath);
     if (!content) continue;
@@ -3945,7 +3981,6 @@ async function syncCommand(
         baseDir,
         clientId,
         scope,
-        markerManagedSkillDirs,
         opts.preview === true,
         output,
         report
@@ -3964,7 +3999,8 @@ async function syncCommand(
           clientConfig,
           { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
           duplicateIds,
-          harnessCovers
+          harnessCovers,
+          output
         );
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
         const outputHash = hashOutputFiles(outputFiles);
@@ -4230,7 +4266,8 @@ async function diffCommand(
           clientConfig,
           { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
           duplicateIds,
-          harnessCovers
+          harnessCovers,
+          output
         );
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
 
@@ -4435,8 +4472,8 @@ function describeBundledPullRefusal(
 ): string | undefined {
   const bundledRoot = paths.bundledRoots[ir.resourceType];
   const writeRoot = paths.writeRoots[ir.resourceType];
-  const sourcePath = ir.sourcePaths[0];
-  if (sourcePath === undefined || writeRoot === bundledRoot) return undefined;
+  if (writeRoot === bundledRoot) return undefined;
+  const sourcePath = primarySourcePath(ir);
   const relative = path.relative(bundledRoot, sourcePath);
   if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) return undefined;
 
@@ -4513,7 +4550,8 @@ async function pullCommand(
           clientConfig,
           { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
           duplicateIds,
-          harnessCovers
+          harnessCovers,
+          output
         );
         const skillFile = outputFiles.find((f) => f.relativePath.endsWith('/SKILL.md'));
         if (!skillFile) {
@@ -4618,15 +4656,9 @@ async function pullCommand(
           continue;
         }
 
-        // Every loader records the file it read, so this should not fire; without the check an edit
-        // would resolve its target against the working directory instead of the resource.
-        const sourcePath = ir.sourcePaths[0];
-        if (sourcePath === undefined) {
-          const reason = `Refusing to pull ${ir.resourceType} ${ir.id}: it has no source file to write the edit back to.`;
-          output.warn(reason);
-          report.failures.push({ id: ir.id, reason });
-          continue;
-        }
+        // Every loader records the file it read; an empty list throws rather than resolving the
+        // edit's target against the working directory instead of the resource.
+        const sourcePath = primarySourcePath(ir);
         const targetFiles = [
           ...new Set(
             changes.map((change) =>
