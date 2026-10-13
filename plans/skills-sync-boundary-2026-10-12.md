@@ -17,7 +17,7 @@ tags: [skills-sync, docs, contributing, hooks, boundaries]
 
 Goal: the Skills Sync guide, the README and `service.ts` describe and depend on translation inputs only (resources, workspace, env, `skills-sync.yaml`); the operator's fleet source-of-truth policy and the checkout-bound maintenance hooks live in `~/.claude`.
 Rulings R1–R6 taken by the owner (§C); Q1 RULED 2026-10-13 (add nothing).
-Current slice (worktree `claude-prompts-mcp-ssb`, branch `refactor/skills-sync-boundary`, shared-tree): 1.1 ✓, 1.2 ✓, 1.3 ✓, 1.4 ✓ committed; 1.5 ✓; Tier 1 gate running, then PR.
+Current slice (worktree `claude-prompts-mcp-ssb`, branch `refactor/skills-sync-boundary`, shared-tree): 1.1 ✓, 1.2 ✓, 1.3 ✓, 1.4 ✓ committed; 1.5 ✓; gate green after DEV-T1-7; live drive green; PR open.
 Next: Tier 2 in the `~/.claude` framework repo after Tier 1 merges, now three rows (2.3 added under R5).
 Constraint: no adapter, export-format, gate Stop hook or delegation change; `guidance:sync` and the `AGENTS.md` projection stay.
 

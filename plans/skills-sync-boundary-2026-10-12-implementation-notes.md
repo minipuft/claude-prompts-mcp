@@ -60,6 +60,19 @@ executing the plan. Conservative option taken, logged, work continued.
 - DEV-T1-6 (row 1.2): the Getting Help row was relabelled ("Understand agent guidance") rather than
   dropped; the brief allowed either.
 
+- DEV-T1-7 (PR boundary, 2026-10-13): `validate:all` failed 1 of 85 — `validate:documented-options`
+  rejected the `--from-index` token in the new CONTRIBUTING sentence (root-script flag, not a
+  server CLI option). Sentence reworded; that validator, `validate:format` and
+  `validate:agent-guidance` re-run green; the other 83 steps were green on the same tree minus one
+  prose line, so the suite was not re-run whole.
+
+## Live drive (2026-10-13)
+
+`npm run build` → `verify:mcp` 20/20; a temporary `skills-sync.yaml` registering
+`prompt:development/review` for `agent-plugins` project scope, `export --client agent-plugins
+--scope project` with no `MCP_WORKSPACE` → wrote `<worktree>/skills/review/…` (the checkout root,
+resolved by `.git`), nothing under `server/skills`. Temp config and output removed.
+
 ## Findings
 
 - `adoptUnmarkedSkillDirs` in `service.ts` stamps the marker onto directories exported before
