@@ -13,6 +13,7 @@
  * stateless, and stage 19 only persists what it returns.
  */
 
+import { partitionReviewHints } from './review-hints.js';
 import { isUnknownInterruptPending } from '../mutation/interrupt-policy.js';
 
 import type { GateReview, PendingGateReview } from '#shared/types/chain-execution.js';
@@ -162,8 +163,9 @@ export function selectToolReviewGateIds(review: PendingGateReview): string[] {
  * Remove the previous structural grade before a replacement is graded (Stage19's late-report
  * path). Preserve any authored requirement sharing the synthetic id, and keep unrelated review
  * authority, budget and history. The actual passing grade, not tool selection, settles the hold.
- * Clearing prompt/hints is exact for detached reviews: they open without either, so those lines
- * came from the previous grade that the replacement supersedes.
+ * Clearing the prompt is exact for detached reviews: they open without one, so its text came from
+ * the previous grade. Only structural hints go with it; a semantic FAIL's hints describe the
+ * earlier result and stay for the replacement's reply.
  */
 export function withoutStructuralFinding(review: GateReview): GateReview {
   if (!hasStructuralFinding(review)) return review;
@@ -181,7 +183,7 @@ export function withoutStructuralFinding(review: GateReview): GateReview {
       : review.gateIds.filter((gateId) => gateId !== PHASE_GUARD_GATE_ID),
     structuralGateIds: review.structuralGateIds?.filter((gateId) => gateId !== PHASE_GUARD_GATE_ID),
     combinedPrompt: '',
-    retryHints: [],
+    retryHints: [...partitionReviewHints(review.retryHints ?? []).semantic],
     metadata,
   };
 }

@@ -449,9 +449,37 @@ function describeRunPosition(after: {
 }
 
 /**
+ * How a semantic review's one resume call reaches a detached node: the verdict call's
+ * user_response is the trailer alone, which routes it to that node's review, and a capture is the
+ * worker's result ending in it. The shape the semantic resume renderer takes as its route.
+ */
+export function describeDetachedResumeRoute(node: Pick<DetachedNodeFacts, 'token'>): {
+  readonly verdictResponse: string;
+  readonly captureResponse: string;
+  readonly reportAction: string;
+  readonly captureAction: string;
+} {
+  const trailer = `${HANDOFF_RESULT_HEADING}\nnode: ${node.token}`;
+  return {
+    verdictResponse: trailer,
+    captureResponse: `<the worker's result>\n\n${trailer}`,
+    reportAction:
+      'Review the result the worker reported against the gates, then submit the structured ' +
+      "gate_verdict with user_response set to the trailer alone, which routes it to this node's " +
+      'review. Shell and script checks of these gates run against the recorded result when the ' +
+      'verdict arrives. Set `"overall": "FAIL"` to ask the worker for a replacement result.',
+    captureAction:
+      "No verdict can be accepted until the worker's result is recorded: resume with that " +
+      'result as user_response, ending in its HANDOFF RESULT trailer.',
+  };
+}
+
+/**
  * The gate review a detached node's late result opened (row 4.8): which node, which attempt, the
  * verdict template, and the exact call that answers it. The template is the one the current-step
- * review renders (`buildStructuredVerdictTemplate`), handed in so this module stays pure.
+ * review renders (`buildStructuredVerdictTemplate`), handed in so this module stays pure. A
+ * semantic review hands in its whole rendered resume instead, which then is the reply's only
+ * resume call.
  */
 export function describeDetachedReview(
   node: DetachedNodeFacts,
@@ -461,25 +489,35 @@ export function describeDetachedReview(
     readonly maxAttempts: number;
     readonly verdictTemplate: string;
     /**
+     * A semantic review's instructions and resume call, rendered with
+     * {@link describeDetachedResumeRoute}. When present it replaces the verdict fence below.
+     */
+    readonly semanticResume?: string;
+    /**
      * What the recorded result's structural grade found missing (row 3.8): the hints the phase
      * guard merged into this review. Empty or absent when the result has every required section.
      */
     readonly structuralHints?: readonly string[];
+    /**
+     * What a semantic FAIL of an earlier result recorded on this review. Only a replacement
+     * report can carry them, and they describe the result it replaced, not this one.
+     */
+    readonly semanticHints?: readonly string[];
   }
 ): string {
-  const hints = review.structuralHints ?? [];
-  return [
+  const head = [
     '---',
     `**Gate Review Required — detached node ${node.token} (step ${node.stepNumber})** ` +
       `(${formatAttempt(review.attempt, review.maxAttempts)})`,
     '',
-    ...(hints.length > 0
-      ? [
-          'The reported result is missing required structure:',
-          ...hints.map((hint) => `- ${hint}`),
-          '',
-        ]
-      : []),
+    ...hintSection('The reported result is missing required structure:', review.structuralHints),
+    ...hintSection('An earlier result failed the semantic review:', review.semanticHints),
+  ];
+  if (review.semanticResume !== undefined) {
+    return [...head, review.semanticResume].join('\n');
+  }
+  return [
+    ...head,
     'Review the result the worker reported above against the gates, then submit — the ' +
       "user_response is only the trailer, which routes the verdict to that node's review:",
     '',
@@ -492,6 +530,11 @@ export function describeDetachedReview(
     'Shell and script checks of these gates run against that recorded result when the verdict ' +
       'arrives. Set `"overall": "FAIL"` to ask the worker for a replacement result.',
   ].join('\n');
+}
+
+/** A headed bullet list of `hints` followed by a blank line; nothing when there are none. */
+function hintSection(heading: string, hints: readonly string[] = []): string[] {
+  return hints.length === 0 ? [] : [heading, ...hints.map((hint) => `- ${hint}`), ''];
 }
 
 /** What a verdict (or `gate_action`) on a detached node's review answers. */

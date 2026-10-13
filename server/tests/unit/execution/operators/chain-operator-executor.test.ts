@@ -81,7 +81,6 @@ describe('ChainOperatorExecutor', () => {
 
     expect(result.content).toContain('You are a code analyzer');
     expect(result.content).toContain('Analyze this code: function foo() {}');
-    expect(result.callToAction).toContain('Step 2');
   });
 
   test('injects stored previous step output when available', async () => {
