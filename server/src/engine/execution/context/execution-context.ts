@@ -109,7 +109,6 @@ export class ExecutionContext {
       framework: {
         judgePhaseTriggered: false,
         styleEnhancementApplied: false,
-        systemPromptApplied: false,
       },
       normalization: {
         completed: false,

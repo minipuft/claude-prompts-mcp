@@ -112,7 +112,9 @@ Criteria gates use inline text criteria that Claude evaluates against its own ou
 
 1. Claude executes the prompt
 2. Gate criteria are injected into the response context
-3. Claude self-evaluates: `GATE_REVIEW: PASS|FAIL - reason`
+3. Claude submits a `gate_verdict` in the structured form the review template shows. A check or
+   reminder gate also accepts the legacy string `GATE_REVIEW: PASS|FAIL - reason`; a semantic
+   (`semantic_evaluation`) gate does not — see [Gate Responses](#gate-responses)
 4. A blocking FAIL holds the step for correction within its retry budget
 5. After retry exhaustion, resolve the review with an accepted `gate_action`
 
@@ -364,9 +366,24 @@ User gates are hot-reloaded. Editing `gate.yaml` or `guidance.md` in workspace g
 ## Gate Responses
 
 > [!WARNING]
-> Follow the action shown for the pending review. Prefer the structured `gate_verdict` below;
-> the legacy strings `GATE_REVIEW: PASS - reason` and `GATE_REVIEW: FAIL - reason` are also
-> accepted. Initial advisory single-prompt guidance does not require a verdict.
+> Follow the action shown for the pending review. Prefer the structured `gate_verdict` below.
+> For check and reminder gates, the legacy strings `GATE_REVIEW: PASS - reason` and
+> `GATE_REVIEW: FAIL - reason` are also accepted. Initial advisory single-prompt guidance does not
+> require a verdict.
+
+A review with a semantic gate takes two calls, and no string answers it:
+
+1. Send `user_response` alone, with no `gate_verdict`, to capture the step output. The reply
+   carries the server-issued binding for the captured output.
+2. Send the structured `gate_verdict` with that gate's report in its `per_gate` entry under
+   `evaluation`, copying the binding unchanged.
+
+A string verdict, or an object whose entry for the semantic gate has no `evaluation`, is refused
+as an error: no attempt is used, the captured output stays, nothing is recorded, and the reply
+ends with the template to resubmit. A verdict sent before the output is captured is refused the
+same way, with the two-call order.
+
+The string examples below apply to check and reminder gates.
 
 ### Pass Response
 

@@ -1,4 +1,5 @@
 // @lifecycle canonical - Injects prompt guidance metadata into the execution context.
+import { hasFrameworkGuidance } from '../../../frameworks/utils/framework-detection.js';
 import { withResponseStyle } from '../../formatting/response-style.js';
 import { BasePipelineStage } from '../stage.js';
 
@@ -216,8 +217,16 @@ export class PromptGuidanceStage extends BasePipelineStage {
     return this.styleManager.getStyleGuidance(style) ?? null;
   }
 
+  /**
+   * Each step is guided by the framework it runs under. Stage 12 already resolved that per step
+   * (operator override > the step's own `framework:` > the active framework) into
+   * `step.frameworkContext`, and the step's required sections and phase guard follow it — so the
+   * guidance block names the same framework. The run-wide choice applies only to a step stage 12
+   * gave no context.
+   */
   private async applyGuidanceToChain(context: ExecutionContext): Promise<number> {
     const steps = context.requireChainSteps();
+    const runFramework = this.getFrameworkOverride(context);
     let applied = 0;
 
     for (const step of steps) {
@@ -232,7 +241,13 @@ export class PromptGuidanceStage extends BasePipelineStage {
         continue;
       }
 
-      const result = await this.applyGuidance(step.convertedPrompt, context, step.promptId);
+      const stepFramework = step.frameworkContext?.selectedFramework.id ?? runFramework;
+      const result = await this.applyGuidance(
+        step.convertedPrompt,
+        context,
+        step.promptId,
+        stepFramework
+      );
       if (result?.enhancedPrompt) {
         step.convertedPrompt = result.enhancedPrompt;
       }
@@ -248,15 +263,18 @@ export class PromptGuidanceStage extends BasePipelineStage {
   private async applyGuidance(
     prompt: ConvertedPrompt,
     context: ExecutionContext,
-    promptId: string = prompt.id
+    promptId: string = prompt.id,
+    frameworkOverride: FrameworkSelection | undefined = this.getFrameworkOverride(context)
   ): Promise<ServicePromptGuidanceResult | null> {
     try {
       // Use injection decision from InjectionControlStage (now runs BEFORE this stage)
       // InjectionControlStage populates context.state.injection with clear boolean semantics:
-      // inject=true means INJECT, inject=false means SKIP
+      // inject=true means INJECT, inject=false means SKIP.
+      // This stage is the framework system prompt's only builder, single prompt and chain step
+      // alike; a system message that already applies a framework is not given a second block.
       const injectionDecision = context.state.injection?.systemPrompt;
       const includeSystemPrompt =
-        (injectionDecision?.inject ?? true) && context.state.framework.systemPromptApplied !== true;
+        (injectionDecision?.inject ?? true) && !hasFrameworkGuidance(prompt.systemMessage);
 
       const guidanceOptions: Parameters<PromptGuidanceService['applyGuidance']>[1] = {
         includeSystemPromptInjection: includeSystemPrompt,
@@ -264,7 +282,6 @@ export class PromptGuidanceStage extends BasePipelineStage {
         scope: context.getScopeOptions(),
       };
 
-      const frameworkOverride = this.getFrameworkOverride(context);
       if (frameworkOverride) {
         guidanceOptions.frameworkOverride = frameworkOverride;
       }

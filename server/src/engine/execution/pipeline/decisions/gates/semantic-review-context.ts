@@ -344,11 +344,13 @@ function resolveSemanticTargetAdmission(input: {
     };
   }
   if (!required) return { kind: 'admitted' };
+  // Reached with or without a `user_response` beside the verdict: a client that sent both was
+  // doing what a gated step usually asks, so the sentence names the two-call order, not a fault.
   if (issued.target === undefined) {
     return {
       kind: 'refused',
       message:
-        'Capture the node output before submitting its semantic gate_verdict; a report cannot create the target. Nothing was recorded.',
+        'This step has a semantic gate. Send user_response alone (no gate_verdict) to capture it, then submit the report against the returned binding. Nothing was recorded.',
     };
   }
   if (

@@ -580,7 +580,8 @@ export class GateLifecycleProcessor {
     try {
       gateDir = resolveContainedPath(gatesDir, id);
     } catch (error) {
-      return this.error(error instanceof Error ? error.message : String(error));
+      // `resolveContainedPath` throws only `Error` (its own refusal, or `path.join`'s TypeError).
+      return this.error((error as Error).message);
     }
 
     if (!existsSync(gateDir)) {

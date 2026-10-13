@@ -463,8 +463,8 @@ describe('FrameworkResolutionStage', () => {
     });
   });
 
-  describe('System prompt duplication prevention', () => {
-    test('sets coordination flag after applying framework context for single prompts', async () => {
+  describe('framework context recording', () => {
+    test('records the framework context for a single prompt', async () => {
       const context = new ExecutionContext({ command: '>>demo' } as any);
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = {
@@ -493,11 +493,10 @@ describe('FrameworkResolutionStage', () => {
 
       await stage.execute(context);
 
-      expect(context.state.framework.systemPromptApplied).toBe(true);
       expect(context.frameworkContext).toBe(frameworkContext);
     });
 
-    test('does not set systemPromptApplied for chain steps (delegated to FrameworkInjectionControlStage)', async () => {
+    test('records the framework context for a chain, leaving injection to later stages', async () => {
       const context = new ExecutionContext({ command: '>>chain' } as any);
       const stepOnePrompt = createConvertedPrompt({ id: 'first' });
 
@@ -542,8 +541,6 @@ describe('FrameworkResolutionStage', () => {
 
       // Framework Stage generates context but does NOT control injection frequency
       // InjectionControlStage handles that after SessionManagementStage
-      // systemPromptApplied defaults to false (from state initialization)
-      expect(context.state.framework.systemPromptApplied).toBe(false);
       expect(context.frameworkContext).toBe(frameworkContext);
     });
   });
@@ -593,7 +590,6 @@ describe('FrameworkResolutionStage', () => {
         userPreference: 'scamper',
       });
       expect(context.frameworkContext).toBe(frameworkContext);
-      expect(context.state.framework.systemPromptApplied).toBe(true);
     });
 
     // Counterpart to the test above: same disabled system, but no override anywhere.
@@ -628,10 +624,9 @@ describe('FrameworkResolutionStage', () => {
 
       expect(manager.generateExecutionContext).not.toHaveBeenCalled();
       expect(context.frameworkContext).toBeUndefined();
-      expect(context.state.framework.systemPromptApplied).toBe(false);
     });
 
-    test('framework override with @operator sets coordination flag to prevent duplication', async () => {
+    test('framework override with @operator becomes the user preference', async () => {
       const context = new ExecutionContext({ command: '@ReACT >>demo' } as any);
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = {
@@ -674,8 +669,6 @@ describe('FrameworkResolutionStage', () => {
         userPreference: 'react',
       });
 
-      // Verify coordination flag is set to signal Prompt Guidance Stage
-      expect(context.state.framework.systemPromptApplied).toBe(true);
       expect(context.frameworkContext).toBe(frameworkContext);
     });
   });

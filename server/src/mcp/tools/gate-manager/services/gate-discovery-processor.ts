@@ -117,11 +117,9 @@ export class GateDiscoveryProcessor {
         ? `\n  - Enforcement Mode: ${definition.enforcementMode}`
         : '';
     // P4.10 — `gate_type` became settable through the tool once the parameter holding its name
-    // was renamed to `type`. Read back from the raw definition for the same reason as the two
-    // above: `GenericGateGuide.gateType` resolves an absent key to 'custom', so the guide's own
-    // property cannot distinguish an authored 'custom' from no declaration at all.
-    const gateTypeLine =
-      definition.gate_type !== undefined ? `\n  - Classification: ${definition.gate_type}` : '';
+    // was renamed to `type`. `GateDefinitionSchema` defaults it to 'custom', so a loaded definition
+    // always carries it and there is no undeclared case to render around.
+    const gateTypeLine = `\n  - Classification: ${definition.gate_type}`;
     // P4.100 — same class again, and the one with the largest consequence to read back: this key
     // decides whether a FAIL withholds the step output. Rendered from the raw definition, and
     // only when declared, so an authored `false` is distinguishable from silence.

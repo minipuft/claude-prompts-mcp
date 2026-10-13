@@ -268,7 +268,7 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
       const first = await call({ user_response: cageerfAnswer('Step 1'), gate_verdict: FAIL });
       // CONTROL: a FAIL inside the budget still asks for the next verdict.
       expect(first.text).toContain('Gate Review Required');
-      expect(first.text).toContain('gate_verdict="GATE_REVIEW: PASS|FAIL');
+      expect(first.text).toContain('gate_verdict={"overall": "PASS|FAIL"');
       expect(first.text).toMatch(ATTEST_REMINDERS);
 
       const second = await call({

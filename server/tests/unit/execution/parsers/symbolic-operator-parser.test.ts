@@ -56,6 +56,33 @@ describe('SymbolicCommandParser', () => {
     );
   });
 
+  test('detectOperators reads "==>" as delegation only, never as a deprecated "=" gate', () => {
+    // The deprecated `=` gate's unquoted form matched ` ==> ` as `=` plus the criterion `=>`, so
+    // every delegated chain carried a junk inline gate and %clean refused it as a requested gate.
+    const result = parser.detectOperators('>>minimal_prompt ==> >>minimal_prompt');
+
+    expect(result.operatorTypes).toEqual(['chain']);
+    expect(result.operators.filter((op) => op.type === 'gate')).toEqual([]);
+    const chainOp = result.operators.find((op) => op.type === 'chain');
+    if (chainOp?.type === 'chain') {
+      expect(chainOp.steps.map((step) => step.delegated === true)).toEqual([false, true]);
+    }
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('Gate operator "=" is deprecated')
+    );
+  });
+
+  test('detectOperators keeps a "::" gate on a delegated step and its deprecated "=" twin', () => {
+    const canonical = parser.detectOperators('>>a ==> >>b :: "cite sources"');
+    const legacy = parser.detectOperators('>>a ==> >>b = "cite sources"');
+
+    for (const result of [canonical, legacy]) {
+      const gates = result.operators.filter((op) => op.type === 'gate');
+      expect(gates).toHaveLength(1);
+      expect(gates[0]?.type === 'gate' ? gates[0].criteria : undefined).toBe('cite sources');
+    }
+  });
+
   test('detectOperators captures framework overrides and normalizes identifiers', () => {
     const result = parser.detectOperators('@ReACT >>debug_issue');
 

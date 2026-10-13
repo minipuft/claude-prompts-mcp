@@ -3,7 +3,10 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, test } from '@jest/globals';
 
-import { evaluateSemanticEvaluation } from '../../../../src/engine/gates/core/semantic-evaluation.js';
+import {
+  evaluateSemanticEvaluation,
+  semanticAttributionFaults,
+} from '../../../../src/engine/gates/core/semantic-evaluation.js';
 import { hashBytes } from '../../../../src/shared/utils/hash.js';
 
 import type {
@@ -179,6 +182,30 @@ describe('evaluateSemanticEvaluation', () => {
     const pinned = context();
     const injected = { ...pinned, reviewer: { provenance: 'client_reported' } };
     expectInvalid(injected, report(pinned), 'invalid_context');
+  });
+
+  // A string verdict or an evaluation-less per_gate entry reaches the kernel as `undefined`. It is
+  // one fault, stated once, and it cannot be attributed to the current attempt: the reply a
+  // client reads must not carry a raw schema fault (`: Invalid input…`) beside the translation.
+  test('an absent report is exactly one attribution fault, missing_report, with no empty-path prefix', () => {
+    const result = evaluateSemanticEvaluation(context(), undefined);
+    expect(result.issues.map((entry) => entry.code)).toEqual(['missing_report']);
+    expect(result.issues[0]?.message.startsWith(':')).toBe(false);
+    expect(semanticAttributionFaults(result).map((entry) => entry.code)).toEqual([
+      'missing_report',
+    ]);
+    expect(result.passed).toBe(false);
+  });
+
+  test('a top-level schema fault names no empty path', () => {
+    const pinned = context();
+    for (const submitted of ['GATE_REVIEW: PASS - not a report', null, 42]) {
+      const result = expectInvalid(pinned, submitted, 'invalid_report');
+      expect(result.issues.filter((entry) => /^\s*:/.test(entry.message))).toEqual([]);
+    }
+    // Control: a fault inside the report still names the field it is about.
+    const nested = expectInvalid(pinned, { ...report(pinned), observations: 'none' });
+    expect(nested.issues.some((entry) => entry.message.startsWith('observations: '))).toBe(true);
   });
 
   test('rejects undeclared report, binding and evidence keys at the defensive kernel', () => {

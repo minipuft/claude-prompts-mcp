@@ -97,6 +97,14 @@ const render = async (over: Record<string, unknown> = {}): Promise<string> => {
 };
 
 describe('gate-review render of a current-step review is byte-identical (row 3.5)', () => {
+  test('Gate Coverage lists one line per gate the review grades', async () => {
+    const one = await render({ gateIds: ['code-quality'] });
+    expect(one).toContain('- [1] PASS|FAIL: rationale');
+    expect(one).not.toContain('- [2] PASS|FAIL: rationale');
+    // Control: the two-gate review still lists both.
+    expect(await render()).toContain('- [2] PASS|FAIL: rationale');
+  });
+
   test('authored framework guidance prevents a second injected framework on the initial worker review', async () => {
     const systemMessage =
       'AUTHORED_SYSTEM_SENTINEL. Apply the C.A.G.E.E.R.F framework systematically';

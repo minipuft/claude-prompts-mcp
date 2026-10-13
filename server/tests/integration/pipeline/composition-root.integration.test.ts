@@ -47,6 +47,7 @@ import { loadPromptData } from '../../../src/runtime/data-loader.js';
 import { initializeModules } from '../../../src/runtime/module-initializer.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 
+import type { TemporaryGateRegistry } from '../../../src/engine/gates/core/temporary-gate-registry.js';
 import type { ConfigLoader } from '../../../src/infra/config/index.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { RuntimeFoundation } from '../../../src/runtime/context.js';
@@ -65,6 +66,7 @@ const originalEnv = new Map(PATH_ENV_KEYS.map((key) => [key, process.env[key]]))
 
 const PASS = 'GATE_REVIEW: PASS - ok';
 const FRAMEWORK_HEADER = 'C.A.G.E.E.R.F Framework Active';
+const FWS2_FRAMEWORK_ID = 'fws2fw';
 
 type ToolCallback = (args: Record<string, unknown>, extra: unknown) => Promise<unknown>;
 interface Reply {
@@ -164,6 +166,70 @@ function writeWorkspace(workspace: string): void {
     '        - DEF-CRITERION',
     ...steps('CR Def'),
   ]);
+  // Ungated chains for per-step framework guidance. The system prompt injects on every step so a
+  // later step's framework block is observable, not thinned away by the default frequency.
+  const everyStepFramework = [
+    'injection:',
+    '  system-prompt:',
+    '    frequency:',
+    '      mode: every',
+  ];
+  // A chain step's injection block is its own prompt's, so the frequency sits on the step prompts.
+  for (const id of ['fws_a', 'fws_b']) {
+    prompt(id, [
+      `description: ${id}`,
+      `userMessageTemplate: BODY-${id}`,
+      ...optOut,
+      ...everyStepFramework,
+    ]);
+  }
+  const fwSteps = (firstStepFramework: string | null): string[] => [
+    'chainSteps:',
+    '  - promptId: fws_a',
+    '    stepName: A',
+    ...(firstStepFramework === null ? [] : [`    framework: ${firstStepFramework}`]),
+    '  - promptId: fws_b',
+    '    stepName: B',
+  ];
+  prompt('fws_declared', [
+    'description: ungated chain whose first step declares react',
+    'userMessageTemplate: FWS-DECLARED-OWN',
+    ...optOut,
+    ...fwSteps('react'),
+  ]);
+  prompt('fws_plain', [
+    'description: ungated chain with no step-level framework',
+    'userMessageTemplate: FWS-PLAIN-OWN',
+    ...optOut,
+    ...fwSteps(null),
+  ]);
+  // A workspace framework whose guidance names template placeholders, so a builder that inserts
+  // the guidance after substituting renders them literally. `type` lowercases to `id` because the
+  // guidance service resolves a framework by its type.
+  const fws2FrameworkDir = path.join(workspace, 'resources', 'frameworks', FWS2_FRAMEWORK_ID);
+  mkdirSync(fws2FrameworkDir, { recursive: true });
+  writeFileSync(
+    path.join(fws2FrameworkDir, 'framework.yaml'),
+    [
+      `id: ${FWS2_FRAMEWORK_ID}`,
+      'name: FWS2 Probe',
+      'type: FWS2FW',
+      'version: 1.0.0',
+      'enabled: true',
+      'description: single-prompt guidance probe',
+      'systemPromptGuidance: FWS2-GUIDANCE for {PROMPT_NAME} in {PROMPT_CATEGORY}',
+      '',
+    ].join('\n')
+  );
+  prompt('fws2_single', ['description: fws2 single', 'userMessageTemplate: BODY-fws2', ...optOut]);
+  // A system message that already carries a framework's guidance: the framework block is not
+  // injected a second time.
+  prompt('fws2_carries_react', [
+    'description: fws2 single whose system message already applies react',
+    'systemMessage: Apply the ReACT framework systematically, as the author wrote it.',
+    'userMessageTemplate: BODY-fws2-carries',
+    ...optOut,
+  ]);
   // A workspace config overlays the packaged one key by key. This switch is what sends a chain's
   // own gate definitions through registration and the run's gate remap.
   writeFileSync(
@@ -249,8 +315,6 @@ afterAll(async () => {
   await foundation?.serviceOrchestrator.stopAll();
   await modules?.mcpToolsManager.getChainSessionStore()?.cleanup();
   modules?.mcpToolsManager.shutdown();
-  // Its 30s memory interval holds the process open; `Application.shutdown` never stops it.
-  modules?.mcpToolsManager.getMetricsCollector().shutdown();
   await SqliteEngine.shutdownInstance();
   rmSync(root, { recursive: true, force: true });
   for (const [key, value] of originalEnv) {
@@ -487,6 +551,363 @@ describe('a routed command before the composition root assigns the resource_mana
     } finally {
       // Not `early.cleanup()`: that shuts down the config and prompt managers this file shares.
       await early.getChainSessionStore().cleanup();
+    }
+  });
+});
+
+/**
+ * R11.8: a gate the call requested is enforced as written or refused with a reason. MEASURED
+ * 2026-10-12 on `0a0c2e3d` through this composition root: `%clean` and `%framework` with a `::`
+ * criterion, a named `::` gate or a `gates` entry, and `gates.enabled: false` or the runtime switch
+ * off with a `::` criterion or a `gates` entry, each ran the prompt with no gate and `isError: false`
+ * — stage 11 skipped, and nothing told the client.
+ */
+describe('a gate the call requested while a switch withholds every gate', () => {
+  const refusedFor = (reply: Reply, cause: string, address: string): void => {
+    expect(reply.isError).toBe(true);
+    expect(reply.text).toContain('[gate-suppressed] workflow:');
+    expect(reply.text).toContain(cause);
+    expect(reply.text).toContain(address);
+    expect(reply.text).toContain('no run was created');
+    expect(reply.text).not.toContain('BODY-cr_a');
+  };
+  const QUICK_GATE = [{ name: 'Tone', description: 'PLAIN-DIRECT' }];
+
+  test.each([
+    ['%clean with a `::` criterion', { command: '%clean >>cr_a :: "MUST-CITE"' }, ':: "MUST-CITE"'],
+    ['%clean with a named `::` gate', { command: '%clean >>cr_a :: tone:"be plain"' }, ':: tone:'],
+    [
+      '%clean with a quick request gate',
+      { command: '%clean >>cr_a', gates: QUICK_GATE },
+      'request gate 1 (name "Tone")',
+    ],
+    [
+      '%clean with a criterion on an arrow-chain step',
+      { command: '%clean >>cr_a --> >>cr_b :: "STEP-B"' },
+      ':: "STEP-B"',
+    ],
+  ])('%s is refused, naming the clean modifier and the gate', async (_, args, address) => {
+    refusedFor(await promptEngine(args), '%clean runs without gates', address);
+  });
+
+  test.each([
+    ['a `::` criterion', { command: '%framework >>cr_a :: "MUST-CITE"' }, ':: "MUST-CITE"'],
+    [
+      'a canonical request gate',
+      { command: '%framework >>cr_a', gates: ['code-quality'] },
+      'request gate 1 ("code-quality")',
+    ],
+  ])(
+    'the framework modifier with %s is refused, naming it and the gate',
+    async (_, args, address) => {
+      refusedFor(await promptEngine(args), '%framework runs the framework without gates', address);
+    }
+  );
+
+  test('control: %lean keeps the requested gate', async () => {
+    const reply = await promptEngine({ command: '%lean >>cr_a :: "MUST-CITE"' });
+    expect(reply.isError).toBe(false);
+    expect(reply.text).toContain('BODY-cr_a');
+    expect(reply.text).toContain('MUST-CITE');
+  });
+
+  test('control: %clean with no requested gate runs, and withholds the chain author gates', async () => {
+    const single = await promptEngine({ command: '%clean >>cr_a' });
+    expect(single.isError).toBe(false);
+    expect(single.text).toContain('BODY-cr_a');
+
+    const chain = await promptEngine({ command: '%clean >>cr_chain' });
+    expect(chain.isError).toBe(false);
+    expect(chain.text).toContain('BODY-cr_a');
+    expect(chain.text).not.toContain('GUIDANCE-cr-block');
+  });
+
+  test('control: a `verify:` gate under %clean is not refused (stage 17 runs it)', async () => {
+    const reply = await promptEngine({ command: '%clean >>cr_a :: verify:"true"' });
+    expect(reply.isError).toBe(false);
+    expect(reply.text).toContain('Verification: `true`');
+  });
+
+  describe('with `gates.enabled: false` in config', () => {
+    let previous: boolean;
+    beforeEach(() => {
+      const gates = foundation.configManager.getConfig().gates;
+      previous = gates.enabled;
+      gates.enabled = false;
+    });
+    afterEach(() => {
+      foundation.configManager.getConfig().gates.enabled = previous;
+    });
+    const CAUSE = 'gates are disabled by configuration (`gates.enabled: false`)';
+
+    test('a `::` criterion is refused', async () => {
+      refusedFor(await promptEngine({ command: '>>cr_a :: "MUST-CITE"' }), CAUSE, ':: "MUST-CITE"');
+    });
+
+    test('a request gate is refused', async () => {
+      refusedFor(
+        await promptEngine({ command: '>>cr_a', gates: QUICK_GATE }),
+        CAUSE,
+        'request gate 1 (name "Tone")'
+      );
+    });
+
+    test('a gate on a submitted workflow node is refused', async () => {
+      const reply = await promptEngine({
+        workflow: {
+          version: 1,
+          nodes: [{ id: 'one', promptId: 'cr_a', inlineGateIds: ['cr-block'] }],
+        },
+      });
+      refusedFor(reply, CAUSE, 'node "one" gate "cr-block"');
+    });
+
+    test('control: a call with no requested gate runs', async () => {
+      const reply = await promptEngine({ command: '>>cr_a' });
+      expect(reply.isError).toBe(false);
+      expect(reply.text).toContain('BODY-cr_a');
+    });
+  });
+
+  describe('with the runtime gate switch off', () => {
+    const systemControl = (args: Record<string, unknown>): Promise<unknown> => {
+      const callback = tools.get('system_control');
+      if (callback === undefined) throw new Error('system_control was never registered');
+      return callback(args, {});
+    };
+    beforeEach(async () => {
+      await systemControl({ action: 'gates', operation: 'disable' });
+    });
+    afterEach(async () => {
+      await systemControl({ action: 'gates', operation: 'enable' });
+    });
+
+    test('a `::` criterion is refused', async () => {
+      refusedFor(
+        await promptEngine({ command: '>>cr_a :: "MUST-CITE"' }),
+        'the gate system is disabled for this workspace',
+        ':: "MUST-CITE"'
+      );
+    });
+
+    test('control: a call with no requested gate runs', async () => {
+      const reply = await promptEngine({ command: '>>cr_a' });
+      expect(reply.isError).toBe(false);
+      expect(reply.text).toContain('BODY-cr_a');
+    });
+  });
+});
+
+/**
+ * R11.13 made a full temporary gate registry a refusal, and a run-owned gate has no expiry: it
+ * lives as long as its run. So an abandoned run must give its gates back when the stale-session
+ * sweep prunes it (`chainSessions.timeoutMinutes`), or abandoned runs could hold the 100-gate
+ * registry full and refuse every gated call after them. Driven through the composed wiring:
+ * `ChainSessionStore.cleanupStaleSessions` → `onRunEnded` → `TemporaryGateRegistry.releaseRun`.
+ */
+describe('a run the stale-session sweep prunes gives its temporary gates back', () => {
+  test('a registry held full by an abandoned run frees when the run is pruned; a live run keeps its gate', async () => {
+    const executor = (modules.mcpToolsManager as unknown as { promptExecutor: unknown })
+      .promptExecutor as {
+      lightweightGateSystem: { getTemporaryGateRegistry(): TemporaryGateRegistry | undefined };
+    };
+    const registry = executor.lightweightGateSystem.getTemporaryGateRegistry();
+    const store = modules.mcpToolsManager.getChainSessionStore();
+    if (registry === undefined || store === undefined) throw new Error('no registry or store');
+    const sessionOf = (chainId: string) => {
+      const session = store.getSessionByChainIdentifier(chainId);
+      if (session === undefined) throw new Error(`no session for ${chainId}`);
+      return session;
+    };
+    const gate = (description: string) => [{ name: 'Sweep', description }];
+
+    const live = sessionOf(
+      chainIdOf(await promptEngine({ command: '>>cr_chain', gates: gate('LIVE-GATE') }), 'cr_chain')
+    );
+    const abandoned = sessionOf(
+      chainIdOf(await promptEngine({ command: '>>cr_chain', gates: gate('OLD-GATE') }), 'cr_chain')
+    );
+    const liveGateIds = registry.getRunGates(live.sessionId).map((held) => held.id);
+    expect(liveGateIds).toHaveLength(1);
+
+    // Fill the registry with gates the abandoned run owns, until a new gated call is refused.
+    const filler: string[] = [];
+    for (let index = 0; index < 100; index += 1) {
+      try {
+        filler.push(
+          registry.createTemporaryGate(
+            {
+              name: `fill-${index}`,
+              type: 'validation',
+              scope: 'execution',
+              description: 'filler',
+              guidance: 'filler',
+              source: 'manual',
+            },
+            'fill'
+          )
+        );
+      } catch {
+        break;
+      }
+    }
+    registry.adoptIntoRun(abandoned.sessionId, filler);
+    const full = await promptEngine({ command: '>>cr_a', gates: gate('NEW-GATE') });
+    expect(full.isError).toBe(true);
+    expect(full.text).toContain('Temporary gate registry is full');
+
+    // Past the sweep's threshold: the run is abandoned, and the sweep prunes it.
+    abandoned.lastActivity = Date.now() - 48 * 60 * 60 * 1000;
+    expect(await store.cleanupStaleSessions()).toBeGreaterThanOrEqual(1);
+
+    expect(registry.getRunGates(abandoned.sessionId)).toEqual([]);
+    expect(filler.filter((id) => registry.getTemporaryGate(id) !== undefined)).toEqual([]);
+    expect(registry.getRunGates(live.sessionId).map((held) => held.id)).toEqual(liveGateIds);
+
+    const freed = await promptEngine({ command: '>>cr_a', gates: gate('NEW-GATE') });
+    expect(freed.isError).toBe(false);
+    expect(freed.text).toContain('NEW-GATE');
+  });
+});
+
+/**
+ * Stage 12 resolves a framework per chain step (operator `@framework` > the step's own
+ * `framework:` > the active framework), and the step's required sections and phase guard follow
+ * it. The framework guidance block a step renders must name that same framework: before
+ * 2026-10-12 stage 15 injected the run-wide framework into every step, so an ungated step that
+ * declared `react` rendered "operating under the C.A.G.E.E.R.F Framework".
+ */
+describe('a chain step renders the framework guidance of the framework it runs under', () => {
+  const OPERATING_UNDER = /You are operating under the (\S+) Framework for (\S+)\./g;
+  const APPLY_HEADING = /Apply the \S+ framework systematically:/g;
+
+  /** Every framework block in one reply, as `framework@prompt`. */
+  const frameworkBlocks = (text: string): string[] =>
+    [...text.matchAll(OPERATING_UNDER)].map((match) => `${match[1]}@${match[2]}`);
+
+  const expectOneBlock = (reply: Reply, expected: string): void => {
+    expect(reply.isError).toBe(false);
+    expect(frameworkBlocks(reply.text)).toEqual([expected]);
+    expect(reply.text.match(APPLY_HEADING) ?? []).toHaveLength(1);
+  };
+
+  async function runBothSteps(command: string, promptId: string): Promise<[Reply, Reply]> {
+    const first = await promptEngine({ command });
+    const second = await promptEngine({
+      chain_id: chainIdOf(first, promptId),
+      user_response: 'ANSWER-A',
+    });
+    return [first, second];
+  }
+
+  test('an ungated step that declares react renders ReACT; the undeclared step renders the active framework', async () => {
+    const [first, second] = await runBothSteps('>>fws_declared', 'fws_declared');
+    expectOneBlock(first, 'ReACT@fws_a');
+    expect(first.text).toContain('BODY-fws_a');
+    expect(first.text).not.toContain('C.A.G.E.E.R.F');
+    expectOneBlock(second, 'C.A.G.E.E.R.F@fws_b');
+    expect(second.text).toContain('BODY-fws_b');
+  });
+
+  test('control: a chain with no step-level framework renders the active framework on every step', async () => {
+    const [first, second] = await runBothSteps('>>fws_plain', 'fws_plain');
+    expectOneBlock(first, 'C.A.G.E.E.R.F@fws_a');
+    expectOneBlock(second, 'C.A.G.E.E.R.F@fws_b');
+  });
+
+  test('control: an `@react` override renders ReACT on every step, the declared one included', async () => {
+    const [first, second] = await runBothSteps('@react >>fws_plain', 'fws_plain');
+    expectOneBlock(first, 'ReACT@fws_a');
+    expectOneBlock(second, 'ReACT@fws_b');
+
+    const declared = await promptEngine({ command: '@react >>fws_declared' });
+    expectOneBlock(declared, 'ReACT@fws_a');
+  });
+});
+
+/**
+ * A single prompt's framework system prompt has one builder, `PromptGuidanceService` (stage 15).
+ * Before 2026-10-12 stage 12 also built it through `FrameworkManager`, stage 18 rendered that copy,
+ * and a flag told stage 15 to stand down. The two builders disagreed: the manager substituted the
+ * template's placeholders BEFORE inserting the framework's guidance, so a placeholder the guidance
+ * itself names rendered literally, and a template without `{FRAMEWORK_GUIDANCE}` lost the guidance
+ * outright where the service appends it under a heading.
+ */
+describe('a single prompt renders its framework guidance through one builder', () => {
+  const FWS2_GUIDANCE = 'FWS2-GUIDANCE for fws2_single in general';
+  const FWS2_HEADING = '## FWS2FW Framework';
+
+  const count = (text: string, needle: string): number => text.split(needle).length - 1;
+
+  test('guidance that names template placeholders renders them substituted, once', async () => {
+    const reply = await promptEngine({ command: `@${FWS2_FRAMEWORK_ID} >>fws2_single` });
+    expect(reply.isError).toBe(false);
+    expect(count(reply.text, FWS2_GUIDANCE)).toBe(1);
+    expect(reply.text).not.toContain('{PROMPT_NAME}');
+    expect(reply.text).toContain(
+      'You are operating under the FWS2 Probe framework for fws2_single.'
+    );
+    expect(reply.text).toContain('BODY-fws2');
+  });
+
+  test('a framework template without `{FRAMEWORK_GUIDANCE}` renders the same guidance once, under its heading', async () => {
+    // No loaded framework reaches this shape — every definition's template is generated with the
+    // placeholder — so the definition the server holds is edited in place and restored.
+    const definition = modules.mcpToolsManager
+      .getFrameworkManager()
+      ?.getFramework(FWS2_FRAMEWORK_ID);
+    if (definition === undefined) throw new Error(`${FWS2_FRAMEWORK_ID} was never loaded`);
+    const withPlaceholder = await promptEngine({ command: `@${FWS2_FRAMEWORK_ID} >>fws2_single` });
+    const original = definition.systemPromptTemplate;
+    definition.systemPromptTemplate = 'FWS2-TEMPLATE-WITHOUT-PLACEHOLDER for {PROMPT_NAME}.';
+    try {
+      const reply = await promptEngine({ command: `@${FWS2_FRAMEWORK_ID} >>fws2_single` });
+      expect(reply.isError).toBe(false);
+      expect(count(reply.text, 'FWS2-TEMPLATE-WITHOUT-PLACEHOLDER for fws2_single.')).toBe(1);
+      expect(count(reply.text, FWS2_HEADING)).toBe(1);
+      expect(count(reply.text, FWS2_GUIDANCE)).toBe(1);
+      // The same guidance text the placeholder template renders.
+      expect(count(withPlaceholder.text, FWS2_GUIDANCE)).toBe(1);
+      expect(count(withPlaceholder.text, FWS2_HEADING)).toBe(0);
+    } finally {
+      definition.systemPromptTemplate = original;
+    }
+  });
+
+  test('`@react` renders ReACT once; `%clean` renders none', async () => {
+    const react = await promptEngine({ command: '@react >>fws2_single' });
+    expect(react.isError).toBe(false);
+    expect(count(react.text, 'You are operating under the ReACT Framework for fws2_single.')).toBe(
+      1
+    );
+    expect(count(react.text, 'Apply the ReACT framework systematically:')).toBe(1);
+    expect(react.text).not.toContain(FWS2_GUIDANCE);
+
+    const clean = await promptEngine({ command: '%clean >>fws2_single' });
+    expect(clean.isError).toBe(false);
+    expect(clean.text).toContain('BODY-fws2');
+    expect(clean.text).not.toContain('You are operating under');
+    expect(clean.text).not.toMatch(/Apply the \S+ framework systematically/);
+  });
+
+  test('a system message that already applies a framework is not given the block again', async () => {
+    const reply = await promptEngine({ command: '@react >>fws2_carries_react' });
+    expect(reply.isError).toBe(false);
+    expect(reply.text).toContain('BODY-fws2-carries');
+    expect(count(reply.text, 'Apply the ReACT framework systematically')).toBe(1);
+    expect(reply.text).not.toContain('You are operating under');
+  });
+
+  test('with the framework system disabled, a single prompt renders no framework guidance', async () => {
+    await modules.frameworkStateStore.disableFrameworkSystem('fws2 probe');
+    try {
+      const reply = await promptEngine({ command: '>>fws2_single' });
+      expect(reply.isError).toBe(false);
+      expect(reply.text).toContain('BODY-fws2');
+      expect(reply.text).not.toContain('You are operating under');
+      expect(reply.text).not.toMatch(/Apply the \S+ framework systematically/);
+    } finally {
+      await modules.frameworkStateStore.enableFrameworkSystem('fws2 probe');
     }
   });
 });

@@ -261,29 +261,35 @@ describe('portable semantic summaries from the actual verdict processor', () => 
   );
 
   test.each(['gate', 'detached'] as const)(
-    '%s insufficient evidence and absent report remain actionable derived failures',
+    '%s insufficient evidence remains an actionable derived failure',
     async (kind) => {
-      for (const state of ['insufficient_evidence', 'missing'] as const) {
-        const f = fixture({ kind, state: state === 'missing' ? 'met' : state });
-        if (state === 'missing') {
-          // An overall-only structured submission genuinely carries no per-gate report or claim.
-          Object.assign(f.submission, { per_gate: undefined });
-        }
-        await f.submit();
-        const result = summary(f);
-        expect(result.verdict).toBe('FAIL');
-        expect(result.semanticResult?.passed).toBe(false);
-        expect(result.rationale).toContain(
-          state === 'missing' ? 'structured per_gate evaluation report' : state
-        );
-        if (state === 'missing') {
-          expect(result.reportedVerdict).toBeUndefined();
-          expect(result.evaluation).toBeUndefined();
-          expect(result.semanticResult?.issues.map((issue) => issue.code)).toContain(
-            'missing_report'
-          );
-        }
-      }
+      const f = fixture({ kind, state: 'insufficient_evidence' });
+      await f.submit();
+      const result = summary(f);
+      expect(result.verdict).toBe('FAIL');
+      expect(result.semanticResult?.passed).toBe(false);
+      expect(result.rationale).toContain('insufficient_evidence');
+    }
+  );
+
+  // R11.2: an absent report is not a FAIL the client earned, it is a submission that cannot be
+  // graded. It records no summary and spends nothing.
+  test.each(
+    (['gate', 'detached'] as const).flatMap((kind) =>
+      (['overall-only', 'legacy'] as const).map((shape) => ({ kind, shape }))
+    )
+  )(
+    '$kind $shape submission without a report records no summary and spends nothing',
+    async ({ kind, shape }) => {
+      const f = fixture({ kind, state: 'met', legacy: shape === 'legacy' });
+      // An overall-only structured submission genuinely carries no per-gate report or claim.
+      if (shape === 'overall-only') Object.assign(f.submission, { per_gate: undefined });
+      await f.submit();
+      expect(f.context.state.gates.perGateVerdicts).toBeUndefined();
+      expect(f.store.recordGateReviewOutcome).not.toHaveBeenCalled();
+      expect(f.store.setReview).not.toHaveBeenCalled();
+      expect(f.session.reviews?.['reviewed']?.attemptCount).toBe(0);
+      expect(f.session.reviews?.['reviewed']?.semanticContext?.target?.content).toBe(BODY);
     }
   );
 
@@ -344,19 +350,6 @@ describe('portable semantic summaries from the actual verdict processor', () => 
       reportedReview: { overall: 'FAIL' },
     });
     expect(summary(f, 'sibling').disposition).toBe('advisory-cleared');
-  });
-  test('legacy missing report retains exact legacy claim separately from actionable kernel failure', async () => {
-    const f = fixture({ legacy: true });
-    await f.submit();
-    expect(summary(f)).toMatchObject({
-      verdict: 'FAIL',
-      reportedVerdict: 'PASS',
-      reportedRationale: 'Exact legacy rationale',
-      reportedReview: { overall: 'PASS', rationale: 'Exact legacy rationale' },
-      semanticResult: { passed: false },
-    });
-    expect(summary(f).rationale).toContain('structured per_gate evaluation report');
-    expect(summary(f).evaluation).toBeUndefined();
   });
   test.each(['gate', 'detached'] as const)(
     '%s PASS over actual failed check preserves refusal, no charge and no accepted summary',

@@ -122,9 +122,13 @@ export class ChainOperatorExecutor {
       explicitGateIds.length > 0 ||
       gateIdsToRender.some((gateId) => this.isInlineGateId(gateId)) ||
       Boolean(inlineGuidanceText);
+    // `semanticReviewAction` answers every non-legacy protocol, so only a legacy review reaches
+    // the generic sentence — and even there the example is the structured form the review's
+    // template shows: a string example taught clients to send a string to a review that cannot
+    // accept one (R11.2).
     const callToAction =
       semanticReviewAction(review.protocol) ??
-      'Use the resume shortcut below and include both your step output and a gate_verdict (e.g., `GATE_REVIEW: PASS - reason`) to resume the workflow.';
+      'Use the resume shortcut below and include both your step output and a gate_verdict, in the structured form the review template shows, to resume the workflow.';
 
     // Get the last actual step that was executed
     const fallbackIndex = stepPrompts.length - 1;
@@ -207,7 +211,10 @@ export class ChainOperatorExecutor {
     const declaredSections = await this.resolveDeclaredSections(targetStep, input);
     const responseFormatSection = this.buildResponseFormatSection(
       {
-        coverage: gateGuidanceEnabled && review.protocol.submission === 'legacy',
+        coverage:
+          gateGuidanceEnabled && review.protocol.submission === 'legacy'
+            ? review.gateIds.length
+            : false,
         verdictLine: isTargetFinalStep && review.protocol.submission === 'legacy',
       },
       declaredSections
@@ -613,7 +620,7 @@ export class ChainOperatorExecutor {
     const declaredSections = await this.resolveDeclaredSections(step, input);
     lines.push(
       this.buildResponseFormatSection(
-        { coverage: asksVerdict, verdictLine: asksVerdict },
+        { coverage: asksVerdict ? 'per-gate' : false, verdictLine: asksVerdict },
         declaredSections
       )
     );
@@ -1177,9 +1184,14 @@ export class ChainOperatorExecutor {
    * step's verdict request for both: every render of a gated step asks, and no render of an
    * ungated one does, since it has no gate to grade (R171). A review render keeps its own
    * rule: its verdict block above asks, and the line closes only its final step.
+   *
+   * `coverage` is the number of gates graded, one line each — a review knows its gate list — or
+   * `'per-gate'` when the render holds only the step's rendered gate text and not the list, which
+   * asks for one line per gate shown rather than printing a count it would have to guess. Two
+   * fixed lines used to render for every step, so a one-gate step was asked for a second gate.
    */
   private buildResponseFormatSection(
-    request: { readonly coverage: boolean; readonly verdictLine: boolean },
+    request: { readonly coverage: false | number | 'per-gate'; readonly verdictLine: boolean },
     declaredSections: readonly DeclaredSection[] = []
   ): string {
     const lines: string[] = [
@@ -1206,11 +1218,19 @@ export class ChainOperatorExecutor {
       lines.push('');
     }
 
-    if (request.coverage) {
+    if (request.coverage === 'per-gate') {
       lines.push(
         '**Gate Coverage**:',
-        '- [1] PASS|FAIL: rationale',
-        '- [2] PASS|FAIL: rationale',
+        '- [n] PASS|FAIL: rationale (one line per gate listed above, numbered in order)',
+        ''
+      );
+    } else if (request.coverage !== false && request.coverage > 0) {
+      lines.push(
+        '**Gate Coverage**:',
+        ...Array.from(
+          { length: request.coverage },
+          (_, position) => `- [${position + 1}] PASS|FAIL: rationale`
+        ),
         ''
       );
     }

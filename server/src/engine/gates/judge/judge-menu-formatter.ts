@@ -1,17 +1,7 @@
 // @lifecycle canonical - Formats resource menus and judge responses for Claude.
-import type { Logger } from '#infra/logging/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
 import type { ResourceMenu } from './judge-resource-collector.js';
 import type { ExecutionContext } from '../../execution/context/index.js';
-
-/** Narrow type for framework judge prompt data — avoids frameworks/ import. */
-export interface JudgePromptData {
-  systemMessage?: string;
-  userMessageTemplate?: string;
-}
-
-/** Provider that resolves a framework's judge prompt by framework ID. */
-export type FrameworkJudgePromptProvider = (frameworkId: string) => JudgePromptData | undefined;
 
 /**
  * Context about operators already specified in the command.
@@ -32,11 +22,6 @@ export interface OperatorContext {
  * Extracted from JudgeSelectionStage.
  */
 export class JudgeMenuFormatter {
-  constructor(
-    private readonly logger: Logger,
-    private readonly judgePromptProvider?: FrameworkJudgePromptProvider | null
-  ) {}
-
   /**
    * Build the complete judge response with resource menu and selection instructions.
    */
@@ -58,19 +43,11 @@ export class JudgeMenuFormatter {
 
 `;
 
-    const frameworkJudgePrompt = this.getActiveFrameworkJudgePrompt(context);
-
-    const introLines = frameworkJudgePrompt
-      ? [
-          frameworkJudgePrompt.systemMessage ?? '',
-          '',
-          '### Framework-Specific Instructions',
-          frameworkJudgePrompt.userMessageTemplate ?? '',
-          '',
-        ]
-      : [
-          'You are an expert resource selector. Analyze the task below and select appropriate enhancement resources to improve the response quality.',
-        ];
+    // The menu carries no framework intro: stage 10 renders it before stage 12 resolves a
+    // framework, so there is none to introduce it with (`pipeline-builder.ts` stage order).
+    const introLines = [
+      'You are an expert resource selector. Analyze the task below and select appropriate enhancement resources to improve the response quality.',
+    ];
 
     const responseLines = [
       '## Resource Selection Required',
@@ -241,22 +218,5 @@ export class JudgeMenuFormatter {
     clean = clean.replace(/\s+/g, ' ');
 
     return clean.trim();
-  }
-
-  private getActiveFrameworkJudgePrompt(context: ExecutionContext): JudgePromptData | undefined {
-    const frameworkId = context.frameworkContext?.selectedFramework?.type;
-    if (!frameworkId || !this.judgePromptProvider) {
-      return undefined;
-    }
-
-    try {
-      return this.judgePromptProvider(frameworkId.toLowerCase());
-    } catch (error) {
-      this.logger.warn('[JudgeMenuFormatter] Failed to load framework judge prompt', {
-        frameworkId,
-        error,
-      });
-      return undefined;
-    }
   }
 }
