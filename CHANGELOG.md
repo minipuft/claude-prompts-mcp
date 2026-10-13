@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The word "and" inside a `::` criterion no longer splits it into two criteria.** `>>p :: "errors and warnings are logged"` is now reviewed as one criterion; to list several in one quote, separate them with `,`, `;` or `|` (`:: "cite sources, note confidence"`).
 - **A string `gate_verdict`, or a structured one with no report for a semantic gate, is refused instead of spending an attempt.** On a review whose gate has a `semantic_evaluation` criterion, `gate_verdict="GATE_REVIEW: PASS - …"` or an object whose `per_gate` entry for that gate has no `evaluation` used to count as a FAIL: the attempt was spent and the captured output discarded. The call now fails with an error naming the gate and the missing `per_gate[n].evaluation`; it uses no attempt, keeps the captured output, records nothing, and ends with the structured template, binding filled in, to resubmit.
+- Skills Sync guide and README describe the exporter and its inputs only; the repository `AGENTS.md` projection is documented in CONTRIBUTING, and a project-scope export resolves the repository root by `.git`, not by the presence of `AGENTS.md`.
 
 ### Fixed
 
