@@ -207,6 +207,73 @@ describe('skills-sync CLI option handling', () => {
     }
   });
 
+  it('resolves a project-scope export against the checkout that holds .git, and against cwd otherwise', async () => {
+    // The checkout marker is `<root>/.git`: a directory in a primary checkout, a file in a linked
+    // worktree. Without it a `server/` package root says nothing about where the repository is.
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-checkout-'));
+    const cwdRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-cwd-'));
+    const packageRoot = path.join(tempRoot, 'server');
+    const saved = new Map(
+      ['MCP_SERVER_ROOT', 'MCP_RESOURCES_PATH', 'MCP_WORKSPACE'].map((key) => [
+        key,
+        process.env[key],
+      ])
+    );
+    const cwd = jest.spyOn(process, 'cwd').mockReturnValue(cwdRoot);
+    const demo = path.join(packageRoot, 'resources', 'prompts', 'examples', 'demo');
+    await mkdir(demo, { recursive: true });
+    await writeFile(
+      path.join(demo, 'prompt.yaml'),
+      'id: demo\nname: Demo\ndescription: Fixture prompt.\nuserMessageTemplateFile: user-message.md\n',
+      'utf-8'
+    );
+    await writeFile(path.join(demo, 'user-message.md'), 'Say hello.\n', 'utf-8');
+    await writeFile(
+      path.join(packageRoot, 'skills-sync.yaml'),
+      'registrations:\n  agent-plugins:\n    project:\n      - prompt:examples/demo\n',
+      'utf-8'
+    );
+    const projectExport = () =>
+      runSkillsSyncCommand(
+        parseSkillsSyncArgs([
+          'node',
+          'scripts/skills-sync.ts',
+          'export',
+          '--client',
+          'agent-plugins',
+          '--scope',
+          'project',
+        ]),
+        output,
+        resolveSkillsSyncPaths()
+      );
+
+    try {
+      process.env['MCP_SERVER_ROOT'] = packageRoot;
+      delete process.env['MCP_RESOURCES_PATH'];
+      delete process.env['MCP_WORKSPACE'];
+
+      await writeFile(path.join(tempRoot, '.git'), '', 'utf-8');
+      await projectExport();
+      expect(existsSync(path.join(tempRoot, 'skills', 'demo', 'SKILL.md'))).toBe(true);
+      expect(existsSync(path.join(cwdRoot, 'skills'))).toBe(false);
+
+      await rm(path.join(tempRoot, 'skills'), { recursive: true, force: true });
+      await rm(path.join(tempRoot, '.git'));
+      await projectExport();
+      expect(existsSync(path.join(cwdRoot, 'skills', 'demo', 'SKILL.md'))).toBe(true);
+      expect(existsSync(path.join(tempRoot, 'skills'))).toBe(false);
+    } finally {
+      cwd.mockRestore();
+      for (const [key, value] of saved) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      await rm(tempRoot, { recursive: true, force: true });
+      await rm(cwdRoot, { recursive: true, force: true });
+    }
+  });
+
   it('rolls back clone writes when companion gate validation fails', async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-'));
     const previousServerRoot = process.env['MCP_SERVER_ROOT'];
