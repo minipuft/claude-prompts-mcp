@@ -461,10 +461,7 @@ interface SyncConfig {
   overrides?: Record<string, { outputDir?: { user?: string; project?: string } }>;
 }
 
-type ConfigSelectionSource = 'registrations' | 'exports' | 'none';
-
 interface ClientResourceSelection {
-  source: ConfigSelectionSource;
   mode: 'all' | 'scoped' | 'unregistered';
   normalized: NormalizedExport[];
   allowList?: Set<string>;
@@ -703,7 +700,11 @@ function validateSkillsSyncOptions(opts: SkillsSyncOptions): void {
     throw usageError(`Unknown command: ${opts.command}. Run skills-sync help for usage.`);
   }
 
-  if (opts.client != null && opts.client !== 'all' && CLIENT_REGISTRY[opts.client] == null) {
+  if (
+    opts.client != null &&
+    opts.client !== 'all' &&
+    !Object.hasOwn(CLIENT_REGISTRY, opts.client)
+  ) {
     throw usageError(
       `Unknown client: ${opts.client} (available: ${Object.keys(CLIENT_REGISTRY).join(', ')}, all)`
     );
@@ -869,35 +870,33 @@ function resolveClientResourceSelection(
   if (config.registrations != null && typeof config.registrations === 'object') {
     const registration = config.registrations[clientId];
     if (registration == null) {
-      return { source: 'registrations', mode: 'unregistered', normalized: [] };
+      return { mode: 'unregistered', normalized: [] };
     }
     if (registration === 'all') {
-      return { source: 'registrations', mode: 'all', normalized: [] };
+      return { mode: 'all', normalized: [] };
     }
     if (isScopedExports(registration)) {
       return {
-        source: 'registrations',
         mode: 'scoped',
         normalized: normalizeScopedSelections(registration),
         allowList: buildScopedAllowList(registration),
       };
     }
-    return { source: 'registrations', mode: 'unregistered', normalized: [] };
+    return { mode: 'unregistered', normalized: [] };
   }
 
   if (config.exports === 'all') {
-    return { source: 'exports', mode: 'all', normalized: [] };
+    return { mode: 'all', normalized: [] };
   }
   if (isScopedExports(config.exports)) {
     return {
-      source: 'exports',
       mode: 'scoped',
       normalized: normalizeScopedSelections(config.exports),
       allowList: buildScopedAllowList(config.exports),
     };
   }
 
-  return { source: 'none', mode: 'all', normalized: [] };
+  return { mode: 'all', normalized: [] };
 }
 
 function filterResourcesForScope(
@@ -927,7 +926,7 @@ function filterResourcesForScope(
  * refuses an unknown client as a usage error first, so a missing entry here is a broken invariant.
  */
 function resolveClientConfig(clientId: string, config: SyncConfig): ClientConfig {
-  const base = CLIENT_REGISTRY[clientId];
+  const base = Object.hasOwn(CLIENT_REGISTRY, clientId) ? CLIENT_REGISTRY[clientId] : undefined;
   if (!base) {
     throw new Error(
       `skills-sync invariant: client '${clientId}' passed validation but is not in CLIENT_REGISTRY`
@@ -3882,6 +3881,13 @@ async function applySyncPrune(
   }
 }
 
+/** The flag that narrows which resources a run loads, or undefined for an unfiltered run. */
+function describeLoadFilter(opts: SkillsSyncOptions): '--id' | '--resource-type' | undefined {
+  if (opts.id) return '--id';
+  if (opts.resourceType) return '--resource-type';
+  return undefined;
+}
+
 async function syncCommand(
   opts: SkillsSyncOptions,
   output: SkillsSyncOutput,
@@ -3893,6 +3899,7 @@ async function syncCommand(
   const harnessCovers = await resolveHarnessCovers(paths);
   const cliScope = opts.scope;
   const shouldPrune = opts.prune ?? true;
+  const filterNarrowsLoad = describeLoadFilter(opts);
   const clientIds =
     opts.client === 'all' || !opts.client ? Object.keys(CLIENT_REGISTRY) : [opts.client];
 
@@ -4087,7 +4094,14 @@ async function syncCommand(
         });
       }
 
-      if (shouldPrune) {
+      if (shouldPrune && filterNarrowsLoad) {
+        // The plan above is built from the resources this run loaded; a filter narrows that set, so
+        // every skill outside it would read as stale. Only an unfiltered sync can tell stale from
+        // out of scope.
+        output.log(
+          `  prune skipped (filtered by ${filterNarrowsLoad}: only an unfiltered sync prunes)`
+        );
+      } else if (shouldPrune) {
         await applySyncPrune(
           baseDir,
           prunePlan.pruneSkillDirs,
@@ -5153,42 +5167,51 @@ async function cloneCommand(
 // ─── Section 11: CLI Main ───────────────────────────────────────────────────
 
 export function parseSkillsSyncArgs(argv: string[]): SkillsSyncOptions {
-  const { values, positionals } = parseArgs({
-    args: argv.slice(2),
-    options: {
-      client: { type: 'string' },
-      scope: { type: 'string' },
-      'resource-type': { type: 'string' },
-      id: { type: 'string' },
-      prune: { type: 'boolean' },
-      'no-prune': { type: 'boolean' },
-      output: { type: 'string' },
-      file: { type: 'string' },
-      category: { type: 'string' },
-      preview: { type: 'boolean' },
-      'preview-detail': { type: 'string' },
-      force: { type: 'boolean' },
-      json: { type: 'boolean' },
-    },
-    allowPositionals: true,
-    strict: true,
-  });
+  try {
+    const { values, positionals } = parseArgs({
+      args: argv.slice(2),
+      options: {
+        client: { type: 'string' },
+        scope: { type: 'string' },
+        'resource-type': { type: 'string' },
+        id: { type: 'string' },
+        prune: { type: 'boolean' },
+        'no-prune': { type: 'boolean' },
+        output: { type: 'string' },
+        file: { type: 'string' },
+        category: { type: 'string' },
+        preview: { type: 'boolean' },
+        'preview-detail': { type: 'string' },
+        force: { type: 'boolean' },
+        json: { type: 'boolean' },
+      },
+      allowPositionals: true,
+      strict: true,
+    });
 
-  return {
-    command: positionals[0] ?? 'help',
-    client: values.client,
-    scope: values.scope as 'user' | 'project' | undefined,
-    resourceType: values['resource-type'] as ResourceType | undefined,
-    id: values.id,
-    prune: values['no-prune'] ? false : values.prune,
-    output: values.output,
-    file: values.file,
-    category: values.category,
-    preview: values.preview ?? false,
-    previewDetail: values['preview-detail'] as 'summary' | 'diff' | undefined,
-    force: values.force ?? false,
-    json: values.json ?? false,
-  };
+    return {
+      command: positionals[0] ?? 'help',
+      client: values.client,
+      scope: values.scope as 'user' | 'project' | undefined,
+      resourceType: values['resource-type'] as ResourceType | undefined,
+      id: values.id,
+      prune: values['no-prune'] ? false : values.prune,
+      output: values.output,
+      file: values.file,
+      category: values.category,
+      preview: values.preview ?? false,
+      previewDetail: values['preview-detail'] as 'summary' | 'diff' | undefined,
+      force: values.force ?? false,
+      json: values.json ?? false,
+    };
+  } catch (error) {
+    const code = (error as { code?: unknown } | null)?.code;
+    // Every ERR_PARSE_ARGS_* code (unknown option, missing value, bad value) is the caller's input.
+    if (typeof code === 'string' && code.startsWith('ERR_PARSE_ARGS_')) {
+      throw usageError((error as Error).message);
+    }
+    throw error;
+  }
 }
 
 export function printSkillsSyncHelp(output: SkillsSyncOutput): void {

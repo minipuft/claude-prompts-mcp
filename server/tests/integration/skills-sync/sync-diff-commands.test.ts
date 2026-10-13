@@ -437,6 +437,72 @@ describe('sync and diff commands end to end (F11)', () => {
       expect(await exists(skillMdPath('alpha_prompt'))).toBe(true);
     });
 
+    // R0C3.5: the prune plan is built from the resources the run loaded, so a filter that narrows
+    // the load made every unfiltered skill look stale. Each case syncs the full tree first, so the
+    // directory a filtered run must leave alone is present, marked and managed; the unfiltered
+    // case is the positive control that the same directory IS removable.
+    describe('a filtered sync does not prune', () => {
+      it('sync --id leaves the other managed skills in place, says why, and counts no prune', async () => {
+        await writePrompt('alpha_prompt');
+        await writePrompt('beta_prompt');
+        await run({ command: 'sync' });
+        expect(await exists(skillMdPath('alpha_prompt'))).toBe(true);
+
+        const { report, out } = await run({ command: 'sync', id: 'beta_prompt' });
+
+        expect(await exists(skillMdPath('alpha_prompt'))).toBe(true);
+        expect(report.pruned).toBe(0);
+        expect(out.logs.some((line) => line.startsWith('  pruned '))).toBe(false);
+        expect(out.logs).toContain(
+          '  prune skipped (filtered by --id: only an unfiltered sync prunes)'
+        );
+      });
+
+      it('sync --resource-type leaves the skills of other types in place', async () => {
+        await writePrompt('alpha_prompt');
+        await writeGate('code-quality', 'Code Quality');
+        await run({ command: 'sync' });
+        expect(await exists(skillMdPath('alpha_prompt'))).toBe(true);
+
+        const { report, out } = await run({ command: 'sync', resourceType: 'gate' });
+
+        expect(await exists(skillMdPath('alpha_prompt'))).toBe(true);
+        expect(await exists(skillMdPath('gates-code-quality'))).toBe(true);
+        expect(report.pruned).toBe(0);
+        expect(out.logs).toContain(
+          '  prune skipped (filtered by --resource-type: only an unfiltered sync prunes)'
+        );
+      });
+
+      it('sync --id --preview plans no prune either', async () => {
+        await writePrompt('alpha_prompt');
+        await writePrompt('beta_prompt');
+        await run({ command: 'sync' });
+
+        const { report, out } = await run({ command: 'sync', id: 'beta_prompt', preview: true });
+
+        expect(report.pruned).toBe(0);
+        expect(out.logs.some((line) => line.includes('prune alpha_prompt/'))).toBe(false);
+        expect(await exists(skillMdPath('alpha_prompt'))).toBe(true);
+      });
+
+      it('control: an unfiltered sync after the source is deleted does prune it', async () => {
+        await writePrompt('alpha_prompt');
+        await writePrompt('beta_prompt');
+        await run({ command: 'sync' });
+        await rm(path.join(serverRoot, 'resources', 'prompts', 'general', 'alpha_prompt'), {
+          recursive: true,
+          force: true,
+        });
+
+        const { report, out } = await run({ command: 'sync' });
+
+        expect(report.pruned).toBe(1);
+        expect(out.logs).toContain('  pruned alpha_prompt/');
+        expect(await exists(path.join(outputDir, 'alpha_prompt'))).toBe(false);
+      });
+    });
+
     it('sync category-prefixes the directories of a prompt id used in two categories', async () => {
       await writePrompt('shared_id', {}, 'general');
       await writePrompt('shared_id', {}, 'ops');
@@ -478,7 +544,7 @@ describe('sync and diff commands end to end (F11)', () => {
       expect(await exists(skillMdPath('alpha_prompt'))).toBe(true);
       expect(await exists(path.join(outputDir, 'beta_prompt'))).toBe(false);
 
-      const real = await run({ command: 'sync', id: 'beta_prompt', prune: false });
+      const real = await run({ command: 'sync', id: 'beta_prompt' });
       expect(real.out.logs).toContain('  updated skills-sync.yaml registrations (+1 key(s))');
       expect(await readRegistered()).toEqual([
         'prompt:general/alpha_prompt',
@@ -489,7 +555,6 @@ describe('sync and diff commands end to end (F11)', () => {
       const preview = await run({
         command: 'sync',
         id: 'gamma_prompt',
-        prune: false,
         preview: true,
       });
       expect(preview.out.logs).toContain(

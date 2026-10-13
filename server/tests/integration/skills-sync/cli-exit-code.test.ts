@@ -75,6 +75,17 @@ describe('skills-sync CLI exit status', () => {
     expect(listTree(roots.root)).toEqual(before);
   }, 60_000);
 
+  it('exits 2 on an unknown flag, before reading or writing anything', () => {
+    // parseArgs rejects the flag before any command runs; its TypeError used to exit 1.
+    const before = listTree(roots.root);
+
+    const result = run('export', '--bogus');
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("Unknown option '--bogus'");
+    expect(listTree(roots.root)).toEqual(before);
+  }, 60_000);
+
   it('writes the client skill when the same command names a real client', () => {
     // Positive control for the test above: one identifier differs, and the tree probe sees the write.
     const before = listTree(roots.root);

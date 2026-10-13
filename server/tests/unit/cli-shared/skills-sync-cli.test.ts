@@ -54,12 +54,35 @@ describe('skills-sync CLI option handling', () => {
     expect(opts.json).toBe(true);
   });
 
-  it('rejects --verbose, which never had behavior behind it', () => {
+  it('rejects --verbose, which never had behavior behind it, as a usage error', () => {
     // Deleted rather than kept as a warned no-op: a knob whose retirement
     // nobody would notice is a permanent parallel path (cleanup-standards.md).
     expect(() =>
       parseSkillsSyncArgs(['node', 'scripts/skills-sync.ts', 'diff', '--verbose'])
-    ).toThrow();
+    ).toThrow(SkillsSyncCommandError);
+    expect(() =>
+      parseSkillsSyncArgs(['node', 'scripts/skills-sync.ts', 'diff', '--verbose'])
+    ).toThrow(
+      expect.objectContaining({ exitCode: 2, message: expect.stringContaining('--verbose') })
+    );
+  });
+
+  // The CLI wrapper exits `err.exitCode` for a SkillsSyncCommandError and 1 for anything else, so
+  // a parseArgs error escaping as a plain TypeError exited 1: a usage error reported as a crash.
+  it.each([
+    ['an unknown flag', ['export', '--bogus'], '--bogus'],
+    ['a string flag with no value', ['export', '--client'], '--client'],
+    ['a boolean flag given a value', ['export', '--json=yes'], '--json'],
+  ])("parses %s as a usage error (exit 2) that keeps parseArgs' message", (_name, args, flag) => {
+    let thrown: unknown;
+    try {
+      parseSkillsSyncArgs(['node', 'scripts/skills-sync.ts', ...args]);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(SkillsSyncCommandError);
+    expect(thrown).toMatchObject({ exitCode: 2, message: expect.stringContaining(flag) });
   });
 
   it('emits nothing but a parseable JSON report on stdout under --json', async () => {
@@ -498,6 +521,21 @@ describe('skills-sync usage validation and config resolution against a real temp
         opts: () => ({ command: 'export', client: 'vscode', preview: true }),
         message: () =>
           `Unknown client: vscode (available: ${listSupportedSkillsSyncClients().join(', ')}, all)`,
+        valid: () => ({ command: 'export', client: 'claude-code', preview: true }),
+      },
+      // Inherited Object.prototype names: `CLIENT_REGISTRY['toString']` is a function, not a client.
+      {
+        name: 'a client named after an inherited Object property (toString)',
+        opts: () => ({ command: 'export', client: 'toString', preview: true }),
+        message: () =>
+          `Unknown client: toString (available: ${listSupportedSkillsSyncClients().join(', ')}, all)`,
+        valid: () => ({ command: 'export', client: 'claude-code', preview: true }),
+      },
+      {
+        name: 'a client named after an inherited Object property (constructor)',
+        opts: () => ({ command: 'export', client: 'constructor', preview: true }),
+        message: () =>
+          `Unknown client: constructor (available: ${listSupportedSkillsSyncClients().join(', ')}, all)`,
         valid: () => ({ command: 'export', client: 'claude-code', preview: true }),
       },
       {
