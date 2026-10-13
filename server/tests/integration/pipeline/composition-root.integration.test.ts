@@ -372,6 +372,59 @@ describe('prompt_engine over the pipeline the composition root builds', () => {
   });
 });
 
+describe('an anonymous inline criterion through the composition root', () => {
+  test.each([
+    ['empty double-quoted', '>>cr_a :: ""', '""'],
+    ['blank double-quoted', '>>cr_a :: "   "', '"   "'],
+    ['blank single-quoted', ">>cr_a :: '  '", '"  "'],
+  ])('%s is refused as gate-criteria-invalid, naming the criterion', async (_, command, quoted) => {
+    const reply = await promptEngine({ command });
+    expect(reply.isError).toBe(true);
+    expect(reply.text).toContain('[gate-criteria-invalid]');
+    expect(reply.text).toContain(`inline gate has the criterion ${quoted}`);
+    expect(reply.text).not.toContain('Unknown prompt');
+    expect(reply.text).not.toContain('BODY-cr_a');
+  });
+
+  test('a blank criterion on an arrow-chain step is refused on that step', async () => {
+    const reply = await promptEngine({ command: '>>cr_a :: "  " --> >>cr_b' });
+    expect(reply.isError).toBe(true);
+    expect(reply.text).toContain('[gate-criteria-invalid]');
+    expect(reply.text).toContain('inline gate on step 1 has the criterion "  ", which is blank');
+    expect(reply.text).not.toContain('BODY-cr_a');
+  });
+
+  test('a criterion with text renders under its gate (positive control)', async () => {
+    const reply = await promptEngine({ command: '>>cr_a :: "output names the contract"' });
+    expect(reply.isError).toBe(false);
+    expect(reply.text).toContain('BODY-cr_a');
+    expect(reply.text).toContain('output names the contract');
+  });
+
+  // The response lists each criterion as its own numbered item; R11.14: `,` `;` `|` separate
+  // criteria inside one quote, and `and` does not.
+  const criteriaItems = (text: string): string[] =>
+    [...text.matchAll(/^\d+\. (.+)$/gm)].map((match) => match[1] ?? '');
+
+  test('a criterion containing the letters "and" reaches the review whole', async () => {
+    const reply = await promptEngine({ command: '>>cr_a :: "handle errors"' });
+    expect(reply.isError).toBe(false);
+    expect(criteriaItems(reply.text)).toEqual(['handle errors']);
+  });
+
+  test('a comma lists two criteria, each rendered as its own item', async () => {
+    const reply = await promptEngine({ command: '>>cr_a :: "cite sources, note confidence"' });
+    expect(reply.isError).toBe(false);
+    expect(criteriaItems(reply.text)).toEqual(['cite sources', 'note confidence']);
+  });
+
+  test('the word "and" leaves one criterion, rendered as one item', async () => {
+    const reply = await promptEngine({ command: '>>cr_a :: "errors and warnings are logged"' });
+    expect(reply.isError).toBe(false);
+    expect(criteriaItems(reply.text)).toEqual(['errors and warnings are logged']);
+  });
+});
+
 describe('a routed command before the composition root assigns the resource_manager router', () => {
   test('is refused as an ordering defect rather than answered from a second catalog', async () => {
     const early = new PromptExecutor(

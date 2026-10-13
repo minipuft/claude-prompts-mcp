@@ -404,3 +404,81 @@ describe('SymbolicCommandParser', () => {
     });
   });
 });
+
+/**
+ * MEASURED 2026-10-12 on `ca0df3bf`: `parseCriteria` split on `/,|and|\||;/i`, so a criterion
+ * holding the letters "and" anywhere was cut mid-word (`:: security:"handle errors"` →
+ * `["h", "le errors"]`), and a blank criterion was filtered to nothing, so `:: "   "` produced no
+ * gate operator and the command failed as an unknown prompt instead of reaching stage 05's
+ * `gate-criteria-invalid` refusal.
+ */
+describe('inline gate criteria splitting', () => {
+  const parser = createSymbolicCommandParser({
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  } as unknown as Logger);
+
+  const gateOf = (command: string) => {
+    const gates = parser.detectOperators(command).operators.filter((op) => op.type === 'gate');
+    expect(gates).toHaveLength(1);
+    const gate = gates[0];
+    if (gate?.type !== 'gate') throw new Error('no gate operator');
+    return gate;
+  };
+
+  test.each(['handle errors', 'standard output', 'brand voice', 'Android BRAND'])(
+    'an anonymous criterion containing the letters "and" stays whole: %s',
+    (criterion) => {
+      expect(gateOf(`>>demo :: "${criterion}"`).parsedCriteria).toEqual([criterion]);
+    }
+  );
+
+  test('a named criterion containing the letters "and" stays whole', () => {
+    const gate = gateOf('>>demo :: security:"handle errors"');
+    expect(gate.gateId).toBe('security');
+    expect(gate.parsedCriteria).toEqual(['handle errors']);
+  });
+
+  test('a chain segment criterion containing the letters "and" stays whole', () => {
+    const chain = parser
+      .detectOperators('>>a :: "handle errors" --> >>b')
+      .operators.find((op) => op.type === 'chain');
+    if (chain?.type !== 'chain') throw new Error('no chain operator');
+    expect(chain.steps[0]?.inlineGateCriteria).toEqual(['handle errors']);
+  });
+
+  test('separators still split one quoted text into several criteria (positive control)', () => {
+    expect(gateOf('>>demo :: "cite sources, note confidence"').parsedCriteria).toEqual([
+      'cite sources',
+      'note confidence',
+    ]);
+    expect(gateOf('>>demo :: "a; b | c"').parsedCriteria).toEqual(['a', 'b', 'c']);
+  });
+
+  // R11.14 (2026-10-12): `and` is not a separator, whole word or not.
+  test.each(['errors and warnings are logged', 'errors AND warnings are logged'])(
+    'the word "and" does not split a criterion: %s',
+    (criterion) => {
+      expect(gateOf(`>>demo :: "${criterion}"`).parsedCriteria).toEqual([criterion]);
+    }
+  );
+
+  test.each([
+    ['double-quoted', '>>demo :: "   "', '   '],
+    ['single-quoted', ">>demo :: '  '", '  '],
+  ])('a blank %s criterion is carried as written, for stage 05 to refuse', (_, command, text) => {
+    const detection = parser.detectOperators(command);
+    expect(detection.hasOperators).toBe(true);
+    expect(gateOf(command).parsedCriteria).toEqual([text]);
+  });
+
+  test('a blank criterion on a chain segment is carried onto that step', () => {
+    const chain = parser
+      .detectOperators('>>a :: "  " --> >>b')
+      .operators.find((op) => op.type === 'chain');
+    if (chain?.type !== 'chain') throw new Error('no chain operator');
+    expect(chain.steps[0]?.inlineGateCriteria).toEqual(['  ']);
+  });
+});
