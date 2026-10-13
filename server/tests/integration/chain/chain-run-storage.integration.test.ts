@@ -632,6 +632,77 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     ).toHaveLength(0);
   });
 
+  describe('a store starting over rows left by dead server processes', () => {
+    // A PID Linux cannot hand out (above `pid_max`), so `process.kill(pid, 0)` answers ESRCH.
+    const DEAD_PID = '2147483646';
+
+    const seedRun = async (sessionId: string, ownerPid: string): Promise<void> => {
+      await new DirectChainRunRegistry(engine).save(
+        [
+          {
+            sessionId,
+            chainId: `chain-${sessionId}#1`,
+            state: {
+              currentNodeId: 'n1',
+              nodes: nodes(['n1', 'p', 'One']),
+              lastUpdated: 1,
+              stepStates: new Map(),
+            },
+            executionOrder: [],
+            startTime: 1,
+            lastActivity: 1,
+            originalArgs: {},
+            runStatus: 'working',
+          },
+        ],
+        { continuityScopeId: ownerPid }
+      );
+    };
+
+    const seedHookRow = (ownerPid: string): void => {
+      engine.run(
+        `INSERT INTO chain_sessions (run_owner_pid, continuity_scope_id, chain_id, state)
+         VALUES (?, ?, ?, ?)`,
+        [ownerPid, ownerPid, `chain-hook-${ownerPid}#1`, '{}']
+      );
+    };
+
+    const owners = (table: 'chain_sessions' | 'chain_runs'): string[] =>
+      engine
+        .query<{ run_owner_pid: string }>(
+          `SELECT DISTINCT run_owner_pid FROM ${table} ORDER BY run_owner_pid`
+        )
+        .map((row) => row.run_owner_pid);
+
+    test('rows owned by a dead PID are deleted from the hook projection and the run tables, and live owners are kept', async () => {
+      const live = [String(process.pid), String(process.ppid)];
+      // 'default' is not a PID; the sweep skips owners it cannot parse rather than deleting them.
+      const notAPid = 'default';
+      for (const owner of [DEAD_PID, ...live, notAPid]) {
+        seedHookRow(owner);
+        await seedRun(`sess-${owner}`, owner);
+      }
+      // Positive control: the sweep has something to remove before it runs.
+      expect(owners('chain_sessions')).toContain(DEAD_PID);
+      expect(owners('chain_runs')).toContain(DEAD_PID);
+
+      const store = newStore();
+      await (store as unknown as { initPromise: Promise<void> }).initPromise;
+
+      expect(owners('chain_sessions')).not.toContain(DEAD_PID);
+      expect(owners('chain_runs')).not.toContain(DEAD_PID);
+      expect(
+        engine.query('SELECT 1 FROM chain_run_nodes WHERE session_id = ?', [`sess-${DEAD_PID}`])
+      ).toHaveLength(0);
+      for (const owner of [...live, notAPid]) {
+        expect(owners('chain_sessions')).toContain(owner);
+        expect(owners('chain_runs')).toContain(owner);
+      }
+
+      await store.cleanup();
+    });
+  });
+
   // --- P4 Tier 2: chain_run_nodes.origin / origin_unknown_id (schema v23) -------------------
   //
   // Every assertion below reads the RAW column or a cold-loaded node rather than the value that
