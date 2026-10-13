@@ -306,6 +306,21 @@ measured case — is skipped and reported as a failure naming the real target, b
 replace another client's render with this client's. Each client gets its own directory; if two
 clients should share one, register the resource for only one of them.
 
+### Consuming exports from automation
+
+The exporter runs no command after an export and writes no catalog of its own. Tooling that
+indexes or drift-checks exported skills is a consumer of two contracts that already exist, never
+something `export` or `sync` depends on, so removing or ignoring it changes nothing the exporter
+does.
+
+- **The managed marker.** Every `SKILL.md` the exporter writes carries the frontmatter key
+  `managed-by` set to `claude-prompts-skills-sync`, with `managed-client`, `managed-scope` and
+  `managed-resource-key` recording which client, scope and resource produced it. `sync` prunes a
+  directory only when the saved manifest lists it or its `SKILL.md` carries this marker, so a
+  directory with neither is never touched.
+- **`diff --json`.** The machine-readable drift surface is the `drift` array described under
+  [Commands](#commands): one element per client and scope examined, empty when clean.
+
 ## Commands
 
 | Command  | NPM Script              | Purpose                                                                                                                                       |
