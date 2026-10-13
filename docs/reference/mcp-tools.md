@@ -321,7 +321,7 @@ before any gate registers, with a `[gate-suppressed]` line naming the modifier a
 call requested. `gates.enabled: false` in config and the runtime switch (`system_control`
 `action:"gates", operation:"disable"`) are refused the same way. Drop the modifier, or the gates;
 `%lean` keeps your gates without the framework. Gates a prompt's author configured are not your
-request: `%clean >>chain` still runs, without them. A `:: verify:"command"` gate is not refused,
+request: `%clean >>research_chain` still runs, without them. A `:: verify:"command"` gate is not refused,
 because shell verification runs whatever the modifier. Before this, each of these ran the prompt
 with no gate and no warning.
 
