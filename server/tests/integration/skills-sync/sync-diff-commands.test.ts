@@ -720,8 +720,20 @@ describe('sync and diff commands end to end (F11)', () => {
           : [],
       run: (sql: string, params: unknown[] = []) => {
         if (sql.includes('DELETE FROM skills_sync_manifests')) {
-          rows = rows.filter((row) => !(row['client'] === params[0] && row['scope'] === params[1]));
+          // `WHERE client = ? AND scope = ?` clears the pair; a third `resource_key = ?` narrows it.
+          rows = rows.filter(
+            (row) =>
+              !(
+                row['client'] === params[0] &&
+                row['scope'] === params[1] &&
+                (!sql.includes('resource_key = ?') || row['resource_key'] === params[2])
+              )
+          );
         } else if (sql.includes('INSERT INTO skills_sync_manifests')) {
+          // The real table's PRIMARY KEY (client, scope, resource_key).
+          if (rows.some((row) => columns.slice(0, 3).every((c, i) => row[c] === params[i]))) {
+            throw new Error('UNIQUE constraint failed: skills_sync_manifests');
+          }
           rows.push(Object.fromEntries(columns.map((column, i) => [column, params[i]])));
         }
       },
@@ -760,6 +772,69 @@ describe('sync and diff commands end to end (F11)', () => {
         .map((row) => [row['resource_key'], row['version']])
     );
     expect(versions).toEqual({ 'gate:twin': 2, 'prompt:general/solo': 1 });
+  });
+
+  describe('0C3.13 a filtered run keeps the manifest rows of the skills it did not touch', () => {
+    const rowsByKey = (db: ReturnType<typeof manifestDatabase>) =>
+      Object.fromEntries(
+        db
+          .query('SELECT * FROM skills_sync_manifests', ['claude-code', 'user'])
+          .map((row) => [row['resource_key'] as string, row])
+      );
+
+    it.each(['export', 'sync'] as const)(
+      '%s --id keeps the other skill row and refreshes its own',
+      async (command) => {
+        await writePrompt('alpha_prompt');
+        await writePrompt('beta_prompt');
+        const db = manifestDatabase();
+        await run({ command, dbManager: db as never });
+        const before = rowsByKey(db);
+        expect(Object.keys(before).sort()).toEqual([
+          'prompt:general/alpha_prompt',
+          'prompt:general/beta_prompt',
+        ]);
+        await writeFile(
+          path.join(
+            serverRoot,
+            'resources',
+            'prompts',
+            'general',
+            'beta_prompt',
+            'user-message.md'
+          ),
+          'Do the OTHER thing.'
+        );
+
+        await run({ command, id: 'beta_prompt', dbManager: db as never });
+
+        const after = rowsByKey(db);
+        expect(Object.keys(after).sort()).toEqual(Object.keys(before).sort());
+        expect(after['prompt:general/alpha_prompt']).toEqual(before['prompt:general/alpha_prompt']);
+        const betaBefore = before['prompt:general/beta_prompt'];
+        const betaAfter = after['prompt:general/beta_prompt'];
+        expect(betaAfter?.['source_hash']).not.toBe(betaBefore?.['source_hash']);
+        expect(betaAfter?.['output_hash']).not.toBe(betaBefore?.['output_hash']);
+      }
+    );
+
+    it.each(['export', 'sync'] as const)(
+      'an unfiltered %s after the source is deleted still drops that row (control)',
+      async (command) => {
+        await writePrompt('alpha_prompt');
+        await writePrompt('beta_prompt');
+        const db = manifestDatabase();
+        await run({ command, dbManager: db as never });
+        await rm(path.join(serverRoot, 'resources', 'prompts', 'general', 'alpha_prompt'), {
+          recursive: true,
+          force: true,
+        });
+
+        await run({ command, dbManager: db as never });
+
+        expect(Object.keys(rowsByKey(db))).toEqual(['prompt:general/beta_prompt']);
+      }
+    );
   });
 
   it('diff fills the same drift report from a saved manifest', async () => {

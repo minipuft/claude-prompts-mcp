@@ -857,6 +857,110 @@ describe('Pull Command Integration', () => {
     expect(out.logs.some((l) => l.includes('no prose changes to pull'))).toBe(true);
   });
 
+  /**
+   * Row 0C3.10. A pull writes the edit to the location the type's loader reads. Each case
+   * re-exports after the pull: the export reloads the resource, so an edit written anywhere the
+   * loader does not read reverts to the old text in the regenerated SKILL.md.
+   */
+  describe('0C3.10 a guidance pull lands where the loader reads it', () => {
+    async function exportFor(clientId: string): Promise<void> {
+      await runSkillsSyncCommand(
+        { command: 'export', client: clientId, scope: 'user' } as SkillsSyncOptions,
+        silentOutput(),
+        resolveSkillsSyncPaths()
+      );
+    }
+
+    /** Export, replace `from` with `to` in `<skillDir>/SKILL.md`, and return the pull's result. */
+    async function editAndPull(skillDir: string, from: string, to: string) {
+      await exportFor('claude-code');
+      const skillPath = path.join(outputDir, skillDir, 'SKILL.md');
+      const exported = await readFile(skillPath, 'utf-8');
+      // Precondition: the text being edited is in the file, so the edit changes it.
+      expect(exported).toContain(from);
+      await writeFile(skillPath, exported.replace(from, to));
+      return pullFor('claude-code');
+    }
+
+    it('writes a framework guidance edit into systemPromptGuidance, the one field the loader reads', async () => {
+      const fwDir = path.join(serverRoot, 'resources', 'frameworks', 'tonefw');
+      await mkdir(fwDir, { recursive: true });
+      await writeFile(
+        path.join(fwDir, 'framework.yaml'),
+        yaml.dump({
+          id: 'tonefw',
+          name: 'Tone Framework',
+          type: 'TONE',
+          version: '1.0.0',
+          enabled: true,
+          systemPromptGuidance: 'Apply the tone method.',
+        })
+      );
+      await writeSyncConfig(serverRoot, outputDir);
+
+      const { out, report } = await editAndPull(
+        'frameworks-tonefw',
+        'Apply the tone method.',
+        'Apply the revised tone method.'
+      );
+
+      expect(report.failures).toEqual([]);
+      expect(out.logs.join('\n')).toContain('pulled 1 resource(s)');
+      const doc = yaml.load(await readFile(path.join(fwDir, 'framework.yaml'), 'utf-8')) as Record<
+        string,
+        unknown
+      >;
+      expect(doc['systemPromptGuidance']).toBe('Apply the revised tone method.');
+      // The other fields survive, and no file nobody reads appears beside the YAML.
+      expect(doc['name']).toBe('Tone Framework');
+      expect(existsSync(path.join(fwDir, 'guidance.md'))).toBe(false);
+      // The loader serves the edit: a re-export carries it.
+      await exportFor('claude-code');
+      expect(
+        await readFile(path.join(outputDir, 'frameworks-tonefw', 'SKILL.md'), 'utf-8')
+      ).toContain('Apply the revised tone method.');
+    });
+
+    it.each([
+      ['gate', 'gates', 'gate.yaml', 'gates-tone-gate', 'tone-gate'],
+      ['style', 'styles', 'style.yaml', 'styles-terse-style', 'terse-style'],
+    ])(
+      'writes a %s guidance edit to the file guidanceFile names, not a new guidance.md',
+      async (type, dirName, yamlName, skillDir, id) => {
+        const dir = path.join(serverRoot, 'resources', dirName, id);
+        await mkdir(dir, { recursive: true });
+        await writeFile(
+          path.join(dir, yamlName),
+          yaml.dump({
+            id,
+            name: `${type} ${id}`,
+            description: `The ${id} ${type}`,
+            ...(type === 'gate' ? { type: 'guidance' } : {}),
+            guidanceFile: 'custom.md',
+          })
+        );
+        await writeFile(path.join(dir, 'custom.md'), 'Original custom guidance.');
+        await writeSyncConfig(serverRoot, outputDir);
+
+        const { report } = await editAndPull(
+          skillDir,
+          'Original custom guidance.',
+          'Edited custom guidance.'
+        );
+
+        expect(report.failures).toEqual([]);
+        expect(await readFile(path.join(dir, 'custom.md'), 'utf-8')).toBe(
+          'Edited custom guidance.'
+        );
+        expect(existsSync(path.join(dir, 'guidance.md'))).toBe(false);
+        await exportFor('claude-code');
+        expect(await readFile(path.join(outputDir, skillDir, 'SKILL.md'), 'utf-8')).toContain(
+          'Edited custom guidance.'
+        );
+      }
+    );
+  });
+
   describe('a pull that would edit the bundled package tree', () => {
     it('is refused naming the resources directory when no workspace is set, and a library prompt still pulls', async () => {
       // `MCP_RESOURCES_PATH` moves the write root without setting a workspace; the bundled tree

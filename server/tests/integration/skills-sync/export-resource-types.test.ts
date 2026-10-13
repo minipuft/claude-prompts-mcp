@@ -310,6 +310,73 @@ describe('Export resource types', () => {
     });
   });
 
+  // ─── One bad gate does not block unrelated output (row 0C3.12) ───────────────
+
+  describe('one unusable gate does not abort the prompts around it', () => {
+    const badGateYaml = (): string =>
+      path.join(serverRoot, 'resources', 'gates', 'bad', 'gate.yaml');
+
+    /** Two prompts (one including a good gate, one including the malformed gate too) + the gates. */
+    async function writeFixture(): Promise<void> {
+      await writeConfig();
+      await writeGate('good-gate');
+      await mkdir(path.dirname(badGateYaml()), { recursive: true });
+      await writeFile(badGateYaml(), MALFORMED_YAML);
+      await writePrompt('general', 'uses_good', { gateConfiguration: { include: ['good-gate'] } });
+      await writePrompt('general', 'uses_both', {
+        gateConfiguration: { include: ['good-gate', 'bad'] },
+      });
+    }
+
+    const namingBadGate = (report: { failures: Array<{ id: string; reason: string }> }) =>
+      report.failures.filter(
+        (f) => f.id.includes('bad') || f.reason.includes(path.join('gates', 'bad', 'gate.yaml'))
+      );
+
+    it.each([
+      ['an unfiltered export', {}],
+      ['--resource-type prompt', { resourceType: 'prompt' as const }],
+    ])(
+      '%s writes both prompts and reports the malformed gate once, by path',
+      async (_label, filter) => {
+        await writeFixture();
+
+        const { report } = await run(filter);
+
+        expect(await exists(path.join(outputDir, 'uses_good', 'SKILL.md'))).toBe(true);
+        expect(await exists(path.join(outputDir, 'uses_both', 'SKILL.md'))).toBe(true);
+        const recorded = namingBadGate(report);
+        expect(recorded).toHaveLength(1);
+        expect(recorded[0]?.id).toBe('gate/bad');
+        expect(recorded[0]?.reason).toContain(badGateYaml());
+        // No prompt is reported skipped for the gate's sake.
+        expect(report.failures.filter((f) => f.reason.startsWith('prompt skipped'))).toEqual([]);
+        // The prompt that included the unusable gate ships without it; the good gate still ships.
+        expect(await exists(path.join(outputDir, 'uses_both', 'gates', 'bad'))).toBe(false);
+        expect(
+          await exists(path.join(outputDir, 'uses_both', 'gates', 'good-gate', 'gate.yaml'))
+        ).toBe(true);
+      }
+    );
+
+    it('a prompt whose included gate carries an incomplete semantic criterion fails alone, naming the gate', async () => {
+      await writeConfig();
+      await writeGate('badsem', { pass_criteria: [{ type: 'semantic_evaluation' }] });
+      await writePrompt('general', 'uses_badsem', {
+        gateConfiguration: { include: ['badsem'] },
+      });
+      await writePrompt('general', 'fine');
+
+      const { report } = await run({ resourceType: 'prompt' });
+
+      expect(await exists(path.join(outputDir, 'fine', 'SKILL.md'))).toBe(true);
+      expect(await exists(path.join(outputDir, 'uses_badsem', 'SKILL.md'))).toBe(false);
+      const failure = report.failures.find((f) => f.id === 'uses_badsem');
+      expect(failure).toBeDefined();
+      expect(failure?.reason).toContain('gate badsem');
+    });
+  });
+
   // ─── A registered gate whose yaml cannot be parsed says so ──────────────────
 
   describe('an unparsable registered gate.yaml', () => {

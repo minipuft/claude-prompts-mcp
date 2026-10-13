@@ -415,6 +415,36 @@ interface StyleYaml {
   activation?: unknown;
 }
 
+/** The resource types whose guidance is read from their own definition, not from a prompt message. */
+type GuidanceBearingType = Exclude<ResourceType, 'prompt'>;
+
+/** The `framework.yaml` field a framework's guidance is served from. */
+const FRAMEWORK_GUIDANCE_FIELD = 'systemPromptGuidance' as const;
+
+/** Where a resource's guidance text lives: a file beside its YAML, or a field inside the YAML. */
+interface GuidanceLocation {
+  /** The file, relative to the resource directory. */
+  file: string;
+  /** Set when the text is a field of `file` rather than the whole of it. */
+  yamlField?: typeof FRAMEWORK_GUIDANCE_FIELD;
+}
+
+/**
+ * The one answer to "where does this resource's guidance live". The loaders read through it and
+ * `pullCommand` writes through it, so an edit pulled back lands where the next load reads it.
+ * A framework serves the inline `systemPromptGuidance` field of `framework.yaml` (R91); a gate or
+ * style serves the file its `guidanceFile` names, `guidance.md` when it names none.
+ */
+function resolveGuidanceLocation(
+  resourceType: GuidanceBearingType,
+  data: { guidanceFile?: string }
+): GuidanceLocation {
+  if (resourceType === 'framework') {
+    return { file: 'framework.yaml', yamlField: FRAMEWORK_GUIDANCE_FIELD };
+  }
+  return { file: data.guidanceFile ?? 'guidance.md' };
+}
+
 interface ClientCapabilities {
   scripts: boolean;
   references: boolean;
@@ -1032,6 +1062,31 @@ function dependsOnFramework(gate: GateYaml): boolean {
   return contexts !== undefined && contexts.length > 0;
 }
 
+/** Where the gate scan reports a gate it cannot use: the run log and the run report. */
+interface GateScanSink {
+  output?: SkillsSyncOutput;
+  report?: SkillsSyncRunReport;
+}
+
+/**
+ * Parses a gate.yaml, naming the file in the error. The gate scan and the gate loader both read
+ * through it, so a malformed file reads the same whichever of them meets it first.
+ */
+function parseGateYaml(raw: string, yamlPath: string): GateYaml {
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(raw);
+  } catch (error) {
+    throw new Error(`${yamlPath}: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    });
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`${yamlPath}: not a YAML mapping`);
+  }
+  return parsed as GateYaml;
+}
+
 /**
  * Resolves the gate IDs active for a prompt, delegating activation to the engine.
  *
@@ -1047,7 +1102,8 @@ async function resolveActiveGateRefs(
   promptCategory: string,
   gateRoots: readonly string[],
   chainSteps: PromptYamlChainStep[],
-  declaredArtifacts?: ArtifactKind[]
+  declaredArtifacts: ArtifactKind[] | undefined,
+  scanSink: GateScanSink
 ): Promise<IRGateRef[]> {
   const refs: IRGateRef[] = [];
   const excludeSet = new Set(gateConfig?.exclude ?? []);
@@ -1065,15 +1121,25 @@ async function resolveActiveGateRefs(
   // The registry key is the declared id, which need not be the directory name: step 3 resolves a
   // registered id back to its directory through this map, not through `gateDirs`.
   const gateDirById = new Map<string, string>();
+  const gateYamlRawById = new Map<string, string>();
   for (const [dirName, gateDir] of gateDirs) {
     const gateYamlRaw = await readOptionalFile(path.join(gateDir, 'gate.yaml'));
     if (!gateYamlRaw) continue;
-    const gate = yaml.load(gateYamlRaw) as GateYaml;
+    let gate: GateYaml;
+    try {
+      gate = parseGateYaml(gateYamlRaw, path.join(gateDir, 'gate.yaml'));
+    } catch (error) {
+      // One unparsable gate is that gate's problem: it is left out of the scan and recorded once
+      // per run, and the prompts that would have been resolved through it export without it.
+      recordSkippedResource('gate', dirName, error, scanSink.output, scanSink.report);
+      continue;
+    }
     // `getAllGuides(enabledOnly)` defaults to true in `selectGates`; match it.
     if (gate.enabled === false) continue;
     const gateId = gate.id ?? dirName;
     gatesById.set(gateId, gate);
     gateDirById.set(gateId, gateDir);
+    gateYamlRawById.set(gateId, gateYamlRaw);
   }
 
   /** Registers a gate id unless it is excluded, unknown, or unhonourable in a skill. */
@@ -1111,13 +1177,14 @@ async function resolveActiveGateRefs(
 
   // 3. Load registered gate content
   for (const gateId of registeredIds) {
-    // Registered only from `gatesById`, which fills this map in the same step.
+    // Registered only from `gatesById`, which fills these maps in the same step: the scan above
+    // is the one place a gate.yaml is read and parsed.
     const gateDir = gateDirById.get(gateId)!;
-    const gateYamlRaw = await readOptionalFile(path.join(gateDir, 'gate.yaml'));
-    if (!gateYamlRaw) continue;
-    const gate = yaml.load(gateYamlRaw) as GateYaml;
-    const guidanceFile = gate.guidanceFile ?? 'guidance.md';
-    const guidance = await readOptionalFile(path.join(gateDir, guidanceFile));
+    const gateYamlRaw = gateYamlRawById.get(gateId)!;
+    const gate = gatesById.get(gateId)!;
+    const guidance = await readOptionalFile(
+      path.join(gateDir, resolveGuidanceLocation('gate', gate).file)
+    );
     const activation = gate.activation as Record<string, unknown> | undefined;
 
     refs.push({
@@ -1282,7 +1349,8 @@ async function loadPromptIR(
     category,
     gateRoots,
     data.chainSteps ?? [],
-    data.artifacts?.produces
+    data.artifacts?.produces,
+    { output, report }
   );
 
   // Load chain step sub-prompt content
@@ -1378,9 +1446,9 @@ async function loadPromptIR(
 async function loadGateIR(gateDir: string): Promise<SkillIR> {
   const yamlPath = path.join(gateDir, 'gate.yaml');
   const raw = await readFile(yamlPath, 'utf-8');
-  const data = yaml.load(raw) as GateYaml;
+  const data = parseGateYaml(raw, yamlPath);
 
-  const guidanceFile = data.guidanceFile ?? 'guidance.md';
+  const guidanceFile = resolveGuidanceLocation('gate', data).file;
   const guidance = await readOptionalFile(path.join(gateDir, guidanceFile));
 
   const sourceContentsMap: Record<string, string> = { 'gate.yaml': raw };
@@ -1428,7 +1496,7 @@ async function loadFrameworkIR(methDir: string): Promise<SkillIR> {
   // One source for the system prompt (R91): the inline `systemPromptGuidance`, which is the text
   // the runtime serves. A second, file-named key was read here while no writer emitted it and the
   // server's schema never declared it, so an export could carry text the server never serves.
-  const guidance = data.systemPromptGuidance ?? '';
+  const guidance = data[FRAMEWORK_GUIDANCE_FIELD] ?? '';
 
   const sourceContentsMap: Record<string, string> = { 'framework.yaml': raw };
   if (phasesRaw) sourceContentsMap[phasesFile] = phasesRaw;
@@ -1472,7 +1540,7 @@ async function loadStyleIR(styleDir: string): Promise<SkillIR> {
   const raw = await readFile(yamlPath, 'utf-8');
   const data = yaml.load(raw) as StyleYaml;
 
-  const guidanceFile = data.guidanceFile ?? 'guidance.md';
+  const guidanceFile = resolveGuidanceLocation('style', data).file;
   const guidance = await readOptionalFile(path.join(styleDir, guidanceFile));
 
   const sourceContentsMap: Record<string, string> = { 'style.yaml': raw };
@@ -1569,15 +1637,16 @@ function recordSkippedResource(
   kind: ResourceType,
   id: string,
   error: unknown,
-  output: SkillsSyncOutput,
+  output: SkillsSyncOutput | undefined,
   report: SkillsSyncRunReport | undefined
 ): void {
   const message = (error as Error).message;
-  output.error(`  skip ${kind} ${id}: ${message}`);
-  report?.failures.push({
-    id: `${kind === 'prompt' ? '' : `${kind}/`}${id}`,
-    reason: `${kind} skipped: ${message}`,
-  });
+  const failureId = `${kind === 'prompt' ? '' : `${kind}/`}${id}`;
+  // Once per run: every prompt's gate scan meets the same unparsable gate.yaml, and the gate
+  // loader meets it again in an unfiltered run. The first to record it names it.
+  if (report?.failures.some((failure) => failure.id === failureId)) return;
+  output?.error(`  skip ${kind} ${id}: ${message}`);
+  report?.failures.push({ id: failureId, reason: `${kind} skipped: ${message}` });
 }
 
 async function loadAllResources(
@@ -2471,6 +2540,26 @@ function partitionGateRefs(
   return { checks, evaluations, reminders, omitted, passthrough };
 }
 
+/**
+ * Runs one gate's render step, naming the gate in whatever it throws. A schema error alone says
+ * which field is missing and not whose it is, which is the only thing the operator needs to act on.
+ */
+function namingGate<T>(gateId: string, render: () => T): T {
+  try {
+    return render();
+  } catch (error) {
+    const issues = (error as { issues?: Array<{ path: PropertyKey[]; message: string }> }).issues;
+    const detail = Array.isArray(issues)
+      ? issues
+          .map((issue) => `${issue.path.map(String).join('.') || '$'}: ${issue.message}`)
+          .join('; ')
+      : error instanceof Error
+        ? error.message
+        : String(error);
+    throw new Error(`gate ${gateId}: ${detail}`, { cause: error });
+  }
+}
+
 /** Normalize only public semantic criteria through the canonical schema; never load a suite. */
 function semanticCriteriaForExport(
   criteria: readonly unknown[]
@@ -2494,9 +2583,11 @@ function renderEvaluationRequirements(evaluations: readonly TieredGateRef[]): st
     '### Evaluation Requirements\n\n' +
     evaluations
       .map((entry) =>
-        renderSemanticReviewPrompt([
-          { gateId: entry.ref.id, criteria: semanticCriteriaForExport(entry.passCriteria) },
-        ])
+        namingGate(entry.ref.id, () =>
+          renderSemanticReviewPrompt([
+            { gateId: entry.ref.id, criteria: semanticCriteriaForExport(entry.passCriteria) },
+          ])
+        )
       )
       .join('\n\n') +
     '\n\n'
@@ -2925,7 +3016,7 @@ export function emitGateFiles(
     // Machine-readable manifest entry — lets enforcement tooling (opencode-prompts
     // plugin) read gate ids and criteria without a YAML dependency. Plan row 2.3.
     const parsed = parseRegisteredGateYaml(ref, ref.gateYamlContent, output) ?? {};
-    manifestGates.push(publicGateManifestEntry(ref, parsed));
+    manifestGates.push(namingGate(ref.id, () => publicGateManifestEntry(ref, parsed)));
   }
   if (skillId && manifestGates.length > 0) {
     files.push({
@@ -3370,6 +3461,30 @@ function adaptResource(
   return buildAgentSkillsSkill(ir, clientConfig, duplicateIds, harnessCovers, output);
 }
 
+/**
+ * `adaptResource` for a run that must not die with one resource: a render that throws (a gate
+ * criterion the schema refuses, say) is recorded in the report against this resource and the
+ * caller moves on to the next. Returns `null` for a resource that was recorded.
+ */
+function adaptResourceOrRecord(
+  ir: SkillIR,
+  clientConfig: ClientConfig,
+  placement: SkillPlacement,
+  duplicateIds: Set<string>,
+  harnessCovers: readonly string[],
+  output: SkillsSyncOutput,
+  report: SkillsSyncRunReport
+): OutputFile[] | null {
+  try {
+    return adaptResource(ir, clientConfig, placement, duplicateIds, harnessCovers, output);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    output.error(`  skip ${ir.resourceType} ${ir.id}: ${reason}`);
+    report.failures.push({ id: ir.id, reason });
+    return null;
+  }
+}
+
 // ─── Section 7: Manifest Operations (SQLite-backed) ────────────────────────
 
 /** Row shape from the skills_sync_manifests table. */
@@ -3420,9 +3535,13 @@ function loadManifestEntries(
   return map;
 }
 
-/** Bulk save manifest entries within a single transaction. */
 /**
- * Persist the manifest for one client+scope.
+ * Persist the manifest for one client+scope, in a single transaction.
+ *
+ * `replaceSet` is the run's claim to be the whole truth for the pair: an unfiltered run replaces
+ * every row, which is how a retired resource leaves the manifest. A run narrowed by `--id` or
+ * `--resource-type` saw only part of the set, so it replaces just the keys it wrote — the table is
+ * durable, and deleting the rest would erase rows nothing re-creates until the next full run.
  *
  * Returns false when no initialized database is available — the CLI entry point
  * passes no `dbManager`, so a plain `skills:export` writes files but records
@@ -3435,17 +3554,25 @@ async function saveManifestBatch(
   scope: 'user' | 'project',
   entries: Map<string, SyncManifestEntry>,
   configHash: string,
+  replaceSet: boolean,
   dbManager?: DatabasePort
 ): Promise<boolean> {
   if (!dbManager?.isInitialized()) return false;
 
   await dbManager.transaction(() => {
-    // Clear previous entries for this client+scope
-    dbManager.run('DELETE FROM skills_sync_manifests WHERE client = ? AND scope = ?', [
-      clientId,
-      scope,
-    ]);
+    if (replaceSet) {
+      dbManager.run('DELETE FROM skills_sync_manifests WHERE client = ? AND scope = ?', [
+        clientId,
+        scope,
+      ]);
+    }
     for (const [key, entry] of entries) {
+      if (!replaceSet) {
+        dbManager.run(
+          'DELETE FROM skills_sync_manifests WHERE client = ? AND scope = ? AND resource_key = ?',
+          [clientId, scope, key]
+        );
+      }
       dbManager.run(
         `INSERT INTO skills_sync_manifests
          (client, scope, resource_key, resource_id, resource_type, source_hash, output_hash,
@@ -3604,14 +3731,17 @@ async function exportCommand(
       for (const ir of scopedResources) {
         reportTemplateFidelityGaps(ir, findTemplateFidelityGaps(ir), output);
         const resourceKey = manifestKey(ir);
-        let outputFiles = adaptResource(
+        const adapted = adaptResourceOrRecord(
           ir,
           clientConfig,
           { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
           duplicateIds,
           harnessCovers,
-          output
+          output,
+          report
         );
+        if (adapted === null) continue;
+        let outputFiles = adapted;
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
         const outputHash = hashOutputFiles(outputFiles);
 
@@ -3702,6 +3832,7 @@ async function exportCommand(
           scope,
           manifestEntries,
           configHash,
+          describeLoadFilter(opts) === undefined,
           opts.dbManager
         );
         if (!manifestSaved) {
@@ -4003,14 +4134,17 @@ async function syncCommand(
       const manifestEntries = new Map<string, SyncManifestEntry>();
       for (const ir of scopedResources) {
         const resourceKey = manifestKey(ir);
-        let outputFiles = adaptResource(
+        const adapted = adaptResourceOrRecord(
           ir,
           clientConfig,
           { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
           duplicateIds,
           harnessCovers,
-          output
+          output,
+          report
         );
+        if (adapted === null) continue;
+        let outputFiles = adapted;
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
         const outputHash = hashOutputFiles(outputFiles);
 
@@ -4125,6 +4259,7 @@ async function syncCommand(
           scope,
           manifestEntries,
           configHash,
+          describeLoadFilter(opts) === undefined,
           opts.dbManager
         );
         if (!manifestSaved) {
@@ -4277,14 +4412,17 @@ async function diffCommand(
         // Output drift: exported files edited locally since last export
         const resourceKey = manifestKey(ir);
         const baseDir = resolveOutputDir(clientConfig, scope, paths);
-        let outputFiles = adaptResource(
+        const adapted = adaptResourceOrRecord(
           ir,
           clientConfig,
           { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
           duplicateIds,
           harnessCovers,
-          output
+          output,
+          report
         );
+        if (adapted === null) continue;
+        let outputFiles = adapted;
         outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
 
         // Without a manifest, "never exported" is a question the output directory answers: no
@@ -4561,14 +4699,17 @@ async function pullCommand(
 
       for (const ir of scopedResources) {
         // Only pull the main SKILL.md, not tool files
-        const outputFiles = adaptResource(
+        const adapted = adaptResourceOrRecord(
           ir,
           clientConfig,
           { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
           duplicateIds,
           harnessCovers,
-          output
+          output,
+          report
         );
+        if (adapted === null) continue;
+        const outputFiles = adapted;
         const skillFile = outputFiles.find((f) => f.relativePath.endsWith('/SKILL.md'));
         if (!skillFile) {
           throw new Error(`skills-sync invariant: the ${ir.id} adapter output has no SKILL.md`);
@@ -4590,6 +4731,8 @@ async function pullCommand(
         const changes: Array<{
           section: string;
           file: string;
+          /** Set when the edit is one field of `file`, not the whole file. */
+          yamlField?: string;
           oldContent: string;
           newContent: string;
         }> = [];
@@ -4639,17 +4782,25 @@ async function pullCommand(
           }
         }
 
-        // Guidance (## Guidance) → guidance.md
-        if (parsed.guidanceContent !== null && ir.guidanceContent !== null) {
-          if (parsed.guidanceContent.trim() !== expected.guidanceContent?.trim()) {
-            const reversed = reverseCompileTemplate(parsed.guidanceContent);
-            changes.push({
-              section: 'guidanceContent',
-              file: 'guidance.md',
-              oldContent: ir.guidanceContent,
-              newContent: reversed,
-            });
-          }
+        // Guidance (## Guidance) → wherever this type's loader reads it
+        if (
+          ir.resourceType !== 'prompt' &&
+          parsed.guidanceContent !== null &&
+          ir.guidanceContent !== null &&
+          parsed.guidanceContent.trim() !== expected.guidanceContent?.trim()
+        ) {
+          const definition = await readOptionalFile(primarySourcePath(ir));
+          const location = resolveGuidanceLocation(
+            ir.resourceType,
+            definition ? parseYamlOrThrow<{ guidanceFile?: string }>(definition) : {}
+          );
+          changes.push({
+            section: 'guidanceContent',
+            file: location.file,
+            ...(location.yamlField !== undefined && { yamlField: location.yamlField }),
+            oldContent: ir.guidanceContent,
+            newContent: reverseCompileTemplate(parsed.guidanceContent),
+          });
         }
 
         if (changes.length === 0) continue;
@@ -4720,8 +4871,12 @@ async function pullCommand(
             continue;
           }
 
-          if (change.section === 'name' || change.section === 'description') {
-            // Update prompt.yaml field
+          const yamlField =
+            change.section === 'name' || change.section === 'description'
+              ? change.section
+              : change.yamlField;
+          if (yamlField !== undefined) {
+            // Update a field of the resource's own YAML (it is `file` for a field-resident edit)
             const yamlPath = sourcePath;
             const yamlContent = await readOptionalFile(yamlPath);
             if (!yamlContent) continue;
@@ -4729,13 +4884,13 @@ async function pullCommand(
             // that field's token only, so the author's comments and flow-style lists survive
             // (P6.256). A whole-document dump dropped the comments and re-rendered every line.
             const doc = parseYamlOrThrow<Record<string, unknown>>(yamlContent);
-            doc[change.section] = change.newContent;
+            doc[yamlField] = change.newContent;
             await writeFile(yamlPath, serializeYamlPreservingSource(doc, yamlContent).content);
             scopeWrittenPaths.add(yamlPath);
-            output.log(`    wrote ${change.section} → ${yamlPath}`);
+            output.log(`    wrote ${yamlField} → ${yamlPath}`);
             wroteAny = true;
           } else {
-            // Write prose file (system-message.md, user-message.md, guidance.md)
+            // Write prose file (system-message.md, user-message.md, or the guidance file)
             const filePath = path.join(resourceDir, change.file);
             await writeFile(filePath, change.newContent);
             scopeWrittenPaths.add(filePath);
@@ -5063,11 +5218,6 @@ async function cloneCommand(
         for (const stepEntry of stepDirEntries) {
           const stepId = stepEntry.name;
           const stepTargetDir = path.join(targetDir, stepId);
-          if (existsSync(stepTargetDir) && !opts.force) {
-            output.log(`  skip resource ${stepId} (exists, use --force)`);
-            continue;
-          }
-
           await mkdir(stepTargetDir, { recursive: true });
           const stepYaml = await readOptionalFile(
             path.join(companionResourcesDir, stepId, 'prompt.yaml')
@@ -5157,7 +5307,7 @@ async function cloneCommand(
         )}`
       );
     }
-    throw new Error(transactionResult.error ?? 'Clone failed');
+    throw new Error(transactionResult.error);
   }
 
   report.written += writtenPaths.size;
