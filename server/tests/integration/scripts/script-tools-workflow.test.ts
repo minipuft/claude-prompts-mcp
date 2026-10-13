@@ -194,6 +194,7 @@ describe('Script Tools Workflow Integration', () => {
       const plan = await planner.createPlan({
         convertedPrompt: promptWithTools,
         frameworkEnabled: true,
+        gatesRequested: true,
         gateOverrides: {
           gates: ['code-quality', 'security-review'],
         },
