@@ -257,3 +257,12 @@ Moved from `plans/workflow-client-evaluation-2026-10-09-implementation-notes.md`
 - Finding (0C3.1) → split: the two other `ir.sourcePaths[0]` reads route through `primarySourcePath` in 0C3.4; typing `sourcePaths` as a non-empty tuple (closing the class at compile time; one fixture, `export-template-compile.test.ts:43`, breaks) goes to 0C3.2, after 0C3.8 releases that file.
 - Finding (0C3.1) → 0C3.2: `compileTemplate`'s `_args` parameter has no reader.
 - Wave 2: 0C3.4 (sole writer of `service.ts`), 0C3.7 (CLI, WS), 0C3.8 (TC, NS); disjoint files.
+
+## 2026-10-13 — rate-limit stop; 0C3.7, 0C3.8 accepted; 0C3.11 cut
+
+- All three wave-2 workers died on the account session limit; resumed by message with the tree state named (service.ts then clean; each worker's own uncommitted hunks listed). Each re-read its hunks and reported no half-written case and no planted mutation left.
+- 0C3.8 accepted (artifact read). DEV-T0C3-2: `describePassCriterion`, `buildPassCriteriaSection` and `describeSkillRemovals` are not exported, so their branches move to 0C3.5, which drives full exports into temp dirs. DEV-T0C3-P2 (planner): the brief named functions without probing `^export`; name functions, not lines, and probe the route.
+- 0C3.7 accepted (artifact read: the refusal table pairs each row with a legal twin and an unwritten-tree listing whose positive control is a valid export). Scope change sent mid-row: the `server/`+`AGENTS.md` repo-root case dropped because #485 on main changes that rule to `.git` and tests it.
+- Findings (0C3.7, 0C3.1) → row 0C3.11: `--bogus` throws Node's `parseArgs` error, not a usage error, so the CLI exits 1 (R11.12 says 2); `--client toString` passes validation; `ClientResourceSelection.source` has no reader (surplus).
+- Finding (0C3.7), not cut: with no `registrations` key, a typo'd legacy `exports:` (a list, or a string other than `all`) exports every resource, where a typo under `registrations` exports nothing. Every e2e fixture relies on the list shape meaning "all" (audit Appendix B, method limits), so changing it is a config-semantics change outside this tier's objective. Revives if a user reports an unintended full export. Pinned as today's behaviour (`selection-asymmetry`).
+- Finding: the session shell exports `MCP_RESOURCES_PATH`; the new tests clear it per case.
