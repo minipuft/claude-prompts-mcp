@@ -219,3 +219,28 @@ Moved from `plans/workflow-client-evaluation-2026-10-09-implementation-notes.md`
 - 1.11 accepted: the audit's suspected empty `gate_verdict=` was not the reproducing defect; the duplicated fence without the HANDOFF trailer and the verdict fence on a FAIL were.
 - 1.17 accepted: finding 1 (stale target digest after a detached FAIL) did not reproduce — a detached review renews at the replacement report, not at FAIL; the earlier probe's snapshot was read after the replacement. DEV-T9-P2: the planner passed a probe claim on without its observed values. Finding 2 fixed, plus `withoutStructuralFinding` no longer erasing semantic hints.
 - Findings not cut: `projectFrozenReview` ignores `review.phase` (callers must check it); the `%judge` menu returns after script stages 08/09 have run, so a judge call runs a prompt's scripts and the follow-up runs them again.
+
+## 2026-10-12 — 0C2 opened (subplanner, worktree `claude-prompts-mcp-sgr-0c2`, branch `fix/sgr-0c2-chain-manager-coverage`, shared-tree)
+
+Baseline, measured at `8c154134` with the tier's coverage command (canonical home for the number; every 0C2 row and the final report re-runs exactly this):
+
+    cd server && NODE_OPTIONS=--experimental-vm-modules npx jest -w 2 --workerIdleMemoryLimit=1024MB \
+      tests/unit/chain-session tests/integration/chain tests/integration/tenant \
+      --coverage --collectCoverageFrom=src/modules/chains/manager.ts --coverageReporters=text-summary
+
+→ branches 582/756 = 76.98%, statements 982/1124, functions 153/165 (28 suites, 459 tests). The audit measured 573/745 at `6889b015` over the whole unit+integration run; the file has grown 11 arms since.
+
+Re-measured inventory (authored → measured):
+
+- The five dead methods: still 0 production callers. Consumers by name: `manager.ts`, `shared/types/chain-session.ts`, and six test files (`session-stage.test.ts` mocks four of them, `symbolic-stage.test.ts`, `gate-review-session-continuity.test.ts`, `tenant-isolation.test.ts` ×3 asserts, `chain-session-store.test.ts` ×4 calls, `persist-mutation-coverage.test.ts` list entry). Matches the audit.
+- `transitionStepState` holds the ONLY terminal step-stickiness check in the module (`TERMINAL_STEP_LIFECYCLES`, manager.ts:107/1242); the live mutator `setStepState` (called by stage 18) has none. The tests titled "terminal stickiness" pin it on the dead method only.
+- Region 17 is a class, not 5 sites: `if (this.logger)` ×3 and `this.logger?.` ×~17 in manager.ts, on a constructor-required `Logger`.
+- Region 7 is unchanged by #483: `cleanup()` clears the handle; `startCleanupScheduler` still has one caller (the constructor), so its `if (this.cleanupIntervalHandle)` cannot hold.
+
+Rulings for this tier:
+
+- **R0C2.1 — M8 stays out.** The `errorText` helper is its own slice (R11.11), so the audit's ~94% projection, which counted M8's ~21 arms, is an upper bound this tier cannot reach; the tier target is the projection without M8 (≈90%).
+- **R0C2.2 — an unreachable guard whose false branch silently repairs is deleted; where the type still needs narrowing it becomes a throwing accessor** (the Q10 precedent, `requireExecutionPlan()`), never a non-null assertion or a new silent default.
+- **R0C2.3 — 0C2.2 closes the optional-logger class in manager.ts by enumeration** (`rg "this\.logger\?\.|if \(this\.logger\)"` over the file = 0); sites in other modules are a count in the findings, not rows here.
+- **R0C2.4 — `transitionStepState` is deleted with its tests** (no consumer). Whether a live path can overwrite a terminal step is probed by 0C2.1 and reported as a finding; this tier changes no step-lifecycle behaviour.
+- **R0C2.5 — file sequencing in the shared tree:** 0C2.5 waits for 0C2.1 (both edit `tenant-isolation.test.ts`); 0C2.9 waits for 0C2.1 and 0C2.2 (`chain-session-store.test.ts`, the scheduler); 0C2.6 and 0C2.7 write new or untouched files and must not test the five dead methods.
