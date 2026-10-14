@@ -292,6 +292,20 @@ export interface SessionBlueprint {
   gateInstructions?: string;
 }
 
+/** SQL storage namespace and resolved caller continuity are separate, exact identity axes. */
+export interface ExactControlScope {
+  readonly organizationId: string | null;
+  readonly workspaceId: string | null;
+  readonly continuityScopeId: string;
+}
+
+/** Detached durable view; inspecting it neither repairs nor promotes the held local session. */
+export interface ConversationControlInspection {
+  readonly ownerPid: string;
+  readonly scope: ExactControlScope;
+  readonly session: Readonly<Omit<ChainSession, 'handoffToken'>>;
+}
+
 export interface ChainSession {
   sessionId: string;
   chainId: string;

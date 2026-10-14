@@ -27,6 +27,7 @@ import type {
   ChainHandoffClaimResult,
   ChainSession,
   ChainSessionLifecycle,
+  ExactControlScope,
   SessionBlueprint,
   UnknownLedgerEntry,
 } from '#shared/types/chain-session.js';
@@ -34,11 +35,21 @@ import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.
 
 import { isTerminalRunStatus } from '#shared/types/chain-session.js';
 import { stripRunNumber } from '#shared/utils/chain-id-codec.js';
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
+
+type OwnedControlRunResult =
+  | { status: 'owned'; run: { ownerPid: string; scope: ExactControlScope; session: ChainSession } }
+  | { status: 'refused'; reason: 'unknown-session' | 'ownership-lost' | 'scope-mismatch' };
 
 export interface ChainRunRegistry {
   ensureInitialized(): Promise<void>;
   /** Every run owned by the scope's run owner, with its nodes in position order. */
   load(scope?: StateStoreOptions): Promise<ChainSession[]>;
+  readOwnedControlRun(
+    sessionId: string,
+    ownerScope: StateStoreOptions,
+    scope: ExactControlScope
+  ): OwnedControlRunResult;
   /** Replace the scope owner's runs wholesale. Must run inside the caller's transaction. */
   /**
    * Replace this owner's runs with `sessions`. Returns the session ids that were NOT written
@@ -145,6 +156,54 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
 
   async ensureInitialized(): Promise<void> {
     // Tables created by SqliteEngine.applySchema() during db.initialize()
+  }
+
+  /** Pure exact read: namespace/owner checks precede residual continuity and node hydration. */
+  readOwnedControlRun(
+    sessionId: string,
+    ownerScope: StateStoreOptions,
+    scope: ExactControlScope
+  ): OwnedControlRunResult {
+    const row = this.db.queryOne<
+      ChainRunRow & {
+        run_owner_pid: string;
+        organization_id: string | null;
+        workspace_id: string | null;
+      }
+    >('SELECT * FROM chain_runs WHERE session_id = ?', [sessionId]);
+    if (row === null) return { status: 'refused', reason: 'unknown-session' };
+    if (row.run_owner_pid !== resolveRunOwnerPid(ownerScope)) {
+      return { status: 'refused', reason: 'ownership-lost' };
+    }
+    if (
+      row.organization_id !== (ownerScope.organizationId ?? null) ||
+      row.workspace_id !== (ownerScope.workspaceId ?? null) ||
+      row.organization_id !== scope.organizationId ||
+      row.workspace_id !== scope.workspaceId
+    )
+      return { status: 'refused', reason: 'scope-mismatch' };
+    const continuityScopeId = resolveContinuityScopeId({
+      continuityScopeId: parseResidual(row.state).continuityScopeId,
+    });
+    if (continuityScopeId !== scope.continuityScopeId) {
+      return { status: 'refused', reason: 'scope-mismatch' };
+    }
+    const nodeRows = this.db.query<ChainRunNodeRow>(
+      'SELECT * FROM chain_run_nodes WHERE session_id = ? ORDER BY position',
+      [sessionId]
+    );
+    return {
+      status: 'owned',
+      run: {
+        ownerPid: row.run_owner_pid,
+        scope: {
+          organizationId: row.organization_id,
+          workspaceId: row.workspace_id,
+          continuityScopeId,
+        },
+        session: reconstructSession(row, nodeRows),
+      },
+    };
   }
 
   async load(scope?: StateStoreOptions): Promise<ChainSession[]> {

@@ -87,6 +87,132 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     engine.run('DELETE FROM execution_records');
   });
 
+  describe('conversation control identity', () => {
+    const create = (store: ChainSessionStore, id: string, continuityScopeId: string) =>
+      store.createSession(
+        id,
+        'chain-inspect#1',
+        2,
+        { target: id },
+        {
+          continuityScopeId,
+          nodes: nodes(['n1', 'p1', 'One'], ['n2', 'p2', 'Two']),
+        }
+      );
+    const rows = () => engine.query('SELECT * FROM chain_runs ORDER BY session_id');
+
+    test('exact UUID and caller continuity return a detached durable view without credentials or local repairs', async () => {
+      const store = newStore();
+      const held = await create(store, 'identity-a', 'caller-a');
+      const other = await create(store, 'identity-b', 'caller-b');
+      expect(other.chainId).toBe(held.chainId);
+      const credential = await store.mintHandoffToken(held.sessionId);
+      expect(credential?.token).toEqual(expect.any(String));
+      if (credential === undefined) throw new Error('positive credential missing');
+      held.lifecycle = 'dormant';
+      held.state.currentNodeId = 'malformed-local-pointer';
+      const localBefore = structuredClone(held);
+      const durableBefore = rows();
+      const scope = store.getConversationControlScope('caller-a');
+      expect(scope.workspaceId).toBe('ws-storage');
+      const view = store.inspectConversationControl(held.sessionId, scope);
+      expect(view?.session).toMatchObject({ sessionId: held.sessionId, chainId: held.chainId });
+      expect(view?.scope).toEqual(scope);
+      expect(view?.session.state.currentNodeId).toBe('n1');
+      expect(view?.session.lifecycle).toBe('canonical');
+      expect(view?.session).not.toHaveProperty('handoffToken');
+      expect(JSON.stringify(view)).not.toContain(credential.token);
+      expect(store.inspectConversationControl(other.sessionId, scope)).toBeUndefined();
+      expect(store.inspectConversationControl('unknown-uuid', scope)).toBeUndefined();
+      if (view === undefined) throw new Error('positive inspection missing');
+      view.session.state.currentNodeId = 'mutated-inspection';
+      expect(
+        store.inspectConversationControl(held.sessionId, scope)?.session.state.currentNodeId
+      ).toBe('n1');
+      expect(held).toEqual(localBefore);
+      expect(rows()).toEqual(durableBefore);
+      await store.cleanup();
+    });
+
+    test.each([{}, { workspaceId: 'storage' }, { workspaceId: 'storage', organizationId: 'org' }])(
+      'nullable namespace is exact, authoritative and read-only: %j',
+      async (defaultScope) => {
+        const store = new ChainSessionStore(
+          logger,
+          new StubTextReferenceStore() as never,
+          { cleanupIntervalMs: 60_000, defaultScope },
+          engine
+        );
+        const held = await create(store, 'namespace', 'request-continuity');
+        const scope = store.getConversationControlScope('request-continuity');
+        expect(store.inspectConversationControl(held.sessionId, scope)?.scope).toEqual(scope);
+        const localBefore = structuredClone(held);
+        for (const column of ['organization_id', 'workspace_id']) {
+          const original = rows()[0];
+          if (original === undefined) throw new Error('positive namespace row missing');
+          const replacement = original[column] === null ? 'foreign-namespace' : null;
+          engine.run(`UPDATE chain_runs SET ${column} = ? WHERE session_id = ?`, [
+            replacement,
+            held.sessionId,
+          ]);
+          const durableBefore = rows();
+          expect(store.inspectConversationControl(held.sessionId, scope)).toBeUndefined();
+          expect(rows()).toEqual(durableBefore);
+          engine.run(`UPDATE chain_runs SET ${column} = ? WHERE session_id = ?`, [
+            original[column],
+            held.sessionId,
+          ]);
+        }
+        expect(
+          store.inspectConversationControl(held.sessionId, { ...scope, workspaceId: 'client-hint' })
+        ).toBeUndefined();
+        expect(held).toEqual(localBefore);
+        await store.cleanup();
+      }
+    );
+
+    test('canonical default is exact and legacy residual absence uses the existing default normalization', async () => {
+      const store = newStore();
+      const legacy = await create(store, 'legacy-default', 'default');
+      const foreign = await create(store, 'foreign-continuity', 'other');
+      engine.run(
+        "UPDATE chain_runs SET state = json_remove(state, '$.continuityScopeId') WHERE session_id = ?",
+        [legacy.sessionId]
+      );
+      const scope = store.getConversationControlScope('default');
+      const owner = { continuityScopeId: String(process.pid), workspaceId: 'ws-storage' };
+      const registry = new DirectChainRunRegistry(engine);
+      const before = rows();
+      expect(
+        store.inspectConversationControl(legacy.sessionId, scope)?.scope.continuityScopeId
+      ).toBe('default');
+      expect(store.inspectConversationControl(foreign.sessionId, scope)).toBeUndefined();
+      expect(registry.readOwnedControlRun(foreign.sessionId, owner, scope)).toEqual({
+        status: 'refused',
+        reason: 'scope-mismatch',
+      });
+      expect(rows()).toEqual(before);
+      await store.cleanup();
+    });
+
+    test('a foreign durable owner refuses without local adoption or credential mutation', async () => {
+      const store = newStore();
+      const held = await create(store, 'foreign-owner', 'caller');
+      await store.mintHandoffToken(held.sessionId);
+      engine.run('UPDATE chain_runs SET run_owner_pid = ? WHERE session_id = ?', [
+        'foreign',
+        held.sessionId,
+      ]);
+      const before = rows();
+      const localBefore = structuredClone(held);
+      const scope = store.getConversationControlScope('caller');
+      expect(store.inspectConversationControl(held.sessionId, scope)).toBeUndefined();
+      expect(held).toEqual(localBefore);
+      expect(rows()).toEqual(before);
+      await store.cleanup();
+    });
+  });
+
   describe('exact raw run identity (R7)', () => {
     const owner = { continuityScopeId: String(process.pid), workspaceId: 'ws-storage' };
     const fixture = (sessionId: string, chainId: string): ChainSession => ({

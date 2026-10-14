@@ -32,6 +32,8 @@ import type {
   ChainSessionLookupOptions,
   ChainSessionService,
   ChainSessionSummary,
+  ConversationControlInspection,
+  ExactControlScope,
   GateReviewOutcomeUpdate,
   ParsedCommandSnapshot,
   RemainderMode,
@@ -1114,6 +1116,35 @@ export class ChainSessionStore implements ChainSessionService {
       this.promoteSessionLifecycle(session, 'session-id lookup');
     }
     return session;
+  }
+
+  /** Bind storage namespace from this store, independently of resolved caller continuity. */
+  getConversationControlScope(resolvedCallerContinuity: string): ExactControlScope {
+    return {
+      organizationId: this.workspaceScope?.organizationId ?? null,
+      workspaceId: this.workspaceScope?.workspaceId ?? null,
+      continuityScopeId: resolveContinuityScopeId({ continuityScopeId: resolvedCallerContinuity }),
+    };
+  }
+
+  /** Returns a durable view, leaving even a malformed or dormant held local session untouched. */
+  inspectConversationControl(
+    sessionId: string,
+    scope: ExactControlScope
+  ): ConversationControlInspection | undefined {
+    const held = this.activeSessions.get(sessionId);
+    if (
+      held === undefined ||
+      scope.organizationId !== (this.workspaceScope?.organizationId ?? null) ||
+      scope.workspaceId !== (this.workspaceScope?.workspaceId ?? null) ||
+      resolveContinuityScopeId({ continuityScopeId: held.continuityScopeId }) !==
+        scope.continuityScopeId
+    )
+      return undefined;
+    const result = this.requireRunRegistry().readOwnedControlRun(sessionId, this.runScope, scope);
+    if (result.status !== 'owned') return undefined;
+    const { handoffToken: _credential, ...session } = result.run.session;
+    return structuredClone({ ownerPid: result.run.ownerPid, scope: result.run.scope, session });
   }
 
   /**
