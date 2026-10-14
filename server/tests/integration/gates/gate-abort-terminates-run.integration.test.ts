@@ -15,8 +15,10 @@ import {
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 import { UNKNOWN_INTERRUPT_GATE_ID } from '../../../src/engine/execution/pipeline/decisions/mutation/types.js';
+import { createVerifyActiveStateStore } from '../../../src/engine/gates/shell/verify-active-state-store.js';
 import { PromptExecutor } from '../../../src/mcp/tools/prompt-engine/core/prompt-executor.js';
 import { HookRegistry } from '../../../src/infra/hooks/hook-registry.js';
 import { McpNotificationEmitter } from '../../../src/infra/observability/notifications/mcp-notification-emitter.js';
@@ -58,6 +60,7 @@ describe('gate_action:"abort" terminates the run', () => {
     const config = {
       getConfig: () => ({ identity: { launchDefaults: { workspaceId: scope.workspaceId } } }),
       getChainSessionConfig: () => undefined,
+      getRuntimeStateDirectory: () => path.join(tmpDir, 'runtime-state'),
     };
     const textStore = new StubTextReferenceStore();
     const executor = new PromptExecutor(
@@ -202,6 +205,47 @@ describe('gate_action:"abort" terminates the run', () => {
       store.onRunEnded(ended);
       const call = { chain_id: session.chainId, gate_action: 'abort' as const };
       expect(Object.keys(call).sort()).toEqual(['chain_id', 'gate_action']);
+      if (state === 'active') {
+        const active = createVerifyActiveStateStore(logger, {
+          runtimeStateDir: path.join(tmpDir, 'runtime-state'),
+        });
+        await active.writeState(
+          session.chainId,
+          {
+            gateId: 'release',
+            shellVerify: { command: 'false', loop: true },
+            attemptCount: 1,
+            maxAttempts: 5,
+            previousResults: [],
+          },
+          session.sessionId
+        );
+        const db = new DatabaseSync(active.stateDbPath);
+        const read = db.prepare('SELECT * FROM verify_active_state WHERE session_id = ?');
+        try {
+          db.exec(
+            "CREATE TRIGGER deny_release BEFORE DELETE ON verify_active_state BEGIN SELECT RAISE(ABORT, 'release SQL failure'); END"
+          );
+          const incomplete = await executor.executePromptCommand(call, extras);
+          expect(incomplete.isError).toBe(true);
+          expect(JSON.stringify(incomplete.content)).toContain('release incomplete');
+          expect(logger.warn).toHaveBeenCalledWith(
+            '[PromptExecutor] Verify-loop release incomplete',
+            expect.objectContaining({
+              error: expect.objectContaining({ message: 'release SQL failure' }),
+            })
+          );
+          expect(
+            engine.queryOne('SELECT run_status FROM chain_runs WHERE session_id = ?', [sessionId])
+          ).toEqual({ run_status: 'cancelled' });
+          expect(read.get(session.chainId)).toBeDefined();
+          db.exec('DROP TRIGGER deny_release');
+          expect((await executor.executePromptCommand(call, extras)).isError).toBe(false);
+          expect(read.get(session.chainId)).toBeUndefined();
+        } finally {
+          db.close();
+        }
+      }
       const result = await executor.executePromptCommand(call, extras);
       expect(result.isError).toBe(false);
       expect(pipeline).not.toHaveBeenCalled();

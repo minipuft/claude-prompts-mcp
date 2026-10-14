@@ -22,7 +22,8 @@
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 
 import { createHermeticRoots } from './helpers/child-env.js';
@@ -42,9 +43,11 @@ const PASS = 'GATE_REVIEW: PASS - three options with tradeoffs';
 interface ToolOutcome {
   text: string;
   methods: string[];
+  isError: boolean | undefined;
 }
 
 type Call = (args: Record<string, unknown>) => Promise<ToolOutcome>;
+type RunRow = Record<'session_id' | 'chain_id' | 'run_owner_pid' | 'run_status' | 'state', string>;
 
 describe('Streamable HTTP: a failing shell verification on the last step holds the run', () => {
   let teardown: Array<() => void | Promise<void>> = [];
@@ -54,18 +57,18 @@ describe('Streamable HTTP: a failing shell verification on the last step holds t
   });
 
   /** Start `quick_decision` with an inline verification of `marker`, which the caller controls. */
-  async function startVerifiedChain(
-    markerPresent: boolean
-  ): Promise<{ call: Call; start: ToolOutcome; marker: string }> {
+  async function startVerifiedChain(markerPresent: boolean, loop = false) {
     const roots = createHermeticRoots('shell-final-e2e');
     teardown.push(roots.cleanup);
     const workspace = path.join(roots.root, 'workspace');
     mkdirSync(workspace, { recursive: true });
     const marker = path.join(roots.root, 'verified');
+    const counter = path.join(roots.root, 'executions');
     if (markerPresent) writeFileSync(marker, 'ok');
     const port = await getAvailablePort();
     const baseUrl = `http://127.0.0.1:${port}`;
     const proc = startServerWithHttp(port, {
+      source: loop,
       env: {
         HOME: roots.home,
         MCP_WORKSPACE: workspace,
@@ -79,18 +82,31 @@ describe('Streamable HTTP: a failing shell verification on the last step holds t
     let nextId = 1;
     const raw: Call = async (args) => {
       const outcome = await client.callToolWithNotifications('prompt_engine', args, nextId++);
-      const result = outcome.result as { content?: Array<{ text?: string }> } | undefined;
+      const result = outcome.result as
+        { content?: Array<{ text?: string }>; isError?: boolean } | undefined;
       return {
         text: (result?.content ?? []).map((part) => part.text ?? '').join('\n'),
         methods: outcome.notifications.map((n: StreamNotification) => n.method),
+        isError: result?.isError,
       };
     };
     const start = await raw({
-      command: `>>quick_decision topic:"pick a database" :: verify:"test -f ${marker}"`,
+      command: loop
+        ? `>>quick_decision topic:"pick a database" :: verify:"printf x >> ${counter}; exit 1" loop:true max:5`
+        : `>>quick_decision topic:"pick a database" :: verify:"test -f ${marker}"`,
     });
     const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(start.text)?.[1];
     if (chainId === undefined) throw new Error(`no chain id in: ${start.text.slice(0, 400)}`);
-    return { call: (args) => raw({ chain_id: chainId, ...args }), start, marker };
+    return {
+      call: (args: Record<string, unknown>) => raw({ chain_id: chainId, ...args }),
+      start,
+      marker,
+      raw,
+      chainId,
+      runtimeRoot: roots.runtimeRoot,
+      serverPid: proc.pid,
+      counter,
+    };
   }
 
   const answer = (call: Call, label: string): Promise<ToolOutcome> =>
@@ -138,9 +154,8 @@ describe('Streamable HTTP: a failing shell verification on the last step holds t
     expect(completions(after)).toBe(0);
   }, 180000);
 
-  // Abort releases the hold by CANCELLING the run: stage 17 clears the snapshot and calls
-  // `cancelChain`, and the completion guard holds only `completed` — `cancelled` stays reachable
-  // so an operator can always end a run. `chain/complete` announces any terminal status.
+  // Run-level abort cancels before the pipeline, retaining the hold history. The cancelled run
+  // refuses later progression, and `chain/complete` announces its terminal status once.
   test('abort after escalation releases the hold by cancelling the run, announced once', async () => {
     const { call } = await startVerifiedChain(false);
     await bounceEveryStep(call);
@@ -150,13 +165,116 @@ describe('Streamable HTTP: a failing shell verification on the last step holds t
     expect(completions(escalated)).toBe(0);
 
     const aborted = await call({ gate_action: 'abort' });
-    expect(aborted.text).toContain('Shell Verification — Aborted');
+    expect(aborted.isError).toBe(false);
+    expect(aborted.text).toContain('🛑 **Chain Cancelled**');
     expect(completions(aborted)).toBe(1);
 
     const after = await call({ user_response: 'after' });
     expect(after.text).toContain('Chain run already complete');
     expect(after.text).toContain('Status: cancelled');
     expect(completions(after)).toBe(0);
+  }, 180000);
+
+  test('early loop abort clears only the producer-owned active row', async () => {
+    const fixture = await startVerifiedChain(false, true);
+    const bounced = await answer(fixture.call, 'Captured early answer');
+    expect(bounced.text).toContain('Shell Verification FAILED');
+    expect(completions(bounced)).toBe(0);
+    expect(readFileSync(fixture.counter, 'utf8')).toBe('x');
+    const other = await fixture.raw({
+      command: '>>quick_decision topic:"unrelated" :: verify:"exit 2" loop:true max:5',
+    });
+    const otherId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(other.text)?.[1];
+    if (otherId === undefined || fixture.serverPid === undefined)
+      throw new Error('fixture missing identity');
+    const directory = path.join(fixture.runtimeRoot, 'runtime-state');
+    const runs = new DatabaseSync(path.join(directory, 'state.db'), { readOnly: true });
+    const verify = new DatabaseSync(path.join(directory, 'verify-state.db'), { readOnly: true });
+    try {
+      const readRun = (id: string) => {
+        const row = runs
+          .prepare(
+            'SELECT session_id, chain_id, run_owner_pid, run_status, state FROM chain_runs ' +
+              'WHERE chain_id = ? AND run_owner_pid = ?'
+          )
+          .get(id, String(fixture.serverPid)) as RunRow | undefined;
+        if (row === undefined) throw new Error(`no producer-owned run for ${id}`);
+        return row;
+      };
+      const before = readRun(fixture.chainId);
+      const unrelated = readRun(otherId);
+      expect(before.run_status).toBe('working');
+      const pending = JSON.parse(before.state).pendingShellVerification;
+      expect(pending.shellVerify.loop).toBe(true);
+      expect(pending.attemptCount).toBe(1);
+      expect(pending.maxAttempts).toBe(5);
+      const activeRows = verify
+        .prepare('SELECT session_id, state_json FROM verify_active_state')
+        .all() as Array<{ session_id: string; state_json: string }>;
+      const matching = activeRows.filter((row) =>
+        JSON.parse(row.state_json).config.command.includes(fixture.counter)
+      );
+      expect(matching).toHaveLength(1);
+      const active = matching[0];
+      if (active === undefined) throw new Error('producer did not arm the target');
+      expect(JSON.parse(active.state_json).sessionId).toBe(active.session_id);
+      expect(JSON.parse(active.state_json).config.command).toBe(
+        JSON.parse(before.state).pendingShellVerification.shellVerify.command
+      );
+      const otherActive = activeRows.find(
+        (row) =>
+          JSON.parse(row.state_json).config.command ===
+          JSON.parse(unrelated.state).pendingShellVerification.shellVerify.command
+      );
+      if (otherActive === undefined) throw new Error('producer did not arm the unrelated run');
+      const nodes = runs.prepare(
+        'SELECT * FROM chain_run_nodes WHERE session_id = ? ORDER BY position'
+      );
+      const beforeNodes = nodes
+        .all(before.session_id)
+        .map(({ updated_at: _writeClock, ...node }) => node);
+      expect(beforeNodes.length).toBeGreaterThan(0);
+      expect(beforeNodes[0]?.['rendered_at']).toBeGreaterThan(0);
+      const aborted = await fixture.call({ gate_action: 'abort' });
+      const after = readRun(fixture.chainId);
+      const repeated = await fixture.call({ gate_action: 'abort' });
+      const resumed = await fixture.call({ user_response: 'after cancellation' });
+      const targetActiveAfter = verify
+        .prepare('SELECT state_json FROM verify_active_state WHERE session_id = ?')
+        .get(active.session_id);
+      const unrelatedActiveAfter = verify
+        .prepare('SELECT state_json FROM verify_active_state WHERE session_id = ?')
+        .get(otherActive.session_id);
+      const history = runs
+        .prepare(
+          "SELECT COUNT(*) AS count FROM execution_records WHERE session_id = ? AND status = 'cancelled'"
+        )
+        .get(before.session_id) as { count: number };
+      const counterAfter = readFileSync(fixture.counter, 'utf8');
+      const data = [before, after, active, targetActiveAfter, history];
+      const effects = [unrelatedActiveAfter, aborted, repeated, resumed, counterAfter];
+      console.log('[early-loop-data]', JSON.stringify(data));
+      console.log('[early-loop-effects]', JSON.stringify(effects));
+      expect(aborted.isError).toBe(false);
+      expect(completions(aborted)).toBe(1);
+      expect(repeated.isError).toBe(false);
+      expect(completions(repeated)).toBe(0);
+      expect(after.run_status).toBe('cancelled');
+      expect(history.count).toBe(1);
+      expect(JSON.parse(after.state).pendingShellVerification).toEqual(
+        JSON.parse(before.state).pendingShellVerification
+      );
+      expect(
+        nodes.all(before.session_id).map(({ updated_at: _writeClock, ...node }) => node)
+      ).toEqual(beforeNodes);
+      expect(unrelatedActiveAfter).toEqual({ state_json: otherActive.state_json });
+      expect(resumed.text).toContain('Status: cancelled');
+      expect(counterAfter).toBe('x');
+      expect(targetActiveAfter).toBeUndefined();
+    } finally {
+      runs.close();
+      verify.close();
+    }
   }, 180000);
 
   test('positive control: a passing verification announces chain/complete exactly once, on the final answer', async () => {

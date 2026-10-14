@@ -123,7 +123,8 @@ export class ShellVerificationStage extends BasePipelineStage {
 
     // LOOP MODE: Write verify-state.db for Stop hook integration
     if (shellVerify.loop === true) {
-      await this.stateManager.writeState(this.resolveVerifyStateKey(context), pending);
+      const stateKey = this.resolveVerifyStateKey(context);
+      await this.stateManager.writeState(stateKey, pending, context.getSessionId());
     }
 
     // Execute verification via ShellVerifyExecutor. The caller's workspace decides whether the
@@ -157,7 +158,8 @@ export class ShellVerificationStage extends BasePipelineStage {
     pending: PendingShellVerification
   ): Promise<void> {
     if (pending.shellVerify.loop === true) {
-      await this.stateManager.writeState(this.resolveVerifyStateKey(context), pending);
+      const stateKey = this.resolveVerifyStateKey(context);
+      await this.stateManager.writeState(stateKey, pending, context.getSessionId());
     }
     await this.saveToSession(context, pending);
   }
@@ -458,7 +460,8 @@ export class ShellVerificationStage extends BasePipelineStage {
     const rearmed: PendingShellVerification = { ...pending, attemptCount: 0, previousResults: [] };
     await this.writeSnapshot(context, rearmed, undefined);
     if (rearmed.shellVerify.loop === true) {
-      await this.stateManager.writeState(this.resolveVerifyStateKey(context), rearmed);
+      const stateKey = this.resolveVerifyStateKey(context);
+      await this.stateManager.writeState(stateKey, rearmed, context.getSessionId());
     }
     context.diagnostics.info(this.name, 'Shell verification armed for the next step', {
       gateId: rearmed.gateId,

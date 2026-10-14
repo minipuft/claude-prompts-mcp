@@ -218,6 +218,15 @@ and artifacts. Repeated abort is idempotent; completed, failed, missing or out-o
 non-applied results without mutation. Later progression is blocked, including after reload.
 The public `cancel` property is removed; the existing undeclared-parameter check refuses retired-key requests.
 
+For `loop:true` checks, abort also releases stored active verification bound to the run's
+internal identity; foreign or unbound rows are retained. Incomplete cleanup returns
+`isError:true` while cancellation remains durable and artifacts are retained. Repeating the
+same abort retries cleanup without duplicating the terminal event or history record.
+Clearing stored verification does not kill an external command already running; a concurrent
+Stop hook may finish its command and rewrite state it loaded before abort. Run continuity
+still follows the [live-owner rolling-handoff boundary](../architecture/sqlite-persistence.md#live-run-ownership-and-fresh-process-handoff).
+Dead-owner restart does not recover an operational run.
+
 With a captured answer, an advisory or informational gate's FAIL advances with a warning.
 A verdict without the step's answer does not advance it.
 

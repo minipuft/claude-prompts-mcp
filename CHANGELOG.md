@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Aborting a run clears its owned stored verification; cleanup failures report an error and can be retried with another abort while cancellation remains durable.
 - Nested prompt commands and resume tokens preserve the full ID, quoted JSON arguments retain operator characters, and stale numbered tokens refuse instead of selecting another run. Appending updates progress immediately, while a blocking-unknown resume retains captured work and ordinary gate reviews.
 - First resource writes honor the configured resource directory even when its prompt/gate folders do not yet exist.
 - Foreign request-scope handoff claims preserve their token and run, allowing a matching request to claim it afterward.

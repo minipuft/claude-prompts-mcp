@@ -84,6 +84,53 @@ describe('VerifyActiveStateStore (persistence)', () => {
     return createVerifyActiveStateStore(createLogger(), { runtimeStateDir: blockedPath });
   };
 
+  test('owned release preserves foreign and unbound bytes and accepts absent or matching rows', async () => {
+    const store = createVerifyActiveStateStore(createLogger(), {
+      runtimeStateDir: path.join(tmpRoot, 'owned'),
+    });
+    await store.writeState('same-key', pending, 'review-owned');
+    const db = new DatabaseSync(store.stateDbPath);
+    const read = () =>
+      db.prepare('SELECT state_json FROM verify_active_state WHERE session_id = ?').get('same-key');
+    try {
+      const bound = read();
+      expect(JSON.parse(String(bound?.['state_json']))).toMatchObject({
+        runSessionId: 'review-owned',
+      });
+      await expect(store.releaseRunState('same-key', 'other-run')).resolves.toBe('foreign');
+      expect(read()).toEqual(bound);
+      await expect(store.releaseRunState('same-key', 'review-owned')).resolves.toBe('released');
+      expect(read()).toBeUndefined();
+      await expect(store.releaseRunState('same-key', 'review-owned')).resolves.toBe('absent');
+      for (const raw of ['{}', '{"runSessionId":0}', '{"runSessionId":""}', 'null', '{']) {
+        db.prepare('INSERT INTO verify_active_state VALUES (?, ?, ?)').run(
+          'same-key',
+          raw,
+          'retained'
+        );
+        await expect(store.releaseRunState('same-key', 'review-owned')).resolves.toBe('unbound');
+        expect(read()?.['state_json']).toBe(raw);
+        db.prepare('DELETE FROM verify_active_state WHERE session_id = ?').run('same-key');
+      }
+      await store.writeState('same-key', pending);
+      await expect(store.releaseRunState('same-key', 'review-owned')).resolves.toBe('unbound');
+      await expect(store.releaseRunState('same-key', '')).rejects.toThrow('internal run identity');
+      await store.writeState('same-key', pending, 'review-owned');
+      for (const rejection of ["ABORT, 'injected release failure'", 'IGNORE']) {
+        db.exec(
+          `CREATE TRIGGER deny_release BEFORE DELETE ON verify_active_state BEGIN SELECT RAISE(${rejection}); END`
+        );
+        await expect(store.releaseRunState('same-key', 'review-owned')).rejects.toThrow();
+        expect(read()).toBeDefined();
+        db.exec('DROP TRIGGER deny_release');
+      }
+      await expect(store.releaseRunState('same-key', 'review-owned')).resolves.toBe('released');
+      expect(read()).toBeUndefined();
+    } finally {
+      db.close();
+    }
+  });
+
   test('a write that cannot persist rejects instead of resolving with success logged', async () => {
     const store = brokenStore('blocked-write');
 

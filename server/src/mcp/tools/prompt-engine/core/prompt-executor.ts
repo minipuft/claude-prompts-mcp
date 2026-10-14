@@ -60,6 +60,10 @@ import {
 } from '#engine/gates/guidance/GateGuidanceRenderer.js';
 import { GateManagerProvider } from '#engine/gates/registry/gate-provider-adapter.js';
 import { GateReferenceResolver } from '#engine/gates/services/gate-reference-resolver.js';
+import {
+  createVerifyActiveStateStore,
+  type VerifyActiveStateStore,
+} from '#engine/gates/shell/verify-active-state-store.js';
 import { WorkspaceScriptLoader } from '#modules/automation/core/index.js';
 import { createScriptExecutor } from '#modules/automation/execution/script-executor.js';
 import {
@@ -127,6 +131,7 @@ export class PromptExecutor {
   private toolDescriptionLoader?: ToolDescriptionLoader;
   private analyticsService?: MetricsCollector;
   private promptPipeline: PromptExecutionPipeline | undefined;
+  private verifyActiveStateStore: VerifyActiveStateStore | undefined;
   private mcpToolsManager?: any;
   /** GateManager for registry-based gate selection in pipeline stages */
   private readonly gateManager: GateManager;
@@ -656,6 +661,31 @@ export class PromptExecutor {
       };
     }
 
+    try {
+      if (session === undefined) throw new Error('Resolved run identity unavailable for release');
+      const outcome = await this.getVerifyActiveStateStore().releaseRunState(
+        session.chainId,
+        session.sessionId
+      );
+      if (outcome === 'foreign' || outcome === 'unbound') {
+        throw new Error(`Verify-loop state is ${outcome}`);
+      }
+    } catch (error) {
+      this.logger.warn('[PromptExecutor] Verify-loop release incomplete', { chainId, error });
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `🛑 **Chain Cancelled**: \`${chainId}\`\n\n` +
+              'Verify-loop release incomplete. Cancellation and artifacts are retained; ' +
+              'retry `gate_action:"abort"` with the same `chain_id` to retry release.',
+          },
+        ],
+        isError: true,
+      };
+    }
+
     return {
       content: [
         {
@@ -1081,6 +1111,7 @@ export class PromptExecutor {
       const builder = new PipelineBuilder({
         logger: this.logger,
         configManager: this.configManager,
+        verifyActiveStateStore: this.getVerifyActiveStateStore(),
         parsingSystem: this.parsingSystem,
         executionPlanner: this.executionPlanner,
         chainSessionStore: this.chainSessionStore,
@@ -1111,6 +1142,13 @@ export class PromptExecutor {
       this.promptPipeline = builder.build();
     }
     return this.promptPipeline;
+  }
+
+  private getVerifyActiveStateStore(): VerifyActiveStateStore {
+    this.verifyActiveStateStore ??= createVerifyActiveStateStore(this.logger, {
+      runtimeStateDir: this.configManager.getRuntimeStateDirectory(),
+    });
+    return this.verifyActiveStateStore;
   }
 }
 

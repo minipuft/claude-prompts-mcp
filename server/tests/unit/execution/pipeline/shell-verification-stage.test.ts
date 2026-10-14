@@ -497,7 +497,8 @@ describe('ShellVerificationStage', () => {
       // The loop's Stop-hook state stands again rather than being cleared
       expect(stateManager.writeState).toHaveBeenLastCalledWith(
         'chain-test#1',
-        expect.objectContaining({ attemptCount: 0 })
+        expect.objectContaining({ attemptCount: 0 }),
+        'test-session'
       );
       expect(stateManager.clearState).not.toHaveBeenCalled();
     });

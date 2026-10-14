@@ -15,13 +15,13 @@ tags: [hooks, workflows, evaluation, clients]
 
 # Client workflow contracts and repeatable evaluation
 
-## Now (2026-10-13)
+## Now (2026-10-14)
 
 Goal: coherent abort, conversation pause, and truthful client workflow evidence.
-Slice: accepted source fixes, all85 local checks, and final current source-wire355RPC/28stages BOTHprotocols at HEAD8261a2d9/63bindings; fresh bundledHTTP20checks and unchanged schema snapshots accepted. Final467file manifest2789c7cfe2b693c2c99d146bcb3a426e407a0a5f4081b38ed2e28575d4bd868e.
-Next: reviewed source PR/CI boundary; retain explicit source-to-plan-only-writeback binding without repeating runtime. Q6 downstream port ownership/change gate and conversation-pause implementation remain open; installed/native/release activation remains separate.
-Constraint: root owns HEAD; checkpoint/stashes and accepted receipts retained; no CloudySky/global/downstream install/shared DB/npm/tag/release; public delivery scope remains separately bound.
-Boundary: source/STDIO/HTTP proof accepted with failed-run and STDIOforeignscope source/store limits; native/client installation and crash durability unproved. No release or installed mutation authorized.
+Slice: accepted hook/parser and custody/early-loop abort repairs; all 85 local validation checks passed. The occupied custody index is preserved after the client crash; two test files need the accepted equivalent formatting copies before the commit retry.
+Next: commit the reviewed changes, build once, check bundled HTTP separately, then run the prepared 367-request source matrix against 71 fresh bindings. Update draft #489 and let CI run the full suite. Pause's 19 implementation rows follow in a separate candidate.
+Constraint: root owns HEAD; checkpoints, stashes and accepted receipts stay retained. Source publish authorization covers this repository only; no CloudySky, installed client, foreign checkout, shared database, package or release mutation.
+Boundary: the earlier 355-request source matrix at 8261a2d9 and bundled HTTP receipt are historical evidence. Current source transport, #488 composition, Q6 adapters and native proof need separate receipts.
 
 ## Intent
 

@@ -78,10 +78,7 @@ import {
 } from '#engine/gates/services/request-gate-admission.js';
 import { createRunStepViewProvider } from '#engine/gates/services/run-step-view.js';
 import { TemporaryGateRegistrar } from '#engine/gates/services/temporary-gate-registrar.js';
-import {
-  createShellVerifyExecutor,
-  createVerifyActiveStateStore,
-} from '#engine/gates/shell/index.js';
+import { createShellVerifyExecutor } from '#engine/gates/shell/index.js';
 import { createToolDetectionService } from '#modules/automation/detection/tool-detection-service.js';
 import { createScriptExecutor } from '#modules/automation/execution/script-executor.js';
 import { createToolTriggerFilter } from '#modules/automation/execution/tool-trigger-filter.js';
@@ -424,9 +421,7 @@ export class PipelineBuilder {
 
     // The runtime root, not the package: the Python Stop hook finds this file beside `state.db`,
     // and a package-relative one ignored MCP_RUNTIME_ROOT and was wiped by every plugin update.
-    const verifyActiveStateStore = createVerifyActiveStateStore(deps.logger, {
-      runtimeStateDir: deps.configManager.getRuntimeStateDirectory(),
-    });
+    const verifyActiveStateStore = deps.verifyActiveStateStore;
     const shellVerificationStage = createShellVerificationStage(
       shellVerifyExecutor,
       verifyActiveStateStore,
@@ -436,9 +431,12 @@ export class PipelineBuilder {
     );
 
     // Lifecycle hook: clean up verify-state when sessions are cleared
-    deps.chainSessionStore.onSessionCleared(async (_sessionId: string, session) => {
+    deps.chainSessionStore.onSessionCleared(async (sessionId: string, session) => {
       if (session.pendingShellVerification?.shellVerify?.loop === true) {
-        await verifyActiveStateStore.clearState(session.chainId);
+        const outcome = await verifyActiveStateStore.releaseRunState(session.chainId, sessionId);
+        if (outcome === 'foreign' || outcome === 'unbound') {
+          deps.logger.warn(`[PipelineBuilder] Verify-loop release incomplete: ${outcome}`);
+        }
       }
     });
 

@@ -357,3 +357,127 @@ Root spot-read30line runtime receipt and independent467-file complete-set seal; 
 ## Source PR #489 opened (2026-10-14)
 
 https://github.com/minipuft/claude-prompts-mcp/pull/489 draft/main, linked to owner T3 thread; fullCI owns testAll. Source candidate clean b648721ba8d303ab82d3610926a82a01396660e7; proof observed8261a2d9/source63exact afterplan-only writeback. Parent0.1 now SOURCE accepted because every abort child receipt and removal sweep closed; no native/install assertion. Continuing approved conversationpause0.1 read-only contract/consumer inventory, no first-PR source changes. No release/global/CloudySky/foreignsource change.
+
+## New census and CI boundaries (2026-10-14)
+
+Read-only pause report132/180lines c9261ec96a570f6a6b4195f2f6e24bf77b7c6834e4f397485b2fc91191bc3423 is inventory only, field/packet/retention/claim/verify ownership still unruled. Q6 proposal108lines e40214b7df8876b40d6e13ae5f5e6e9bf6234b1bae8f3df4135ac88c9a4005f3 preserves three foreign checkout dirty sets and no edits. F27 upstream advisory still leaf-parses/lowercases; F28 post-hook tells unknown hold to submit verdict; dependent port/pause production held pending source-owner resolution. CI38511075452 actualfbaa24db: unit1 inventory failure bothNodes, E2E7 cases/5files; integration not observed afterunitfail. Source/runtime accepted receipts are narrower than fullCI closure.
+
+## E2E acceptance and F28 ruling (2026-10-14)
+
+Root read0.41receipt/diffbudget; accepted6paths46/160lines, selected8PASS including strictpublishedfalse/capturedfulltoken/restart/retry/event/terminalrefusal, typed0/guardclean. EarlyLoop remainsunprobed. F28 ruling: central pending-gate directive helper in existing session_state owns wording; ordinary XML preserved, unknown helper uses existing canonical reminder/interrupt exits and cannotrequestgrading. Both post-tool and user-prompt directives covered; zero-issued-step exception applies ONLY syntheticunknown, ordinaryprompt gating unchanged. No MCP core/schema/protocol/foreign changes. F27 source-owned selector projection remainsseparate/sequenced.
+
+## Crash retry acceptance and remaining repair (2026-10-14)
+
+Root spot-read F28 six-file patch/receipt and accepts107focusedPASS plus6/2omission failures; no native event claim. Row0.42 run1 is retained SQLupdated_at criterion mismatch, cleanup unreached. Corrected run2 reaches final cleanup assertion: owned active keychain-quick_decision#1 survives unchanged after cancellation; UUID244d656a-c624-470b-b8cc-9490c3c09e09, onceevent/history, unrelatedrow exact, laterresume cancelled/counterx. Seal3425da7ca82d16837818b87677153b58a5fc66ebff07d24686eddf5007707ab7; source repair unstarted. F29 error policy RULED: do not roll back durable cancellation; report incomplete active release truthfully; repeated abort retries exact cleanup without duplicate event.
+
+F27 interface RULED: six narrow owner exports and nine string-valued generated fields project existing selector/quote/operator grammar; no second admission parser. Typed command/raw IDs preserved; actual TS helpers provide oracle. Existing Unicode-arrow advisory alias absent canonical registry is removed rather than maintained as undocumented compatibility. Exact nine-path caps apply; generator drift/overflow stops for recut. Source-byte changes expire affected63bindings, not old immutable receipts.
+
+Pause cardf63302ca2660a687a1db541acb2417a67dff471cf571d8c6ff377f9b97c2bdf6/rowsfd9e09a1ea25b5131b6274bfd85f0ae9a33dae0d9caf1d7245f38fe8a3fedb18 accepted. Normalstop-old-first single-use successor recovery, exact UUID/scope authority, busy refusal, protected retention and run-lifecycle verifyTTL RULED;19tasks in4/7/5/3 tiers replace falsified oldcaps. H1/H2 remain separate unmeasured diagnosis rows; production unstarted and candidate custody separate fromPR489.
+
+## F27 acceptance and F29 dependent dispatch (2026-10-14)
+
+Root read F27receipt/diff:9paths330lines,100owning/actualTS28oracle/26selectorPASS; three faults5/4/11FAIL plus discriminating positives, restore33PASS; generator/Ruff/Pyreflygreen. Caps amended prompt40→50/operators65→70 for measured same-path formatting. Receiptcb4ec98fdd7db6629056bdcaef1686f8d80c6c9bf9d7668c520a4161582a0a6f. Only frozen runtime binding parser-utils changedc1f18a...→2abe45...; old63-source wire receipt remains immutable and no currentwire/native claim. Follow-on0.47 removes now-unreachable optional operators fallback created by unconditional shared-helper import; accepted F27 checks remain scoped evidence.
+
+F29 actual producer needs optional private runSessionId anchor; all3stage17writes bind exact internal identity, PythonStop complete-dict rewrites preserve it. Atomic release classifies absent/owned/foreign/unbound; only owned exact raw state deletes. Root accepts source-only census and dependent152/128/10line recut, runtime repair unrun. No key migration/legacy alias guessing; foreign/unbound cleanup after durable cancel reports incomplete. Callback source has retained session object, so conditional teardown can use exact producer key/internal ID without lookup-after-delete.
+
+H1/H2 PREPcardfcc36f0cf77d21672d43a86a20d900dd75678f7c5ec2e6089248f1321d58fa35/helperb4d89324bbcb2560d74f93bc7aca173ee7e3d63435da864d33f71c9d0b864ff9 read; runtime/syntax/imports unrun. First upper-model retry failed provider capacity; replacement provider stopped with possible-cybersecurity-risk message after artifacts were written. Narrowed mechanical artifact receipt succeeded, no diagnostic execution or confirmed defect. Current installed inspect confirms catalog fullID and unchanged reportedplugin0.1.3roots; /tmp/workflow-installed-inventory-20261014.json is reported provenance only, no executable/hook/native parity.
+
+## F29.1 acceptance and custody harness correction (2026-10-14)
+
+Root read F29.1receipt:118/152lines4paths,35owningPASS, real SQLite matching/absent/foreign/unbound/malformed/SQLfailure/zero-change/retry reached; both owner omission controls fail first intended assertion, sourceexactrestored. Scoped inheritedfiveJesttype diagnostics/lint unchanged, no new. Seald8646e13e4938fdc73338888befa880174804fb3511a9edbd811bc96841872af. Wiring and warm repair remainunrun.
+
+Custody helper first runtime stopped H1 beforeverdict on null-prototype SQLite row versus plain object assertion; H2notreached. Preserve measurements/H1-inCoS2 blocked/run1 source2025-byte guard unchanged; wrapperandactualsourcePIDs gone, fixturecredentialfile removed. Raw real updates/returns retained, not yet whole accepted diagnostic. Root rules prototype-only correction: spreadbothrows with all enumerableSQLcolumns/values exact; no field relaxation. Generated private fixturecredentials should not be echoed in console errors. Helper correction delegated outside only. Row0.47 PREPcardc548291e51cb7fa713c1e729398122e8dc1ab3da410f1705fb012c4cbe38c23a accepted two-path cleanupscope,127/180 and1/4lines; no newcompatgrammar/API.
+
+## H1/H2 measured diagnosis and0.47 acceptance (2026-10-14)
+
+Corrected custody helper ebbe38e0541de19cc49d6f14abefb3876dd9c14e45d44ad33a0507970ceef07e executedprivatefixtures: H1registry2claimed despiteactualchanges1/0, one durableowner/tokenconsumed, replayrefused/fullstateexact; H2storecompatiblepositiveclaimed then no-blueprint targetrefusal changedowner/token/fullrow. BothRED with immutable receipts under measurements-run2, diagnosis-receipt.json joins hashes/source/guard. All2025sourcebytes/fullporcelain/index unchanged; wrapperandactualsourcePIDsgone; fixturecredentialfilesremoved; private DB evidence retained. Originalrun1 onlyprototype-harnessmismatch kept. Rootdisposition repairH1.1/H2.1 beforeT1.3; no native/MCP/general race claim, independentabortwiringcontinues.
+
+Rootread0.47receipt:2paths127/1line cleanup,126actualchecks/Pyrefly/RuffPASS; liveASTs/F28tail preserved, delimiterAPIkept, guardclean. Receipta8ded556386a562fd6ec13319a6e70e96b6b7fa7807a166649a6023ed5b5e4e2. AcceptedF27/F29.1/sourcehistory untouched. No renewedwire/nativeclaim.
+
+## F29.2 acceptance and custody contract ruling (2026-10-14)
+
+Root read awaitedwiringreceipt:4paths100/128lines,7selectedintegrationPASS/2unrelatedfiltered; actualSQLiteDELETESQLfailure→truthfulincompleteerroraftercancel→retryrelease, onceevent/history/retainedstate/noPipeline controls reached. Error-to-successfaultfails intendedfirstassertion; exactbytesrestore. ScopedTS0/newlint0; seal9830ef38edd9f06c1a4be2e9fb7e6427b44f9f5a9e554254830765eb8043ee06. Foreign/unboundstoreoutcomesmeasuredF29.1; executorbranchsourceinspectedtyped, notnative. F29.3 lifecycle10/changelog5line recut plusacceptedwarmtestunchanged; realwarmcontrolstillpending.
+
+Rootread custodyrepair87linecard/exact7path298lineDAG. RULEDexistingimmediatetransactionownership+RETURNING, beginoutsideownedrollbacktry/synccommitbeforeclaimack; terminalleftovertokenunknown-tokenunchanged; exactsharedsnapshotcompatibleBPsubset, no fullenginefields/node-count/currentpointerrestrictions. C1→C2→C3→C4 sequentialchecks; nestedbusy/selected-statefailclosedcontrols unrun. Publiccreation/claimarguments/statuspayloadspreserved. ForcedSELECToldRED versusadaptedlock-entry/simultaneousrequests separatelylabeled. No broadport/schemaDDL/pipelineowner change.
+
+## F29.3 real executable binding and C1 handoff (2026-10-14)
+
+RootreadF29.3receipt/rawsummary: actualsrcHTTPwarm1PASS/3filtered, child553326node--importtsxsrc/index.ts/cwdserver/privateenvroots, runb9ac6467-40be-4cdd-a84c-4cc15cdc35f4 boundprivateanchor; owned#1activepositive→absent, unrelated#2/62261e11-f955-49f8-b3bc-a274edea9662rowexact. Oncecancelledhistory/event, retry/noevent, pending/nonwriteclocknodeexact, laterresumeCancelled/counterx reached;23readonlyDBsnapshots; fixture/PID/guardcleanupclean. Sealf6f316dde02bfc8be0cfbb6e1723fae69559369ff7ed80117de33a835a511d20. lifecycle9/changelog1line, helperrouting1line exception source:loop (onlywarmlooptrue); everyassertion/warmbodybyteequal.
+
+Importantclassificationcorrection: prior0.42 childargvwasdist/index.js, so its acceptedRED is immutablebundle-run evidence, notdirect-src/installedparity. Currenttablelabelsupdated; historicalartifactsealsnotrewritten. SourceAPI35+7andcurrent-srcHTTP1proveF29repairatdeclaredscope; new-pathSTDIO/foreignunboundresponsesruntime/cold/native/Stopconcurrencyunrun. No externalcommandkillclaim.
+
+Custodyrepaircardhashff857773ff8e0c4c7d1dc6832f90c1b0e9eca3d9ef5ddc6955e6c181b69ecea2/tasks9cc724e75c8dec683e64b4d7ed569abd14629868ccbfb6f3567e5213358fc668 accepted7paths298lineDAG. SourcebindrecheckrequiredcurrentexecutorafterF29.2. C1exactregistry105/sharedtype8/handofftest80; C2manager20/handofftest45; C3executor8/tenant22; C4lifecycle10. SuccessfulsynchronousBEGINoutsideownedtry/commitbeforeack plusRETURNING; strictsharedsnapshotBPcompatible/terminalunknown-token, noDDL/portexpansion. OriginalH1forcedSELECTredseparatefromadaptedlockentry/simultaneous-source-controls.
+
+## C1 and final protocol PREP acceptance (2026-10-14)
+
+RootreadC1receipt/source:registry77/sharedprose7/handofftests79=163/193; focused13→32PASS/4storecasesfiltered; sourceESLint0. RealSQLite nestedforeigntransaction/busyBEGIN/nullRETURNING/postUPDATErollback/invalidBPscope-terminalfullrow/nodes/zero-timeoutsiblingmutationdenial reached. IgnoreRETURNING/admissionaftertransfer/removeTxn faultsREDatownassertion, exactsource restored; source94f0546825a33f7e5f945e5ecd9bfd8fddd5c0730c9a9f980a818edf6602b6c9. Initialtestfixture reusedUUIDacrosstransferredowners causing`save`skip; uniqueIDs+actualUPDATEreachability corrected, nocriterionrelax. C2storequeue/adoption+outsidecrossprocesscontrols stillunrun; don'tcloseH1.1/H2.1overallorT1.3early.
+
+FinalprotocolPREPaccepted49driver/40verifier/109card; proposed367RPC(178STDIO189HTTP)/30stages/8hosts/71bindings, no execution yet. Source/provenance binding isnotcoverage. Old355controls/appendoraclebyteexact; newground-truthcounterloop2controls; noBlueprintwireproducerabsent soC1/C2realstore negative independent. Verifierceiling40→45 preserves separate rawDB/counter/two-controlassertions. Ready/finalfreeze heldC1–C4/gates/build; no native/installed/bundledSTDIO claim.
+
+## C2 store acceptance (2026-10-14)
+
+RootreadC2receipt/source:manager5/test41=46/65lines; owning44/44PASS. Compatiblelegacy/chain/inserted/remainder/detachednullpointer adopted; absent/incompatibleBP refusal fullrow/nodes/owner/tokenexact. SiblingBEGINIMMEDIATEbusy_timeout0 provedrealheldsave beforequeueguard; omittedawaitentersregistryearly andREDspy1vs0; exactsourceb076e28a6d4655c9ac36bf4f5a0e3fd9fd7bdc3fea3c3315fc00f2d3d1fde258restored. Manager119errors/7warningsunchanged/noaddedfinding, notrawlintgreen. Initialfourtestexpectationfailures fabricatedreviews:{} wherecanonicalabsent; injectedregistrybypassedresolvedDbEngine, sofixturewasnontransactional; bothcorrectedwithrealenginecomposition/witnessandarchivedasharnessmismatch. Outsidehelper/crossprocess/native/sourceglobalgatesremainunrun. C3clienttext/tenantfixturesnext, thenC4docs; no overallcustody/T1.3closureyet.
+
+## C3 consumer acceptance (2026-10-14)
+
+RootreadC3receipt:executor5/8+tenantfixtures16/22=21/30; exactNoBlueprintretainedowner/tokenwording/textError/flowandoutsidecasebytesPASS; P6.220/P6.2294PASS/45filtered. Existingdonoreviction/survivingrun/historyassertionsunchanged, allF29outsideNoBlueprintbyteequal. SourceC4docandoutsideprocesscontrolsremainunrun; no broadtest/nativeproof.
+
+## C4 lifecycle acceptance and process-boundary entry (2026-10-14)
+
+RootreadC4receipt:7/10lines, exactrefusedowner/token/compatibleBP/terminalpretransfer/committedwinner/scopedsingleusewording+formatPASS; allF29/externalcommand/deadownerlimitsoutsidehandoffbytepreserved. C1–C4total237within298; runtimeC5stillopen. Root grantsno phasepauseproductionorinstalled/nativefromdocumentation. Adaptedsourcehelper220 current-source seal/probe next underexclusiveguard; originalebbe38helper/forcedSELECTRED untouched.
+
+## C5 repaired-source process acceptance (2026-10-14)
+
+RootreadC5acceptance:singlefreshbatchPASS_LOCAL_CONTROL with578current-sourcebindings,2025tracked-byte/fullporcelain/index/HEADguardunchanged. Orderedwinner608462UUID3dde602c-43e8-44b9-92b1-fc02a77a4770RETURNING1/changes1; loser608461unknown-token/noUPDATErawemptyobservations(aggregate0); replayrefused. Sharedreleaseuninstrumentedwinner608506/loser608511oneowner/token/UUID/fullnodes-domain/replaypreserved; readinessdoesn'tproveCPUinstructions overlap. H2compatiblepositiveclaimed/noBlueprintfullrow-node-owner-tokenexact. Nestedouterworkcommittable/zero-timeoutsiblingselectedstate mutationdenied. All10declaredchildlauncher/runtimePIDsandmainruntime608407gone; mainlauncherexit0PIDnotseparatelyrecorded. Fixturecredentialfilesremoved/privateDBevidenceretained. Sourceguard/teardownprecedefinalPASS; originalhelpers/REDimmutable;C1transactionremovalfaultreusednorereun. H1.1/H2.1source/privateprocessrepairclosed, noMCP/native/generalrace/T1.3pauseclaim. C1–C4source237/298 +C5processscope accepted. Requiredglobalgates/freshbuild/bundledHTTP/new367sourceprotocolstillunrun.
+
+## Required gate stop (2026-10-14)
+
+Parallelindependentrootgatesallfinished: sourceTSexit2parser-utils130char:string|undefinedassignmentTS2322; testtypesexit1handofftest0→2; ESLintexit1unusedcallbackgenerator293no-unused-vars0→1 plusstrict1597→1596. RetainedESLintJSON /tmp/eslint-ratchet-1791968484791.json identifiesexactcallback. No baselineincrease orscope/protocolgranted; own35/44/sourceHTTP/processreceiptsnotinvalidatedsemantically,butglobalgreenunachieved. Rows0.50–52 owncorrections/typedfixture/lowercanonicalbaselineafternewfindingfixed. Rootstopsdependentbuild/protocol; newrepairdelegationsbounded.
+
+## Required source/lint gate acceptance (2026-10-14)
+
+Rootread0.50/52receipt/patch:parserchar!==undefined narrowsquoteassignment withsamecanonicalpredicate; generatorunusedfunction-typearg char→_char;8sourcechangedlines,nocast/interface/constant/projectiondrift. SourceTS0/oracle3PASS/selector26PASS68filtered/generatorowner0. Canonicalstrictdecreaseoldgreen1791951731860manager1466!session.blueprint72→71 matchesC2removedlateguard; totals2353→2352,strict1597→1596,warnings695. Baseline6linecanonicalgenerator/noallowincrease,allotherrules/settings/overrideLogsame; lintgate0. Receip tb77feb7e0d6f618624ebbcf0692f76de064d6f88f149afced21fd9cdaf36aebc; rawguardbaselineMexplicitlyauthorizedownedoutputretained,nofalsecleanclaim; alloutside3bytes/head/indexunchanged. Testtarget0.51baseline0/current2stillunfixed; exactcollectorpreparedsource candidate genericquery callback unconfirmed. Rootgrants0.51nextafterlease, no moreglobal/build/protocoluntiltypingcorrected.
+
+## Exact test-type cause and supported-status ruling (2026-10-14)
+
+GrantedcollectorretrievedtwoTS2322positions handoff-claim468:5/519:68:'holding'notChainRunStatus; genericqueryOnespycandidatehaszerodiagnostics andpreparedpatchNOTAPPLIED. Ownerchain-execution68supportsworking|input_required|completed|failed|cancelled; chain-session399derivesheld-openfromnullpointer/openreview/owedfacts. ROOT RULEDreplaceonlytwoholdingfixtureassignmentswithworking(existingmakeSessiondefault),4changedlines/1file, allactualSQL/nodes/nullpointer/review/physical-lock/assertionsunchanged. C2detachedholdstilldefinedbyopenreview; no canonicalStatusSchemaExpansion. Diagnosticno-writeguard/baseline332 unchanged. Freshfixgrantfollowsexactruling; oldcount-only/prepwronghypothesis preservedasruled-out, notproductcause.
+
+## Test-type gate acceptance (2026-10-14)
+
+Rootread0.51fixreceipt:twoholding→workingassignments4changedlines, exactactual-tsconfigdiagnostics2→0, handoff44/44PASS, failedfulltest-type-ratchet332existingerrors/noRegressions. Genericquery-spypreppatchnotapplied; allSQL/assertions/review/nullpointer/physical-lockwitness/config/baseline/head/index/outsidebytesunchanged. Existing332debtretainednoterrorfreeclaim. SourceTS0andlint2352/695passedfrom0.50/52/sourceunchanged; initialthreegatesnowaccepted, validate:all/freshbuild/final367protocol/CIstillrequired.
+
+## Integrated validation82/85 and named recut (2026-10-14)
+
+Requiredfullvalidate:allcompleted82/85PASS/137.9seconds withoutmutations. NewKnipunusedexports parser-utils.PROMPT_SELECTOR_DELIMITER_SYMBOLS andchain-session.TERMINAL_RUN_STATUSES, allothernewcategorycountsnotincreased; source2constantsprivateimplementation, rootexternalcensusbeforeprivatize. Modulecatalogneeds canonicalgeneratoraftercurrentsource. Operator-registry-drift stillrequiresdeadPythonfallbackandselftestmutation; currenthookusesregistrymandatorysource, soobsoletefourthliteralcopycriterionretired—not resurrectfallback. Existing3literalcopy/crossengine/registryexamples/propertyfalsifiersretain. Rows0.53–55 boundpostvalidationrepairs; baselineincreaseforKnipforbidden. Finalcoherentglobal/build/protocolreadyheld.
+
+## Export consumer census before0.53 (2026-10-14)
+
+Rootsource/CLI/hooks/testssearchconfirmedparserdelimiterconstonlyreadinsamefile, terminalconstonlyruntime-readbyisTerminalRunStatus; PythonTSparity143–145textuallylocates`export constTERMINAL...`anddescribesexportedliteral. PublicmoduleexportunusedbutliteralSSOTnotdead: makeconstantsprivateandupdateexistingextractortoidentifycanonicalconstregardlessexportmodifier/docclaim, preserveallstatuscompare/omissionmutations. Rowrecutsource4+parity8/3paths,nopublicalias/nobaselineincrease. Obsoletevalidatorfourthfallbackcopy separate0.54; generatorcatalog0.55sequentialafterexports.
+
+## Export privacy acceptance and validator retirement (2026-10-14)
+
+Rootread0.53receipt:source4exportmodifierlines+parity4doc/regexlines3paths; TS0/terminalparity3PASS(actualequality+added/droppedstatusfalsifiers)/Knip1060PASS(exports424), no baseline/settingschange. Constantnames/values/usesintact; textconsumerreadsdeclarationindependentexportmodifier, SSOTpreserved. Receipt3df717461a473ce5616eef1914bb79fa2bbe4242b2b84c4cc40dae3b6b47287b, guardclean/outsidebytes/head/indexunchanged. Rootread0.54PREP46linecard/56linepatch:obsoletefourthPythoncopycriteriononlyretired,5retainedcriterionbodiesbyteexact/remainingmutations+trackedpathadmissionkept; source/helper/registryuntouched. Normal/selftestsUnrununtilgrant. Cataloggeneratornextaftercriterionrow.
+
+## Operator drift criterion retirement acceptance (2026-10-14)
+
+Rootread0.54receipt:56/100lines exactscript, normal0 threeactualliteralcopies andselftest0 threecleanbaselines+fiveexistingfaultwitnesses, format0. Allfivecriterionbodies/source-read/trackedpathadmissionunchanged; obsoletePythoncopy/site/fault/historyretired becausecurrenthookderivesregistry. Noalwayspassskip/recreatedfallback/noparallelparser/registryorhookchanges; outsidebytes/proofs/head/indexpreserved. Canonicalcatalog0.55lastremaining82/85failurebeforewholevalidationrerun.
+
+## Canonical catalog acceptance and whole-suite rerun (2026-10-14)
+
+Rootread0.55receipt:generate/checkPASS35boundaries14staterows3extensions, docs/reference/module-catalog.mdsoleoutput4/64changedlines. Engine-gatesInstability0.56→0.55/chains0.67→0.68 fromcurrentdependency-cruisermetrics; no speculativeexport/edgecausation, allothercatalogcells/bytesunchanged. RawguardDocMexpectedownedoutputretained; source/outsidebytes/head/indexpreserved. Receiptf5d127e6c5bb97730dbee50046ad509d7bb15cabc91839e1edafa57480947cb1. Allthree82/85failurerowsownedchecksaccepted, whole85rerunrequirednewsourceepochbeforebuild/protocol.
+
+## Final local gate acceptance before source commits (2026-10-14)
+
+Fullvalidate:allafter3corrections85/85PASS/136.6seconds; allCode/metadata/hook/python/contract/domain/delivery/planmemberspassed. SourceTS0/lint2352errors695warnings/testtypes332existingerrorsfromfailedgatecorrectionsaccepted, ceilingslowerornonincreased. Local-gate-receipt.json andgreenlog /tmp/workflow-current-gates-20261014-2 retainbytehash; no test:alllocal (CIowner). Rootcommitbyconcern/namedpathswithoutHEADconcurrency, thenfreshbuild/bundledHTTPandcurrent367sourceprotocol. No old355stamp relabeling/native/installed/phasepausecompletion.
+
+## Custody precommit style stop (2026-10-14)
+
+Rootsplitconcerns/namedpaths: F28commit e19d2ed2 andqualifiedguidance256f6b6a landed withhooks; partialindexselectedonlyNoBlueprintexecutortext/handoffdocplus6custodypaths. Attempt`fix(chains): preserve ownership when workflow claims are refused` failed precommitPrettier in tenant-isolation/handoff-claim tests; nocommitcreated/indexrestored/currentworktreeintact. Fullvalidate:formatcoversJSON/MD/YAMLnotTS; initial85greenisnotTSstylepass. Row0.56formatterPREP+AST/comment-preservingownedtestformat, thennormalrestage/newcommit (noamend/noverify). Rootindex/HEADsoleowner; allworkersmustnotstage.
+
+## Format-only numerical recut after commit rejection (2026-10-14)
+
+Rootreadoutside0.56prep/equivalence:actualpinnedPrettier3.9.6/serverconfig/ignore/LF formats handoff343changedlines(629→796),tenant50(1369→1391),total393; currentAST/semanticToken/literalrawTemplate/commentsequencesequivalent. Owncasefields/SQL/assertions/modelRootphysical-lockwitnessunchanged; Rootmeasurednewrowceilings400/60, no compressiontoold80linecap. Worktree/head/index/fulltracked2025bytespreservedPREP, staged2inputs=worktree. Grantapplyexactformattedcopies2paths, pinnedcheck/equivalence thennormalrestagecommit; runtime44/4/85greenretainedscope, no rerunwholebehaviorforstylisticnormalization.
+
+### 2026-10-14 — Client-crash continuation and custody commit
+
+The client crash preserved HEAD 256f6b6a and the occupied eight-path index, including partial lifecycle/executor hunks. Row 0.56 applied only the exact two accepted formatter copies: 343/400 and 50/60 changed lines. On-disk AST, semantic tokens, literals and comments remained equivalent; pinned Prettier passed. Raw guard retained the two expected M→MM transitions and no other tracked-byte changes. The worker released its lease before root restaged the two paths. The normal commit hooks accepted acbeed71, `fix(chains): preserve ownership when workflow claims are refused`; the failed earlier commit was not amended or bypassed. Receipt: /tmp/workflow-commit-format-20261014/apply/acceptance-receipt.json. Existing behavior/runtime receipts and all 85 green validation members remain retained; equivalent formatting did not change their criteria.
