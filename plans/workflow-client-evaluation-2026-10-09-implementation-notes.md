@@ -345,3 +345,7 @@ Root incorrectly ruled that changes to existing files could not trip tree-state 
 ## DEV-INTEGRATION-TS-FORMAT-BOUND (2026-10-14)
 
 Indexed pre-commit formatter caught tokenizer test that validate:format does not inspect. Root authored20-line estimate; canonical Prettier measured48(33added/15removed). Worker retained formattedresult and halted; root spot-read diff and exact compiler AST equivalence (nodekind/literal/identifier/orderedchildren, positions/rawsource excluded), explicitly recut onefile bound48 and accepted current result. Raw emitted JS layout difference retained; no behavior test rerun. No source/config change.
+
+## Root plan validation repair (2026-10-14)
+
+Second full local gate84/85PASS; only newly tracked plan-row tracking failed. Canonical owner requires `as of DATE · flips when ...`; authored semicolon stamps were not recognized. Normalized active open-row notation, joined numeric rows to their table headers, consolidated duplicated master planning-step output into retained path evidence/history, and quote historical probe content so literal source tables do not become live tasks. No production/source/criterion/status-completion change; all84 passing byte-scoped checks retained. Root owns these plan edits.
