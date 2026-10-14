@@ -17,8 +17,8 @@ tags: [hooks, workflows, contracts, execution]
 ## Now (2026-10-12)
 
 Goal: park workflow execution so the model can discuss the task with the user and resume the same step.
-Slice: owner requested pause/resume plus appropriate enforcement/reminders; all eight child rows OPEN.
-Next: freeze the existing-owner persistence/action projection and scope joins, then implement after abort/removal closure.
+Slice: source abort/namespace boundary is draft PR #489; pause implementation remains unstarted. Row0.1 read-only contract and consumer inventory is resumed against the accepted source candidate.
+Next: freeze exact orthogonal conversation-hold field, existing serializer/guards/projections and named readers/writers before production; root rules any unresolved semantic choice. Separate next slice/worktree preserves current PR candidate.
 Constraint: no advancement, review bypass, terminal status, worker-kill claim or automatic resume from conversation.
 Boundary: source/hook controls first; installed-client Stop/event behavior requires separate native proof.
 
