@@ -46,6 +46,7 @@ import type { ChainSessionService, ToolResponse } from '#shared/types/index.js';
 import type { AnswerGrade } from '../../../frameworks/phase-guards/index.js';
 import type { GateEnhancementService } from '../../../gates/services/gate-enhancement-service.js';
 import type {
+  DeferredAdvance,
   DetachedReviewVerdictResult,
   GateVerdictProcessor,
   VerdictProcessingResult,
@@ -257,9 +258,13 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return;
     }
 
-    if (!(await this.runUnknownsPhase(context, sessionId, sessionContext, currentNodeIdAtStart))) {
-      return;
-    }
+    const resolvedAdvance = await this.runUnknownsPhase(
+      context,
+      sessionId,
+      sessionContext,
+      currentNodeIdAtStart
+    );
+    if (resolvedAdvance === false) return;
 
     // Refresh chain variables for downstream template rendering
     context.state.session.chainContext = this.chainSessionStore.getChainContext(
@@ -285,6 +290,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       this.resolveVerdictTrailer(context, currentNodeIdAtStart, currentStepAtStart)
     );
     if (verdictResult.earlyExit) {
+      await this.raiseInterrupt(context, sessionId, false);
       await this.settleVerdict(context, sessionId, session, verdictResult);
       await this.ensurePostAdvanceReview(context);
       this.logExit({ gateVerdict: 'answered', handled: true });
@@ -313,8 +319,10 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     // run on the step it answered, whatever the verdict said — the verdict is recorded, the
     // advance is not taken, and stage 19 opens the structural review from the same grade.
     const heldNodeId = this.gradeAnswer(context);
-    if (captured !== undefined && captured.nodeId !== heldNodeId) {
-      await this.verdictProcessor.applyDeferredAdvance(context, captured);
+    await this.raiseInterrupt(context, sessionId, false, heldNodeId !== undefined);
+    const advance = captured ?? resolvedAdvance;
+    if (advance !== undefined && advance.nodeId !== heldNodeId) {
+      await this.verdictProcessor.applyDeferredAdvance(context, advance);
     }
 
     await this.settleVerdict(context, sessionId, session, verdictResult, heldNodeId);
@@ -326,7 +334,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
   /**
    * Answer this call's `gate_action` on the step review. The action carries two disjoint
-   * vocabularies (see `McpToolRequest.gate_action`); the interrupt half was consumed earlier, and
+   * vocabularies (see `McpToolRequest.gate_action`); run-level abort was consumed by the executor,
+   * the interrupt half was consumed earlier, and
    * only the retry-exhaustion half answers the step review — and only while that review is
    * exhausted, the one phase that accepts it. In budget, the processor refuses it by name rather
    * than let it reach the verdict path, where it came back as the same review, neither applied
@@ -341,7 +350,11 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     sessionContext: SessionContext
   ): Promise<boolean> {
     const gateAction = context.mcpRequest.gate_action;
-    if (gateAction === undefined || isInterruptResolutionAction(gateAction)) {
+    if (
+      gateAction === undefined ||
+      gateAction === 'abort' ||
+      isInterruptResolutionAction(gateAction)
+    ) {
       return false;
     }
     if (this.stepReviewOf(session)?.phase === 'exhausted') {
@@ -355,6 +368,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
         this.stepCaptureService.ledgerSubmittedReviewAction(context, session.sessionId, session);
         await this.verdictProcessor.applyDeferredAdvance(context, skipped);
         await this.ensurePostAdvanceReview(context);
+        await this.raiseInterrupt(context, session.sessionId, false);
       }
       this.logExit({ gateAction, handled: true });
       return true;
@@ -642,6 +656,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
   ): Promise<void> {
     const sessionId = session.sessionId;
     const action = context.mcpRequest.gate_action;
+    // Run-level abort is consumed by the executor before any detached review admission.
+    if (action === 'abort') return;
     const result: DetachedReviewVerdictResult =
       kind === 'review-verdict' || action === undefined
         ? await this.verdictProcessor.processDetachedReviewVerdict(context, session, node.nodeId)
@@ -729,7 +745,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    *
    * An empty `user_response` is exempt because it captures nothing (R19): the trailer is evidence
    * FOR A CAPTURE, and a reply-less call may only answer a review, apply a remainder, resolve an
-   * interrupt or cancel. That exemption once was the guarantee-B bypass — a verdict-only call at
+   * interrupt. Run-level abort exits before this stage. That exemption once was the guarantee-B
+   * bypass — a verdict-only call at
    * a delegated node under a pending review advanced the node with nothing captured. What closes
    * the bypass now is the capture half, not a refusal here: the verdict processor refuses a bare
    * PASS on a review whose node has no captured output (`isStepComplete`, P6.22), so the call
@@ -798,7 +815,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     sessionId: string,
     sessionContext: SessionContext,
     currentNodeIdAtStart: string | null
-  ): Promise<boolean> {
+  ): Promise<false | DeferredAdvance | undefined> {
     const observationOutcome = await this.applyObservations(
       context,
       sessionId,
@@ -821,16 +838,18 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return false;
     }
     if (remainder.kind === 'applied') {
+      this.refreshTotals(context, sessionId, context.getScopeOptions());
       await this.reviewInsertedNodeAfterRemainder(context, sessionId, sessionContext);
     }
 
-    if (!(await this.resolveInterrupt(context, sessionId, sessionContext, remainder))) {
+    const resolution = await this.resolveInterrupt(context, sessionId, sessionContext, remainder);
+    if (resolution === false) {
       this.logExit({ interruptAction: 'refused' });
       return false;
     }
 
     await this.raiseInterrupt(context, sessionId, insertedThisCall);
-    return true;
+    return resolution;
   }
 
   /**
@@ -865,6 +884,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     }
     await this.chainSessionStore.clearReview(sessionId, review.nodeId);
     sessionContext.pendingReview = undefined;
+    if (context.sessionContext?.pendingReview?.nodeId === review.nodeId) {
+      context.sessionContext = { ...context.sessionContext, pendingReview: undefined };
+    }
     await authority.createReviewForStep(context, sessionContext, gateIds);
     context.diagnostics.info(this.name, 'Inserted node review re-derived after remainder', {
       nodeId: review.nodeId,
@@ -1105,10 +1127,10 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     sessionId: string,
     sessionContext: SessionContext,
     remainder: RemainderApplication
-  ): Promise<boolean> {
+  ): Promise<false | DeferredAdvance | undefined> {
     const action = context.mcpRequest.gate_action;
     if (!isInterruptResolutionAction(action)) {
-      return true;
+      return undefined;
     }
 
     const resolution = await this.verdictProcessor.resolveUnknownInterrupt(
@@ -1123,7 +1145,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       context.setResponse(this.buildErrorResponse(`❌ ${resolution.message}`));
       return false;
     }
-    return true;
+    return resolution.deferredAdvance;
   }
 
   /**
@@ -1141,7 +1163,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
   private async raiseInterrupt(
     context: ExecutionContext,
     sessionId: string,
-    insertedThisCall: boolean
+    insertedThisCall: boolean,
+    heldAnswer = false
   ): Promise<void> {
     const scopeOptions = context.getScopeOptions();
     const session = this.chainSessionStore.getSession(sessionId, scopeOptions);
@@ -1149,17 +1172,37 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       return;
     }
 
+    const pending = this.stepReviewOf(session);
+    if (heldAnswer && pending !== undefined && isUnknownInterruptPending(pending)) {
+      await this.chainSessionStore.clearReview(sessionId, pending.nodeId);
+      if (context.sessionContext !== undefined) delete context.sessionContext.pendingReview;
+    }
+    const ordinaryHolding = pending !== undefined && !isUnknownInterruptPending(pending);
+    const position = currentOrdinal(session.state.nodes, session.state.currentNodeId);
+    const next =
+      session.state.nodes[context.mcpRequest.gate_action === 'skip' ? position - 1 : position];
+    const deferredInsertion =
+      !isInterruptResolutionAction(context.mcpRequest.gate_action) &&
+      next?.origin === 'inserted' &&
+      this.chainSessionStore.getStepState(sessionId, next.id) === undefined &&
+      session.unknownsLedger?.some(
+        (unknown) =>
+          unknown.id === next.originUnknownId && unknown.state === 'active' && unknown.blocking
+      ) === true;
     const alreadyHolding = isUnknownInterruptPending(this.stepReviewOf(session));
     const interrupt = decideInterrupt({
       ledger: session.unknownsLedger ?? [],
       nodes: session.state.nodes,
       currentNodeId: session.state.currentNodeId,
-      pauseOnBlocking: this.resolveEffectivePause(
-        sessionId,
-        scopeOptions,
-        insertedThisCall,
-        alreadyHolding
-      ),
+      pauseOnBlocking:
+        !ordinaryHolding &&
+        !heldAnswer &&
+        this.resolveEffectivePause(
+          sessionId,
+          scopeOptions,
+          insertedThisCall || deferredInsertion,
+          alreadyHolding
+        ),
     });
     if (interrupt === undefined) {
       return;
@@ -1197,9 +1240,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    *
    * The pause is therefore bound to the two states where the run is genuinely stopped:
    *
-   * - an insertion landed on THIS call — OQ-1's "the inserted investigation node IS the pause
-   *   point". The insertion cap is one per unknown id, so this fires once per unknown, which is
-   *   the granularity a supervised run wants;
+   * - an inserted investigation still awaits dispatch, including one an ordinary review deferred;
+   *   the captured reporting node stays current until the synthetic hold is released;
    * - the synthetic review is ALREADY pending — the run is holding right now, so the payload
    *   must say `paused: true` rather than describing a soft interrupt.
    *

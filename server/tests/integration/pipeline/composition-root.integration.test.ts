@@ -47,6 +47,10 @@ import { loadPromptData } from '../../../src/runtime/data-loader.js';
 import { initializeModules } from '../../../src/runtime/module-initializer.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 
+import type { McpRequestExtra } from '../../../src/shared/utils/request-identity-resolver.js';
+import type { IdentityConfig } from '../../../src/shared/types/core-config.js';
+import type { McpNotificationEmitterPort } from '../../../src/shared/types/index.js';
+import { hasStructuralFinding } from '../../../src/engine/execution/pipeline/decisions/gates/structural-review-composition.js';
 import type { TemporaryGateRegistry } from '../../../src/engine/gates/core/temporary-gate-registry.js';
 import type { ConfigLoader } from '../../../src/infra/config/index.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
@@ -72,6 +76,7 @@ type ToolCallback = (args: Record<string, unknown>, extra: unknown) => Promise<u
 interface Reply {
   isError: boolean;
   text: string;
+  structured: Record<string, unknown> | undefined;
 }
 
 const silentLogger = (): Logger =>
@@ -84,16 +89,35 @@ let promptManager: PromptAssetManager;
 let textReferenceStore: TextReferenceStore;
 const tools = new Map<string, ToolCallback>();
 
-async function promptEngine(args: Record<string, unknown>): Promise<Reply> {
+let stepCompleteObserver: McpNotificationEmitterPort['emitChainStepComplete'] | undefined;
+const capturedTransportNotifications: McpNotificationEmitterPort = {
+  canSend: () => stepCompleteObserver !== undefined,
+  setServer: () => {},
+  emitGateFailed: () => {},
+  emitResponseBlocked: () => {},
+  emitRetryExhausted: () => {},
+  emitFrameworkChanged: () => {},
+  emitChainStepComplete: (notification) => {
+    stepCompleteObserver?.(notification);
+  },
+  emitChainComplete: () => {},
+};
+
+async function promptEngine(
+  args: Record<string, unknown>,
+  sdkExtra: McpRequestExtra = {}
+): Promise<Reply> {
   const callback = tools.get('prompt_engine');
   if (callback === undefined) throw new Error('prompt_engine was never registered');
-  const result = (await callback(args, {})) as {
+  const result = (await callback(args, sdkExtra)) as {
     isError?: boolean;
     content?: Array<{ text?: string }>;
+    structuredContent?: Record<string, unknown>;
   };
   return {
     isError: result.isError === true,
     text: (result.content ?? []).map((part) => part.text ?? '').join('\n'),
+    structured: result.structuredContent,
   };
 }
 
@@ -145,6 +169,16 @@ function writeWorkspace(workspace: string): void {
     ]),
   ];
   prompt('cr_a', ['description: step a', 'userMessageTemplate: BODY-cr_a', ...optOut]);
+  prompt('cr_guard', [
+    'description: declares actual framework response headers',
+    'userMessageTemplate: BODY-cr_guard',
+    'gateConfiguration:',
+    '  exclude:',
+    '    - content-structure',
+    '    - creed-fidelity',
+    '    - framework-compliance',
+    '  framework_gates: true',
+  ]);
   prompt('cr_b', ['description: step b', 'userMessageTemplate: BODY-cr_b', ...optOut]);
   prompt('cr_chain', [
     'description: chain with a blocking canonical gate on every step',
@@ -306,6 +340,8 @@ beforeAll(async () => {
       handleFrameworkConfigChange: async () => {},
     },
   });
+  // Pipeline construction captures this transport port on the first callback in any test group.
+  modules.mcpToolsManager.setNotificationEmitter(capturedTransportNotifications);
 }, 60000);
 
 afterAll(async () => {
@@ -331,6 +367,670 @@ beforeEach(() => {
 });
 afterEach(() => {
   cloneFixture.restore();
+});
+
+describe('composition-root request-continuity handoff', () => {
+  let identity: IdentityConfig;
+  let transport: ReturnType<ConfigLoader['getTransportMode']>;
+
+  beforeEach(() => {
+    const config = foundation.configManager.getConfig();
+    identity = config.identity;
+    transport = foundation.configManager.getTransportMode();
+    config.identity = {
+      mode: 'permissive',
+      allowPerRequestOverride: true,
+      launchDefaults: { workspaceId: 'composition-root' },
+    };
+    (foundation.configManager as ConfigLoader).setTransportMode('streamable-http');
+  });
+  afterEach(() => {
+    foundation.configManager.getConfig().identity = identity;
+    (foundation.configManager as ConfigLoader).setTransportMode(transport);
+  });
+
+  const sdk = (workspaceId: string, organizationId?: string): McpRequestExtra => ({
+    http: {
+      req: {
+        headers: {
+          'x-workspace-id': workspaceId,
+          ...(organizationId === undefined ? {} : { 'x-organization-id': organizationId }),
+        },
+      },
+    },
+  });
+  const store = () => {
+    const value = modules.mcpToolsManager.getChainSessionStore();
+    if (value === undefined) throw new Error('composition root did not wire a chain store');
+    return value;
+  };
+  const database = () =>
+    SqliteEngine.getInstance(silentLogger(), {
+      dbPath: foundation.pathResolver.getStateDatabasePath(),
+    });
+
+  const runFacts = async (sessionId: string) => {
+    const db = await database();
+    const row = db.queryOne<{
+      chain_id: string;
+      run_owner_pid: string;
+      workspace_id: string;
+      handoff_token: string | null;
+      run_status: string;
+      current_node_id: string;
+      state: string;
+    }>(
+      `SELECT chain_id, run_owner_pid, workspace_id, handoff_token, run_status,
+              current_node_id, state FROM chain_runs WHERE session_id = ?`,
+      [sessionId]
+    );
+    if (row === null) throw new Error(`no persisted run ${sessionId}`);
+    const residual = JSON.parse(row.state) as {
+      continuityScopeId: string;
+      lifecycle: string;
+      reviews?: Record<
+        string,
+        {
+          attemptCount: number;
+          status: string;
+          nodeId: string;
+        }
+      >;
+    };
+    const session = store().getSession(sessionId);
+    if (session === undefined) throw new Error(`no loaded run ${sessionId}`);
+    return {
+      chainId: row.chain_id,
+      owner: row.run_owner_pid,
+      storageWorkspace: row.workspace_id,
+      token: row.handoff_token,
+      status: row.run_status,
+      currentNode: row.current_node_id,
+      continuity: residual.continuityScopeId,
+      lifecycle: residual.lifecycle,
+      reviews: Object.entries(residual.reviews ?? {}).map(([id, review]) => ({
+        id,
+        attemptCount: review.attemptCount,
+        status: review.status,
+        nodeId: review.nodeId,
+      })),
+      nodes: db.query(
+        `SELECT node_id, prompt_id, position, milestone, responded_at, completed_at
+                        FROM chain_run_nodes WHERE session_id = ? ORDER BY position`,
+        [sessionId]
+      ),
+      captures: textReferenceStore.buildChainVariables(sessionId, row.chain_id),
+    };
+  };
+
+  const mint = async (extra: McpRequestExtra, qualified = false) => {
+    const firstPrompt = qualified ? 'implementation_plan/plan_table' : 'cr_a';
+    const started = await promptEngine(
+      {
+        workflow: {
+          version: 1,
+          nodes: [
+            {
+              id: 'one',
+              promptId: firstPrompt,
+              args: { feature: 'scope proof' },
+              inlineGateIds: ['cr-block'],
+            },
+            { id: 'two', promptId: 'cr_b', inlineGateIds: ['cr-block'] },
+          ],
+        },
+      },
+      extra
+    );
+    expect(started.isError).toBe(false);
+    const chainId = /chain-[A-Za-z0-9_/-]+#\d+/.exec(started.text)?.[0];
+    if (chainId === undefined) throw new Error(`no returned run token in:\n${started.text}`);
+    const answered = await promptEngine(
+      { chain_id: chainId, user_response: 'SCOPE-CAPTURE' },
+      extra
+    );
+    expect(answered.isError).toBe(false);
+    expect(answered.text).toContain('Gate Review Required');
+    const minted = await promptEngine({ chain_id: chainId, handoff: true }, extra);
+    expect(minted.isError).toBe(false);
+    const token = /hnd_[A-Za-z0-9_-]+/.exec(minted.text)?.[0];
+    if (token === undefined) throw new Error(`no handoff token in:\n${minted.text}`);
+    const session = store().getSessionByChainIdentifier(chainId, { includeDormant: true });
+    if (session === undefined) throw new Error(`no session for ${chainId}`);
+    const before = await runFacts(session.sessionId);
+    expect(before.token).toBe(token);
+    expect(before.owner).toBe(String(process.pid));
+    expect(before.storageWorkspace).toBe('composition-root');
+    expect(JSON.stringify(before.captures)).toContain('SCOPE-CAPTURE');
+    expect(before.reviews.length).toBeGreaterThan(0);
+    return { chainId, token, sessionId: session.sessionId, before };
+  };
+  const claim = async (run: Awaited<ReturnType<typeof mint>>, extra: McpRequestExtra) => {
+    const reply = await promptEngine({ claim_token: run.token }, extra);
+    expect(reply.isError).toBe(false);
+    expect(reply.text).toContain(`Chain: ${run.chainId}`);
+    const after = await runFacts(run.sessionId);
+    expect(after.token).toBeNull();
+    expect(after.owner).toBe(run.before.owner);
+    expect(after.storageWorkspace).toBe(run.before.storageWorkspace);
+    expect(after.continuity).toBe(run.before.continuity);
+    expect(after.currentNode).toBe(run.before.currentNode);
+    expect(JSON.stringify(after.captures)).toContain('SCOPE-CAPTURE');
+  };
+
+  test.each([
+    ['launch defaults with no SDK headers', {}, 'composition-root'],
+    ['explicit nondefault HTTP identity', sdk('scope-explicit'), 'scope-explicit'],
+  ] as const)(
+    'claims under %s with the same stage03 continuity',
+    async (_name, extra, expected) => {
+      const run = await mint(extra);
+      expect(run.before.continuity).toBe(expected);
+      await claim(run, extra);
+    }
+  );
+
+  test.each([
+    ['nondefault run without headers', sdk('scope-noheader'), {}, false],
+    ['root run with foreign headers', {}, sdk('scope-foreign'), false],
+    ['qualified run with foreign headers', {}, sdk('scope-qualified-foreign'), true],
+  ] as const)(
+    'refuses %s before burning its token, then accepts the original scope',
+    async (_name, original, foreign, qualified) => {
+      const run = await mint(original, qualified);
+      if (qualified) expect(run.chainId).toMatch(/^chain-implementation_plan\/plan_table#\d+$/);
+      const refused = await promptEngine({ claim_token: run.token }, foreign);
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain('Claim Refused**: request continuity');
+      expect(await runFacts(run.sessionId)).toEqual(run.before);
+      await claim(run, original);
+    }
+  );
+
+  test.each(['locked', 'override-disabled', 'stdio'] as const)(
+    '%s policy keeps both stage03 and claim on launch continuity despite foreign headers',
+    async (policy) => {
+      const config = foundation.configManager.getConfig().identity;
+      if (policy === 'locked') config.mode = 'locked';
+      if (policy === 'override-disabled') config.allowPerRequestOverride = false;
+      if (policy === 'stdio') (foundation.configManager as ConfigLoader).setTransportMode('stdio');
+      const run = await mint({});
+      expect(run.before.continuity).toBe('composition-root');
+      await claim(run, sdk(`scope-${policy}`));
+    }
+  );
+
+  test('default workspace with a known organization uses normalized organization continuity', async () => {
+    const extra = sdk('default', 'scope-org');
+    const run = await mint(extra);
+    expect(run.before.continuity).toBe('scope-org');
+    const refused = await promptEngine(
+      { claim_token: run.token },
+      sdk('default', 'scope-other-org')
+    );
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain('Claim Refused**: request continuity');
+    expect(await runFacts(run.sessionId)).toEqual(run.before);
+    await claim(run, extra);
+  });
+
+  test('effective default identity retains the unfiltered claim policy', async () => {
+    foundation.configManager.getConfig().identity.launchDefaults = {};
+    const run = await mint(sdk('scope-unfiltered'));
+    expect(run.before.continuity).toBe('scope-unfiltered');
+    const claimed = await promptEngine({ claim_token: run.token }, {});
+    const after = await runFacts(run.sessionId);
+    expect(claimed.text).not.toContain('Claim Refused');
+    expect(after.token).toBeNull();
+    expect(after.owner).toBe(run.before.owner);
+    expect(after.storageWorkspace).toBe(run.before.storageWorkspace);
+    expect(after.continuity).toBe(run.before.continuity);
+  });
+});
+
+describe('composition-root blocking-unknown capture and resume', () => {
+  const store = () => {
+    const value = modules.mcpToolsManager.getChainSessionStore();
+    if (value === undefined) throw new Error('composition root did not wire a chain store');
+    return value;
+  };
+  const gateSwitch = async (enabled: boolean) => {
+    const callback = tools.get('system_control');
+    if (callback === undefined) throw new Error('system_control was never registered');
+    const reply = (await callback(
+      { action: 'gates', operation: enabled ? 'enable' : 'disable' },
+      {}
+    )) as { isError?: boolean };
+    expect(reply.isError).not.toBe(true);
+  };
+  let priorPhaseMode: ReturnType<ConfigLoader['getConfig']>['phaseGuards']['mode'];
+  let priorNoticeObserver: typeof stepCompleteObserver;
+  beforeEach(() => {
+    priorPhaseMode = foundation.configManager.getConfig().phaseGuards.mode;
+    priorNoticeObserver = stepCompleteObserver;
+  });
+  afterEach(async () => {
+    await gateSwitch(true);
+    foundation.configManager.getConfig().phaseGuards.mode = priorPhaseMode;
+    stepCompleteObserver = priorNoticeObserver;
+    jest.restoreAllMocks();
+  });
+  const discovery = [
+    {
+      type: 'unknown_discovered',
+      id: 'capture-gap',
+      statement: 'Which investigation resolves the captured root?',
+      blocking: true,
+      target_step_id: 'next',
+    },
+  ];
+  const start = async (enabled: boolean, gated = false, pause = true, rootPrompt = 'cr_a') => {
+    await gateSwitch(enabled);
+    const reply = await promptEngine({
+      workflow: {
+        version: 1,
+        budget: { pauseOnBlocking: pause },
+        nodes: [
+          { id: 'root', promptId: rootPrompt, ...(gated ? { inlineGateIds: ['cr-block'] } : {}) },
+          { id: 'next', promptId: 'cr_b' },
+        ],
+      },
+    });
+    expect(reply.isError).toBe(false);
+    const chainId = chainIdOf(reply, rootPrompt);
+    const session = store().getSessionByChainIdentifier(chainId);
+    if (session === undefined) throw new Error(`no session for ${chainId}`);
+    const captures = jest.spyOn(store(), 'updateSessionState');
+    return { chainId, sessionId: session.sessionId, captures };
+  };
+  type Run = Awaited<ReturnType<typeof start>>;
+  const current = (run: Run) => {
+    const session = store().getSession(run.sessionId);
+    if (session === undefined) throw new Error(`no run ${run.sessionId}`);
+    return session;
+  };
+  const records = async (run: Run) => {
+    const db = await SqliteEngine.getInstance(silentLogger(), {
+      dbPath: foundation.pathResolver.getStateDatabasePath(),
+    });
+    return db.query<{ node_id: string; prompt_id: string; status: string }>(
+      'SELECT node_id, prompt_id, status FROM execution_records WHERE session_id = ? ORDER BY execution_id',
+      [run.sessionId]
+    );
+  };
+  const rootCaptures = (run: Run) =>
+    run.captures.mock.calls.filter(
+      ([, nodeId, , metadata]) => nodeId === 'root' && metadata?.['source'] === 'user_response'
+    ).length;
+  const passForReply = (reply: Reply) => {
+    const emitted = /"satisfied": (\[[^\]]*\])/.exec(reply.text)?.[1];
+    if (emitted === undefined) throw new Error(`no issued reminder template in:\n${reply.text}`);
+    const satisfied = JSON.parse(emitted) as string[];
+    expect(satisfied).toEqual(['cr-block']);
+    return {
+      overall: 'PASS',
+      rationale: 'The captured fixture marker was reviewed',
+      reminders: { satisfied, not_applicable: [] },
+    };
+  };
+  const fail = { overall: 'FAIL', rationale: 'The fixture needs another pass', per_gate: [] };
+  const captureAndDiscover = (run: Run) =>
+    promptEngine({ chain_id: run.chainId, user_response: 'CAPTURE-ROOT', observations: discovery });
+  const review = (run: Run) => store().getReview(run.sessionId, 'root');
+  const paused = async (run: Run, reply: Reply) => {
+    expect(reply.isError).toBe(false);
+    expect(reply.structured?.['chain_interrupt']).toMatchObject({ paused: true });
+    expect(review(run)?.gateIds).toEqual(['__unknown_interrupt__']);
+    expect(current(run).state.currentNodeId).toBe('root');
+    expect(current(run).state.nodes.map((node) => node.id)).toEqual([
+      'root',
+      'inv-capture-gap',
+      'next',
+    ]);
+    return records(run);
+  };
+  const resumeCaptured = async (run: Run) => {
+    const captured = { ...store().getStepState(run.sessionId, 'root') };
+    const output = store().getChainContext(run.sessionId)['step_results'];
+    expect(rootCaptures(run)).toBe(1);
+    expect(JSON.stringify(output)).toContain('CAPTURE-ROOT');
+    const resumed = await promptEngine({ chain_id: run.chainId, gate_action: 'resume' });
+    expect(resumed.isError).toBe(false);
+    expect(resumed.structured?.['chain_interrupt']).toMatchObject({ paused: false });
+    expect(current(run).state.currentNodeId).toBe('inv-capture-gap');
+    expect(captured).toMatchObject({ state: 'completed', isPlaceholder: false });
+    expect(
+      current(run).unknownsLedger?.some(
+        (unknown) => unknown.id === 'capture-gap' && unknown.state === 'active'
+      )
+    ).toBe(true);
+    expect(store().getStepState(run.sessionId, 'root')).toEqual(captured);
+    expect(store().getChainContext(run.sessionId)['step_results']).toEqual(output);
+    expect(rootCaptures(run)).toBe(1);
+    const rows = await records(run);
+    expect(
+      rows.filter(
+        (row) =>
+          row.node_id === 'inv-capture-gap' &&
+          row.prompt_id === 'investigate_unknown' &&
+          row.status === 'working'
+      )
+    ).toHaveLength(1);
+    expect(rows.filter((row) => row.node_id === 'root' && row.status === 'working')).toHaveLength(
+      1
+    );
+  };
+
+  test.each([
+    ['gates OFF, ungated root', false, false],
+    ['gates ON, ungated root', true, false],
+    ['gates ON, ordinary review settled by PASS', true, true],
+  ] as const)(
+    '%s keeps capture immutable while paused and resumes the investigation once',
+    async (_name, enabled, gated) => {
+      const run = await start(enabled, gated);
+      let reply = await captureAndDiscover(run);
+      if (gated) {
+        const ordinaryAfterDiscovery = review(run);
+        const discoveryInterrupt = reply.structured?.['chain_interrupt'];
+        reply = await promptEngine({ chain_id: run.chainId, gate_verdict: passForReply(reply) });
+        expect(ordinaryAfterDiscovery?.gateIds).toEqual(['cr-block']);
+        expect(discoveryInterrupt).toMatchObject({ paused: false });
+      }
+      const pauseRows = await paused(run, reply);
+      await resumeCaptured(run);
+      expect(reply.text).not.toContain('BODY-cr_a');
+      expect(pauseRows.filter((row) => row.status === 'working')).toHaveLength(1);
+    }
+  );
+
+  test.each([false, true])(
+    'gates %s resumes an uncaptured paused root without fabricating completion',
+    async (enabled) => {
+      const run = await start(enabled);
+      const reply = await promptEngine({ chain_id: run.chainId, observations: discovery });
+      const pauseRows = await paused(run, reply);
+      expect(rootCaptures(run)).toBe(0);
+      const resumed = await promptEngine({ chain_id: run.chainId, gate_action: 'resume' });
+      expect(resumed.isError).toBe(false);
+      expect(current(run).state.currentNodeId).toBe('root');
+      expect(store().getStepState(run.sessionId, 'root')?.completedAt).toBeUndefined();
+      expect(rootCaptures(run)).toBe(0);
+      expect((await records(run)).some((row) => row.node_id === 'inv-capture-gap')).toBe(false);
+      expect(reply.text).not.toContain('BODY-cr_a');
+      expect(pauseRows.filter((row) => row.status === 'working')).toHaveLength(1);
+    }
+  );
+
+  test.each(['no verdict', 'FAIL', 'resume'] as const)(
+    'ordinary review retains its binding and attempts after discovery with %s',
+    async (action) => {
+      const run = await start(true, true);
+      const before = review(run);
+      expect(before?.gateIds).toEqual(['cr-block']);
+      const reply = await captureAndDiscover(run);
+      expect(reply.isError).toBe(false);
+      const afterDiscovery = review(run);
+      if (action !== 'no verdict') {
+        const acted = await promptEngine({
+          chain_id: run.chainId,
+          ...(action === 'FAIL' ? { gate_verdict: fail } : { gate_action: 'resume' }),
+        });
+        expect(acted.isError).toBe(action === 'resume');
+        expect(review(run)?.gateIds).toEqual(['cr-block']);
+        expect(review(run)?.createdAt).toBe(before?.createdAt);
+        expect(review(run)?.attemptCount).toBe(
+          (before?.attemptCount ?? 0) + (action === 'FAIL' ? 1 : 0)
+        );
+      }
+      expect(afterDiscovery?.gateIds).toEqual(['cr-block']);
+      expect(afterDiscovery?.createdAt).toBe(before?.createdAt);
+      expect(afterDiscovery?.attemptCount).toBe(before?.attemptCount);
+      expect(reply.structured?.['chain_interrupt']).toMatchObject({ paused: false });
+      expect(current(run).state.currentNodeId).toBe('root');
+      expect(rootCaptures(run)).toBe(1);
+      expect(JSON.stringify(store().getChainContext(run.sessionId)['step_results'])).toContain(
+        'CAPTURE-ROOT'
+      );
+    }
+  );
+
+  test.each([false, true])(
+    'gates %s soft discovery advances a real captured root once',
+    async (enabled) => {
+      const run = await start(enabled, false, false);
+      const reply = await captureAndDiscover(run);
+      expect(reply.isError).toBe(false);
+      expect(reply.structured?.['chain_interrupt']).toMatchObject({ paused: false });
+      expect(current(run).state.currentNodeId).toBe('inv-capture-gap');
+      expect(rootCaptures(run)).toBe(1);
+      expect(
+        (await records(run)).filter(
+          (row) => row.node_id === 'inv-capture-gap' && row.status === 'working'
+        )
+      ).toHaveLength(1);
+    }
+  );
+
+  test('abort retains the captured paused run without rendering or advancing a node', async () => {
+    const run = await start(false);
+    await captureAndDiscover(run);
+    const before = await records(run);
+    const output = store().getChainContext(run.sessionId)['step_results'];
+    const aborted = await promptEngine({ chain_id: run.chainId, gate_action: 'abort' });
+    expect(aborted.isError).toBe(false);
+    expect(current(run).runStatus).toBe('cancelled');
+    expect(current(run).state.currentNodeId).toBe('root');
+    expect(store().getChainContext(run.sessionId)['step_results']).toEqual(output);
+    expect(rootCaptures(run)).toBe(1);
+    expect((await records(run)).filter((row) => row.status === 'working')).toEqual(
+      before.filter((row) => row.status === 'working')
+    );
+  });
+
+  test.each(['arrow', 'structured'] as const)(
+    'F25 command-only qualified %s append refreshes full progress without recapturing root',
+    async (form) => {
+      const run = await start(false);
+      await paused(run, await captureAndDiscover(run));
+      await resumeCaptured(run);
+      const db = await SqliteEngine.getInstance(silentLogger(), {
+        dbPath: foundation.pathResolver.getStateDatabasePath(),
+      });
+      const rootTimes = () =>
+        db.query<{ responded_at: number; completed_at: number }>(
+          "SELECT responded_at, completed_at FROM chain_run_nodes WHERE session_id = ? AND node_id = 'root'",
+          [run.sessionId]
+        );
+      const beforeTimes = rootTimes();
+      const beforeState = { ...store().getStepState(run.sessionId, 'root') };
+      const beforeOutput = store().getChainContext(run.sessionId)['step_results'];
+      const beforeRootRecords = (await records(run)).filter((row) => row.node_id === 'root');
+      expect(beforeTimes[0]?.responded_at).toEqual(expect.any(Number));
+      expect(beforeTimes[0]?.completed_at).toEqual(expect.any(Number));
+      expect(current(run).state.nodes).toHaveLength(3);
+      const promptId = 'implementation_plan/plan_table';
+      const feature = 'F25 keep / path --> ==> + ? %clean exactly';
+      const tailIds =
+        form === 'arrow'
+          ? ['implementation-plan-plan-table', 'implementation-plan-plan-table-2']
+          : ['qualified-one', 'qualified-two'];
+      const request =
+        form === 'arrow'
+          ? {
+              command: `--> >>${promptId} feature="${feature}" --> >>${promptId} feature="${feature}"`,
+            }
+          : {
+              remainder: {
+                mode: 'append',
+                nodes: tailIds.map((id) => ({ id, promptId, args: { feature } })),
+              },
+            };
+      const appended = await promptEngine({ chain_id: run.chainId, ...request });
+      expect(appended.isError).toBe(false);
+      expect(current(run).state.nodes.map((node) => node.id)).toEqual([
+        'root',
+        'inv-capture-gap',
+        'next',
+        ...tailIds,
+      ]);
+      expect(
+        current(run)
+          .state.nodes.slice(3)
+          .map(({ id, promptId, args, origin }) => ({
+            id,
+            promptId,
+            args,
+            origin,
+          }))
+      ).toEqual(tailIds.map((id) => ({ id, promptId, args: { feature }, origin: 'remainder' })));
+      expect(current(run).state.currentNodeId).toBe('inv-capture-gap');
+      expect(current(run).executionOrder).toEqual(['root']);
+      expect(store().getStepState(run.sessionId, 'root')).toEqual(beforeState);
+      expect(store().getChainContext(run.sessionId)['step_results']).toEqual(beforeOutput);
+      expect(rootTimes()).toEqual(beforeTimes);
+      expect(rootCaptures(run)).toBe(1);
+      expect((await records(run)).filter((row) => row.node_id === 'root')).toEqual(
+        beforeRootRecords
+      );
+      expect(appended.structured?.['chain_interrupt']).toMatchObject({
+        paused: false,
+        remaining_nodes: [{ id: 'next' }, ...tailIds.map((id) => ({ id, promptId }))],
+      });
+      expect(appended.text).toContain('→ Progress 2/5');
+    }
+  );
+
+  test('the answering remainder drops target-step gates before ordinary grading of an investigation', async () => {
+    await gateSwitch(true);
+    const started = await promptEngine({
+      workflow: {
+        version: 1,
+        nodes: [
+          { id: 'root', promptId: 'cr_a' },
+          { id: 'next', promptId: 'cr_b', inlineGateIds: ['cr-block'] },
+        ],
+      },
+    });
+    const chainId = chainIdOf(started, 'cr_a');
+    const session = store().getSessionByChainIdentifier(chainId);
+    if (session === undefined) throw new Error('no remainder run');
+    await promptEngine({ chain_id: chainId, user_response: 'ROOT-ORDER', observations: discovery });
+    expect(store().getSession(session.sessionId)?.state.currentNodeId).toBe('inv-capture-gap');
+    const answered = await promptEngine({
+      chain_id: chainId,
+      user_response: 'INVESTIGATION-ORDER',
+      remainder: { mode: 'replace', nodes: [{ id: 'replacement', promptId: 'cr_a' }] },
+    });
+    expect(answered.isError).toBe(false);
+    expect(answered.text).not.toContain('GUIDANCE-cr-block');
+    expect(
+      Object.values(store().getSession(session.sessionId)?.reviews ?? {}).some((value) =>
+        value.gateIds.includes('cr-block')
+      )
+    ).toBe(false);
+    expect(
+      store()
+        .getSession(session.sessionId)
+        ?.state.nodes.some((node) => node.id === 'next')
+    ).toBe(false);
+  });
+  const exhaust = async (run: Run) => {
+    const maximum = review(run)?.maxAttempts;
+    if (maximum === undefined) throw new Error('ordinary review has no attempt budget');
+    for (let attempt = 0; attempt < maximum; attempt += 1) {
+      const reply = await promptEngine({ chain_id: run.chainId, gate_verdict: fail });
+      expect(reply.isError).toBe(false);
+    }
+    expect(review(run)).toMatchObject({ phase: 'exhausted', attemptCount: maximum });
+  };
+
+  test('exhausted ordinary retry retains its review and defers the unknown pause', async () => {
+    const run = await start(true, true);
+    await captureAndDiscover(run);
+    await exhaust(run);
+    const exhausted = review(run);
+    const output = store().getChainContext(run.sessionId)['step_results'];
+    const retried = await promptEngine({ chain_id: run.chainId, gate_action: 'retry' });
+    expect(retried.isError).toBe(false);
+    expect(review(run)?.gateIds).toEqual(['cr-block']);
+    expect(review(run)?.phase).toBe('awaiting-verdict');
+    expect(review(run)?.attemptCount).toBe(0);
+    expect(review(run)?.maxAttempts).toBe(exhausted?.maxAttempts);
+    expect(review(run)?.history?.slice(0, exhausted?.history?.length)).toEqual(exhausted?.history);
+    expect(review(run)?.history?.at(-1)?.status).toBe('reset');
+    expect(retried.structured?.['chain_interrupt']).toMatchObject({ paused: false });
+    expect(current(run).state.currentNodeId).toBe('root');
+    expect(store().getChainContext(run.sessionId)['step_results']).toEqual(output);
+    expect(rootCaptures(run)).toBe(1);
+  });
+
+  test('ordinary skip announces failed before pausing the unanswered investigation, whose resume does not advance', async () => {
+    const notices: Array<{ chainId: string; stepIndex: number; status: string }> = [];
+    stepCompleteObserver = (notice) => {
+      notices.push(notice);
+    };
+    const run = await start(true, true);
+    await captureAndDiscover(run);
+    await exhaust(run);
+    const output = store().getChainContext(run.sessionId)['step_results'];
+    const skipped = await promptEngine({ chain_id: run.chainId, gate_action: 'skip' });
+    expect(skipped.isError).toBe(false);
+    expect(notices).toEqual([{ chainId: run.chainId, stepIndex: 1, status: 'failed' }]);
+    expect(current(run).state.currentNodeId).toBe('inv-capture-gap');
+    expect(current(run).reviews?.['inv-capture-gap']?.gateIds).toEqual(['__unknown_interrupt__']);
+    expect(skipped.structured?.['chain_interrupt']).toMatchObject({ paused: true });
+    expect(skipped.text).not.toContain('BODY-cr_a');
+    expect(store().getStepState(run.sessionId, 'inv-capture-gap')).toBeUndefined();
+    expect((await records(run)).some((row) => row.node_id === 'inv-capture-gap')).toBe(false);
+    const resumed = await promptEngine({ chain_id: run.chainId, gate_action: 'resume' });
+    expect(resumed.isError).toBe(false);
+    expect(current(run).state.currentNodeId).toBe('inv-capture-gap');
+    expect(store().getChainContext(run.sessionId)['step_results']).toEqual(output);
+    expect(rootCaptures(run)).toBe(1);
+    expect(notices).toHaveLength(1);
+    expect(
+      (await records(run)).filter(
+        (row) => row.node_id === 'inv-capture-gap' && row.status === 'working'
+      )
+    ).toHaveLength(1);
+  });
+
+  test('an actual declared-header phase failure keeps ordinary review priority over the inserted unknown', async () => {
+    foundation.configManager.getConfig().phaseGuards.mode = 'enforce';
+    const run = await start(true, false, true, 'cr_guard');
+    const declared = store().getStepState(run.sessionId, 'root')?.declaredSections;
+    expect(declared?.some((header) => header.replace(/^#+\s*/, '') === 'Context')).toBe(true);
+    expect(review(run)).toBeUndefined();
+    const answered = await captureAndDiscover(run);
+    expect(answered.isError).toBe(false);
+    expect(review(run)?.gateIds).toContain('__phase_guard__');
+    expect(review(run)?.gateIds).not.toContain('__unknown_interrupt__');
+    expect(hasStructuralFinding(review(run))).toBe(true);
+    expect(answered.structured?.['chain_interrupt']).toMatchObject({ paused: false });
+    const before = review(run);
+    const resumed = await promptEngine({ chain_id: run.chainId, gate_action: 'resume' });
+    expect(resumed.isError).toBe(true);
+    expect(review(run)).toEqual(before);
+    expect(current(run).state.currentNodeId).toBe('root');
+    expect(rootCaptures(run)).toBe(1);
+  });
+
+  test('a completed real pause without retained capture output cannot force an advance', async () => {
+    const run = await start(false);
+    await captureAndDiscover(run);
+    expect(store().getStepState(run.sessionId, 'root')).toMatchObject({
+      state: 'completed',
+      isPlaceholder: false,
+    });
+    textReferenceStore.clearChainStepResults(run.sessionId);
+    expect(store().getChainContext(run.sessionId)['step_results']).toEqual({});
+    const resumed = await promptEngine({ chain_id: run.chainId, gate_action: 'resume' });
+    expect(resumed.isError).toBe(false);
+    expect(current(run).state.currentNodeId).toBe('root');
+    expect(rootCaptures(run)).toBe(1);
+    expect((await records(run)).some((row) => row.node_id === 'inv-capture-gap')).toBe(false);
+  });
 });
 
 describe('prompt_engine over the pipeline the composition root builds', () => {
@@ -403,10 +1103,10 @@ describe('prompt_engine over the pipeline the composition root builds', () => {
     expect(again.text).toContain('Claim Refused**: no run carries this token');
   });
 
-  test('cancel stops the run, and a later resume is told it is over', async () => {
+  test('abort stops the run, and a later resume is told it is over', async () => {
     const chainId = chainIdOf(await promptEngine({ command: '>>cr_chain' }), 'cr_chain');
 
-    const cancelled = await promptEngine({ chain_id: chainId, cancel: true });
+    const cancelled = await promptEngine({ chain_id: chainId, gate_action: 'abort' });
     expect(cancelled.isError).toBe(false);
     expect(cancelled.text).toContain(`Chain Cancelled**: \`${chainId}\``);
 

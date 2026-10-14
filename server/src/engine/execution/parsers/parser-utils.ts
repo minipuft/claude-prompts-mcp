@@ -1,8 +1,40 @@
 // @lifecycle canonical - Shared helpers for command parsing normalization.
 import { OPERATOR_PATTERNS } from './operator-patterns.js';
 
+import { isAcceptedPromptReference } from '#shared/utils/resource-ids.js';
+
 /** Framework operator core match, from the operators.json registry (SSOT). */
 const FRAMEWORK_OPERATOR_PATTERN = OPERATOR_PATTERNS.framework.pattern;
+
+export interface PromptSelectorMatch {
+  promptId: string;
+  /** Unmodified bytes following the selector, including its separator. */
+  remainder: string;
+  /** Selector span in the original input, excluding any command marker. */
+  start: number;
+  end: number;
+}
+
+/** Read one complete reference; DSL delimiters separate tokens, malformed suffixes do not. */
+export function readPromptSelector(input: string): PromptSelectorMatch | null {
+  const start = input.match(/^\s*(?:>>|\/)?\s*/)?.[0].length ?? 0;
+  let end = start;
+  while (end < input.length && !/\s/.test(input[end] ?? '')) {
+    if (
+      input.startsWith('-->', end) ||
+      input.startsWith('==>', end) ||
+      input[end] === '+' ||
+      (input[end] === '?' &&
+        OPERATOR_PATTERNS.conditional.pattern.exec(input.slice(end))?.index === 0)
+    ) {
+      break;
+    }
+    end++;
+  }
+  const promptId = input.slice(start, end);
+  if (!isAcceptedPromptReference(promptId)) return null;
+  return { promptId, remainder: input.slice(end), start, end };
+}
 
 /**
  * Normalize >> prefixes in symbolic commands for consistent parsing.
@@ -19,22 +51,16 @@ export function normalizeSymbolicPrefixes(command: string): {
   let normalized = command;
   let hadPrefixes = false;
 
-  const chainStepPattern = /-->\s*>>\s*/g;
-  if (chainStepPattern.test(normalized)) {
-    normalized = normalized.replace(chainStepPattern, '--> ');
-    hadPrefixes = true;
-  }
-
-  const parallelPattern = /\+\s*>>\s*/g;
-  if (parallelPattern.test(normalized)) {
-    normalized = normalized.replace(parallelPattern, '+ ');
-    hadPrefixes = true;
-  }
-
-  const conditionalPattern = /:\s*>>\s*/g;
-  if (conditionalPattern.test(normalized)) {
-    normalized = normalized.replace(conditionalPattern, ': ');
-    hadPrefixes = true;
+  for (const [pattern, replacement] of [
+    [/-->\s*>>\s*/g, '--> '],
+    [/\+\s*>>\s*/g, '+ '],
+    [/:\s*>>\s*/g, ': '],
+  ] as const) {
+    normalized = normalized.replace(pattern, (match, offset: number) => {
+      if (isPositionInsideQuotes(normalized, offset)) return match;
+      hadPrefixes = true;
+      return replacement;
+    });
   }
 
   const frameworkPrefixPattern = /^>>\s*@/;
@@ -56,9 +82,15 @@ export function stripStyleOperators(input: string): string {
   }
   // Match #styleid where styleid starts with a letter
   // Also handle legacy #style(id) syntax for backward compatibility
-  return input
-    .replace(/#style(?:[:=]|\()([A-Za-z0-9_-]+)\)?/gi, ' ')
-    .replace(/(?:^|\s)#[A-Za-z][A-Za-z0-9_-]*(?=\s|$)/g, ' ')
+  const withoutLegacy = input.replace(
+    /#style(?:[:=]|\()([A-Za-z0-9_-]+)\)?/gi,
+    (match, _styleId: string, offset: number) =>
+      isPositionInsideQuotes(input, offset) ? match : ' '
+  );
+  return withoutLegacy
+    .replace(/(?:^|\s)#[A-Za-z][A-Za-z0-9_-]*(?=\s|$)/g, (match, offset: number) =>
+      isPositionInsideQuotes(withoutLegacy, offset) ? match : ' '
+    )
     .trim();
 }
 

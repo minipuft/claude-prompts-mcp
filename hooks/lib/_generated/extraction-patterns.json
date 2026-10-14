@@ -1,6 +1,6 @@
 {
   "step": "(?:[Ss]tep|[Pp]rogress|[Cc]omplete)\\s*\\(?(\\d+)\\s*(?:of|/)\\s*(\\d+)",
-  "chainId": "(chain-[a-zA-Z0-9_#-]+)",
+  "chainId": "(?<![^ \\t\\r\\n\\f\\v`\"'():=,;{}\\[\\]*<>!?])(chain-[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*(?:#[0-9]+)?)(?![^ \\t\\r\\n\\f\\v`\"'():=,;{}\\[\\]*<>!?])",
   "gateHeader": "\\*\\*(?:Structural \\+ Gate |Structural |Gate )?Review Required\\*\\*",
   "gatesList": "\\*\\*Gates\\*\\*:\\s*(.+?)(?:\n|$)",
   "structuredVerdict": "\"overall\"\\s*:\\s*\"(PASS|FAIL)\"",

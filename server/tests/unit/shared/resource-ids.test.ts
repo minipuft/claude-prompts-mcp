@@ -1,18 +1,9 @@
-/**
- * The id convention, and the one property that made unifying two normalizers safe.
- *
- * `normalizePromptId` existed twice: here, and inline in `command-parser.ts` carrying an extra
- * `.replace(/[^a-z0-9_]/g, '')`. The two disagreed on nested chain-step ids — the parser's version
- * collapsed `deep_analysis/initial_scan` to `deep_analysisinitial_scan` — and the draft service
- * compares this function's output against every loaded prompt id, nested ones included. The strip
- * was unreachable at its own call site (the capture group already excluded those characters), so
- * it was dropped rather than adopted. `preserves a qualified id` is the case that would have
- * failed against the version that was removed; it is the reason this file exists.
- */
+/** Pure identifier conventions, accepted references and normalization; no collaborators mocked. */
 
 import { describe, expect, it } from '@jest/globals';
 
 import {
+  isAcceptedPromptReference,
   isCanonicalPromptId,
   isKebabId,
   normalizePromptId,
@@ -47,6 +38,38 @@ describe('normalizePromptId', () => {
     for (const id of ['my_prompt', 'deep_analysis/initial_scan', 'a']) {
       expect(normalizePromptId(normalizePromptId(id))).toBe(normalizePromptId(id));
     }
+  });
+});
+
+describe('accepted prompt references', () => {
+  it.each<[string, boolean]>([
+    ['my_prompt', true],
+    ['chain/child/deep', true],
+    ['Legacy-Root', false],
+    ['7root', false],
+    ['7ROOT/Kebab-Child/Step_3', false],
+    ['_/-', false],
+    [`${'A'.repeat(1024)}/child`, false],
+  ])('accepts %s independently of canonical authoring', (id, canonical) => {
+    expect(isAcceptedPromptReference(id)).toBe(true);
+    expect(isCanonicalPromptId(id)).toBe(canonical);
+  });
+
+  it.each([
+    '',
+    '/',
+    '/root',
+    'root/',
+    'root//child',
+    'root child/leaf',
+    'root.part/leaf',
+    'root/../leaf',
+    'root%2Fpart/leaf',
+    'root\\part/leaf',
+    'root/leaf\n',
+    'root/é',
+  ])('rejects the complete malformed reference %j', (id) => {
+    expect(isAcceptedPromptReference(id)).toBe(false);
   });
 });
 

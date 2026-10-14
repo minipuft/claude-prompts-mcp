@@ -401,20 +401,22 @@ GATE_REVIEW: FAIL - Missing error handling for edge case X.
 
 ### Escalation (Max Retries)
 
-After max attempts, user is prompted for `gate_action`:
+After max attempts, resolve the exhausted review with `gate_action`:
 
 - `retry` - Reset attempts and try again
 - `skip` - Continue without validation
-- `abort` - Stop execution
 
 ```bash
 prompt_engine(chain_id:"chain-abc", gate_action:"retry")
 ```
 
-`abort` is terminal: the run moves to `cancelled`, and resuming that `chain_id` answers
-"Chain run already complete" instead of re-rendering the step. Start a fresh run with the chain
-command, or pass `force_restart`. To end a run that is not sitting at a gate, use
-`prompt_engine(chain_id:"...", cancel:true)`.
+To stop the whole run at any time, send `prompt_engine(chain_id:"...", gate_action:"abort")`.
+It works during active execution, a blocking-unknown pause, an ordinary review or a detached hold.
+No node, trailer, report, retry exhaustion or command is required. The run moves durably to
+`cancelled`, retaining its state and artifacts; a later resume answers "Chain run already complete".
+Repeated abort succeeds for an already-cancelled run. Completed, failed, missing or out-of-scope
+runs return a non-applied refusal. Start a fresh run with the chain command or `force_restart`.
+The public `cancel` property has been removed; use the abort call above.
 
 ## Verdicts and reminders
 
@@ -549,9 +551,18 @@ A decision table for picking the right `pass_criteria.type` for the check you ac
 
 ## Turning the Gate System Off
 
-`system_control(action:"gates", operation:"disable")` turns the gate system off, and `operation:"enable"` turns it back on. While it is off, gate guidance and validation are skipped, and `prompt_engine` stops advertising its `gates`, `gate_verdict` and `gate_action` parameters. A client that never uses gates stops paying tokens for those three parameter descriptions on every tool listing, which is why the switch exists.
+`system_control(action:"gates", operation:"disable")` turns the runtime gate switch off, and
+`operation:"enable"` turns it back on. `gates` and `gate_verdict` are runtime-feature-gated;
+`gate_action` remains a core field with its full enum. `abort`, `resume` and `accept_alternative`
+remain available while the switch is off; `retry` and `skip` receive a named unavailable-action
+refusal. Keeping run control available lets you stop a run or resolve a blocking unknown without
+turning gate review back on.
 
-**A toggle persists across restarts.** It is saved in `state.db` (`kv_state`, key `gates`) under the workspace the call resolves to: the request's own identity, or, when the request carries none, the launch workspace (`--workspace-id`, then `identity.launchDefaults.workspaceId` in your config file, then the basename of `CLAUDE_PROJECT_DIR`, else of the working directory). A server started later with the same runtime root and workspace reads it back at startup and advertises the same schema, on STDIO and Streamable HTTP alike. This matters because the narrowing is the point: a restart that silently restored the three parameters would spend the tokens the toggle was saving, and nothing would say so.
+`operation:"status"` separates the runtime switch from `Configuration Enabled` and effective
+`Effective Review/Guidance`, which requires both runtime and configuration enablement. Health metrics label
+the runtime switch. Configuration disablement does not itself specify schema withdrawal.
+
+**A toggle persists across restarts.** It is saved in `state.db` (`kv_state`, key `gates`) under the workspace the call resolves to: the request's own identity, or, when the request carries none, the launch workspace (`--workspace-id`, then `identity.launchDefaults.workspaceId` in your config file, then the basename of `CLAUDE_PROJECT_DIR`, else of the working directory). A server started later with the same runtime root and workspace reads the saved switch at startup. The narrower gate-parameter surface saves listing tokens while core run control stays available.
 
 What that does not cover:
 

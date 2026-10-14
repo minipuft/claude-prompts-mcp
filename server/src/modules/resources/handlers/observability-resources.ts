@@ -22,6 +22,7 @@ import type {
 } from '../types.js';
 import type { McpServer, ReadResourceResult } from '@modelcontextprotocol/server';
 
+import { isChainId } from '#shared/utils/chain-id-codec.js';
 import { currentOrdinal, totalOf } from '#shared/utils/node-order.js';
 
 /**
@@ -30,7 +31,7 @@ import { currentOrdinal, totalOf } from '#shared/utils/node-order.js';
  */
 function buildUri(pattern: string, id?: string): string {
   if (id !== undefined && id !== '') {
-    return pattern.replace('{chainId}', id);
+    return pattern.replace('{chainId}', encodeURIComponent(id));
   }
   return pattern;
 }
@@ -162,7 +163,20 @@ function registerSessionResources(server: McpServer, dependencies: ResourceDepen
       mimeType: 'application/json',
     },
     async (uri, variables): Promise<ReadResourceResult> => {
-      const chainId = variables['chainId'] as string;
+      const encodedChainId = variables['chainId'];
+      if (typeof encodedChainId !== 'string') {
+        throw new ResourceNotFoundError('Session', String(encodedChainId));
+      }
+
+      let chainId: string;
+      try {
+        chainId = decodeURIComponent(encodedChainId);
+      } catch {
+        throw new ResourceNotFoundError('Session', encodedChainId);
+      }
+      if (!isChainId(chainId)) {
+        throw new ResourceNotFoundError('Session', chainId);
+      }
 
       // Use chainId lookup (user-facing identifier like chain-quick_decision#1)
       const session = chainSessionStore.getSessionByChainIdentifier(chainId);

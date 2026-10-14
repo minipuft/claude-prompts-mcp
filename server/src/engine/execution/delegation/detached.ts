@@ -296,13 +296,15 @@ function routeReportedNode(
     'awaiting-verdict': 'a gate_verdict, with user_response ending in this trailer',
     'awaiting-replacement':
       "the worker's replacement result as user_response (no gate_verdict), ending in this trailer",
-    exhausted: 'gate_action "retry" or "skip" with this trailer, or cancel: true',
+    exhausted: 'gate_action "retry" or "skip" with this trailer',
   };
   return {
     kind: 'refuse',
     message:
       `❌ The gate review of ${label} is waiting for ${waitingFor[node.review]}:\n` +
-      `${trailerBlock(node.token)}\nNothing was recorded.`,
+      `${trailerBlock(node.token)}\nNothing was recorded.\n` +
+      'To stop the whole run at any time, send chain_id and gate_action "abort". ' +
+      'No node, trailer or report is required.',
   };
 }
 
@@ -376,9 +378,8 @@ export function describeHeldRun(
     }
   }
   lines.push(
-    owed.length > 0 || underReview.length > 0
-      ? 'A worker that will never report: stop the run with cancel: true.'
-      : 'To stop the run instead: cancel: true.'
+    'To stop the whole run at any time, send chain_id and gate_action "abort". ' +
+      'No node, trailer, report or retry exhaustion is required.'
   );
   return lines.join('\n');
 }
@@ -392,7 +393,7 @@ function describeOtherHolds(holds: RunHolds): { until: string[]; moves: string[]
     until.push(`its ${review} is answered`);
     moves.push(
       phase === 'exhausted'
-        ? `The ${review} has spent its retries: resume with chain_id and gate_action "retry", "skip" or "abort".`
+        ? `The ${review} has spent its retries: resume with chain_id and gate_action "retry" or "skip".`
         : `The ${review} is still open: resume with chain_id and gate_verdict.`
     );
   }
@@ -400,7 +401,7 @@ function describeOtherHolds(holds: RunHolds): { until: string[]; moves: string[]
     until.push(`its shell verification of step ${holds.shellStep} passes`);
     moves.push(
       `The shell verification of step ${holds.shellStep} has not passed: fix what it checks, then ` +
-        'resume with chain_id and user_response — or gate_action "retry", "skip" or "abort".'
+        'resume with chain_id and user_response — or gate_action "retry" or "skip".'
     );
   }
   return { until, moves };
@@ -513,8 +514,11 @@ export function describeDetachedReview(
     ...hintSection('The reported result is missing required structure:', review.structuralHints),
     ...hintSection('An earlier result failed the semantic review:', review.semanticHints),
   ];
+  const abortInstruction =
+    `To stop the whole run at any time, send chain_id="${review.chainId}", gate_action="abort". ` +
+    'No node, trailer or report is required.';
   if (review.semanticResume !== undefined) {
-    return [...head, review.semanticResume].join('\n');
+    return [...head, review.semanticResume, abortInstruction].join('\n');
   }
   return [
     ...head,
@@ -529,6 +533,7 @@ export function describeDetachedReview(
     '',
     'Shell and script checks of these gates run against that recorded result when the verdict ' +
       'arrives. Set `"overall": "FAIL"` to ask the worker for a replacement result.',
+    abortInstruction,
   ].join('\n');
 }
 
@@ -567,7 +572,9 @@ export function describeDetachedReviewOutcome(
     exhausted:
       `✗ Gate review of ${label} failed ${counter} — the retry limit is reached. Resume with ` +
       `gate_action "retry" (another replacement) or "skip" (accept the recorded result), with ` +
-      `user_response ending in:\n${trailerBlock(node.token)}\nor stop the run with cancel: true.`,
+      `user_response ending in:\n${trailerBlock(node.token)}\n` +
+      'To stop the whole run at any time, send chain_id and gate_action "abort". ' +
+      'No node, trailer or report is required.',
   };
   return `${heads[outcome.result]}\n\n${describeRunPosition(outcome)}`;
 }

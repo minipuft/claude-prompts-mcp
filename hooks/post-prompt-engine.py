@@ -21,9 +21,28 @@ sys.path.insert(0, str(Path(__file__).parent / "lib"))
 from session_state import (
     clear_session_state,
     is_subagent_payload,
+    load_session_state,
     parse_prompt_engine_response,
     save_session_state,
 )
+
+COMPLETION_MARKER = re.compile(r"(?m)^(?:[✓✅][ \t]*)?(?:Chain complete\b|Execution complete\.)")
+
+
+def _matches_tracked_run(session_id: str, request_id: str, response_id: str, *, require_named: bool = False) -> bool:
+    """Bind a terminal response to this conversation's tracked run before clearing it."""
+    tracked = load_session_state(session_id) if session_id else None
+    if tracked is None:
+        return False
+    tracked_id = tracked.get("chain_id", "")
+    if not tracked_id:
+        # A gate-only prompt can have no chain id; its explicit completion still resolves it.
+        return not require_named and not response_id
+    if request_id and request_id != tracked_id:
+        return False
+    if response_id and response_id != tracked_id:
+        return False
+    return request_id == tracked_id or response_id == tracked_id
 
 
 def parse_hook_input() -> dict:
@@ -53,6 +72,14 @@ def main():
     tool_response = hook_input.get("tool_response", {})
     tool_input = hook_input.get("tool_input", {})
 
+    # A rejected tool response cannot change the previously tracked run, even when its
+    # explanation quotes a completion marker or an attempted resolution parameter.
+    if isinstance(tool_response, dict) and tool_response.get("isError") is True:
+        sys.exit(0)
+    succeeded = isinstance(tool_response, dict) and tool_response.get("isError") is False
+    request_id = tool_input.get("chain_id", "") if isinstance(tool_input, dict) else ""
+    request_id = request_id if isinstance(request_id, str) else ""
+
     # Parse response for chain/gate state
     if isinstance(tool_response, dict):
         content = tool_response.get("content", "")
@@ -65,20 +92,29 @@ def main():
     state = parse_prompt_engine_response(content)
 
     if not state:
-        # A verdict/cancel submission whose response carries no further chain
-        # markers means the tracked state RESOLVED (e.g. gate PASS → "Execution
-        # complete."). Clear the row: sessions previously kept their pending
-        # state for the 24h retention window, and recovery hooks re-injected
-        # long-resolved gates after compaction.
-        if isinstance(tool_input, dict) and (tool_input.get("gate_verdict") or tool_input.get("cancel")):
+        abort_match = re.match(r"^🛑 \*\*Chain Cancelled\*\*: `([^`\n]+)`(?:\n|$)", content)
+        abort_succeeded = (
+            succeeded
+            and isinstance(tool_input, dict)
+            and tool_input.get("gate_action") == "abort"
+            and bool(request_id)
+            and abort_match is not None
+            and abort_match.group(1) == request_id
+            and _matches_tracked_run(session_id, request_id, request_id, require_named=True)
+        )
+        completed = bool(COMPLETION_MARKER.search(content))
+        verdict_completed = (
+            succeeded
+            and isinstance(tool_input, dict)
+            and bool(tool_input.get("gate_verdict"))
+            and completed
+            and _matches_tracked_run(session_id, request_id, "")
+        )
+        if abort_succeeded or verdict_completed:
             clear_session_state(session_id)
         sys.exit(0)
 
-    # Extract chain_id from tool_input (higher priority than regex parsing)
-    if isinstance(tool_input, dict):
-        input_chain_id = tool_input.get("chain_id", "")
-        if input_chain_id:
-            state["chain_id"] = input_chain_id
+    response_id = state.get("chain_id", "")
 
     # Terminal boundary: an explicit completion marker with nothing pending
     # means the run is over — clear the row instead of saving a snapshot that
@@ -86,10 +122,15 @@ def main():
     # decide this: "Step 2 of 2" (final step delivered, still in flight) and
     # "Chain complete (2/2)" both parse to 2/2, so the marker text is the
     # discriminator.
-    run_is_complete = bool(re.search(r"[Cc]hain complete|Execution complete", content))
+    run_is_complete = bool(COMPLETION_MARKER.search(content))
     if run_is_complete and not state.get("pending_gate") and not state.get("pending_shell_verify"):
-        clear_session_state(session_id)
+        if succeeded and _matches_tracked_run(session_id, request_id, response_id):
+            clear_session_state(session_id)
         sys.exit(0)
+
+    # Extract chain_id from tool_input (higher priority than regex parsing)
+    if request_id:
+        state["chain_id"] = request_id
 
     # Save state for this session
     save_session_state(session_id, state)

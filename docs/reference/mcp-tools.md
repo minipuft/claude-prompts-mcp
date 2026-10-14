@@ -83,7 +83,10 @@ MCP Resources provide a **read-only, token-efficient** alternative to tool-based
 | `resource://session/{chainId}` | Session state + progress   | Inspect chain for resumption                |
 | `resource://metrics/pipeline`  | Execution analytics (lean) | Observability - system health               |
 
-> **Note:** Session URIs use the user-facing `chainId` (e.g., `chain-quick_decision#1`) — the same identifier used to resume chains with `chain_id` parameter.
+> **Note:** Use the returned session URI: its final component percent-encodes the full chain ID,
+> such as `resource://session/chain-implementation_plan%2Fplan_table%231`. Reads decode that
+> component once and validate the whole ID. Tool parameters and stored IDs keep the raw
+> `chain-implementation_plan/plan_table#1` token.
 
 </details>
 
@@ -118,6 +121,12 @@ ReadMcpResourceTool uri="resource://session/chain-quick_decision#1"
 # Resume the chain directly using the chainId
 prompt_engine(chain_id:"chain-quick_decision#1", user_response:"your output here")
 ```
+
+Keep the returned `chain_id` exactly, including every `/` segment and the `#` suffix.
+For example, `chain-implementation_plan/plan_table#1` identifies a different run from
+`chain-implementation_plan#1`. Prompt references accept nonempty ASCII letter, digit,
+underscore or hyphen segments separated by `/`; loaded reference spelling is preserved.
+Canonical prompt authoring uses lowercase snake_case segments.
 
 <details>
 <summary><strong>Example Usage (MCP Protocol)</strong></summary>
@@ -336,20 +345,20 @@ prompt_engine(command:"%judge analysis_report")
 <details>
 <summary><strong>Parameters</strong></summary>
 
-| Parameter       | Type    | Purpose                                                                                                                                                                                                                                                             |
-| --------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `command`       | string  | Prompt ID with operators and arguments                                                                                                                                                                                                                              |
-| `chain_id`      | string  | Resume token for continuing chains                                                                                                                                                                                                                                  |
-| `user_response` | string  | Your output from previous step (for chain resume)                                                                                                                                                                                                                   |
-| `gate_verdict`  | union   | Structured review object or legacy verdict string. Required semantic criteria use `per_gate[].evaluation` with server-issued binding and captured evidence; legacy strings remain supported. See [Gate Verdict Formats](#gate-verdict-formats). Rationale required. |
-| `gate_action`   | enum    | Your move on a run that is waiting for one. After a FAILED GATE with retries exhausted: `retry`, `skip`, `abort`. On a run PAUSED by a blocking unknown: `resume`, `accept_alternative`, `abort`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt).    |
-| `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                                                              |
-| `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                                                           |
-| `inputs`        | object  | Typed prompt arguments. Nested objects and arrays stay structured; explicit inline arguments win on key conflicts.                                                                                                                                                  |
-| `options`       | object  | Legacy prompt values and execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) when transport metadata is unavailable.                                                                                      |
-| `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                                                         |
-| `workflow`      | object  | A structured multi-step run submitted instead of a command string. Mutually exclusive with `command` and `chain_id`. See [Workflow Submission](#workflow-submission).                                                                                               |
-| `remainder`     | object  | Rewrite the rest of a running chain after a blocking unknown invalidated its shape. `{mode:'replace'\|'append', nodes:[…], edges?:[…]}`, requires `chain_id`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt).                                        |
+| Parameter       | Type    | Purpose                                                                                                                                                                                                                                                                                        |
+| --------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `command`       | string  | Prompt ID with operators and arguments                                                                                                                                                                                                                                                         |
+| `chain_id`      | string  | Resume token for continuing chains                                                                                                                                                                                                                                                             |
+| `user_response` | string  | Your output from previous step (for chain resume)                                                                                                                                                                                                                                              |
+| `gate_verdict`  | union   | Structured review object or legacy verdict string. Required semantic criteria use `per_gate[].evaluation` with server-issued binding and captured evidence; legacy strings remain supported. See [Gate Verdict Formats](#gate-verdict-formats). Rationale required.                            |
+| `gate_action`   | enum    | Core run control: `abort` stops any nonterminal run; `resume` and `accept_alternative` resolve a blocking-unknown pause. `retry` and `skip` resolve exhausted reviews and are unavailable while the runtime gate switch is off. See [Blocking-unknown interrupt](#blocking-unknown-interrupt). |
+| `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                                                                                         |
+| `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                                                                                      |
+| `inputs`        | object  | Typed prompt arguments. Nested objects and arrays stay structured; explicit inline arguments win on key conflicts.                                                                                                                                                                             |
+| `options`       | object  | Legacy prompt values and execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) when transport metadata is unavailable.                                                                                                                 |
+| `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                                                                                    |
+| `workflow`      | object  | A structured multi-step run submitted instead of a command string. Mutually exclusive with `command` and `chain_id`. See [Workflow Submission](#workflow-submission).                                                                                                                          |
+| `remainder`     | object  | Rewrite the rest of a running chain after a blocking unknown invalidated its shape. `{mode:'replace'\|'append', nodes:[…], edges?:[…]}`, requires `chain_id`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt).                                                                   |
 
 </details>
 
@@ -415,7 +424,8 @@ Notes:
 - The FAIL that spends a review's last attempt answers with a "Retry Limit Reached" block
   offering `gate_action`. The review is then exhausted: a further `gate_verdict` is refused and
   records nothing. `gate_action:"retry"` resets the counter and reopens the review;
-  `gate_action:"skip"` closes it without a verdict; `gate_action:"abort"` stops the run.
+  `gate_action:"skip"` closes it without a verdict. Independently, `gate_action:"abort"` stops
+  the whole run before review admission, including before retry exhaustion.
 
 ````
 
@@ -659,8 +669,8 @@ prompt_engine(command:">>bugfix :: verify:'npm test' :full loop:true")
 1. The command runs after each answer — never on the call that renders the prompt, even when that call carries a `user_response`, because nothing has been answered yet. On a chain, every step's answer is checked and each step gets its own attempt budget (`max:N` bounds each step); the chain completes only when the last step's check passes.
 2. A chain step is held while its check is pending: the run stays on that step until the check passes or a `gate_action` moves it.
 3. If FAIL + attempts remain → bounce-back (Claude retries automatically)
-4. If FAIL + max reached → escalation (user chooses `retry`/`skip`/`abort` via `gate_action`). Answering again after the attempts are spent re-shows the escalation without running the command.
-5. When a step has both an exhausted gate review and a pending check, one `gate_action` answers the review only. After a `skip`, the check still holds the step and the reply says so; answer again to re-run it, or send `skip` again to skip the check.
+4. If FAIL + max reached → escalation (user chooses `retry`/`skip` via `gate_action`; `abort` stops the whole run at any time). Answering again after the attempts are spent re-shows the escalation without running the command.
+5. When a step has both an exhausted gate review and a pending check, a `retry` or `skip` action answers the review only. After a `skip`, the check still holds the step and the reply says so; answer again to re-run it, or send `skip` again to skip the check.
 6. With `loop:true` → Stop hook blocks completion until tests pass
 
 **Presets:**
@@ -1047,9 +1057,11 @@ the rule the router enforces are one list. `action:"preview"` reads what its `pr
 
 #### A declared parameter the current state does not advertise
 
-`prompt_engine` publishes a **union**: `gates`, `gate_verdict` and `gate_action` appear in
-`tools/list` only while the gate system is enabled. A client holding a stale `tools/list` that
-still sends one gets its own message, not "not a parameter" — the contract does name it:
+`prompt_engine` publishes a **union** of its reachable input shapes. `gates` and `gate_verdict`
+are runtime-feature-gated. `gate_action` is a core field with its full enum: `retry`, `skip`,
+`abort`, `resume`, `accept_alternative`. With the runtime gate switch off, `abort`, `resume` and
+`accept_alternative` remain available; `retry` and `skip` receive a named unavailable-action
+refusal before execution. A withdrawn parameter receives a declared-but-unavailable message:
 
 ```
 'gate_verdict' is a parameter of prompt_engine, but not one this server is advertising right now:
@@ -1614,26 +1626,39 @@ system_control(action:"session", operation:"inspect", session_id:"chain-research
 system_control(action:"session", operation:"clear", session_id:"chain-research#1")
 
 # Stopping a run lives on the other tool — see "Which tool stops a run" below.
-prompt_engine(chain_id:"chain-research#1", cancel:true)
+prompt_engine(chain_id:"chain-research#1", gate_action:"abort")
 ```
 
 ### Which tool stops a run
 
 **The id you hold decides the tool.** A `chain_id` is held _because you are running the chain_, and
-stopping the run you are in is part of running it — so `cancel` is on `prompt_engine`. A
+stopping the run you are in is part of running it, so `gate_action:"abort"` is on `prompt_engine`. A
 `session_id` comes from a listing, and acting on runs you are not in is operator work — so `list`,
 `inspect` and `clear` stay on `system_control`. Without that rule the split re-forms the first time
 someone adds a verb.
 
 | Verb            | Tool                                                  | Effect                                                                                                                                                                                                                                                     |
 | --------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cancel`        | `prompt_engine(chain_id, cancel:true)`                | Soft stop. runStatus becomes `cancelled`, progression is blocked, and the session row and artifacts are **retained** for inspection and audit. Idempotent on an already-cancelled run; refuses one already completed or failed.                            |
+| `abort`         | `prompt_engine(chain_id, gate_action:"abort")`        | Terminal stop. `runStatus` becomes `cancelled`; progression is blocked and the session and artifacts are **retained**. Idempotent on an already-cancelled run; completed, failed, missing or out-of-scope runs return a non-applied refusal.               |
 | `handoff`       | `prompt_engine(chain_id, handoff:true)`               | Mint a single-use token that exports the run to another client (Codex, OpenCode, another Claude Code conversation). The run stays yours until the claim lands; minting again rotates the token. Your copy is retired on the next persist after a claim.    |
 | `claim_token`   | `prompt_engine(claim_token:"hnd_…")`                  | Claim a run minted elsewhere and resume it in the same call — send the token alone. Refused by name when the token is unknown, spent, or rotated, when the run is from another workspace (scope is never rewritten), or when the run carries no blueprint. |
 | `clear`         | `system_control(action:"session", operation:"clear")` | Hard removal. Session state and chain history are deleted. Irreversible.                                                                                                                                                                                   |
-| `force_restart` | `prompt_engine(command, force_restart:true)`          | Abandons the current run and immediately starts a new one — cancel-then-start in a single call. Use `cancel` when you want to stop and start nothing.                                                                                                      |
+| `force_restart` | `prompt_engine(command, force_restart:true)`          | Abandons the current run and immediately starts a new one — cancel-then-start in a single call. Use `abort` when you want to stop and start nothing.                                                                                                       |
 
-Cancel during an active run to halt progression while preserving evidence; clear during cleanup.
+Handoff claims apply the configured request identity policy before using the token. A
+meaningful request continuity mismatch retains the token and owner for a matching claim;
+launch defaults, locked mode and disabled overrides apply as on ordinary requests. The
+launch storage namespace and process ownership remain separate checks.
+
+Abort applies to active runs, blocking-unknown pauses, ordinary reviews and detached holds.
+Send only `chain_id` and `gate_action:"abort"`: no node, trailer, report, retry exhaustion or
+command is required. The existing scoped cancellation transition persists `cancelled`, retaining
+state and artifacts across reloads; later progression is refused. Clear removes them during cleanup.
+
+The public `cancel` property is removed. Calls carrying `cancel:true`, `cancel:false`, or a mixed
+cancel/abort request are refused by the existing undeclared-parameter check before execution,
+without changing the run. There is no alias. Internal cancellation and persisted `cancelled`
+remain part of the lifecycle.
 
 ### Resource Change Tracking
 
@@ -1946,6 +1971,15 @@ answer that step and it continues.
 id `__unknown_interrupt__`, issues no step at all, and the response is the interrupt alone. Only a
 `gate_action` verb clears it — no `gate_verdict` does, because no gate produced this hold.
 
+When discovery accompanies a real answer, the pause retains that answer and its current step;
+resume moves to the investigation without capturing the answer again. With no captured answer,
+resume issues the current step and leaves the investigation next.
+
+An ordinary review takes priority: its verdict, attempts and captured output stay intact, and
+synthetic pausing waits until that review settles. Retry reopens the ordinary review. Skip keeps
+its failed completion notification, then pauses the unanswered investigation before issuing work;
+resume issues that investigation without advancing past it.
+
 Either variant carries `structuredContent.chain_interrupt`:
 
 ```jsonc
@@ -1969,7 +2003,7 @@ Either variant carries `structuredContent.chain_interrupt`:
   "paused": false,
   "resume": {
     "chain_id": "chain-draft#4",
-    "verbs": ["answer the step", "remainder", "gate_action:abort", "cancel"],
+    "verbs": ["answer the step", "remainder", "gate_action:abort"],
   },
 }
 ```
@@ -1981,10 +2015,12 @@ inserts it), so the step you are handed now is never listed as still to come.
 **`resume.verbs` is state-dependent, not additive.** A PAUSED run lists a different set, and the
 two are not subsets of one another in either direction:
 
-| Run state | Verbs                                                                                                    |
-| --------- | -------------------------------------------------------------------------------------------------------- |
-| Soft      | `answer the step`, `remainder`, `gate_action:abort`, `cancel`                                            |
-| Paused    | `gate_action:resume`, `gate_action:accept_alternative` (with `remainder`), `gate_action:abort`, `cancel` |
+| Run state | Verbs                                                                                          |
+| --------- | ---------------------------------------------------------------------------------------------- |
+| Soft      | `answer the step`, `remainder`, `gate_action:abort`                                            |
+| Paused    | `gate_action:resume`, `gate_action:accept_alternative` (with `remainder`), `gate_action:abort` |
+
+Abort stops the whole run in either state, with no node, trailer, report or retry exhaustion.
 
 A run that completes with a blocking unknown still open renders no interrupt section: its reply
 says the run completed and names every blocking unknown still open as unresolved, and
@@ -2021,6 +2057,9 @@ rewriting the tail repeatedly cannot buy back spent budget. One accepted remaind
 counted per declaration like the insertion cap: a remainder accepted before the unknown was
 resolved does not count once it is re-opened, even while that remainder is still ahead of the run
 (each remainder node records the step it was accepted on). And a per-run ceiling.
+
+An accepted remainder updates progress to count the full plan immediately. An append without
+an answer keeps the current investigation and previously captured work.
 
 ```bash
 # soft interrupt: the remainder alone is the acceptance

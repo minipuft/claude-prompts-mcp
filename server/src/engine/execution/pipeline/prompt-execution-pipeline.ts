@@ -149,7 +149,7 @@ export class PromptExecutionPipeline {
    * the run (`create-new` / `create-force-restart`) — the fact stage 20 already reads for "the
    * run-creating call". The run ends `failed` (R56) — the one status no other path writes, so a
    * later `chain_id` is refused on the status itself, naming the `failed` record just written
-   * ({@link reportPreviousFailure}); an operator's `cancel` stays `cancelled`. Ending it releases
+   * ({@link reportPreviousFailure}); an operator's `abort` stays `cancelled`. Ending it releases
    * its gates (`onRunEnded`, fired for every terminal status). A later call's throw leaves the run
    * `working`.
    *

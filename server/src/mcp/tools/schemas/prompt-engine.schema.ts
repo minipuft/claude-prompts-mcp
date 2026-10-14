@@ -348,9 +348,10 @@ export interface ToolSurfaceState {
    * The gate system runtime master switch (`GateStateStore.isGateSystemEnabled(scope)`,
    * moved by `system_control gates enable|disable`).
    *
-   * When it is off, nothing reads the three gate parameters: shell verification refuses
+   * When it is off, `gates` and `gate_verdict` are unavailable: shell verification refuses
    * to run, and the gate-enhancement stage selects no gates and renders no guidance for the
-   * request's scope, so the parameters have no reachable effect and are omitted. The stage
+   * request's scope, so those parameters are omitted. `gate_action` stays core because
+   * blocking-unknown interrupts use it independently of gates. The stage
    * also honors the separate `gates.enabled` config value; either switch being off skips it.
    * This comment once named `GateManager` and a `GateService.getGuidanceText`/
    * `validateContent` pair; neither symbol exists.
@@ -391,19 +392,17 @@ const PARAM_DEFAULTS = {
   // true and absent were indistinguishable there (plan row 0.5.16). Both real behaviours are now
   // stated, and both are asserted in chain-lifecycle.yaml.
   force_restart:
-    "Start a new execution instead of resuming. Cannot be combined with 'chain_id'. Redundant with a plain 'command'; it matters when the command text itself carries a chain id.",
+    "Start a new execution instead of resuming. Cannot be combined with 'chain_id'. Redundant with a plain 'command'; it matters when the command text itself carries a chain id. Unlike gate_action:'abort', it starts new work.",
   chain_id:
     'Resume token (e.g., `chain-demo#2`). RESUME: chain_id + user_response only. Omit command.',
   handoff:
     "Mint a single-use handoff token for the run named by 'chain_id', so another client (Codex, OpenCode, a different Claude Code conversation) can claim and continue it. Requires 'chain_id'; nothing else is read. Minting again rotates the token. The run stays yours until the claim lands.",
   claim_token:
     "Claim a run minted elsewhere with 'handoff' and resume it in this conversation in the same call. Send the token ALONE — it names the run, so omit command and chain_id. Single-use: a claimed, rotated, or ended token is refused by name.",
-  cancel:
-    "Stop the run named by 'chain_id' and block further progression. Requires 'chain_id'; nothing else is read. Distinct from 'force_restart': cancel ENDS this run and starts nothing, while force_restart abandons it and immediately begins a new one. The session's state and artifacts survive a cancel — remove them with system_control(action:\"session\", operation:\"clear\").",
   gate_verdict:
     'Gate review result when resuming. PREFERRED (structured, cannot be malformed): {overall:"PASS"|"FAIL", rationale:"...", per_gate:[{index:1, passed:true, rationale:"..."}], reminders:{satisfied:["id"], not_applicable:[{id:"id", reason:"..."}]}}. per_gate carries only check-tier gates; reminders attests the rest in one field. Also accepts the legacy string "GATE_REVIEW: PASS - rationale". Rationales are single-line. Keep user_response for actual step output.',
   gate_action:
-    'Your move on a run that is waiting for one. AFTER A FAILED GATE exhausts its retry limit: "retry" resets the attempt count, "skip" bypasses the gate, "abort" stops execution. ON A RUN PAUSED BY A BLOCKING UNKNOWN (only when budget.pauseOnBlocking was declared): "resume" clears the pause and issues the investigation step as written, "accept_alternative" replaces the rest of the run with the nodes supplied in `remainder` on the SAME call (refused by name without one). "abort" and cancel:true exit either state.',
+    'Run action. "abort" stops the existing run named by chain_id in any nonterminal state, including active runs, blocking-unknown pauses, ordinary reviews and detached holds. No command, review, retry exhaustion, node selection, trailer or report is required; it starts no work and consumes no report. State and artifacts are retained; repeated abort succeeds. Completed, failed, missing or out-of-scope runs receive a non-applied refusal. AFTER A FAILED GATE exhausts its retry limit: "retry" resets attempts, "skip" bypasses the gate. ON A BLOCKING-UNKNOWN INTERRUPT (only with budget.pauseOnBlocking): "resume" clears the pause and issues the investigation step as written, "accept_alternative" replaces the remaining run with remainder on the SAME call (refused without one).',
   user_response:
     'Your Step output to capture before advancing. Supply the same text you would reply with during manual execution.',
   gates:
@@ -450,13 +449,21 @@ function buildCoreFields(resolve: DescriptionResolver) {
       .optional()
       .describe(resolve('chain_id', PARAM_DEFAULTS.chain_id)),
 
-    // Lives here rather than on `system_control` because of which id the caller holds: a
-    // `chain_id` is held BECAUSE you are running the chain, and stopping the run you are in is
-    // part of running it. `system_control session` keeps list/inspect/clear, which are operator
-    // work across runs you are not in and are keyed on `session_id` from a listing.
-    cancel: z.boolean().optional().describe(resolve('cancel', PARAM_DEFAULTS.cancel)),
+    gate_action: z
+      // Core even when gates are disabled: `retry`/`skip` then receive a named refusal
+      // from the admission owner; blocking-unknown actions remain reachable. `resume`/
+      // `accept_alternative` answer a run paused on the reserved `__unknown_interrupt__`
+      // review; `abort` exits any existing nonterminal run before pipeline dispatch. Review-only
+      // actions used against the wrong pending state are refused
+      // BY NAME at the verdict processor rather than being narrowed out of the enum here —
+      // narrowing is what silently strips a value (P6-F6), and a caller who sent `resume` to a
+      // gate review deserves to be told so.
+      .enum(['retry', 'skip', 'abort', 'resume', 'accept_alternative'])
+      .optional()
+      .describe(resolve('gate_action', PARAM_DEFAULTS.gate_action)),
+
     // 2A handoff: export this run to another client (mint) / import one minted elsewhere
-    // (claim). Both are chain-lifecycle verbs and live here for the same reason cancel does.
+    // (claim). The caller holds the run identifier, so these are execution-lifecycle actions.
     handoff: z.boolean().optional().describe(resolve('handoff', PARAM_DEFAULTS.handoff)),
     claim_token: z
       .string()
@@ -587,17 +594,6 @@ function buildGateFields(
       )
       .optional()
       .describe(resolve('gate_verdict', PARAM_DEFAULTS.gate_verdict)),
-
-    gate_action: z
-      // Five members, two states. `retry`/`skip` answer a FAILED GATE; `resume`/
-      // `accept_alternative` answer a run paused on the reserved `__unknown_interrupt__`
-      // review; `abort` exits either. A member used against the wrong pending state is refused
-      // BY NAME at the verdict processor rather than being narrowed out of the enum here —
-      // narrowing is what silently strips a value (P6-F6), and a caller who sent `resume` to a
-      // gate review deserves to be told so.
-      .enum(['retry', 'skip', 'abort', 'resume', 'accept_alternative'])
-      .optional()
-      .describe(resolve('gate_action', PARAM_DEFAULTS.gate_action)),
   };
 }
 

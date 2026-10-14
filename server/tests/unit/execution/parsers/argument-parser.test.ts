@@ -2,7 +2,8 @@ import { describe, expect, test, jest } from '@jest/globals';
 
 import { ArgumentParser } from '../../../../src/engine/execution/parsers/argument-parser.js';
 
-import type { ConvertedPrompt, PromptArgument } from '../../../../src/shared/types/index.js';
+import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
+import type { PromptArgument } from '../../../../src/shared/types/index.js';
 
 const createLogger = () => ({
   info: jest.fn(),
@@ -378,7 +379,12 @@ describe('ArgumentParser optional typed arguments', () => {
   test('preserves real contextual defaults and authored false, zero, empty arrays and objects', async () => {
     const parser = new ArgumentParser(createLogger());
     const withDefaults = prompt();
-    const defaults: Record<string, unknown> = { items: [], settings: {}, count: 0, enabled: false };
+    const defaults: Record<string, PromptArgument['defaultValue']> = {
+      items: [],
+      settings: {},
+      count: 0,
+      enabled: false,
+    };
     withDefaults.arguments = withDefaults.arguments.map((argument: PromptArgument) => ({
       ...argument,
       ...(defaults[argument.name] !== undefined ? { defaultValue: defaults[argument.name] } : {}),
@@ -408,5 +414,92 @@ describe('ArgumentParser optional typed arguments', () => {
       count: 0,
       enabled: false,
     });
+  });
+});
+
+describe('F23.1 JSON processed argument preservation', () => {
+  const input = 'keep / path --> ==> + ? %clean exactly';
+  const prompt: ConvertedPrompt = {
+    id: 'wire_namespace',
+    name: 'Wire Namespace',
+    description: '',
+    category: 'tests',
+    userMessageTemplate: '{{input}}',
+    arguments: [
+      { name: 'input', type: 'string', required: false },
+      { name: 'items', type: 'array', required: false },
+      { name: 'settings', type: 'object', required: false },
+      { name: 'count', type: 'number', required: false },
+      { name: 'enabled', type: 'boolean', required: false },
+      { name: 'omitted', type: 'string', required: false, defaultValue: 'fallback' },
+    ],
+  };
+
+  test('F23.1 literal witness remains an independent processed argument positive', async () => {
+    const result = await new ArgumentParser(createLogger()).parseArguments(
+      `input=${JSON.stringify(input)}`,
+      prompt,
+      {}
+    );
+    expect(result.metadata.parsingStrategy).toBe('keyvalue');
+    expect(result.processedArgs['input']).toBe(input);
+  });
+
+  test('F23.1 scalar JSON preserves HTML greater-than and arrows with existing trim', async () => {
+    const parser = new ArgumentParser(createLogger());
+    for (const value of [input, '<tag>a > b</tag>', 'https://example.test/a/b?x=1 --> ==>']) {
+      const result = await parser.parseArguments(
+        JSON.stringify({ input: `  ${value}  ` }),
+        prompt,
+        {}
+      );
+      expect(result.metadata.parsingStrategy).toBe('json');
+      expect(result.processedArgs['input']).toBe(value);
+    }
+  });
+
+  test('F23.1 JSON string-array elements preserve angles and existing serialization', async () => {
+    const result = await new ArgumentParser(createLogger()).parseArguments(
+      JSON.stringify({
+        items: ['  <tag> --> ==> a > b  ', 2, false, null, { tag: '<keep>' }],
+      }),
+      prompt,
+      {}
+    );
+    expect(result.metadata.parsingStrategy).toBe('json');
+    expect(result.processedArgs['items']).toBe(
+      JSON.stringify(['<tag> --> ==> a > b', 2, false, null, { tag: '<keep>' }])
+    );
+  });
+
+  test('F23.1 existing key type default object and size policies remain in effect', async () => {
+    const parser = new ArgumentParser(createLogger());
+    const result = await parser.parseArguments(
+      JSON.stringify({
+        input: 'ordinary',
+        count: 0,
+        enabled: false,
+        settings: { tag: '<keep>' },
+        extra: 'ignored',
+      }),
+      prompt,
+      {}
+    );
+    expect(result.processedArgs['input']).toBe('ordinary');
+    expect(result.processedArgs['count']).toBe(0);
+    expect(result.processedArgs['enabled']).toBe(false);
+    expect(result.processedArgs['settings']).toBe(JSON.stringify({ tag: '<keep>' }));
+    expect(result.processedArgs['omitted']).toBeUndefined();
+    const fallback = await parser.parseArguments('', prompt, {});
+    expect(fallback.processedArgs['omitted']).toBe('fallback');
+    expect(result.processedArgs).not.toHaveProperty('extra');
+    expect(result.metadata.warnings).toContain('Unexpected argument: extra');
+    const sizedPrompt: ConvertedPrompt = {
+      ...prompt,
+      arguments: [{ name: 'input', type: 'string', required: false, validation: { maxLength: 1 } }],
+    };
+    await expect(
+      parser.parseArguments(JSON.stringify({ input: 'xx' }), sizedPrompt, {})
+    ).rejects.toThrow();
   });
 });

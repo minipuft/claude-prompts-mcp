@@ -50,7 +50,11 @@ export interface ChainRunRegistry {
    * same statement so it cannot be claimed twice (2A). Refuses a row whose workspace differs
    * from the claimant's when both are known.
    */
-  claimRunByToken(token: string, scope?: StateStoreOptions): ClaimRunResult;
+  claimRunByToken(
+    token: string,
+    scope?: StateStoreOptions,
+    requestContinuityFilter?: string
+  ): ClaimRunResult;
   /** Drop every run owned by a process that is no longer alive. */
   deleteRunsForOwners(ownerPids: readonly string[]): void;
 }
@@ -299,7 +303,11 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     return result;
   }
 
-  claimRunByToken(token: string, scope?: StateStoreOptions): ClaimRunResult {
+  claimRunByToken(
+    token: string,
+    scope?: StateStoreOptions,
+    requestContinuityFilter?: string
+  ): ClaimRunResult {
     const claimantPid = resolveRunOwnerPid(scope);
     const claimantWorkspace = scope?.workspaceId ?? null;
     const claimantOrganization = scope?.organizationId ?? null;
@@ -324,6 +332,15 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
         status: 'workspace-mismatch',
         rowWorkspaceId: row.workspace_id,
         claimantWorkspaceId: claimantWorkspace,
+      };
+    }
+
+    const runContinuityScopeId = parseResidual(row.state).continuityScopeId;
+    if (requestContinuityFilter !== undefined && runContinuityScopeId !== requestContinuityFilter) {
+      return {
+        status: 'request-continuity-mismatch',
+        runContinuityScopeId,
+        requestContinuityScopeId: requestContinuityFilter,
       };
     }
 

@@ -24,7 +24,6 @@ type Summary = { sessionId: string; chainId: string };
 describe('SessionActionHandler', () => {
   let clearSession: jest.MockedFunction<(id: string, scope?: unknown) => Promise<boolean>>;
   let clearSessionsForChain: jest.MockedFunction<(id: string, scope?: unknown) => Promise<void>>;
-  let cancelChain: jest.MockedFunction<(id: string, scope?: unknown) => Promise<boolean>>;
   let sessions: Summary[];
   let handler: SessionActionHandler;
   const requestScope = { continuityScopeId: 'workspace-a' };
@@ -46,9 +45,6 @@ describe('SessionActionHandler', () => {
     clearSessionsForChain = jest.fn<(id: string, scope?: unknown) => Promise<void>>(() =>
       Promise.resolve()
     );
-    cancelChain = jest.fn<(id: string, scope?: unknown) => Promise<boolean>>(() =>
-      Promise.resolve(true)
-    );
 
     const context = {
       logger: new MockLogger(),
@@ -62,7 +58,6 @@ describe('SessionActionHandler', () => {
         listActiveSessions: () => sessions,
         clearSession,
         clearSessionsForChain,
-        cancelChain,
       },
     } as unknown as SystemControlContext;
 
@@ -121,25 +116,16 @@ describe('SessionActionHandler', () => {
     });
   });
 
-  describe('cancel — relocated to prompt_engine', () => {
-    /**
-     * `cancel` moved to `prompt_engine(chain_id, cancel: true)`. The refusal names the
-     * replacement rather than falling into the generic unknown-operation branch: a caller
-     * reaching for it here is not confused about the vocabulary, they are using the interface
-     * that used to have it, and a bare "unknown operation" would send them looking for a typo.
-     */
-    test('refuses and names the replacement instead of cancelling', async () => {
-      await expect(handler.execute({ operation: 'cancel', session_id: 'sess-1' })).rejects.toThrow(
-        /prompt_engine/
-      );
-
-      expect(cancelChain).not.toHaveBeenCalled();
-    });
-
-    test('does not list cancel among the operations it still serves', async () => {
-      await expect(handler.execute({ operation: 'nonsense' })).rejects.toThrow(
-        'Unknown session operation: nonsense. Valid operations: list, clear, inspect'
-      );
-    });
+  describe('unknown operations', () => {
+    test.each(['cancel', 'nonsense'])(
+      'refuses %s through the generic operation boundary without mutating sessions',
+      async (operation) => {
+        await expect(handler.execute({ operation, session_id: 'sess-1' })).rejects.toThrow(
+          `Unknown session operation: ${operation}. Valid operations: list, clear, inspect`
+        );
+        expect(clearSession).not.toHaveBeenCalled();
+        expect(clearSessionsForChain).not.toHaveBeenCalled();
+      }
+    );
   });
 });

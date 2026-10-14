@@ -1,17 +1,12 @@
 """
-Tests for hooks/gate-enforce.py verdict-shape handling.
-
-gate_verdict reaches the hook in two schema shapes: the structured object
-{overall, rationale, per_gate[]} (preferred) and the legacy
-"GATE_REVIEW: FAIL - reason" string. The structured shape crashed the hook
-with TypeError until 2026-08-03 (surfaced by the codex-prompts E2E port);
-because hook failures are fail-open, that meant object verdicts were never
-gate-enforced.
+Verdict parameter admission through real hook subprocesses; pending-run policy probes are local.
 """
 
 import importlib.util
 import io
 import json
+import os
+import subprocess
 import sys
 from pathlib import Path
 from typing import ClassVar
@@ -44,11 +39,28 @@ def run_hook(monkeypatch, capsys, tool_input):
     return excinfo.value.code, json.loads(out) if out.strip() else {}
 
 
+def run_verdict_subprocess(tool_input, workspace):
+    payload = {"tool_name": "prompt_engine", "tool_input": tool_input, "session_id": "verdict-shape"}
+    result = subprocess.run(
+        [sys.executable, str(HOOKS_DIR / "gate-enforce.py")],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={**os.environ, "MCP_WORKSPACE": str(workspace)},
+    )
+    print(
+        json.dumps(
+            {"tool_input": tool_input, "exit_code": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
+        )
+    )
+    assert result.stderr == ""
+    return result.returncode, json.loads(result.stdout) if result.stdout.strip() else {}
+
+
 class TestStructuredVerdict:
-    def test_fail_object_denies(self, monkeypatch, capsys):
-        code, out = run_hook(
-            monkeypatch,
-            capsys,
+    def test_fail_object_allows(self, tmp_path):
+        code, out = run_verdict_subprocess(
             {
                 "chain_id": "chain-demo#1",
                 "gate_verdict": {
@@ -57,30 +69,28 @@ class TestStructuredVerdict:
                     "per_gate": [{"index": 1, "passed": False, "rationale": "g: no"}],
                 },
             },
+            tmp_path,
         )
         assert code == 0
-        assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert "criteria unmet" in out["hookSpecificOutput"]["permissionDecisionReason"]
+        assert out == {}
 
-    def test_pass_object_allows(self, monkeypatch, capsys):
-        code, out = run_hook(
-            monkeypatch,
-            capsys,
+    def test_pass_object_allows(self, tmp_path):
+        code, out = run_verdict_subprocess(
             {
                 "chain_id": "chain-demo#1",
                 "gate_verdict": {"overall": "PASS", "rationale": "all met"},
             },
+            tmp_path,
         )
         assert code == 0
-        assert out.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+        assert out == {}
 
 
 class TestPendingGateResolution:
     """A pending gate must accept every contract-flagged resolution verb.
 
-    The hook's previous hardcoded model (chain_id without gate_verdict -> deny) blocked
-    `cancel: true` and `gate_action: "abort"` — both server-supported exits — so a pending
-    gate trapped its own abort (2026-08-20). The verb set now comes from
+    A hardcoded model of pending-run exits can block `gate_action: "abort"` and trap a pending
+    gate. The verb set comes from
     lib/_generated/resolution_verbs.py, emitted by server/scripts/generate-contracts.ts.
     """
 
@@ -90,16 +100,20 @@ class TestPendingGateResolution:
         monkeypatch.setattr(hook_mod, "load_session_state", lambda _sid: dict(self.PENDING))
         return run_hook(monkeypatch, capsys, tool_input)
 
-    def test_cancel_true_allows(self, monkeypatch, capsys):
-        code, out = self.run_pending(monkeypatch, capsys, {"chain_id": "chain-demo#1", "cancel": True})
-        assert code == 0
-        assert out.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
-
     @pytest.mark.parametrize("action", ["retry", "skip", "abort"])
     def test_gate_action_allows(self, monkeypatch, capsys, action):
         code, out = self.run_pending(monkeypatch, capsys, {"chain_id": "chain-demo#1", "gate_action": action})
         assert code == 0
         assert out.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+
+    @pytest.mark.parametrize("gate", ["code-review", "detached review"])
+    def test_abort_is_admitted_across_review_holds(self, monkeypatch, capsys, gate):
+        monkeypatch.setattr(hook_mod, "load_session_state", lambda _sid: {"pending_gate": gate})
+        bare_code, bare_out = run_hook(monkeypatch, capsys, {"chain_id": "chain-demo#1"})
+        abort_code, abort_out = run_hook(monkeypatch, capsys, {"chain_id": "chain-demo#1", "gate_action": "abort"})
+        assert bare_code == abort_code == 0
+        assert bare_out["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert abort_out == {}
 
     def test_bare_resume_denies_and_names_exits(self, monkeypatch, capsys):
         code, out = self.run_pending(
@@ -112,11 +126,12 @@ class TestPendingGateResolution:
         assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
         # Verdict-first message, exits named as the fallback line.
         assert "gate_verdict" in reason
-        assert "cancel" in reason
+        assert "cancel" not in reason
         assert "gate_action" in reason
 
-    def test_cancel_false_still_denies(self, monkeypatch, capsys):
-        code, out = self.run_pending(monkeypatch, capsys, {"chain_id": "chain-demo#1", "cancel": False})
+    @pytest.mark.parametrize("retired_value", [True, False])
+    def test_retired_parameter_does_not_resolve_a_pending_gate(self, monkeypatch, capsys, retired_value):
+        code, out = self.run_pending(monkeypatch, capsys, {"chain_id": "chain-demo#1", "cancel": retired_value})
         assert code == 0
         assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
 
@@ -139,27 +154,36 @@ class TestPendingGateResolution:
         assert hook_mod.load_resolution_params() == flagged
 
 
-class TestLegacyStringVerdict:
-    def test_fail_string_denies(self, monkeypatch, capsys):
-        code, out = run_hook(
-            monkeypatch,
-            capsys,
-            {
-                "chain_id": "chain-demo#1",
-                "gate_verdict": "GATE_REVIEW: FAIL - not good enough",
-            },
-        )
+class TestRetiredStringVerdict:
+    @pytest.mark.parametrize(
+        "verdict",
+        ["GATE_REVIEW: PASS - solid", "GATE_REVIEW: FAIL - not good enough"],
+        ids=["retired-pass", "retired-fail"],
+    )
+    def test_legacy_string_parameter_is_refused(self, tmp_path, verdict):
+        code, out = run_verdict_subprocess({"chain_id": "chain-demo#1", "gate_verdict": verdict}, tmp_path)
+        assert code == 0
+        assert out.get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+        assert out["hookSpecificOutput"]["permissionDecisionReason"].startswith("gate_verdict requires an object")
+
+
+class TestMalformedVerdict:
+    @pytest.mark.parametrize(
+        "verdict",
+        [
+            {},
+            {"overall": None, "rationale": "reason"},
+            {"overall": [], "rationale": "reason"},
+            {"overall": "pass", "rationale": "reason"},
+            {"overall": "FAIL", "rationale": False},
+            {"overall": "PASS", "rationale": " "},
+            None,
+            True,
+            [],
+        ],
+    )
+    def test_malformed_verdict_is_refused_without_crashing(self, tmp_path, verdict):
+        code, out = run_verdict_subprocess({"chain_id": "chain-demo#1", "gate_verdict": verdict}, tmp_path)
         assert code == 0
         assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-    def test_pass_string_allows(self, monkeypatch, capsys):
-        code, out = run_hook(
-            monkeypatch,
-            capsys,
-            {
-                "chain_id": "chain-demo#1",
-                "gate_verdict": "GATE_REVIEW: PASS - solid",
-            },
-        )
-        assert code == 0
-        assert out.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
+        assert out["hookSpecificOutput"]["permissionDecisionReason"].startswith("gate_verdict requires an object")

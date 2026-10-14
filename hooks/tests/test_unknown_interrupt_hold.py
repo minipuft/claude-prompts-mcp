@@ -1,16 +1,12 @@
 """
-Hook awareness of the blocking-unknown interrupt (plan row 3.1,
-plans/features/mid-chain-unknown-surfacing-2026-08-20.md).
+Hook awareness of the blocking-unknown interrupt.
 
 A hard-paused run holds on the reserved synthetic review `__unknown_interrupt__` instead of on a
 gate anyone authored. Three things follow, and each is asserted here rather than assumed:
 
-1. ALLOW — every verb the server accepts for that hold (`gate_action: resume |
-   accept_alternative | abort`, `cancel: true`) must pass `gate-enforce.py` Check 2. Tier 0
-   renamed the artifact to `PENDING_RUN_RESOLUTION_PARAMS`, which plausibly makes this work for
-   free — `gate_action` is one parameter whatever its value. "Plausibly" is why the matrix is a
-   test: the mutation probe below is red against a hook that lost the parameter, so a green row
-   here reports the hook's behaviour and not the test's optimism.
+1. ALLOW — the server's `gate_action: resume | accept_alternative | abort` verbs must pass
+   `gate-enforce.py` Check 2. The generated resolution set supplies that parameter; the mutation
+   probe below proves the matrix detects its removal.
 2. DENY — a bare `chain_id` resume while the interrupt is pending must be denied, with a message
    naming the verbs that DO clear it. No `gate_verdict` clears this hold, so the ordinary
    gate-review prose would be wrong.
@@ -34,6 +30,7 @@ sys.path.insert(0, str(HOOKS_DIR / "lib"))
 from session_state import (
     UNKNOWN_INTERRUPT_GATE_ID,
     UNKNOWN_INTERRUPT_LABEL,
+    _fallback_interrupt_exits,
     format_chain_reminder,
     interrupt_exits,
     label_gate_ids,
@@ -67,7 +64,6 @@ Resolve with `chain_id="chain-demo#1"` plus one of:
 - gate_action:resume
 - gate_action:accept_alternative (with remainder)
 - gate_action:abort
-- cancel
 
 Chain: chain-demo#1
 → Progress 1/3
@@ -107,7 +103,6 @@ class TestInterruptHoldMatrix:
             "gate_action:resume",
             "gate_action:accept_alternative (with remainder)",
             "gate_action:abort",
-            "cancel",
         ],
     }
 
@@ -131,11 +126,6 @@ class TestInterruptHoldMatrix:
                 "remainder": {"mode": "replace", "nodes": [{"id": "n1", "promptId": "minimal_prompt"}]},
             },
         )
-        assert code == 0
-        assert out.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
-
-    def test_cancel_true_is_allowed(self, monkeypatch, capsys):
-        code, out = self.run_paused(monkeypatch, capsys, {"chain_id": "chain-demo#1", "cancel": True})
         assert code == 0
         assert out.get("hookSpecificOutput", {}).get("permissionDecision") != "deny"
 
@@ -182,7 +172,7 @@ class TestInterruptHoldMatrix:
         reason = out["hookSpecificOutput"]["permissionDecisionReason"]
         assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert "gate_action" in reason
-        assert "cancel" in reason
+        assert "cancel" not in reason
 
     def test_an_ordinary_gate_review_still_gets_the_verdict_message(self, monkeypatch, capsys):
         """Discrimination control: the interrupt branch must not swallow gate reviews."""
@@ -229,7 +219,6 @@ class TestPausedResponseParsing:
             "gate_action:resume",
             "gate_action:accept_alternative (with remainder)",
             "gate_action:abort",
-            "cancel",
         ]
         # Row 2.6: a paused run issues no step, so no exit that answers one may be advertised.
         assert "answer the step" not in state["interrupt_verbs"]
@@ -252,3 +241,31 @@ class TestPausedResponseParsing:
         state = parse_prompt_engine_response(PAUSED_RESPONSE)
         assert state is not None
         assert interrupt_exits(state)[0] == "gate_action:resume"
+
+    def test_stale_interrupt_verbs_and_missing_artifact_do_not_advertise_retired_exit(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, "_generated.resolution_verbs", None)
+        assert _fallback_interrupt_exits() == ["gate_action"]
+        assert interrupt_exits({"interrupt_verbs": ["gate_action:abort", "cancel", "gate_verdict"]}) == [
+            "gate_action:abort"
+        ]
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "chain-implementation_plan/plan_table#1",
+        "chain-Team-Legacy/Child_Name/9deep#01",
+    ],
+)
+def test_paused_qualified_run_retains_exact_resume_token_and_exits(token):
+    state = parse_prompt_engine_response(PAUSED_RESPONSE.replace("chain-demo#1", token))
+    assert state is not None
+    assert state["chain_id"] == token
+    assert state["pending_gate"] == UNKNOWN_INTERRUPT_LABEL
+    assert interrupt_exits(state) == [
+        "gate_action:resume",
+        "gate_action:accept_alternative (with remainder)",
+        "gate_action:abort",
+    ]
+    for mode in ("full", "inline"):
+        assert token in format_chain_reminder(state, mode=mode)

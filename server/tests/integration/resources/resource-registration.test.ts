@@ -11,6 +11,7 @@
 import { describe, test, expect, beforeAll, afterAll, jest, beforeEach } from '@jest/globals';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ResourceTemplate } from '@modelcontextprotocol/server';
 
 import { registerResources, notifyResourcesChanged } from '../../../src/modules/resources/index.js';
 import type { ResourceDependencies } from '../../../src/modules/resources/types.js';
@@ -33,11 +34,13 @@ describe('MCP Resources Registration Integration', () => {
     {
       template: unknown;
       options: unknown;
-      readHandler: (uri: URL, variables: Record<string, string>) => Promise<unknown>;
+      readHandler: (uri: URL, variables: Record<string, string | string[]>) => Promise<unknown>;
     }
   >;
   let mockMcpServer: {
-    registerResource: jest.Mock;
+    registerResource: jest.Mock<
+      (name: string, template: unknown, options: unknown, readHandler: unknown) => void
+    >;
     sendResourceListChanged: jest.Mock;
   };
 
@@ -69,7 +72,7 @@ describe('MCP Resources Registration Integration', () => {
             options,
             readHandler: readHandler as (
               uri: URL,
-              variables: Record<string, string>
+              variables: Record<string, string | string[]>
             ) => Promise<unknown>,
           });
         }
@@ -640,13 +643,26 @@ describe('MCP Resources Registration Integration', () => {
         averageResponseTime: 150,
         requestsPerMinute: 10,
         errorRate: 0.05,
+        performanceTrends: [],
       },
+      frameworkUsage: { currentFramework: 'CAGEERF', frameworkSwitches: 0 },
+      gateValidationStats: {
+        totalValidations: 0,
+        validationSuccessRate: 0,
+        averageValidationTime: 0,
+        gateAdoptionRate: 0,
+      },
+      recommendations: [],
     };
 
     const testSessionStats = {
       totalActiveSessions: 2,
       totalCompletedSessions: 50,
       sessionsWithPendingReviews: 1,
+      totalSessions: 2,
+      totalChains: 2,
+      averageStepsPerChain: 4,
+      oldestSessionAge: 120000,
     };
 
     beforeEach(() => {
@@ -774,6 +790,140 @@ describe('MCP Resources Registration Integration', () => {
       expect(parsed.sessions.totalActiveSessions).toBe(2);
       expect(parsed.sessions.sessionsWithPendingReviews).toBe(1);
       expect(parsed.timestamp).toBeDefined();
+    });
+
+    describe('Session URI component round trips', () => {
+      const chainIds = [
+        'chain-Root_Name-X#1',
+        'chain-Root_Name-X#2',
+        'chain-team/child',
+        'chain-team/deep/flow#3',
+        'chain-Legacy_NS/Child-X#0',
+        'chain-Legacy_NS/Deep-Name/Flow_1#01',
+      ];
+      let sessions: Array<typeof testSessionDetails>;
+      let lookup: jest.Mock<
+        NonNullable<ResourceDependencies['chainSessionStore']>['getSessionByChainIdentifier']
+      >;
+      let getSession: jest.Mock<
+        NonNullable<ResourceDependencies['chainSessionStore']>['getSession']
+      >;
+
+      beforeEach(() => {
+        sessions = chainIds.map((chainId, index) => ({
+          ...structuredClone(testSessionDetails),
+          chainId,
+          sessionId: `uri-session-${index}`,
+        }));
+        lookup = jest.fn((chainId) => sessions.find((session) => session.chainId === chainId));
+        getSession = jest.fn(() => undefined);
+        registerResources(mockMcpServer as never, {
+          logger: mockLogger,
+          chainSessionStore: {
+            listActiveSessions: () =>
+              sessions.map((session) => ({
+                ...session,
+                currentStep: 2,
+                totalSteps: 5,
+                pendingReview: true,
+              })),
+            getSession,
+            getSessionByChainIdentifier: lookup,
+            getSessionStats: () => testSessionStats,
+          },
+        });
+      });
+
+      test.each(chainIds)(
+        'advertised SDK URI round trips exact %s and its SID',
+        async (chainId) => {
+          const before = structuredClone(sessions);
+          const list = registeredResources.get('sessions')!;
+          const item = registeredResources.get('session')!;
+          if (
+            !(list.template instanceof ResourceTemplate) ||
+            !(item.template instanceof ResourceTemplate)
+          ) {
+            throw new Error('Session resources must register actual SDK templates');
+          }
+          const encodedUri = new URL(
+            RESOURCE_URI_PATTERNS.SESSION_ITEM.replace('{chainId}', encodeURIComponent(chainId))
+          );
+          const encodedVariables = item.template.uriTemplate.match(encodedUri.toString());
+          expect(encodedVariables).toEqual({ chainId: encodeURIComponent(chainId) });
+          const direct = (await item.readHandler(encodedUri, encodedVariables!)) as {
+            contents: Array<{ text: string }>;
+          };
+          expect(JSON.parse(direct.contents[0].text)).toMatchObject({
+            chainId,
+            sessionId: sessions[chainIds.indexOf(chainId)].sessionId,
+          });
+          const body = (await list.readHandler(
+            new URL(RESOURCE_URI_PATTERNS.SESSION_LIST),
+            {}
+          )) as {
+            contents: Array<{ uri: string; text: string }>;
+          };
+          expect(body.contents[0].uri).toBe(RESOURCE_URI_PATTERNS.SESSION_LIST);
+          const listed = await list.template.listCallback!({} as never);
+          const bodyList = JSON.parse(body.contents[0].text) as Array<{
+            uri: string;
+            chainId: string;
+          }>;
+          for (const resources of [listed.resources, bodyList]) {
+            const resource = resources.find(
+              (entry) =>
+                entry.uri ===
+                RESOURCE_URI_PATTERNS.SESSION_ITEM.replace('{chainId}', encodeURIComponent(chainId))
+            );
+            expect(resource).toBeDefined();
+            const uri = new URL(resource!.uri);
+            const variables = item.template.uriTemplate.match(uri.toString());
+            expect(variables).toEqual({ chainId: encodeURIComponent(chainId) });
+            const result = (await item.readHandler(uri, variables!)) as {
+              contents: Array<{ uri: string; text: string }>;
+            };
+            expect(result.contents[0].uri).toBe(uri.toString());
+            expect(JSON.parse(result.contents[0].text)).toMatchObject({
+              chainId,
+              sessionId: sessions[chainIds.indexOf(chainId)].sessionId,
+            });
+          }
+          expect(bodyList.map((entry) => entry.chainId)).toEqual(chainIds);
+          expect(lookup.mock.calls).toEqual([[chainId], [chainId], [chainId]]);
+          expect(getSession).not.toHaveBeenCalled();
+          expect(sessions).toEqual(before);
+        }
+      );
+
+      test.each([
+        ['incomplete percent', 'chain-Root_Name-X%', undefined],
+        ['invalid percent', 'chain-Root_Name-X%GG', undefined],
+        ['double encoded root', encodeURIComponent(encodeURIComponent(chainIds[0])), undefined],
+        [
+          'double encoded qualified',
+          encodeURIComponent(encodeURIComponent(chainIds[3])),
+          undefined,
+        ],
+        ['invalid whole identifier', encodeURIComponent('chain-team/child#1\n'), undefined],
+        ['stale numbered URI', encodeURIComponent('chain-Root_Name-X#99'), 'chain-Root_Name-X#99'],
+      ])(
+        'SDK URI refuses %s without state effects or alias lookup',
+        async (_name, component, expectedLookup) => {
+          const before = structuredClone(sessions);
+          const item = registeredResources.get('session')!;
+          if (!(item.template instanceof ResourceTemplate)) {
+            throw new Error('Session resource must register an actual SDK template');
+          }
+          const uri = new URL(RESOURCE_URI_PATTERNS.SESSION_ITEM.replace('{chainId}', component!));
+          const variables = item.template.uriTemplate.match(uri.toString());
+          expect(variables).toEqual({ chainId: component });
+          await expect(item.readHandler(uri, variables!)).rejects.toThrow();
+          expect(lookup.mock.calls).toEqual(expectedLookup === undefined ? [] : [[expectedLookup]]);
+          expect(getSession).not.toHaveBeenCalled();
+          expect(sessions).toEqual(before);
+        }
+      );
     });
   });
 

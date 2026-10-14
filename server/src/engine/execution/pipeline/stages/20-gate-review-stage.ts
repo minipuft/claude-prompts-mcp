@@ -20,6 +20,7 @@ import {
   hasStructuralFinding,
   selectToolReviewGateIds,
 } from '../decisions/gates/structural-review-composition.js';
+import { isUnknownInterruptPending } from '../decisions/mutation/interrupt-policy.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
@@ -300,6 +301,12 @@ export class GateReviewStage extends BasePipelineStage {
     }
 
     context.sessionContext = { ...sessionContext, pendingReview };
+
+    if (isUnknownInterruptPending(pendingReview)) {
+      context.executionResults = { content: '', generatedAt: Date.now() };
+      this.logExit({ skipped: 'Blocking-unknown interrupt has no work prompt' });
+      return;
+    }
 
     // The review handed to the renderer below. Reassigned once, when this stage records check
     // results onto it (ruling B4) — the store copy and the context copy must be the same object

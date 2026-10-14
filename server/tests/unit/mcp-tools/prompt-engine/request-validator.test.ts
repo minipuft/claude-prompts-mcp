@@ -296,6 +296,39 @@ describe('McpToolRequestValidator', () => {
     });
   });
 
+  describe('exact chain reference admission', () => {
+    test.each([
+      'chain-analysis',
+      'chain-implementation_plan/plan_table#1',
+      'chain-Team-Legacy/Child_Name/9deep#01',
+      'chain-9legacy#0',
+    ])('returns the complete raw identity %s unchanged', (raw) => {
+      expect(McpToolRequestValidator.isValidChainId(raw)).toBe(true);
+      expect(McpToolRequestValidator.validateChainId(raw)).toBe(raw);
+      expect(McpToolRequestValidator.validatePartial({ chain_id: raw }).chain_id).toBe(raw);
+    });
+
+    test.each([
+      'chain-/child#1',
+      'chain-parent//child#1',
+      'chain-parent/../child#1',
+      'chain-parent/%63hild#1',
+      'chain-parent\\child#1',
+      'chain-parent/child name#1',
+      'chain-parent/child#1\n',
+      'chain-parent/child#1\r\n',
+      'chain-parent/child#',
+      'chain-parent/child#latest',
+      'chain-parent/child#1#2',
+    ])('refuses the whole malformed identity %j', (raw) => {
+      expect(McpToolRequestValidator.isValidChainId(raw)).toBe(false);
+      expect(() => McpToolRequestValidator.validateChainId(raw)).toThrow(
+        'Chain ID must follow format:'
+      );
+      expect(() => McpToolRequestValidator.validatePartial({ chain_id: raw })).toThrow();
+    });
+  });
+
   describe('isValidCommand()', () => {
     it('should return true for non-empty strings', () => {
       expect(McpToolRequestValidator.isValidCommand('>>test')).toBe(true);

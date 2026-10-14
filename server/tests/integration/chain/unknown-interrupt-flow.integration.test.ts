@@ -519,7 +519,7 @@ describe('interrupt rendering: text section and structuredContent (row 2.4)', ()
     };
   };
 
-  test('the SOFT variant renders the interrupt and the four base verbs', async () => {
+  test('the SOFT variant renders the interrupt and the three base verbs', async () => {
     const { text } = await render(false);
 
     expect(text).toMatchInlineSnapshot(`
@@ -543,7 +543,8 @@ describe('interrupt rendering: text section and structuredContent (row 2.4)', ()
       - answer the step
       - remainder
       - gate_action:abort
-      - cancel
+
+      Abort stops the whole run at any time. No node, trailer, report or retry exhaustion is required.
 
       Chain: chain-demo#1
       → Progress 1/3
@@ -575,7 +576,8 @@ describe('interrupt rendering: text section and structuredContent (row 2.4)', ()
       - gate_action:resume
       - gate_action:accept_alternative (with remainder)
       - gate_action:abort
-      - cancel
+
+      Abort stops the whole run at any time. No node, trailer, report or retry exhaustion is required.
 
       Chain: chain-demo#1
       → Progress 1/3
@@ -605,7 +607,7 @@ describe('interrupt rendering: text section and structuredContent (row 2.4)', ()
       paused: false,
       resume: {
         chain_id: 'chain-demo#1',
-        verbs: ['answer the step', 'remainder', 'gate_action:abort', 'cancel'],
+        verbs: ['answer the step', 'remainder', 'gate_action:abort'],
       },
     });
   });
@@ -625,7 +627,6 @@ describe('interrupt rendering: text section and structuredContent (row 2.4)', ()
           'gate_action:resume',
           'gate_action:accept_alternative (with remainder)',
           'gate_action:abort',
-          'cancel',
         ],
       },
     });

@@ -315,7 +315,9 @@ describe('describeHeldRun', () => {
     );
     expect(text).toContain('a (step 2), b (step 3)');
     expect(text).not.toContain('c (step 4)');
-    expect(text).toContain('cancel: true');
+    expect(text).toContain('send chain_id and gate_action "abort"');
+    expect(text).toContain('No node, trailer, report or retry exhaustion is required.');
+    expect(text).not.toContain('cancel: true');
     expect(text).not.toMatch(/[Cc]hain complete|Execution complete/);
   });
 });
@@ -373,6 +375,10 @@ describe('resolveDetachedReport: a reported node under gate review (row 4.8)', (
       "worker's replacement result"
     );
     expect(message(route(underReview('exhausted'), verdict))).toContain('gate_action "retry"');
+    expect(message(route(underReview('exhausted'), verdict))).toContain(
+      'send chain_id and gate_action "abort"'
+    );
+    expect(message(route(underReview('exhausted'), verdict))).not.toContain('cancel: true');
     expect(message(route(underReview('awaiting-verdict'), none))).toContain('node: rev');
   });
 
@@ -458,7 +464,8 @@ describe('describeHeldRun: every open hold kind, each with its move (P6.30)', ()
       reviews: [{ stepNumber: 2, kind: 'structural', phase: 'exhausted' }],
     });
     expect(spent).toContain('The structural review of step 2 has spent its retries');
-    expect(spent).toContain('gate_action "retry", "skip" or "abort"');
+    expect(spent).toContain('gate_action "retry" or "skip"');
+    expect(spent).toContain('send chain_id and gate_action "abort"');
   });
 
   test('(c) an owed report and a step review: both, each with its own move', () => {
@@ -493,7 +500,7 @@ describe('describeHeldRun: every open hold kind, each with its move (P6.30)', ()
   });
 });
 
-describe('the words a detached review says (row 3.8)', () => {
+describe('the words a detached review says', () => {
   const node: DetachedNodeFacts = {
     token: 'rev',
     nodeId: 'rev',
@@ -530,6 +537,9 @@ describe('the words a detached review says (row 3.8)', () => {
     });
     expect(missing).toContain('The reported result is missing required structure:');
     expect(missing).toContain('- Ensure your response includes the required "## Context" section');
+    expect(missing).toContain('send chain_id="c", gate_action="abort"');
+    expect(missing).toContain('No node, trailer or report is required.');
+    expect(missing).not.toContain('cancel: true');
     expect(describeDetachedReview(node, { ...review, structuralHints: [] })).not.toContain(
       'missing required structure'
     );
@@ -564,6 +574,22 @@ describe('the words a detached review says (row 3.8)', () => {
     expect(structuralAt).toBeGreaterThan(-1);
     expect(semanticAt).toBeGreaterThan(structuralAt);
     expect(both.split(semanticHint)).toHaveLength(2);
+  });
+
+  test('an exhausted review keeps its retry and skip trailer separate from whole-run abort', () => {
+    const text = describeDetachedReviewOutcome(node, {
+      result: 'exhausted',
+      attempt: 2,
+      maxAttempts: 2,
+      runCompleted: false,
+      held: true,
+      detachedNodes: [node],
+    });
+    expect(text).toContain('gate_action "retry" (another replacement) or "skip"');
+    expect(text).toContain('user_response ending in:\n```\nHANDOFF RESULT\nnode: rev\n```');
+    expect(text).toContain('send chain_id and gate_action "abort"');
+    expect(text).toContain('No node, trailer or report is required.');
+    expect(text).not.toContain('cancel: true');
   });
 });
 
@@ -630,6 +656,19 @@ describe("a detached semantic review renders one resume call, routed by the node
     });
   };
   const count = (text: string, needle: string) => text.split(needle).length - 1;
+
+  test.each(['bound', 'capture-first', 'unavailable'] as const)(
+    'a %s semantic review offers the independent whole-run abort',
+    (target) => {
+      const text = reply(target);
+      expect(text).toContain(
+        'To stop the whole run at any time, send chain_id="chain#1", gate_action="abort". ' +
+          'No node, trailer or report is required.'
+      );
+      expect(count(text, 'gate_action="abort"')).toBe(1);
+      expect(text).not.toContain('cancel: true');
+    }
+  );
 
   test('a bound review: one fence with the filled verdict and the trailer as user_response', () => {
     const text = reply('bound');

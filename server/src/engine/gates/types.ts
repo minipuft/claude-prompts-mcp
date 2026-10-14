@@ -279,11 +279,6 @@ export type { GateEnforcementMode, GateSeverity } from './types/gate-primitives.
 export { SEVERITY_TO_ENFORCEMENT } from './types/gate-primitives.js';
 
 /**
- * User action choices when retry limit is exceeded
- */
-export type GateAction = 'retry' | 'skip' | 'abort';
-
-/**
  * Interface for GateManager consumed by the gate-provider-adapter.
  * Breaks the concrete import cycle: gate-manager → registry → adapter → gate-manager.
  */

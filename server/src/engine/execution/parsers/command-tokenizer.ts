@@ -9,7 +9,11 @@
  */
 
 import { RESERVED_OPERATORS } from './operator-patterns.js';
-import { isPositionInsideQuotes, findFrameworkOperatorOutsideQuotes } from './parser-utils.js';
+import {
+  isPositionInsideQuotes,
+  findFrameworkOperatorOutsideQuotes,
+  readPromptSelector,
+} from './parser-utils.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -113,10 +117,15 @@ function buildCleanedCommand(command: string, operators: TokenizedOperator[]): s
   // Strip trailing verify options (:fast, :full, :extended, loop:true/false, max:N, timeout:N)
   result = result.replace(
     /\s+(?::(fast|full|extended)\b|loop:(true|false)\b|max:\d+\b|timeout:\d+\b)/gi,
-    ''
+    (match, _mode, _loop, position: number) =>
+      isPositionInsideQuotes(result, position) ? match : ''
   );
 
-  return result.replace(/\s+/g, ' ').trim();
+  return result
+    .replace(/\s+/g, (space, position: number) =>
+      isPositionInsideQuotes(result, position) ? space : ' '
+    )
+    .trim();
 }
 
 /**
@@ -139,19 +148,24 @@ function extractPromptInfo(
       op.type === 'conditional'
   );
 
-  const baseSegment = hasDelimiters
-    ? (withoutDelegation.split(/-->|==>|\+|\?/)[0]?.trim() ?? '')
-    : withoutDelegation.trim();
+  let baseSegment = withoutDelegation.trim();
+  if (hasDelimiters) {
+    // Modifier removal shifts positions; detect delimiters again on the cleaned text.
+    const delimiters: TokenizedOperator[] = [];
+    detectDelimiters(withoutDelegation, delimiters);
+    detectStructural(withoutDelegation, delimiters);
+    const firstDelimiter = Math.min(...delimiters.map((op) => op.position));
+    baseSegment = withoutDelegation.slice(0, firstDelimiter).trim();
+  }
 
-  const match = baseSegment.match(/^(?:>>)?([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/);
-  const promptId = match?.[1];
-  if (promptId === undefined) {
+  const selector = readPromptSelector(baseSegment);
+  if (selector === null) {
     return { promptId: null, rawArgs: '' };
   }
 
   return {
-    promptId,
-    rawArgs: (match?.[2] ?? '').trim(),
+    promptId: selector.promptId,
+    rawArgs: selector.remainder.trim(),
   };
 }
 

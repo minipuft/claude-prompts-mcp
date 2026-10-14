@@ -393,7 +393,7 @@ export const acceptsVerdictlessJoin = (review: GateReview | undefined): boolean 
  * True when a run has walked past its last node but may not complete yet: a detached
  * (`await: run`) node it spawned has not reported (Tier 4), or a review of one of its nodes is
  * still open. Such a run is NOT complete — its status stays non-terminal, and a resume reaches it
- * to deliver the owed result or verdict (or a cancel). PURE; {@link nodesHoldingRunOpen} is the
+ * to deliver the owed result or verdict (or run abort). PURE; {@link nodesHoldingRunOpen} is the
  * one derivation.
  */
 export const isRunHeldOpen = (run: RunHoldFacts): boolean =>
@@ -530,7 +530,8 @@ export interface ChainSessionLookupOptions extends StateStoreOptions {
 }
 
 /**
- * Outcome of claiming a handed-off run (plan 2A). The registry produces the first three; the
+ * Outcome of claiming a handed-off run (plan 2A). The registry owns transfer, unknown-token,
+ * launch-storage and request-continuity refusals; the
  * store adds `no-blueprint` after inspecting what it received (OQ-1: a run nothing can resume
  * is refused rather than loaded), and `chain-id-held` before any transfer when this server
  * already runs a different run under the claimed chain id (R62: a `chain_id` must name one run).
@@ -539,8 +540,25 @@ export type ChainHandoffClaimResult =
   | { status: 'claimed'; session: ChainSession }
   | { status: 'unknown-token' }
   | { status: 'workspace-mismatch'; rowWorkspaceId: string; claimantWorkspaceId: string }
+  | {
+      status: 'request-continuity-mismatch';
+      runContinuityScopeId: string | undefined;
+      requestContinuityScopeId: string;
+    }
   | { status: 'no-blueprint'; chainId: string }
   | { status: 'chain-id-held'; chainId: string };
+
+/** Immutable projection of a terminal transition that has already persisted. */
+export interface RunTerminalFact {
+  readonly chainId: string;
+  readonly status: 'completed' | 'failed' | 'cancelled';
+  readonly completedAt: number;
+  readonly promptId?: string;
+  readonly telemetry: Readonly<RunTelemetry>;
+  readonly scope?: Readonly<StateStoreOptions>;
+}
+
+export type RunEndedCallback = (sessionId: string, terminal?: RunTerminalFact) => void;
 
 export interface ChainSessionService {
   /**
@@ -691,7 +709,7 @@ export interface ChainSessionService {
     scope?: StateStoreOptions
   ): Promise<{ token: string; chainId: string; sessionId: string } | undefined>;
   /** Claim a run minted elsewhere and load it here; every refusal names its reason (plan 2A). */
-  claimHandoff(token: string): Promise<ChainHandoffClaimResult>;
+  claimHandoff(token: string, requestScope?: StateStoreOptions): Promise<ChainHandoffClaimResult>;
   completeStep(
     sessionId: string,
     nodeId: string,
@@ -784,8 +802,8 @@ export interface ChainSessionService {
   onSessionCleared(
     callback: (sessionId: string, session: ChainSession) => void | Promise<void>
   ): void;
-  /** Register a callback invoked once a run ends: a terminal status, or its session removed. */
-  onRunEnded(callback: (sessionId: string) => void): void;
+  /** Terminal transitions carry a persisted fact; session removal carries only the ID. */
+  onRunEnded(callback: RunEndedCallback): void;
   /**
    * Apply a batch of typed unknown observations to the session's ledger.
    *

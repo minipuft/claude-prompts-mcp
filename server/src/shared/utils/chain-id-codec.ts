@@ -21,20 +21,25 @@
  * contract, no owner. Keep it that way: add format knowledge here, not at a call site.
  */
 
+import { PROMPT_REFERENCE_PATTERN_SOURCE } from './resource-ids.js';
+
 /**
  * The run-number suffix. One literal serves strip, parse, and format so the three can
  * never disagree about what a run suffix is.
  */
 const RUN_SUFFIX_PATTERN = /#(\d+)$/;
 
+/** Unanchored source for generated text-token projections. */
+export const CHAIN_ID_PATTERN_SOURCE = `chain-${PROMPT_REFERENCE_PATTERN_SOURCE}(?:#[0-9]+)?`;
+
 /**
  * Full shape of a chain identifier, with or without a run suffix.
  *
- * Used by request validation and by the `chain_id` MCP parameter. The base segment is
- * `chain-` plus a prompt id, which the prompt loader constrains to the same character
- * class this allows.
+ * Used by request validation and by the `chain_id` MCP parameter. The prompt part
+ * shares accepted-reference syntax with the loader, preserving full qualified ids.
+ * Absolute end rejects trailing newlines as well as malformed segments and suffixes.
  */
-export const CHAIN_ID_PATTERN = /^chain-[a-zA-Z0-9_-]+(?:#\d+)?$/;
+export const CHAIN_ID_PATTERN = new RegExp(`^${CHAIN_ID_PATTERN_SOURCE}(?![\\s\\S])`);
 
 /**
  * The format stated in prose, for validator messages that must tell a caller what to

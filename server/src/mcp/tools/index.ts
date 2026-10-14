@@ -41,10 +41,9 @@ import {
 } from './schemas/index.js';
 import { deriveStructuredMessage } from './shared/structured-message.js';
 import {
-  GATE_PARAMETERS_UNAVAILABLE,
+  describePromptEngineParameterRefusal,
   describeUndeclaredParameterRefusal,
   type ContractToolName,
-  type UnavailableParameters,
 } from './shared/undeclared-parameters.js';
 import {
   ConsolidatedSystemControl,
@@ -515,9 +514,12 @@ export class McpToolRouter {
   private refuseUndeclaredParameters(
     tool: ContractToolName,
     args: object,
-    unavailable?: UnavailableParameters
+    gateSystemEnabled?: boolean
   ): { content: { type: 'text'; text: string }[]; isError: true } | null {
-    const refusal = describeUndeclaredParameterRefusal(tool, args, unavailable);
+    const refusal =
+      tool === 'prompt_engine'
+        ? describePromptEngineParameterRefusal(args, gateSystemEnabled ?? true)
+        : describeUndeclaredParameterRefusal(tool, args);
     if (refusal === null) return null;
     this.logger.warn(`${tool} refused undeclared parameter(s): ${refusal.split('\n')[0] ?? ''}`);
     return { content: [{ type: 'text', text: `❌ ${refusal}` }], isError: true };
@@ -957,15 +959,13 @@ export class McpToolRouter {
         withRequestNotifications(async (args: PromptEngineInput, extra: unknown) => {
           try {
             // Ahead of the allowlist below, which is where an undeclared key would otherwise
-            // vanish. The gate trio is DECLARED but withdrawn from the advertised surface while
+            // vanish. `gates` and `gate_verdict` are withdrawn from the advertised surface while
             // gates are off, so it gets the "not advertised right now" message, never "not a
             // parameter" — the contract names it (CLAUDE.md §Public API Contract).
             const undeclared = this.refuseUndeclaredParameters(
               'prompt_engine',
               args,
-              this.readToolSurfaceState().gateSystemEnabled === false
-                ? GATE_PARAMETERS_UNAVAILABLE
-                : undefined
+              this.readToolSurfaceState().gateSystemEnabled
             );
             if (undeclared !== null) return undeclared;
 
@@ -1004,7 +1004,6 @@ export class McpToolRouter {
               // framework routes, and this). Verified live, not by unit test: only a real
               // tools/call can show whether the value arrives. Re-measured 2026-08-30: four
               // recorded instances precede `remainder` below, which makes it the fifth.
-              ...(args.cancel !== undefined ? { cancel: args.cancel } : {}),
               // Fourth instance (2026-08-21): `handoff`/`claim_token` typechecked end-to-end and
               // were dead on the wire until the two-server live drive showed `handoff:true`
               // rendering the prompt instead of minting. Same allowlist, same lesson.

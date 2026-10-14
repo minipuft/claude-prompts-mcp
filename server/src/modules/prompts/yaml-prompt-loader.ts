@@ -30,6 +30,7 @@ import {
   isSingleFilePromptName,
   singleFilePromptBaseName,
 } from '#shared/utils/prompt-layout.js';
+import { isAcceptedPromptReference } from '#shared/utils/resource-ids.js';
 import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 
 // ============================================
@@ -740,6 +741,13 @@ export function loadYamlPrompt(
     });
     return null;
   };
+
+  // Directory prefixes are part of identity, including when content is already cached.
+  if (!isAcceptedPromptReference(promptId)) {
+    const error = `Invalid prompt reference '${promptId}': expected nonempty ASCII alphanumeric, underscore or hyphen segments separated by '/'`;
+    ctx.logger.error(`[PromptLoader] ${error} in ${yamlPath}`);
+    return refuse(error);
+  }
 
   // Check cache first
   // Compute relative file path for PromptData.file

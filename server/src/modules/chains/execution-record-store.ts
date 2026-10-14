@@ -71,7 +71,7 @@ export interface ExecutionRecordAppendInput {
   chainId?: string;
   stepNumber?: number;
   /**
-   * Stable node identity of the step this record describes. Omitted by the two run-level
+   * Stable node identity of the step this record describes. Omitted by the three run-level
    * terminal writers, which describe a run rather than a node; `buildAppendParams` binds NULL
    * for them explicitly rather than letting the column go unnamed.
    */
@@ -89,7 +89,7 @@ export interface ExecutionRecordAppendInput {
    * Run-level telemetry, flat rather than nested: this file's existing flat-scalar style
    * (sessionId/chainId/stepNumber/promptId) maps one field to one column, which is what keeps
    * the column names literal in the INSERT below and therefore visible to
-   * `validate:no-phantom-columns`. Bound only by the two terminal-record call sites.
+   * `validate:no-phantom-columns`. Bound by completion, failure and cancellation terminal writers.
    */
   stepsPlanned?: number;
   gatesFired?: number;
@@ -98,14 +98,14 @@ export interface ExecutionRecordAppendInput {
   unknownsClosed?: number;
   /**
    * P4 adaptive-mutation counters. Same terminal-rows-only posture as the five above — they
-   * arrive on the same `getRunTelemetry` object both terminal writers spread, so a writer
+   * arrive on the same telemetry projection all terminal writers spread, so a writer
    * cannot pick up one group and miss the other.
    */
   nodesInserted?: number;
   nodesSkipped?: number;
   /**
    * D-8 mid-chain interrupt counters. Same terminal-rows-only posture and the same delivery
-   * route as the P4 pair above — they ride the one `getRunTelemetry` object both terminal
+   * route as the P4 pair above — they ride the same telemetry projection all terminal
    * writers spread, so a writer cannot bind one group and miss this one. See `RunTelemetry`
    * for what unit each counts.
    */

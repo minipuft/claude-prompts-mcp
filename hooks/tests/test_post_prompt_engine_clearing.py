@@ -1,16 +1,4 @@
-"""
-Tests for hooks/post-prompt-engine.py session-row lifecycle.
-
-Rows were written on every parse and cleared by nothing but the 24h sweep, so
-a resolved gate ("Execution complete.", no markers) left its pending_gate row
-behind and recovery hooks re-injected long-resolved state after compaction.
-These pin the clearing boundaries:
-
-  - verdict/cancel submission + marker-less response  → row cleared
-  - explicit completion marker + nothing pending      → row cleared
-  - final step merely DELIVERED ("Step 2 of 2")       → row kept (in flight)
-  - FAIL verdict re-issuing a gate review             → row kept (gate pending)
-"""
+"""Session-row clearing from prompt_engine terminal responses in an isolated workspace."""
 
 import json
 import os
@@ -66,12 +54,18 @@ def workspace(tmp_path):
     return ws
 
 
-def _payload(content: str, tool_input: dict | None = None, session_id: str = "sess-clear") -> dict:
+def _payload(
+    content: str,
+    tool_input: dict | None = None,
+    session_id: str = "sess-clear",
+    *,
+    is_error: bool | None = False,
+) -> dict:
     return {
         "tool_name": "mcp__claude-prompts__prompt_engine",
         "session_id": session_id,
         "tool_input": tool_input or {},
-        "tool_response": {"content": content},
+        "tool_response": {"content": content, **({"isError": is_error} if is_error is not None else {})},
     }
 
 
@@ -84,18 +78,75 @@ class TestSessionRowClearing:
         assert _load_row(workspace, "sess-clear") is not None
 
         resolve = _run_hook(
-            _payload("Execution complete.", {"chain_id": "chain-demo#1", "gate_verdict": "GATE_REVIEW: PASS - ok"}),
+            _payload(
+                "Execution complete.",
+                {"chain_id": "chain-demo#1", "gate_verdict": {"overall": "PASS", "rationale": "ok"}},
+            ),
             workspace,
         )
         assert resolve.returncode == 0
         assert _load_row(workspace, "sess-clear") is None
 
-    def test_a_cancel_clears_the_row(self, workspace):
+    def test_authoritative_abort_clears_the_matching_tracked_run(self, workspace):
         _run_hook(_payload("Step 1 of 3 chain-demo#1", {"command": ">>demo"}), workspace)
-        assert _load_row(workspace, "sess-clear") is not None
+        assert _load_row(workspace, "sess-clear")["chain_id"] == "chain-demo#1"
 
-        _run_hook(_payload("Run cancelled.", {"chain_id": "chain-demo#1", "cancel": True}), workspace)
+        response = "🛑 **Chain Cancelled**: `chain-demo#1`\n\nFurther progression is blocked."
+        abort = _run_hook(_payload(response, {"chain_id": "chain-demo#1", "gate_action": "abort"}), workspace)
+        assert abort.returncode == 0
         assert _load_row(workspace, "sess-clear") is None
+
+    @pytest.mark.parametrize(
+        ("content", "tool_input", "is_error"),
+        [
+            ("⚠️ **Abort Not Applied**: `chain-demo#1`", {"chain_id": "chain-demo#1", "gate_action": "abort"}, True),
+            ("🛑 **Chain Cancelled**: `chain-demo#1`", {"chain_id": "chain-demo#1", "gate_action": "abort"}, True),
+            ("Nothing was recorded.", {"chain_id": "chain-demo#1", "gate_action": "abort"}, False),
+            ("🛑 **Chain Cancelled**: `chain-demo#1`", {"chain_id": "chain-demo#1"}, False),
+            ("🛑 **Chain Cancelled**: `other#1`", {"chain_id": "chain-demo#1", "gate_action": "abort"}, False),
+            ("🛑 **Chain Cancelled**: `other#1`", {"chain_id": "other#1", "gate_action": "abort"}, False),
+            ("🛑 **Chain Cancelled**: `chain-demo#1`", {"chain_id": "chain-demo#1", "gate_action": "abort"}, None),
+            (
+                "Nothing was recorded.",
+                {"chain_id": "chain-demo#1", "gate_verdict": {"overall": "PASS", "rationale": "ok"}},
+                False,
+            ),
+            (
+                "Execution complete.",
+                {"chain_id": "chain-demo#1", "gate_verdict": {"overall": "PASS", "rationale": "ok"}},
+                True,
+            ),
+            (
+                "Execution complete.",
+                {"chain_id": "chain-demo#1", "gate_verdict": {"overall": "PASS", "rationale": "ok"}},
+                None,
+            ),
+            (
+                "Execution complete.",
+                {"chain_id": "other#1", "gate_verdict": {"overall": "PASS", "rationale": "ok"}},
+                False,
+            ),
+        ],
+        ids=[
+            "abort-refused",
+            "abort-error-with-success-words",
+            "abort-markerless",
+            "abort-without-request-action",
+            "abort-response-id-mismatch",
+            "abort-request-id-mismatch",
+            "abort-status-unreported",
+            "verdict-markerless",
+            "completion-error",
+            "completion-status-unreported",
+            "completion-request-id-mismatch",
+        ],
+    )
+    def test_unproven_terminal_response_preserves_tracker(self, workspace, content, tool_input, is_error):
+        _run_hook(_payload("Step 1 of 3 chain-demo#1", {"command": ">>demo"}), workspace)
+        before = _load_row(workspace, "sess-clear")
+        response = _run_hook(_payload(content, tool_input, is_error=is_error), workspace)
+        assert response.returncode == 0
+        assert _load_row(workspace, "sess-clear") == before
 
     def test_chain_completion_clears_the_row(self, workspace):
         _run_hook(_payload("Step 2 of 2 chain-demo#1", {"command": ">>demo"}), workspace)
@@ -103,6 +154,22 @@ class TestSessionRowClearing:
 
         _run_hook(_payload("Chain complete (2/2) chain-demo#1", {"chain_id": "chain-demo#1"}), workspace)
         assert _load_row(workspace, "sess-clear") is None
+
+    def test_completion_for_another_run_preserves_tracker(self, workspace):
+        _run_hook(_payload("Step 1 of 3 chain-demo#1", {"command": ">>demo"}), workspace)
+        before = _load_row(workspace, "sess-clear")
+        _run_hook(_payload("✓ Chain complete (3/3) chain-other#1", {"chain_id": "chain-demo#1"}), workspace)
+        assert _load_row(workspace, "sess-clear") == before
+
+    def test_abort_does_not_clear_a_gate_only_tracker_without_run_identity(self, workspace):
+        _run_hook(_payload(GATE_REVIEW_RESPONSE, {"command": ">>demo"}), workspace)
+        before = _load_row(workspace, "sess-clear")
+        assert before["chain_id"] == ""
+        _run_hook(
+            _payload("🛑 **Chain Cancelled**: `chain-demo#1`", {"chain_id": "chain-demo#1", "gate_action": "abort"}),
+            workspace,
+        )
+        assert _load_row(workspace, "sess-clear") == before
 
     def test_a_delivered_final_step_is_kept(self, workspace):
         """'Step 2 of 2' is the final step IN FLIGHT, not completion — the row
@@ -118,7 +185,10 @@ class TestSessionRowClearing:
         _run_hook(_payload(GATE_REVIEW_RESPONSE, {"command": ">>demo"}), workspace)
 
         _run_hook(
-            _payload(GATE_REVIEW_RESPONSE, {"chain_id": "chain-demo#1", "gate_verdict": "GATE_REVIEW: FAIL - nope"}),
+            _payload(
+                GATE_REVIEW_RESPONSE,
+                {"chain_id": "chain-demo#1", "gate_verdict": {"overall": "FAIL", "rationale": "nope"}},
+            ),
             workspace,
         )
 
@@ -137,3 +207,61 @@ class TestSessionRowClearing:
         row = _load_row(workspace, "sess-clear")
         assert row is not None
         assert row.get("pending_gate")
+
+
+class TestQualifiedTerminalBinding:
+    @pytest.mark.parametrize(
+        ("tracked", "response_id", "request_id", "action", "is_error", "cleared"),
+        [
+            ("chain-plan/table#1", "chain-plan/table#1", "chain-plan/table#1", "abort", False, True),
+            (
+                "chain-plan/table/detail#01",
+                "chain-plan/table/detail#01",
+                "chain-plan/table/detail#01",
+                "complete",
+                False,
+                True,
+            ),
+            ("chain-plan/table#1", "chain-plan#1", "chain-plan/table#1", "abort", False, False),
+            ("chain-plan/table#1", "chain-plan/table#1", "chain-plan#1", "abort", False, False),
+            (
+                "chain-plan/table/detail#01",
+                "chain-plan/table/detail#1",
+                "chain-plan/table/detail#01",
+                "complete",
+                False,
+                False,
+            ),
+            ("chain-plan/table#1", "chain-plan/table#1", "chain-plan/table#1", "abort", True, False),
+            ("chain-plan/table#1", "chain-plan#1", "chain-plan/table#1", "complete", False, False),
+        ],
+        ids=[
+            "qualified-abort",
+            "deep-raw-completion",
+            "short-abort-response",
+            "short-abort-request",
+            "normalized-completion-response",
+            "abort-error",
+            "short-completion-response",
+        ],
+    )
+    def test_terminal_response_binds_the_exact_tracked_token(
+        self, workspace, tracked, response_id, request_id, action, is_error, cleared
+    ):
+        arm = _run_hook(_payload(f"Step 1 of 3 `{tracked}`", {"command": ">>plan/table"}), workspace)
+        assert arm.returncode == 0
+        before = _load_row(workspace, "sess-clear")
+        assert before["chain_id"] == tracked
+        tool_input = {"chain_id": request_id}
+        if action == "abort":
+            tool_input["gate_action"] = "abort"
+            content = f"🛑 **Chain Cancelled**: `{response_id}`"
+        else:
+            content = f"✓ Chain complete (3/3) `{response_id}`"
+        response = _run_hook(_payload(content, tool_input, is_error=is_error), workspace)
+        assert response.returncode == 0
+        after = _load_row(workspace, "sess-clear")
+        if cleared:
+            assert after is None
+        else:
+            assert after == before

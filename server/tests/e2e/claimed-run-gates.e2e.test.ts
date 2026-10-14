@@ -1074,7 +1074,8 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     const kept = chainIdOf((await server.call('prompt_engine', { command: '>>sv_chain164' })).text);
     expect([await chainLine(ended), await chainLine(kept)]).toEqual(['cg164', 'cg164']);
 
-    await server.call('prompt_engine', { chain_id: ended, cancel: true });
+    const aborted = await server.call('prompt_engine', { chain_id: ended, gate_action: 'abort' });
+    expect(aborted.isError).toBe(false);
     expect([await chainLine(ended), await chainLine(kept)]).toEqual(['none', 'cg164']);
     const failed = await server.call('prompt_engine', {
       chain_id: kept,

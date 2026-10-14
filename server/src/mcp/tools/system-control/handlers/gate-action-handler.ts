@@ -60,6 +60,30 @@ export class GateActionHandler extends ActionHandler {
     }
   }
 
+  /** Report runtime/configuration policy without implying per-call gate modifiers. */
+  private describeReviewGuidancePolicy(runtimeEnabled: boolean): string {
+    const configuredEnabled = this.configManager?.getGatesConfig().enabled;
+    const effective = runtimeEnabled ? configuredEnabled : false;
+    const label = (enabled: boolean | undefined): string =>
+      enabled === undefined
+        ? 'Unknown (configuration unavailable)'
+        : enabled
+          ? 'Enabled'
+          : 'Disabled';
+    const configurationDefault =
+      configuredEnabled === undefined
+        ? '\n**Configuration Default**: An unspecified `gates.enabled` permits review/guidance; loaded configuration is unavailable here.'
+        : '';
+
+    return (
+      `**Runtime Switch**: ${label(runtimeEnabled)}\n` +
+      `**Configuration Enabled**: ${label(configuredEnabled)}\n` +
+      `**Effective Review/Guidance**: ${
+        effective === undefined ? 'Unknown' : effective ? 'Active' : 'Inactive'
+      }${configurationDefault}`
+    );
+  }
+
   private async enableGateSystem(args: {
     reason?: string;
     persist?: boolean;
@@ -71,12 +95,12 @@ export class GateActionHandler extends ActionHandler {
     const currentState = this.gateStateStore.getCurrentState(this.requestScope);
     if (currentState.enabled) {
       return this.createMinimalSystemResponse(
-        `ℹ️ Gate system is already enabled.\n\n${describeTogglePersistence({
+        `ℹ️ Gate runtime switch is already enabled.\n\n${describeTogglePersistence({
           persist: args.persist,
           note: args.persist === true ? await this.context.persistGateConfig(true) : undefined,
           setting: '`gates.enabled`',
           changed: false,
-        })}`,
+        })}\n\n${this.describeReviewGuidancePolicy(true)}`,
         'enable_gate_system'
       );
     }
@@ -96,9 +120,7 @@ export class GateActionHandler extends ActionHandler {
     const response =
       `✅ **Gate System Enabled**\n\n` +
       `**Reason**: ${args.reason || 'User requested to enable gate system'}\n` +
-      `**Status**: Gate system is now active\n` +
-      `**Validation**: Quality gates will now be applied to prompt executions\n\n` +
-      `🔍 All template and chain executions will now include gate validation and guidance.` +
+      `${this.describeReviewGuidancePolicy(true)}` +
       `\n\n${persistence}`;
 
     return this.createMinimalSystemResponse(response, 'enable_gate_system');
@@ -140,9 +162,8 @@ export class GateActionHandler extends ActionHandler {
     const response =
       `⚠️ **Gate System Disabled**\n\n` +
       `**Reason**: ${args.reason || 'User requested to disable gate system'}\n` +
-      `**Status**: Gate system is now inactive\n` +
-      `**Impact**: Gate validation and guidance will be skipped\n\n` +
-      `📝 Prompt executions will now skip quality gate validation.` +
+      `**Status**: Runtime switch is now disabled\n` +
+      `**Review/Guidance**: Inactive while the runtime switch is disabled.` +
       `\n\n${persistence}`;
 
     return this.createMinimalSystemResponse(response, 'disable_gate_system');
@@ -160,8 +181,10 @@ export class GateActionHandler extends ActionHandler {
     const health = this.gateStateStore.getSystemHealth(this.requestScope);
 
     let response = `🚪 **Gate System Status**\n\n`;
-    response += `**System State**: ${currentState.enabled ? 'Enabled' : 'Disabled'}\n`;
-    response += `**Health Status**: ${health.status}\n`;
+    response += `**System State**: ${currentState.enabled ? 'Enabled' : 'Disabled'} (runtime switch)\n`;
+    response += `${this.describeReviewGuidancePolicy(currentState.enabled)}\n`;
+    response += `**Runtime Health Status**: ${health.status}\n`;
+    response += `**Runtime Performance Metrics**:\n`;
     response += `**Total Validations**: ${health.totalValidations}\n`;
     response += `**Success Rate**: ${health.successRate}%\n`;
     response += `**Average Validation Time**: ${health.averageValidationTime}ms\n`;
@@ -177,7 +200,7 @@ export class GateActionHandler extends ActionHandler {
       });
     }
 
-    response += `\n🔧 Control gates using: action="gates", operation="enable/disable"`;
+    response += `\n🔧 Control the runtime switch using: action="gates", operation="enable/disable"`;
 
     return this.createMinimalSystemResponse(response, 'gate_system_status');
   }
@@ -196,10 +219,10 @@ export class GateActionHandler extends ActionHandler {
 
     const statusIcon =
       health.status === 'healthy' ? '✅' : health.status === 'degraded' ? '⚠️' : '❌';
-    response += `**Overall Status**: ${statusIcon} ${health.status.toUpperCase()}\n\n`;
+    response += `**Overall Status**: ${statusIcon} ${health.status.toUpperCase()} (runtime switch)\n\n`;
 
-    response += `**Performance Metrics**:\n`;
-    response += `- Enabled: ${health.enabled ? 'Yes' : 'No'}\n`;
+    response += `**Runtime Performance Metrics**:\n`;
+    response += `- Runtime Switch Enabled: ${health.enabled ? 'Yes' : 'No'}\n`;
     response += `- Total Validations: ${health.totalValidations}\n`;
     response += `- Success Rate: ${health.successRate}%\n`;
     response += `- Average Validation Time: ${health.averageValidationTime}ms\n`;
@@ -209,9 +232,9 @@ export class GateActionHandler extends ActionHandler {
     }
 
     if (health.status === 'healthy') {
-      response += '\n✅ System is performing optimally. No action required.\n';
+      response += '\n✅ Runtime gate health reports no issues.\n';
     } else if (health.status === 'degraded') {
-      response += '\n⚠️ System performance is degraded. Monitor closely.\n';
+      response += '\n⚠️ Runtime gate health is degraded. Monitor closely.\n';
       if (health.issues.length > 0) {
         response += '\n**Issues Detected**:\n';
         health.issues.forEach((issue) => {
@@ -219,7 +242,7 @@ export class GateActionHandler extends ActionHandler {
         });
       }
     } else if (health.status === 'disabled') {
-      response += '\n🚫 Gate system is currently disabled.\n';
+      response += '\n🚫 Gate runtime switch is currently disabled.\n';
       response += "Enable using: `action='gates', operation='enable'`\n";
     }
 

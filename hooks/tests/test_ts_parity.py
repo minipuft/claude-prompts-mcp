@@ -1,5 +1,5 @@
 """
-Parity between three vocabularies the Python hooks restate and the TypeScript source that owns them.
+Parity between four vocabularies the Python hooks restate and the TypeScript source that owns them.
 
 WHY THIS FILE EXISTS
 --------------------
@@ -21,6 +21,7 @@ by name, with no file edited.
   3. hook config defaults  : `hooks.expandedOutput` `@default` (and the prose sentence beside it) in
                              shared/types/config-file.ts against `config_loader.DEFAULT_CONFIG` and
                              the value `is_expanded_output()` returns for a config that says nothing
+  4. chain text tokens     : generated JSON/Python projections against chain-id-codec.ts
 """
 
 import ast
@@ -242,3 +243,182 @@ class TestHookConfigDefaults:
         problems = hook_default_mismatch(planted, *python_values)
 
         assert any("hooks.expandedOutput prose" in p for p in problems)
+
+
+# ── 4. chain text-token projections ───────────────────────────────────────────
+
+
+class TestChainExtractionProjection:
+    @pytest.fixture(scope="class")
+    @staticmethod
+    def owner_projection():
+        import subprocess
+
+        script = """
+import { readFileSync } from 'node:fs';
+import { CHAIN_ID_PATTERN_SOURCE, CHAIN_ID_PATTERN, isChainId } from './src/shared/utils/chain-id-codec.ts';
+const patterns = JSON.parse(readFileSync('../hooks/lib/_generated/extraction-patterns.json', 'utf8'));
+const probes = JSON.parse(process.argv[1]);
+const pattern = new RegExp(patterns.chainId);
+console.log(JSON.stringify({ source: CHAIN_ID_PATTERN_SOURCE, strict: CHAIN_ID_PATTERN.source,
+  matches: probes.map(text => pattern.exec(text)?.[1] ?? null),
+  accepted: probes.map(isChainId) }));
+"""
+        probes = [
+            "chain-analysis",
+            "chain-implementation_plan/plan_table#1",
+            "chain-Team-Legacy/Child_Name/9deep#01",
+            "chain-Team/9child#0",
+            'chain_id:"chain-Team/9child#01"',
+            "**chain-team/phase/plan#1**",
+            "prefixchain-team/child#1",
+            "/chain-team/child#1",
+            "chain-team/child#latest",
+            "chain-team/child#1#2",
+            "chain-team/child#1/extra",
+            "chain-team//child#1",
+            "chain-team.child#1",
+            "chain-team/../child#1",
+            "chain-team/%63hild#1",
+            "chain-team\\child#1",
+            "échain-team/child#1",
+            "chain-team/child#1é",
+            "chain-team/child#1\u0301",
+            "chain-team/child#1\u200b",
+            "\u0085chain-team/child#1",
+            "chain-team/child#1\u00a0",
+            "chain-team/child#1\u2028",
+            "chain-team/child#\u0661",
+            "chain-team/child#1\u0661",
+            "chain-team/child#1\n",
+        ]
+        result = subprocess.run(
+            ["node", "--import", "tsx", "--input-type=module", "-e", script, json.dumps(probes)],
+            cwd=REPO_ROOT / "server",
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return probes, json.loads(result.stdout)
+
+    def test_generated_text_projection_agrees_with_codec_and_python(self, owner_projection):
+        import session_state
+
+        probes, owner = owner_projection
+        assert owner["strict"].replace(r"\/", "/") == f"^{owner['source']}(?![\\s\\S])"
+        expected = (
+            [
+                "chain-analysis",
+                "chain-implementation_plan/plan_table#1",
+                "chain-Team-Legacy/Child_Name/9deep#01",
+                "chain-Team/9child#0",
+                "chain-Team/9child#01",
+                "chain-team/phase/plan#1",
+            ]
+            + [None] * 19
+            + ["chain-team/child#1"]
+        )
+        matches = [
+            match.group(1) if (match := re.search(session_state._PATTERNS["chainId"], text)) else None
+            for text in probes
+        ]
+        assert owner["matches"] == matches == expected
+        assert owner["accepted"] == [True] * 4 + [False] * (len(probes) - 4)
+
+    def test_generated_fallback_equals_json_and_python_has_no_private_grammar(self):
+        import session_state
+        from _generated.extraction_patterns import EXTRACTION_PATTERNS
+
+        generated = json.loads((HOOKS_LIB / "_generated" / "extraction-patterns.json").read_text())
+        assert session_state._load_patterns() == generated == EXTRACTION_PATTERNS
+        tree = ast.parse((HOOKS_LIB / "session_state.py").read_text())
+        assert not any(
+            isinstance(node, ast.Dict)
+            and any(isinstance(key, ast.Constant) and key.value == "chainId" for key in node.keys)
+            for node in ast.walk(tree)
+        )
+
+    @pytest.mark.parametrize("unavailable", ["missing", "unreadable", "malformed"])
+    def test_json_unavailable_fallback_preserves_qualified_token(self, monkeypatch, unavailable):
+        import io
+
+        import session_state
+        from _generated.extraction_patterns import EXTRACTION_PATTERNS
+
+        def unavailable_json(*args, **kwargs):
+            if unavailable == "missing":
+                raise FileNotFoundError("planted missing generated JSON")
+            if unavailable == "unreadable":
+                raise PermissionError("planted unreadable generated JSON")
+            return io.StringIO("{")
+
+        monkeypatch.setattr(session_state, "open", unavailable_json, raising=False)
+        loaded = session_state._load_patterns()
+        assert loaded == EXTRACTION_PATTERNS
+        monkeypatch.setattr(session_state, "_PATTERNS", loaded)
+        token = "chain-Team-Legacy/Child_Name/9deep#01"
+        state = session_state.parse_prompt_engine_response(f'Progress 1/3\nchain_id="{token}"')
+        assert state is not None and state["chain_id"] == token
+
+    @pytest.mark.parametrize(
+        "token",
+        [
+            "chain-analysis",
+            "chain-Legacy-Prompt#0",
+            "chain-implementation_plan/plan_table#1",
+            "chain-Team-Legacy/Child_Name/9deep#01",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "frame",
+        [
+            "Chain: {token}",
+            "**{token}**",
+            "`{token}`",
+            'chain_id="{token}"',
+            'chain_id:"{token}"',
+            "HANDOFF RESULT chain={token} node=work attempt=1 claim=receipt",
+        ],
+    )
+    def test_complete_qualified_text_tokens_preserve_exact_bytes(self, token, frame):
+        from session_state import parse_prompt_engine_response
+
+        state = parse_prompt_engine_response(f"Progress 1/3\n{frame.format(token=token)}")
+        assert state is not None and state["chain_id"] == token
+
+    @pytest.mark.parametrize(
+        "token",
+        [
+            "prefixchain-team/child#1",
+            "/chain-team/child#1",
+            ".chain-team/child#1",
+            "@chain-team/child#1",
+            "échain-team/child#1",
+            "中chain-team/child#1",
+            "chain-team/child#1é",
+            "chain-team/child#1中",
+            "chain-team/child#1\u0301",
+            "chain-team/child#1\u200b",
+            "\u0085chain-team/child#1",
+            "chain-team/child#1\u00a0",
+            "chain-team/child#1\u2028",
+            "chain-team/child#\u0661",
+            "chain-team/child#1\u0661",
+            "chain-team/child#latest",
+            "chain-team/child#",
+            "chain-team/child#-1",
+            "chain-team/child#1#2",
+            "chain-team/child#1.0",
+            "chain-team/child#1/extra",
+            "chain-team//child#1",
+            "chain-team/../child#1",
+            "chain-team/%63hild#1",
+            "chain-team\\child#1",
+            "chain-team/child#1@tail",
+        ],
+    )
+    def test_invalid_ascii_and_unicode_tokens_are_not_prefix_truncated(self, token):
+        from session_state import parse_prompt_engine_response
+
+        state = parse_prompt_engine_response(f"Progress 1/3\n`{token}`")
+        assert state is not None and state["chain_id"] == ""

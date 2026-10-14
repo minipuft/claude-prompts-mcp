@@ -675,12 +675,12 @@ describe('PromptExecutionPipeline — a call that throws, and the call after it'
     expect(contentText(after)).toBe('STEP-BODY');
   });
 
-  test('(d) a later call that throws, then an explicit cancel: the next chain_id gets the cancelled-run reply, not a start-call failure', async () => {
+  test('(d) a later call that throws, then run abort: the next chain_id gets the cancelled-run reply, not a start-call failure', async () => {
     const { call, run, sessionStore } = setup();
     await call('create-new');
     await expect(call('resume-chain-id', 'capture exploded')).rejects.toThrow('capture exploded');
-    // `prompt_engine(cancel: true)` ends the run outside the pipeline and writes no record, so the
-    // run's newest record is still the failed call's.
+    // Run abort ends outside the pipeline; this fixture calls its underlying store directly, so
+    // the pipeline's newest record is still the failed call's.
     await sessionStore.cancelChain('run-121');
     expect(run.status).toBe('cancelled');
 

@@ -8,7 +8,8 @@ import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js'
 
 /**
  * Tests for chain-path CTA methods: buildGateReviewCTA, buildFinalStepMessage,
- * buildChainFooter (non-delegation), formatBlockedResponse, and advisory warnings.
+ * buildChainFooter (non-delegation), formatBlockedResponse, interrupt projections,
+ * and advisory warnings.
  *
  * These exercise the chain formatting path (formatChainResponse + buildChainFooter)
  * and the blocked response path (formatBlockedResponse).
@@ -381,8 +382,13 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       const reply = assembler.formatChainResponse(context, { isChainFormatting: true } as any);
 
       expect(reply).toContain(
-        'Next: chain_id="chain-test#1", gate_action="retry" | gate_action="skip" | cancel: true'
+        'Next: chain_id="chain-test#1", gate_action="retry" | gate_action="skip"'
       );
+      expect(reply).toContain(
+        'Stop the whole run at any time: chain_id="chain-test#1", gate_action="abort"'
+      );
+      expect(reply).toContain('No node, trailer or report is required.');
+      expect(reply).not.toContain('cancel: true');
       expect(reply).not.toContain('gate_verdict');
       expect(reply).not.toContain('Gate Review Required');
       expect(reply).toContain('Progress 1/3');
@@ -657,4 +663,44 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
       expect(result).toBeUndefined();
     });
   });
+});
+
+describe('interrupt abort projections', () => {
+  test.each([false, true])(
+    'soft/paused=%s offers one run abort in text and structured verbs',
+    (paused) => {
+      const context = createChainContext({
+        currentStep: 1,
+        totalSteps: 3,
+        ...(paused
+          ? {
+              pendingReview: makePendingReview({ gateIds: ['__unknown_interrupt__'], prompts: [] }),
+            }
+          : {}),
+      });
+      context.state.session.chainInterrupt = {
+        reason: 'blocking_unknown',
+        unknownId: 'u1',
+        statement: 'Confirm the dependency',
+        openBlockingUnknowns: [{ id: 'u1', statement: 'Confirm the dependency' }],
+        uninvestigatedUnknownIds: [],
+        affectedStepIds: [],
+        remainingNodes: [],
+        paused,
+      };
+      const verbs = paused
+        ? [
+            'gate_action:resume',
+            'gate_action:accept_alternative (with remainder)',
+            'gate_action:abort',
+          ]
+        : ['answer the step', 'remainder', 'gate_action:abort'];
+      const structured = assembler.buildInterruptStructuredContent(context);
+      expect(structured?.['resume']).toEqual({ chain_id: 'chain-test#1', verbs });
+      const text = assembler.formatChainResponse(context, { isChainFormatting: true } as any);
+      for (const verb of verbs) expect(text).toContain(`- ${verb}`);
+      expect(text).toContain('No node, trailer, report or retry exhaustion is required.');
+      expect(text).not.toMatch(/cancel(: true)?/);
+    }
+  );
 });

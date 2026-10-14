@@ -38,7 +38,7 @@ const review = (overrides: Partial<GateReview> = {}): GateReview => ({
 const PASS: ReviewEvent = { type: 'verdict', verdict: verdict('PASS'), at: 100 };
 const FAIL: ReviewEvent = { type: 'verdict', verdict: verdict('FAIL'), at: 100 };
 const REPLACEMENT: ReviewEvent = { type: 'replacement-report', output: 'second try' };
-const action = (value: 'retry' | 'skip' | 'abort'): ReviewEvent => ({
+const action = (value: 'retry' | 'skip'): ReviewEvent => ({
   type: 'gate_action',
   action: value,
   at: 100,
@@ -59,7 +59,6 @@ const EVENTS: ReadonlyArray<{
   { label: 'replacement', event: REPLACEMENT, enforcement: 'blocking', attemptCount: 1 },
   { label: 'retry', event: action('retry'), enforcement: 'blocking', attemptCount: 3 },
   { label: 'skip', event: action('skip'), enforcement: 'blocking', attemptCount: 3 },
-  { label: 'abort', event: action('abort'), enforcement: 'blocking', attemptCount: 3 },
 ];
 
 const KINDS: readonly GateReviewKind[] = ['gate', 'structural', 'detached'];
@@ -91,7 +90,6 @@ describe('advanceReview', () => {
       'gate awaiting-verdict replacement -> refused(phase) awaiting-verdict @1',
       'gate awaiting-verdict retry -> refused(phase) awaiting-verdict @3',
       'gate awaiting-verdict skip -> refused(phase) awaiting-verdict @3',
-      'gate awaiting-verdict abort -> refused(phase) awaiting-verdict @3',
       'gate awaiting-replacement PASS -> refused(phase) awaiting-replacement @1',
       'gate awaiting-replacement FAIL -> refused(phase) awaiting-replacement @1',
       'gate awaiting-replacement FAIL(last) -> refused(phase) awaiting-replacement @2',
@@ -100,7 +98,6 @@ describe('advanceReview', () => {
       'gate awaiting-replacement replacement -> reopened awaiting-verdict @1',
       'gate awaiting-replacement retry -> refused(phase) awaiting-replacement @3',
       'gate awaiting-replacement skip -> refused(phase) awaiting-replacement @3',
-      'gate awaiting-replacement abort -> refused(phase) awaiting-replacement @3',
       'gate exhausted PASS -> refused(phase) exhausted @1',
       'gate exhausted FAIL -> refused(phase) exhausted @1',
       'gate exhausted FAIL(last) -> refused(phase) exhausted @2',
@@ -109,7 +106,6 @@ describe('advanceReview', () => {
       'gate exhausted replacement -> refused(phase) exhausted @1',
       'gate exhausted retry -> reopened awaiting-verdict @0',
       'gate exhausted skip -> cleared deleted @3',
-      'gate exhausted abort -> aborted deleted @3',
       'structural awaiting-verdict PASS -> passed deleted @2',
       'structural awaiting-verdict FAIL -> failed awaiting-verdict @2',
       'structural awaiting-verdict FAIL(last) -> exhausted exhausted @3',
@@ -118,7 +114,6 @@ describe('advanceReview', () => {
       'structural awaiting-verdict replacement -> refused(phase) awaiting-verdict @1',
       'structural awaiting-verdict retry -> refused(phase) awaiting-verdict @3',
       'structural awaiting-verdict skip -> refused(phase) awaiting-verdict @3',
-      'structural awaiting-verdict abort -> refused(phase) awaiting-verdict @3',
       'structural awaiting-replacement PASS -> refused(phase) awaiting-replacement @1',
       'structural awaiting-replacement FAIL -> refused(phase) awaiting-replacement @1',
       'structural awaiting-replacement FAIL(last) -> refused(phase) awaiting-replacement @2',
@@ -127,7 +122,6 @@ describe('advanceReview', () => {
       'structural awaiting-replacement replacement -> reopened awaiting-verdict @1',
       'structural awaiting-replacement retry -> refused(phase) awaiting-replacement @3',
       'structural awaiting-replacement skip -> refused(phase) awaiting-replacement @3',
-      'structural awaiting-replacement abort -> refused(phase) awaiting-replacement @3',
       'structural exhausted PASS -> refused(phase) exhausted @1',
       'structural exhausted FAIL -> refused(phase) exhausted @1',
       'structural exhausted FAIL(last) -> refused(phase) exhausted @2',
@@ -136,7 +130,6 @@ describe('advanceReview', () => {
       'structural exhausted replacement -> refused(phase) exhausted @1',
       'structural exhausted retry -> reopened awaiting-verdict @0',
       'structural exhausted skip -> cleared deleted @3',
-      'structural exhausted abort -> aborted deleted @3',
       'detached awaiting-verdict PASS -> passed deleted @2',
       'detached awaiting-verdict FAIL -> failed awaiting-replacement @2',
       'detached awaiting-verdict FAIL(last) -> exhausted exhausted @3',
@@ -145,7 +138,6 @@ describe('advanceReview', () => {
       'detached awaiting-verdict replacement -> refused(phase) awaiting-verdict @1',
       'detached awaiting-verdict retry -> refused(phase) awaiting-verdict @3',
       'detached awaiting-verdict skip -> refused(phase) awaiting-verdict @3',
-      'detached awaiting-verdict abort -> refused(phase) awaiting-verdict @3',
       'detached awaiting-replacement PASS -> refused(phase) awaiting-replacement @1',
       'detached awaiting-replacement FAIL -> refused(phase) awaiting-replacement @1',
       'detached awaiting-replacement FAIL(last) -> refused(phase) awaiting-replacement @2',
@@ -154,7 +146,6 @@ describe('advanceReview', () => {
       'detached awaiting-replacement replacement -> reopened awaiting-verdict @1',
       'detached awaiting-replacement retry -> refused(phase) awaiting-replacement @3',
       'detached awaiting-replacement skip -> refused(phase) awaiting-replacement @3',
-      'detached awaiting-replacement abort -> refused(phase) awaiting-replacement @3',
       'detached exhausted PASS -> refused(phase) exhausted @1',
       'detached exhausted FAIL -> refused(phase) exhausted @1',
       'detached exhausted FAIL(last) -> refused(phase) exhausted @2',
@@ -163,7 +154,6 @@ describe('advanceReview', () => {
       'detached exhausted replacement -> refused(phase) exhausted @1',
       'detached exhausted retry -> reopened awaiting-replacement @0',
       'detached exhausted skip -> cleared deleted @3',
-      'detached exhausted abort -> refused(phase) exhausted @3',
     ]);
   });
 
@@ -221,7 +211,7 @@ describe('advanceReview', () => {
       for (const phase of PHASES) {
         for (const { event, enforcement, attemptCount } of EVENTS) {
           const next = advanceReview(review({ kind, phase, attemptCount }), event, enforcement);
-          if (['refused', 'passed', 'cleared', 'aborted', 'exhausted'].includes(next.outcome)) {
+          if (['refused', 'passed', 'cleared', 'exhausted'].includes(next.outcome)) {
             expect(next).not.toHaveProperty('renewAttempt');
           }
         }

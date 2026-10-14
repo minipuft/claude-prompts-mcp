@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from config_loader import load_config
 from db_reader import load_recoverable_chain_state
+from session_state import GATE_VERDICT_GUIDANCE
 from verify_active_store import (
     clear_verify_active_state,
     load_verify_active_state,
@@ -365,7 +366,7 @@ def chain_block_reason(chain_state: dict) -> str:
             f"Chain {chain_id} has a pending gate review (step {step}/{total}).\n\n"
             f"Submit gate_verdict via prompt_engine:\n"
             f'  chain_id="{chain_id}"\n'
-            f'  gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"'
+            f"  {GATE_VERDICT_GUIDANCE}"
         )
     if chain_state.get("pending_shell_verify"):
         return (

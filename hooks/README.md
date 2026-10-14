@@ -36,8 +36,8 @@ contract.
 | -------------------------------- | ----------------------- | -------------------------------------- |
 | Model ignores `>>analyze` syntax | `prompt-suggest.py`     | Suggests correct MCP call              |
 | Forgets to continue chain        | `post-prompt-engine.py` | Injects `[Chain] Step 2/5` reminder    |
-| Skips gate review                | `post-prompt-engine.py` | Prompts `GATE_REVIEW: PASS\|FAIL`      |
-| Ignores FAIL verdict             | `gate-enforce.py`       | Blocks until criteria addressed        |
+| Skips gate review                | `post-prompt-engine.py` | Prompts an object `gate_verdict`       |
+| Malformed verdict parameter      | `gate-enforce.py`       | Names the required object shape        |
 | Chain lost after compaction      | `compact-recovery.py`   | Re-injects chain state post-compaction |
 
 ## Hooks Reference
@@ -65,8 +65,14 @@ Triggers after `prompt_engine` calls. Tracks chain state and pending gates.
 ```text
 [Chain] Step 2/5 - call prompt_engine to continue
 [Gate] code-quality
-  Respond: GATE_REVIEW: PASS|FAIL - <reason>
+  Submit: gate_verdict={"overall":"PASS","rationale":"<reason>"}
+  Use FAIL for unmet criteria; follow the returned server template for applicable report fields.
 ```
+
+The tracker clears its saved run only after a successful terminal response for that run. A
+`gate_action: "abort"` request alone does not clear it; the response must report
+`**Chain Cancelled**` for the tracked `chain_id`. Error and refusal responses retain the state
+for recovery. Agent subcalls do not change the parent's tracker.
 
 ### `gate-enforce.py` (PreToolUse)
 
@@ -74,18 +80,22 @@ Blocks `prompt_engine` calls that violate gate discipline:
 
 | Check             | Trigger                                                                                        | Denial Message                                                                                                                            |
 | ----------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| FAIL verdict      | `gate_verdict` with overall FAIL (object or legacy string)                                     | "Gate FAIL: {reason}. Review the failing criteria ... resubmit."                                                                          |
+| Invalid verdict   | Non-object `gate_verdict`, invalid overall or missing rationale                                | "gate_verdict requires an object with overall PASS or FAIL and a non-empty rationale."                                                    |
 | Pending gate      | `chain_id` carrying NO resolution parameter while a gate is open                               | "Gate review required: ... submit gate_verdict. If the gate cannot be satisfied, these parameters also resolve it: {exits}."              |
 | Paused on unknown | `chain_id` carrying NO resolution parameter while the run is hard-paused on a blocking unknown | "Chain paused: blocking unknown interrupt. The run issued no step and no gate_verdict clears this hold. Resolve it with one of: {verbs}." |
 
-The pending-run check accepts every **resolution parameter** the server accepts — `gate_verdict`,
-`gate_action` (retry/skip/abort/resume/accept_alternative), `cancel` — read from
+The pending-run check accepts every **resolution parameter** the server accepts — `gate_verdict`
+and `gate_action` (retry/skip/abort/resume/accept_alternative) — read from
 `lib/_generated/resolution_verbs.py`, which `server npm run generate:contracts` emits from
 parameters flagged `resolvesPendingRun` in `tooling/contracts/prompt-engine.json`. Never hardcode
-the verb list in the hook: the hardcoded model denied `gate_action: "abort"` and `cancel: true`
-(both server-supported exits), so a pending gate trapped its own abort (fixed 2026-08-20). If the
-generated module is missing or unreadable the check fails open — the server enforces gates
+the verb list in the hook: a hardcoded model can deny `gate_action: "abort"` and trap a pending
+gate. If the generated module is missing or unreadable the check fails open — the server enforces gates
 authoritatively.
+
+`gate_verdict` is an object with `overall:"PASS"` or `overall:"FAIL"` and a rationale. Honest FAIL
+submissions reach the server's authoritative judgment; the hook does not grade them. Applicable
+`per_gate`, `reminders` and semantic evaluation follow the returned server template. String verdict
+parameters are refused. Returned response text and delegated-worker text protocols are separate.
 
 **Two holds, one rule.** A run can also be held by the reserved synthetic review
 `__unknown_interrupt__`, raised when a blocking unknown lands on a run that declared
@@ -103,13 +113,12 @@ Covered by `tests/test_unknown_interrupt_hold.py`, including a mutation probe th
 **Test manually:**
 
 ```bash
-# FAIL verdict - should deny
-echo '{"tool_name": "prompt_engine", "tool_input": {"gate_verdict": "GATE_REVIEW: FAIL - bad code"}}' \
-  | python3 hooks/gate-enforce.py | jq '.hookSpecificOutput.permissionDecision'
-# Output: "deny"
+# Honest FAIL verdict - should allow (exit 0, no output)
+echo '{"tool_name": "prompt_engine", "tool_input": {"gate_verdict": {"overall":"FAIL","rationale":"bad code"}}}' \
+  | python3 hooks/gate-enforce.py
 
 # PASS verdict - should allow (exit 0, no output)
-echo '{"tool_name": "prompt_engine", "tool_input": {"gate_verdict": "GATE_REVIEW: PASS - looks good"}}' \
+echo '{"tool_name": "prompt_engine", "tool_input": {"gate_verdict": {"overall":"PASS","rationale":"looks good"}}}' \
   | python3 hooks/gate-enforce.py
 echo $?  # Output: 0
 ```
@@ -210,6 +219,30 @@ hooks/
     ├── session_state.py    # Chain/gate state tracking (delegates to hook_state_store)
     └── workspace.py        # MCP_WORKSPACE resolution
 ```
+
+### Chain-token grammar and generated patterns
+
+Preserve the complete raw chain token, including every namespace segment and run suffix:
+`chain-implementation_plan/plan_table#1`. Shortening it to a root or basename changes the run
+identity. Do not normalize, alias or URI-encode `chain_id`; any URI encoding belongs to its
+transport boundary. Structured returned IDs take precedence where the response provides them.
+
+`server/src/shared/utils/resource-ids.ts` owns accepted-reference syntax separately from canonical
+authoring. `server/src/shared/utils/chain-id-codec.ts` composes it into `CHAIN_ID_PATTERN_SOURCE`
+and the strict `CHAIN_ID_PATTERN`. Hook text extraction derives from that source and matches a
+complete token rather than accepting a valid prefix of a malformed one.
+
+From `server/`, run `npm run generate:contracts` to regenerate both
+`hooks/lib/_generated/extraction-patterns.json` and `extraction_patterns.py`.
+`lib/session_state.py` uses the generated Python twin when JSON is unavailable; neither artifact
+is a separate grammar authority. Run `npm run generate:contracts -- --check` to check artifact
+parity. This check establishes generated-byte agreement, not native hook event delivery.
+
+Source checks do not establish request-continuity claims, URI protocol behavior, fresh STDIO and
+Streamable HTTP behavior, or installed candidate/native event joins; each needs separate evidence.
+Codex and Gemini adapters resolve their installed package's `hooks/lib`; OpenCode has a separate
+TypeScript port and fallback. Candidate-source readiness alone does not establish downstream or
+installed parity.
 
 ## Data Access
 

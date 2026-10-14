@@ -655,7 +655,7 @@ describe('detached delegation (await: run) through the pipeline', () => {
       ]);
     });
 
-    test('cancel still ends a held run — a worker that never reports is not a deadlock', async () => {
+    test('internal cancellation ends a held run when a worker never reports', async () => {
       const pipeline = buildPipeline({
         sessionStore,
         recordStore,

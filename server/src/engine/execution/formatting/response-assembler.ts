@@ -38,18 +38,12 @@ import { attemptInHand, formatAttempt } from '#shared/utils/attempt-number.js';
 import { ordinalOf, parseStepForNode } from '#shared/utils/node-order.js';
 
 /**
- * The verbs that answer a SOFT (unpaused) interrupt, verbatim from the plan's §Interrupt payload
- * block.
+ * The resolution verbs offered by a soft (unpaused) interrupt.
  *
  * `gate_action` spellings match the contract enum (`tooling/contracts/prompt-engine.json`)
  * exactly, because a client reads this list and puts the string back on the wire.
  */
-const SOFT_INTERRUPT_VERBS = [
-  'answer the step',
-  'remainder',
-  'gate_action:abort',
-  'cancel',
-] as const;
+const SOFT_INTERRUPT_VERBS = ['answer the step', 'remainder', 'gate_action:abort'] as const;
 
 /**
  * The verbs a HARD-paused run offers — the RESOLUTION verbs only, and this list is not a
@@ -68,7 +62,6 @@ const PAUSED_INTERRUPT_VERBS = [
   'gate_action:resume',
   'gate_action:accept_alternative (with remainder)',
   'gate_action:abort',
-  'cancel',
 ] as const;
 
 /**
@@ -1070,7 +1063,7 @@ export class ResponseAssembler {
       .map((verb) => `- ${verb}`)
       .join('\n');
 
-    return `\n---\n\n**${header}**\n\n${interrupt.statement}${uninvestigated}${affected}${remaining}\n\nResolve with \`chain_id="${context.sessionContext?.chainId ?? ''}"\` plus one of:\n\n${verbs}`;
+    return `\n---\n\n**${header}**\n\n${interrupt.statement}${uninvestigated}${affected}${remaining}\n\nResolve with \`chain_id="${context.sessionContext?.chainId ?? ''}"\` plus one of:\n\n${verbs}\n\nAbort stops the whole run at any time. No node, trailer, report or retry exhaustion is required.`;
   }
 
   /**
@@ -1619,9 +1612,9 @@ export class ResponseAssembler {
 
 /** What an exhausted review accepts, in the words every reply holding one uses. */
 const EXHAUSTED_REVIEW_CHOICE =
-  'The retry budget is spent. Choose a `gate_action`: `retry`, or `skip` to accept the answer already given, or send `cancel: true`.';
+  'The retry budget is spent. Choose a review `gate_action`: `retry`, or `skip` to accept the answer already given.';
 
-/** The `Next:` line of a reply holding an exhausted review: the only moves it accepts (P6.23). */
+/** Review-scoped next actions and the independent run-level stop action. */
 function exhaustedReviewMoves(chainId: string): string {
-  return `Next: chain_id="${chainId}", gate_action="retry" | gate_action="skip" | cancel: true`;
+  return `Next: chain_id="${chainId}", gate_action="retry" | gate_action="skip"\nStop the whole run at any time: chain_id="${chainId}", gate_action="abort". No node, trailer or report is required.`;
 }

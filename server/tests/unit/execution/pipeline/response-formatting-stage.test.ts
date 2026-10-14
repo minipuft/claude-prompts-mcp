@@ -7,6 +7,10 @@ import { ResponseFormatter } from '../../../../src/mcp/tools/prompt-engine/proce
 
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ExecutionRecordStore } from '../../../../src/modules/chains/execution-record-store.js';
+import type {
+  ChainSession,
+  ChainSessionService,
+} from '../../../../src/shared/types/chain-session.js';
 
 const createLogger = (): Logger => ({
   info: jest.fn(),
@@ -136,11 +140,8 @@ describe('ResponseFormattingStage', () => {
 /**
  * Tier 3.4 — terminal execution records emitted from the formatting stage.
  *
- * Two terminal outcomes reach this stage. Completion was already handled. Abort was not:
- * `state.session.aborted` is set by GateVerdictProcessor and the shell-verification stage
- * and — before this — was read by nothing, so a user-aborted chain left its last ledger
- * record at `working` permanently. Failure is NOT here; it is emitted from the pipeline's
- * catch boundary, because an abort does not throw and a throw never reaches this stage.
+ * Completion records are emitted here. Cancellation uses the executor's terminal observer;
+ * failure uses the pipeline's catch boundary. Historical records keep their original outcomes.
  */
 describe('ResponseFormattingStage — stepsExecuted', () => {
   /** Captures the FormatterExecutionContext the stage builds, which is otherwise unobservable. */
@@ -228,13 +229,15 @@ describe('ResponseFormattingStage terminal records', () => {
 
   const runStage = async (
     mutate: (context: ExecutionContext) => void,
-    store?: ExecutionRecordStore
+    store?: ExecutionRecordStore,
+    sessions?: ChainSessionService
   ): Promise<void> => {
     const stage = new ResponseFormattingStage(
       new ResponseFormatter(createLogger()),
       new ResponseAssembler(),
       createLogger(),
-      store ?? null
+      store ?? null,
+      sessions ?? null
     );
 
     const context = new ExecutionContext({ command: '>>chain' });
@@ -259,47 +262,6 @@ describe('ResponseFormattingStage terminal records', () => {
     await stage.execute(context);
   };
 
-  test('emits a cancelled record when the run was aborted', async () => {
-    const { store, appended } = createRecordStore();
-
-    await runStage((context) => {
-      context.state.session.aborted = true;
-    }, store);
-
-    expect(appended).toHaveLength(1);
-    expect(appended[0]).toMatchObject({
-      sessionId: 'sess-term',
-      chainId: 'chain-term#1',
-      status: 'cancelled',
-    });
-  });
-
-  test('the cancelled record is terminal — completedAt is set', async () => {
-    const { store, appended } = createRecordStore();
-
-    await runStage((context) => {
-      context.state.session.aborted = true;
-    }, store);
-
-    // Without completedAt the row still reads as in-flight, which is the defect
-    // this path closes — asserting the status alone would not catch it.
-    expect(appended[0]?.['completedAt']).toEqual(expect.any(Number));
-  });
-
-  test('abort wins over completion when both flags are set', async () => {
-    const { store, appended } = createRecordStore();
-
-    // A chain can be flagged complete and aborted in the same pass. Abort is the more
-    // specific outcome, so recording `completed` here would erase the user's choice.
-    await runStage((context) => {
-      context.state.session.chainComplete = true;
-      context.state.session.aborted = true;
-    }, store);
-
-    expect(appended).toHaveLength(1);
-    expect(appended[0]).toMatchObject({ status: 'cancelled' });
-  });
-
   test('still emits completed for an ordinary finished chain', async () => {
     const { store, appended } = createRecordStore();
 
@@ -308,10 +270,10 @@ describe('ResponseFormattingStage terminal records', () => {
     }, store);
 
     expect(appended).toHaveLength(1);
-    expect(appended[0]).toMatchObject({ status: 'completed' });
+    expect(appended[0]).toMatchObject({ status: 'completed', completedAt: expect.any(Number) });
   });
 
-  test('emits nothing for a run that is neither complete nor aborted', async () => {
+  test('emits nothing for a run still in progress', async () => {
     const { store, appended } = createRecordStore();
 
     await runStage(() => undefined, store);
@@ -319,10 +281,49 @@ describe('ResponseFormattingStage terminal records', () => {
     expect(appended).toEqual([]);
   });
 
+  test.each(['working', 'completed', 'cancelled', 'failed'] as const)(
+    'completion records respect the scoped run status %s',
+    async (runStatus) => {
+      const { store, appended } = createRecordStore();
+      const scope = { workspaceId: 'ws-format' };
+      const session = {
+        sessionId: 'sess-term',
+        chainId: 'chain-term#1',
+        state: { nodes: [], currentNodeId: null, lastUpdated: 0 },
+        executionOrder: [],
+        startTime: 0,
+        lastActivity: 0,
+        originalArgs: {},
+        runStatus,
+      } satisfies ChainSession;
+      const getSession = jest.fn((id: string, lookup?: { workspaceId?: string }) =>
+        id === 'sess-term' && lookup?.workspaceId === scope.workspaceId ? session : undefined
+      );
+      const getRunTelemetry = jest.fn();
+      await runStage(
+        (context) => {
+          context.state.session.chainComplete = true;
+          jest.spyOn(context, 'getScopeOptions').mockReturnValue(scope);
+        },
+        store,
+        { getSession, getRunTelemetry } as unknown as ChainSessionService
+      );
+
+      expect(getSession).toHaveBeenCalledWith('sess-term', scope);
+      if (runStatus === 'cancelled' || runStatus === 'failed') {
+        expect(appended).toEqual([]);
+        expect(getRunTelemetry).not.toHaveBeenCalled();
+      } else {
+        expect(appended).toHaveLength(1);
+        expect(appended[0]).toMatchObject({ status: 'completed', completedAt: expect.any(Number) });
+      }
+    }
+  );
+
   test('does not throw when no record store is wired', async () => {
     await expect(
       runStage((context) => {
-        context.state.session.aborted = true;
+        context.state.session.chainComplete = true;
       })
     ).resolves.toBeUndefined();
   });

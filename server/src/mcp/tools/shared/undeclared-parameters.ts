@@ -58,7 +58,7 @@ export const DECLARED_PARAMETERS_BY_TOOL: Readonly<Record<ContractToolName, Read
 /**
  * A declared parameter the CURRENT runtime state does not advertise, and why.
  *
- * `prompt_engine` advertises a union: `gates`, `gate_verdict` and `gate_action` appear only while
+ * `prompt_engine` advertises a union: `gates` and `gate_verdict` appear only while
  * the gate system is enabled (CLAUDE.md §Public API Contract). Such a key is declared-but-
  * unavailable, and telling its sender "not a parameter of prompt_engine" would be false — the
  * contract names it. It gets its own message, which says what to turn on.
@@ -147,9 +147,31 @@ function quoteList(names: readonly string[]): string {
  * unavailability rule cannot drift apart.
  */
 export const GATE_PARAMETERS_UNAVAILABLE: UnavailableParameters = new Map(
-  (['gates', 'gate_verdict', 'gate_action'] as const).map((name) => [
+  (['gates', 'gate_verdict'] as const).map((name) => [
     name,
     'the gate system is disabled, so nothing reads a gate parameter. Enable it with ' +
       '`system_control action:"gates", operation:"enable"`, or drop it from this call.',
   ])
 );
+
+/** Core run actions remain declared; only gate-dependent values need the gate system. */
+export function describePromptEngineParameterRefusal(
+  args: object,
+  gateSystemEnabled: boolean
+): string | null {
+  const keyRefusal = describeUndeclaredParameterRefusal(
+    'prompt_engine',
+    args,
+    gateSystemEnabled ? undefined : GATE_PARAMETERS_UNAVAILABLE
+  );
+  if (keyRefusal !== null) return keyRefusal;
+  const action = (args as { gate_action?: unknown }).gate_action;
+  if (!gateSystemEnabled && (action === 'retry' || action === 'skip')) {
+    return (
+      `gate_action:"${action}" is unavailable while the gate system is disabled. ` +
+      'Enable it with `system_control action:"gates", operation:"enable"` to answer a gate review. ' +
+      'No execution or run state was changed.'
+    );
+  }
+  return null;
+}

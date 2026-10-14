@@ -12,7 +12,7 @@
  * | ---------------------- | ------------------------------ | -------------------------------------------------------- |
  * | `awaiting-verdict`     | `verdict`                      | PASS → passed; FAIL → per enforcement, below             |
  * | `awaiting-replacement` | `replacement-report`           | reopened, awaiting a verdict on the new output           |
- * | `exhausted`            | `gate_action` (detached: no abort) | retry → reopened, counter 0; skip → cleared; abort → aborted |
+ * | `exhausted`            | `gate_action` (`retry`/`skip`)   | retry → reopened, counter 0; skip → cleared                |
  *
  * A blocking FAIL charges one attempt and lands on `exhausted` once `attemptCount` reaches
  * `maxAttempts`; otherwise a detached review awaits a replacement report and any other awaits
@@ -64,7 +64,7 @@ type ReviewRefusal = 'phase' | 'failing-check';
 type ReviewAdvance = ReviewAttemptIntent &
   (
     | {
-        readonly outcome: 'passed' | 'cleared' | 'aborted';
+        readonly outcome: 'passed' | 'cleared';
         readonly review: null;
         readonly attempt: number;
       }
@@ -166,12 +166,6 @@ function applyVerdict(
 function applyAction(review: GateReview, action: GateAction, at: number): ReviewAdvance {
   if (action === 'skip') {
     return { outcome: 'cleared', review: null, attempt: review.attemptCount };
-  }
-  if (action === 'abort') {
-    // A detached node is not the run: `cancel: true` stops a run and needs no node (row 4.8).
-    return review.kind === 'detached'
-      ? refuse(review, 'phase')
-      : { outcome: 'aborted', review: null, attempt: review.attemptCount };
   }
   const reset: GateReview = {
     ...review,

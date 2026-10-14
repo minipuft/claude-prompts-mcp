@@ -582,8 +582,9 @@ number of detached ones.
   non-detached review), applies the event with `advanceReview`, and persists what it returns.
 - **One transition table**: `advanceReview` (`decisions/gates/review-lifecycle.ts`) is pure and
   owns the attempt counter. `awaiting-verdict` accepts a verdict; `awaiting-replacement` (detached
-  only) accepts a replacement report; `exhausted` accepts only `gate_action` retry, skip or abort
-  (a detached review refuses abort). A blocking FAIL charges one attempt and lands on `exhausted`
+  only) accepts a replacement report; `exhausted` accepts review actions `retry` or `skip`.
+  Run-level `gate_action:"abort"` is handled before this dispatcher, in any nonterminal state,
+  without node, trailer, report or retry exhaustion. A blocking FAIL charges one attempt and lands on `exhausted`
   when the budget is spent; an advisory or informational FAIL charges it and clears the review. A
   PASS over a failing `shell_verify` / `script_tool` result is refused, and a refusal charges
   nothing.

@@ -30,9 +30,9 @@ export interface GateSetEnforcement {
 }
 
 /**
- * User action choices when retry limit is exceeded.
+ * Review-owned action choices when retry limit is exceeded. Run-level abort belongs to the executor.
  */
-export type GateAction = 'retry' | 'skip' | 'abort';
+export type GateAction = 'retry' | 'skip';
 
 /** Pure lifecycle intent; the authority issues fresh pins when the caller applies it. */
 export interface ReviewAttemptIntent {

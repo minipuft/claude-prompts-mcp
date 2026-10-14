@@ -38,8 +38,7 @@ export const parameterSchema = z.object({
    * pending on, a blocking-unknown interrupt (`__unknown_interrupt__`) is another, and both are
    * cleared through this same set of verbs.
    * Generated into `hooks/lib/_generated/resolution_verbs.py` so the PreToolUse gate hook
-   * enforces the SAME move set the server accepts, instead of a private approximation —
-   * the private model blocked `cancel` and `gate_action` twice (2026-08-20).
+   * enforces the SAME move set the server accepts, rather than a private approximation.
    */
   resolvesPendingRun: z.boolean().optional(),
 });

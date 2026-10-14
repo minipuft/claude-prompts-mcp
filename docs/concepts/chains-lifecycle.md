@@ -84,7 +84,15 @@ Chains persist across messages. You don't need to feed the entire history back t
   (position, prompt, step lifecycle), both PID-scoped to the owning server process. `chain_sessions`
   is a derived read-projection of those two tables, rebuilt in the same transaction — the row
   Python hooks and cross-language consumers actually read.
+  `workspace_id` on these storage rows is the server's launch namespace;
+  `continuity_scope_id` identifies the request's run scope. Neither replaces process ownership
+  in `run_owner_pid`. A missing request scope retains the existing legacy unfiltered policy.
 - **Resume**: Just provide `chain_id` + `user_response`.
+  Preserve the full returned token, such as `chain-implementation_plan/plan_table#1`,
+  including namespace segments and the run suffix. Reference admission does not normalize
+  existing stored tokens; new-run reservation chooses its own number, starting at `#1`.
+  A missing numbered token does not fall back to another run or to a bare legacy token.
+  An existing bare legacy token still addresses its exact stored row.
 - **Debug**: Use `system_control(action: "status")` to inspect active sessions.
 
 ### Automatic Resume
@@ -117,14 +125,21 @@ prompt_engine(chain_id:"chain-research#1", handoff:true)   # owner: mints hnd_�
 prompt_engine(claim_token:"hnd_…")                         # other client: claims + resumes
 ```
 
-The token is single-use and is the only key the claimer sends — run numbers are a
-per-server sequence, so two servers sharing one `state.db` can both hold a
+The token is single-use and is the only key the claimer sends — run numbers are counted
+per request continuity scope, so different scopes sharing one `state.db` can both hold
 `chain-research#1`, and a claim by name could pick the wrong one. The claim rewrites the
 row's owner and burns the token in one statement, then resumes the run in the same call so
 the claimer receives the current step immediately. The donor keeps its copy until its next
 persist, where it notices the row is no longer its own and retires it. A claim never
 rewrites workspace scope, and a run whose persisted state carries no blueprint is refused
 by name rather than loaded as something nothing can resume.
+
+The claim uses the same identity policy as ordinary requests: launch defaults apply when
+headers are absent, and locked or override-disabled configurations retain those defaults.
+A meaningful request scope must match the run before its token is used; a refusal retains
+the token and owner, so the original request scope can claim it. Request continuity is
+separate from the launch storage namespace and process owner. An effective unfiltered
+scope keeps legacy behavior; it does not replace either storage or ownership checks.
 
 ## Step Identity
 
@@ -192,7 +207,15 @@ and nothing is recorded. Resolve it with `gate_action`:
 | ------------- | ------------------------------------------------------------------------------------------------------------ |
 | `"retry"`     | Resets the attempt counter and reopens the review for another verdict.                                       |
 | `"skip"`      | Closes the review without a verdict. The step renders again with no review; a detached step's result stands. |
-| `"abort"`     | Stops the run. A detached step's review refuses it; use `cancel: true`.                                      |
+| `"abort"`     | Stops the whole run at any time, independently of the review phase or detached routing.                      |
+
+Abort is run control, so it is admitted before command parsing, report routing and review
+selection. `prompt_engine(chain_id:"...", gate_action:"abort")` needs no node, trailer, report,
+retry exhaustion or command. It works for active runs, blocking-unknown pauses, ordinary reviews
+and detached holds. The scoped transition persists `runStatus:"cancelled"` while retaining state
+and artifacts. Repeated abort is idempotent; completed, failed, missing or out-of-scope runs return
+non-applied results without mutation. Later progression is blocked, including after reload.
+The public `cancel` property is removed; the existing undeclared-parameter check refuses retired-key requests.
 
 With a captured answer, an advisory or informational gate's FAIL advances with a warning.
 A verdict without the step's answer does not advance it.
@@ -374,7 +397,7 @@ one wants to stop. Template chains get the default.
 **Resolving a pause** uses `gate_action`, not `gate_verdict`: no gate produced this hold, so no
 verdict clears it. `resume` clears the hold and issues the investigation step as written;
 `accept_alternative` (carrying a `remainder` in the same call) replaces the rest of the plan;
-`abort` and `cancel:true` exit. The verb list a run prints is the list that run accepts — a paused
+`abort` ends the run. The verb list a run prints is the list that run accepts — a paused
 run never offers "answer the step", because it issued no step.
 
 **Replacing the remainder.** The insert/skip policy makes two local edits and cannot express "this
@@ -676,7 +699,7 @@ past the last step while a result is outstanding, the run stays open: the respon
 outstanding step and its token, and until one reports, a resume that reports nothing is refused
 with the same list. The result that closes the last gap completes the run. A step the run never
 reached (never rendered) is owed nothing and never holds a run open. A worker that will never
-report does not trap the run: `prompt_engine(chain_id:"…", cancel:true)` still ends it.
+report does not trap the run: `prompt_engine(chain_id:"…", gate_action:"abort")` ends it without a trailer or report.
 
 The obligation survives a restart. The run records when each detached step was spawned
 (`chain_run_nodes.spawned_at`, [schema v31](../architecture/sqlite-persistence.md)), and a step
@@ -701,7 +724,8 @@ trailer is the current step's verdict, as before.
   the same trailer. It replaces the first result, and the review opens again for another verdict.
   Each FAIL counts one attempt against the step's retry limit. Once the limit is reached, resume
   with the trailer and `gate_action: "retry"` (another replacement) or `"skip"` (accept the
-  recorded result), or stop the run with `cancel: true`.
+  recorded result). Independently, `gate_action:"abort"` with `chain_id` stops the whole run
+  without the trailer, report or retry exhaustion.
 - **Shell and script checks** (`shell_verify`, `script_tool`) run when the verdict arrives, against
   the step's recorded result, never against the text of the call that carries the verdict. A PASS
   over a failing check is refused, exactly as on any review.

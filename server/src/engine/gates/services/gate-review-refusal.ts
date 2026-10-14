@@ -19,7 +19,7 @@ import { ordinalOf } from '#shared/utils/node-order.js';
  *   PASS over a recorded exit code is an unnoticed contradiction. `gate_action: skip` is the
  *   operator's override, behind exhaustion; a FAIL is the submitter agreeing with the check.
  * - `phase` — the review is not waiting for this kind of call: an exhausted review answers only
- *   `gate_action`, and a detached review never `abort`s — `cancel: true` stops a run.
+ *   review-owned `gate_action` (`retry`/`skip`). Run-level abort bypasses review handling.
  */
 export function describeRefusal(reason: 'phase' | 'failing-check', review: GateReview): string {
   if (reason === 'failing-check') {
@@ -35,9 +35,7 @@ export function describeRefusal(reason: 'phase' | 'failing-check', review: GateR
     'awaiting-verdict': 'a gate_verdict',
     'awaiting-replacement': "the worker's replacement result",
     exhausted:
-      review.kind === 'detached'
-        ? 'gate_action "retry" or "skip", or cancel: true'
-        : 'gate_action "retry", "skip" or "abort"',
+      'gate_action "retry" or "skip"; to stop the run, use gate_action "abort" with chain_id',
   };
   return (
     `❌ The gate review of node '${review.nodeId}' (${formatAttempt(attemptInHand(review.attemptCount, review.maxAttempts), review.maxAttempts)}) ` +

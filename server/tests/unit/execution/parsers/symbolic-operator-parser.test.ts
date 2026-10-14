@@ -509,3 +509,94 @@ describe('inline gate criteria splitting', () => {
     expect(chain.steps[0]?.inlineGateCriteria).toEqual(['  ']);
   });
 });
+
+describe('SymbolicCommandParser whole selectors', () => {
+  const parser = createSymbolicCommandParser({
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  } as unknown as Logger);
+  const child = 'implementation_plan/plan_table';
+  const deep = `${child}/detail`;
+
+  test.each(['-->', '==>'])('shared selector reads qualified chain %s', (arrow) => {
+    const result = parser.detectOperators(
+      `>>${child} input:"/tmp/a/b"${arrow}>>${deep} :: quality`
+    );
+    const chain = result.operators.find((op) => op.type === 'chain');
+    expect(chain?.type === 'chain' ? chain.steps.map((step) => step.promptId) : undefined).toEqual([
+      child,
+      deep,
+    ]);
+    expect(
+      chain?.type === 'chain' ? chain.steps.map((step) => step.delegated === true) : undefined
+    ).toEqual([false, arrow === '==>']);
+    expect(chain?.type === 'chain' ? chain.steps[1]?.inlineGateCriteria : undefined).toEqual([
+      'quality',
+    ]);
+  });
+
+  test('qualified repetition reaches the shared chain selector', () => {
+    const result = parser.detectOperators(`>>${deep} input:"a/b" *2`);
+    const chain = result.operators.find((op) => op.type === 'chain');
+    expect(chain?.type === 'chain' ? chain.steps.map((step) => step.promptId) : undefined).toEqual([
+      deep,
+      deep,
+    ]);
+  });
+
+  test.each(['a//b', 'a/../b', 'a/b%clean', 'a/b@ReACT', 'a/b:arg'])(
+    'whole malformed chain step refuses %s',
+    (id) => {
+      expect(() => parser.detectOperators(`>>${child} --> ${id}`)).toThrow(/Invalid chain step/);
+    }
+  );
+
+  test.each(["'", '"'])('qualified symbolic args retain quoted delimiters %s', (quote) => {
+    const tail = `input:${quote}https://example.test/a/b?x=1 /tmp/a/b --> ==> + ? # @ :: %clean${quote}`;
+    const result = parser.detectOperators(`>>${child} ${tail} --> >>${deep}`);
+    const chain = result.operators.find((op) => op.type === 'chain');
+    expect(chain?.type === 'chain' ? chain.steps.map((step) => step.promptId) : undefined).toEqual([
+      child,
+      deep,
+    ]);
+    expect(chain?.type === 'chain' ? chain.steps[0]?.args : undefined).toBe(tail);
+  });
+
+  test.each(["'", '"'])('shared style stripping keeps quoted style bytes %s', (quote) => {
+    const tail = `input:${quote}/tmp/a/b #analytical text${quote}`;
+    const result = parser.detectOperators(`>>${child} ${tail} --> >>${deep}`);
+    const chain = result.operators.find((op) => op.type === 'chain');
+    expect(chain?.type === 'chain' ? chain.steps[0]?.args : undefined).toBe(tail);
+  });
+});
+
+describe('qualified quoted operator names', () => {
+  const parser = createSymbolicCommandParser({
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+  } as unknown as Logger);
+  test.each(["'", '"'])('quoted framework/style/gate names remain literal %s', (quote) => {
+    const tail = `input:${quote}prefix @ReACT #analytical :: quality *2${quote}`;
+    const result = parser.detectOperators(`>>parent/child ${tail} --> >>parent/child/deep`);
+    expect(result.operatorTypes).toEqual(['chain']);
+    const chain = result.operators.find((op) => op.type === 'chain');
+    expect(chain?.type === 'chain' ? chain.steps[0]?.args : undefined).toBe(tail);
+  });
+  test.each(["'", '"'])('repetition preserves quoted chain text %s', (quote) => {
+    const tail = `input:${quote}a/b --> literal${quote}`;
+    const result = parser.detectOperators(`>>parent/child ${tail} *2`);
+    const chain = result.operators.find((op) => op.type === 'chain');
+    expect(chain?.type === 'chain' ? chain.steps.map((step) => step.promptId) : undefined).toEqual([
+      'parent/child',
+      'parent/child',
+    ]);
+    expect(chain?.type === 'chain' ? chain.steps.map((step) => step.args) : undefined).toEqual([
+      tail,
+      tail,
+    ]);
+  });
+});

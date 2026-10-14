@@ -97,8 +97,6 @@ export interface PipelineInternalState {
     lifecycleDecision?: string;
     /** ID of the current execution scope */
     executionScopeId?: string;
-    /** Whether the session/chain has been aborted by user choice */
-    aborted?: boolean;
     /** Whether the chain has already advanced past the final step */
     chainComplete?: boolean;
     /** Chain variables for template rendering (from ChainSessionStore) */

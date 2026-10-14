@@ -242,3 +242,49 @@ userMessageTemplate: Should not be found
     expect(ids).not.toContain('_private');
   });
 });
+
+describe('PromptLoader: complete directory-derived references', () => {
+  let tmpRoot: string;
+  const safeIds = ['LEGACY-Root', '7ROOT/Kebab-Child/Step_3'];
+  const malformedIds = ['bad prefix/valid_leaf', 'bad.prefix/valid_leaf', 'bad%prefix/valid_leaf'];
+
+  beforeAll(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'prompt-reference-test-'));
+    for (const id of [...safeIds, ...malformedIds]) {
+      const dir = path.join(tmpRoot, ...id.split('/'));
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'prompt.yaml'),
+        `id: ${id.split('/').pop()}\nname: Reference fixture\ndescription: Exact directory-derived reference fixture\nuserMessageTemplate: ${id}\n`
+      );
+    }
+  });
+
+  afterAll(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  test.each(safeIds)('preserves safe legacy spelling %s through discovery and cache', (id) => {
+    const loader = new PromptLoader(createLogger(), {});
+    for (let load = 0; load < 2; load++) {
+      const prompt = loader.loadAllYamlPrompts(tmpRoot).find((item) => item.id === id);
+      expect(prompt).toMatchObject({ id, file: `${id}/prompt.yaml` });
+      expect(
+        loader.loadYamlPrompt(path.join(tmpRoot, ...id.split('/')), tmpRoot)?.loadedContent
+      ).toMatchObject({ userMessageTemplate: id });
+    }
+  });
+
+  test.each(malformedIds)('refuses malformed composed prefix %s with source path', (id) => {
+    const logger = createLogger();
+    const loader = new PromptLoader(logger, {});
+    const dir = path.join(tmpRoot, ...id.split('/'));
+    // A valid leaf can warm the cache, but cannot authorize a malformed full reference.
+    expect(loader.loadYamlPrompt(dir, path.dirname(dir))?.promptData.id).toBe('valid_leaf');
+    const ids = loader.loadAllYamlPrompts(tmpRoot).map((prompt) => prompt.id);
+    expect(ids).not.toContain(id);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining(path.join(dir, 'prompt.yaml'))
+    );
+  });
+});

@@ -19,7 +19,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
+import { McpServer } from '@modelcontextprotocol/server';
+import { z } from 'zod/v4';
+
+import { McpToolRouter } from '../../../src/mcp/tools/index.js';
+import type { PromptExecutor } from '../../../src/mcp/tools/prompt-engine/core/prompt-executor.js';
+import type { PromptEngineInput } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
 
 import {
   DECLARED_PARAMETERS_BY_TOOL,
@@ -139,7 +145,7 @@ describe('undeclared parameter refusal', () => {
   describe('declared but not advertised (the prompt_engine union)', () => {
     it('says the gate system is off — NOT "not a parameter"', () => {
       // `gate_verdict` IS in the contract (CLAUDE.md §Public API Contract: the tool surface is a
-      // union, and the gate trio is a member advertised only while gates are enabled). Telling its
+      // union, and gates/verdict are advertised only while gates are enabled). Telling its
       // sender it is not a parameter would be false, and would send them to fix a spelling that is
       // already right.
       const message = describeUndeclaredParameterRefusal(
@@ -169,6 +175,120 @@ describe('undeclared parameter refusal', () => {
         expect(DECLARED_PARAMETERS_BY_TOOL.prompt_engine.has(name)).toBe(true);
       }
     });
+  });
+});
+
+describe('registered prompt_engine action admission', () => {
+  async function registered(enabled: boolean) {
+    const server = new McpServer({ name: 'action-admission-test', version: '1' });
+    const registrations = jest.spyOn(server, 'registerTool');
+    const execute = jest.fn<PromptExecutor['executePromptCommand']>().mockResolvedValue({
+      content: [{ type: 'text', text: 'executor reached' }],
+      isError: false,
+    });
+    let current = enabled;
+    // Skip initialize's persistence/I/O; keep the real router registration, schema and admission.
+    const router = Object.create(McpToolRouter.prototype) as McpToolRouter;
+    Object.assign(router, {
+      logger: { info() {}, warn() {}, debug() {}, error() {} },
+      mcpServer: server,
+      promptExecutor: { executePromptCommand: execute },
+      gateStateStore: { isGateSystemEnabled: () => current },
+    });
+    await router.registerAllTools(server);
+    const registration = registrations.mock.calls.find(([name]) => name === 'prompt_engine');
+    if (registration === undefined) throw new Error('prompt_engine was not registered');
+    const schema = registration[1].inputSchema;
+    if (!(schema instanceof z.ZodObject))
+      throw new Error('prompt_engine schema is not a ZodObject');
+    const callback = registration[2] as (
+      args: PromptEngineInput,
+      extra: unknown
+    ) => ReturnType<PromptExecutor['executePromptCommand']>;
+    return {
+      execute,
+      server,
+      call: (args: object) => callback(schema.parse(args), {}),
+      setEnabled: (value: boolean) => {
+        current = value;
+      },
+    };
+  }
+
+  it.each(['retry', 'skip'])(
+    'refuses gates-off %s by name before the executor',
+    async (gate_action) => {
+      const fixture = await registered(false);
+      try {
+        const result = await fixture.call({ chain_id: 'chain-demo#1', gate_action });
+        expect(result.isError).toBe(true);
+        expect(result.content).toEqual([
+          expect.objectContaining({
+            text: expect.stringContaining(`gate_action:"${gate_action}"`),
+          }),
+        ]);
+        expect(JSON.stringify(result.content)).toContain(
+          'unavailable while the gate system is disabled'
+        );
+        expect(fixture.execute).not.toHaveBeenCalled();
+      } finally {
+        await fixture.server.close();
+      }
+    }
+  );
+
+  it.each(['abort', 'resume', 'accept_alternative'] as const)(
+    'admits gates-off %s to the executor unchanged',
+    async (gate_action) => {
+      const fixture = await registered(false);
+      try {
+        const result = await fixture.call({ chain_id: 'chain-demo#1', gate_action });
+        expect(result.isError).toBe(false);
+        expect(fixture.execute).toHaveBeenCalledWith(
+          { chain_id: 'chain-demo#1', gate_action },
+          expect.anything()
+        );
+      } finally {
+        await fixture.server.close();
+      }
+    }
+  );
+
+  it.each(['gates', 'gate_verdict'])(
+    'still refuses unavailable %s from cached input',
+    async (key) => {
+      const fixture = await registered(true);
+      fixture.setEnabled(false);
+      try {
+        const value = key === 'gates' ? ['some-gate'] : 'GATE_REVIEW: PASS - ok';
+        const result = await fixture.call({ chain_id: 'chain-demo#1', [key]: value });
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(
+          `'${key}' is a parameter of prompt_engine`
+        );
+        expect(fixture.execute).not.toHaveBeenCalled();
+      } finally {
+        await fixture.server.close();
+      }
+    }
+  );
+
+  it('checks current gate state on a cached schema in both toggle directions', async () => {
+    const fixture = await registered(true);
+    try {
+      fixture.setEnabled(false);
+      expect((await fixture.call({ chain_id: 'chain-demo#1', gate_action: 'retry' })).isError).toBe(
+        true
+      );
+      expect(fixture.execute).not.toHaveBeenCalled();
+      fixture.setEnabled(true);
+      expect((await fixture.call({ chain_id: 'chain-demo#1', gate_action: 'retry' })).isError).toBe(
+        false
+      );
+      expect(fixture.execute).toHaveBeenCalledTimes(1);
+    } finally {
+      await fixture.server.close();
+    }
   });
 });
 

@@ -85,7 +85,7 @@ export class ShellVerificationStage extends BasePipelineStage {
       return;
     }
 
-    // Handle gate_action response (retry/skip/abort)
+    // Handle gate_action response (retry/skip); run-level abort exits in the executor.
     const gateAction = context.mcpRequest.gate_action;
     if (this.reviewAnsweredAction(context, gateAction, pending)) return;
     if (gateAction === 'skip' && this.refusesSkip(context)) {
@@ -212,7 +212,7 @@ export class ShellVerificationStage extends BasePipelineStage {
     });
 
     // Max attempts: clear verify-state.db (the Stop hook shouldn't keep trying). The session
-    // keeps the check — `retry` needs it; skip/abort or the next pass clears it.
+    // keeps the check — `retry` needs it; skip or the next pass clears it.
     if (pending.attemptCount >= pending.maxAttempts && shellVerify.loop === true) {
       await this.stateManager.clearState(this.resolveVerifyStateKey(context));
     }
@@ -261,19 +261,14 @@ export class ShellVerificationStage extends BasePipelineStage {
 
   /**
    * One call acts once (P6.56): an action the step's exhausted review already answered on this
-   * call is not also applied to the check, which keeps holding the step. An abort ended the run
-   * there, so it still clears the check here.
+   * call is not also applied to the check, which keeps holding the step.
    */
   private reviewAnsweredAction(
     context: ExecutionContext,
     gateAction: string | undefined,
     pending: PendingShellVerification
   ): boolean {
-    if (
-      gateAction === undefined ||
-      gateAction === 'abort' ||
-      context.state.gates.gateActionAnsweredReview !== true
-    ) {
+    if (gateAction === undefined || context.state.gates.gateActionAnsweredReview !== true) {
       return false;
     }
     if (gateAction === 'skip') this.renderStillPending(context, pending);
@@ -494,7 +489,7 @@ export class ShellVerificationStage extends BasePipelineStage {
   }
 
   /**
-   * Clear pending state from session (on pass, skip, abort, or escalation).
+   * Clear pending state from session (on pass, skip, or escalation).
    */
   private async clearFromSession(context: ExecutionContext): Promise<void> {
     const sessionId = context.getSessionId();
@@ -503,27 +498,7 @@ export class ShellVerificationStage extends BasePipelineStage {
   }
 
   /**
-   * Cancel the owning run, when there is one, so an abort is terminal rather than advisory.
-   *
-   * Shell verification also runs for single prompts, which have no run: no session id means
-   * there is nothing to cancel, and a `false` return means the run was already terminal.
-   * Neither is a defect, so neither warns.
-   */
-  private async cancelRunIfAny(context: ExecutionContext): Promise<void> {
-    const sessionId = context.getSessionId();
-    // Written strictly rather than as the `if (!sessionId)` its two neighbours use: the lint
-    // ratchet measures direction, and a baseline with slack would have absorbed a new violation.
-    if (sessionId === undefined || sessionId.length === 0) return;
-    const cancelled = await this.chainSessionService.cancelChain(sessionId);
-    if (!cancelled) {
-      this.logger.debug(
-        `[${this.name}] Abort requested for session ${sessionId}; no active run to cancel`
-      );
-    }
-  }
-
-  /**
-   * Handle gate_action user decision (retry/skip/abort).
+   * Handle gate_action user decision (retry/skip).
    */
   private async handleGateAction(
     context: ExecutionContext,
@@ -569,36 +544,6 @@ export class ShellVerificationStage extends BasePipelineStage {
           gateId: pending.gateId,
         });
         this.logExit({ gateAction: 'skip' });
-        break;
-      }
-
-      case 'abort': {
-        context.state.session.aborted = true;
-        context.state.gates.pendingShellVerification = undefined;
-        await this.clearFromSession(context);
-        // The response below tells the user "Execution stopped". Cancel the run so that is
-        // true — otherwise runStatus stays 'working' and the next call resumes the chain.
-        // Guarded on sessionId because shell verification also runs for single prompts, which
-        // have no run to cancel; that is not a failure worth warning about.
-        await this.cancelRunIfAny(context);
-        context.diagnostics.info(
-          this.name,
-          'User chose to abort after shell verification failure',
-          {
-            gateId: pending.gateId,
-          }
-        );
-
-        context.setResponse({
-          content: [
-            {
-              type: 'text',
-              text: `## Shell Verification — Aborted\n\n**Command:** \`${pending.shellVerify.command}\`\n\nExecution stopped by user. No further verification will run.`,
-            },
-          ],
-        });
-
-        this.logExit({ gateAction: 'abort' });
         break;
       }
 

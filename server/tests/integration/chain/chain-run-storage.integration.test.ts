@@ -87,6 +87,229 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     engine.run('DELETE FROM execution_records');
   });
 
+  describe('exact raw run identity (R7)', () => {
+    const owner = { continuityScopeId: String(process.pid), workspaceId: 'ws-storage' };
+    const fixture = (sessionId: string, chainId: string): ChainSession => ({
+      sessionId,
+      chainId,
+      continuityScopeId: 'default',
+      state: {
+        currentNodeId: 'capture',
+        nodes: nodes(['capture', 'plan/collect', 'Collect'], ['report', 'plan/report', 'Report']),
+        lastUpdated: 1,
+        stepStates: new Map(),
+      },
+      executionOrder: [],
+      startTime: 1,
+      lastActivity: 1,
+      originalArgs: {},
+      lifecycle: 'canonical',
+      runStatus: 'working',
+    });
+
+    test.each([
+      'chain-plan#1',
+      'chain-plan/table#1',
+      'chain-plan/table/detail#1',
+      'legacy-plan/table#1',
+      'chain-plan/table#0',
+      'chain-plan/table#01',
+    ])('cold lookup preserves an existing raw token %s', async (chainId) => {
+      // Registry fixtures preserve historical bytes; new-run reservation is a separate policy.
+      await new DirectChainRunRegistry(engine).save([fixture('r7-raw', chainId)], owner);
+      const reader = newStore();
+      try {
+        await (reader as unknown as { initPromise: Promise<void> }).initPromise;
+        const found = reader.getSessionByChainIdentifier(chainId, { includeDormant: true });
+        expect(found?.sessionId).toBe('r7-raw');
+        expect(found?.chainId).toBe(chainId);
+        expect(found?.state.currentNodeId).toBe('capture');
+        expect(found?.state.nodes.map((node) => node.promptId)).toEqual([
+          'plan/collect',
+          'plan/report',
+        ]);
+        expect(
+          engine.queryOne<{ chain_id: string }>(
+            'SELECT chain_id FROM chain_runs WHERE session_id = ?',
+            ['r7-raw']
+          )?.chain_id
+        ).toBe(chainId);
+      } finally {
+        await reader.cleanup();
+      }
+    });
+
+    test('missing explicit numbers never fall back to an exact bare legacy row', async () => {
+      await new DirectChainRunRegistry(engine).save(
+        [fixture('r7-bare', 'chain-plan/table'), fixture('r7-numbered', 'chain-plan/table#1')],
+        owner
+      );
+      const reader = newStore();
+      try {
+        await (reader as unknown as { initPromise: Promise<void> }).initPromise;
+        expect(
+          reader.getSessionByChainIdentifier('chain-plan/table', { includeDormant: true })
+            ?.sessionId
+        ).toBe('r7-bare');
+        expect(
+          reader.getSessionByChainIdentifier('chain-plan/table#1', { includeDormant: true })
+            ?.sessionId
+        ).toBe('r7-numbered');
+        expect(
+          reader.getSessionByChainIdentifier('chain-plan/table#99', { includeDormant: true })
+        ).toBeUndefined();
+        expect(
+          reader.getSessionByChainIdentifier('chain-plan/table#01', { includeDormant: true })
+        ).toBeUndefined();
+        expect(
+          reader.getSessionByChainIdentifier('chain-plan/table#0', { includeDormant: true })
+        ).toBeUndefined();
+        expect(reader.getSession('r7-bare')?.state.currentNodeId).toBe('capture');
+        expect(reader.getSession('r7-numbered')?.state.currentNodeId).toBe('capture');
+      } finally {
+        await reader.cleanup();
+      }
+    });
+
+    test('scoped exact lookup and abort keep another continuity capture and report intact', async () => {
+      const store = newStore();
+      const scopeA = { continuityScopeId: 'r7-request-a' };
+      const scopeB = { continuityScopeId: 'r7-request-b' };
+      try {
+        for (const [sessionId, scope] of [
+          ['r7-a', scopeA],
+          ['r7-b', scopeB],
+        ] as const) {
+          await store.createSession(
+            sessionId,
+            'chain-plan/table#1',
+            2,
+            {},
+            {
+              ...scope,
+              nodes: nodes(
+                ['capture', 'plan/collect', 'Collect'],
+                ['report', 'plan/report', 'Report']
+              ),
+            }
+          );
+          await store.updateSessionState(sessionId, 'capture', `${sessionId} capture`);
+          await store.setReview(sessionId, {
+            nodeId: 'report',
+            kind: 'detached',
+            phase: 'awaiting-verdict',
+            combinedPrompt: '',
+            gateIds: ['quality'],
+            prompts: [],
+            createdAt: 1,
+            attemptCount: 1,
+            maxAttempts: 2,
+            reviewedOutput: `${sessionId} report`,
+          });
+        }
+        expect(store.getSessionByChainIdentifier('chain-plan/table#1', scopeA)?.sessionId).toBe(
+          'r7-a'
+        );
+        expect(store.getSessionByChainIdentifier('chain-plan/table#1', scopeB)?.sessionId).toBe(
+          'r7-b'
+        );
+        expect(
+          store.getSessionByChainIdentifier('chain-plan/table#1', {
+            continuityScopeId: 'r7-request-missing',
+          })
+        ).toBeUndefined();
+        const beforeCapture = store.getStepState('r7-b', 'capture');
+        const beforeReport = store.getReview('r7-b', 'report');
+        expect(await store.cancelChain('r7-b', scopeA)).toBe(false);
+        expect(await store.cancelChain('r7-a', scopeA)).toBe(true);
+        expect(store.getStepState('r7-b', 'capture')).toEqual(beforeCapture);
+        expect(store.getReview('r7-b', 'report')).toEqual(beforeReport);
+        expect(store.getSession('r7-b')?.runStatus).toBe('working');
+        const joined = engine.query<{
+          session_id: string;
+          chain_id: string;
+          run_status: string;
+          node_id: string;
+          milestone: string;
+          responded_at: number | null;
+        }>(
+          `SELECT r.session_id, r.chain_id, r.run_status, n.node_id, n.milestone, n.responded_at
+             FROM chain_runs r JOIN chain_run_nodes n ON n.session_id = r.session_id
+            WHERE r.session_id IN (?, ?) AND n.node_id = ? ORDER BY r.session_id`,
+          ['r7-a', 'r7-b', 'capture']
+        );
+        expect(
+          joined.map((row) => [
+            row.session_id,
+            row.chain_id,
+            row.run_status,
+            row.node_id,
+            row.milestone,
+          ])
+        ).toEqual([
+          ['r7-a', 'chain-plan/table#1', 'cancelled', 'capture', 'working'],
+          ['r7-b', 'chain-plan/table#1', 'working', 'capture', 'working'],
+        ]);
+        for (const row of joined) {
+          expect(row.responded_at).toEqual(expect.any(Number));
+          expect(row.responded_at).toBe(store.getStepState(row.session_id, 'capture')?.respondedAt);
+        }
+      } finally {
+        await store.cleanup();
+      }
+    });
+
+    test('qualified cold load joins node capture, report and attempt metadata to the exact run', async () => {
+      const writer = newStore();
+      await writer.createSession(
+        'r7-metadata',
+        'chain-plan/table/detail#1',
+        2,
+        {},
+        {
+          nodes: nodes(['capture', 'plan/collect', 'Collect'], ['report', 'plan/report', 'Report']),
+        }
+      );
+      await writer.updateSessionState('r7-metadata', 'capture', 'captured answer');
+      await writer.completeStep('r7-metadata', 'capture');
+      await writer.advanceStep('r7-metadata', 'capture');
+      await writer.setReview('r7-metadata', {
+        nodeId: 'report',
+        kind: 'detached',
+        phase: 'awaiting-verdict',
+        combinedPrompt: '',
+        gateIds: ['quality'],
+        prompts: [],
+        createdAt: 1,
+        attemptCount: 1,
+        maxAttempts: 2,
+        reviewedOutput: 'exact detached report',
+      });
+      const captured = writer.getStepState('r7-metadata', 'capture');
+      await writer.cleanup();
+      const reader = newStore();
+      try {
+        await (reader as unknown as { initPromise: Promise<void> }).initPromise;
+        const loaded = reader.getSessionByChainIdentifier('chain-plan/table/detail#1', {
+          includeDormant: true,
+        });
+        expect(loaded?.sessionId).toBe('r7-metadata');
+        expect(loaded?.chainId).toBe('chain-plan/table/detail#1');
+        expect(loaded?.state.currentNodeId).toBe('report');
+        expect(loaded?.executionOrder).toEqual(['capture']);
+        expect(reader.getStepState('r7-metadata', 'capture')).toEqual(captured);
+        expect(reader.getReview('r7-metadata', 'report')).toMatchObject({
+          nodeId: 'report',
+          attemptCount: 1,
+          reviewedOutput: 'exact detached report',
+        });
+        expect(reader.getReview('r7-metadata', 'capture')).toBeUndefined();
+      } finally {
+        await reader.cleanup();
+      }
+    });
+  });
+
   test('the v22 schema declares both run tables and no longer declares the retired blob', () => {
     expect(engine.getSchemaVersion()).toBe(35);
 

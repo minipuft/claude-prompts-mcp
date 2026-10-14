@@ -49,7 +49,6 @@ const createMockSessionService = (): ChainSessionService =>
     setPendingShellVerification: jest.fn().mockResolvedValue(undefined),
     getPendingShellVerification: jest.fn().mockReturnValue(undefined),
     clearPendingShellVerification: jest.fn().mockResolvedValue(undefined),
-    cancelChain: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
     getSession: jest.fn().mockReturnValue(undefined),
   }) as unknown as ChainSessionService;
 
@@ -674,7 +673,7 @@ describe('ShellVerificationStage', () => {
   });
 
   describe('gate_action handling', () => {
-    const createEscalatedContext = (gateAction: 'retry' | 'skip' | 'abort') => {
+    const createEscalatedContext = (gateAction: 'retry' | 'skip') => {
       const context = new ExecutionContext({
         command: '>>chain',
         chain_id: 'chain-test#1',
@@ -728,40 +727,6 @@ describe('ShellVerificationStage', () => {
 
       // Should save reset state to session
       expect(sessionService.setPendingShellVerification).toHaveBeenCalled();
-
-      // Should NOT execute the verification command
-      expect(executor.execute).not.toHaveBeenCalled();
-    });
-
-    test('gate_action: abort sets response with abort confirmation', async () => {
-      const executor = createMockExecutor(true);
-      const sessionService = createMockSessionService();
-      const stage = new ShellVerificationStage(
-        executor,
-        createMockStateManager(),
-        sessionService,
-        createAdvanceOwner(),
-        createLogger()
-      );
-
-      const context = createEscalatedContext('abort');
-      await stage.execute(context);
-
-      // Should set a response (pipeline terminates)
-      expect(context.response).toBeDefined();
-      const text = context.response!.content[0].text;
-      expect(text).toContain('Aborted');
-      expect(text).toContain('npm test');
-
-      // Should clear from session
-      expect(sessionService.clearPendingShellVerification).toHaveBeenCalled();
-
-      // Should mark session as aborted
-      expect(context.state.session.aborted).toBe(true);
-
-      // ...and cancel the run, so "Execution stopped by user" above is true rather than
-      // advisory. The flag alone left runStatus 'working' and the chain resumable.
-      expect(sessionService.cancelChain).toHaveBeenCalled();
 
       // Should NOT execute the verification command
       expect(executor.execute).not.toHaveBeenCalled();

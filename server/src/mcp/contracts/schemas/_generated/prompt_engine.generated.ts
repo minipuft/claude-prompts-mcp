@@ -30,7 +30,6 @@ export type prompt_engineParamName =
   | 'gate_action'
   | 'gates'
   | 'force_restart'
-  | 'cancel'
   | 'handoff'
   | 'claim_token'
   | 'options'
@@ -103,11 +102,11 @@ export const prompt_engineParameters: ToolParameter[] = [
     name: 'gate_action',
     type: 'enum',
     description:
-      "Your move on a run that is waiting for one. THREE ANSWER A FAILED GATE after the retry limit is exhausted: 'retry' resets attempts (semantic retry renews server attempt and requires separate replacement capture), 'skip' records operational BYPASS and continues without an evaluated PASS/FAIL, 'abort' stops chain execution entirely. TWO ANSWER A PAUSED RUN holding a blocking-unknown interrupt (reserved review id '__unknown_interrupt__', raised only when the run declared budget.pauseOnBlocking): 'resume' clears the pause and issues the investigation step as written, 'accept_alternative' replaces the remainder of the run with the nodes supplied in 'remainder' on the SAME call. 'abort' and cancel:true exit either state.",
+      "Run action. 'abort' stops the existing run named by 'chain_id' in any nonterminal state, including active runs, blocking-unknown pauses, ordinary reviews and detached holds. No command, review, retry exhaustion, node selection, trailer or report is required; it starts no work and consumes no report. State and artifacts are retained; repeated abort of an already-cancelled run succeeds. Completed, failed, missing or out-of-scope runs return a non-applied refusal. AFTER A FAILED GATE exhausts its retry limit: 'retry' resets attempts (semantic retry renews the server attempt and requires separate replacement capture), 'skip' records operational BYPASS and continues without an evaluated PASS/FAIL. ON A BLOCKING-UNKNOWN INTERRUPT ('__unknown_interrupt__', raised only with budget.pauseOnBlocking): 'resume' clears the pause and issues the investigation step as written, 'accept_alternative' replaces the remaining run with 'remainder' on the SAME call (refused without one).",
     status: 'working',
     compatibility: 'canonical',
     notes: [
-      'State-conditional: advertised only while the gate system is enabled. Part of the declared union surface regardless — see CLAUDE.md §Public API Contract.',
+      "Core parameter: advertised independently of gate-system enablement. With gates disabled, 'retry' and 'skip' receive a named refusal; 'abort', 'resume' and 'accept_alternative' remain available.",
       "'accept_alternative' without a 'remainder' in the same call is refused by name — it is the acceptance of an alternative, not a request for one.",
       "'resume' and 'accept_alternative' are meaningful only while '__unknown_interrupt__' is the pending review; against a failed-gate review they are refused the same way 'retry' is against an interrupt.",
     ],
@@ -137,18 +136,9 @@ export const prompt_engineParameters: ToolParameter[] = [
     name: 'force_restart',
     type: 'boolean',
     description:
-      "Start a new execution instead of resuming one. Cannot be combined with 'chain_id' (that pair is rejected). Redundant with a plain 'command', which already starts a new chain; it matters only when the command text itself carries a chain id. Distinct from 'cancel': force_restart abandons the current run and immediately begins a new one, while cancel ends it and starts nothing.",
+      "Start a new execution instead of resuming one. Cannot be combined with 'chain_id' (that pair is rejected). Redundant with a plain 'command', which already starts a new chain; it matters only when the command text itself carries a chain id. Distinct from gate_action:'abort': force_restart abandons the current run and immediately begins a new one, while abort ends it and starts nothing.",
     status: 'working',
     compatibility: 'canonical',
-  },
-  {
-    name: 'cancel',
-    type: 'boolean',
-    description:
-      "Stop the run named by 'chain_id' and block further progression. Requires 'chain_id'; no other parameter is read. Moved here from system_control session cancel because a chain id is held BECAUSE you are running the chain, so ending that run is part of running it — system_control keeps list/inspect/clear, which are keyed on a session_id read from a listing. Cancel retains the session's state and artifacts; remove them with system_control(action:\"session\", operation:\"clear\").",
-    status: 'working',
-    compatibility: 'canonical',
-    resolvesPendingRun: true,
   },
   {
     name: 'handoff',
@@ -199,7 +189,7 @@ export const prompt_engineParameters: ToolParameter[] = [
       "`resolution` is required when type is 'unknown_resolved'; omitted for 'unknown_discovered'.",
       "A blocking `unknown_discovered` (with or without `target_step_id`) inserts one `investigate_unknown` step immediately after the current node; `target_step_id` instead governs the skip side — a later `unknown_resolved` with resolution 'irrelevant' skips that ledger entry's target once it is strictly ahead of the current step. Capped at 1 insertion per unknown id and 3 per run, and one insertion per call: when one call declares several blocking unknowns, only the first gets a step and the interrupt names the rest as open with no investigation step (`uninvestigated_unknown_ids`). The server never infers a target and only ever mutates in reaction to an observation — enforcement stays advisory.",
       "A blocking `unknown_discovered` also raises a CHAIN INTERRUPT: the response carries `structuredContent.chain_interrupt` — `{kind:'chain_interrupt', reason:'blocking_unknown', unknown:{id,statement}, open_blocking_unknowns:[{id,statement}…], uninvestigated_unknown_ids:[…], affected_step_ids:[…], remaining_nodes:[…], paused:<bool>, resume:{chain_id, verbs:[…]}}`. `affected_step_ids` is derived from DECLARED `target_step_id` links only; the server never scans text for affected steps.",
-      "By default the interrupt rides on the inserted investigation step and the run continues — answer that step to resume. When the run declared `budget.pauseOnBlocking: true` the run instead PAUSES on a synthetic review with the reserved id '__unknown_interrupt__', the response is the interrupt alone, and it is resolved with `gate_action: 'resume' | 'accept_alternative'` (or `abort` / `cancel`). Either way a `remainder` may be submitted to replace the rest of the run.",
+      "By default the interrupt rides on the inserted investigation step and the run continues — answer that step to resume. When the run declared `budget.pauseOnBlocking: true` the run instead PAUSES on a synthetic review with the reserved id '__unknown_interrupt__', the response is the interrupt alone, and it is resolved with `gate_action: 'resume' | 'accept_alternative'` (or run-level `abort`). Either way a `remainder` may be submitted to replace the rest of the run.",
     ],
   },
   {
