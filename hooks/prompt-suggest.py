@@ -37,7 +37,7 @@ from cache_manager import (
 )
 from config_loader import is_expanded_output
 from db_reader import load_recoverable_chain_state
-from session_state import ChainState, format_chain_reminder
+from session_state import UNKNOWN_INTERRUPT_LABEL, ChainState, format_chain_reminder, format_gate_directive
 
 # Import generated operator patterns (SSOT: server/tooling/contracts/operators.json)
 try:
@@ -776,13 +776,11 @@ def main():
 
         # Block if: steps remain OR pending gate/verify at final step
         needs_continuation = chain_id and step > 0 and step < total
-        needs_review = chain_id and step > 0 and pending_gate
+        needs_review = chain_id and pending_gate and (step > 0 or pending_gate == UNKNOWN_INTERRUPT_LABEL)
         if needs_continuation or needs_review:
             # Build imperative directive matching >>syntax pattern
             if pending_gate:
-                directive = (
-                    f'<GATE-REVIEW>chain_id="{chain_id}" gates="{pending_gate}" → Submit gate_verdict</GATE-REVIEW>'
-                )
+                directive = format_gate_directive(session_state)
             else:
                 directive = (
                     f"<CALL-TOOL>\n"

@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from session_state import (
     clear_session_state,
+    format_gate_directive,
     is_subagent_payload,
     load_session_state,
     parse_prompt_engine_response,
@@ -160,9 +161,7 @@ def main():
         save_session_state(session_id, state)
 
     if pending_gate:
-        # CLAUDE DIRECTIVE ONLY: Guide Claude to submit verdict (token-efficient)
-        # User sees server's "Gate Review Required" message in tool response
-        directive = f'<GATE-REVIEW>chain_id="{chain_id}" gates="{pending_gate}" → Submit gate_verdict</GATE-REVIEW>'
+        directive = format_gate_directive(state)
 
         hook_response = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": directive}}
         print(json.dumps(hook_response))

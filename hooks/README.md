@@ -60,6 +60,9 @@ Triggers on every user message. Detects `>>prompt` syntax and suggests the corre
 
 Triggers after `prompt_engine` calls. Tracks chain state and pending gates.
 
+Blocking-unknown holds use the server's resolution exits in both hook directives, including
+recovered holds with no issued step. Ordinary reviews retain their gate-verdict directive.
+
 **Output:**
 
 ```text

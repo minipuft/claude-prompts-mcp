@@ -34,8 +34,10 @@ from session_state import (
     format_chain_reminder,
     interrupt_exits,
     label_gate_ids,
+    load_session_state,
     parse_prompt_engine_response,
 )
+from test_delegation_deadlock_fixes import run_post_prompt_engine
 
 spec = importlib.util.spec_from_file_location("gate_enforce", HOOKS_DIR / "gate-enforce.py")
 hook_mod = importlib.util.module_from_spec(spec)
@@ -269,3 +271,39 @@ def test_paused_qualified_run_retains_exact_resume_token_and_exits(token):
     ]
     for mode in ("full", "inline"):
         assert token in format_chain_reminder(state, mode=mode)
+
+
+@pytest.mark.parametrize("token", ["chain-demo#1", "chain-Team-Legacy/Child_Name/9deep#01"])
+def test_post_unknown_hold_directive_retains_server_exits(patch_workspace, monkeypatch, capsys, token):
+    content = PAUSED_RESPONSE.replace("chain-demo#1", token)
+    code, out = run_post_prompt_engine(
+        monkeypatch, capsys, session_id="post-held", content=content, tool_input={"chain_id": token}, is_error=False
+    )
+    assert code == 0
+    directive = out["hookSpecificOutput"]["additionalContext"]
+    assert token in directive
+    assert "<INTERRUPT>" in directive
+    assert "gate_verdict" not in directive
+    assert "PASS" not in directive and "FAIL" not in directive
+    state = parse_prompt_engine_response(content)
+    assert state is not None
+    for verb in state["interrupt_verbs"]:
+        assert verb in directive
+    stored = load_session_state("post-held")
+    assert stored is not None and stored["pending_gate"] == UNKNOWN_INTERRUPT_LABEL
+    assert stored["chain_id"] == token
+
+
+def test_post_ordinary_review_keeps_exact_directive(patch_workspace, monkeypatch, capsys):
+    code, out = run_post_prompt_engine(
+        monkeypatch,
+        capsys,
+        session_id="ordinary-review",
+        content="Progress 1/3\n**Gate Review Required**\n**Gates**: review",
+        tool_input={"chain_id": "chain-demo#1"},
+        is_error=False,
+    )
+    assert code == 0
+    assert out["hookSpecificOutput"]["additionalContext"] == (
+        '<GATE-REVIEW>chain_id="chain-demo#1" gates="review" → Submit gate_verdict</GATE-REVIEW>'
+    )

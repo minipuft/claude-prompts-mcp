@@ -336,3 +336,12 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
         lines.append("Run implementation, then prompt_engine validates with shell command")
 
     return "\n".join(lines)
+
+
+def format_gate_directive(state: ChainState) -> str:
+    """Render the pending hold's instruction without offering a gate verdict for an interrupt."""
+    chain_id = state.get("chain_id", "")
+    gate = state.get("pending_gate")
+    if gate == UNKNOWN_INTERRUPT_LABEL:
+        return f'<INTERRUPT>chain_id="{chain_id}"\n{format_chain_reminder(state)}</INTERRUPT>'
+    return f'<GATE-REVIEW>chain_id="{chain_id}" gates="{gate}" → Submit gate_verdict</GATE-REVIEW>'
