@@ -355,7 +355,7 @@ export interface ChainSession {
 }
 
 /** Terminal run-status values — sticky once entered. */
-export const TERMINAL_RUN_STATUSES: readonly ChainRunStatus[] = [
+const TERMINAL_RUN_STATUSES: readonly ChainRunStatus[] = [
   'completed',
   'failed',
   'cancelled',
@@ -531,10 +531,9 @@ export interface ChainSessionLookupOptions extends StateStoreOptions {
 
 /**
  * Outcome of claiming a handed-off run (plan 2A). The registry owns transfer, unknown-token,
- * launch-storage and request-continuity refusals; the
- * store adds `no-blueprint` after inspecting what it received (OQ-1: a run nothing can resume
- * is refused rather than loaded), and `chain-id-held` before any transfer when this server
- * already runs a different run under the claimed chain id (R62: a `chain_id` must name one run).
+ * launch-storage, request-continuity and `no-blueprint` refusals before transferring ownership.
+ * The store adds `chain-id-held` before transfer when this server already runs a different run
+ * under the claimed chain id (R62: a `chain_id` must name one run).
  */
 export type ChainHandoffClaimResult =
   | { status: 'claimed'; session: ChainSession }

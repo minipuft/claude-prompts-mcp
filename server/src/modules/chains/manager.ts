@@ -1450,6 +1450,7 @@ export class ChainSessionStore implements ChainSessionService {
     requestScope?: StateStoreOptions
   ): Promise<ChainHandoffClaimResult> {
     await this.initPromise;
+    await this.persistQueue;
     const heldChainId = this.findHeldChainIdForToken(token);
     if (heldChainId !== undefined) {
       this.logger.warn(`[Handoff] Refusing claim: ${heldChainId} already names another run here`);
@@ -1463,10 +1464,6 @@ export class ChainSessionStore implements ChainSessionService {
     if (result.status !== 'claimed') return result;
 
     const session = result.session;
-    if (!session.blueprint) {
-      this.logger.warn(`[Handoff] Claimed ${session.chainId} carries no blueprint; refusing`);
-      return { status: 'no-blueprint', chainId: session.chainId };
-    }
     // The claim above is its own committed write: the row is this server's now, so a rejected
     // save below restores the run's own fields but keeps it held, which is what the rows say.
     const snapshot = this.snapshotRun(session);

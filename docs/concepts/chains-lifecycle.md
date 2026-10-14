@@ -131,12 +131,13 @@ per request continuity scope, so different scopes sharing one `state.db` can bot
 row's owner and burns the token in one statement, then resumes the run in the same call so
 the claimer receives the current step immediately. The donor keeps its copy until its next
 persist, where it notices the row is no longer its own and retires it. A claim never
-rewrites workspace scope, and a run whose persisted state carries no blueprint is refused
-by name rather than loaded as something nothing can resume.
+rewrites workspace scope. Terminal runs and runs without a compatible blueprint are refused
+before transfer. A refused claim preserves the owner and token.
+Only the committed transfer winner is acknowledged.
 
 The claim uses the same identity policy as ordinary requests: launch defaults apply when
 headers are absent, and locked or override-disabled configurations retain those defaults.
-A meaningful request scope must match the run before its token is used; a refusal retains
+A meaningful request scope must match the run before its token is used; a scope refusal retains
 the token and owner, so the original request scope can claim it. Request continuity is
 separate from the launch storage namespace and process owner. An effective unfiltered
 scope keeps legacy behavior; it does not replace either storage or ownership checks.

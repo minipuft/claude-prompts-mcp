@@ -11,6 +11,7 @@ import { afterAll, beforeAll, describe, expect, jest, test } from '@jest/globals
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { DatabaseSync } from 'node:sqlite';
 
 import { UNKNOWN_INTERRUPT_GATE_ID } from '../../../src/engine/execution/pipeline/decisions/index.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
@@ -57,7 +58,15 @@ function makeSession(sessionId: string, token?: string): ChainSession {
     originalArgs: {},
     lifecycle: 'canonical',
     runStatus: 'working',
-    blueprint: { parsedCommand: { promptId: 'p1' } } as unknown as ChainSession['blueprint'],
+    blueprint: {
+      parsedCommand: { promptId: 'p1' },
+      executionPlan: {
+        strategy: 'chain',
+        gates: [],
+        requiresFramework: false,
+        requiresSession: true,
+      },
+    },
     ...(token !== undefined && { handoffToken: token }),
   };
 }
@@ -67,6 +76,11 @@ describe('DirectChainRunRegistry handoff transfer', () => {
   let engine: SqliteEngine;
   let donor: DirectChainRunRegistry;
   let claimer: DirectChainRunRegistry;
+
+  const snapshot = () => ({
+    runs: engine.query('SELECT * FROM chain_runs ORDER BY session_id'),
+    nodes: engine.query('SELECT * FROM chain_run_nodes ORDER BY session_id, position'),
+  });
 
   beforeAll(async () => {
     tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'handoff-'));
@@ -431,6 +445,275 @@ describe('DirectChainRunRegistry handoff transfer', () => {
       'hnd_token-4'
     );
   });
+  test.each([
+    undefined,
+    null,
+    {},
+    [],
+    'bad',
+    { parsedCommand: {} },
+    { parsedCommand: { promptId: 'p1' }, executionPlan: null },
+  ])('C1 incompatible blueprint %j refuses without changing rows', async (blueprint) => {
+    const session = makeSession('c1-invalid', 'hnd_c1-invalid');
+    await donor.save([session], DONOR);
+    const state = engine.queryOne<{ state: string }>(
+      'SELECT state FROM chain_runs WHERE session_id = ?',
+      [session.sessionId]
+    )!.state;
+    engine.run('UPDATE chain_runs SET state = ? WHERE session_id = ?', [
+      JSON.stringify({ ...JSON.parse(state), blueprint }),
+      session.sessionId,
+    ]);
+    const before = snapshot();
+    expect(claimer.claimRunByToken('hnd_c1-invalid', CLAIMER)).toEqual({
+      status: 'no-blueprint',
+      chainId: session.chainId,
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  test.each(['completed', 'failed', 'cancelled', 'workspace', 'continuity'] as const)(
+    'C1 %s refusal preserves every row',
+    async (kind) => {
+      const session = makeSession('c1-refusal', 'hnd_c1-refusal');
+      if (kind !== 'workspace' && kind !== 'continuity') session.runStatus = kind;
+      await donor.save([session], DONOR);
+      const before = snapshot();
+      const result = claimer.claimRunByToken(
+        'hnd_c1-refusal',
+        kind === 'workspace' ? FOREIGN_WS : CLAIMER,
+        kind === 'continuity' ? 'foreign' : undefined
+      );
+      expect(result.status).toBe(
+        kind === 'workspace'
+          ? 'workspace-mismatch'
+          : kind === 'continuity'
+            ? 'request-continuity-mismatch'
+            : 'unknown-token'
+      );
+      expect(snapshot()).toEqual(before);
+    }
+  );
+
+  test.each(['inserted', 'remainder'] as const)(
+    'C1 compatible %s nodes and null pointer claim',
+    async (origin) => {
+      const session = makeSession(`c1-compatible-${origin}`, 'hnd_c1-compatible');
+      session.state.nodes[1]!.origin = origin;
+      session.state.currentNodeId = null;
+      session.runStatus = 'working';
+      await donor.save([session], DONOR);
+      expect(claimer.claimRunByToken('hnd_c1-compatible', CLAIMER)).toMatchObject({
+        status: 'claimed',
+        session: { state: { currentNodeId: null, nodes: [{}, { origin }] } },
+      });
+    }
+  );
+
+  test.each(['nested', 'busy', 'locked', 'zero', 'throw'])(
+    'C1 %s transfer boundary',
+    async (kind) => {
+      const session = makeSession(`c1-boundary-${kind}`, 'hnd_c1-boundary');
+      await donor.save([session], DONOR);
+      const before = snapshot(),
+        query = engine.queryOne.bind(engine);
+      const sibling = new DatabaseSync(path.join(tmpRoot, 'runtime-state', 'state.db'));
+      sibling.exec('PRAGMA busy_timeout=0');
+      engine.run('PRAGMA busy_timeout=0');
+      if (kind === 'busy') sibling.exec('BEGIN IMMEDIATE');
+      let callerCommitted = false,
+        updateSeen = false;
+      const spy = jest.spyOn(engine, 'queryOne').mockImplementation((sql, params) => {
+        if (sql.includes('UPDATE chain_runs')) {
+          updateSeen = true;
+          if (kind === 'zero') return null;
+          if (kind === 'locked')
+            expect(() =>
+              sibling
+                .prepare('UPDATE chain_runs SET state = ? WHERE session_id = ?')
+                .run('{"blueprint":null}', session.sessionId)
+            ).toThrow(/locked|busy/);
+          const result = query(sql, params);
+          if (kind === 'throw') throw new Error('C1 after transfer');
+          return result;
+        }
+        return query(sql, params);
+      });
+      try {
+        if (kind === 'nested') {
+          engine.beginTransaction('immediate');
+          engine.run('UPDATE chain_runs SET last_activity = 7 WHERE session_id = ?', [
+            session.sessionId,
+          ]);
+          const caller = snapshot();
+          expect(() => claimer.claimRunByToken('hnd_c1-boundary', CLAIMER)).toThrow(/transaction/);
+          expect(snapshot()).toEqual(caller);
+          expect(
+            sibling
+              .prepare('SELECT last_activity FROM chain_runs WHERE session_id = ?')
+              .get(session.sessionId)
+          ).toEqual({ last_activity: 1 });
+          engine.commit();
+          callerCommitted = true;
+          expect(
+            sibling
+              .prepare('SELECT last_activity FROM chain_runs WHERE session_id = ?')
+              .get(session.sessionId)
+          ).toEqual({ last_activity: 7 });
+        } else if (kind === 'throw' || kind === 'busy')
+          expect(() => claimer.claimRunByToken('hnd_c1-boundary', CLAIMER)).toThrow(
+            kind === 'busy' ? /locked|busy/ : 'C1 after transfer'
+          );
+        else
+          expect(claimer.claimRunByToken('hnd_c1-boundary', CLAIMER).status).toBe(
+            kind === 'zero' ? 'unknown-token' : 'claimed'
+          );
+        if (kind === 'throw' || kind === 'zero' || kind === 'busy')
+          expect(snapshot()).toEqual(before);
+        if (kind !== 'nested' && kind !== 'busy') expect(updateSeen).toBe(true);
+      } finally {
+        spy.mockRestore();
+        sibling.close();
+        if (kind === 'nested' && !callerCommitted) {
+          try {
+            engine.rollback();
+          } catch {
+            /* A failing claim may have ended the caller transaction. */
+          }
+        }
+      }
+    }
+  );
+  const realStore = () =>
+    new ChainSessionStore(
+      createLogger(),
+      new StubTextReferenceStore() as any,
+      { cleanupIntervalMs: 100000, defaultScope: { workspaceId: 'ws-a' } },
+      engine
+    );
+  test.each([
+    'absent',
+    'incompatible',
+    'legacy',
+    'chain',
+    'inserted',
+    'remainder',
+    'detached',
+  ] as const)('C2 real-store %s custody', async (kind) => {
+    const session = makeSession(`c2-${kind}`, `hnd_c2-${kind}`);
+    session.chainId = `chain-c2-${kind}#1`;
+    session.state.nodes.forEach((node) => {
+      node.origin = 'planned';
+    });
+    if (kind === 'absent') delete session.blueprint;
+    if (kind === 'incompatible')
+      session.blueprint = { parsedCommand: {} } as ChainSession['blueprint'];
+    if (kind === 'chain')
+      session.blueprint!.parsedCommand.steps = [{ nodeId: 'n1' }, { nodeId: 'n2' }];
+    if (kind === 'inserted' || kind === 'remainder') session.state.nodes[1]!.origin = kind;
+    if (kind === 'detached') {
+      session.state.currentNodeId = null;
+      session.runStatus = 'working';
+      session.reviews = {
+        n2: {
+          nodeId: 'n2',
+          kind: 'detached',
+          phase: 'awaiting-verdict',
+          combinedPrompt: '',
+          gateIds: ['quality'],
+          prompts: [],
+          createdAt: 1,
+          attemptCount: 1,
+          maxAttempts: 2,
+          reviewedOutput: 'retained report',
+        },
+      };
+    }
+    await donor.save([session], DONOR);
+    const before = snapshot(),
+      store = realStore();
+    try {
+      const result = await store.claimHandoff(`hnd_c2-${kind}`);
+      if (kind === 'absent' || kind === 'incompatible') {
+        expect(result.status).toBe('no-blueprint');
+        expect(snapshot()).toEqual(before);
+        expect(store.hasActiveSession(session.sessionId)).toBe(false);
+      } else {
+        expect(result).toMatchObject({
+          status: 'claimed',
+          session: {
+            sessionId: session.sessionId,
+            lifecycle: 'dormant',
+            blueprint: session.blueprint,
+            ...(session.reviews ? { reviews: session.reviews } : {}),
+            state: { nodes: session.state.nodes, currentNodeId: session.state.currentNodeId },
+          },
+        });
+        expect(
+          engine.queryOne(
+            'SELECT run_owner_pid, handoff_token FROM chain_runs WHERE session_id = ?',
+            [session.sessionId]
+          )
+        ).toEqual({ run_owner_pid: String(process.pid), handoff_token: null });
+        expect(
+          store.getSessionByChainIdentifier(session.chainId, { includeDormant: true })?.lifecycle
+        ).toBe('canonical');
+      }
+    } finally {
+      await store.cleanup();
+    }
+  });
+  test('C2 queued claim waits for an actual open save transaction', async () => {
+    const session = makeSession('c2-wait', 'hnd_c2-wait');
+    session.chainId = 'chain-c2-wait#1';
+    await donor.save([session], DONOR);
+    const store = realStore();
+    await store.createSession('c2-local', 'chain-c2-local#1', 1);
+    let release!: () => void, entered!: () => void;
+    const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+      ready = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+    const registry = (store as unknown as { runRegistry: ChainRunRegistry }).runRegistry;
+    const save = registry.save.bind(registry),
+      transfer = jest.spyOn(registry, 'claimRunByToken');
+    const blockedSave = jest.spyOn(registry, 'save').mockImplementationOnce(async (...args) => {
+      const result = await save(...args);
+      entered();
+      await hold;
+      return result;
+    });
+    const pending = store.mintHandoffToken('c2-local');
+    await ready;
+    const observer = new DatabaseSync(path.join(tmpRoot, 'runtime-state', 'state.db'));
+    observer.exec('PRAGMA busy_timeout=0');
+    const claim = store
+      .claimHandoff('hnd_c2-wait')
+      .catch((error) => ({ status: 'claim-error', error }));
+    try {
+      expect(() => observer.exec('BEGIN IMMEDIATE')).toThrow(/locked|busy/);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(transfer).not.toHaveBeenCalled();
+      release();
+      await pending;
+      expect(await claim).toMatchObject({
+        status: 'claimed',
+        session: { sessionId: session.sessionId },
+      });
+      expect(transfer).toHaveBeenCalledTimes(1);
+    } finally {
+      release();
+      await pending;
+      await claim;
+      observer.close();
+      blockedSave.mockRestore();
+      transfer.mockRestore();
+      await store.cleanup();
+    }
+  });
 });
 
 describe('ChainSessionStore handoff verbs', () => {
@@ -493,7 +776,7 @@ describe('ChainSessionStore handoff verbs', () => {
   test('claim refuses a run with no blueprint and does not load it', async () => {
     const bare = makeSession('s-bare');
     delete bare.blueprint;
-    const store = makeStore(fakeRegistry({ status: 'claimed', session: bare }));
+    const store = makeStore(fakeRegistry({ status: 'no-blueprint', chainId: bare.chainId }));
 
     const result = await store.claimHandoff('hnd_y');
 

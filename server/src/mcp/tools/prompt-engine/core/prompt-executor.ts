@@ -781,8 +781,9 @@ export class PromptExecutor {
       case 'no-blueprint':
         return {
           refusal: this.textError(
-            `❌ **Claim Refused**: \`${result.chainId}\` was transferred but carries no ` +
-              'blueprint, so nothing here can resume it. Restart it from its command instead.'
+            `❌ **Claim Refused**: \`${result.chainId}\` carries no compatible blueprint, ` +
+              'so nothing here can resume it. The run and token stay with their owner. ' +
+              'Restart it from its command instead.'
           ),
         };
       case 'chain-id-held':
