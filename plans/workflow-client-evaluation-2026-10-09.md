@@ -18,8 +18,8 @@ tags: [hooks, workflows, evaluation, clients]
 ## Now (2026-10-13)
 
 Goal: coherent abort, conversation pause, and truthful client workflow evidence.
-Slice: full retained source-wire matrix accepted:355RPC/28stages BOTH STDIO/HTTP,62exactbindings,8hosts/4ports cleaned; recovered seal448files/6c389222c023a99159afb727d2c079186daf57af74e5dc67105913fd27a23d14. Source abort/namespace/F24/F25 repairs accepted; no runtime replay after crash.
-Next: all85 local validation members passed with retained84 unchanged checks plus the corrected plan-row owner check. Final current candidate source-wire/bundle row0.35 remains held until root commits plan-only repair and refreshes frozen HEAD; no production bytes changed.
+Slice: accepted source fixes, all85 local checks, and final current source-wire355RPC/28stages BOTHprotocols at HEAD8261a2d9/63bindings; fresh bundledHTTP20checks and unchanged schema snapshots accepted. Final467file manifest2789c7cfe2b693c2c99d146bcb3a426e407a0a5f4081b38ed2e28575d4bd868e.
+Next: reviewed source PR/CI boundary; retain explicit source-to-plan-only-writeback binding without repeating runtime. Q6 downstream port ownership/change gate and conversation-pause implementation remain open; installed/native/release activation remains separate.
 Constraint: root owns HEAD; checkpoint/stashes and accepted receipts retained; no CloudySky/global/downstream install/shared DB/npm/tag/release; public delivery scope remains separately bound.
 Boundary: source/STDIO/HTTP proof accepted with failed-run and STDIOforeignscope source/store limits; native/client installation and crash durability unproved. No release or installed mutation authorized.
 
