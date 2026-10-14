@@ -1704,7 +1704,9 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       const reply = await pipeline.execute({ chain_id: chainId, gate_verdict: fail } as any);
 
       expect(reply.isError).toBe(true);
-      expect(textOf(reply)).toContain('gate_action "retry", "skip" or "abort"');
+      expect(textOf(reply)).toContain(
+        'gate_action "retry" or "skip"; to stop the run, use gate_action "abort" with chain_id.'
+      );
       expect(reviews()['draft']?.attemptCount).toBe(2);
     });
   });
