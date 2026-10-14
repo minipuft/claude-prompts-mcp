@@ -1,4 +1,9 @@
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { SqliteEngine } from '../../../../src/infra/database/sqlite-engine.js';
 
 import { PromptExecutor } from '../../../../src/mcp/tools/prompt-engine/core/prompt-executor.js';
 import { hashBytes } from '../../../../src/shared/utils/hash.js';
@@ -76,8 +81,10 @@ const mockFrameworkStateStore = {
 
 describe('PromptEngine Validation', () => {
   let engine: PromptExecutor;
+  let abortRuntimeDir: string | undefined;
+  let abortDatabase: SqliteEngine | undefined;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
     jest.mocked(mockConfigManager.getTransportMode).mockReturnValue('streamable-http');
     jest.mocked(mockConfigManager.getConfig).mockReturnValue({
@@ -86,18 +93,39 @@ describe('PromptEngine Validation', () => {
       frameworks: {},
       identity: { mode: 'permissive', allowPerRequestOverride: true, launchDefaults: {} },
     } as ReturnType<ConfigManager['getConfig']>);
+    if (expect.getState().currentTestName?.startsWith('PromptEngine Validation abort')) {
+      abortRuntimeDir = mkdtempSync(join(tmpdir(), 'prompt-validation-abort-'));
+      abortDatabase = await SqliteEngine.getInstance(mockLogger, {
+        dbPath: join(abortRuntimeDir, 'state.db'),
+      });
+      await abortDatabase.initialize();
+      jest.mocked(mockConfigManager.getRuntimeStateDirectory).mockReturnValue(abortRuntimeDir);
+    }
     engine = new PromptExecutor(
       mockLogger,
       mockPromptAssetManager,
       mockConfigManager,
       mockTextReferenceStore,
-      undefined // gateManager
+      undefined, // gateManager
+      undefined,
+      undefined,
+      abortDatabase
     );
   });
 
   afterEach(async () => {
-    if (engine) {
-      await engine.getChainSessionStore().cleanup();
+    try {
+      if (engine) await engine.getChainSessionStore().cleanup();
+    } finally {
+      await abortDatabase?.shutdown();
+      abortDatabase = undefined;
+      if (abortRuntimeDir !== undefined) {
+        rmSync(abortRuntimeDir, { recursive: true, force: true });
+        abortRuntimeDir = undefined;
+        jest
+          .mocked(mockConfigManager.getRuntimeStateDirectory)
+          .mockReturnValue('/nonexistent-runtime-root/runtime-state');
+      }
     }
   });
 
@@ -388,6 +416,10 @@ describe('PromptEngine Validation', () => {
    * keeps `list`/`inspect`/`clear`, which are keyed on a `session_id` read from a listing.
    */
   describe('abort', () => {
+    async function seedAbortRun(sessionId: string): Promise<void> {
+      await engine.getChainSessionStore().createSession(sessionId, 'chain-demo#1', 1);
+    }
+
     test.each([undefined, '', '  '])(
       'requires a named run, including for standalone shell prompts (%p)',
       async (chainId) => {
@@ -418,12 +450,9 @@ describe('PromptEngine Validation', () => {
       // your own run meant listing sessions to look up an id you never chose. A live drive is
       // what caught this: with a mock store, passing the chain id straight through "works".
       const store = engine.getChainSessionStore();
-      jest
-        .spyOn(store, 'getSessionByChainIdentifier')
-        .mockReturnValue({ sessionId: 'review-demo-1786998494932' } as never);
-      const cancelChain = jest
-        .spyOn(store, 'cancelChain')
-        .mockResolvedValue(true as unknown as never);
+      await seedAbortRun('review-demo-1786998494932');
+      jest.spyOn(store, 'getSessionByChainIdentifier');
+      const cancelChain = jest.spyOn(store, 'cancelChain');
 
       const result = await engine.executePromptCommand(
         { gate_action: 'abort', chain_id: ' chain-demo#1 ' },
@@ -457,9 +486,8 @@ describe('PromptEngine Validation', () => {
 
     test('short-circuits before companion parsing, handoff, claim and report consumption', async () => {
       const store = engine.getChainSessionStore();
-      const cancelChain = jest
-        .spyOn(store, 'cancelChain')
-        .mockResolvedValue(true as unknown as never);
+      await seedAbortRun('chain-demo#1');
+      const cancelChain = jest.spyOn(store, 'cancelChain');
 
       const pipeline = jest.spyOn(
         engine as unknown as { getPromptExecutionPipeline: () => unknown },
@@ -507,7 +535,8 @@ describe('PromptEngine Validation', () => {
 
     test('returns success again when the durable owner reports an already-cancelled run', async () => {
       const store = engine.getChainSessionStore();
-      jest.spyOn(store, 'cancelChain').mockResolvedValue(true as unknown as never);
+      await seedAbortRun('chain-demo#1');
+      jest.spyOn(store, 'cancelChain');
       const args = { gate_action: 'abort' as const, chain_id: 'chain-demo#1' };
 
       const first = await engine.executePromptCommand(args, {});
