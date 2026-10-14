@@ -13,6 +13,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -197,6 +198,245 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     expect(createHash('sha256').update(JSON.stringify(packet)).digest('hex')).toBe(
       'be425405cefa6c332dd99de240505663517a262cccc7547f4589906e65c855bf'
     );
+  });
+
+  describe('selected conversation control persistence', () => {
+    const fixture = async () => {
+      const refs = new StubTextReferenceStore();
+      const store = new ChainSessionStore(
+        logger,
+        refs as never,
+        { cleanupIntervalMs: 60_000, defaultScope: { workspaceId: 'ws-storage' } },
+        engine
+      );
+      const held = await store.createSession(
+        'selected',
+        'chain-selected#1',
+        2,
+        { target: 'old' },
+        { continuityScopeId: 'caller', nodes: nodes(['n1', 'p1', 'One'], ['n2', 'p2', 'Detached']) }
+      );
+      await store.markNodeSpawned('selected', 'n2');
+      await store.mintHandoffToken('selected');
+      for (const id of ['history', 'foreign', 'peer'])
+        await store.createSession(id, `chain-${id}#1`, 1);
+      engine.run(
+        "UPDATE chain_runs SET workspace_id = 'other-namespace' WHERE session_id = 'history'"
+      );
+      engine.run(
+        "UPDATE chain_runs SET run_owner_pid = 'foreign-owner' WHERE session_id = 'foreign'"
+      );
+      for (const id of ['history', 'foreign']) store['activeSessions'].delete(id);
+      store.setStepState('selected', 'n1', 'rendered', false, ['Evidence']);
+      return { store, refs, held, scope: store.getConversationControlScope('caller') };
+    };
+    const change = (session: ChainSession) => {
+      session.originalArgs = { target: 'new' };
+      return 'changed';
+    };
+    const commit = (f: Awaited<ReturnType<typeof fixture>>, mutation = change) =>
+      f.store['runConversationControlMutation']('selected', f.scope, mutation);
+    const raw = (other = false) => ({
+      runs: engine.query(
+        `SELECT * FROM chain_runs ${other ? "WHERE session_id != 'selected'" : ''} ORDER BY session_id`
+      ),
+      nodes: engine.query(
+        `SELECT * FROM chain_run_nodes ${other ? "WHERE session_id != 'selected'" : ''} ORDER BY session_id, position`
+      ),
+    });
+
+    test('canonical issued metadata commits and unrelated namespaces/history/foreign rows stay exact', async () => {
+      const f = await fixture();
+      const other = raw(true);
+      expect(other.runs).toHaveLength(3);
+      expect(
+        engine.queryOne<{ rendered_at: number | null }>(
+          "SELECT rendered_at FROM chain_run_nodes WHERE session_id = 'selected' AND node_id = 'n1'"
+        )?.rendered_at
+      ).toBeNull();
+      const result = await commit(f);
+      expect(result.status).toBe('committed');
+      if (result.status !== 'committed') throw new Error('positive selected commit missing');
+      expect(result.inspection.session.state.stepStates).toEqual(f.held.state.stepStates);
+      expect(result.inspection.session.originalArgs).toEqual({ target: 'new' });
+      expect(result.inspection.session).not.toHaveProperty('handoffToken');
+      expect(
+        engine.queryOne<{ declared_sections_json: string }>(
+          "SELECT declared_sections_json FROM chain_run_nodes WHERE session_id = 'selected' AND node_id = 'n1'"
+        )?.declared_sections_json
+      ).toBe('["Evidence"]');
+      expect(raw(true)).toEqual(other);
+      await f.store.cleanup();
+    });
+
+    test('physical second-connection BUSY rejects before mutation and permits a retry', async () => {
+      const f = await fixture();
+      const before = raw();
+      const local = structuredClone(f.held);
+      const timeout = engine.queryOne<{ timeout: number }>('PRAGMA busy_timeout');
+      if (timeout === null) throw new Error('busy timeout missing');
+      const blocker = new DatabaseSync(path.join(tmpDir, 'runtime-state', 'state.db'));
+      engine.run('PRAGMA busy_timeout = 1');
+      blocker.exec('BEGIN IMMEDIATE');
+      try {
+        await expect(commit(f)).rejects.toThrow(/locked|busy/i);
+        expect(f.held).toEqual(local);
+        expect(raw()).toEqual(before);
+      } finally {
+        blocker.exec('ROLLBACK');
+        blocker.close();
+        engine.run(`PRAGMA busy_timeout = ${timeout.timeout}`);
+      }
+      expect((await commit(f)).status).toBe('committed');
+      await f.store.cleanup();
+    });
+
+    test.each([
+      [
+        'SQL rejection',
+        "BEFORE INSERT ON chain_run_nodes WHEN NEW.session_id = 'selected' BEGIN SELECT RAISE(ABORT, 'fixture SQL failure'); END",
+      ],
+      [
+        'run domain alteration',
+        "AFTER INSERT ON chain_runs WHEN NEW.session_id = 'selected' BEGIN UPDATE chain_runs SET current_node_id = 'n2' WHERE session_id = 'selected'; END",
+      ],
+      [
+        'node domain alteration',
+        "AFTER INSERT ON chain_run_nodes WHEN NEW.session_id = 'selected' AND NEW.node_id = 'n1' BEGIN UPDATE chain_run_nodes SET declared_sections_json = NULL WHERE session_id = 'selected' AND node_id = 'n1'; END",
+      ],
+      [
+        'credential alteration',
+        "AFTER INSERT ON chain_runs WHEN NEW.session_id = 'selected' BEGIN UPDATE chain_runs SET handoff_token = 'altered-credential' WHERE session_id = 'selected'; END",
+      ],
+    ])('%s rolls back canonical rows and tentative memory, then retries', async (_name, body) => {
+      const f = await fixture();
+      const before = raw();
+      const local = structuredClone(f.held);
+      engine.run(`CREATE TRIGGER selected_fault ${body}`);
+      try {
+        await expect(commit(f)).rejects.toThrow(
+          _name === 'SQL rejection' ? 'fixture SQL failure' : 'durable row or node mismatch'
+        );
+        expect(raw()).toEqual(before);
+        expect(f.held).toEqual(local);
+      } finally {
+        engine.run('DROP TRIGGER selected_fault');
+      }
+      expect((await commit(f)).status).toBe('committed');
+      await f.store.cleanup();
+    });
+
+    test.each(['owner', 'namespace', 'zero winner'])(
+      '%s refuses without foreign writes and releases only lost local custody',
+      async (cause) => {
+        const f = await fixture();
+        if (cause === 'owner')
+          engine.run(
+            "UPDATE chain_runs SET run_owner_pid = 'claimed-owner' WHERE session_id = 'selected'"
+          );
+        if (cause === 'namespace')
+          engine.run(
+            "UPDATE chain_runs SET workspace_id = 'legacy-mismatch' WHERE session_id = 'selected'"
+          );
+        if (cause === 'zero winner')
+          engine.run(
+            "CREATE TRIGGER selected_zero BEFORE DELETE ON chain_runs WHEN OLD.session_id = 'selected' BEGIN SELECT RAISE(IGNORE); END"
+          );
+        const before = raw();
+        const local = structuredClone(f.held);
+        const mutation = jest.fn(change);
+        const result = await commit(f, mutation);
+        expect(result).toEqual({
+          status: 'refused',
+          reason: cause === 'namespace' ? 'scope-mismatch' : 'ownership-lost',
+          inspection: null,
+        });
+        expect(raw()).toEqual(before);
+        expect(f.held).toEqual(local);
+        expect(mutation).toHaveBeenCalledTimes(cause === 'zero winner' ? 1 : 0);
+        expect(f.store.hasActiveSession('selected')).toBe(cause === 'namespace');
+        expect(f.store.hasActiveSession('peer')).toBe(true);
+        expect(f.refs.clearChainStepResults.mock.calls).toEqual(
+          cause === 'namespace' ? [] : [['selected']]
+        );
+        if (cause === 'zero winner') engine.run('DROP TRIGGER selected_zero');
+        await f.store.cleanup();
+      }
+    );
+
+    test('shared queue reserves whole jobs and observes custody lost before a delayed control starts', async () => {
+      const f = await fixture();
+      const before = raw();
+      const order: number[] = [];
+      let release!: () => void;
+      f.store['persistQueue'] = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const first = commit(f, (session) => {
+        order.push(1);
+        return change(session);
+      });
+      const second = commit(f, (session) => {
+        order.push(2);
+        return change(session);
+      });
+      await Promise.resolve();
+      expect(order).toEqual([]);
+      expect(raw()).toEqual(before);
+      release();
+      expect((await first).status).toBe('committed');
+      expect((await second).status).toBe('committed');
+      expect(order).toEqual([1, 2]);
+      f.store['persistQueue'] = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const mutation = jest.fn(change);
+      const delayed = commit(f, mutation);
+      await Promise.resolve();
+      engine.run("UPDATE chain_runs SET run_owner_pid = 'new-owner' WHERE session_id = 'selected'");
+      const foreign = raw();
+      release();
+      expect((await delayed).status).toBe('refused');
+      expect(mutation).not.toHaveBeenCalled();
+      expect(raw()).toEqual(foreign);
+      expect(f.refs.clearChainStepResults.mock.calls).toEqual([['selected']]);
+      await f.store.cleanup();
+    });
+
+    test('failed BEGIN leaves another caller transaction intact', async () => {
+      const f = await fixture();
+      const before = raw();
+      engine.beginTransaction('immediate');
+      engine.run("UPDATE chain_runs SET last_activity = 99 WHERE session_id = 'peer'");
+      try {
+        await expect(commit(f)).rejects.toThrow(/within a transaction|transaction already/i);
+        expect(
+          engine.queryOne<{ last_activity: number }>(
+            "SELECT last_activity FROM chain_runs WHERE session_id = 'peer'"
+          )?.last_activity
+        ).toBe(99);
+      } finally {
+        engine.rollback();
+      }
+      expect(raw()).toEqual(before);
+      expect((await commit(f)).status).toBe('committed');
+      await f.store.cleanup();
+    });
+
+    test('terminal state and invalid held pointer cannot enter a control mutation', async () => {
+      const f = await fixture();
+      const mutation = jest.fn(change);
+      const before = raw();
+      f.held.state.currentNodeId = 'invalid-local';
+      const local = structuredClone(f.held);
+      await expect(commit(f, mutation)).rejects.toThrow('invalid held node pointer');
+      expect(f.held).toEqual(local);
+      expect(raw()).toEqual(before);
+      f.held.runStatus = 'cancelled';
+      expect((await commit(f, mutation)).status).toBe('refused');
+      expect(mutation).not.toHaveBeenCalled();
+      await f.store.cleanup();
+    });
   });
 
   describe('conversation control identity', () => {

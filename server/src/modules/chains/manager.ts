@@ -595,6 +595,115 @@ export class ChainSessionStore implements ChainSessionService {
     return write;
   }
 
+  /** Queue the entire synchronous transaction, including validation and rollback, as one job. */
+  private async runConversationControlMutation<T>(
+    sessionId: string,
+    scope: ExactControlScope,
+    mutation: (session: ChainSession) => T
+  ): Promise<ConversationControlMutationResult<T>> {
+    await this.initPromise;
+    const work = this.persistQueue.then(async (): Promise<ConversationControlMutationResult<T>> => {
+      const held = this.activeSessions.get(sessionId);
+      if (held === undefined)
+        return { status: 'refused', reason: 'unknown-session', inspection: null };
+      const result = this.writeConversationControlMutation(held, scope, mutation);
+      if (
+        result.status === 'refused' &&
+        result.reason === 'ownership-lost' &&
+        this.activeSessions.get(sessionId) === held
+      ) {
+        const release = emptyRunRelease('keep');
+        this.evictClaimedSessions([sessionId], release);
+        await this.releaseRemovedRuns(release);
+      }
+      return result;
+    });
+    this.persistQueue = work.then(
+      () => undefined,
+      () => undefined
+    );
+    return work;
+  }
+
+  private writeConversationControlMutation<T>(
+    held: ChainSession,
+    scope: ExactControlScope,
+    mutation: (session: ChainSession) => T
+  ): ConversationControlMutationResult<T> {
+    const authority = this.getConversationControlScope(scope.continuityScopeId);
+    if (
+      scope.organizationId !== authority.organizationId ||
+      scope.workspaceId !== authority.workspaceId ||
+      resolveContinuityScopeId({ continuityScopeId: held.continuityScopeId }) !==
+        scope.continuityScopeId
+    )
+      return { status: 'refused', reason: 'scope-mismatch', inspection: null };
+    const db = this.resolvedDbEngine;
+    if (db === undefined) throw new Error('Selected conversation controls require a DatabasePort');
+    const registry = this.requireRunRegistry();
+    // A failed BEGIN owns no transaction and must not roll back another caller's work.
+    db.beginTransaction('immediate');
+    let snapshot: MemorySnapshot | undefined;
+    try {
+      const owned = registry.readOwnedControlRun(held.sessionId, this.runScope, scope);
+      if (owned.status === 'refused') {
+        db.rollback();
+        return { ...owned, inspection: null };
+      }
+      if (isTerminalRunStatus(held.runStatus) || isTerminalRunStatus(owned.run.session.runStatus)) {
+        db.rollback();
+        return { status: 'refused', reason: 'run-terminal', inspection: null };
+      }
+      snapshot = this.snapshotRun(held);
+      const value = this.applyConversationControlMutation(held, mutation);
+      // No projection write may invalidate the final canonical row witness.
+      this.projectToHookView(db);
+      const stored = registry.saveSelectedControlRun(held, this.runScope, scope);
+      if (stored.status === 'refused') {
+        db.rollback();
+        snapshot.restore();
+        return { ...stored, inspection: null };
+      }
+      const { handoffToken: _credential, ...session } = stored.run.session;
+      const inspection = structuredClone({
+        ownerPid: stored.run.ownerPid,
+        scope: stored.run.scope,
+        session,
+      });
+      db.commit();
+      return { status: 'committed', value, inspection };
+    } catch (error) {
+      db.rollback();
+      snapshot?.restore();
+      throw error;
+    }
+  }
+
+  private applyConversationControlMutation<T>(
+    held: ChainSession,
+    mutation: (session: ChainSession) => T
+  ): T {
+    if (
+      held.state.currentNodeId !== null &&
+      ordinalOf(held.state.nodes, held.state.currentNodeId) === -1
+    ) {
+      throw new Error('Selected conversation control has an invalid held node pointer');
+    }
+    const sessionId = held.sessionId;
+    const value = mutation(held);
+    if (
+      value !== null &&
+      typeof value === 'object' &&
+      'then' in value &&
+      typeof value.then === 'function'
+    ) {
+      throw new Error('Selected conversation control mutation must be synchronous');
+    }
+    if (held.sessionId !== sessionId)
+      throw new Error('Selected conversation control changed run UUID');
+    return value;
+  }
+
   /**
    * Persist what a mutator just changed, or put memory back where the rows are (R87, P6.185).
    *
@@ -3157,6 +3266,14 @@ export function createChainSessionStore(
  *   unreachable today; a silent overwrite would lose an open review.
  */
 /** What a mutator is about to change in memory, and how to put it back (R87). */
+type ConversationControlMutationResult<T> =
+  | { status: 'committed'; value: T; inspection: ConversationControlInspection }
+  | {
+      status: 'refused';
+      reason: 'unknown-session' | 'scope-mismatch' | 'ownership-lost' | 'run-terminal';
+      inspection: ConversationControlInspection | null;
+    };
+
 interface MemorySnapshot {
   restore(): void;
 }

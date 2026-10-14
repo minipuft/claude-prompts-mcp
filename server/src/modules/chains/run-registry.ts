@@ -41,6 +41,16 @@ type OwnedControlRunResult =
   | { status: 'owned'; run: { ownerPid: string; scope: ExactControlScope; session: ChainSession } }
   | { status: 'refused'; reason: 'unknown-session' | 'ownership-lost' | 'scope-mismatch' };
 
+type SelectedControlRunResult =
+  | { status: 'saved'; run: Extract<OwnedControlRunResult, { status: 'owned' }>['run'] }
+  | Extract<OwnedControlRunResult, { status: 'refused' }>;
+
+const RUN_COLUMNS = `session_id, chain_id, base_chain_id, run_owner_pid, organization_id, workspace_id,
+  run_status, current_node_id, state, created_at, last_activity, run_completed_at, handoff_token`;
+const NODE_COLUMNS = `session_id, node_id, position, prompt_id, step_name, milestone,
+  is_placeholder, rendered_at, responded_at, completed_at, origin, origin_unknown_id,
+  accepted_at_step, declared_sections_json, delegated, args_json, inline_gate_ids, spawned_at, updated_at`;
+
 export interface ChainRunRegistry {
   ensureInitialized(): Promise<void>;
   /** Every run owned by the scope's run owner, with its nodes in position order. */
@@ -50,6 +60,11 @@ export interface ChainRunRegistry {
     ownerScope: StateStoreOptions,
     scope: ExactControlScope
   ): OwnedControlRunResult;
+  saveSelectedControlRun(
+    session: ChainSession,
+    ownerScope: StateStoreOptions,
+    scope: ExactControlScope
+  ): SelectedControlRunResult;
   /** Replace the scope owner's runs wholesale. Must run inside the caller's transaction. */
   /**
    * Replace this owner's runs with `sessions`. Returns the session ids that were NOT written
@@ -277,31 +292,93 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     const namespace = { runOwnerPid, organizationId, workspaceId };
     for (const session of sessions) {
       if (claimedElsewhere.has(session.sessionId)) continue;
-      this.writeSession(session, namespace, updatedAt);
+      this.writeSession(serializeSessionRows(session, namespace, updatedAt));
     }
     return [...claimedElsewhere];
   }
 
-  private writeSession(session: ChainSession, namespace: RunRowNamespace, updatedAt: number): void {
-    const rows = serializeSessionRows(session, namespace, updatedAt);
+  private writeSession(rows: ReturnType<typeof serializeSessionRows>): void {
     this.db.run(
-      `INSERT INTO chain_runs (
-           session_id, chain_id, base_chain_id, run_owner_pid, organization_id, workspace_id,
-           run_status, current_node_id, state, created_at, last_activity, run_completed_at,
-           handoff_token
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO chain_runs (${RUN_COLUMNS}) VALUES (${rows.run.map(() => '?').join(', ')})`,
       rows.run
     );
     for (const node of rows.nodes)
       this.db.run(
-        `INSERT INTO chain_run_nodes (
-             session_id, node_id, position, prompt_id, step_name, milestone,
-             is_placeholder, rendered_at, responded_at, completed_at,
-             origin, origin_unknown_id, accepted_at_step, declared_sections_json, delegated,
-             args_json, inline_gate_ids, spawned_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO chain_run_nodes (${NODE_COLUMNS}) VALUES (${node.map(() => '?').join(', ')})`,
         node
       );
+  }
+
+  /** Caller owns the immediate transaction; both write and witness use one canonical payload. */
+  saveSelectedControlRun(
+    session: ChainSession,
+    ownerScope: StateStoreOptions,
+    scope: ExactControlScope
+  ): SelectedControlRunResult {
+    const owned = this.readOwnedControlRun(session.sessionId, ownerScope, scope);
+    if (owned.status === 'refused') return owned;
+    if (
+      owned.run.session.chainId !== session.chainId ||
+      resolveContinuityScopeId({ continuityScopeId: session.continuityScopeId }) !==
+        scope.continuityScopeId
+    )
+      return { status: 'refused', reason: 'scope-mismatch' };
+    const namespace = {
+      runOwnerPid: owned.run.ownerPid,
+      organizationId: owned.run.scope.organizationId,
+      workspaceId: owned.run.scope.workspaceId,
+    };
+    const identity = [
+      session.sessionId,
+      namespace.runOwnerPid,
+      namespace.organizationId,
+      namespace.workspaceId,
+    ];
+    const before = this.db.queryOne<{ state: string }>(
+      `SELECT state FROM chain_runs WHERE session_id = ? AND run_owner_pid = ?
+        AND organization_id IS ? AND workspace_id IS ?`,
+      identity
+    );
+    if (before === null) return { status: 'refused', reason: 'ownership-lost' };
+    if (
+      resolveContinuityScopeId({
+        continuityScopeId: parseResidual(before.state).continuityScopeId,
+      }) !== scope.continuityScopeId
+    ) {
+      return { status: 'refused', reason: 'scope-mismatch' };
+    }
+    const rows = serializeSessionRows(session, namespace, Date.now());
+    const winner = this.db.queryOne<{ session_id: string }>(
+      `DELETE FROM chain_runs WHERE session_id = ? AND run_owner_pid = ?
+        AND organization_id IS ? AND workspace_id IS ? AND state = ? RETURNING session_id`,
+      [...identity, before.state]
+    );
+    if (winner === null) return { status: 'refused', reason: 'ownership-lost' };
+    this.db.run('DELETE FROM chain_run_nodes WHERE session_id = ?', [session.sessionId]);
+    this.writeSession(rows);
+    this.assertSelectedRows(session.sessionId, rows);
+    const after = this.readOwnedControlRun(session.sessionId, ownerScope, scope);
+    if (after.status === 'refused') throw new Error('Selected control durable identity changed');
+    return { status: 'saved', run: after.run };
+  }
+
+  private assertSelectedRows(
+    sessionId: string,
+    expected: ReturnType<typeof serializeSessionRows>
+  ): void {
+    const run = this.db.queryOne<Record<string, unknown>>(
+      `SELECT ${RUN_COLUMNS} FROM chain_runs WHERE session_id = ?`,
+      [sessionId]
+    );
+    const nodes = this.db.query<Record<string, unknown>>(
+      `SELECT ${NODE_COLUMNS} FROM chain_run_nodes WHERE session_id = ? ORDER BY position`,
+      [sessionId]
+    );
+    if (
+      JSON.stringify(run === null ? null : Object.values(run)) !== JSON.stringify(expected.run) ||
+      JSON.stringify(nodes.map((node) => Object.values(node))) !== JSON.stringify(expected.nodes)
+    )
+      throw new Error('Selected control durable row or node mismatch');
   }
 
   /** Session ids among `sessionIds` whose row is currently owned by someone other than `ownerPid`. */
