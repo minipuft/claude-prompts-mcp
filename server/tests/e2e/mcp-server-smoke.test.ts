@@ -758,8 +758,8 @@ describe('MCP Server Smoke Tests', () => {
     /**
      * The tool surface is a function of runtime state, not a constant.
      *
-     * `prompt_engine` advertises its three gate parameters only while the gate
-     * system is enabled. Proving that end-to-end needs a live state change and
+     * `prompt_engine` withdraws `gates` and `gate_verdict` while the gate system
+     * is disabled; `gate_action` remains core. Proving that needs a live state change and
      * two `tools/list` calls, because the property that matters is what reaches
      * the wire: an in-process assertion cannot distinguish a schema that was
      * rebuilt from one that was merely re-described.
@@ -799,7 +799,7 @@ describe('MCP Server Smoke Tests', () => {
       // The tier's gate criterion: the *shape* changed, not only description
       // text. Asserting the parameter set rather than a deep-equality diff is
       // what separates the two — a re-described schema keeps its keys.
-      expect(disabled).toEqual([]);
+      expect(disabled).toEqual(['gate_action']);
       expect(disabled).not.toEqual(enabled);
 
       // Restore, and confirm the narrowing is reversible rather than one-way.

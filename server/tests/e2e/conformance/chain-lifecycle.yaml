@@ -184,8 +184,8 @@ scenarios:
   # read together.
   - id: force-restart-suppresses-command-embedded-resume
     claim_source: >-
-      prompt-engine metadata — "Setting force_restart:true ignores previously cached steps even if
-      chain_id is present."
+      prompt-engine metadata — "Start a new execution instead of resuming one"; force_restart
+      suppresses a resume token carried in command text, rather than an explicit chain_id.
     requests:
       - tool: prompt_engine
         args: { command: '%clean >>quick_decision topic:"pick a cache"' }
@@ -196,8 +196,8 @@ scenarios:
           command: '${cid}'
           user_response: 'Options: Redis, Memcached, Dragonfly.'
           force_restart: true
-    # The id stops being read as a resume target and is looked up as a prompt name, which fails.
-    expect: { error_contains: 'Unknown prompt "chain-quick_decision"' }
+    # The full run token is an invalid prompt selector once resume normalization is suppressed.
+    expect: { error_contains: 'Parse error: "${cid}"' }
 
   - id: command-embedded-resume-advances-without-force-restart
     claim_source: >-
@@ -268,8 +268,8 @@ scenarios:
 
   - id: gate-action-abort-stops-verification
     claim_source: >-
-      prompt_engine gate_action parameter — "abort: Stop execution". The server offers it in the
-      same failure message as retry and skip.
+      prompt_engine gate_action parameter — run-level abort cancels the named run, retains its
+      state and artifacts, and starts no new execution. No retry exhaustion is required.
     requests:
       - tool: prompt_engine
         args: { command: '>>minimal_prompt :: verify:"exit 1" :fast' }
@@ -280,7 +280,7 @@ scenarios:
         args: { chain_id: '${cid}', user_response: 'done' }
       - tool: prompt_engine
         args: { chain_id: '${cid}', gate_action: 'abort' }
-    expect: { text_contains: 'No further verification will run' }
+    expect: { is_error: false, text_contains: '🛑 **Chain Cancelled**: `${cid}`' }
 
   # ── Malformed gate_verdict (Tier 0.5b row C6) ──────────────────────────────
   #

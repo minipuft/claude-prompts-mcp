@@ -242,7 +242,8 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
         gate_verdict: FAIL,
       });
       expect(refused.isError).toBe(true);
-      expect(refused.text).toContain('is waiting for gate_action "retry", "skip" or "abort"');
+      expect(refused.text).toContain('is waiting for gate_action "retry" or "skip"');
+      expect(refused.text).toContain('to stop the run, use gate_action "abort" with chain_id');
       expect(refused.text).toContain('Nothing was recorded');
 
       const retried = await call({ gate_action: 'retry' });

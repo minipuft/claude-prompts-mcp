@@ -98,6 +98,7 @@ interface Scenario {
   requests: ScenarioRequest[];
   expect: {
     ok?: boolean;
+    is_error?: false;
     /**
      * The response must FAIL and its text must contain this substring.
      *
@@ -445,7 +446,8 @@ async function runScenario(active: StreamableHttpMcpClient, scenario: Scenario):
     thrown = error instanceof Error ? error : new Error(String(error));
   }
 
-  const { expect: want } = scenario;
+  const want = bindValue(scenario.expect, bindings, scenario.id) as Scenario['expect'];
+  if (want.is_error === false) expect((last as { isError?: boolean })?.isError).toBe(false);
 
   if (scenario.known_divergence) {
     // Inverted on purpose: assert the divergence PERSISTS. When the server starts honoring
