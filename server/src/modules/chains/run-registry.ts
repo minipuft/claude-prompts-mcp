@@ -274,79 +274,34 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     );
 
     const updatedAt = Date.now();
+    const namespace = { runOwnerPid, organizationId, workspaceId };
     for (const session of sessions) {
       if (claimedElsewhere.has(session.sessionId)) continue;
-      this.db.run(
-        `INSERT INTO chain_runs (
+      this.writeSession(session, namespace, updatedAt);
+    }
+    return [...claimedElsewhere];
+  }
+
+  private writeSession(session: ChainSession, namespace: RunRowNamespace, updatedAt: number): void {
+    const rows = serializeSessionRows(session, namespace, updatedAt);
+    this.db.run(
+      `INSERT INTO chain_runs (
            session_id, chain_id, base_chain_id, run_owner_pid, organization_id, workspace_id,
            run_status, current_node_id, state, created_at, last_activity, run_completed_at,
            handoff_token
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          session.sessionId,
-          session.chainId,
-          stripRunNumber(session.chainId),
-          runOwnerPid,
-          organizationId,
-          workspaceId,
-          session.runStatus,
-          session.state.currentNodeId,
-          JSON.stringify(toResidual(session)),
-          session.startTime,
-          session.lastActivity,
-          session.runCompletedAt ?? null,
-          session.handoffToken ?? null,
-        ]
-      );
-
-      const stepStates = session.state.stepStates;
-      session.state.nodes.forEach((node, index) => {
-        const metadata = stepStates?.get(node.id);
-        this.db.run(
-          `INSERT INTO chain_run_nodes (
+      rows.run
+    );
+    for (const node of rows.nodes)
+      this.db.run(
+        `INSERT INTO chain_run_nodes (
              session_id, node_id, position, prompt_id, step_name, milestone,
              is_placeholder, rendered_at, responded_at, completed_at,
              origin, origin_unknown_id, accepted_at_step, declared_sections_json, delegated,
              args_json, inline_gate_ids, spawned_at, updated_at
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            session.sessionId,
-            node.id,
-            index + 1,
-            node.promptId,
-            node.stepName,
-            metadata?.state ?? null,
-            metadata === undefined ? null : metadata.isPlaceholder ? 1 : 0,
-            metadata?.renderedAt ?? null,
-            metadata?.respondedAt ?? null,
-            metadata?.completedAt ?? null,
-            // The column is NOT NULL with no DDL default, so this bind is the only source of
-            // the value — a real 'planned'/'inserted' string on every row, never a NULL that a
-            // default would paper over.
-            node.origin ?? 'planned',
-            node.originUnknownId ?? null,
-            // P6.253: a remainder's acceptance stamp. NULL on every planned and inserted node.
-            node.acceptedAtStep ?? null,
-            // Serialised only when the render recorded one. A step that declared nothing and a
-            // step whose declaration was never recorded are the same row here, and both mean the
-            // verification stage has no declared header to block on.
-            metadata?.declaredSections === undefined
-              ? null
-              : JSON.stringify(metadata.declaredSections),
-            // A.5: the node's own declaration. NULL rather than 0/'{}' when absent, so "declared
-            // nothing" and "declared not delegated" stay distinguishable on the row.
-            node.delegated === undefined ? null : node.delegated ? 1 : 0,
-            node.args === undefined ? null : JSON.stringify(node.args),
-            // P6.101: a contributed node's step gates. NULL when it carries none.
-            node.inlineGateIds === undefined ? null : JSON.stringify(node.inlineGateIds),
-            // Tier 4: the detached lifecycle's way in. NULL for every node never spawned.
-            metadata?.spawnedAt ?? null,
-            updatedAt,
-          ]
-        );
-      });
-    }
-    return [...claimedElsewhere];
+        node
+      );
   }
 
   /** Session ids among `sessionIds` whose row is currently owned by someone other than `ownerPid`. */
@@ -458,6 +413,71 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
       this.db.run('DELETE FROM chain_runs WHERE run_owner_pid = ?', [pid]);
     }
   }
+}
+
+type RunRowNamespace = {
+  runOwnerPid: string;
+  organizationId: string | null;
+  workspaceId: string | null;
+};
+
+function serializeSessionRows(
+  session: ChainSession,
+  namespace: RunRowNamespace,
+  updatedAt: number
+): { run: unknown[]; nodes: unknown[][] } {
+  return {
+    run: [
+      session.sessionId,
+      session.chainId,
+      stripRunNumber(session.chainId),
+      namespace.runOwnerPid,
+      namespace.organizationId,
+      namespace.workspaceId,
+      session.runStatus,
+      session.state.currentNodeId,
+      JSON.stringify(toResidual(session)),
+      session.startTime,
+      session.lastActivity,
+      session.runCompletedAt ?? null,
+      session.handoffToken ?? null,
+    ],
+    nodes: session.state.nodes.map((node, index) => {
+      const metadata = session.state.stepStates?.get(node.id);
+      return [
+        session.sessionId,
+        node.id,
+        index + 1,
+        node.promptId,
+        node.stepName,
+        metadata?.state ?? null,
+        metadata === undefined ? null : metadata.isPlaceholder ? 1 : 0,
+        metadata?.renderedAt ?? null,
+        metadata?.respondedAt ?? null,
+        metadata?.completedAt ?? null,
+        // The column is NOT NULL with no DDL default, so this bind is the only source of
+        // the value — a real 'planned'/'inserted' string on every row, never a NULL that a
+        // default would paper over.
+        node.origin ?? 'planned',
+        node.originUnknownId ?? null,
+        // P6.253: a remainder's acceptance stamp. NULL on every planned and inserted node.
+        node.acceptedAtStep ?? null,
+        // Serialised only when the render recorded one. A step that declared nothing and a
+        // step whose declaration was never recorded are the same row here, and both mean the
+        // verification stage has no declared header to block on.
+        metadata?.declaredSections === undefined ? null : JSON.stringify(metadata.declaredSections),
+        // A.5: the node's own declaration. NULL rather than 0/'{}' when absent, so "declared
+        // nothing" and "declared not delegated" stay distinguishable on the row.
+        node.delegated === undefined ? null : node.delegated ? 1 : 0,
+        node.args === undefined ? null : JSON.stringify(node.args),
+        // P6.101: a contributed node's step gates. NULL when it carries none.
+        node.inlineGateIds === undefined ? null : JSON.stringify(node.inlineGateIds),
+        // Tier 4: the detached lifecycle's way in. NULL for every node never spawned.
+        metadata?.spawnedAt ?? null,
+        updatedAt,
+      ];
+    }),
+  };
 }
 
 /**

@@ -12,6 +12,7 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -85,6 +86,117 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     engine.run('DELETE FROM chain_runs');
     engine.run('DELETE FROM chain_sessions');
     engine.run('DELETE FROM execution_records');
+  });
+
+  test('conversation canonical serialization preserves every stored run and node column', async () => {
+    const session: ChainSession = {
+      sessionId: 'canonical',
+      chainId: 'chain-canonical#3',
+      continuityScopeId: 'caller',
+      startTime: 10,
+      lastActivity: 20,
+      lifecycle: 'dormant',
+      runStatus: 'input_required',
+      originalArgs: { target: 'retained output' },
+      executionOrder: ['n1'],
+      handoffToken: 'hnd_canonical_fixture',
+      gateRemap: { original: 'physical' },
+      gatesFiredCount: 3,
+      gateRetriesCount: 2,
+      state: {
+        currentNodeId: 'n2',
+        lastUpdated: 30,
+        nodes: [
+          { id: 'n1', promptId: 'p1', stepName: 'Capture' },
+          {
+            id: 'n2',
+            promptId: 'p2',
+            stepName: 'Detached',
+            origin: 'remainder',
+            originUnknownId: 'u',
+            acceptedAtStep: 1,
+            delegated: true,
+            args: { note: 'declared' },
+            inlineGateIds: ['quality'],
+          },
+          { id: 'n3', promptId: 'p3', stepName: 'Pending', delegated: false },
+        ],
+        stepStates: new Map([
+          [
+            'n1',
+            {
+              state: 'completed',
+              isPlaceholder: false,
+              renderedAt: 11,
+              respondedAt: 12,
+              completedAt: 13,
+              declaredSections: ['Evidence'],
+            },
+          ],
+          ['n2', { state: 'working', isPlaceholder: true, renderedAt: 21, spawnedAt: 22 }],
+        ]),
+      },
+      reviews: {
+        n1: {
+          nodeId: 'n1',
+          kind: 'detached',
+          phase: 'awaiting-verdict',
+          combinedPrompt: 'Review',
+          gateIds: ['quality'],
+          prompts: [],
+          createdAt: 31,
+          attemptCount: 1,
+          maxAttempts: 3,
+          reviewedOutput: 'captured report',
+          history: [{ timestamp: 32, status: 'fail', reasoning: 'retain retry' }],
+        },
+      },
+      pendingShellVerification: {
+        gateId: 'shell',
+        nodeId: 'n2',
+        shellVerify: { command: 'fixture check', loop: true },
+        attemptCount: 1,
+        maxAttempts: 2,
+        previousResults: [],
+        originalGoal: 'retained shell goal',
+      },
+      unknownsLedger: [
+        {
+          id: 'u',
+          statement: 'unknown',
+          state: 'active',
+          blocking: true,
+          discoveredAtStep: 1,
+          targetStepId: 'n2',
+        },
+      ],
+      blueprint: {
+        parsedCommand: { promptId: 'p1', promptArgs: { goal: 'retained' } },
+        executionPlan: {
+          strategy: 'chain',
+          gates: ['quality'],
+          requiresFramework: false,
+          requiresSession: true,
+        },
+      },
+    };
+    await engine.transaction(() =>
+      new DirectChainRunRegistry(engine).save([session], {
+        continuityScopeId: 'canonical-owner',
+        organizationId: 'canonical-org',
+        workspaceId: 'canonical-ws',
+      })
+    );
+    // Pin all canonical columns; the node SQL write clock is not domain progress.
+    const packet = {
+      run: engine.query('SELECT * FROM chain_runs ORDER BY session_id'),
+      nodes: engine
+        .query<Record<string, unknown>>('SELECT * FROM chain_run_nodes ORDER BY position')
+        .map(({ updated_at: _writeClock, ...domain }) => domain),
+    };
+    expect(createHash('sha256').update(JSON.stringify(packet)).digest('hex')).toBe(
+      'be425405cefa6c332dd99de240505663517a262cccc7547f4589906e65c855bf'
+    );
   });
 
   describe('conversation control identity', () => {
