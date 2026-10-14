@@ -1,5 +1,5 @@
 """
-Parity between four vocabularies the Python hooks restate and the TypeScript source that owns them.
+Parity between projected vocabularies and the TypeScript source that owns them.
 
 WHY THIS FILE EXISTS
 --------------------
@@ -50,12 +50,98 @@ OPERATORS_REGISTRY = REPO_ROOT / "server" / "tooling" / "contracts" / "registrie
 OPERATORS_PY = HOOKS_LIB / "operators.py"
 
 
+class TestPromptAnnotationProjection:
+    @pytest.fixture(scope="class")
+    @staticmethod
+    def selector_oracle():
+        import subprocess
+
+        probes = [
+            ">>Root",
+            "%clean @CAGEERF #analytical >>Parent/Child/Deep",
+            ">>7-leading/root-child",
+            ">>MiXeD/Unknown",
+            ">>Parent/",
+            ">>Parent//Child",
+            ">>Parent/../Child",
+            ">>Parent/Child.ext",
+            ">>Parent/Child%20",
+            ">>Parent/Child\\extra",
+            ">>Parent/Child:tail",
+            ">>Parent/Child@tail",
+            ">>Parent/Child#tail",
+            ">>Parent/Child%clean",
+            '>>Parent/Child?tail ? "condition" : >>notes',
+            ">>>bad --> >>notes",
+            'text:">>Root --> >>Child"',
+            "text:'>>Root ==> >>Child'",
+            '>>Root text:"--> >>fake" --> >>Parent/Child',
+            r'>>Root text:"escaped \" >>fake --> still quoted" ==> >>Parent/Child',
+            ">>Root+>>Child",
+            '>>Root? "ok" : >>Parent/Child',
+            ">>Root → >>Child",
+            ">>Parent/Child\u0085tail",
+            ">>Parent/Child\u00a0tail",
+            ">>\ufeffParent/Child",
+            '>>Root? "a\u2028b" : >>Child',
+            '>>Root?\u0085"ok" : >>Child',
+        ]
+        script = """
+import { readPromptSelector, isPositionInsideQuotes, PROMPT_INVOCATION_MARKER_PATTERN } from './src/engine/execution/parsers/parser-utils.ts';
+import { OPERATOR_PATTERNS } from './src/engine/execution/parsers/operator-patterns.ts';
+const probes = JSON.parse(process.argv[1]);
+const delimiters = Object.values(OPERATOR_PATTERNS).filter(op => op.role === 'delimiter' && op.status === 'implemented');
+console.log(JSON.stringify(probes.map(text => ({
+  annotations: [...text.matchAll(PROMPT_INVOCATION_MARKER_PATTERN)].filter(m => !isPositionInsideQuotes(text, m.index)).map(m => readPromptSelector(text.slice(m.index))?.promptId ?? null),
+  chain: delimiters.some(op => [...text.matchAll(new RegExp(op.pattern.source, 'g'))].some(m => !isPositionInsideQuotes(text, m.index)))
+}))));
+"""
+        result = subprocess.run(
+            ["node", "--import", "tsx", "--input-type=module", "-e", script, json.dumps(probes)],
+            cwd=REPO_ROOT / "server",
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return probes, json.loads(result.stdout)
+
+    def test_actual_typescript_selector_and_quote_outputs_match(self, selector_oracle):
+        probes, expected = selector_oracle
+        measured = [
+            {"annotations": operators.annotate_prompt_references(text), "chain": operators.has_chain_delimiter(text)}
+            for text in probes
+        ]
+        assert measured == expected
+        assert expected[0]["annotations"] == ["Root"]
+        assert expected[15]["annotations"] == [None, "notes"]
+
+    def test_generated_json_and_python_twin_match(self):
+        from _generated.extraction_patterns import EXTRACTION_PATTERNS
+
+        generated = json.loads((HOOKS_LIB / "_generated" / "extraction-patterns.json").read_text())
+        assert generated == EXTRACTION_PATTERNS
+
+    def test_json_unavailable_does_not_replace_python_projection(self, monkeypatch):
+        original = Path.read_text
+        generated = HOOKS_LIB / "_generated" / "extraction-patterns.json"
+
+        def unavailable(path, *args, **kwargs):
+            if path == generated:
+                raise OSError("planted unavailable JSON")
+            return original(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", unavailable)
+        with pytest.raises(OSError, match="planted unavailable"):
+            generated.read_text()
+        assert operators.annotate_prompt_references(">>Parent/Child") == ["Parent/Child"]
+
+
 # ── 1. terminal run statuses ──────────────────────────────────────────────────
 
 
 def ts_terminal_run_statuses(ts_text: str) -> set[str]:
-    """The string members of the exported `TERMINAL_RUN_STATUSES` array literal."""
-    match = re.search(r"export const TERMINAL_RUN_STATUSES\b[^=]*=\s*\[([^\]]*)\]", ts_text)
+    """The string members of the canonical `TERMINAL_RUN_STATUSES` array literal."""
+    match = re.search(r"\b(?:export\s+)?const\s+TERMINAL_RUN_STATUSES\b[^=]*=\s*\[([^\]]*)\]", ts_text)
     assert match, "TERMINAL_RUN_STATUSES array literal not found in chain-session.ts"
     return set(re.findall(r"'([^']+)'", match.group(1)))
 

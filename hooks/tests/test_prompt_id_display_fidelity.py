@@ -40,6 +40,9 @@ CATALOG = {
     },
     "reviewCard": {"id": "reviewCard", "description": "Review card", "arguments": []},
     "notes": {"id": "notes", "description": "Notes", "arguments": []},
+    "Parent": {"id": "Parent", "description": "Parent only", "arguments": []},
+    "Parent/Child": {"id": "Parent/Child", "description": "Qualified child", "arguments": []},
+    "Parent/Child/Deep": {"id": "Parent/Child/Deep", "description": "Deep child", "arguments": []},
 }
 
 
@@ -120,3 +123,50 @@ class TestChainStepsUseAuthoredCasing:
         ctx = context_of(run_hook(monkeypatch, capsys, ">>releaseplanner --> >>reviewcard"))
         assert "1. releasePlanner" in ctx
         assert "2. reviewCard" in ctx
+
+
+@pytest.mark.parametrize("typed", ["Parent/Child", "parent/child", "PARENT/CHILD", "Parent/Child/Deep"])
+def test_qualified_catalog_and_verbatim_command(stub_catalog, monkeypatch, capsys, typed):
+    command = f'%clean @CAGEERF >>{typed} marker:"child value"'
+    ctx = context_of(run_hook(monkeypatch, capsys, command))
+    assert f"[>> prompt_engine] {_lookup(typed)['id']}" in ctx
+    assert f'command:"{command}"' in ctx
+
+
+def test_unknown_qualified_fallback_keeps_raw_case(stub_catalog, monkeypatch, capsys):
+    assert prompt_suggest.detect_prompt_invocation(">>MiXeD/Unknown") == "MiXeD/Unknown"
+    assert "MiXeD/Unknown" in context_of(run_hook(monkeypatch, capsys, ">>MiXeD/Unknown"))
+    assert "MiXeD/Unknown" in prompt_suggest.format_user_message(">>MiXeD/Unknown", {}, {})
+
+
+@pytest.mark.parametrize(
+    "tail", ["/", "//child", "/../child", ".ext", "%20", "\\extra", ":tail", "@tail", "#tail", "?tail", "%clean"]
+)
+def test_bad_whole_reference_never_rescues_later_marker(tail):
+    message = f">>Parent/Child{tail} --> >>notes"
+    assert prompt_suggest.detect_prompt_invocation(message) is None
+    assert prompt_suggest.detect_chain_syntax(message) == []
+
+
+@pytest.mark.parametrize("command", ['text:">>notes --> >>reviewCard"', "text:'>>notes ==> >>reviewCard'"])
+def test_literal_quoted_markers_and_delimiters_are_not_invocations(command):
+    assert prompt_suggest.detect_prompt_invocation(command) is None
+    assert prompt_suggest.detect_chain_syntax(command) == []
+
+
+def test_chain_preview_preserves_qualified_ids(stub_catalog, monkeypatch, capsys):
+    command = '>>parent/child text:"--> >>fake" --> >>Parent/Child/Deep'
+    assert prompt_suggest.detect_chain_syntax(command) == ["parent/child", "Parent/Child/Deep"]
+    ctx = context_of(run_hook(monkeypatch, capsys, command))
+    assert "1. Parent/Child" in ctx and "2. Parent/Child/Deep" in ctx
+    assert "fake" not in prompt_suggest.detect_chain_syntax(command)
+
+
+def test_advisory_modifiers_ignore_quotes_and_unicode_arrow():
+    from operators import detect_operator
+
+    assert detect_operator('text:"@CAGEERF #analytical ==>"', "framework") == []
+    assert detect_operator('text:"@CAGEERF #analytical ==>"', "style") == []
+    assert detect_operator('text:"@CAGEERF #analytical ==>"', "delegation") == []
+    assert detect_operator("@CAGEERF >>Parent/Child", "framework") == ["CAGEERF"]
+    assert prompt_suggest.detect_chain_syntax(">>notes → >>reviewCard") == []

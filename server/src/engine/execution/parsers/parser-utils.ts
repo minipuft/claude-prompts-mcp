@@ -6,6 +6,17 @@ import { isAcceptedPromptReference } from '#shared/utils/resource-ids.js';
 /** Framework operator core match, from the operators.json registry (SSOT). */
 const FRAMEWORK_OPERATOR_PATTERN = OPERATOR_PATTERNS.framework.pattern;
 
+export const PROMPT_INVOCATION_MARKER_PATTERN = /(?<!>)>>/g;
+export const PROMPT_SELECTOR_PREFIX_PATTERN = /^\s*(?:>>|\/)?\s*/;
+export const PROMPT_SELECTOR_WHITESPACE_PATTERN = /\s/;
+const PROMPT_SELECTOR_DELIMITER_SYMBOLS = [
+  OPERATOR_PATTERNS.chain.symbol,
+  OPERATOR_PATTERNS.delegation.symbol,
+  OPERATOR_PATTERNS.parallel.symbol,
+];
+export const PROMPT_QUOTE_CHARACTERS: readonly string[] = ['"', "'"];
+export const PROMPT_QUOTE_ESCAPE = '\\';
+
 export interface PromptSelectorMatch {
   promptId: string;
   /** Unmodified bytes following the selector, including its separator. */
@@ -17,13 +28,11 @@ export interface PromptSelectorMatch {
 
 /** Read one complete reference; DSL delimiters separate tokens, malformed suffixes do not. */
 export function readPromptSelector(input: string): PromptSelectorMatch | null {
-  const start = input.match(/^\s*(?:>>|\/)?\s*/)?.[0].length ?? 0;
+  const start = input.match(PROMPT_SELECTOR_PREFIX_PATTERN)?.[0].length ?? 0;
   let end = start;
-  while (end < input.length && !/\s/.test(input[end] ?? '')) {
+  while (end < input.length && !PROMPT_SELECTOR_WHITESPACE_PATTERN.test(input[end] ?? '')) {
     if (
-      input.startsWith('-->', end) ||
-      input.startsWith('==>', end) ||
-      input[end] === '+' ||
+      PROMPT_SELECTOR_DELIMITER_SYMBOLS.some((symbol) => input.startsWith(symbol, end)) ||
       (input[end] === '?' &&
         OPERATOR_PATTERNS.conditional.pattern.exec(input.slice(end))?.index === 0)
     ) {
@@ -115,7 +124,11 @@ export function isPositionInsideQuotes(str: string, position: number): boolean {
     const prevChar = i > 0 ? str[i - 1] : undefined;
 
     // Skip escaped quotes
-    if ((char === '"' || char === "'") && prevChar !== '\\') {
+    if (
+      char !== undefined &&
+      PROMPT_QUOTE_CHARACTERS.includes(char) &&
+      prevChar !== PROMPT_QUOTE_ESCAPE
+    ) {
       if (!inQuotes) {
         inQuotes = true;
         quoteChar = char;

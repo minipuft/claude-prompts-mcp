@@ -16,6 +16,15 @@ import { spawnSync } from 'node:child_process';
 // Import schemas from SSOT (eliminates duplication)
 import { toolContractSchema, type ToolContract } from '../src/mcp/contracts/schemas/types.js';
 import { CHAIN_ID_PATTERN_SOURCE } from '../src/shared/utils/chain-id-codec.js';
+import { PROMPT_REFERENCE_PATTERN_SOURCE } from '../src/shared/utils/resource-ids.js';
+import { OPERATOR_PATTERNS } from '../src/engine/execution/parsers/operator-patterns.js';
+import {
+  PROMPT_INVOCATION_MARKER_PATTERN,
+  PROMPT_SELECTOR_PREFIX_PATTERN,
+  PROMPT_SELECTOR_WHITESPACE_PATTERN,
+  PROMPT_QUOTE_CHARACTERS,
+  PROMPT_QUOTE_ESCAPE,
+} from '../src/engine/execution/parsers/parser-utils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -281,7 +290,26 @@ async function generateResolutionVerbs(
   // regex SOURCE strings; consumers compile them with their language's engine.
   // Delimiters frame text tokens; all other adjacent bytes (including Unicode) refuse a match.
   const tokenDelimiters = ' \\t\\r\\n\\f\\v`"\'():=,;{}\\[\\]*<>!?';
+  const characterClass = (matches: (_char: string) => boolean): string =>
+    `[${Array.from({ length: 0x10000 }, (_, value) => value)
+      .filter((value) => matches(String.fromCharCode(value)))
+      .map((value) => `\\u${value.toString(16).padStart(4, '0')}`)
+      .join('')}]`;
   const extractionPatterns = {
+    promptReference: PROMPT_REFERENCE_PATTERN_SOURCE,
+    promptInvocation: PROMPT_INVOCATION_MARKER_PATTERN.source,
+    promptSelectorPrefix: PROMPT_SELECTOR_PREFIX_PATTERN.source,
+    promptSelectorWhitespace: characterClass((char) =>
+      PROMPT_SELECTOR_WHITESPACE_PATTERN.test(char)
+    ),
+    promptSelectorBoundary: `^(?:${(['chain', 'delegation', 'parallel', 'conditional'] as const).map((id) => OPERATOR_PATTERNS[id].pattern.source).join('|')})`,
+    promptQuoteCharacters: PROMPT_QUOTE_CHARACTERS.join(''),
+    promptQuoteEscape: PROMPT_QUOTE_ESCAPE,
+    promptDotLineTerminators: characterClass((char) => !/./.test(char)),
+    promptChainDelimiter: Object.values(OPERATOR_PATTERNS)
+      .filter((op) => op.role === 'delimiter' && op.status === 'implemented')
+      .map((op) => op.pattern.source)
+      .join('|'),
     step: '(?:[Ss]tep|[Pp]rogress|[Cc]omplete)\\s*\\(?(\\d+)\\s*(?:of|/)\\s*(\\d+)',
     chainId: `(?<![^${tokenDelimiters}])(${CHAIN_ID_PATTERN_SOURCE})(?![^${tokenDelimiters}])`,
     gateHeader: '\\*\\*(?:Structural \\+ Gate |Structural |Gate )?Review Required\\*\\*',

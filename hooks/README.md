@@ -46,6 +46,9 @@ contract.
 
 Triggers on every user message. Detects `>>prompt` syntax and suggests the correct `prompt_engine` call.
 
+Annotations preserve whole slash-qualified references and typed case; display resolves through
+the authored catalog ID. Quoted markers and delimiters do not create invocations or chain previews.
+
 **Output:**
 
 ```text
