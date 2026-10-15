@@ -1623,14 +1623,35 @@ export class ChainSessionStore implements ChainSessionService {
       this.logger.warn(`[Handoff] Refusing to mint for terminal session ${sessionId}`);
       return undefined;
     }
-    // 20 random bytes, base64url: unguessable, shell/URL safe, pasted exactly once.
-    const token = createHandoffToken();
-    const snapshot = this.snapshotRun(session);
-    session.handoffToken = token;
-    session.lastActivity = Date.now();
-    await this.persistMutation(snapshot);
-    this.logger.info(`[Handoff] Minted token for session ${sessionId} (${session.chainId})`);
-    return { token, chainId: session.chainId, sessionId };
+    if (session.conversationPause === undefined) {
+      // 20 random bytes, base64url: unguessable, shell/URL safe, pasted exactly once.
+      const token = createHandoffToken();
+      const snapshot = this.snapshotRun(session);
+      session.handoffToken = token;
+      session.lastActivity = Date.now();
+      await this.persistMutation(snapshot);
+      this.logger.info(`[Handoff] Minted token for session ${sessionId} (${session.chainId})`);
+      return { token, chainId: session.chainId, sessionId };
+    }
+    // Bulk save retains a paused row, so its credential rotates through the selected strict control
+    // commit (writer namespace + caller continuity), leaving pause and domain clocks untouched. A
+    // paused run with no credential is malformed and refuses rather than minting a replacement.
+    const result = await this.runConversationControlMutation<string | undefined>(
+      sessionId,
+      this.getConversationControlScope(resolveContinuityScopeId(scope)),
+      (held) => {
+        held.handoffToken = createHandoffToken();
+        return held.handoffToken;
+      },
+      (held, durable) =>
+        held.handoffToken === undefined ||
+        (durable.conversationPause !== undefined && durable.handoffToken === undefined)
+          ? { kind: 'read', value: undefined }
+          : { kind: 'write' }
+    );
+    if (result.status !== 'committed' || result.value === undefined) return undefined;
+    this.logger.info(`[Handoff] Rotated paused token for session ${sessionId}`);
+    return { token: result.value, chainId: session.chainId, sessionId };
   }
 
   /**
@@ -1652,22 +1673,28 @@ export class ChainSessionStore implements ChainSessionService {
     const result = this.requireRunRegistry().claimRunByToken(
       token,
       this.runScope,
-      this.resolveScopeFilter(requestScope)
+      this.resolveScopeFilter(requestScope),
+      createHandoffToken
     );
     if (result.status !== 'claimed') return result;
 
     const session = result.session;
+    // A paused claim already committed owner + successor credential; its row is held exactly as
+    // stored: no lifecycle/clock edit and no bulk rewrite (bulk save retains paused rows anyway).
+    const paused = session.conversationPause !== undefined;
     // The claim above is its own committed write: the row is this server's now, so a rejected
     // save below restores the run's own fields but keeps it held, which is what the rows say.
     const snapshot = this.snapshotRun(session);
-    session.lifecycle = 'dormant';
-    session.lastActivity = Date.now();
+    if (!paused) {
+      session.lifecycle = 'dormant';
+      session.lastActivity = Date.now();
+    }
     this.activeSessions.set(session.sessionId, session);
     const sessionIds = this.chainSessionMapping.get(session.chainId) ?? new Set<string>();
     sessionIds.add(session.sessionId);
     this.chainSessionMapping.set(session.chainId, sessionIds);
     this.ensureRunMappingConsistency();
-    await this.persistMutation(snapshot);
+    if (!paused) await this.persistMutation(snapshot);
     this.logger.info(`[Handoff] Claimed ${session.chainId} (session ${session.sessionId})`);
     return result;
   }

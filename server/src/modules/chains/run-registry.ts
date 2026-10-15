@@ -75,12 +75,15 @@ export interface ChainRunRegistry {
   /**
    * Transfer the run carrying `token` to the owner/scope in `scope`, nulling the token in the
    * same statement so it cannot be claimed twice (2A). Refuses a row whose workspace differs
-   * from the claimant's when both are known.
+   * from the claimant's when both are known. A conversation-paused run instead needs an exact
+   * namespace and continuity match and receives `mintSuccessor()` in place of the token, so it
+   * stays recoverable; a paused claim without that factory throws and rolls back.
    */
   claimRunByToken(
     token: string,
     scope?: StateStoreOptions,
-    requestContinuityFilter?: string
+    requestContinuityFilter?: string,
+    mintSuccessor?: () => string
   ): ClaimRunResult;
   /** Drop unprotected runs owned by a process that is no longer alive. */
   deleteRunsForOwners(ownerPids: readonly string[]): void;
@@ -117,6 +120,8 @@ interface ChainRunRow {
   run_completed_at: number | null;
   handoff_token: string | null;
 }
+
+type ClaimRow = ChainRunRow & { workspace_id: string | null; organization_id: string | null };
 
 /** What a registry claim hands back: the run, or the reason it was refused at the row level. */
 export type ClaimRunResult = ChainHandoffClaimResult;
@@ -405,11 +410,12 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
   claimRunByToken(
     token: string,
     scope?: StateStoreOptions,
-    requestContinuityFilter?: string
+    requestContinuityFilter?: string,
+    mintSuccessor?: () => string
   ): ClaimRunResult {
     this.db.beginTransaction('immediate');
     try {
-      const result = this.claimSelectedRun(token, scope, requestContinuityFilter);
+      const result = this.claimSelectedRun(token, scope, requestContinuityFilter, mintSuccessor);
       this.db.commit();
       return result;
     } catch (error) {
@@ -421,21 +427,26 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
   private claimSelectedRun(
     token: string,
     scope?: StateStoreOptions,
-    requestContinuityFilter?: string
+    requestContinuityFilter?: string,
+    mintSuccessor?: () => string
   ): ClaimRunResult {
     const claimantPid = resolveRunOwnerPid(scope);
     const claimantWorkspace = scope?.workspaceId ?? null;
     const claimantOrganization = scope?.organizationId ?? null;
 
-    const row = this.db.queryOne<ChainRunRow & { workspace_id: string | null }>(
+    const row = this.db.queryOne<ClaimRow>(
       `SELECT session_id, chain_id, run_status, current_node_id, state,
-              created_at, last_activity, run_completed_at, handoff_token, workspace_id
+              created_at, last_activity, run_completed_at, handoff_token, workspace_id,
+              organization_id
          FROM chain_runs
         WHERE handoff_token = ?`,
       [token]
     );
     if (row === null || isTerminalRunStatus(row.run_status as ChainRunStatus)) {
       return { status: 'unknown-token' };
+    }
+    if (parseResidual(row.state).conversationPause !== undefined) {
+      return this.claimPausedRun(row, token, scope, requestContinuityFilter, mintSuccessor);
     }
 
     // OQ-3: a claim never rewrites workspace scope. Known-and-different is refused; an unknown
@@ -466,7 +477,60 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
       return { status: 'no-blueprint', chainId: row.chain_id };
     }
 
-    const nodeRows = this.db.query<ChainRunNodeRow>(
+    const session = reconstructSession({ ...row, handoff_token: null }, this.claimNodeRows(row));
+    const transferred = this.db.queryOne<{ session_id: string }>(
+      `UPDATE chain_runs
+          SET run_owner_pid = ?, organization_id = COALESCE(?, organization_id),
+              workspace_id = COALESCE(?, workspace_id), handoff_token = NULL
+        WHERE session_id = ? AND handoff_token = ? RETURNING session_id`,
+      [claimantPid, claimantOrganization, claimantWorkspace, row.session_id, token]
+    );
+    return transferred === null ? { status: 'unknown-token' } : { status: 'claimed', session };
+  }
+
+  /**
+   * Paused recovery: exact storage namespace and normalized continuity, no NULL-as-unknown and no
+   * namespace restamping. A mismatch answers `unknown-token` so no foreign metadata leaks; every
+   * refusal precedes the conditional update, which swaps owner and credential and nothing else.
+   */
+  private claimPausedRun(
+    row: ClaimRow,
+    token: string,
+    scope: StateStoreOptions | undefined,
+    requestContinuityFilter: string | undefined,
+    mintSuccessor: (() => string) | undefined
+  ): ClaimRunResult {
+    const residual = parseResidual(row.state);
+    if (
+      row.organization_id !== (scope?.organizationId ?? null) ||
+      row.workspace_id !== (scope?.workspaceId ?? null) ||
+      resolveContinuityScopeId({ continuityScopeId: residual.continuityScopeId }) !==
+        resolveContinuityScopeId({ continuityScopeId: requestContinuityFilter })
+    )
+      return { status: 'unknown-token' };
+    if (!isCompatibleBlueprint(residual.blueprint)) {
+      return { status: 'no-blueprint', chainId: row.chain_id };
+    }
+    if (mintSuccessor === undefined)
+      throw new Error('Paused handoff claim requires a successor credential factory');
+    const successor = mintSuccessor();
+    if (successor.length === 0 || successor === token)
+      throw new Error('Paused handoff claim produced an unusable successor credential');
+    const nodeRows = this.claimNodeRows(row);
+    const transferred = this.db.queryOne<{ session_id: string }>(
+      `UPDATE chain_runs SET run_owner_pid = ?, handoff_token = ?
+        WHERE session_id = ? AND handoff_token = ? RETURNING session_id`,
+      [resolveRunOwnerPid(scope), successor, row.session_id, token]
+    );
+    if (transferred === null) return { status: 'unknown-token' };
+    return {
+      status: 'claimed',
+      session: reconstructSession({ ...row, handoff_token: successor }, nodeRows),
+    };
+  }
+
+  private claimNodeRows(row: ClaimRow): ChainRunNodeRow[] {
+    return this.db.query<ChainRunNodeRow>(
       `SELECT session_id, node_id, position, prompt_id, step_name, milestone,
               is_placeholder, rendered_at, responded_at, completed_at,
               declared_sections_json, origin, origin_unknown_id, accepted_at_step, delegated,
@@ -476,15 +540,6 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
         ORDER BY position`,
       [row.session_id]
     );
-    const session = reconstructSession({ ...row, handoff_token: null }, nodeRows);
-    const transferred = this.db.queryOne<{ session_id: string }>(
-      `UPDATE chain_runs
-          SET run_owner_pid = ?, organization_id = COALESCE(?, organization_id),
-              workspace_id = COALESCE(?, workspace_id), handoff_token = NULL
-        WHERE session_id = ? AND handoff_token = ? RETURNING session_id`,
-      [claimantPid, claimantOrganization, claimantWorkspace, row.session_id, token]
-    );
-    return transferred === null ? { status: 'unknown-token' } : { status: 'claimed', session };
   }
 
   private protectedPauseIds(ownerPid: string): Set<string> {
