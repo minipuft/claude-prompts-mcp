@@ -88,6 +88,7 @@ export interface ChainRunRegistry {
 
 /** The document-shaped remainder of a session, everything the columns do not carry. */
 interface ResidualRunState {
+  conversationPause?: ChainSession['conversationPause'];
   executionOrder?: string[];
   originalArgs?: Record<string, unknown>;
   continuityScopeId?: string;
@@ -585,6 +586,8 @@ function toResidual(session: ChainSession): ResidualRunState {
   if (session.pendingShellVerification !== undefined) {
     residual.pendingShellVerification = session.pendingShellVerification;
   }
+  if (session.conversationPause !== undefined)
+    residual.conversationPause = session.conversationPause;
   if (session.gateRemap !== undefined) residual.gateRemap = session.gateRemap;
   if (session.blueprint !== undefined) residual.blueprint = session.blueprint;
   if (session.unknownsLedger !== undefined) residual.unknownsLedger = session.unknownsLedger;
@@ -746,6 +749,7 @@ function toStepStates(nodeRows: readonly ChainRunNodeRow[]): Map<string, StepMet
 function applyResidual(session: ChainSession, residual: ResidualRunState): void {
   const optional: Array<[keyof ResidualRunState, keyof ChainSession]> = [
     ['continuityScopeId', 'continuityScopeId'],
+    ['conversationPause', 'conversationPause'],
     ['pendingShellVerification', 'pendingShellVerification'],
     ['gateRemap', 'gateRemap'],
     ['blueprint', 'blueprint'],

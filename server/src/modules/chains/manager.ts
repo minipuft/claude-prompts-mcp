@@ -33,6 +33,8 @@ import type {
   ChainSessionService,
   ChainSessionSummary,
   ConversationControlInspection,
+  ConversationControlReadDecision,
+  ConversationControlResult,
   ExactControlScope,
   GateReviewOutcomeUpdate,
   ParsedCommandSnapshot,
@@ -599,14 +601,18 @@ export class ChainSessionStore implements ChainSessionService {
   private async runConversationControlMutation<T>(
     sessionId: string,
     scope: ExactControlScope,
-    mutation: (session: ChainSession) => T
+    mutation: (session: ChainSession) => T,
+    readOnly?: (
+      held: Readonly<ChainSession>,
+      durable: Readonly<ChainSession>
+    ) => ConversationControlReadDecision<T>
   ): Promise<ConversationControlMutationResult<T>> {
     await this.initPromise;
     const work = this.persistQueue.then(async (): Promise<ConversationControlMutationResult<T>> => {
       const held = this.activeSessions.get(sessionId);
       if (held === undefined)
         return { status: 'refused', reason: 'unknown-session', inspection: null };
-      const result = this.writeConversationControlMutation(held, scope, mutation);
+      const result = this.writeConversationControlMutation(held, scope, mutation, readOnly);
       if (
         result.status === 'refused' &&
         result.reason === 'ownership-lost' &&
@@ -628,7 +634,11 @@ export class ChainSessionStore implements ChainSessionService {
   private writeConversationControlMutation<T>(
     held: ChainSession,
     scope: ExactControlScope,
-    mutation: (session: ChainSession) => T
+    mutation: (session: ChainSession) => T,
+    readOnly?: (
+      held: Readonly<ChainSession>,
+      durable: Readonly<ChainSession>
+    ) => ConversationControlReadDecision<T>
   ): ConversationControlMutationResult<T> {
     const authority = this.getConversationControlScope(scope.continuityScopeId);
     if (
@@ -651,8 +661,19 @@ export class ChainSessionStore implements ChainSessionService {
         return { ...owned, inspection: null };
       }
       if (isTerminalRunStatus(held.runStatus) || isTerminalRunStatus(owned.run.session.runStatus)) {
+        const inspection = this.ownedControlInspection(owned.run);
         db.rollback();
-        return { status: 'refused', reason: 'run-terminal', inspection: null };
+        return { status: 'refused', reason: 'run-terminal', inspection };
+      }
+      if (readOnly !== undefined) {
+        const decision = this.applyConversationControlMutation(held, () =>
+          readOnly(held, owned.run.session)
+        );
+        if (decision.kind === 'read') {
+          const inspection = this.ownedControlInspection(owned.run);
+          db.commit();
+          return { status: 'committed', value: decision.value, inspection };
+        }
       }
       snapshot = this.snapshotRun(held);
       const value = this.applyConversationControlMutation(held, mutation);
@@ -664,12 +685,7 @@ export class ChainSessionStore implements ChainSessionService {
         snapshot.restore();
         return { ...stored, inspection: null };
       }
-      const { handoffToken: _credential, ...session } = stored.run.session;
-      const inspection = structuredClone({
-        ownerPid: stored.run.ownerPid,
-        scope: stored.run.scope,
-        session,
-      });
+      const inspection = this.ownedControlInspection(stored.run);
       db.commit();
       return { status: 'committed', value, inspection };
     } catch (error) {
@@ -677,6 +693,15 @@ export class ChainSessionStore implements ChainSessionService {
       snapshot?.restore();
       throw error;
     }
+  }
+
+  private ownedControlInspection(run: {
+    ownerPid: string;
+    scope: ExactControlScope;
+    session: ChainSession;
+  }): ConversationControlInspection {
+    const { handoffToken: _credential, ...session } = run.session;
+    return structuredClone({ ownerPid: run.ownerPid, scope: run.scope, session });
   }
 
   private applyConversationControlMutation<T>(
@@ -1501,6 +1526,87 @@ export class ChainSessionStore implements ChainSessionService {
     }
   }
 
+  pauseConversation(
+    sessionId: string,
+    scope: ExactControlScope
+  ): Promise<ConversationControlResult> {
+    return this.controlConversation('pause', sessionId, scope);
+  }
+
+  resumeConversation(
+    sessionId: string,
+    scope: ExactControlScope
+  ): Promise<ConversationControlResult> {
+    return this.controlConversation('resume', sessionId, scope);
+  }
+
+  private async controlConversation(
+    action: 'pause' | 'resume',
+    sessionId: string,
+    scope: ExactControlScope
+  ): Promise<ConversationControlResult> {
+    const result = await this.runConversationControlMutation<ConversationControlValue>(
+      sessionId,
+      scope,
+      (held) => {
+        if (action === 'resume') {
+          delete held.conversationPause;
+          return { outcome: 'resumed' };
+        }
+        held.handoffToken ??= createHandoffToken();
+        held.conversationPause = {
+          kind: 'conversation',
+          nodeId: held.state.currentNodeId,
+          pausedAt: Date.now(),
+        };
+        return { outcome: 'paused', token: held.handoffToken };
+      },
+      (held, durable) => this.decideConversationControl(action, held, durable)
+    );
+    const inspection = result.inspection;
+    const value =
+      result.status === 'refused'
+        ? { outcome: 'refused' as const, reason: result.reason }
+        : result.value;
+    if (value.outcome === 'refused')
+      return {
+        ...value,
+        sessionId,
+        chainId: inspection?.session.chainId ?? null,
+        scope: inspection?.scope ?? scope,
+        inspection,
+      };
+    if (inspection === null) throw new Error('Conversation control success lacks an owned witness');
+    return { ...value, inspection };
+  }
+
+  private decideConversationControl(
+    action: 'pause' | 'resume',
+    held: Readonly<ChainSession>,
+    durable: Readonly<ChainSession>
+  ): ConversationControlReadDecision<ConversationControlValue> {
+    if (
+      held.handoffToken !== durable.handoffToken ||
+      (held.conversationPause === undefined) !== (durable.conversationPause === undefined) ||
+      held.conversationPause?.kind !== durable.conversationPause?.kind ||
+      held.conversationPause?.nodeId !== durable.conversationPause?.nodeId ||
+      held.conversationPause?.pausedAt !== durable.conversationPause?.pausedAt
+    )
+      throw new Error('Conversation control state differs from durable state');
+    if (durable.conversationPause !== undefined) {
+      if (durable.handoffToken === undefined)
+        return {
+          kind: 'read',
+          value: { outcome: 'refused', reason: 'recovery-credential-missing' },
+        };
+      if (action === 'pause')
+        return { kind: 'read', value: { outcome: 'already-paused', token: durable.handoffToken } };
+    }
+    if (action === 'resume' && durable.conversationPause === undefined)
+      return { kind: 'read', value: { outcome: 'resumed' } };
+    return { kind: 'write' };
+  }
+
   /**
    * Mint a single-use handoff token for a live run (2A). Minting again rotates the token —
    * the previous one can no longer claim. Returns undefined for an unknown, out-of-scope, or
@@ -1517,7 +1623,7 @@ export class ChainSessionStore implements ChainSessionService {
       return undefined;
     }
     // 20 random bytes, base64url: unguessable, shell/URL safe, pasted exactly once.
-    const token = `hnd_${randomBytes(20).toString('base64url')}`;
+    const token = createHandoffToken();
     const snapshot = this.snapshotRun(session);
     session.handoffToken = token;
     session.lastActivity = Date.now();
@@ -3265,7 +3371,15 @@ export function createChainSessionStore(
  *   a current-step review keyed onto a detached node's open review, or the reverse. Both are
  *   unreachable today; a silent overwrite would lose an open review.
  */
-/** What a mutator is about to change in memory, and how to put it back (R87). */
+type ConversationControlValue =
+  | { outcome: 'paused' | 'already-paused'; token: string }
+  | { outcome: 'resumed' }
+  | { outcome: 'refused'; reason: 'recovery-credential-missing' };
+
+function createHandoffToken(): string {
+  return `hnd_${randomBytes(20).toString('base64url')}`;
+}
+
 type ConversationControlMutationResult<T> =
   | { status: 'committed'; value: T; inspection: ConversationControlInspection }
   | {
@@ -3274,6 +3388,7 @@ type ConversationControlMutationResult<T> =
       inspection: ConversationControlInspection | null;
     };
 
+/** What a mutator is about to change in memory, and how to put it back (R87). */
 interface MemorySnapshot {
   restore(): void;
 }

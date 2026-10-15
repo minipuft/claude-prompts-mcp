@@ -306,7 +306,37 @@ export interface ConversationControlInspection {
   readonly session: Readonly<Omit<ChainSession, 'handoffToken'>>;
 }
 
+export interface ConversationPause {
+  readonly kind: 'conversation';
+  readonly nodeId: string | null;
+  readonly pausedAt: number;
+}
+
+export type ConversationControlReadDecision<T> = { kind: 'write' } | { kind: 'read'; value: T };
+
+export type ConversationControlResult =
+  | {
+      outcome: 'paused' | 'already-paused';
+      inspection: ConversationControlInspection;
+      token: string;
+    }
+  | { outcome: 'resumed'; inspection: ConversationControlInspection }
+  | {
+      outcome: 'refused';
+      sessionId: string;
+      chainId: string | null;
+      scope: ExactControlScope;
+      reason:
+        | 'unknown-session'
+        | 'scope-mismatch'
+        | 'ownership-lost'
+        | 'run-terminal'
+        | 'recovery-credential-missing';
+      inspection: ConversationControlInspection | null;
+    };
+
 export interface ChainSession {
+  conversationPause?: ConversationPause;
   sessionId: string;
   chainId: string;
   state: ChainState;

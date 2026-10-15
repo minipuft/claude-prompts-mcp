@@ -432,9 +432,316 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
       await expect(commit(f, mutation)).rejects.toThrow('invalid held node pointer');
       expect(f.held).toEqual(local);
       expect(raw()).toEqual(before);
+      await expect(f.store.pauseConversation(f.held.sessionId, f.scope)).rejects.toThrow(
+        'invalid held node pointer'
+      );
+      expect(f.held).toEqual(local);
+      expect(raw()).toEqual(before);
       f.held.runStatus = 'cancelled';
       expect((await commit(f, mutation)).status).toBe('refused');
       expect(mutation).not.toHaveBeenCalled();
+      await f.store.cleanup();
+    });
+  });
+
+  describe('conversation pause', () => {
+    const fixture = async (hold = 'ordinary', count = 2) => {
+      const refs = new StubTextReferenceStore();
+      const store = new ChainSessionStore(
+        logger,
+        refs as never,
+        { cleanupIntervalMs: 60_000, defaultScope: { workspaceId: 'ws-storage' } },
+        engine
+      );
+      const held = await store.createSession(
+        'conversation',
+        'chain-conversation#1',
+        count,
+        { target: 'frozen' },
+        {
+          continuityScopeId: 'caller',
+          nodes: count === 0 ? [] : nodes(['n1', 'p1', 'Capture'], ['n2', 'p2', 'Detached']),
+        }
+      );
+      if (count > 0) {
+        await store.updateSessionState(held.sessionId, 'n1', 'captured target');
+        if (hold === 'unknown')
+          await store.applyUnknownObservations(held.sessionId, 'n1', [
+            { type: 'unknown_discovered', id: 'u', statement: 'plan shape', blocking: true },
+          ]);
+        if (hold === 'detached') await store.markNodeSpawned(held.sessionId, 'n2');
+        const nodeId = hold === 'detached' ? 'n2' : 'n1';
+        await store.setReview(held.sessionId, {
+          nodeId,
+          kind: hold === 'unknown' ? 'structural' : hold === 'detached' ? 'detached' : 'gate',
+          phase: 'awaiting-verdict',
+          combinedPrompt: 'retained review',
+          prompts: [],
+          createdAt: 1,
+          gateIds: [hold === 'unknown' ? '__unknown_interrupt__' : 'quality'],
+          attemptCount: 2,
+          maxAttempts: 3,
+          reviewedOutput: 'captured target',
+          semanticContext: {
+            nodeId,
+            attemptId: 'frozen-attempt',
+            definitions: {},
+            target: {
+              kind: 'step_output',
+              content: 'captured target',
+              digest: 'sha256:' + createHash('sha256').update('captured target').digest('hex'),
+            },
+          },
+        });
+        if (hold === 'shell')
+          await store.setPendingShellVerification(held.sessionId, {
+            gateId: 'shell',
+            nodeId: 'n1',
+            shellVerify: { command: 'fixture check' },
+            attemptCount: 1,
+            maxAttempts: 3,
+            previousResults: [],
+            originalGoal: 'frozen goal',
+          });
+      }
+      return { store, held, refs, scope: store.getConversationControlScope('caller') };
+    };
+    const raw = () => ({
+      runs: engine.query('SELECT * FROM chain_runs ORDER BY session_id'),
+      nodes: engine.query('SELECT * FROM chain_run_nodes ORDER BY session_id, position'),
+    });
+    const domain = (session: ChainSession) => {
+      const {
+        conversationPause: _pause,
+        handoffToken: _credential,
+        ...rest
+      } = structuredClone(session);
+      return rest;
+    };
+    const forbidWrites = () => {
+      for (const table of ['chain_runs', 'chain_run_nodes', 'chain_sessions'])
+        for (const operation of ['INSERT', 'UPDATE', 'DELETE'])
+          engine.run(
+            `CREATE TRIGGER forbid_${table}_${operation} BEFORE ${operation} ON ${table} BEGIN SELECT RAISE(ABORT, 'unexpected control write'); END`
+          );
+      return () => {
+        for (const table of ['chain_runs', 'chain_run_nodes', 'chain_sessions'])
+          for (const operation of ['INSERT', 'UPDATE', 'DELETE'])
+            engine.run(`DROP TRIGGER forbid_${table}_${operation}`);
+      };
+    };
+
+    test.each(['ordinary', 'unknown', 'shell', 'detached'])(
+      '%s hold survives pause, readonly repeat, cold hydration and explicit resume without advance',
+      async (hold) => {
+        const f = await fixture(hold);
+        const before = domain(f.held);
+        const captures = f.refs.storeChainStepResult.mock.calls.length;
+        const paused = await f.store.pauseConversation(f.held.sessionId, f.scope);
+        expect(paused.outcome).toBe('paused');
+        if (paused.outcome !== 'paused') throw new Error('positive pause missing');
+        expect(f.held.handoffToken).toBe(paused.token);
+        expect(domain(f.held)).toEqual(before);
+        expect(paused.inspection.session).not.toHaveProperty('handoffToken');
+        const pausedRaw = raw();
+        const fullHeld = structuredClone(f.held);
+        const remove = forbidWrites();
+        try {
+          expect(await f.store.pauseConversation(f.held.sessionId, f.scope)).toEqual({
+            ...paused,
+            outcome: 'already-paused',
+          });
+          expect(raw()).toEqual(pausedRaw);
+          expect(f.held).toEqual(fullHeld);
+        } finally {
+          remove();
+        }
+        await f.store.cleanup();
+        const reader = newStore();
+        await reader['initPromise'];
+        const restored = reader['activeSessions'].get(f.held.sessionId);
+        if (restored === undefined) throw new Error('current-owner cold session missing');
+        expect(restored.conversationPause).toEqual(fullHeld.conversationPause);
+        expect(restored.handoffToken).toBe(paused.token);
+        expect(domain(restored)).toEqual({ ...before, lifecycle: 'dormant' });
+        const resumed = await reader.resumeConversation(restored.sessionId, f.scope);
+        expect(resumed.outcome).toBe('resumed');
+        expect(resumed).not.toHaveProperty('token');
+        expect(restored.conversationPause).toBeUndefined();
+        expect(restored.handoffToken).toBe(paused.token);
+        expect(restored.reviews).toEqual(before.reviews);
+        expect(domain(restored)).toEqual({ ...before, lifecycle: 'dormant' });
+        expect(f.refs.storeChainStepResult.mock.calls).toHaveLength(captures);
+        expect(reader['textReferenceStore'].storeChainStepResult).not.toHaveBeenCalled();
+        const resumedRaw = raw();
+        const resumedHeld = structuredClone(restored);
+        const undo = forbidWrites();
+        try {
+          expect((await reader.resumeConversation(restored.sessionId, f.scope)).outcome).toBe(
+            'resumed'
+          );
+          expect(raw()).toEqual(resumedRaw);
+          expect(restored).toEqual(resumedHeld);
+        } finally {
+          undo();
+        }
+        await reader.cleanup();
+      }
+    );
+
+    test('legacy absence survives current-owner cold load and absent resume performs no write', async () => {
+      const f = await fixture();
+      await f.store.cleanup();
+      const reader = newStore();
+      await reader['initPromise'];
+      const held = reader['activeSessions'].get(f.held.sessionId);
+      if (held === undefined) throw new Error('legacy cold session missing');
+      expect(held.conversationPause).toBeUndefined();
+      const before = raw();
+      const local = structuredClone(held);
+      const remove = forbidWrites();
+      try {
+        expect((await reader.resumeConversation(held.sessionId, f.scope)).outcome).toBe('resumed');
+        expect(raw()).toEqual(before);
+        expect(held).toEqual(local);
+      } finally {
+        remove();
+      }
+      await reader.cleanup();
+    });
+
+    test('existing credential is preserved and legacy absence/nullable pointer remain readable', async () => {
+      const f = await fixture('ordinary', 0);
+      const minted = await f.store.mintHandoffToken(f.held.sessionId);
+      if (minted === undefined) throw new Error('positive credential missing');
+      expect(f.held.conversationPause).toBeUndefined();
+      const paused = await f.store.pauseConversation(f.held.sessionId, f.scope);
+      expect(paused.outcome).toBe('paused');
+      expect(paused).toHaveProperty('token', minted.token);
+      expect(f.held.conversationPause).toMatchObject({ kind: 'conversation', nodeId: null });
+      await f.store.cleanup();
+    });
+
+    test.each(['pause', 'resume'])(
+      '%s strict BUSY and SQL failure roll back record/credential and permit retry',
+      async (action) => {
+        const f = await fixture();
+        if (action === 'resume') await f.store.pauseConversation(f.held.sessionId, f.scope);
+        const operation = () =>
+          action === 'pause'
+            ? f.store.pauseConversation(f.held.sessionId, f.scope)
+            : f.store.resumeConversation(f.held.sessionId, f.scope);
+        const before = raw();
+        const local = structuredClone(f.held);
+        const timeout = engine.queryOne<{ timeout: number }>('PRAGMA busy_timeout');
+        if (timeout === null) throw new Error('timeout missing');
+        const blocker = new DatabaseSync(path.join(tmpDir, 'runtime-state', 'state.db'));
+        engine.run('PRAGMA busy_timeout = 1');
+        blocker.exec('BEGIN IMMEDIATE');
+        try {
+          await expect(operation()).rejects.toThrow(/locked|busy/i);
+          expect(raw()).toEqual(before);
+          expect(f.held).toEqual(local);
+        } finally {
+          blocker.exec('ROLLBACK');
+          blocker.close();
+          engine.run(`PRAGMA busy_timeout = ${timeout.timeout}`);
+        }
+        engine.run(
+          "CREATE TRIGGER control_failure BEFORE INSERT ON chain_runs BEGIN SELECT RAISE(ABORT, 'control SQL failure'); END"
+        );
+        try {
+          await expect(operation()).rejects.toThrow('control SQL failure');
+          expect(raw()).toEqual(before);
+          expect(f.held).toEqual(local);
+        } finally {
+          engine.run('DROP TRIGGER control_failure');
+        }
+        expect((await operation()).outcome).toBe(action === 'pause' ? 'paused' : 'resumed');
+        await f.store.cleanup();
+      }
+    );
+
+    test.each(['pause record', 'credential'])(
+      '%s held/durable disagreement throws without adoption or writes',
+      async (fact) => {
+        const f = await fixture();
+        await f.store.pauseConversation(f.held.sessionId, f.scope);
+        if (fact === 'pause record')
+          f.held.conversationPause = { kind: 'conversation', nodeId: 'n2', pausedAt: 0 };
+        else f.held.handoffToken = 'different-held-credential';
+        const before = raw();
+        const local = structuredClone(f.held);
+        await expect(f.store.pauseConversation(f.held.sessionId, f.scope)).rejects.toThrow(
+          'differs from durable'
+        );
+        await expect(f.store.resumeConversation(f.held.sessionId, f.scope)).rejects.toThrow(
+          'differs from durable'
+        );
+        expect(raw()).toEqual(before);
+        expect(f.held).toEqual(local);
+        await f.store.cleanup();
+      }
+    );
+
+    test('missing recovery credential refuses and terminal priority cannot acknowledge an existing pause', async () => {
+      const f = await fixture();
+      const record = { kind: 'conversation' as const, nodeId: 'n1', pausedAt: 1 };
+      f.held.conversationPause = record;
+      engine.run(
+        "UPDATE chain_runs SET state = json_set(state, '$.conversationPause', json(?)) WHERE session_id = ?",
+        [JSON.stringify(record), f.held.sessionId]
+      );
+      const before = raw();
+      const local = structuredClone(f.held);
+      const remove = forbidWrites();
+      try {
+        for (const action of ['pauseConversation', 'resumeConversation'] as const) {
+          const result = await f.store[action](f.held.sessionId, f.scope);
+          expect(result).toMatchObject({
+            outcome: 'refused',
+            reason: 'recovery-credential-missing',
+          });
+          expect(result).not.toHaveProperty('token');
+          expect(raw()).toEqual(before);
+          expect(f.held).toEqual(local);
+        }
+      } finally {
+        remove();
+      }
+      await f.store.cancelChain(f.held.sessionId);
+      const terminal = await f.store.pauseConversation(f.held.sessionId, f.scope);
+      expect(terminal).toMatchObject({
+        outcome: 'refused',
+        reason: 'run-terminal',
+        chainId: f.held.chainId,
+      });
+      expect(terminal.inspection?.session).not.toHaveProperty('handoffToken');
+      await f.store.cleanup();
+    });
+
+    test('no-write decisions still refuse foreign custody and exact scope mismatch', async () => {
+      const f = await fixture();
+      await f.store.pauseConversation(f.held.sessionId, f.scope);
+      const before = raw();
+      const wrong = { ...f.scope, continuityScopeId: 'other' };
+      expect(await f.store.pauseConversation(f.held.sessionId, wrong)).toMatchObject({
+        outcome: 'refused',
+        reason: 'scope-mismatch',
+      });
+      expect(raw()).toEqual(before);
+      engine.run("UPDATE chain_runs SET run_owner_pid = 'new-owner' WHERE session_id = ?", [
+        f.held.sessionId,
+      ]);
+      const foreign = raw();
+      const result = await f.store.pauseConversation(f.held.sessionId, f.scope);
+      expect(result).toMatchObject({
+        outcome: 'refused',
+        reason: 'ownership-lost',
+        inspection: null,
+      });
+      expect(result).not.toHaveProperty('token');
+      expect(raw()).toEqual(foreign);
       await f.store.cleanup();
     });
   });
