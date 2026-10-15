@@ -28,6 +28,7 @@
           "retry",
           "skip",
           "abort",
+          "pause",
           "resume",
           "accept_alternative"
         ],

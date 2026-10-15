@@ -101,15 +101,16 @@ export const prompt_engineParameters: ToolParameter[] = [
     name: 'gate_action',
     type: 'enum',
     description:
-      "Run action. 'abort' stops the existing run named by 'chain_id' in any nonterminal state, including active runs, blocking-unknown pauses, ordinary reviews and detached holds. No command, review, retry exhaustion, node selection, trailer or report is required; it starts no work and consumes no report. State and artifacts are retained; repeated abort of an already-cancelled run succeeds. Completed, failed, missing or out-of-scope runs return a non-applied refusal. AFTER A FAILED GATE exhausts its retry limit: 'retry' resets attempts (semantic retry renews the server attempt and requires separate replacement capture), 'skip' records operational BYPASS and continues without an evaluated PASS/FAIL. ON A BLOCKING-UNKNOWN INTERRUPT ('__unknown_interrupt__', raised only with budget.pauseOnBlocking): 'resume' clears the pause and issues the investigation step as written, 'accept_alternative' replaces the remaining run with 'remainder' on the SAME call (refused without one).",
+      "Run action. 'abort' stops the existing run named by 'chain_id' in any nonterminal state, including active runs, blocking-unknown pauses, ordinary reviews and detached holds. No command, review, retry exhaustion, node selection, trailer or report is required; it starts no work and consumes no report. State and artifacts are retained; repeated abort of an already-cancelled run succeeds. Completed, failed, missing or out-of-scope runs return a non-applied refusal. 'pause' persists a conversation pause on the scoped run so you can discuss the step with the user; 'resume' clears it explicitly; 'abort' still ends the run. Send pause or resume with 'chain_id' only. AFTER A FAILED GATE exhausts its retry limit: 'retry' resets attempts (semantic retry renews the server attempt and requires separate replacement capture), 'skip' records operational BYPASS and continues without an evaluated PASS/FAIL. ON A BLOCKING-UNKNOWN INTERRUPT ('__unknown_interrupt__', raised only with budget.pauseOnBlocking): 'resume' clears the pause and issues the investigation step as written, 'accept_alternative' replaces the remaining run with 'remainder' on the SAME call (refused without one).",
     status: 'working',
     compatibility: 'canonical',
     notes: [
-      "Core parameter: advertised independently of gate-system enablement. With gates disabled, 'retry' and 'skip' receive a named refusal; 'abort', 'resume' and 'accept_alternative' remain available.",
+      "Core parameter: advertised independently of gate-system enablement. With gates disabled, 'retry' and 'skip' receive a named refusal; 'abort', 'pause', 'resume' and 'accept_alternative' remain available.",
+      "'pause' and 'resume' are control calls. Sent with user_response, gate_verdict, remainder, observations, command, workflow, force_restart, handoff, claim_token, inputs, options or gates they are refused before anything changes; presence decides, so an empty string or false still counts as sent. Nothing implicitly resumes a conversation pause.",
       "'accept_alternative' without a 'remainder' in the same call is refused by name — it is the acceptance of an alternative, not a request for one.",
       "'resume' and 'accept_alternative' are meaningful only while '__unknown_interrupt__' is the pending review; against a failed-gate review they are refused the same way 'retry' is against an interrupt.",
     ],
-    enum: ['retry', 'skip', 'abort', 'resume', 'accept_alternative'],
+    enum: ['retry', 'skip', 'abort', 'pause', 'resume', 'accept_alternative'],
     resolvesPendingRun: true,
   },
   {

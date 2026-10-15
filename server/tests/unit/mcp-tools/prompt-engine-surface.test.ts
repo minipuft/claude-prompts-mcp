@@ -5,6 +5,7 @@ import { ExecutionContext } from '../../../src/engine/execution/context/executio
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { McpToolRequestValidator } from '../../../src/engine/execution/validation/request-validator.js';
 import { isChainId } from '../../../src/shared/utils/chain-id-codec.js';
+import { describePromptEngineParameterRefusal } from '../../../src/mcp/tools/shared/undeclared-parameters.js';
 import { buildPromptEngineSchema } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
 
 import type { ToolSurfaceState } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
@@ -108,19 +109,133 @@ describe('prompt_engine parameter surface', () => {
       'retry',
       'skip',
       'abort',
+      'pause',
       'resume',
       'accept_alternative',
     ]);
-    for (const gate_action of ['retry', 'skip', 'abort', 'resume', 'accept_alternative']) {
+    for (const gate_action of ['retry', 'skip', 'abort', 'pause', 'resume', 'accept_alternative']) {
       expect(schema.parse({ chain_id: 'chain-demo#1', gate_action })).toHaveProperty(
         'gate_action',
         gate_action
       );
     }
-    expect(schema.safeParse({ chain_id: 'chain-demo#1', gate_action: 'pause' }).success).toBe(
-      false
-    );
+    expect(schema.safeParse({ chain_id: 'chain-demo#1', gate_action: 'hold' }).success).toBe(false);
   });
+
+  /**
+   * Pause and resume are control calls: the run they name and nothing else. Every case below sends
+   * a value that is FALSY or EMPTY as well as a truthy one, because presence decides — a check
+   * keyed on truthiness would wave `handoff:false` through and answer a call nobody made.
+   */
+  describe('pause/resume control exclusivity (T2.1)', () => {
+    const CHAIN = 'chain-demo#1';
+    const VERDICT = { overall: 'PASS', rationale: 'ok' };
+    const REMAINDER = { mode: 'append', nodes: [{ id: 'next', promptId: 'p' }] };
+    const WORKFLOW = { version: 1, nodes: [{ id: 'gather', promptId: 'p' }] };
+    const MIXED: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
+      ['user_response', { user_response: 'step output' }],
+      ['user_response (empty)', { user_response: '' }],
+      ['gate_verdict', { gate_verdict: VERDICT }],
+      ['remainder', { remainder: REMAINDER }],
+      ['observations', { observations: [] }],
+      ['command', { command: '--> >>next' }],
+      ['command (empty)', { command: '' }],
+      ['workflow', { workflow: WORKFLOW }],
+      ['force_restart (false)', { force_restart: false }],
+      ['force_restart (true)', { force_restart: true }],
+      ['handoff (false)', { handoff: false }],
+      ['handoff (true)', { handoff: true }],
+      ['claim_token', { claim_token: 'hnd_abc' }],
+      ['claim_token (empty)', { claim_token: '' }],
+      ['inputs', { inputs: { topic: 'x' } }],
+      ['inputs (empty)', { inputs: {} }],
+      ['options', { options: { mode: 'x' } }],
+      ['options (empty)', { options: {} }],
+      ['gates', { gates: ['some-gate'] }],
+      ['gates (empty)', { gates: [] }],
+    ];
+    const ACTIONS = ['pause', 'resume'] as const;
+    const STATES = [true, false] as const;
+
+    test.each(STATES)('accepts a bare pause and a bare resume with gates=%s', (enabled) => {
+      for (const gate_action of ACTIONS) {
+        const result = build({ gateSystemEnabled: enabled }).safeParse({
+          chain_id: CHAIN,
+          gate_action,
+        });
+        expect(result.success).toBe(true);
+      }
+    });
+
+    test.each(
+      ACTIONS.flatMap((action) =>
+        STATES.flatMap((enabled) => MIXED.map(([label, extra]) => [action, enabled, label, extra]))
+      ) as Array<[string, boolean, string, Record<string, unknown>]>
+    )('refuses %s with gates=%s combined with %s', (gate_action, enabled, _label, extra) => {
+      const result = build({ gateSystemEnabled: enabled }).safeParse({
+        chain_id: CHAIN,
+        gate_action,
+        ...extra,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    test.each(
+      ACTIONS.flatMap((action) => [
+        [action, 'handoff', { handoff: false }],
+        [action, 'force_restart', { force_restart: false }],
+        [action, 'observations', { observations: [] }],
+        [action, 'gate_verdict', { gate_verdict: VERDICT }],
+        [action, 'inputs', { inputs: {} }],
+        [action, 'options', { options: {} }],
+        [action, 'gates', { gates: [] }],
+      ]) as Array<[string, string, Record<string, unknown>]>
+    )(
+      'names the control rule for %s + %s, not some other field rule',
+      (gate_action, key, extra) => {
+        // These values are each valid on their own, so the refusal can only be the exclusivity rule.
+        const schema = build({ gateSystemEnabled: true });
+        expect(schema.safeParse(extra).success).toBe(true);
+        const result = schema.safeParse({ chain_id: CHAIN, gate_action, ...extra });
+        expect(result.success).toBe(false);
+        const issue = result.error?.issues.find((entry) => entry.path[0] === 'gate_action');
+        expect(issue?.message).toContain(`gate_action:"${gate_action}" is a control call`);
+        expect(issue?.message).toContain(`'${key}'`);
+      }
+    );
+
+    test('an undefined key was not sent; accept_alternative still pairs with remainder', () => {
+      const schema = build({ gateSystemEnabled: true });
+      const unset = { chain_id: CHAIN, gate_action: 'pause', handoff: undefined };
+      expect(schema.safeParse(unset).success).toBe(true);
+      const alt = { chain_id: CHAIN, gate_action: 'accept_alternative', remainder: REMAINDER };
+      expect(schema.safeParse(alt).success).toBe(true);
+    });
+
+    test.each(STATES)('the handler admits bare pause and resume with gates=%s', (enabled) => {
+      // Pause is core like abort; the bare blocking-unknown resume keeps its existing path.
+      for (const gate_action of ACTIONS) {
+        const args = { chain_id: CHAIN, gate_action };
+        expect(describePromptEngineParameterRefusal(args, enabled)).toBeNull();
+      }
+    });
+  });
+
+  test.each([
+    [true, true],
+    [true, false],
+    [false, true],
+    [false, false],
+  ])(
+    'refuses the retired cancel:%s as an undeclared parameter with gates=%s',
+    (cancel, enabled) => {
+      const refusal = describePromptEngineParameterRefusal(
+        { chain_id: 'chain-demo#1', cancel },
+        enabled
+      );
+      expect(refusal).toContain("'cancel' is not a parameter of prompt_engine");
+    }
+  );
 
   test('advertises the gate parameters while the gate system is enabled', () => {
     const keys = advertisedKeys({ gateSystemEnabled: true });
