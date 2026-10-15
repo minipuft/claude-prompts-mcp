@@ -1,3 +1,10 @@
+---
+title: Workflow contract composition implementation notes
+date: 2026-10-14
+status: active
+tags: [workflows, contracts, integration]
+---
+
 # Composition implementation notes
 
 ## 2026-10-14 — C1 artifacts accepted under explicit index exception
@@ -19,3 +26,17 @@ C2 remains unaccepted pending test typing:332baseline→333initial/final, same10
 Root read67-line typing-fix receiptSHAfd2b2e4dfe32f434116bf0820df4b5d5f511f90aaec1d3d36cc6a902f3a0995d and exact one-line object input diff; seven priority assertions and all companion payloads unchanged. Existing386 checks plus8abortPASS=394. Cumulative2tests/4changedlines within3/180. Canonical type ratchetPASS332; raw final diagnostic bytes equal initial333 minus exactly named TS2322; four pre-existing owner diagnostics and same1099root/563test/2102dependency compiler view unchanged, no baseline producer/cast/suppression. Pinnedformat/diffPASS.
 
 RawHEAD/index/2026stage0entries/2048observedfiles/protectedtwo plans and priorfixture exact; source588/resources226/dist4/hooks61/tooling8 and C1bundle068fab4e… byte/mode-equal. ThreePIDs/eightabort runtimeroots/elevenDBpaths/privatecache roots observedthenabsent; no MCP bookkeeping. Evidence-helper baseline-field lookup corrected without check replay. Root accepts C2 source/test compatibility only; C3registeredSTDIO/HTTP and PRCI/native remain pending.
+
+## 2026-10-14 — Readiness82/85; bounded metadata/catalog repair
+
+Canonical validate:all completed82PASS/3FAIL. Source types/lint/test typing/contracts/architecture and other members passed. Failures: generated module-catalog drift from composedsource; root-authored new plan missing tags, notes missing frontmatter, C3stamp used semicolon rather than required middle dot. Root fixes its own plan fields, adds C2.5 sole generatedcatalog owner, and reruns only those3failedmembers after canonical catalog regeneration. No source/runtime/baseline relaxation or full85replay. Preserve red readiness log.
+
+## 2026-10-14 — R-TAKEOVER: Claude planner continues this plan
+
+The Codex planner session ran out of tokens after committing C2 (4558df34) and leaving C2.5 uncommitted. The owner ruled (2026-10-14, in the Claude review thread) that the Claude session takes over this plan, the pause plan's commit-only step and the 0C2/0C3 PR boundaries. Accepted receipts carry over unchanged; nothing is re-run that no named byte change invalidated.
+
+C2.5 accepted: the uncommitted catalog regeneration (engine-gates 0.55→0.56) and the plan frontmatter/stamp fixes were read, and the three failed readiness members re-run green on this tree. The raw-index exception from C1 stays recorded as it was.
+
+- **R-PR**: the combined branch opens its own PR stating it supersedes #488 and #489; both drafts close as included once it merges. #489's branch is not fast-forwarded, so its review record stays as written.
+- **R-ORDER**: merge 0C3, then 0C2, then this branch. The coverage branches are ready now and touch no verdict code; this branch waits on C3 and carries the breaking change, so it lands last and the release PR (#473, not cut) picks up 6.0.0 once.
+- **R-C3**: one STDIO session and one fresh HTTP request sequence against the built combined `dist/`, each showing: a string `gate_verdict` refused with the object shape named, an object verdict accepted, and `gate_action:"abort"` ending the run. A positive control is required: the same probe against `origin/main`'s build must ACCEPT the string verdict, or the refusal observation proves nothing. Driver lives outside the repo; no installed-plugin or shared runtime-state mutation (private `MCP_RUNTIME_ROOT`, `MCP_RESOURCES_PATH` unset).
