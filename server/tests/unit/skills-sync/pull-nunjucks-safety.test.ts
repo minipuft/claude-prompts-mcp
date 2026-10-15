@@ -72,6 +72,102 @@ describe('parseSkillMd — order-aware section boundaries', () => {
   });
 });
 
+// ─── parseSkillMd: edge inputs ──────────────────────────────────────────────
+
+describe('parseSkillMd — edge inputs', () => {
+  it('parses a SKILL.md with no frontmatter as claude-code with empty identity', () => {
+    const parsed = parseSkillMd('## Instructions\n\nBe brief.\n\n## Usage\n\nDo {x}');
+
+    expect(parsed.frontmatter).toEqual({});
+    expect(parsed.format).toBe('claude-code');
+    expect(parsed.name).toBe('');
+    expect(parsed.description).toBe('');
+    // The whole text is body, so sections still parse.
+    expect(parsed.systemMessage).toBe('Be brief.');
+    expect(parsed.userMessage).toBe('Do {x}');
+  });
+
+  it('treats an empty frontmatter fence as no frontmatter', () => {
+    const parsed = parseSkillMd('---\n---\n## Usage\n\nGo');
+
+    expect(parsed.frontmatter).toEqual({});
+    // No frontmatter is parsed and the heading after the fence is still found.
+    expect(parsed.userMessage).toBe('Go');
+  });
+
+  it('reports an empty name when frontmatter omits it', () => {
+    const parsed = parseSkillMd('---\ndescription: Only a description\n---\n## Usage\n\nGo');
+
+    expect(parsed.name).toBe('');
+    expect(parsed.description).toBe('Only a description');
+  });
+
+  it('detects agent-skills format from a compatibility object', () => {
+    const parsed = parseSkillMd(
+      '---\nname: T\ncompatibility:\n  agent-skills: "1.0"\n---\n## Usage\n\nGo'
+    );
+
+    expect(parsed.format).toBe('agent-skills');
+    expect(parsed.name).toBe('T');
+  });
+
+  it('ignores a whitespace-only ## heading and keeps it as section content', () => {
+    // `##   ` matches the heading pattern but trims to empty, so it opens no section.
+    const parsed = parseSkillMd('## Instructions\n\nFirst\n##   \nSecond');
+
+    expect(parsed.sections.size).toBe(1);
+    expect(parsed.systemMessage).toBe('First\n##   \nSecond');
+  });
+
+  it('parses registered gates and inline criteria from the Quality Gates section', () => {
+    const parsed = parseSkillMd(
+      [
+        '## Quality Gates',
+        '',
+        '### Criteria',
+        '',
+        '| Gate | Type |',
+        '| --- | --- |',
+        '| code-quality | validation |',
+        '',
+        '### Inline Criteria',
+        '',
+        '- Be concise',
+        '- Cite sources',
+        'not a bullet',
+        '',
+        '## Usage',
+        '',
+        'Go',
+      ].join('\n')
+    );
+
+    expect(parsed.qualityGates).toEqual([
+      { id: 'code-quality', source: 'registered' },
+      { id: 'Be concise', source: 'inline' },
+      { id: 'Cite sources', source: 'inline' },
+    ]);
+    expect(parsed.userMessage).toBe('Go');
+  });
+
+  it('returns no gates when the Quality Gates section has neither table rows nor inline criteria', () => {
+    const parsed = parseSkillMd('## Quality Gates\n\nNothing structured here.\n\n## Usage\n\nGo');
+
+    expect(parsed.qualityGates).toEqual([]);
+  });
+
+  it('reads agent-skills argument bullets, required or not', () => {
+    const parsed = parseSkillMd(
+      '## Arguments\n\n- **target** (required): File path\n- **depth**: How deep\n'
+    );
+
+    expect(parsed.arguments).toEqual([
+      { index: 0, name: 'target', required: true, description: 'File path' },
+      { index: 1, name: 'depth', required: false, description: 'How deep' },
+    ]);
+  });
+});
+
 // ─── hasNunjucksControlFlow ─────────────────────────────────────────────────
 
 describe('hasNunjucksControlFlow', () => {

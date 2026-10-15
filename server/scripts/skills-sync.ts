@@ -3,6 +3,7 @@
 // reading and writing the directories the server itself resolves.
 import {
   runSkillsSyncFromArgv,
+  SkillsSyncCommandError,
   type SkillsSyncOutput,
 } from '../src/modules/skills-sync/service.js';
 import { resolveSkillsSyncPaths } from '../src/runtime/skills-sync-paths.js';
@@ -16,9 +17,10 @@ const consoleOutput: SkillsSyncOutput = {
 };
 
 // Paths resolve inside the chain, so a refused path setting reports as `Fatal:` like any failure.
+// A usage error exits with its own code (2); every other failure exits 1.
 Promise.resolve()
   .then(() => runSkillsSyncFromArgv(process.argv, consoleOutput, resolveSkillsSyncPaths()))
   .catch((err: Error) => {
     console.error(`Fatal: ${err.message}`);
-    process.exit(1);
+    process.exit(err instanceof SkillsSyncCommandError ? err.exitCode : 1);
   });

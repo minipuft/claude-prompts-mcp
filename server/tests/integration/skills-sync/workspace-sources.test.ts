@@ -12,12 +12,14 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, realpathSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as yaml from 'js-yaml';
 
 import {
+  locateSkillsSyncPackageRoot,
   runSkillsSyncCommand,
   type SkillsSyncOptions,
   type SkillsSyncOutput,
@@ -323,5 +325,127 @@ describe('skills sync reads the workspace over the bundled tree', () => {
     expect(existsSync(path.join(outputDir, 'covered_prompt', 'gates', 'security-reminder'))).toBe(
       false
     );
+  });
+
+  it('keeps every reminder when gates.harnessCovers is not an array, or the config does not parse', async () => {
+    await writeGate(packageRoot, 'security-reminder', {
+      subject: 'security',
+      pass_criteria: [{ type: 'inline_guidance' }],
+    });
+    await writePrompt(workspace, 'general', 'uncovered_prompt', {
+      gateConfiguration: { include: ['security-reminder'] },
+    });
+    await writeConfig(workspace, outputDir);
+    const skillPath = path.join(outputDir, 'uncovered_prompt', 'SKILL.md');
+    const exportWith = async (configText: string) => {
+      await writeFile(path.join(workspace, 'config.json'), configText);
+      await run({
+        command: 'export',
+        client: 'claude-code',
+        scope: 'user',
+        id: 'uncovered_prompt',
+      });
+      return readFile(skillPath, 'utf-8');
+    };
+
+    // Control first: an array is applied, so the probe below can see an omission.
+    expect(await exportWith(JSON.stringify({ gates: { harnessCovers: ['security'] } }))).toContain(
+      'Omitted 1 reminder(s)'
+    );
+
+    // A string is not a list of subjects; nothing is omitted and nothing throws.
+    for (const unusable of [
+      JSON.stringify({ gates: { harnessCovers: 'security' } }),
+      JSON.stringify({ gates: { harnessCovers: { security: true } } }),
+      JSON.stringify({ gates: {} }),
+      '{ not json',
+    ]) {
+      const skill = await exportWith(unusable);
+      expect(skill).toContain('| security-reminder |');
+      expect(skill).not.toContain('Omitted');
+    }
+
+    // Non-string entries in a real array are dropped; the strings still apply.
+    expect(
+      await exportWith(JSON.stringify({ gates: { harnessCovers: [7, null, 'security'] } }))
+    ).toContain('Omitted 1 reminder(s)');
+  });
+});
+
+describe('locating the package root without an explicit resolver', () => {
+  const ENV_KEYS = [
+    'MCP_SERVER_ROOT',
+    'MCP_RESOURCES_PATH',
+    'MCP_WORKSPACE',
+    'MCP_RUNTIME_ROOT',
+    'MCP_CONFIG_PATH',
+  ];
+  // service.ts sits at server/src/modules/skills-sync, so its bundle-relative root is server/.
+  const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+  let base: string;
+  let savedEnv: Record<string, string | undefined>;
+  let savedCwd: string;
+
+  const layout = async (...dirs: string[]) => {
+    for (const dir of dirs) await mkdir(path.join(base, dir), { recursive: true });
+  };
+  const located = () => {
+    const packageRoot = resolveSkillsSyncPaths().packageRoot;
+    expect(packageRoot).toBe(locateSkillsSyncPackageRoot());
+    return packageRoot;
+  };
+
+  beforeEach(async () => {
+    savedCwd = process.cwd();
+    savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
+    for (const key of ENV_KEYS) delete process.env[key];
+    base = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'skills-locate-')));
+    await mkdir(path.join(base, 'cwd'), { recursive: true });
+    process.chdir(path.join(base, 'cwd'));
+  });
+
+  afterEach(async () => {
+    process.chdir(savedCwd);
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(base, { recursive: true, force: true });
+  });
+
+  it('takes <MCP_SERVER_ROOT>/server when it holds resources, ahead of <MCP_SERVER_ROOT> itself', async () => {
+    await layout('repo/server/resources');
+    process.env['MCP_SERVER_ROOT'] = path.join(base, 'repo');
+    expect(located()).toBe(path.join(base, 'repo', 'server'));
+
+    // Control: with both present the server/ form still wins, so the answer is not "whatever exists".
+    await layout('repo/resources');
+    expect(located()).toBe(path.join(base, 'repo', 'server'));
+  });
+
+  it('takes MCP_SERVER_ROOT itself when only it holds resources, and resolves a relative value against the cwd', async () => {
+    await layout('pkg/resources');
+    process.env['MCP_SERVER_ROOT'] = path.join(base, 'pkg');
+    expect(located()).toBe(path.join(base, 'pkg'));
+
+    process.env['MCP_SERVER_ROOT'] = '../pkg';
+    expect(located()).toBe(path.join(base, 'pkg'));
+  });
+
+  it('ignores an MCP_SERVER_ROOT that holds no resources and looks at the cwd: server/ first, then the cwd itself', async () => {
+    await layout('empty');
+    process.env['MCP_SERVER_ROOT'] = path.join(base, 'empty');
+
+    await layout('cwd/resources');
+    expect(located()).toBe(path.join(base, 'cwd'));
+
+    await layout('cwd/server/resources');
+    expect(located()).toBe(path.join(base, 'cwd', 'server'));
+  });
+
+  it('falls back to the directory the module was built into when neither the env nor the cwd names a tree', () => {
+    // Control for the cwd cases above: the same empty cwd, now with nothing for them to find.
+    expect(located()).toBe(serverDir);
+    expect(existsSync(path.join(serverDir, 'resources'))).toBe(true);
   });
 });
