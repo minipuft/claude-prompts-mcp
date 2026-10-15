@@ -28,10 +28,16 @@ import type { ScriptToolRuntime } from '#engine/gates/services/script-tool-crite
 import type { PromptData } from '#modules/prompts/types.js';
 import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
 import type { RemainderSubmission, WorkflowIR } from '#modules/workflow-ir/types.js';
-import type { UnknownObservation } from '#shared/types/chain-session.js';
+import type {
+  ChainSession,
+  ConversationControlResult,
+  ExactControlScope,
+  UnknownObservation,
+} from '#shared/types/chain-session.js';
 import type { GateSpecification, McpToolRequest } from '#shared/types/execution.js';
 import type { DatabasePort, StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 
+import { isConversationPaused } from '#engine/execution/capture/step-capture-service.js';
 import { ChainOperatorExecutor } from '#engine/execution/operators/chain-operator-executor.js';
 import {
   isAppendCommand,
@@ -39,6 +45,7 @@ import {
 } from '#engine/execution/parsers/append-command-parser.js';
 import { createParsingSystem } from '#engine/execution/parsers/index.js';
 import { createSymbolicCommandParser } from '#engine/execution/parsers/symbolic-operator-parser.js';
+import { isUnknownInterruptPending } from '#engine/execution/pipeline/decisions/index.js';
 import { ExecutionPlanner } from '#engine/execution/planning/execution-planner.js';
 import {
   PromptReferenceResolver,
@@ -78,6 +85,7 @@ import {
 } from '#modules/formatting/index.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 import { TextReferenceStore, ArgumentHistoryTracker } from '#modules/text-refs/index.js';
+import { RunOperationRefusedError } from '#shared/types/chain-session.js';
 import {
   type Logger,
   type MetricsCollector,
@@ -88,6 +96,7 @@ import {
   ChainSessionService,
 } from '#shared/types/index.js';
 import { isChainId } from '#shared/utils/chain-id-codec.js';
+import { currentOrdinal, totalOf } from '#shared/utils/node-order.js';
 import {
   resolveRequestIdentity,
   resolveRequestIdentityContext,
@@ -477,17 +486,22 @@ export class PromptExecutor {
     if (args.gate_action === 'abort') {
       return await this.handleAbort(args.chain_id, sdkExtra);
     }
+    // `pause` and `resume` carry nothing but the run they name (the schema's control rule, held
+    // again for in-process callers); `pause` is answered here, before any parse, script or gate.
+    const control = await this.answerConversationControl(args, sdkExtra);
+    if (control !== undefined) return control;
     // `handoff` names an existing run and starts nothing.
     if (args.handoff === true) {
-      return await this.handleHandoff(args.chain_id, sdkExtra);
+      return await this.refuseOnOperationAdmission(this.handleHandoff(args.chain_id, sdkExtra));
     }
     // `claim_token` transfers a run here and then FALLS THROUGH as a plain resume of it, so the
     // claimer receives the current step in the same call and its PostToolUse tracking records
-    // the chain id from the rendered response (the hook-adoption decision in plan 2A).
+    // the chain id from the rendered response (the hook-adoption decision in plan 2A). A PAUSED
+    // run stops at custody: the claim answers with its successor token and the run stays paused.
     let claimedChainId: string | undefined;
     if (typeof args.claim_token === 'string' && args.claim_token.trim().length > 0) {
       const claim = await this.handleClaim(args.claim_token.trim(), sdkExtra);
-      if (claim.refusal !== undefined) return claim.refusal;
+      if (claim.response !== undefined) return claim.response;
       claimedChainId = claim.chainId;
     }
 
@@ -509,6 +523,15 @@ export class PromptExecutor {
     let commandValue = shouldTreatAsResumeOnly ? undefined : normalizedCommand || undefined;
     const chainIdValue =
       claimedChainId ?? args.chain_id ?? (shouldTreatAsResumeOnly ? chainIdFromCommand : undefined);
+
+    // Both spellings of a resume (chain_id, or a bare chain id as `command`) and a restart naming
+    // the run reach a paused run's guard here, before parse, script or gate registration.
+    const paused = await this.answerPausedTarget(
+      args,
+      chainIdValue ?? chainIdFromCommand,
+      sdkExtra
+    );
+    if (paused !== undefined) return paused;
 
     // ONE MECHANISM, TWO SPELLINGS (OQ-A1, row A.3).
     //
@@ -589,7 +612,93 @@ export class PromptExecutor {
     });
 
     const pipeline = this.getPromptExecutionPipeline();
-    return pipeline.execute(request);
+    return this.refuseOnOperationAdmission(pipeline.execute(request));
+  }
+
+  /**
+   * Refuse `pause`/`resume` carrying work — the in-process twin of the schema's control rule, as
+   * stage 04's `collectSourceConflicts` is of source exclusivity — then answer `pause`. A lone
+   * `resume` falls through to {@link answerPausedTarget}, else to its blocking-unknown meaning.
+   */
+  private async answerConversationControl(
+    args: PromptCommandArgs,
+    sdkExtra: unknown
+  ): Promise<ToolResponse | undefined> {
+    const action = args.gate_action;
+    if (action !== 'pause' && action !== 'resume') return undefined;
+    const supplied = CONTROL_EXCLUSIVE_PARAMETERS.filter((name) => args[name] !== undefined);
+    if (supplied.length > 0) {
+      return this.textError(
+        `❌ gate_action:"${action}" is a control call: send it with chain_id only. Remove ` +
+          `${supplied.map((name) => `'${name}'`).join(', ')} and send ` +
+          `${supplied.length === 1 ? 'it' : 'them'} in a separate call. Nothing was changed.`
+      );
+    }
+    if (action === 'resume') return undefined;
+    const chainId = args.chain_id?.trim() ?? '';
+    if (chainId.length === 0)
+      return this.textError('❌ `gate_action:"pause"` requires `chain_id`: the run to pause.');
+    const scope = this.resolveRequestScope(sdkExtra);
+    const session = this.chainSessionStore.getSessionByChainIdentifier(chainId, {
+      ...scope,
+      includeDormant: true,
+    });
+    const result = await this.chainSessionStoreInstance.pauseConversation(
+      session?.sessionId ?? chainId,
+      this.controlScope(scope)
+    );
+    return describeControlResult(chainId, result);
+  }
+
+  /**
+   * Answer a call naming a conversation-paused run (a lookup that neither touches nor promotes
+   * it): `resume` clears the pause and captures, grades and advances nothing; any other workflow
+   * call is refused before any change. Undefined when the target is absent or not paused.
+   */
+  private async answerPausedTarget(
+    args: PromptCommandArgs,
+    target: string | undefined,
+    sdkExtra: unknown
+  ): Promise<ToolResponse | undefined> {
+    if (target === undefined || target.trim().length === 0) return undefined;
+    const scope = this.resolveRequestScope(sdkExtra);
+    const session = this.chainSessionStore.getSessionByChainIdentifier(target.trim(), {
+      ...scope,
+      includeDormant: false,
+    });
+    if (session === undefined || !isConversationPaused(session)) return undefined;
+    if (args.gate_action === 'resume') {
+      const result = await this.chainSessionStoreInstance.resumeConversation(
+        session.sessionId,
+        this.controlScope(scope)
+      );
+      return describeControlResult(session.chainId, result);
+    }
+    // The refusal reports the run as storage holds it, read without touching the held copy.
+    const durable = this.chainSessionStoreInstance.inspectConversationControl(
+      session.sessionId,
+      this.controlScope(scope)
+    );
+    return this.textError(
+      describePausedRefusal(durable?.session ?? session, args.force_restart === true)
+    );
+  }
+
+  /** Exact control identity: this store's storage namespace plus the caller's continuity. */
+  private controlScope(scope: StateStoreOptions | undefined): ExactControlScope {
+    return this.chainSessionStoreInstance.getConversationControlScope(
+      resolveContinuityScopeId(scope)
+    );
+  }
+
+  /** The store's operation-admission refusal (T1.4) is the client's answer, never a crash. */
+  private async refuseOnOperationAdmission(work: Promise<ToolResponse>): Promise<ToolResponse> {
+    try {
+      return await work;
+    } catch (error) {
+      if (!(error instanceof RunOperationRefusedError)) throw error;
+      return this.textError(`⏸️ **Workflow Change Refused**: ${error.message}`);
+    }
   }
 
   /**
@@ -754,14 +863,15 @@ export class PromptExecutor {
 
   /**
    * Claim a run minted elsewhere (plan 2A). On success the caller resumes it in the same
-   * request; every refusal names its reason, because a claim that silently does nothing is the
-   * "missing blueprint" incident that motivated the feature.
+   * request — unless the run is conversation-paused, which the claim answers at custody (its
+   * successor token, the pause kept). Every refusal names its reason, because a claim that
+   * silently does nothing is the "missing blueprint" incident that motivated the feature.
    */
   private async handleClaim(
     token: string,
     sdkExtra: unknown
   ): Promise<
-    { chainId: string; refusal?: undefined } | { chainId?: undefined; refusal: ToolResponse }
+    { chainId: string; response?: undefined } | { chainId?: undefined; response: ToolResponse }
   > {
     let requestScope: StateStoreOptions | undefined;
     if (sdkExtra !== null && typeof sdkExtra === 'object') {
@@ -781,10 +891,12 @@ export class PromptExecutor {
     const result = await this.chainSessionStore.claimHandoff(token, requestScope);
     switch (result.status) {
       case 'claimed':
-        return { chainId: result.session.chainId };
+        return isConversationPaused(result.session)
+          ? { response: describePausedCustody(result.session) }
+          : { chainId: result.session.chainId };
       case 'unknown-token':
         return {
-          refusal: this.textError(
+          response: this.textError(
             '❌ **Claim Refused**: no run carries this token.\n\n' +
               'It was never minted here, was already claimed (tokens are single-use), was ' +
               'rotated by a newer `handoff`, or the run ended. Ask the owning client to mint ' +
@@ -793,7 +905,7 @@ export class PromptExecutor {
         };
       case 'workspace-mismatch':
         return {
-          refusal: this.textError(
+          response: this.textError(
             `❌ **Claim Refused**: the run belongs to workspace \`${result.rowWorkspaceId}\` and ` +
               `this request is scoped to \`${result.claimantWorkspaceId}\`. A handoff never ` +
               'rewrites workspace scope.'
@@ -801,7 +913,7 @@ export class PromptExecutor {
         };
       case 'request-continuity-mismatch':
         return {
-          refusal: this.textError(
+          response: this.textError(
             `❌ **Claim Refused**: request continuity \`${result.requestContinuityScopeId}\` ` +
               `does not match run continuity \`${result.runContinuityScopeId ?? 'absent'}\`. ` +
               'The token and run stay with their owner; claim from the original request scope.'
@@ -809,7 +921,7 @@ export class PromptExecutor {
         };
       case 'no-blueprint':
         return {
-          refusal: this.textError(
+          response: this.textError(
             `❌ **Claim Refused**: \`${result.chainId}\` carries no compatible blueprint, ` +
               'so nothing here can resume it. The run and token stay with their owner. ' +
               'Restart it from its command instead.'
@@ -817,7 +929,7 @@ export class PromptExecutor {
         };
       case 'chain-id-held':
         return {
-          refusal: this.textError(
+          response: this.textError(
             `❌ **Claim Refused**: this server already runs a different run under ` +
               `\`${result.chainId}\`, so that \`chain_id\` could not tell the two apart. The ` +
               'run stays with its owner; finish or abort the run here first, or claim it on ' +
@@ -826,7 +938,7 @@ export class PromptExecutor {
         };
       default: {
         const unreachable: never = result;
-        return { refusal: this.textError(`❌ **Claim Refused**: ${JSON.stringify(unreachable)}`) };
+        return { response: this.textError(`❌ **Claim Refused**: ${JSON.stringify(unreachable)}`) };
       }
     }
   }
@@ -1150,6 +1262,107 @@ export class PromptExecutor {
     return this.verifyActiveStateStore;
   }
 }
+
+type PromptCommandArgs = Parameters<PromptExecutor['executePromptCommand']>[0];
+
+/**
+ * Parameters a `pause` or `resume` call may not carry. The same list as the tool schema's
+ * `CONTROL_EXCLUSIVE_PARAMETERS` (`mcp/tools/schemas/prompt-engine.schema.ts`), held here for the
+ * in-process callers that skip the schema; decided by presence, as there.
+ */
+const CONTROL_EXCLUSIVE_PARAMETERS = [
+  'user_response',
+  'gate_verdict',
+  'remainder',
+  'observations',
+  'command',
+  'workflow',
+  'force_restart',
+  'handoff',
+  'claim_token',
+  'inputs',
+  'options',
+  'gates',
+] as const satisfies readonly (keyof PromptCommandArgs)[];
+
+type ControlRefusalReason = Extract<ConversationControlResult, { outcome: 'refused' }>['reason'];
+
+const CONTROL_REFUSALS: Record<ControlRefusalReason, string> = {
+  'unknown-session': 'no nonterminal run with that id exists in this workspace.',
+  'scope-mismatch': 'the run belongs to another workspace or continuity scope.',
+  'ownership-lost': 'another server claimed the run, so this one can no longer change it.',
+  'run-terminal': 'the run already ended (completed, failed or cancelled).',
+  'recovery-credential-missing':
+    'the paused run carries no recovery credential, so it cannot be controlled safely; abort it.',
+  busy: 'work on the run had not settled when the control arrived. Retry the same call.',
+};
+
+const toolText = (text: string, isError = false): ToolResponse => ({
+  content: [{ type: 'text' as const, text }],
+  isError,
+});
+
+const resumeOrAbort = (chainId: string): string =>
+  `Resume it with \`prompt_engine(chain_id:"${chainId}", gate_action:"resume")\`, or end it ` +
+  'with `gate_action:"abort"`.';
+
+/** Where a paused run stands, read off its own node list. */
+function describeRunPosition(session: Pick<ChainSession, 'state'>): string {
+  const total = totalOf(session.state.nodes);
+  return session.state.currentNodeId === null
+    ? `past its last step (${total} of ${total}), still held open`
+    : `step ${currentOrdinal(session.state.nodes, session.state.currentNodeId)} of ${total}`;
+}
+
+/** Client text for a pause or resume outcome; the recovery token appears in this reply only. */
+function describeControlResult(chainId: string, result: ConversationControlResult): ToolResponse {
+  if (result.outcome === 'refused') {
+    const reason = CONTROL_REFUSALS[result.reason];
+    return toolText(`⚠️ **Control Not Applied**: \`${chainId}\` — ${reason}`, true);
+  }
+  const session = result.inspection.session;
+  const position = describeRunPosition(session);
+  if (result.outcome !== 'resumed') {
+    return toolText(
+      `⏸️ **Workflow Paused**: \`${session.chainId}\` at ${position}. Discuss the step with ` +
+        `the user; nothing advances until you resume.\n\n${resumeOrAbort(session.chainId)}` +
+        `\n\nRecovery token: \`${result.token}\` — claim the paused run from another client ` +
+        'with `prompt_engine(claim_token:"…")`.'
+    );
+  }
+  const unknownHeld = Object.values(session.reviews ?? {}).some(isUnknownInterruptPending);
+  return toolText(
+    `▶️ **Workflow Resumed**: \`${session.chainId}\` at ${position}. Nothing was captured, ` +
+      'graded or advanced.\n\n' +
+      (unknownHeld
+        ? 'The blocking-unknown hold is still pending: send `gate_action:"resume"` again to ' +
+          'issue its investigation step, or `gate_action:"accept_alternative"` with a `remainder`.'
+        : 'Continue in a separate call with the action the run owed before the pause.')
+  );
+}
+
+/** A workflow call on a paused run, refused before any change. */
+function describePausedRefusal(
+  session: Pick<ChainSession, 'chainId' | 'state'>,
+  restart: boolean
+): string {
+  return (
+    `⏸️ **Workflow Paused**: \`${session.chainId}\` is paused for conversation at ` +
+    `${describeRunPosition(session)}. ` +
+    (restart ? '`force_restart` cannot replace a paused run. ' : '') +
+    `This call was refused and nothing changed.\n\n${resumeOrAbort(session.chainId)} ` +
+    'Inspect it with `system_control(action:"session", operation:"inspect")`.'
+  );
+}
+
+/** A claimed paused run stops at custody: the successor token, the pause kept. */
+const describePausedCustody = (session: ChainSession): ToolResponse =>
+  toolText(
+    `🔑 **Paused Run Claimed**: \`${session.chainId}\` is now held here, still paused at ` +
+      `${describeRunPosition(session)}. Nothing was resumed, rendered or advanced.\n\n` +
+      `${resumeOrAbort(session.chainId)}\n\nRecovery token: ` +
+      `\`${session.handoffToken ?? 'none'}\` (single-use).`
+  );
 
 export function createPromptExecutor(
   logger: Logger,

@@ -334,8 +334,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
   /**
    * Answer this call's `gate_action` on the step review. The action carries two disjoint
-   * vocabularies (see `McpToolRequest.gate_action`); run-level abort was consumed by the executor,
-   * the interrupt half was consumed earlier, and
+   * vocabularies (see `McpToolRequest.gate_action`); run-level abort and pause were consumed by the
+   * executor, the interrupt half was consumed earlier, and
    * only the retry-exhaustion half answers the step review — and only while that review is
    * exhausted, the one phase that accepts it. In budget, the processor refuses it by name rather
    * than let it reach the verdict path, where it came back as the same review, neither applied
@@ -353,6 +353,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
     if (
       gateAction === undefined ||
       gateAction === 'abort' ||
+      gateAction === 'pause' ||
       isInterruptResolutionAction(gateAction)
     ) {
       return false;
@@ -656,8 +657,8 @@ export class StepResponseCaptureStage extends BasePipelineStage {
   ): Promise<void> {
     const sessionId = session.sessionId;
     const action = context.mcpRequest.gate_action;
-    // Run-level abort is consumed by the executor before any detached review admission.
-    if (action === 'abort') return;
+    // Run-level abort and pause are consumed by the executor before any detached review admission.
+    if (action === 'abort' || action === 'pause') return;
     const result: DetachedReviewVerdictResult =
       kind === 'review-verdict' || action === undefined
         ? await this.verdictProcessor.processDetachedReviewVerdict(context, session, node.nodeId)

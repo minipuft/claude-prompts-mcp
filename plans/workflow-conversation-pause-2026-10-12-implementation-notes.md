@@ -137,3 +137,13 @@ The store holds per-run work and control counts; `admitWork` throws `RunOperatio
 - **R-T2.1-RESUME:** the presence rule refuses a blocking-unknown `resume` sent with extra keys too; accepted — the contract forbids silently ignoring meaningful input, and only the bare form exists in use.
 - **R-T2.1-KEYS:** `inputs`, `options` and `gates` are refused with pause/resume as well (they accompany new work; without a command they would be ignored). T2.1 bound raised to 240.
 - **Routed:** the in-process twin of control exclusivity (stage 04's `collectSourceConflicts` guards in-process callers that skip the schema) → T2.2 executor validation. `docs/reference/mcp-tools.md:1062` and `hooks/tests/test_unknown_interrupt_hold.py:115` list gate_action values without `pause` → T4.3 and T3.x.
+
+### T2.2 accepted and rulings (2026-10-15)
+
+The executor routes abort, then the in-process control-exclusivity twin, then pause; a paused-run guard before the append rewrite and the pipeline resolves the target from either form with a pure lookup, resumes only, denies force_restart on that run, and refuses every other workflow call with a resume-or-abort instruction. Capture refuses a paused run at five entry points before any write. Stage 16 excludes pause like abort. `RunOperationRefusedError` from the pipeline or handoff returns refusal text. Parser and blueprint resolver needed no change (the guard runs before the pipeline; the resolver's paused lookup is already pure).
+
+- **R-T2.2-HOLD → T2.2a:** the store counts work only inside each mutator's persist, so a pause can land mid-request after a stage-08 script tool ran. The contract makes busy pause a refusal while a request is in flight; T2.2a adds a public hold the executor keeps across `pipeline.execute`.
+- **R-T2.2-LINES → T2.3:** prompt-executor.ts is 1024 code lines (max-lines 1000; lint ratchet counts it). The control-response text (`describe*`, `toolText`, `resumeOrAbort`, refusal table) is response assembly, which the Domain Ownership Matrix assigns to ResponseAssembler; T2.3 owns that formatter and moves it there, which brings the executor back under the limit where the code belongs.
+- **SSOT → T2.2a:** `isConversationPaused` (capture) duplicates the store's private `isProtectedPause`; the executor copies the schema's unexported key list. One definition each.
+- **Dormant pause → T2.2a:** the pause lookup uses `includeDormant:true` and promotes a dormant run in memory before the control; a control must not.
+- **Accepted as is:** the custody-claim executor test mocks `claimHandoff`; a real cross-owner claim is T4.1's process evidence.

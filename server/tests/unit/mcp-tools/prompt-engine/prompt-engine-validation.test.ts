@@ -3,13 +3,18 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { StepCaptureService } from '../../../../src/engine/execution/capture/step-capture-service.js';
+import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { UNKNOWN_INTERRUPT_GATE_ID } from '../../../../src/engine/execution/pipeline/decisions/index.js';
 import { SqliteEngine } from '../../../../src/infra/database/sqlite-engine.js';
 
 import { PromptExecutor } from '../../../../src/mcp/tools/prompt-engine/core/prompt-executor.js';
+import { RunOperationRefusedError } from '../../../../src/shared/types/chain-session.js';
 import { hashBytes } from '../../../../src/shared/utils/hash.js';
 
 import type { ConfigManager } from '../../../../src/shared/types/config-manager.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
+import type { ChainSessionStore } from '../../../../src/modules/chains/manager.js';
 import type { PromptAssetManager } from '../../../../src/modules/prompts/index.js';
 import type { TextReferenceStore } from '../../../../src/modules/text-refs/index.js';
 import type { McpToolRequest } from '../../../../src/shared/types/execution.js';
@@ -93,7 +98,11 @@ describe('PromptEngine Validation', () => {
       frameworks: {},
       identity: { mode: 'permissive', allowPerRequestOverride: true, launchDefaults: {} },
     } as ReturnType<ConfigManager['getConfig']>);
-    if (expect.getState().currentTestName?.startsWith('PromptEngine Validation abort')) {
+    const testName = expect.getState().currentTestName ?? '';
+    if (
+      testName.startsWith('PromptEngine Validation abort') ||
+      testName.startsWith('PromptEngine Validation conversation pause')
+    ) {
       abortRuntimeDir = mkdtempSync(join(tmpdir(), 'prompt-validation-abort-'));
       abortDatabase = await SqliteEngine.getInstance(mockLogger, {
         dbPath: join(abortRuntimeDir, 'state.db'),
@@ -674,6 +683,225 @@ describe('PromptEngine Validation', () => {
       expect(result.content[0]!.text).toContain('run continuity `absent`');
       expect(result.content[0]!.text).toContain('token and run stay with their owner');
       expect(pipeline).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('conversation pause', () => {
+    const RUN = 'pause-run';
+    const CHAIN = 'chain-demo#1';
+    const store = (): ChainSessionStore => engine.getChainSessionStore() as ChainSessionStore;
+    const controlScope = () => store().getConversationControlScope('default');
+    /** The run as storage holds it, plus the live copy: both must stay put across a refusal. */
+    const snapshot = () => ({
+      durable: store().inspectConversationControl(RUN, controlScope()),
+      held: structuredClone(store().getSession(RUN)),
+    });
+    function stubPipeline() {
+      const execute = jest.fn(async (_request: McpToolRequest) => ({
+        content: [{ type: 'text' as const, text: 'rendered' }],
+        isError: false,
+      }));
+      const target = engine as unknown as { getPromptExecutionPipeline: () => unknown };
+      jest.spyOn(target, 'getPromptExecutionPipeline').mockReturnValue({ execute });
+      return execute;
+    }
+    const control = (gate_action: 'pause' | 'resume' | 'abort') =>
+      engine.executePromptCommand({ chain_id: CHAIN, gate_action }, {});
+    async function pausedRun() {
+      await store().createSession(RUN, CHAIN, 2);
+      const paused = await control('pause');
+      expect(paused.isError).toBe(false);
+      return paused.content[0]!.text;
+    }
+
+    test('pause persists, acknowledges the retained step with its token, and repeats idempotently', async () => {
+      const text = await pausedRun();
+      const first = store().inspectConversationControl(RUN, controlScope())?.session;
+      const again = await control('pause');
+      expect(text).toContain('Workflow Paused');
+      expect(text).toContain('step 1 of 2');
+      expect(text).toContain(`Recovery token: \`${store().getSession(RUN)?.handoffToken}\``);
+      expect(first?.conversationPause).toMatchObject({ kind: 'conversation', nodeId: 'n1' });
+      expect(again.content[0]!.text).toContain('Workflow Paused');
+      expect(store().inspectConversationControl(RUN, controlScope())?.session).toEqual(first);
+    });
+
+    test.each([
+      { name: 'chain_id resume', args: { chain_id: CHAIN, user_response: 'answer' } },
+      { name: 'command resume', args: { command: CHAIN, user_response: 'answer' } },
+      { name: 'bare continuation', args: { chain_id: CHAIN } },
+      { name: 'bare command id', args: { command: CHAIN } },
+      { name: 'report', args: { chain_id: CHAIN, user_response: 'HANDOFF RESULT: done' } },
+      {
+        name: 'verdict',
+        args: { chain_id: CHAIN, gate_verdict: { overall: 'PASS' as const, rationale: 'ok' } },
+      },
+      { name: 'remainder', args: { chain_id: CHAIN, command: '--> >>write_summary' } },
+      { name: 'retry', args: { chain_id: CHAIN, gate_action: 'retry' as const } },
+      { name: 'restart', args: { command: CHAIN, force_restart: true } },
+    ])('$name on a paused run is refused before any parse, script or capture', async ({ args }) => {
+      await pausedRun();
+      const execute = stubPipeline();
+      const before = snapshot();
+      const result = await engine.executePromptCommand(args, {});
+      expect(result.isError).toBe(true);
+      expect(result.content[0]!.text).toContain('paused for conversation at step 1 of 2');
+      expect(result.content[0]!.text).toContain('gate_action:"resume"');
+      if ('force_restart' in args) expect(result.content[0]!.text).toContain('force_restart');
+      expect(execute).not.toHaveBeenCalled();
+      expect(mockTextReferenceStore.storeChainStepResult).not.toHaveBeenCalled();
+      expect(snapshot()).toEqual(before);
+    });
+
+    test('independent new work is not refused by another run being paused', async () => {
+      await pausedRun();
+      const execute = stubPipeline();
+      await engine.executePromptCommand({ command: '>>other_prompt' }, {});
+      expect(execute).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+      ['user_response', 'x'],
+      ['gate_verdict', { overall: 'PASS', rationale: 'r' }],
+      ['remainder', { mode: 'append', nodes: [] }],
+      ['observations', []],
+      ['command', '>>x'],
+      ['workflow', { version: 1, nodes: [] }],
+      ['force_restart', false],
+      ['handoff', false],
+      ['claim_token', 't'],
+      ['inputs', {}],
+      ['options', {}],
+      ['gates', []],
+    ] as const)('in process, pause or resume with %s is refused unchanged', async (key, value) => {
+      await store().createSession(RUN, CHAIN, 2);
+      const pause = jest.spyOn(store(), 'pauseConversation');
+      const resume = jest.spyOn(store(), 'resumeConversation');
+      const execute = stubPipeline();
+      for (const action of ['pause', 'resume'] as const) {
+        const result = await engine.executePromptCommand(
+          { chain_id: CHAIN, gate_action: action, [key]: value } as never,
+          {}
+        );
+        expect(result.isError).toBe(true);
+        expect(result.content[0]!.text).toContain(`Remove '${key}'`);
+      }
+      expect(pause).not.toHaveBeenCalled();
+      expect(resume).not.toHaveBeenCalled();
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    test('a pause arriving while work persists is refused as retryable and pauses nothing', async () => {
+      await store().createSession(RUN, CHAIN, 2);
+      const inFlight = store().updateSessionState(RUN, 'n1', 'draft', { isPlaceholder: true });
+      const result = await control('pause');
+      await inFlight;
+      expect(result.isError).toBe(true);
+      expect(result.content[0]!.text).toContain('Retry the same call');
+      expect(store().getSession(RUN)?.conversationPause).toBeUndefined();
+    });
+
+    test('resume clears only the pause and returns the owed action without moving the run', async () => {
+      await store().createSession(RUN, CHAIN, 2);
+      await store().mintHandoffToken(RUN);
+      const before = store().inspectConversationControl(RUN, controlScope())?.session;
+      await control('pause');
+      const execute = stubPipeline();
+      const result = await control('resume');
+      expect(result.isError).toBe(false);
+      expect(result.content[0]!.text).toContain('Workflow Resumed');
+      expect(result.content[0]!.text).toContain('Nothing was captured, graded or advanced');
+      expect(execute).not.toHaveBeenCalled();
+      expect(store().inspectConversationControl(RUN, controlScope())?.session).toEqual(before);
+    });
+
+    test('with both holds, the first resume clears the conversation pause only', async () => {
+      await store().createSession(RUN, CHAIN, 2);
+      await store().setReview(RUN, {
+        nodeId: 'n1',
+        kind: 'gate',
+        phase: 'awaiting-verdict',
+        combinedPrompt: 'A blocking unknown stopped this plan.',
+        gateIds: [UNKNOWN_INTERRUPT_GATE_ID],
+        prompts: [],
+        createdAt: 1,
+        attemptCount: 0,
+        maxAttempts: 1,
+      });
+      await control('pause');
+      const execute = stubPipeline();
+      const first = await control('resume');
+      expect(first.content[0]!.text).toContain('blocking-unknown hold is still pending');
+      expect(store().getSession(RUN)?.reviews?.['n1']?.gateIds).toEqual([
+        UNKNOWN_INTERRUPT_GATE_ID,
+      ]);
+      expect(execute).not.toHaveBeenCalled();
+      // F24: with no conversation pause left, `resume` keeps its blocking-unknown path.
+      await control('resume');
+      expect(execute).toHaveBeenCalledWith(expect.objectContaining({ gate_action: 'resume' }));
+    });
+
+    test('abort ends a paused run, after which ordinary terminal guards answer', async () => {
+      await pausedRun();
+      const abort = await control('abort');
+      expect(abort.content[0]!.text).toContain('Chain Cancelled');
+      expect(store().getSession(RUN)?.runStatus).toBe('cancelled');
+      const execute = stubPipeline();
+      await engine.executePromptCommand({ chain_id: CHAIN, user_response: 'late' }, {});
+      expect(execute).toHaveBeenCalledTimes(1);
+    });
+
+    test('a claimed paused run stops at custody: nothing resumes, renders or advances', async () => {
+      await pausedRun();
+      const execute = stubPipeline();
+      const advance = jest.spyOn(store(), 'advanceStep');
+      const resume = jest.spyOn(store(), 'resumeConversation');
+      const claimed = store().getSession(RUN)!;
+      jest
+        .spyOn(store(), 'claimHandoff')
+        .mockResolvedValue({ status: 'claimed', session: claimed });
+      const result = await engine.executePromptCommand({ claim_token: 'hnd_paused' }, {});
+      expect(result.isError).toBe(false);
+      expect(result.content[0]!.text).toContain('Paused Run Claimed');
+      expect(result.content[0]!.text).toContain(`\`${claimed.handoffToken}\``);
+      expect(execute).not.toHaveBeenCalled();
+      expect(advance).not.toHaveBeenCalled();
+      expect(resume).not.toHaveBeenCalled();
+      expect(store().getSession(RUN)?.conversationPause).toBeDefined();
+    });
+
+    test('an admission refusal raised inside the pipeline reaches the client as a refusal', async () => {
+      const execute = stubPipeline();
+      execute.mockRejectedValue(new RunOperationRefusedError(RUN, 'control-in-progress'));
+      const result = await engine.executePromptCommand({ command: '>>other_prompt' }, {});
+      expect(result.isError).toBe(true);
+      expect(result.content[0]!.text).toContain('retry once it settles');
+    });
+
+    test('direct capture refuses a paused run before any output or record write', async () => {
+      await pausedRun();
+      const append = jest.fn();
+      const service = new StepCaptureService(store(), mockLogger, { append } as never);
+      const session = store().getSession(RUN)!;
+      const context = new ExecutionContext({ chain_id: CHAIN }, mockLogger);
+      context.state.gates.verdictDetection = {
+        verdict: 'PASS',
+        source: 'gate_verdict',
+        nodeId: 'n1',
+      };
+      const before = snapshot();
+      expect(() => service.ledgerSubmittedVerdict(context, RUN, session)).toThrow(
+        RunOperationRefusedError
+      );
+      await expect(
+        service.captureStep(context, RUN, session, {} as never, 1, {
+          userResponse: 'answer',
+          passClearedThisCall: false,
+        })
+      ).rejects.toThrow(RunOperationRefusedError);
+      expect(append).not.toHaveBeenCalled();
+      expect(mockTextReferenceStore.storeChainStepResult).not.toHaveBeenCalled();
+      expect(snapshot()).toEqual(before);
     });
   });
 
