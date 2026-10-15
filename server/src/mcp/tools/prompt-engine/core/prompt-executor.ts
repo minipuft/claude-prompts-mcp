@@ -31,13 +31,13 @@ import type { PersistedArgumentHistory } from '#modules/text-refs/types.js';
 import type { RemainderSubmission, WorkflowIR } from '#modules/workflow-ir/types.js';
 import type {
   ChainSession,
-  ConversationControlResult,
   ExactControlScope,
   UnknownObservation,
 } from '#shared/types/chain-session.js';
 import type { GateSpecification, McpToolRequest } from '#shared/types/execution.js';
 import type { DatabasePort, StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 
+import { ResponseAssembler } from '#engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '#engine/execution/operators/chain-operator-executor.js';
 import {
   isAppendCommand,
@@ -45,7 +45,6 @@ import {
 } from '#engine/execution/parsers/append-command-parser.js';
 import { createParsingSystem } from '#engine/execution/parsers/index.js';
 import { createSymbolicCommandParser } from '#engine/execution/parsers/symbolic-operator-parser.js';
-import { isUnknownInterruptPending } from '#engine/execution/pipeline/decisions/index.js';
 import { ExecutionPlanner } from '#engine/execution/planning/execution-planner.js';
 import {
   PromptReferenceResolver,
@@ -96,7 +95,6 @@ import {
   ChainSessionService,
 } from '#shared/types/index.js';
 import { isChainId } from '#shared/utils/chain-id-codec.js';
-import { currentOrdinal, totalOf } from '#shared/utils/node-order.js';
 import {
   resolveRequestIdentity,
   resolveRequestIdentityContext,
@@ -113,6 +111,8 @@ export class PromptExecutor {
   private readonly promptManager: PromptAssetManager;
   private readonly configManager: ConfigManager;
   private readonly responseFormatter: ResponseFormatter;
+  /** Renders the conversation-control replies (pause, resume, paused refusal, custody). */
+  private readonly responseAssembler = new ResponseAssembler();
   private readonly executionPlanner: ExecutionPlanner;
   private readonly parsingSystem: ParsingSystem;
   private readonly chainSessionRouter: ChainSessionRouter;
@@ -671,7 +671,7 @@ export class PromptExecutor {
       session?.sessionId ?? chainId,
       this.controlScope(scope)
     );
-    return describeControlResult(chainId, result);
+    return this.responseAssembler.formatConversationControl(chainId, result);
   }
 
   /**
@@ -691,20 +691,23 @@ export class PromptExecutor {
       includeDormant: false,
     });
     if (session === undefined || !isConversationPaused(session)) return undefined;
+    const exact = this.controlScope(scope);
     if (args.gate_action === 'resume') {
       const result = await this.chainSessionStoreInstance.resumeConversation(
         session.sessionId,
-        this.controlScope(scope)
+        exact
       );
-      return describeControlResult(session.chainId, result);
+      return this.responseAssembler.formatConversationControl(session.chainId, result);
     }
     // The refusal reports the run as storage holds it, read without touching the held copy.
     const durable = this.chainSessionStoreInstance.inspectConversationControl(
       session.sessionId,
-      this.controlScope(scope)
+      exact
     );
-    return this.textError(
-      describePausedRefusal(durable?.session ?? session, args.force_restart === true)
+    return this.responseAssembler.formatPausedRefusal(
+      durable?.session ?? session,
+      durable?.scope ?? exact,
+      args.force_restart === true
     );
   }
 
@@ -860,6 +863,9 @@ export class PromptExecutor {
       session?.sessionId ?? trimmed,
       scope
     );
+    if (minted === undefined && session !== undefined && isConversationPaused(session)) {
+      return this.responseAssembler.formatPausedMintRefusal(trimmed);
+    }
     if (minted === undefined) {
       return this.textError(
         `⚠️ **Handoff Not Minted**: \`${trimmed}\`\n\n` +
@@ -916,7 +922,12 @@ export class PromptExecutor {
     switch (result.status) {
       case 'claimed':
         return isConversationPaused(result.session)
-          ? { response: describePausedCustody(result.session) }
+          ? {
+              response: this.responseAssembler.formatPausedCustody(
+                result.session,
+                this.controlScope(requestScope)
+              ),
+            }
           : { chainId: result.session.chainId };
       case 'unknown-token':
         return {
@@ -1288,85 +1299,6 @@ export class PromptExecutor {
 }
 
 type PromptCommandArgs = Parameters<PromptExecutor['executePromptCommand']>[0];
-
-type ControlRefusalReason = Extract<ConversationControlResult, { outcome: 'refused' }>['reason'];
-
-const CONTROL_REFUSALS: Record<ControlRefusalReason, string> = {
-  'unknown-session': 'no nonterminal run with that id exists in this workspace.',
-  'scope-mismatch': 'the run belongs to another workspace or continuity scope.',
-  'ownership-lost': 'another server claimed the run, so this one can no longer change it.',
-  'run-terminal': 'the run already ended (completed, failed or cancelled).',
-  'recovery-credential-missing':
-    'the paused run carries no recovery credential, so it cannot be controlled safely; abort it.',
-  busy: 'work on the run had not settled when the control arrived. Retry the same call.',
-};
-
-const toolText = (text: string, isError = false): ToolResponse => ({
-  content: [{ type: 'text' as const, text }],
-  isError,
-});
-
-const resumeOrAbort = (chainId: string): string =>
-  `Resume it with \`prompt_engine(chain_id:"${chainId}", gate_action:"resume")\`, or end it ` +
-  'with `gate_action:"abort"`.';
-
-/** Where a paused run stands, read off its own node list. */
-function describeRunPosition(session: Pick<ChainSession, 'state'>): string {
-  const total = totalOf(session.state.nodes);
-  return session.state.currentNodeId === null
-    ? `past its last step (${total} of ${total}), still held open`
-    : `step ${currentOrdinal(session.state.nodes, session.state.currentNodeId)} of ${total}`;
-}
-
-/** Client text for a pause or resume outcome; the recovery token appears in this reply only. */
-function describeControlResult(chainId: string, result: ConversationControlResult): ToolResponse {
-  if (result.outcome === 'refused') {
-    const reason = CONTROL_REFUSALS[result.reason];
-    return toolText(`⚠️ **Control Not Applied**: \`${chainId}\` — ${reason}`, true);
-  }
-  const session = result.inspection.session;
-  const position = describeRunPosition(session);
-  if (result.outcome !== 'resumed') {
-    return toolText(
-      `⏸️ **Workflow Paused**: \`${session.chainId}\` at ${position}. Discuss the step with ` +
-        `the user; nothing advances until you resume.\n\n${resumeOrAbort(session.chainId)}` +
-        `\n\nRecovery token: \`${result.token}\` — claim the paused run from another client ` +
-        'with `prompt_engine(claim_token:"…")`.'
-    );
-  }
-  const unknownHeld = Object.values(session.reviews ?? {}).some(isUnknownInterruptPending);
-  return toolText(
-    `▶️ **Workflow Resumed**: \`${session.chainId}\` at ${position}. Nothing was captured, ` +
-      'graded or advanced.\n\n' +
-      (unknownHeld
-        ? 'The blocking-unknown hold is still pending: send `gate_action:"resume"` again to ' +
-          'issue its investigation step, or `gate_action:"accept_alternative"` with a `remainder`.'
-        : 'Continue in a separate call with the action the run owed before the pause.')
-  );
-}
-
-/** A workflow call on a paused run, refused before any change. */
-function describePausedRefusal(
-  session: Pick<ChainSession, 'chainId' | 'state'>,
-  restart: boolean
-): string {
-  return (
-    `⏸️ **Workflow Paused**: \`${session.chainId}\` is paused for conversation at ` +
-    `${describeRunPosition(session)}. ` +
-    (restart ? '`force_restart` cannot replace a paused run. ' : '') +
-    `This call was refused and nothing changed.\n\n${resumeOrAbort(session.chainId)} ` +
-    'Inspect it with `system_control(action:"session", operation:"inspect")`.'
-  );
-}
-
-/** A claimed paused run stops at custody: the successor token, the pause kept. */
-const describePausedCustody = (session: ChainSession): ToolResponse =>
-  toolText(
-    `🔑 **Paused Run Claimed**: \`${session.chainId}\` is now held here, still paused at ` +
-      `${describeRunPosition(session)}. Nothing was resumed, rendered or advanced.\n\n` +
-      `${resumeOrAbort(session.chainId)}\n\nRecovery token: ` +
-      `\`${session.handoffToken ?? 'none'}\` (single-use).`
-  );
 
 export function createPromptExecutor(
   logger: Logger,

@@ -162,3 +162,11 @@ The first T2.3 worker stopped before any edit: ResponseAssembler measures 932/10
 - **structuredContent.conversation_control:** ships, because T3.2 binds hooks to an authoritative packet. It is additive to the documented response shape: the contract description joins this row, docs go to T4.3. The packet never carries the credential (`ConversationControlInspection.session` already strips it; pick fields explicitly from the custody `ChainSession`). For T3: `deriveStructuredMessage` copies reply text into `structuredContent.message`, so a pause/custody reply's credential is there too — hooks must not persist `message`.
 - **Reuse:** obligation wording from `delegation/detached.ts` (`describeHeldRun`, `describeOtherHolds`, `trailerBlock`), `EXHAUSTED_REVIEW_CHOICE` from the assembler, owed-detached ids from `unreportedDetachedNodeIds`; run UUID is `sessionId`; busy refusals carry `inspection: null`, so a busy packet has no run identity (outcome refused, reason busy, retryable).
 - **Finding:** the assembler has ~45 code lines of headroom after this row; the next formatting row will meet max-lines.
+
+### T2.3 accepted (2026-10-15)
+
+New pure module `formatting/conversation-control-response.ts` (packet, `deriveObligations` over review / blocking-unknown / exhausted-retry / shell / detached-report / current step, refusal table, renderers, `EXHAUSTED_REVIEW_CHOICE` moved from the assembler); four thin ResponseAssembler delegates; the executor calls them. `structuredContent.conversation_control` documented as a `gate_action` note (notes are not served, schema bytes unchanged). A paused mint that returns nothing replies "Handoff Not Minted … retry, or resume the run first".
+
+- **For T4.1:** the credential-in-packet plant is caught by one unit test only (the custody path is the only one carrying a live credential); the process drive asserts packet credential absence on both transports.
+- **For T3.x:** an empty `obligations` list is valid (nonterminal paused run past its last node with nothing held).
+- **Finding:** the assembler has ~40 code lines of headroom.

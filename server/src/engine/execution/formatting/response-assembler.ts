@@ -1,4 +1,11 @@
 // @lifecycle canonical - Assembles response content for pipeline formatting stage.
+import {
+  EXHAUSTED_REVIEW_CHOICE,
+  renderConversationControl,
+  renderPausedCustody,
+  renderPausedMintRefusal,
+  renderPausedRefusal,
+} from './conversation-control-response.js';
 import { declaresFrameworkSections } from '../../frameworks/declared-sections.js';
 import { JUDGE_OUTPUT_PLACEHOLDER } from '../../gates/core/review-utils.js';
 import { liveNodeIds } from '../../gates/services/run-step-view.js';
@@ -24,7 +31,14 @@ import type { GateTier } from '#engine/gates/core/gate-tier.js';
 import type { JudgeReviewMetadata } from '#engine/gates/core/review-utils.js';
 import type { RunStepView, RunStepViewProvider } from '#engine/gates/services/run-step-view.js';
 import type { GateCheckResult } from '#shared/types/chain-execution.js';
+import type {
+  ChainSession,
+  ConversationControlResult,
+  ExactControlScope,
+} from '#shared/types/chain-session.js';
+import type { ToolResponse } from '#shared/types/index.js';
 import type { RequestClientProfile } from '#shared/types/request-identity.js';
+import type { ControlRunSnapshot } from './conversation-control-response.js';
 import type {
   ChainFormattingContext,
   SinglePromptFormattingContext,
@@ -602,6 +616,30 @@ export class ResponseAssembler {
     const delegationProfile = this.resolveClientProfile(context)?.delegationProfile;
     const prefix = getHandoffFooterInstruction(delegationProfile);
     return `Next: ${prefix} (see instructions above), then: chain_id="${chainIdentifier}", user_response="<sub-agent result>"`;
+  }
+
+  /** A pause, resume or control refusal: `conversation-control-response.ts` renders it (T2.3). */
+  formatConversationControl(chainId: string, result: ConversationControlResult): ToolResponse {
+    return renderConversationControl(chainId, result);
+  }
+
+  /** A workflow call on a paused run, refused before any change. */
+  formatPausedRefusal(
+    session: ControlRunSnapshot,
+    scope: ExactControlScope,
+    restart: boolean
+  ): ToolResponse {
+    return renderPausedRefusal(session, scope, restart);
+  }
+
+  /** A claimed paused run, answered at custody with its successor token. */
+  formatPausedCustody(session: ChainSession, scope: ExactControlScope): ToolResponse {
+    return renderPausedCustody(session, scope);
+  }
+
+  /** A handoff mint on a paused run that did not apply. */
+  formatPausedMintRefusal(chainId: string): ToolResponse {
+    return renderPausedMintRefusal(chainId);
   }
 
   /**
@@ -1601,10 +1639,6 @@ export class ResponseAssembler {
     return parts.join(', ') || '(none)';
   }
 }
-
-/** What an exhausted review accepts, in the words every reply holding one uses. */
-const EXHAUSTED_REVIEW_CHOICE =
-  'The retry budget is spent. Choose a review `gate_action`: `retry`, or `skip` to accept the answer already given.';
 
 /** Review-scoped next actions and the independent run-level stop action. */
 function exhaustedReviewMoves(chainId: string): string {

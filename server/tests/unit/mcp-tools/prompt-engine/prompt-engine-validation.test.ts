@@ -747,6 +747,11 @@ describe('PromptEngine Validation', () => {
       expect(result.isError).toBe(true);
       expect(result.content[0]!.text).toContain('paused for conversation at step 1 of 2');
       expect(result.content[0]!.text).toContain('gate_action:"resume"');
+      expect(JSON.stringify(result)).not.toContain(store().getSession(RUN)!.handoffToken!);
+      expect(result.structuredContent?.['conversation_control']).toMatchObject({
+        refusal: { reason: 'conversation-paused' },
+        run: { runId: RUN, chainId: CHAIN, scope: controlScope(), currentNodeId: 'n1' },
+      });
       if ('force_restart' in args) expect(result.content[0]!.text).toContain('force_restart');
       expect(execute).not.toHaveBeenCalled();
       expect(mockTextReferenceStore.storeChainStepResult).not.toHaveBeenCalled();
@@ -859,6 +864,12 @@ describe('PromptEngine Validation', () => {
       expect(result.isError).toBe(false);
       expect(result.content[0]!.text).toContain('Workflow Resumed');
       expect(result.content[0]!.text).toContain('Nothing was captured, graded or advanced');
+      expect(result.content[0]!.text).toContain('step 1 (node `n1`) still needs its answer');
+      expect(JSON.stringify(result)).not.toContain(store().getSession(RUN)!.handoffToken!);
+      expect(result.structuredContent?.['conversation_control']).toMatchObject({
+        outcome: 'resumed',
+        run: { runId: RUN, scope: controlScope(), step: { current: 1, total: 2 }, pause: null },
+      });
       expect(execute).not.toHaveBeenCalled();
       expect(store().inspectConversationControl(RUN, controlScope())?.session).toEqual(before);
     });
@@ -880,6 +891,9 @@ describe('PromptEngine Validation', () => {
       const execute = stubPipeline();
       const first = await control('resume');
       expect(first.content[0]!.text).toContain('blocking-unknown hold is still pending');
+      expect(first.structuredContent?.['conversation_control'].run.obligations).toEqual([
+        { kind: 'blocking-unknown', nodeId: 'n1', step: 1, review: expect.anything() },
+      ]);
       expect(store().getSession(RUN)?.reviews?.['n1']?.gateIds).toEqual([
         UNKNOWN_INTERRUPT_GATE_ID,
       ]);
@@ -916,6 +930,16 @@ describe('PromptEngine Validation', () => {
       expect(advance).not.toHaveBeenCalled();
       expect(resume).not.toHaveBeenCalled();
       expect(store().getSession(RUN)?.conversationPause).toBeDefined();
+    });
+
+    test('a paused mint that did not apply says so, not that the run is missing or ended', async () => {
+      await pausedRun();
+      jest.spyOn(store(), 'mintHandoffToken').mockResolvedValue(undefined);
+      const result = await engine.executePromptCommand({ chain_id: CHAIN, handoff: true }, {});
+      expect(result.isError).toBe(true);
+      expect(result.content[0]!.text).toContain('is paused for conversation');
+      expect(result.content[0]!.text).toContain('Retry the same call, or resume');
+      expect(result.content[0]!.text).not.toContain('terminal state');
     });
 
     test('an admission refusal raised inside the pipeline reaches the client as a refusal', async () => {
