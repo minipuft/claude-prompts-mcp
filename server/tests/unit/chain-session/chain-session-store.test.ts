@@ -1,7 +1,23 @@
-import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  jest,
+  test,
+} from '@jest/globals';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
+import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { ChainSessionStore, type SessionBlueprint } from '../../../src/modules/chains/manager.js';
-import { isRunComplete } from '../../../src/shared/types/chain-session.js';
+import {
+  isRunComplete,
+  RunOperationRefusedError,
+} from '../../../src/shared/types/chain-session.js';
 import {
   createSemanticReviewContext,
   bindSemanticReviewTarget,
@@ -1511,5 +1527,340 @@ describe('ChainSessionStore — run creation, review writes, pending verificatio
         'replace'
       )
     ).toEqual({ kind: 'rejected', reason: 'session-unknown' });
+  });
+});
+
+/**
+ * T1.4 operation admission over a real state.db: a conversation-paused run refuses every workflow
+ * mutation before changing memory or rows, a control in flight excludes new work, work in flight
+ * makes a pause `busy`, and abort is never refused. Each refusal is paired with the same call on an
+ * unpaused run that does change state, so "unchanged" is a measurement and not an idle probe.
+ */
+describe('ChainSessionStore — operation admission while conversation-paused (T1.4)', () => {
+  const SCOPE = 'scope-t14';
+  let tmpRoot: string;
+  let engine: SqliteEngine;
+  let store: ChainSessionStore;
+  let owner = 0;
+
+  const control = () => store.getConversationControlScope(SCOPE);
+  const held = (id: string): any => (store as any).activeSessions.get(id);
+  const memory = (id: string): unknown => {
+    const { blueprint: _blueprint, ...own } = held(id);
+    return structuredClone(own);
+  };
+  const raw = (id: string) => ({
+    run: engine.queryOne('SELECT * FROM chain_runs WHERE session_id = ?', [id]),
+    nodes: engine.query('SELECT * FROM chain_run_nodes WHERE session_id = ? ORDER BY position', [
+      id,
+    ]),
+  });
+  const review = (nodeId: string, kind: string, overrides: Record<string, unknown> = {}): any => ({
+    nodeId,
+    kind,
+    phase: 'awaiting-verdict',
+    combinedPrompt: '',
+    gateIds: ['g1'],
+    prompts: [{ gateId: 'g1', criteriaSummary: 'ONE' }],
+    createdAt: 1,
+    attemptCount: 0,
+    maxAttempts: 2,
+    ...overrides,
+  });
+  const shell = (attemptCount = 1): any => ({
+    gateId: 'shell-gate',
+    shellVerify: { command: ['npm', 'test'], timeout: 5000 },
+    attemptCount,
+    maxAttempts: 3,
+    previousResults: [],
+  });
+
+  /** A three-node run with an open gate review on n1, a detached one on n2 and a shell hold. */
+  async function seed(id: string): Promise<void> {
+    await store.createSession(id, `chain-${id}`, 3, {}, { continuityScopeId: SCOPE });
+    await store.setReview(id, review('n1', 'gate'));
+    await store.setReview(id, review('n2', 'detached'));
+    await store.setPendingShellVerification(id, shell());
+  }
+
+  /** Hold the store's next bulk save until released, then run it (or fail it) for real. */
+  function gateNextSave(): {
+    started: () => boolean;
+    release: () => void;
+    fail: (error: Error) => void;
+  } {
+    const real = (store as any).saveSessions.bind(store) as () => Promise<void>;
+    let started = false;
+    let settle!: (error?: Error) => void;
+    const gate = new Promise<Error | undefined>((resolve) => (settle = resolve));
+    jest.spyOn(store as any, 'saveSessions').mockImplementationOnce(async () => {
+      started = true;
+      const error = await gate;
+      if (error !== undefined) throw error;
+      return real();
+    });
+    return { started: () => started, release: () => settle(), fail: (error) => settle(error) };
+  }
+
+  const untilStarted = async (gate: { started: () => boolean }): Promise<void> => {
+    while (!gate.started()) await new Promise((resolve) => setImmediate(resolve));
+  };
+
+  /** Every work mutator, each with arguments that change an unpaused seeded run. */
+  const WORK: Array<[string, (id: string) => unknown]> = [
+    ['setStepState', (id) => store.setStepState(id, 'n1', 'responded')],
+    ['recordStepDeclaration', (id) => store.recordStepDeclaration(id, 'n1', ['a'])],
+    ['transitionRunStatus', (id) => store.transitionRunStatus(id, 'failed')],
+    ['markNodeSpawned', (id) => store.markNodeSpawned(id, 'n2')],
+    ['updateSessionState', (id) => store.updateSessionState(id, 'n1', 'answer')],
+    ['completeStep', (id) => store.completeStep(id, 'n1')],
+    ['advanceStep', (id) => store.advanceStep(id, 'n1')],
+    ['insertNodeAfter', (id) => store.insertNodeAfter(id, 'n1', { stepName: 'X', promptId: 'p' })],
+    ['markNodeSkipped', (id) => store.markNodeSkipped(id, 'n3', 'u1')],
+    [
+      'replaceRemainder',
+      (id) => store.replaceRemainder(id, [{ promptId: 'p', stepName: 'R' }], 'u1', 'append'),
+    ],
+    ['remapRunGates', (id) => store.remapRunGates(id, new Map([['g1', 'g1-2']]))],
+    ['setReview', (id) => store.setReview(id, review('n1', 'gate', { attemptCount: 1 }))],
+    ['clearReview', (id) => store.clearReview(id, 'n1')],
+    ['setPendingGateReview', (id) => store.setPendingGateReview(id, review('n3', 'gate'))],
+    ['clearPendingGateReview', (id) => store.clearPendingGateReview(id, { nodeId: 'n2' } as any)],
+    ['setPendingShellVerification', (id) => store.setPendingShellVerification(id, shell(2))],
+    ['clearPendingShellVerification', (id) => store.clearPendingShellVerification(id)],
+    ['recordGateReviewOutcome', (id) => store.recordGateReviewOutcome(id, { verdict: 'FAIL' })],
+    [
+      'applyUnknownObservations',
+      (id) =>
+        store.applyUnknownObservations(id, 'n1', [
+          { type: 'unknown_discovered', id: 'u-new', statement: 'open question' },
+        ]),
+    ],
+  ];
+
+  beforeAll(async () => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'chain-admission-'));
+    engine = await SqliteEngine.getInstance(createLogger() as any, {
+      dbPath: path.join(tmpRoot, 'runtime-state', 'state.db'),
+    });
+    await engine.initialize();
+  });
+
+  afterAll(async () => {
+    await engine.shutdown();
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  beforeEach(async () => {
+    jest
+      .spyOn(ChainSessionStore.prototype as any, 'startCleanupScheduler')
+      .mockImplementation(() => {});
+    owner += 1;
+    store = new ChainSessionStore(
+      createLogger(),
+      new StubTextReferenceStore() as any,
+      {
+        cleanupIntervalMs: 1000,
+        defaultScope: { continuityScopeId: `pid-t14-${owner}`, workspaceId: 'ws-t14' },
+      },
+      engine
+    );
+    await (store as any).initPromise;
+  });
+
+  afterEach(async () => {
+    await store.cleanup();
+    jest.restoreAllMocks();
+  });
+
+  test('every work mutator refuses a paused run before changing memory or rows; unpaused, each changes the run', async () => {
+    const refused: string[] = [];
+    for (const [name, call] of WORK) {
+      const live = `live-${name}`;
+      await seed(live);
+      const liveBefore = memory(live);
+      await expect(Promise.resolve().then(() => call(live))).resolves.not.toThrow();
+      expect({ name, changed: memory(live) }).not.toEqual({ name, changed: liveBefore });
+
+      const paused = `paused-${name}`;
+      await seed(paused);
+      expect((await store.pauseConversation(paused, control())).outcome).toBe('paused');
+      const before = { memory: memory(paused), rows: raw(paused) };
+      const outcome = await Promise.resolve()
+        .then(() => call(paused))
+        .then(
+          () => 'admitted',
+          (error: unknown) =>
+            error instanceof RunOperationRefusedError &&
+            error.reason === 'conversation-paused' &&
+            !error.retryable
+              ? 'refused'
+              : String(error)
+        );
+      if (outcome === 'refused') refused.push(name);
+      expect({ name, memory: memory(paused), rows: raw(paused) }).toEqual({ name, ...before });
+    }
+    expect(refused).toEqual(WORK.map(([name]) => name));
+  });
+
+  test('a pause holds completion like any other hold, and resume releases it', async () => {
+    await store.createSession('done-1', 'chain-done-1', 1, {}, { continuityScopeId: SCOPE });
+    await store.advanceStep('done-1', 'n1');
+    await store.pauseConversation('done-1', control());
+    const before = raw('done-1');
+
+    expect(await store.completeHeldRun('done-1')).toBe(false);
+    expect(raw('done-1')).toEqual(before);
+
+    expect((await store.resumeConversation('done-1', control())).outcome).toBe('resumed');
+    expect(await store.completeHeldRun('done-1')).toBe(true);
+    expect(raw('done-1').run?.['run_status']).toBe('completed');
+  });
+
+  test('controls, clear semantics and inspection on a paused run are unchanged', async () => {
+    await seed('ctl');
+    const first = await store.pauseConversation('ctl', control());
+    const rows = raw('ctl');
+    const before = memory('ctl');
+
+    expect(await store.pauseConversation('ctl', control())).toMatchObject({
+      outcome: 'already-paused',
+      token: first.outcome === 'paused' ? first.token : 'missing',
+    });
+    await expect(store.clearSession('ctl')).rejects.toThrow('Abort paused run before clearing it');
+    // Lookups and inspection neither promote nor touch a paused run, in memory or in rows.
+    expect(store.getSession('ctl')).toBe(held('ctl'));
+    expect(store.getSessionByChainIdentifier('chain-ctl', { includeDormant: true })).toBe(
+      held('ctl')
+    );
+    expect(store.inspectConversationControl('ctl', control())?.session.conversationPause).toEqual(
+      held('ctl').conversationPause
+    );
+    expect(memory('ctl')).toEqual(before);
+    expect(raw('ctl')).toEqual(rows);
+  });
+
+  test('abort is never refused: a paused run cancels, and terminal then wins over the pause', async () => {
+    await seed('abort-paused');
+    await store.pauseConversation('abort-paused', control());
+
+    expect(await store.cancelChain('abort-paused', { continuityScopeId: SCOPE })).toBe(true);
+    expect(raw('abort-paused').run?.['run_status']).toBe('cancelled');
+    expect(await store.resumeConversation('abort-paused', control())).toMatchObject({
+      outcome: 'refused',
+      reason: 'run-terminal',
+    });
+  });
+
+  test('pause versus abort: an abort issued behind a queued pause ends the run and the pause is refused', async () => {
+    await seed('race-abort');
+    const pausing = store.pauseConversation('race-abort', control());
+    // The control holds the run, yet abort is admitted and serializes ahead of the pause job.
+    expect(await store.cancelChain('race-abort', { continuityScopeId: SCOPE })).toBe(true);
+
+    expect(await pausing).toMatchObject({ outcome: 'refused', reason: 'run-terminal' });
+    const stored = raw('race-abort').run as Record<string, unknown>;
+    expect(stored['run_status']).toBe('cancelled');
+    expect(JSON.parse(String(stored['state'])).conversationPause).toBeUndefined();
+  });
+
+  test('an abort whose persist has not settled makes a pause busy, without mutation', async () => {
+    await seed('abort-busy');
+    const gate = gateNextSave();
+    const aborting = store.cancelChain('abort-busy', { continuityScopeId: SCOPE });
+    await untilStarted(gate);
+
+    expect(await store.pauseConversation('abort-busy', control())).toMatchObject({
+      outcome: 'refused',
+      reason: 'busy',
+      inspection: null,
+    });
+    gate.release();
+    expect(await aborting).toBe(true);
+    expect(held('abort-busy').conversationPause).toBeUndefined();
+  });
+
+  test('delayed persist: a pause arriving during a capture is busy, and lands after it with the capture', async () => {
+    await seed('cap-ok');
+    const rowsBefore = raw('cap-ok');
+    const gate = gateNextSave();
+    const capture = store.updateSessionState('cap-ok', 'n1', 'answer');
+    await untilStarted(gate);
+
+    // Out of scope learns nothing about the run being busy.
+    expect(
+      await store.pauseConversation('cap-ok', store.getConversationControlScope('other'))
+    ).toMatchObject({ outcome: 'refused', reason: 'scope-mismatch' });
+    expect(await store.pauseConversation('cap-ok', control())).toMatchObject({
+      outcome: 'refused',
+      reason: 'busy',
+      inspection: null,
+    });
+    expect(raw('cap-ok')).toEqual(rowsBefore);
+    expect(held('cap-ok').conversationPause).toBeUndefined();
+
+    gate.release();
+    expect(await capture).toBe(true);
+    const paused = await store.pauseConversation('cap-ok', control());
+    expect(paused.outcome).toBe('paused');
+    expect(paused.outcome === 'paused' && paused.inspection.session.state.stepStates).toEqual(
+      held('cap-ok').state.stepStates
+    );
+    expect(store.getStepState('cap-ok', 'n1')?.respondedAt).toBeDefined();
+  });
+
+  test('failure rollback: a capture whose save rejects never reaches the acknowledged pause', async () => {
+    await seed('cap-fail');
+    const rowsBefore = raw('cap-fail');
+    const memoryBefore = memory('cap-fail');
+    const gate = gateNextSave();
+    const capture = store.updateSessionState('cap-fail', 'n1', 'answer');
+    await untilStarted(gate);
+
+    const racing = await store.pauseConversation('cap-fail', control());
+    gate.fail(new Error('T14 planted save failure'));
+    await expect(capture).rejects.toThrow('T14 planted save failure');
+
+    // Rows and memory agree on the pre-capture run: nothing acknowledged the rolled-back capture.
+    expect(raw('cap-fail')).toEqual(rowsBefore);
+    expect(memory('cap-fail')).toEqual(memoryBefore);
+    expect(racing).toMatchObject({ outcome: 'refused', reason: 'busy' });
+    const paused = await store.pauseConversation('cap-fail', control());
+    expect(paused.outcome === 'paused' && paused.inspection.session.state.stepStates).toEqual(
+      new Map()
+    );
+  });
+
+  test('control token invariants: a mint in flight is kept by the pause, and a pending pause refuses a new mint', async () => {
+    await seed('mint-first');
+    const gate = gateNextSave();
+    const minting = store.mintHandoffToken('mint-first', { continuityScopeId: SCOPE });
+    await untilStarted(gate);
+    expect(await store.pauseConversation('mint-first', control())).toMatchObject({
+      reason: 'busy',
+    });
+    gate.release();
+    const minted = await minting;
+    expect(raw('mint-first').run?.['handoff_token']).toBe(minted?.token);
+    expect(await store.pauseConversation('mint-first', control())).toMatchObject({
+      outcome: 'paused',
+      token: minted?.token,
+    });
+    expect(raw('mint-first').run?.['handoff_token']).toBe(minted?.token);
+
+    await seed('pause-first');
+    const pausing = store.pauseConversation('pause-first', control());
+    const refusal = await store
+      .mintHandoffToken('pause-first', { continuityScopeId: SCOPE })
+      .catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(RunOperationRefusedError);
+    expect(refusal).toMatchObject({ reason: 'control-in-progress', retryable: true });
+    expect(() => store.setStepState('pause-first', 'n1', 'responded')).toThrow(
+      RunOperationRefusedError
+    );
+    const paused = await pausing;
+    expect(paused.outcome).toBe('paused');
+    expect(held('pause-first').handoffToken).toBe(paused.outcome === 'paused' && paused.token);
+    expect(raw('pause-first').run?.['handoff_token']).toBe(held('pause-first').handoffToken);
   });
 });

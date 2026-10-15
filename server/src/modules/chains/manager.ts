@@ -68,6 +68,7 @@ import {
   nodesHoldingRunOpen,
   isRunComplete,
   isTerminalRunStatus,
+  RunOperationRefusedError,
   stampLegacyReview,
 } from '#shared/types/chain-session.js';
 import { formatChainId, parseRunNumber, stripRunNumber } from '#shared/utils/chain-id-codec.js';
@@ -272,6 +273,13 @@ export class ChainSessionStore implements ChainSessionService {
   private readonly unreservedRuns = new Set<string>();
   /** The tail of the persists in flight: each waits for the one before it (see `persistSessionsOrThrow`). */
   private persistQueue: Promise<void> = Promise.resolve();
+  /**
+   * Operation admission (T1.4), per run: admitted work whose `persistMutation` has not settled,
+   * and controls (pause, resume, paused mint) in flight. A control refuses `busy` while work is
+   * counted; work refuses while a control is counted or the run is paused (`admitWork`).
+   */
+  private readonly runWork = new Map<string, number>();
+  private readonly runControls = new Map<string, number>();
   private readonly pidScope: StateStoreOptions = { continuityScopeId: String(process.pid) };
   private readonly workspaceScope: StateStoreOptions | undefined;
 
@@ -597,8 +605,34 @@ export class ChainSessionStore implements ChainSessionService {
     return write;
   }
 
-  /** Queue the entire synchronous transaction, including validation and rollback, as one job. */
+  /**
+   * Queue the entire synchronous transaction, including validation and rollback, as one job.
+   *
+   * Admission (T1.4): refused `busy` while in-scope work on the run has not settled, because that
+   * work may still roll its memory back over a committed control. Otherwise the control holds the
+   * run from this call until its job settles, so work arriving meanwhile refuses (`admitWork`).
+   */
   private async runConversationControlMutation<T>(
+    sessionId: string,
+    scope: ExactControlScope,
+    mutation: (session: ChainSession) => T,
+    readOnly?: (
+      held: Readonly<ChainSession>,
+      durable: Readonly<ChainSession>
+    ) => ConversationControlReadDecision<T>
+  ): Promise<ConversationControlMutationResult<T>> {
+    const held = this.activeSessions.get(sessionId);
+    if (held !== undefined && this.heldInControlScope(held, scope) && this.runWork.has(sessionId))
+      return { status: 'refused', reason: 'busy', inspection: null };
+    adjustCount(this.runControls, sessionId, 1);
+    try {
+      return await this.queueConversationControlMutation(sessionId, scope, mutation, readOnly);
+    } finally {
+      adjustCount(this.runControls, sessionId, -1);
+    }
+  }
+
+  private async queueConversationControlMutation<T>(
     sessionId: string,
     scope: ExactControlScope,
     mutation: (session: ChainSession) => T,
@@ -640,13 +674,7 @@ export class ChainSessionStore implements ChainSessionService {
       durable: Readonly<ChainSession>
     ) => ConversationControlReadDecision<T>
   ): ConversationControlMutationResult<T> {
-    const authority = this.getConversationControlScope(scope.continuityScopeId);
-    if (
-      scope.organizationId !== authority.organizationId ||
-      scope.workspaceId !== authority.workspaceId ||
-      resolveContinuityScopeId({ continuityScopeId: held.continuityScopeId }) !==
-        scope.continuityScopeId
-    )
+    if (!this.heldInControlScope(held, scope))
       return { status: 'refused', reason: 'scope-mismatch', inspection: null };
     const db = this.resolvedDbEngine;
     if (db === undefined) throw new Error('Selected conversation controls require a DatabasePort');
@@ -693,6 +721,30 @@ export class ChainSessionStore implements ChainSessionService {
       snapshot?.restore();
       throw error;
     }
+  }
+
+  /** Writer storage namespace and the held run's canonical continuity both equal `scope`. */
+  private heldInControlScope(held: ChainSession, scope: ExactControlScope): boolean {
+    const authority = this.getConversationControlScope(scope.continuityScopeId);
+    return (
+      scope.organizationId === authority.organizationId &&
+      scope.workspaceId === authority.workspaceId &&
+      resolveContinuityScopeId({ continuityScopeId: held.continuityScopeId }) ===
+        scope.continuityScopeId
+    );
+  }
+
+  /**
+   * Operation admission for work (T1.4): refuse before any change while the run is conversation-
+   * paused or a control holds it. Callers run it synchronously before their mutation and their
+   * `persistMutation` call, which counts the run's work until the persist settles; a nested mutator
+   * re-checks the same state, so direct and nested calls share one admission.
+   */
+  private admitWork(session: ChainSession): void {
+    if (this.isProtectedPause(session))
+      throw new RunOperationRefusedError(session.sessionId, 'conversation-paused');
+    if (this.runControls.has(session.sessionId))
+      throw new RunOperationRefusedError(session.sessionId, 'control-in-progress');
   }
 
   private ownedControlInspection(run: {
@@ -743,11 +795,17 @@ export class ChainSessionStore implements ChainSessionService {
    * `strict` persists through {@link persistSessionsOrThrow} (a held lock fails the call too);
    * otherwise through {@link saveSessions}, which reports success over a held lock — memory is
    * then kept, because the next persist writes the whole live set and heals the rows.
+   *
+   * A one-run snapshot counts that run's work (T1.4) from here until the persist has settled,
+   * restore included, so a control arriving in between refuses `busy` instead of committing memory
+   * a rejected save is about to roll back.
    */
   private async persistMutation(
     snapshot: MemorySnapshot,
     options: { strict?: boolean } = {}
   ): Promise<void> {
+    const runId = snapshot.sessionId;
+    if (runId !== undefined) adjustCount(this.runWork, runId, 1);
     try {
       await (options.strict === true ? this.persistSessionsOrThrow() : this.saveSessions());
     } catch (error) {
@@ -758,6 +816,8 @@ export class ChainSessionStore implements ChainSessionService {
         }`
       );
       throw error;
+    } finally {
+      if (runId !== undefined) adjustCount(this.runWork, runId, -1);
     }
   }
 
@@ -770,6 +830,7 @@ export class ChainSessionStore implements ChainSessionService {
     const { blueprint: _blueprint, ...own } = session;
     const copy = structuredClone(own);
     return {
+      sessionId: session.sessionId,
       restore: () => {
         const target = session as unknown as Record<string, unknown>;
         for (const key of Object.keys(target)) {
@@ -1268,14 +1329,7 @@ export class ChainSessionStore implements ChainSessionService {
     scope: ExactControlScope
   ): ConversationControlInspection | undefined {
     const held = this.activeSessions.get(sessionId);
-    if (
-      held === undefined ||
-      scope.organizationId !== (this.workspaceScope?.organizationId ?? null) ||
-      scope.workspaceId !== (this.workspaceScope?.workspaceId ?? null) ||
-      resolveContinuityScopeId({ continuityScopeId: held.continuityScopeId }) !==
-        scope.continuityScopeId
-    )
-      return undefined;
+    if (held === undefined || !this.heldInControlScope(held, scope)) return undefined;
     const result = this.requireRunRegistry().readOwnedControlRun(sessionId, this.runScope, scope);
     if (result.status !== 'owned') return undefined;
     const { handoffToken: _credential, ...session } = result.run.session;
@@ -1299,6 +1353,7 @@ export class ChainSessionStore implements ChainSessionService {
       );
       return false;
     }
+    this.admitWork(session);
 
     const stepStates = this.requireStepStates(session);
     const existing = stepStates.get(nodeId);
@@ -1361,6 +1416,7 @@ export class ChainSessionStore implements ChainSessionService {
     if (session === undefined || existing === undefined) {
       return this.setStepState(sessionId, nodeId, 'rendered', false, declaredSections);
     }
+    this.admitWork(session);
     this.requireStepStates(session).set(nodeId, {
       ...existing,
       declaredSections: [...declaredSections],
@@ -1396,6 +1452,7 @@ export class ChainSessionStore implements ChainSessionService {
       );
       return false;
     }
+    this.admitWork(session);
 
     const currentStatus = session.runStatus;
 
@@ -1462,6 +1519,7 @@ export class ChainSessionStore implements ChainSessionService {
       this.logger.warn(`[StepLifecycle] Cannot mark ${nodeId} spawned: no session ${sessionId}`);
       return false;
     }
+    this.admitWork(session);
     const snapshot = this.snapshotRun(session);
     const stepStates = this.requireStepStates(session);
     const existing = stepStates.get(nodeId);
@@ -1490,8 +1548,10 @@ export class ChainSessionStore implements ChainSessionService {
    * still decides. A no-op (false) for a run still standing on a node, and for one still held.
    */
   async completeHeldRun(sessionId: string): Promise<boolean> {
-    // Undefined (no session) and a node id (still standing somewhere) both answer "not held".
-    if (this.activeSessions.get(sessionId)?.state.currentNodeId !== null) {
+    const session = this.activeSessions.get(sessionId);
+    // Undefined (no session) and a node id (still standing somewhere) both answer "not held"; a
+    // conversation pause is a hold of its own, released only by an explicit resume or abort.
+    if (session?.state.currentNodeId !== null || this.isProtectedPause(session)) {
       return false;
     }
     return this.transitionRunStatus(sessionId, 'completed');
@@ -1624,6 +1684,7 @@ export class ChainSessionStore implements ChainSessionService {
       return undefined;
     }
     if (session.conversationPause === undefined) {
+      this.admitWork(session);
       // 20 random bytes, base64url: unguessable, shell/URL safe, pasted exactly once.
       const token = createHandoffToken();
       const snapshot = this.snapshotRun(session);
@@ -1722,6 +1783,11 @@ export class ChainSessionStore implements ChainSessionService {
     return held ? row.chain_id : undefined;
   }
 
+  /**
+   * Abort: never refused by operation admission (T1.4), paused or not. It serializes through the
+   * owner's persist queue, and its persist counts as the run's work, so a pause arriving meanwhile
+   * refuses `busy` and one queued before it finds the run terminal.
+   */
   async cancelChain(sessionId: string, scope?: StateStoreOptions): Promise<boolean> {
     const session = this.getSessionForMutation(sessionId, scope);
     if (session === undefined) {
@@ -1881,6 +1947,7 @@ export class ChainSessionStore implements ChainSessionService {
       this.logger.warn(`Attempted to update non-existent session: ${sessionId}`);
       return false;
     }
+    this.admitWork(session);
 
     const metadataRecord = {
       ...(stepMetadata || {}),
@@ -1951,6 +2018,7 @@ export class ChainSessionStore implements ChainSessionService {
       );
       return false;
     }
+    this.admitWork(session);
 
     const existingMetadata = this.getStepState(sessionId, nodeId);
     const preservePlaceholder = Boolean(options?.preservePlaceholder);
@@ -1996,6 +2064,7 @@ export class ChainSessionStore implements ChainSessionService {
       );
       return false;
     }
+    this.admitWork(session);
 
     const nodes = session.state.nodes;
     const here = currentOrdinal(nodes, session.state.currentNodeId);
@@ -2097,6 +2166,7 @@ export class ChainSessionStore implements ChainSessionService {
       );
       return null;
     }
+    this.admitWork(session);
 
     if (isTerminalRunStatus(session.runStatus)) {
       this.logger.warn(
@@ -2174,6 +2244,7 @@ export class ChainSessionStore implements ChainSessionService {
       this.logger.warn(`[ChainMutation] Cannot skip node in non-existent session: ${sessionId}`);
       return false;
     }
+    this.admitWork(session);
 
     const nodes = session.state.nodes;
     const target = ordinalOf(nodes, nodeId);
@@ -2247,12 +2318,9 @@ export class ChainSessionStore implements ChainSessionService {
     unknownId: string,
     mode: RemainderMode
   ): Promise<RemainderOutcome> {
-    const admitted = this.refuseRemainder(
-      this.activeSessions.get(sessionId),
-      nodes,
-      unknownId,
-      mode
-    );
+    const held = this.activeSessions.get(sessionId);
+    if (held !== undefined) this.admitWork(held);
+    const admitted = this.refuseRemainder(held, nodes, unknownId, mode);
     if (typeof admitted === 'string') {
       this.logger.warn(
         `[ChainRemainder] Refusing ${mode} of ${nodes.length} node(s) for unknown ${unknownId} in session ${sessionId}: ${admitted}`
@@ -2576,6 +2644,7 @@ export class ChainSessionStore implements ChainSessionService {
       }
       return;
     }
+    this.admitWork(session);
     // R69: the run carries the map an earlier claimer applied, and its reviews name that
     // claimer's ids, so this process's map composes onto it rather than replacing it.
     const { applied, rewrite } = composeGateRemap(session.gateRemap ?? {}, remap);
@@ -2599,6 +2668,7 @@ export class ChainSessionStore implements ChainSessionService {
       this.logger.warn(`Attempted to set a gate review for non-existent session: ${sessionId}`);
       return;
     }
+    this.admitWork(session);
 
     const snapshot = this.snapshotRun(session);
     writeReview(session, cloneReview(review));
@@ -2607,6 +2677,7 @@ export class ChainSessionStore implements ChainSessionService {
 
   async clearReview(sessionId: string, nodeId: string): Promise<void> {
     const session = this.activeSessions.get(sessionId);
+    if (session !== undefined) this.admitWork(session);
     if (session?.reviews?.[nodeId] === undefined) return;
     const snapshot = this.snapshotRun(session);
     deleteReview(session, nodeId);
@@ -2632,6 +2703,7 @@ export class ChainSessionStore implements ChainSessionService {
       this.logger.warn(`Attempted to set a gate review for non-existent session: ${sessionId}`);
       return;
     }
+    this.admitWork(session);
     const recorded = review.metadata?.['nodeId'];
     const nodeId =
       slot?.nodeId ?? review.nodeId ?? (typeof recorded === 'string' ? recorded : undefined);
@@ -2650,6 +2722,7 @@ export class ChainSessionStore implements ChainSessionService {
 
   async clearPendingGateReview(sessionId: string, slot: ReviewSlot): Promise<void> {
     const session = this.activeSessions.get(sessionId);
+    if (session !== undefined) this.admitWork(session);
     const target = session?.reviews?.[slot.nodeId];
     if (session === undefined || target?.kind !== 'detached') {
       return;
@@ -2671,6 +2744,7 @@ export class ChainSessionStore implements ChainSessionService {
       );
       return;
     }
+    this.admitWork(session);
 
     const snapshot = this.snapshotRun(session);
     session.pendingShellVerification = { ...state };
@@ -2684,6 +2758,7 @@ export class ChainSessionStore implements ChainSessionService {
 
   async clearPendingShellVerification(sessionId: string): Promise<void> {
     const session = this.activeSessions.get(sessionId);
+    if (session !== undefined) this.admitWork(session);
     if (!session?.pendingShellVerification) {
       return;
     }
@@ -2709,6 +2784,7 @@ export class ChainSessionStore implements ChainSessionService {
       );
       return;
     }
+    this.admitWork(session);
     const snapshot = this.snapshotRun(session);
     session.gatesFiredCount = (session.gatesFiredCount ?? 0) + 1;
     if (outcome.verdict === 'FAIL') {
@@ -3162,6 +3238,7 @@ export class ChainSessionStore implements ChainSessionService {
         `Cannot apply unknown observations: session not found: ${sessionId}. The chain run may have been cleared.`
       );
     }
+    this.admitWork(session);
 
     // `discoveredAtStep`/`resolvedAtStep` are ordinals-at-write — a historical stamp of where
     // the run stood, not an address into it. Resolved here so the ledger keeps its number
@@ -3437,13 +3514,22 @@ type ConversationControlMutationResult<T> =
   | { status: 'committed'; value: T; inspection: ConversationControlInspection }
   | {
       status: 'refused';
-      reason: 'unknown-session' | 'scope-mismatch' | 'ownership-lost' | 'run-terminal';
+      reason: 'unknown-session' | 'scope-mismatch' | 'ownership-lost' | 'run-terminal' | 'busy';
       inspection: ConversationControlInspection | null;
     };
 
 /** What a mutator is about to change in memory, and how to put it back (R87). */
 interface MemorySnapshot {
+  /** The one run a run snapshot covers; its persist counts as that run's work (T1.4). */
+  readonly sessionId?: string;
   restore(): void;
+}
+
+/** Count `id` up or down in `counts`, dropping it at zero so `has` means "in flight". */
+function adjustCount(counts: Map<string, number>, id: string, delta: 1 | -1): void {
+  const next = (counts.get(id) ?? 0) + delta;
+  if (next > 0) counts.set(id, next);
+  else counts.delete(id);
 }
 
 /** Make `target` hold exactly `source`'s entries, keeping `target`'s identity. */

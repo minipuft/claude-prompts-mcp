@@ -326,14 +326,42 @@ export type ConversationControlResult =
       sessionId: string;
       chainId: string | null;
       scope: ExactControlScope;
+      /** `busy`: work on the run had not settled when the control arrived; retry, nothing changed. */
       reason:
         | 'unknown-session'
         | 'scope-mismatch'
         | 'ownership-lost'
         | 'run-terminal'
-        | 'recovery-credential-missing';
+        | 'recovery-credential-missing'
+        | 'busy';
       inspection: ConversationControlInspection | null;
     };
+
+/** Why the store's operation admission refused a workflow mutation before it changed anything. */
+export type RunOperationRefusalReason = 'conversation-paused' | 'control-in-progress';
+
+/**
+ * A workflow mutation the store refused before mutating (T1.4). `conversation-paused` waits for an
+ * explicit resume or abort; `control-in-progress` is retryable once the pause, resume or paused
+ * mint holding the run settles. Abort is never refused this way.
+ */
+export class RunOperationRefusedError extends Error {
+  readonly sessionId: string;
+  readonly reason: RunOperationRefusalReason;
+  readonly retryable: boolean;
+
+  constructor(sessionId: string, reason: RunOperationRefusalReason) {
+    super(
+      reason === 'conversation-paused'
+        ? `Run ${sessionId} is paused for conversation: resume it explicitly or abort it before any workflow change.`
+        : `Run ${sessionId} has a workflow control in progress: retry once it settles.`
+    );
+    this.name = 'RunOperationRefusedError';
+    this.sessionId = sessionId;
+    this.reason = reason;
+    this.retryable = reason === 'control-in-progress';
+  }
+}
 
 export interface ChainSession {
   conversationPause?: ConversationPause;
@@ -603,6 +631,11 @@ export interface RunTerminalFact {
 
 export type RunEndedCallback = (sessionId: string, terminal?: RunTerminalFact) => void;
 
+/**
+ * Every workflow mutator below throws {@link RunOperationRefusedError} before changing a run that is
+ * conversation-paused or held by an in-flight control; `cancelChain` (abort) is never refused, and
+ * `completeHeldRun` reads a pause as a hold.
+ */
 export interface ChainSessionService {
   /**
    * Create a run.
