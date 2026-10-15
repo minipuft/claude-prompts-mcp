@@ -196,3 +196,13 @@ T2.7: workflow verify-active rows key `workflow-run-<runUUID>` (exported `workfl
 - **R-T2.7-SKIP (accepted):** a skip with no rearm now releases the loop row; before, the Stop hook could keep enforcing a check the user skipped.
 - **For T3.5 (binding):** `hooks/ralph-stop.py:402` and `ralph-context-tracker.py:42` read `WHERE session_id = <client session id>`, which never matched a server key, old or new, and read `LIMIT 1` of any row when the hook session id is empty. T3.5 joins on JSON `runSessionId` / `workflowVerifyStateKey(runUUID)`.
 - **Open:** `writeState(key, pending, runSessionId?)` survives only for gate-abort-terminates-run's legacy fixture; if `unreached-methods` flags it at the boundary, a row moves that fixture to `writeWorkflowState` and deletes it.
+
+### P1+P2 boundary (2026-10-15)
+
+Typecheck and the test-type ratchet green; module catalog regenerated (ae0a0968). Red: `lint:ratchet` (strict-boolean-expressions 1567→1570, no-non-null-assertion 68→69), `validate:knip-ratchet` (exports 417→419, types 613→615), `validate:unreached-methods` (`VerifyActiveStateStore.writeState`, predicted in the T2.7 note). The earlier `no-phantom-columns` and `module-catalog` failures are gone. Each row's per-file ESLint comparison reported no new violations, yet the ratchet rose by four sites: a per-row check that compares message totals, or one file, does not add up to the whole-project ratchet (DEV-T2-4: briefs ask for per-rule counts over every changed src/scripts file against origin/main). Row B1 repairs all three gates.
+
+### B1 accepted (2026-10-15)
+
+The four ratchet increases were five new sites, all in `session-action-handler.ts` (strict-boolean 10→14, non-null 3→4), partly offset by one fewer in `chain-session-router.ts`; each is now an explicit `!== undefined` or a narrowed local. `deriveObligations`, `ConversationObligation`, `ConversationControlRun` and `workflowVerifyStateKey` are un-exported (single-file use; no hook reads `workflow-run-`), superseding the T2.7 note's "exported `workflowVerifyStateKey`". `writeState` is deleted; gate-abort writes through `writeWorkflowState` and re-files the row under the chain id by SQL, so abort still has to release a legacy-keyed row (plant: release skips legacy keys → 2 red). With the new sites fixed, the branch's one removed violation left strict-boolean at 1566 < 1567; the baseline is lowered to the measurement, no rule above main's.
+
+**Root cause of DEV-T2-4:** a per-file `git show origin/main:<f> | eslint --stdin` comparison cannot see type-aware rule changes — imports resolve against the HEAD tree, so old and new code mix and every file compared equal. Locating sites needs a full `origin/main` tree copy linted beside HEAD.

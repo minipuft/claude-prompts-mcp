@@ -209,20 +209,26 @@ describe('gate_action:"abort" terminates the run', () => {
         const active = createVerifyActiveStateStore(logger, {
           runtimeStateDir: path.join(tmpDir, 'runtime-state'),
         });
-        await active.writeState(
-          session.chainId,
+        await active.writeWorkflowState(
+          { runSessionId: session.sessionId, scope: {} },
           {
             gateId: 'release',
             shellVerify: { command: 'false', loop: true },
             attemptCount: 1,
             maxAttempts: 5,
             previousResults: [],
-          },
-          session.sessionId
+          }
         );
         const db = new DatabaseSync(active.stateDbPath);
         const read = db.prepare('SELECT * FROM verify_active_state WHERE session_id = ?');
         try {
+          // Re-file the row under the public chain id, as builds before the run-UUID key wrote it:
+          // abort must still release a legacy-keyed row that names this run.
+          db.prepare(
+            "UPDATE verify_active_state SET session_id = ?, state_json = json_set(state_json, '$.sessionId', ?) WHERE session_id = ?"
+          ).run(session.chainId, session.chainId, `workflow-run-${session.sessionId}`);
+          expect(read.get(`workflow-run-${session.sessionId}`)).toBeUndefined();
+          expect(read.get(session.chainId)).toBeDefined();
           db.exec(
             "CREATE TRIGGER deny_release BEFORE DELETE ON verify_active_state BEGIN SELECT RAISE(ABORT, 'release SQL failure'); END"
           );

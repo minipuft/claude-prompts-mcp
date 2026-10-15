@@ -32,7 +32,7 @@ import type {
 type RunReleaseOutcome = 'released' | 'absent' | 'foreign' | 'unbound';
 
 /** A workflow row's key: the run UUID alone, namespaced apart from host (client-session) keys. */
-export function workflowVerifyStateKey(runSessionId: string): string {
+function workflowVerifyStateKey(runSessionId: string): string {
   return `workflow-run-${runSessionId}`;
 }
 
@@ -67,22 +67,6 @@ export class VerifyActiveStateStore {
     return path.join(this.runtimeStateDir, 'verify-state.db');
   }
 
-  /**
-   * Write verify-active state under a caller-chosen key, as builds before `writeWorkflowState`
-   * did. The pipeline no longer calls it.
-   *
-   * @param sessionId - Row key
-   * @param pending - Current pending verification state
-   * @param runSessionId - Exact internal run identity, separate from the active-state key
-   */
-  async writeState(
-    sessionId: string,
-    pending: PendingShellVerification,
-    runSessionId?: string
-  ): Promise<void> {
-    this.writeRow(sessionId, pending, runSessionId === undefined ? {} : { runSessionId });
-  }
-
   /** Enroll, re-run or rearm a run's loop under its derived key; no run identity is refused. */
   async writeWorkflowState(
     identity: WorkflowVerifyIdentity,
@@ -97,7 +81,7 @@ export class VerifyActiveStateStore {
   private writeRow(
     sessionId: string,
     pending: PendingShellVerification,
-    binding: Partial<WorkflowVerifyIdentity>
+    binding: WorkflowVerifyIdentity
   ): void {
     const { shellVerify } = pending;
 

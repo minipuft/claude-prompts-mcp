@@ -861,12 +861,12 @@ describe('ShellVerificationStage', () => {
     });
   });
 
-  // OQ-10: VerifyActiveStateStore.writeState/clearState now throw on a persistence failure
+  // OQ-10: VerifyActiveStateStore.writeWorkflowState/releaseRunState throw on a persistence failure
   // instead of logging and swallowing it. These tests prove the stage is not a second place
   // that catches — the failure must reach whatever awaits `stage.execute()` (in production,
   // the pipeline's single error boundary), not be absorbed here and reported as a pass.
   describe('verify-loop persistence failures propagate, not get swallowed', () => {
-    test('a writeState failure while arming the loop propagates out of execute()', async () => {
+    test('a writeWorkflowState failure while arming the loop propagates out of execute()', async () => {
       const executor = createMockExecutor(true);
       const stateManager = createMockStateManager({
         writeWorkflowState: jest

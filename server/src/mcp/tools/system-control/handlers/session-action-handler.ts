@@ -37,7 +37,11 @@ export class SessionActionHandler extends ActionHandler {
    * promotion, no `lastActivity` bump. Undefined for any run that is not paused.
    */
   private pausedRun(sessionId: string, chainId: string): ChainSession | undefined {
-    const run = this.context.chainSessionStore!.getSessionByChainIdentifier(chainId, {
+    const store = this.context.chainSessionStore;
+    if (store === undefined) {
+      throw new Error('Chain session manager not initialized');
+    }
+    const run = store.getSessionByChainIdentifier(chainId, {
       ...this.requestScope,
       includeDormant: true,
       promoteDormant: false,
@@ -79,8 +83,8 @@ export class SessionActionHandler extends ActionHandler {
       response += `**Progress**: Step ${session.currentStep}/${session.totalSteps}\n`;
       const paused = this.pausedRun(session.sessionId, session.chainId);
       const status = session.pendingReview ? '⚠️ Awaiting Review' : '🟢 Active';
-      response += `**Status**: ${paused ? '⏸️ Paused' : status}\n`;
-      if (paused) response += `${describePausedRun(paused)}\n`;
+      response += `**Status**: ${paused !== undefined ? '⏸️ Paused' : status}\n`;
+      if (paused !== undefined) response += `${describePausedRun(paused)}\n`;
 
       if (args.show_details) {
         response += `**Started**: ${startTime}\n`;
@@ -128,9 +132,9 @@ export class SessionActionHandler extends ActionHandler {
       );
     }
 
-    if (target) {
+    if (target !== undefined) {
       const paused = this.pausedRun(sessionId, target.chainId);
-      if (paused) return this.refuseClearOfPaused(sessionId, [paused]);
+      if (paused !== undefined) return this.refuseClearOfPaused(sessionId, [paused]);
       if (!(await manager.clearSession(sessionId, this.requestScope))) {
         return this.createMinimalSystemResponse(
           `⚠️ **Nothing Cleared**: the store did not remove \`${sessionId}\`. Nothing was removed.`,

@@ -31,7 +31,7 @@ export const EXHAUSTED_REVIEW_CHOICE =
 export type ControlRunSnapshot = ConversationControlInspection['session'];
 
 /** What the run still owes beneath a conversation pause, one entry per held node. */
-export interface ConversationObligation {
+interface ConversationObligation {
   readonly kind:
     | 'step'
     | 'review'
@@ -47,7 +47,7 @@ export interface ConversationObligation {
 }
 
 /** The exact run a control reply names. */
-export interface ConversationControlRun {
+interface ConversationControlRun {
   /** The run UUID (`sessionId`). */
   readonly runId: string;
   readonly chainId: string;
@@ -93,7 +93,7 @@ function obligationOfReview(review: GateReview): ConversationObligation['kind'] 
  * detached nodes (`unreportedDetachedNodeIds`, the one derivation), and the current step itself
  * when nothing else is held on it. PURE.
  */
-export function deriveObligations(session: ControlRunSnapshot): ConversationObligation[] {
+function deriveObligations(session: ControlRunSnapshot): ConversationObligation[] {
   const { nodes, currentNodeId, stepStates } = session.state;
   const at = (kind: ConversationObligation['kind'], nodeId: string): ConversationObligation => ({
     kind,

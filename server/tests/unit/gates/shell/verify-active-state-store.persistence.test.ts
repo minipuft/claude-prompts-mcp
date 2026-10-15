@@ -67,24 +67,27 @@ describe('VerifyActiveStateStore (persistence)', () => {
     const logger = createLogger();
     const store = createVerifyActiveStateStore(logger, { runtimeStateDir: goodDir });
 
-    await expect(store.writeState('session-control', pending)).resolves.toBeUndefined();
-    expect(rowCount(store.stateDbPath, 'session-control')).toBe(1);
+    await expect(
+      store.writeWorkflowState({ runSessionId: 'control', scope: {} }, pending)
+    ).resolves.toBeUndefined();
+    expect(rowCount(store.stateDbPath, 'workflow-run-control')).toBe(1);
   });
 
   test('one public chain id in two scopes keeps two rows; a release keeps the other and the host row', async () => {
     const store = createVerifyActiveStateStore(createLogger(), {
       runtimeStateDir: path.join(tmpRoot, 'two-scopes'),
     });
-    await store.writeState('host-client-1', pending);
+    for (const [run, scope] of [
+      ['uuid-a', { workspaceId: 'a' }],
+      ['uuid-b', {}],
+    ] as const) {
+      await store.writeWorkflowState({ runSessionId: run, chainId: 'chain-x#1', scope }, pending);
+    }
     const db = new DatabaseSync(store.stateDbPath);
     const rows = () => db.prepare('SELECT * FROM verify_active_state ORDER BY session_id').all();
     try {
-      for (const [run, scope] of [
-        ['uuid-a', { workspaceId: 'a' }],
-        ['uuid-b', {}],
-      ] as const) {
-        await store.writeWorkflowState({ runSessionId: run, chainId: 'chain-x#1', scope }, pending);
-      }
+      const insert = db.prepare('INSERT INTO verify_active_state VALUES (?, ?, ?)');
+      insert.run('host-client-1', JSON.stringify({ sessionId: 'host-client-1' }), 'host');
       const keys = ['host-client-1', 'workflow-run-uuid-a', 'workflow-run-uuid-b'];
       expect(rows().map((row) => row['session_id'])).toEqual(keys);
       expect(JSON.parse(String(rows()[1]?.['state_json']))).toMatchObject({
@@ -99,7 +102,8 @@ describe('VerifyActiveStateStore (persistence)', () => {
         store.writeWorkflowState({ runSessionId: '', chainId: 'chain-x#1', scope: {} }, pending)
       ).rejects.toThrow('requires a workflow run identity');
       // A row an earlier build filed under the public chain id goes only with the run it names
-      await store.writeState('chain-x#1', pending, 'uuid-old');
+      const legacy = { sessionId: 'chain-x#1', runSessionId: 'uuid-old' };
+      insert.run('chain-x#1', JSON.stringify(legacy), 'legacy');
       await expect(store.releaseRunState('chain-x#1', 'uuid-other')).resolves.toBe('absent');
       expect(rows()).toHaveLength(3);
       await expect(store.releaseRunState('chain-x#1', 'uuid-old')).resolves.toBe('released');
@@ -165,9 +169,11 @@ describe('VerifyActiveStateStore (persistence)', () => {
   test('a write that cannot persist rejects instead of resolving with success logged', async () => {
     const store = brokenStore('blocked-write');
 
-    // The caller (whatever awaits writeState) receives the failure as a rejected promise —
+    // The caller (whatever awaits writeWorkflowState) receives the failure as a rejected promise —
     // before this fix it resolved silently while only a warn log recorded the failure.
-    await expect(store.writeState('session-a', pending)).rejects.toThrow();
+    await expect(
+      store.writeWorkflowState({ runSessionId: 'session-a', scope: {} }, pending)
+    ).rejects.toThrow();
   });
 
   test('the write failure states the loop could not be armed, not that it was', async () => {
@@ -176,9 +182,9 @@ describe('VerifyActiveStateStore (persistence)', () => {
     // This message is exactly what the pipeline's single error boundary renders as the
     // `:: verify` reply text (`Error: ${message}`) — asserting its wording here is asserting
     // what OQ-10 requires the reply say.
-    await expect(store.writeState('session-b', pending)).rejects.toThrow(
-      /Failed to arm verify-loop state for session session-b/
-    );
+    await expect(
+      store.writeWorkflowState({ runSessionId: 'session-b', scope: {} }, pending)
+    ).rejects.toThrow(/Failed to arm verify-loop state for session workflow-run-session-b/);
   });
 
   test('a clear that cannot persist rejects instead of resolving with success logged', async () => {
