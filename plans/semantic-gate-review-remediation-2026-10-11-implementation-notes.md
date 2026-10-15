@@ -236,6 +236,66 @@ Moved from `plans/workflow-client-evaluation-2026-10-09-implementation-notes.md`
 - 1.17 accepted: finding 1 (stale target digest after a detached FAIL) did not reproduce — a detached review renews at the replacement report, not at FAIL; the earlier probe's snapshot was read after the replacement. DEV-T9-P2: the planner passed a probe claim on without its observed values. Finding 2 fixed, plus `withoutStructuralFinding` no longer erasing semantic hints.
 - Findings not cut: `projectFrozenReview` ignores `review.phase` (callers must check it); the `%judge` menu returns after script stages 08/09 have run, so a judge call runs a prompt's scripts and the follow-up runs them again.
 
+## 2026-10-12 — 0C2 opened (subplanner, worktree `claude-prompts-mcp-sgr-0c2`, branch `fix/sgr-0c2-chain-manager-coverage`, shared-tree)
+
+Baseline, measured at `8c154134` with the tier's coverage command (canonical home for the number; every 0C2 row and the final report re-runs exactly this):
+
+    cd server && NODE_OPTIONS=--experimental-vm-modules npx jest -w 2 --workerIdleMemoryLimit=1024MB \
+      tests/unit/chain-session tests/integration/chain tests/integration/tenant \
+      --coverage --collectCoverageFrom=src/modules/chains/manager.ts --coverageReporters=text-summary
+
+→ branches 582/756 = 76.98%, statements 982/1124, functions 153/165 (28 suites, 459 tests). The audit measured 573/745 at `6889b015` over the whole unit+integration run; the file has grown 11 arms since.
+
+Re-measured inventory (authored → measured):
+
+- The five dead methods: still 0 production callers. Consumers by name: `manager.ts`, `shared/types/chain-session.ts`, and six test files (`session-stage.test.ts` mocks four of them, `symbolic-stage.test.ts`, `gate-review-session-continuity.test.ts`, `tenant-isolation.test.ts` ×3 asserts, `chain-session-store.test.ts` ×4 calls, `persist-mutation-coverage.test.ts` list entry). Matches the audit.
+- `transitionStepState` holds the ONLY terminal step-stickiness check in the module (`TERMINAL_STEP_LIFECYCLES`, manager.ts:107/1242); the live mutator `setStepState` (called by stage 18) has none. The tests titled "terminal stickiness" pin it on the dead method only.
+- Region 17 is a class, not 5 sites: `if (this.logger)` ×3 and `this.logger?.` ×~17 in manager.ts, on a constructor-required `Logger`.
+- Region 7 is unchanged by #483: `cleanup()` clears the handle; `startCleanupScheduler` still has one caller (the constructor), so its `if (this.cleanupIntervalHandle)` cannot hold.
+
+Rulings for this tier:
+
+- **R0C2.1 — M8 stays out.** The `errorText` helper is its own slice (R11.11), so the audit's ~94% projection, which counted M8's ~21 arms, is an upper bound this tier cannot reach; the tier target is the projection without M8 (≈90%).
+- **R0C2.2 — an unreachable guard whose false branch silently repairs is deleted; where the type still needs narrowing it becomes a throwing accessor** (the Q10 precedent, `requireExecutionPlan()`), never a non-null assertion or a new silent default.
+- **R0C2.3 — 0C2.2 closes the optional-logger class in manager.ts by enumeration** (`rg "this\.logger\?\.|if \(this\.logger\)"` over the file = 0); sites in other modules are a count in the findings, not rows here.
+- **R0C2.4 — `transitionStepState` is deleted with its tests** (no consumer). Whether a live path can overwrite a terminal step is probed by 0C2.1 and reported as a finding; this tier changes no step-lifecycle behaviour.
+- **R0C2.5 — file sequencing in the shared tree:** 0C2.5 waits for 0C2.1 (both edit `tenant-isolation.test.ts`); 0C2.9 waits for 0C2.1 and 0C2.2 (`chain-session-store.test.ts`, the scheduler); 0C2.6 and 0C2.7 write new or untouched files and must not test the five dead methods.
+
+## 2026-10-12 — 0C2 wave 1: 0C2.8 accepted
+
+- 0C2.8 accepted (diff read): one real SQLite engine, a donor `DirectChainRunRegistry` and a claiming store; the pre-R62 pair is built by persisting the claimer's run before the donor writes the same chain id. 5 mutations red→green. Probe mid-wave: 614/717 (the denominator already shrank by 0C2.1's concurrent deletions, so not comparable to the baseline until the tier total is measured).
+- DEV-T0C2-P1 (planner): the 0C2.1 brief went out with a literal `$(cat preamble)` instead of the operating facts (no git restrictions, no shared-tree notice); sent by SendMessage within its first tool rounds. Briefs are now pasted whole.
+- Finding (not cut, R192): `findHeldChainIdForToken` reads through `this.resolvedDbEngine?.queryOne`, so a store with an injected registry and no engine skips the R62 check silently; production always has an engine. Its `row === undefined` arm is reachable only there.
+- Finding: ESLint ignores `server/tests/**`, so "lint your file" is no check for a test row; dropped from later briefs.
+- Feedback adopted: planted mutations in a shared tree collide (0C2.8 saw another row's planted `!` in `getSessionForMutation` once); later briefs require plant-run-revert in one command.
+- 0C2.6 accepted (header and table read). Nine methods answer an unknown id without a branch of their own (optional chaining); the file names them. Finding: the `replaceRemainder` re-check after `refuseRemainder` is unreachable — already region 18 in 0C2.2.
+
+## 2026-10-12 — 0C2.1 accepted; 0C2.2 dispatched
+
+- 0C2.1 accepted (diff read; committed as one refactor). The tenant-isolation probes now observe through `getSessionByChainIdentifier` (same mapping, same non-dormant filter). DEV-T0C2-1 (accepted): the session-stage "only base history exists" setup now mocks `getRunHistory` instead of being deleted — stage 13 reads history there, and deleting it would have left the title false.
+- **Finding (outside this tier's module, for the plan owner): every live writer can overwrite a terminal step state.** Probe (throwaway jest, deleted): `setStepState(…,'rendered')` after `completeStep` → completed → working; after `markNodeSkipped` → skipped → working; `updateSessionState` after `completeStep` → working; control `recordStepDeclaration` after `completeStep` stays completed. Writers: stage 18 `setStepState` (`18-execution-stage.ts:302`), `step-capture-service.ts` (`updateSessionState`/`completeStep`), `markNodeSkipped`. Unverified: whether the pipeline can point stage 18 or a capture at a completed/skipped node. The deleted `transitionStepState` was the only check and nothing called it.
+- Finding: `session-stage.test.ts:7` imports types from `src/modules/chains/types.js`, which does not exist, so its mocks are `any` and the tests typecheck ratchet could never report a stale mock there. Sent back to the 0C2.1 worker with a bound (≤8 new errors, same file).
+- Finding: `server/scripts/validate-no-stepstate.js` comments still list `transitionStepState` among surviving names; sent back to the same worker. The brief's `rg` scope missed `server/scripts` (DEV-T0C2-P2).
+- lint:ratchet dropped on the deletion (strict-boolean-expressions 1604→1595 and four others by 1); the baseline is lowered once at the PR boundary in its own `chore(scripts)` commit.
+- 0C2.7 accepted (test list read). It also pins the base-chain fallback (`chain-a#7` → `chain-a`), which is region 26: 0C2.3 must keep it green. Findings: `findScopedSessionForChain`'s `0` recency sentinel can never select a session with `lastActivity === 0` (latent; real values are `Date.now()`); a negative `limit` lists everything. 0C2.5 dispatched (worker-high · sonnet).
+- 0C2.1 follow-ups accepted: the validator comments no longer list `transitionStepState` (validator still fails on a planted standalone `StepState` in a tracked file — it scans only tracked files); the session-stage test now asserts the stage asks `createSession` for `chain-chain_prompt#5` after a history ending at `#4` (red with an empty history; the old assertion compared against the mock's own return and could not fail). The import fix went over its bound (4 → 33 errors) and was reverted: **finding (outside this module)** — `session-stage.test.ts` imports `ChainSessionService` from a module that does not exist, so its 18 mocks, 13 node fixtures and 2 non-exported type imports are invisible to the tests typecheck ratchet; it needs a typed mock factory and a node fixture helper.
+
+## 2026-10-13 — 0C2 resumed after a session-limit stop
+
+- State on resume: 0C2.2's edits uncommitted and complete in the tree (typecheck green, logger and stepStates closures at 0); its worker resumed by SendMessage for verification only. 0C2.5's tests uncommitted; its red evidence was unattributed (another row was editing manager.ts during its mutation runs), so it re-plants after 0C2.2 closes.
+- **DEV-T0C2-P3 (planner): c6f05a39 committed a planted mutant.** `listActiveSessions` at that commit reads `if (false && this.isDormantSession(session))` — 0C2.7's mutation was live in the shared tree the moment the planner staged manager.ts for 0C2.1. The working tree is correct; the 0C2.2 commit restores the line. From here every planner commit of a src file is preceded by `git diff --cached -- server/src | grep -nE "^\+.*(if \(false|true \|\||MUTANT|PLANTED)"` = empty, and is taken only while no worker is planting.
+- 0C2.2 accepted (diff read before resume; verification after). DEV-T0C2-2 (accepted): the `loadSessions` `instanceof Map` repair was also removed (same hydration-boundary class). Concern ruled: the empty-before-unknown precedence of `refuseRemainder` was pinned by no test (the brief claimed otherwise — DEV-T0C2-P4); cut into 0C2.9 as case A6. Finding: the optional-logger shape remains in `runtime/application.ts` (8) and `infra/database/stores/sqlite-store.ts` (7) — outside this module.
+- 0C2.5 accepted after the attributed re-run: (a) fails exactly cases 1–3 and 5, (b) case 4 and 5, (c) case 5 only; hashes over the two guarded functions restored. Finding: `getSession` skips its scope check on a falsy `continuityScopeId`, `getSessionForMutation` only on `undefined` (an empty-string scope would differ; judged unreachable).
+- 0C2.3 (worker-high · opus) and 0C2.9 (worker-high · sonnet) dispatched at 0813f01e. Briefs now carry: `--json`/`--verbose` failing-name capture and function-scoped hashes for plants (worker feedback from 0C2.5 and 0C2.7).
+- 0C2.9 accepted (diff read, src left clean). Concern recorded: its first plant driver left five plants in manager.ts for a few minutes (aborted before reverting); reversed by exact text; `rg "PLANT|if \(false" server/src/modules/chains` = 0 before the commit. Finding → row 0C2.10: `cloneReview` claims to share nothing but aliases `prompts[].retryHints` (measured), `gateTiers` and `checkResults` (read) — live and wrong in this module, and a class (every field added later is shared), so the fix is one `structuredClone` rather than three more field copies. Finding: the own-PID skip in `collectDeadRunOwnerPids` is an equivalent mutant (the own PID is alive).
+
+## 2026-10-13 — 0C2.3 and 0C2.10 accepted; tier measured
+
+- 0C2.3 accepted. The invariant as written: held sessions ↔ `chainSessionMapping` exactly; `runChainToBase` keys = mapping keys, each → `stripRunNumber`; the histories list every mapping key once under its base and nothing else, none empty. History ORDER is not maintained (registration order; only load/claim sorts) and is not in the invariant (DEV-T0C2-3, accepted). Its one unexplained red (all seeds empty after `reload`) matches 0C2.9's leftover plant B4 ("non-numeric owner not skipped" in the dead-PID sweep, which would delete the test's named owners at reload) — attribution by mechanism, not reproduced; 3 clean re-runs at HEAD green.
+- 0C2.10 accepted; committed apart from 0C2.3 by splitting manager.ts hunks (`git apply --cached`).
+- **Tier result** (canonical probe, clean tree, a5afb759): branches **582/756 = 76.98% → 620/673 = 92.12%**; statements 982/1124 → 1007/1036; functions 153/165 → 154/156; 459 → 568 tests. Uncovered arms 174 → 53. R0C2.1 predicted ≈90% without M8; the `errorText` helper slice (R11.11) owns most of what remains.
+- Findings (not cut, R192): `runChainToBase` duplicates `stripRunNumber` — the invariant proves it, its one value reader falls back to `stripRunNumber`, so the map, its writers, snapshot and clears could go; `ensureRunMappingConsistency` now only indexes held runs and its name overstates it; `claimHandoff`/`loadSessions` never prune, so a history can exceed `MAX_RUN_HISTORY` until the next create; a re-registered id moves to the end of its history, so `nextRunNumber` can mint a colliding number that `reserveRunNumbers` then renames.
+
 ## 2026-10-13 — 0C3 skills-sync coverage: tier opened
 
 - Worktree `claude-prompts-mcp-sgr-0c3`, branch `fix/sgr-0c3-skills-sync-coverage` from `8c154134`; `branch_mode: shared-tree` (workers edit, planner commits per concern).

@@ -197,7 +197,6 @@ const createSessionManager = (): jest.Mocked<ChainSessionStore> =>
     hasActiveSession: jest.fn().mockReturnValue(false),
     getSession: jest.fn(),
     getSessionByChainIdentifier: jest.fn(),
-    getLatestSessionForBaseChain: jest.fn(),
     getRunHistory: jest.fn().mockReturnValue([]),
     createSession: jest.fn(async (sessionId: string, chainId: string) => ({ sessionId, chainId })),
     getReview: jest.fn().mockReturnValue(undefined),

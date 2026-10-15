@@ -25,7 +25,6 @@ import type {
   PendingShellVerificationSnapshot,
   RunTelemetry,
   StepMetadata,
-  GateReviewPrompt,
 } from '#shared/types/chain-execution.js';
 import type {
   ChainHandoffClaimResult,
@@ -96,18 +95,6 @@ function lifecycleForMilestone(milestone: StepMilestone): StepLifecycle {
       return 'working';
   }
 }
-
-/**
- * Step lifecycles that may not be transitioned out of.
- *
- * `completed` was the only one until P4; `skipped` joins it because a step the mutation policy
- * retired must not be re-rendered by a later capture — the whole point of the skip is that the
- * client never sees it again.
- */
-const TERMINAL_STEP_LIFECYCLES: ReadonlySet<StepLifecycle> = new Set<StepLifecycle>([
-  'completed',
-  'skipped',
-]);
 
 /** Step lifecycles that mean "this step has already been rendered, run, or retired". */
 function hasStepStarted(state: StepLifecycle | undefined): boolean {
@@ -471,11 +458,6 @@ export class ChainSessionStore implements ChainSessionService {
    * Fire-and-forget cleanup scheduler (unref to avoid blocking shutdown)
    */
   private startCleanupScheduler(): void {
-    if (this.cleanupIntervalHandle) {
-      this.cleanupIntervalHandle.unref();
-      return;
-    }
-
     this.cleanupIntervalHandle = setInterval(() => {
       this.cleanupStaleSessions().catch((error) => {
         this.logger.warn(
@@ -497,10 +479,6 @@ export class ChainSessionStore implements ChainSessionService {
       const sessions = await this.requireRunRegistry().load(this.runScope);
 
       for (const session of sessions) {
-        if (!(session.state.stepStates instanceof Map)) {
-          session.state.stepStates = new Map();
-        }
-
         // All persisted sessions become dormant until explicitly resumed
         session.lifecycle = 'dormant';
         this.activeSessions.set(session.sessionId, session);
@@ -708,6 +686,25 @@ export class ChainSessionStore implements ChainSessionService {
         'options.databasePort at construction, or call setDatabasePort() before the first ' +
         'session write.'
     );
+  }
+
+  /**
+   * A held run's step-lifecycle map, or a refusal that names the run.
+   *
+   * Every run enters `activeSessions` with one: `createSession` builds it, and the registry's
+   * `toStepStates` rebuilds it behind both `load` and `claimRunByToken`. A run without one is a
+   * defect upstream, so it throws here rather than being handed a fresh empty map, which would
+   * silently forget every step the run had recorded.
+   */
+  private requireStepStates(session: ChainSession): Map<string, StepMetadata> {
+    const stepStates = session.state.stepStates;
+    if (stepStates === undefined) {
+      throw new Error(
+        `ChainSessionStore: session ${session.sessionId} carries no step-state map; every ` +
+          'construction site sets one, so the run was built or hydrated outside them.'
+      );
+    }
+    return stepStates;
   }
 
   /** Whether a registry or a database port is bound, initialized or not. */
@@ -1124,17 +1121,14 @@ export class ChainSessionStore implements ChainSessionService {
   ): boolean {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
-      this.logger?.warn(
+      this.logger.warn(
         `[StepLifecycle] Cannot set step state for non-existent session: ${sessionId}`
       );
       return false;
     }
 
-    if (!session.state.stepStates) {
-      session.state.stepStates = new Map<string, StepMetadata>();
-    }
-
-    const existing = session.state.stepStates.get(nodeId);
+    const stepStates = this.requireStepStates(session);
+    const existing = stepStates.get(nodeId);
     const now = Date.now();
 
     const metadata: StepMetadata = {
@@ -1168,9 +1162,9 @@ export class ChainSessionStore implements ChainSessionService {
       ...(existing?.spawnedAt !== undefined ? { spawnedAt: existing.spawnedAt } : {}),
     };
 
-    session.state.stepStates.set(nodeId, metadata);
+    stepStates.set(nodeId, metadata);
 
-    this.logger?.debug(
+    this.logger.debug(
       `[StepLifecycle] Step ${nodeId} milestone ${milestone} -> state ${metadata.state} (placeholder: ${isPlaceholder})`
     );
     return true;
@@ -1189,13 +1183,15 @@ export class ChainSessionStore implements ChainSessionService {
     nodeId: string,
     declaredSections: readonly string[]
   ): boolean {
-    const existing = this.activeSessions.get(sessionId)?.state.stepStates?.get(nodeId);
-    if (existing === undefined) {
+    const session = this.activeSessions.get(sessionId);
+    const existing = session && this.requireStepStates(session).get(nodeId);
+    if (session === undefined || existing === undefined) {
       return this.setStepState(sessionId, nodeId, 'rendered', false, declaredSections);
     }
-    this.activeSessions
-      .get(sessionId)
-      ?.state.stepStates?.set(nodeId, { ...existing, declaredSections: [...declaredSections] });
+    this.requireStepStates(session).set(nodeId, {
+      ...existing,
+      declaredSections: [...declaredSections],
+    });
     return true;
   }
 
@@ -1204,60 +1200,10 @@ export class ChainSessionStore implements ChainSessionService {
    */
   getStepState(sessionId: string, nodeId: string): StepMetadata | undefined {
     const session = this.activeSessions.get(sessionId);
-    if (!session?.state.stepStates) {
+    if (!session) {
       return undefined;
     }
-    return session.state.stepStates.get(nodeId);
-  }
-
-  /**
-   * Transition step to a new state.
-   *
-   * Enforces step-lifecycle stickiness: a step in terminal `completed`
-   * cannot be overwritten. Re-asserting the same terminal state is a no-op
-   * (returns true to keep callers idempotent).
-   */
-  async transitionStepState(
-    sessionId: string,
-    nodeId: string,
-    newMilestone: StepMilestone,
-    isPlaceholder: boolean = false
-  ): Promise<boolean> {
-    const session = this.activeSessions.get(sessionId);
-    if (!session) {
-      this.logger?.warn(
-        `[StepLifecycle] Cannot transition step state for non-existent session: ${sessionId}`
-      );
-      return false;
-    }
-
-    const currentMetadata = this.getStepState(sessionId, nodeId);
-    const currentState = currentMetadata?.state;
-
-    // Stickiness: refuse to overwrite a terminal step state with a different state. Re-asserting
-    // the same terminal value stays a no-op success, which is why the comparison is against the
-    // lifecycle the incoming milestone implies rather than against the milestone name.
-    if (
-      currentState !== undefined &&
-      TERMINAL_STEP_LIFECYCLES.has(currentState) &&
-      lifecycleForMilestone(newMilestone) !== currentState
-    ) {
-      this.logger.warn(
-        `[StepLifecycle] Refusing to transition step ${nodeId} from terminal ${currentState} to ${newMilestone} (session ${sessionId})`
-      );
-      return false;
-    }
-
-    const fromLabel = currentState ?? 'NONE';
-    const snapshot = this.snapshotRun(session);
-    this.setStepState(sessionId, nodeId, newMilestone, isPlaceholder);
-
-    await this.persistMutation(snapshot);
-    this.logger.debug(
-      `[StepLifecycle] Transitioned step ${nodeId} from ${fromLabel} to ${newMilestone}`
-    );
-
-    return true;
+    return this.requireStepStates(session).get(nodeId);
   }
 
   /**
@@ -1341,13 +1287,13 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
     const snapshot = this.snapshotRun(session);
-    session.state.stepStates ??= new Map<string, StepMetadata>();
-    const existing = session.state.stepStates.get(nodeId);
+    const stepStates = this.requireStepStates(session);
+    const existing = stepStates.get(nodeId);
     if (existing?.spawnedAt !== undefined) {
       return true;
     }
     const now = Date.now();
-    session.state.stepStates.set(nodeId, {
+    stepStates.set(nodeId, {
       ...(existing ?? { state: lifecycleForMilestone('rendered'), isPlaceholder: false }),
       renderedAt: existing?.renderedAt ?? now,
       spawnedAt: now,
@@ -1453,7 +1399,6 @@ export class ChainSessionStore implements ChainSessionService {
     // The claim above is its own committed write: the row is this server's now, so a rejected
     // save below restores the run's own fields but keeps it held, which is what the rows say.
     const snapshot = this.snapshotRun(session);
-    if (!(session.state.stepStates instanceof Map)) session.state.stepStates = new Map();
     session.lifecycle = 'dormant';
     session.lastActivity = Date.now();
     this.activeSessions.set(session.sessionId, session);
@@ -1616,9 +1561,7 @@ export class ChainSessionStore implements ChainSessionService {
   ): Promise<boolean> {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
-      if (this.logger) {
-        this.logger.warn(`Attempted to update non-existent session: ${sessionId}`);
-      }
+      this.logger.warn(`Attempted to update non-existent session: ${sessionId}`);
       return false;
     }
 
@@ -1643,7 +1586,7 @@ export class ChainSessionStore implements ChainSessionService {
     // NOTE: Step advancement is now handled by advanceStep() which should be called
     // ONLY after gate validation passes (or if no gates are configured).
     // This prevents the bug where retry would skip to the next step.
-    this.logger?.debug(
+    this.logger.debug(
       `[StepLifecycle] Step ${nodeId} ${isPlaceholder ? 'rendered as placeholder' : 'response captured'}, ` +
         `run remains at ${session.state.currentNodeId ?? 'complete'} (advancement deferred to advanceStep())`
     );
@@ -1686,7 +1629,7 @@ export class ChainSessionStore implements ChainSessionService {
   ): Promise<boolean> {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
-      this.logger?.warn(
+      this.logger.warn(
         `[StepLifecycle] Cannot complete step for non-existent session: ${sessionId}`
       );
       return false;
@@ -1702,7 +1645,7 @@ export class ChainSessionStore implements ChainSessionService {
 
     // NOTE: Step advancement is now handled by advanceStep() which should be called
     // ONLY after gate validation passes. This prevents the retry-skip bug.
-    this.logger?.debug(
+    this.logger.debug(
       `[StepLifecycle] Step ${nodeId} marked COMPLETED${isPlaceholder ? ' (placeholder)' : ''}, ` +
         `run remains at ${session.state.currentNodeId ?? 'complete'} (call advanceStep() to advance)`
     );
@@ -1731,7 +1674,7 @@ export class ChainSessionStore implements ChainSessionService {
   ): Promise<{ nodeId: string | null; ordinal: number } | false> {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
-      this.logger?.warn(
+      this.logger.warn(
         `[StepLifecycle] Cannot advance step for non-existent session: ${sessionId}`
       );
       return false;
@@ -1745,7 +1688,7 @@ export class ChainSessionStore implements ChainSessionService {
     // a comparison against a stored counter. An unresolvable `nodeId` scores -1 and so lands in
     // this branch, reproducing the old no-op-on-garbage behaviour rather than advancing blind.
     if (here > target) {
-      this.logger?.debug(
+      this.logger.debug(
         `[StepLifecycle] Node ${nodeId || '(unresolved)'} already passed, run is at ordinal ${here}`
       );
       return { nodeId: session.state.currentNodeId, ordinal: here };
@@ -1760,9 +1703,10 @@ export class ChainSessionStore implements ChainSessionService {
     // record of what the run actually executed, and it is read to reconstruct step results, so a
     // node with no result in it would read as an executed step with a missing response.
     const snapshot = this.snapshotRun(session);
+    const stepStates = this.requireStepStates(session);
     let next = nextAfter(nodes, nodeId);
     let skippedPast = 0;
-    while (next !== null && session.state.stepStates?.get(next)?.state === 'skipped') {
+    while (next !== null && stepStates.get(next)?.state === 'skipped') {
       skippedPast += 1;
       next = nextAfter(nodes, next);
     }
@@ -1786,7 +1730,7 @@ export class ChainSessionStore implements ChainSessionService {
     // with a non-terminal status, and `completeHeldRun` — asked after the call is graded — decides
     // whether it is finished (P4.157 / R12).
     await this.persistMutation(snapshot);
-    this.logger?.debug(
+    this.logger.debug(
       `[StepLifecycle] Advanced past node ${nodeId} to ${next ?? 'run-complete'} (ordinal ${ordinal})`
     );
 
@@ -1986,19 +1930,19 @@ export class ChainSessionStore implements ChainSessionService {
     unknownId: string,
     mode: RemainderMode
   ): Promise<RemainderOutcome> {
-    const session = this.activeSessions.get(sessionId);
-    const refusal = this.refuseRemainder(session, nodes, unknownId, mode);
-    if (refusal !== undefined) {
+    const admitted = this.refuseRemainder(
+      this.activeSessions.get(sessionId),
+      nodes,
+      unknownId,
+      mode
+    );
+    if (typeof admitted === 'string') {
       this.logger.warn(
-        `[ChainRemainder] Refusing ${mode} of ${nodes.length} node(s) for unknown ${unknownId} in session ${sessionId}: ${refusal}`
+        `[ChainRemainder] Refusing ${mode} of ${nodes.length} node(s) for unknown ${unknownId} in session ${sessionId}: ${admitted}`
       );
-      return { kind: 'rejected', reason: refusal };
+      return { kind: 'rejected', reason: admitted };
     }
-    // `refuseRemainder` returning undefined already proved the session exists; the cast-free
-    // re-narrow keeps that fact visible to the type checker without a second lookup.
-    if (session === undefined) {
-      return { kind: 'rejected', reason: 'session-unknown' };
-    }
+    const session = admitted;
 
     const snapshot = this.snapshotRun(session);
     const existing = session.state.nodes;
@@ -2009,8 +1953,9 @@ export class ChainSessionStore implements ChainSessionService {
       // `here` is 1-based, so it is already the array index of the first node AFTER the current
       // one — the same arithmetic `insertNodeAfter` relies on. Everything from there is dropped.
       const removed = existing.splice(here, existing.length - here, ...minted);
+      const stepStates = this.requireStepStates(session);
       for (const node of removed) {
-        session.state.stepStates?.delete(node.id);
+        stepStates.delete(node.id);
       }
       this.logger.debug(
         `[ChainRemainder] Replaced ${removed.length} node(s) after ordinal ${here} with ${minted.length} in session ${sessionId} (unknown ${unknownId})`
@@ -2033,7 +1978,8 @@ export class ChainSessionStore implements ChainSessionService {
   /**
    * Every reason a remainder submission is refused, evaluated before anything is mutated.
    *
-   * Returns `undefined` when the submission may proceed. Both caps are recomputed from the
+   * Returns the session itself when the submission may proceed, so the caller holds a run this
+   * check has already proved exists rather than re-testing for one. Both caps are recomputed from the
    * run's NODES rather than from in-memory bookkeeping, so a cold-loaded run enforces exactly
    * what a hot one does — `origin`/`origin_unknown_id`/`accepted_at_step` are persisted columns
    * for this reason.
@@ -2043,7 +1989,7 @@ export class ChainSessionStore implements ChainSessionService {
     nodes: readonly RemainderNodeSpec[],
     unknownId: string,
     mode: RemainderMode
-  ): RemainderRejectionReason | undefined {
+  ): RemainderRejectionReason | ChainSession {
     if (nodes.length === 0) {
       return 'empty-remainder';
     }
@@ -2081,7 +2027,7 @@ export class ChainSessionStore implements ChainSessionService {
       }
     }
 
-    return undefined;
+    return session;
   }
 
   /**
@@ -2127,7 +2073,7 @@ export class ChainSessionStore implements ChainSessionService {
           },
         });
       } catch (error) {
-        this.logger?.error('[ChainSessionStore] Failed to track argument history entry', {
+        this.logger.error('[ChainSessionStore] Failed to track argument history entry', {
           chainId: session.chainId,
           nodeId,
           error,
@@ -2264,7 +2210,7 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     const ledger = session.unknownsLedger ?? [];
-    const stepStates = session.state.stepStates;
+    const stepStates = this.requireStepStates(session);
     return {
       stepsPlanned: totalOf(session.state.nodes),
       gatesFired: session.gatesFiredCount ?? 0,
@@ -2273,7 +2219,7 @@ export class ChainSessionStore implements ChainSessionService {
       unknownsClosed: ledger.filter((entry) => entry.state === 'resolved').length,
       nodesInserted: session.state.nodes.filter((node) => node.origin === 'inserted').length,
       nodesSkipped: session.state.nodes.filter(
-        (node) => stepStates?.get(node.id)?.state === 'skipped'
+        (node) => stepStates.get(node.id)?.state === 'skipped'
       ).length,
       // D-8. Derived from the same two lists as everything above, never from a counter — see
       // `RunTelemetry`'s docblock for what UNIT each one counts, which is the part a reader
@@ -2281,14 +2227,6 @@ export class ChainSessionStore implements ChainSessionService {
       interruptsRaised: ledger.filter((entry) => entry.blocking === true).length,
       remaindersAccepted: countRemainderUnknownIds(session.state.nodes),
     };
-  }
-
-  /**
-   * Get original arguments for session
-   */
-  getOriginalArgs(sessionId: string): Record<string, any> {
-    const session = this.activeSessions.get(sessionId);
-    return session?.originalArgs || {};
   }
 
   getSessionBlueprint(sessionId: string, _scope?: StateStoreOptions): SessionBlueprint | undefined {
@@ -2407,7 +2345,7 @@ export class ChainSessionStore implements ChainSessionService {
   ): Promise<void> {
     const session = this.activeSessions.get(sessionId);
     if (!session) {
-      this.logger?.warn?.(
+      this.logger.warn(
         `Attempted to set pending shell verification for non-existent session: ${sessionId}`
       );
       return;
@@ -2445,7 +2383,7 @@ export class ChainSessionStore implements ChainSessionService {
   ): Promise<void> {
     const session = this.activeSessions.get(sessionId);
     if (session === undefined) {
-      this.logger?.warn(
+      this.logger.warn(
         `[GateReview] Attempted to record verdict for non-existent session: ${sessionId}`
       );
       return;
@@ -2466,69 +2404,12 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Check if chain has any active sessions
+   * The base chain's held runs, oldest registration first. Every held chain id is in its base's
+   * history (the run-index invariant, `tests/unit/chain-session/run-index-invariant.test.ts`), so
+   * a base with no history holds no run.
    */
-  hasActiveSessionForChain(chainId: string): boolean {
-    const sessionIds = this.chainSessionMapping.get(chainId);
-    if (!sessionIds) {
-      return false;
-    }
-
-    for (const sessionId of sessionIds) {
-      const session = this.activeSessions.get(sessionId);
-      if (session && !this.isDormantSession(session)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   getRunHistory(baseChainId: string): string[] {
-    const normalized = stripRunNumber(baseChainId);
-    const history = this.baseChainMapping.get(normalized);
-    if (history && history.length > 0) {
-      return [...history];
-    }
-
-    if (this.chainSessionMapping.has(normalized)) {
-      return [normalized];
-    }
-
-    const fallbackRuns = Array.from(this.chainSessionMapping.keys()).filter(
-      (chainId) => stripRunNumber(chainId) === normalized
-    );
-
-    return fallbackRuns.sort((a, b) => {
-      const runA = parseRunNumber(a) ?? 0;
-      const runB = parseRunNumber(b) ?? 0;
-      return runA - runB;
-    });
-  }
-
-  getLatestSessionForBaseChain(baseChainId: string): ChainSession | undefined {
-    const normalized = stripRunNumber(baseChainId);
-    const history = this.baseChainMapping.get(normalized);
-
-    if (history && history.length > 0) {
-      for (let idx = history.length - 1; idx >= 0; idx -= 1) {
-        const runChainId = history[idx];
-        if (runChainId === undefined) {
-          continue;
-        }
-        const sessionIds = this.chainSessionMapping.get(runChainId);
-        if (!sessionIds) {
-          continue;
-        }
-        for (const sessionId of sessionIds) {
-          const session = this.activeSessions.get(sessionId);
-          if (session && !this.isDormantSession(session)) {
-            return session;
-          }
-        }
-      }
-    }
-
-    return this.getActiveSessionForChain(normalized);
+    return [...(this.baseChainMapping.get(stripRunNumber(baseChainId)) ?? [])];
   }
 
   getSessionByChainIdentifier(
@@ -2629,33 +2510,6 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Get active session for chain (returns first active session)
-   */
-  getActiveSessionForChain(chainId: string): ChainSession | undefined {
-    const sessionIds = this.chainSessionMapping.get(chainId);
-    if (!sessionIds || sessionIds.size === 0) {
-      return undefined;
-    }
-
-    // Return the most recently active session
-    let mostRecentSession: ChainSession | undefined;
-    let mostRecentActivity = 0;
-
-    for (const sessionId of sessionIds) {
-      const session = this.activeSessions.get(sessionId);
-      if (session && !this.isDormantSession(session) && session.lastActivity > mostRecentActivity) {
-        mostRecentSession = session;
-        mostRecentActivity = session.lastActivity;
-      }
-    }
-
-    return mostRecentSession;
-  }
-
-  /**
-   * Clear session
-   */
-  /**
    * Remove one session and its artifacts.
    *
    * `scope` is honoured the same way `cancelChain` honours it: a session belonging to another
@@ -2682,9 +2536,7 @@ export class ChainSessionStore implements ChainSessionService {
     await this.notifySessionCleared(sessionId, session);
     await this.releaseRemovedRuns(release);
 
-    if (this.logger) {
-      this.logger.debug(`Cleared session ${sessionId} for chain ${session.chainId}`);
-    }
+    this.logger.debug(`Cleared session ${sessionId} for chain ${session.chainId}`);
     return true;
   }
 
@@ -2694,11 +2546,7 @@ export class ChainSessionStore implements ChainSessionService {
   async clearSessionsForChain(chainId: string, scope?: StateStoreOptions): Promise<void> {
     const scopeFilter = this.resolveScopeFilter(scope);
     const baseChainId = stripRunNumber(chainId);
-    const runChainIds = chainId === baseChainId ? [...this.getRunHistory(baseChainId)] : [chainId];
-
-    if (runChainIds.length === 0 && this.chainSessionMapping.has(chainId)) {
-      runChainIds.push(chainId);
-    }
+    const runChainIds = chainId === baseChainId ? this.getRunHistory(baseChainId) : [chainId];
 
     const snapshot = this.snapshotRunMembership();
     const release = emptyRunRelease();
@@ -2713,9 +2561,7 @@ export class ChainSessionStore implements ChainSessionService {
     await this.persistMutation(snapshot);
     await this.releaseRemovedRuns(release);
 
-    if (this.logger) {
-      this.logger.debug(`Cleared all sessions for chain ${chainId}`);
-    }
+    this.logger.debug(`Cleared all sessions for chain ${chainId}`);
   }
 
   /**
@@ -2741,7 +2587,7 @@ export class ChainSessionStore implements ChainSessionService {
       await this.clearSession(sessionId);
       cleaned++;
       if (session?.chainId?.startsWith('prompt-review-')) {
-        this.logger?.info('[GateReview] Cleaned abandoned prompt review session', {
+        this.logger.info('[GateReview] Cleaned abandoned prompt review session', {
           sessionId,
           chainId: session.chainId,
           lastActivity: session?.lastActivity,
@@ -2750,7 +2596,7 @@ export class ChainSessionStore implements ChainSessionService {
     }
 
     if (cleaned > 0) {
-      this.logger?.info(
+      this.logger.info(
         `Cleaned up ${cleaned} stale chain sessions (default timeout ${this.defaultSessionTimeoutMs}ms, review timeout ${this.reviewSessionTimeoutMs}ms)`
       );
     }
@@ -2788,7 +2634,7 @@ export class ChainSessionStore implements ChainSessionService {
       const removedSessions = this.removeRunChainSessions(removedChainId, release);
       this.removeRunFromBaseTracking(removedChainId);
 
-      this.logger?.info(
+      this.logger.info(
         `Pruned oldest run ${removedChainId} for base ${baseChainId} (keeping ${MAX_RUN_HISTORY} runs)`,
         { removedSessions }
       );
@@ -2915,21 +2761,6 @@ export class ChainSessionStore implements ChainSessionService {
 
       if (!this.runChainToBase.has(chainId)) {
         this.runChainToBase.set(chainId, baseChainId);
-      }
-    }
-
-    for (const [runChainId, baseChainId] of Array.from(this.runChainToBase.entries())) {
-      if (!this.chainSessionMapping.has(runChainId)) {
-        this.runChainToBase.delete(runChainId);
-        const history = this.baseChainMapping.get(baseChainId);
-        if (history) {
-          const filtered = history.filter((entry) => entry !== runChainId);
-          if (filtered.length > 0) {
-            this.baseChainMapping.set(baseChainId, filtered);
-          } else {
-            this.baseChainMapping.delete(baseChainId);
-          }
-        }
       }
     }
   }
@@ -3076,7 +2907,7 @@ export class ChainSessionStore implements ChainSessionService {
       return;
     }
     session.lifecycle = 'canonical';
-    this.logger?.debug?.(
+    this.logger.debug(
       `[ChainSessionStore] Promoted session ${session.sessionId} to canonical (${reason})`
     );
     this.persistSessionsAsync('lifecycle-promotion');
@@ -3406,31 +3237,13 @@ function deleteReview(session: ChainSession, nodeId: string): void {
   else delete session.reviews;
 }
 
-/** A copy that shares no array or object with `review`, so neither side can mutate the other. */
+/**
+ * A deep copy that shares no array or object with `review`, so neither side can mutate the other:
+ * the store keeps what `setReview` was given and `getReview` hands out, and neither the caller's
+ * object nor a returned one can reach it. One `structuredClone` instead of a field list, so a field
+ * added to {@link GateReview} is copied without anyone editing this function. A review is persisted
+ * as JSON, so it holds only data a structured clone accepts.
+ */
 function cloneReview(review: GateReview): GateReview {
-  return {
-    ...review,
-    gateIds: [...review.gateIds],
-    ...(review.structuralGateIds !== undefined && {
-      structuralGateIds: [...review.structuralGateIds],
-    }),
-    prompts: review.prompts.map((prompt) => {
-      const mappedPrompt: GateReviewPrompt = { ...prompt };
-      if (prompt.explicitInstructions !== undefined) {
-        mappedPrompt.explicitInstructions = [...prompt.explicitInstructions];
-      }
-      if (prompt.metadata !== undefined) {
-        mappedPrompt.metadata = { ...prompt.metadata };
-      }
-      return mappedPrompt;
-    }),
-    ...(review.retryHints !== undefined && { retryHints: [...review.retryHints] }),
-    ...(review.history !== undefined && {
-      history: review.history.map((entry) => ({ ...entry })),
-    }),
-    ...(review.metadata !== undefined && { metadata: { ...review.metadata } }),
-    ...(review.semanticContext !== undefined && {
-      semanticContext: structuredClone(review.semanticContext),
-    }),
-  };
+  return structuredClone(review);
 }

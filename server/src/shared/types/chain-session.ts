@@ -563,13 +563,10 @@ export interface ChainSessionService {
   ): Promise<ChainSession>;
   getSession(sessionId: string, scope?: StateStoreOptions): ChainSession | undefined;
   hasActiveSession(sessionId: string): boolean;
-  hasActiveSessionForChain(chainId: string): boolean;
-  getActiveSessionForChain(chainId: string): ChainSession | undefined;
   getSessionByChainIdentifier(
     chainId: string,
     options?: ChainSessionLookupOptions
   ): ChainSession | undefined;
-  getLatestSessionForBaseChain(chainId: string): ChainSession | undefined;
   getRunHistory(baseChainId: string): string[];
   getChainContext(sessionId: string, scope?: StateStoreOptions): Record<string, unknown>;
   /**
@@ -578,7 +575,6 @@ export interface ChainSessionService {
    * {@link RunTelemetry}.
    */
   getRunTelemetry(sessionId: string, scope?: StateStoreOptions): RunTelemetry | undefined;
-  getOriginalArgs(sessionId: string): Record<string, unknown>;
   getSessionBlueprint(sessionId: string, scope?: StateStoreOptions): SessionBlueprint | undefined;
   getInlineGateIds(sessionId: string, scope?: StateStoreOptions): string[] | undefined;
   /**
@@ -646,12 +642,6 @@ export interface ChainSessionService {
     declaredSections: readonly string[]
   ): boolean;
   getStepState(sessionId: string, nodeId: string): StepMetadata | undefined;
-  transitionStepState(
-    sessionId: string,
-    nodeId: string,
-    newMilestone: StepMilestone,
-    isPlaceholder?: boolean
-  ): Promise<boolean>;
   isStepComplete(sessionId: string, nodeId: string): boolean;
   /**
    * Mark a detached (`await: run`) node spawned — its brief was rendered. Idempotent; persisted.
