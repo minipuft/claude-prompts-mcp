@@ -49,6 +49,16 @@ class StubTextReferenceStore {
   clearChainStepResults = jest.fn();
 }
 
+/**
+ * A blueprint a claim can transfer. The registry refuses `no-blueprint` before moving a run that
+ * nothing could resume, so every run the sequence creates or donates carries one: the evict and
+ * claim operations exist to reach the indexes, not that refusal.
+ */
+const CLAIMABLE_BLUEPRINT = {
+  parsedCommand: { promptId: 'p1' },
+  executionPlan: { strategy: 'chain', gates: [], requiresFramework: false, requiresSession: true },
+} as unknown as NonNullable<ChainSession['blueprint']>;
+
 /** mulberry32: a fixed seed replays the same operation sequence on every run. */
 function seededRandom(seed: number): () => number {
   let state = seed >>> 0;
@@ -238,7 +248,16 @@ describe('ChainSessionStore run indexes stay consistent across every mutator', (
     const create = async (chainId: string, scope: StateStoreOptions): Promise<string> => {
       attempting = `${chainId} in ${String(scope.continuityScopeId)}`;
       try {
-        const created = await store.createSession(nextSessionId(), chainId, 2, {}, scope);
+        const created = await store.createSession(
+          nextSessionId(),
+          chainId,
+          2,
+          {},
+          {
+            ...scope,
+            blueprint: CLAIMABLE_BLUEPRINT,
+          }
+        );
         tally.created++;
         if (created.chainId !== chainId) tally.renamed++;
         if (parseRunNumber(chainId) === undefined) tally.bare++;
@@ -352,7 +371,7 @@ describe('ChainSessionStore run indexes stay consistent across every mutator', (
           continuityScopeId: scope,
           lifecycle: 'canonical',
           runStatus: 'working',
-          blueprint: { parsedCommand: { promptId: 'p1' } } as unknown as ChainSession['blueprint'],
+          blueprint: CLAIMABLE_BLUEPRINT,
           handoffToken: token,
         };
         await new DirectChainRunRegistry(engine).save([donated], {

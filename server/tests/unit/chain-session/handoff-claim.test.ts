@@ -931,8 +931,14 @@ describe('ChainSessionStore handoff refusals over a shared database', () => {
     const result = await claimer.claimHandoff('hnd_never-minted');
 
     expect(result).toEqual({ status: 'unknown-token' });
-    // Positive control for the fall-through: the registry WAS asked, with this token.
-    expect(transfer).toHaveBeenCalledWith('hnd_never-minted', expect.anything());
+    // Positive control for the fall-through: the registry WAS asked, once, with this token, the
+    // claimer's own run scope as the new owner, and no request-continuity filter (none was given).
+    expect(transfer).toHaveBeenCalledTimes(1);
+    expect(transfer).toHaveBeenCalledWith(
+      'hnd_never-minted',
+      { continuityScopeId: 'pid-claimer-unknown', workspaceId: 'ws-a' },
+      undefined
+    );
     expect((claimer as any).activeSessions.size).toBe(0);
     transfer.mockRestore();
   });

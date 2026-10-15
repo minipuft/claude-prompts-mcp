@@ -237,12 +237,18 @@ describe('ChainSessionStore — multi-session listing and chain lookup', () => {
       ).toBeUndefined();
     });
 
-    test('a run-numbered id with no session of its own falls back to the base chain, promoting a dormant one', async () => {
+    test('a run-numbered id with no session of its own finds nothing and leaves the dormant base session dormant', async () => {
       await seed('s-base', 'chain-a', NOW - 1000);
       goDormant('s-base');
 
-      const found = manager.getSessionByChainIdentifier('chain-a#7', { includeDormant: true });
+      // Lookup is exact: a stale or foreign run number never resolves to another run of its base.
+      expect(
+        manager.getSessionByChainIdentifier('chain-a#7', { includeDormant: true })
+      ).toBeUndefined();
+      expect(sessionOf('s-base').lifecycle).toBe('dormant');
 
+      // Control: the base id itself finds the same session and promotes it.
+      const found = manager.getSessionByChainIdentifier('chain-a', { includeDormant: true });
       expect(found?.sessionId).toBe('s-base');
       expect(sessionOf('s-base').lifecycle).toBe('canonical');
     });
