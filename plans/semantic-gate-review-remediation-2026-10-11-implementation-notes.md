@@ -212,6 +212,22 @@ Moved from `plans/workflow-client-evaluation-2026-10-09-implementation-notes.md`
 - R13.3: release PR #473 is not merged from this plan; the owner cuts releases.
 - Owner direction: finish this session here. Slice 7 ships as one PR; 0D.6, 0D.5, 0C1.31, 0C1.32, the coverage slices 0C2/0C3 and the errorText helper remain for the next planner session.
 
+## 2026-10-13 — #483 merged; rulings R13.4–R13.6; slices 8 and 9 cut
+
+- #483 merged (squash `adc6054b`), CI 11/11 green. claude-code-config #69 merged on owner instruction (merge commit, that repo's convention). The four stale `workflow-client-evaluation-2026-10-09*` drafts in the main checkout were older than the client-workflow session's copies; backed up to `~/.local/share/claude-prompts-mcp/stale-plan-drafts-20261013/` and deleted on owner instruction, and the main checkout fast-forwarded.
+- R13.4 (Q1): semantic review instructions render once, in the ResponseAssembler review CTA; step footers and operator supplements carry only a resume line → 1.9, then 1.11.
+- R13.5 (Q3): no CI check for repeated reply content ("feels redundant") → 1.10 killed.
+- R13.6 (Q4): retire the string form of the `gate_verdict` parameter. Every gate kind already has an object answer: check-tier (inline `::` criteria, temporary `gates` entries) through `per_gate[{index, passed, rationale}]`, semantic through `per_gate[].evaluation`, reminders through `reminders`; `:: verify:` needs no verdict. Text-channel grammars are not the parameter and stay: the exported-skill Stop hook (`skills-sync/service.ts`), Ralph subagent output (`hooks/lib/ralph_subagent_contract.py`), the delegation trailer's `Proposed Gate Review:` line. `hooks/gate-enforce.py` detects FAIL only in the string parameter and must read `overall`; hooks belong to the client-workflow plan, so that edit is handed to that session. 1.15 lands after 1.9 (shared assembler sites) and merges with no release between it and the `cancel` removal, so one major carries both.
+- Slice 8 (shared-tree, 4 workers): 0D.6, 0D.5, 0C1.31, 0C1.32. Slice 9 (own worktree, 1 worker): 1.9.
+
+## 2026-10-13 — slice 8 accepted: registry, refusal order, logging, dual mode
+
+- 0D.6 accepted (R13.1). The restore was driven before any release code. A resume can register new request gates, so a run is marked used at the start of every resume (`restoreRunGates`) as well as at adoption; without that, an idle run's own new gate would release its own gates mid-call. Finding not cut: a released run's request gate re-registers under a fresh `temp_…` id on each resume, so `reminders.satisfied` accumulates ids that no longer exist (PASS still advances).
+- 0D.5 accepted: option (a), refusals at stage 05; a new stage slot would renumber 13+ files under the stage-table validator. Behaviour changes: a `%judge` call with a refused gate gets the refusal instead of the menu; a request gate is refused even when the gate service is unavailable (stage 11 used to skip silently). Finding → 0D.11 (default `%clean` decided at stage 07, after stage 05). Not cut: the `%judge` menu returns after script stages ran, so a judge call runs a prompt's scripts twice; workflow nodes never run script tools.
+- 0C1.31 accepted, then found defective by the e2e run of a sibling row: DEV-T8-P1 (planner) — the brief's test bar was order and flush, and neither the worker nor the planner asked what a per-line promise chain costs under sustained logging. A 0D.5 worker's full `chain-prompt-sources` run crashed the server; a scratch-worktree bisect (control `adc6054b` green) named 0fbe398c, heap 61 MB → 2040 MB → V8 abort. Fixed by coalescing (0C1.33). The e2e helper pipes and never reads the server's output, so the abort surfaced only as "socket hang up".
+- 0C1.32 accepted, with the deviation that a listener `error` after bind logs instead of exiting.
+- 0D.11 accepted: workflow nodes never run script tools, so only the `::` command path had the false "nothing executed" claim.
+
 ## 2026-10-13 — slice 9: semantic reply rendering (1.9, 1.11, 1.16, 1.17)
 
 - 1.9 (R13.4) accepted: the single-owner pattern (as `buildJudgeReviewSection` documents) rather than the "section identity dedup" the brief named, which does not exist — DEV-T9-P1, a brief that names a mechanism must have seen it. `formatBlockedResponse` used the step render as instructions, so blocked semantic replies are fixed by the same change.

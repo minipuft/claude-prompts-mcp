@@ -13,6 +13,9 @@ import type { ExecutionPlan } from '../../types.js';
  */
 type FrameworkEnabledProvider = (scope: StateStoreOptions | undefined) => boolean;
 
+/** Whether the call itself requested a gate, in any spelling. */
+type GatesRequestedProvider = (context: ExecutionContext) => boolean;
+
 /**
  * Pipeline Stage 07: Execution Planning
  *
@@ -30,6 +33,7 @@ export class ExecutionPlanningStage extends BasePipelineStage {
   constructor(
     private readonly executionPlanner: ExecutionPlanner,
     private readonly frameworkEnabled: FrameworkEnabledProvider,
+    private readonly gatesRequested: GatesRequestedProvider,
     logger: Logger
   ) {
     super(logger);
@@ -69,6 +73,7 @@ export class ExecutionPlanningStage extends BasePipelineStage {
       convertedPrompt,
       frameworkEnabled: this.frameworkEnabled(context.getScopeOptions()),
       gateOverrides: this.buildGateOverrides(context),
+      gatesRequested: this.gatesRequested(context),
     });
 
     context.executionPlan = plan;
@@ -97,6 +102,7 @@ export class ExecutionPlanningStage extends BasePipelineStage {
       steps,
       frameworkEnabled: this.frameworkEnabled(context.getScopeOptions()),
       gateOverrides,
+      gatesRequested: this.gatesRequested(context),
     });
 
     const aggregatedGates = new Set(chainPlan.gates ?? []);

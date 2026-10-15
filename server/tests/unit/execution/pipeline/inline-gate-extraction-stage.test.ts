@@ -3,6 +3,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { InlineGateExtractionStage } from '../../../../src/engine/execution/pipeline/stages/05-inline-gate-stage.js';
 import { InlineGateProcessor } from '../../../../src/engine/gates/services/inline-gate-processor.js';
+import { RequestGateAdmission } from '../../../../src/engine/gates/services/request-gate-admission.js';
 import { TemporaryGateRegistrar } from '../../../../src/engine/gates/services/temporary-gate-registrar.js';
 
 import type { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
@@ -53,15 +54,31 @@ const createResolver = (
   };
 };
 
+/** The gate switches stage 05's admission reads; every gate runs unless a case turns one off. */
+interface GateSwitchState {
+  configEnabled?: boolean;
+  runtimeEnabled?: boolean;
+}
+
 const createStage = (
   registry: TemporaryGateRegistry,
-  resolver: GateReferenceResolver
+  resolver: GateReferenceResolver,
+  switches: GateSwitchState = {}
 ): InlineGateExtractionStage => {
   const logger = createLogger();
   const inlineGateProcessor = new InlineGateProcessor(registry, resolver, logger, {
     remapRunGates: async () => undefined,
   });
-  return new InlineGateExtractionStage(inlineGateProcessor, logger);
+  const admission = new RequestGateAdmission(
+    new TemporaryGateRegistrar(registry, resolver, logger),
+    () => ({
+      enabled: switches.configEnabled ?? true,
+      definitionsDirectory: 'gates',
+      enableFrameworkGates: true,
+    }),
+    () => switches.runtimeEnabled ?? true
+  );
+  return new InlineGateExtractionStage(inlineGateProcessor, logger, admission);
 };
 
 describe('InlineGateExtractionStage', () => {
@@ -596,5 +613,101 @@ describe('a request gate whose registration throws fails the call (R11.8)', () =
     // Control: once the registry accepts, the same call registers the gate.
     createTemporaryGate.mockImplementation(() => 'rg-1');
     expect((await registrar.registerTemporaryGates(context)).temporaryGateIds).toEqual(['rg-1']);
+  });
+});
+
+describe("stage 05 refuses the call's own gate requests before anything registers", () => {
+  const callWith = (
+    gates: unknown[],
+    extra: { modifiers?: { clean?: boolean }; operators?: unknown[] } = {}
+  ): ExecutionContext => {
+    const context = new ExecutionContext({ command: '>>demo', gates: gates as never });
+    context.state.gates.requestedOverrides = { gates };
+    context.parsedCommand = {
+      promptId: 'demo',
+      rawArgs: '',
+      format: 'symbolic',
+      confidence: 0.9,
+      metadata: {
+        originalCommand: '>>demo',
+        parseStrategy: 'symbolic',
+        detectedFormat: 'symbolic',
+        warnings: [],
+      },
+      inlineGateCriteria: ['Be concise'],
+      ...(extra.modifiers !== undefined ? { modifiers: extra.modifiers } : {}),
+      ...(extra.operators !== undefined
+        ? { operators: { operators: extra.operators } as never }
+        : {}),
+    };
+    return context;
+  };
+  const textOf = (context: ExecutionContext): string =>
+    (context.response?.content[0] as { text: string } | undefined)?.text ?? '';
+
+  test('a blank request gate refuses the call by entry, and no inline gate registers', async () => {
+    const { registry, createTemporaryGate } = createRegistry();
+    const context = callWith([
+      { id: 'cites', criteria: ['Cites a source'] },
+      { name: 'Tone', description: '   ' },
+    ]);
+
+    await createStage(registry, createResolver().resolver).execute(context);
+
+    expect(context.response?.isError).toBe(true);
+    expect(textOf(context)).toContain(
+      '• [gate-criteria-invalid] workflow: request gate 2 (name "Tone")'
+    );
+    expect(textOf(context)).toContain('Nothing was executed and no run was created.');
+    expect(createTemporaryGate).not.toHaveBeenCalled();
+  });
+
+  test("a `::` criterion under the call's own %clean is refused, naming the modifier", async () => {
+    const { registry, createTemporaryGate } = createRegistry();
+    const context = callWith([], {
+      modifiers: { clean: true },
+      operators: [{ type: 'gate', criteria: 'Be concise' }],
+    });
+
+    await createStage(registry, createResolver().resolver).execute(context);
+
+    expect(context.response?.isError).toBe(true);
+    expect(textOf(context)).toContain('• [gate-suppressed] workflow: %clean runs without gates');
+    expect(textOf(context)).toContain(':: "Be concise"');
+    expect(createTemporaryGate).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['configuration', { configEnabled: false }, 'gates are disabled by configuration'],
+    ['the runtime switch', { runtimeEnabled: false }, 'the gate system is disabled'],
+  ])('a request gate with gates off by %s is refused', async (_, switches, cause) => {
+    const { registry } = createRegistry();
+    const context = callWith([{ id: 'cites', criteria: ['Cites a source'] }]);
+
+    await createStage(registry, createResolver().resolver, switches).execute(context);
+
+    expect(context.response?.isError).toBe(true);
+    expect(textOf(context)).toContain('[gate-suppressed]');
+    expect(textOf(context)).toContain(cause);
+  });
+
+  test('control: a valid request gate is admitted, and the inline gate registers', async () => {
+    const { registry, createTemporaryGate } = createRegistry();
+    const context = callWith([{ id: 'cites', criteria: ['Cites a source'] }]);
+
+    await createStage(registry, createResolver().resolver).execute(context);
+
+    expect(context.response).toBeUndefined();
+    expect(createTemporaryGate).toHaveBeenCalledTimes(1);
+  });
+
+  test('control: %clean with no requested gate is admitted (stage 11 skips it)', async () => {
+    const { registry } = createRegistry();
+    const context = callWith([], { modifiers: { clean: true } });
+    context.parsedCommand!.inlineGateCriteria = [];
+
+    await createStage(registry, createResolver().resolver).execute(context);
+
+    expect(context.response).toBeUndefined();
   });
 });

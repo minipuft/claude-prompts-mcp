@@ -26,6 +26,8 @@ export interface ExecutionPlannerOptions {
   convertedPrompt: ConvertedPrompt;
   frameworkEnabled?: boolean;
   gateOverrides?: GateOverrideOptions;
+  /** Whether the call itself requested a gate, in any spelling (`callerRequestedGates`). */
+  gatesRequested?: boolean;
 }
 
 export interface ChainExecutionPlannerOptions {
@@ -33,6 +35,7 @@ export interface ChainExecutionPlannerOptions {
   steps: readonly ChainStepPrompt[];
   frameworkEnabled?: boolean;
   gateOverrides?: GateOverrideOptions;
+  gatesRequested?: boolean;
 }
 
 export interface ChainExecutionPlanResult {
@@ -79,7 +82,13 @@ export class ExecutionPlanner {
   }
 
   async createPlan(options: ExecutionPlannerOptions): Promise<ExecutionPlan> {
-    const { parsedCommand, convertedPrompt, frameworkEnabled = false, gateOverrides } = options;
+    const {
+      parsedCommand,
+      convertedPrompt,
+      frameworkEnabled = false,
+      gateOverrides,
+      gatesRequested = false,
+    } = options;
 
     const categoryInfo = this.categoryExtractor.extractCategory(convertedPrompt);
     const strategyInput: Parameters<typeof this.resolveStrategy>[0] = { convertedPrompt };
@@ -91,7 +100,12 @@ export class ExecutionPlanner {
     const modifierResolution = this.normalizeModifiers(parsedCommand?.modifiers);
 
     // Apply script-tools default: clean mode if prompt has script tools and no explicit overrides
-    this.applyScriptToolDefaults(modifierResolution, convertedPrompt, parsedCommand, gateOverrides);
+    this.applyScriptToolDefaults(
+      modifierResolution,
+      convertedPrompt,
+      parsedCommand,
+      gatesRequested
+    );
 
     // Gate resolution is owned by GateSetResolver (ADR 0001) — this stage only supplies inputs
     // and reads the result. Do not reintroduce gate logic here.
@@ -156,7 +170,13 @@ export class ExecutionPlanner {
   }
 
   async createChainPlan(options: ChainExecutionPlannerOptions): Promise<ChainExecutionPlanResult> {
-    const { parsedCommand, steps, frameworkEnabled = false, gateOverrides } = options;
+    const {
+      parsedCommand,
+      steps,
+      frameworkEnabled = false,
+      gateOverrides,
+      gatesRequested = false,
+    } = options;
 
     if (!Array.isArray(steps) || steps.length === 0) {
       throw new Error('Chain planning requires at least one step with a converted prompt');
@@ -179,6 +199,7 @@ export class ExecutionPlanner {
     if (gateOverrides !== undefined) {
       chainPlanOptions.gateOverrides = gateOverrides;
     }
+    chainPlanOptions.gatesRequested = gatesRequested;
 
     const chainPlan = await this.createPlan(chainPlanOptions);
 
@@ -202,6 +223,7 @@ export class ExecutionPlanner {
       if (gateOverrides !== undefined) {
         stepPlanOptions.gateOverrides = gateOverrides;
       }
+      stepPlanOptions.gatesRequested = gatesRequested;
 
       const stepPlan = await this.createPlan(stepPlanOptions);
       stepPlans.push(stepPlan);
@@ -295,18 +317,19 @@ export class ExecutionPlanner {
    * Script tool prompts default to %clean to focus output on tool results.
    * This default is overridden if the user explicitly provides:
    * - Any modifier flag (%judge, %lean, %framework, or even %clean)
-   * - Custom gates via the gates parameter
+   * - A gate in any spelling: `gates`, a `::` operator, a workflow `gates` or node gate. The
+   *   default exists to keep ungated calls lean, and `%clean` would withhold the requested gate.
    *
    * @param modifierResolution - Current modifier resolution (mutated in place)
    * @param convertedPrompt - The prompt being executed
    * @param parsedCommand - User's parsed command (to detect explicit modifiers)
-   * @param gateOverrides - User's gate overrides (to detect custom gates)
+   * @param gatesRequested - Whether the call itself requested a gate
    */
   private applyScriptToolDefaults(
     modifierResolution: { modifiers?: ExecutionModifiers },
     convertedPrompt: ConvertedPrompt,
-    parsedCommand?: ParsedCommand,
-    gateOverrides?: GateOverrideOptions
+    parsedCommand: ParsedCommand | undefined,
+    gatesRequested: boolean
   ): void {
     // Only apply to prompts with script tools
     if (!convertedPrompt.scriptTools || convertedPrompt.scriptTools.length === 0) {
@@ -335,8 +358,7 @@ export class ExecutionPlanner {
       return;
     }
 
-    // Don't override if user provided custom gates
-    if (gateOverrides?.gates && gateOverrides.gates.length > 0) {
+    if (gatesRequested) {
       return;
     }
 

@@ -43,7 +43,8 @@ export interface RegisteredGateResult {
 
 /**
  * A request gate a resume can no longer reach (R59, R64): the node it names, as the client
- * addresses it, and why. Stage 11 renders it through stage 04's render as a `gate-target-passed` rejection.
+ * addresses it, and why. Stage 05 renders it through stage 04's render as a `gate-target-passed`
+ * rejection.
  */
 export interface StepTargetRefusal {
   readonly nodeId: string;
@@ -243,7 +244,7 @@ export class TemporaryGateRegistrar {
       }
       if (effectiveGuidance === '') {
         throw new Error(
-          `[TemporaryGateRegistrar] request gate "${gate.name}" has nothing to review; stage 11 ` +
+          `[TemporaryGateRegistrar] request gate "${gate.name}" has nothing to review; stage 05 ` +
             'refuses it before registration (R11.8).'
         );
       }
@@ -388,7 +389,7 @@ export class TemporaryGateRegistrar {
    * string, a blank criteria entry, an entry whose every criterion, guidance and description is
    * blank, or a bare id naming neither a registered gate nor one this run holds. Each would
    * otherwise start the run without the gate the client asked for — skipped, or registered with
-   * nothing to review. Stage 11 refuses the call on any, before anything registers, so
+   * nothing to review. Stage 05 refuses the call on any, before anything registers, so
    * {@link registerTemporaryGates} never meets one. Read from the same channel the registration
    * loop reads, and addressed by position across `gates` then `workflow.gates`. Never judged: an
    * entry whose id names a gate this run holds or declared earlier (a resume re-sending it is that
@@ -546,7 +547,7 @@ export class TemporaryGateRegistrar {
    *
    * The same gate again — a resume re-sending it, or a repeat in this request (P6.107) — resolves
    * through the run's declared ids, so a run holding `<id>-2` keeps it (R49); an id another run
-   * holds is not this gate, and registers under a fresh id. Stage 11 refused every new entry that
+   * holds is not this gate, and registers under a fresh id. Stage 05 refused every new entry that
    * cannot register (`invalidRequestGates`), so one here throws; a claimed run's recorded entry
    * that registered nothing when its run started registers nothing now (R11.13).
    */

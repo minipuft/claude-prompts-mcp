@@ -12,11 +12,15 @@
  * The probe is the WAL file: it exists while the server holds the database open (asserted
  * before each trigger, so its absence afterwards is not a probe that cannot fire) and SQLite
  * removes it when the last connection closes.
+ *
+ * The log file must also hold the shutdown sequence's last line: `process.exit` discards file
+ * writes still in flight, so a shutdown that exits without waiting for them leaves the log
+ * ending at startup.
  */
 
 import { afterEach, describe, expect, it } from '@jest/globals';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -103,9 +107,12 @@ describe('STDIO server shutdown triggers', () => {
     async (trigger) => {
       roots = createHermeticRoots('stdio-shutdown-e2e');
       const walPath = path.join(roots.runtimeRoot, 'runtime-state', 'state.db-wal');
+      const logPath = path.join(roots.runtimeRoot, 'logs', 'mcp-server.log');
       proc = await startStdioServer(roots);
 
       expect(existsSync(walPath)).toBe(true);
+      // Positive control: the log file is the one this server writes.
+      expect(readFileSync(logPath, 'utf8')).toContain('MCP Server Log Started');
 
       const exited = waitForExit(proc, 10000);
       if (trigger === 'stdin-end') {
@@ -116,6 +123,7 @@ describe('STDIO server shutdown triggers', () => {
 
       expect(await exited).toBe(0);
       expect(existsSync(walPath)).toBe(false);
+      expect(readFileSync(logPath, 'utf8')).toContain('Graceful shutdown completed successfully');
     },
     40000
   );

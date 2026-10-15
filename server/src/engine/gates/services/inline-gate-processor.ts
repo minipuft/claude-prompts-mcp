@@ -310,10 +310,11 @@ export class InlineGateProcessor {
 
   /**
    * Re-register the temporary gates a restored run's blueprint references and this process does
-   * not hold (R54) — a run claimed from another server (the 2A handoff) is the one resume whose
-   * gates were registered in a process that is not this one. Stage 05 skips processing on a
-   * restored blueprint, and the registry is in memory, so without this the run's named gates, its
-   * anonymous criteria and its request gates stop rendering and reviewing from the claim on.
+   * not hold (R54): a run claimed from another server (the 2A handoff), whose gates were
+   * registered in another process, or a run whose gates a full registry released while it sat
+   * idle. Stage 05 skips processing on a restored blueprint, and the registry is in memory, so
+   * without this the run's named gates, its anonymous criteria and its request gates stop
+   * rendering and reviewing from then on.
    *
    * Each gate registers under the id the blueprint recorded (`restoreTemporaryGate`), so the
    * steps' `inlineGateIds` resolve unchanged; a held id is skipped. That makes the restore
@@ -330,6 +331,9 @@ export class InlineGateProcessor {
     if (runId === undefined) {
       return [];
     }
+    // Before anything below registers: a full registry releases idle runs' gates, and this run,
+    // however long it sat idle, is in use from here.
+    this.temporaryGateRegistry.markRunUsed(runId);
     const restored: string[] = [];
     const restore: RestoreGate = (id, criteria, identity, stepNumber, onHeld = 'skip') => {
       const definition = {
