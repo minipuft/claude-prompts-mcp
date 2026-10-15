@@ -15,13 +15,13 @@ tags: [hooks, workflows, evaluation, clients]
 
 # Client workflow contracts and repeatable evaluation
 
-## Now (2026-10-14)
+## Now (2026-10-15)
 
 Goal: coherent abort, conversation pause, and truthful client workflow evidence.
-Slice: source repairs and final corrected wire boundary accepted:367 calls across STDIO/HTTP,30 stages,8 hosts,71 frozen bindings at4e36decc. All85 local validation members and separate fresh bundled HTTP20/schema3 checks passed. Full repository and cleanup guards stayed exact.
-Next: push the bounded #489 unit-fixture repair after its local gates and let CI run again. Pause production is separate: A inspection and B1 canonical factoring accepted, B2 selected strict persistence running; root recut now22 rows. Object-verdict composition, Q6 and installed/native delivery remain open.
-Constraint: root owns HEAD/index; protected stashes and every accepted/failed receipt stay retained. Source publish authorization covers this repository only; no CloudySky, installed client, foreign checkout, shared database, package or release mutation.
-Boundary: earlier355-call and failed104-call receipts stay historical. Current source transport proof is separate from installed/native/model evidence and stop-old-first recovery.
+Shipped: scoped `abort` (#489) and the object-only `gate_verdict` (#488) landed together in #492 (5e703819), which superseded both drafts. The Claude session took this plan over from the Codex planner on 2026-10-14.
+Current: conversation pause continues in its child plan `workflow-conversation-pause-2026-10-12.md` on `feat/conversation-pause`, rebased onto main; it lands before the 6.0.0 release is cut (owner, 2026-10-15). That plan's T3.x hook rows and T4.x evidence rows carry the hook and pause work named by rows 0.2 and 1.3–1.7 here.
+Next: the pause slices P1–P4. Native client delivery (2.x) and the evaluation harness (3.x) are not release blockers and stay open.
+Constraint: no CloudySky, installed client, foreign checkout, shared database, package or release mutation from this plan.
 
 ## Intent
 
