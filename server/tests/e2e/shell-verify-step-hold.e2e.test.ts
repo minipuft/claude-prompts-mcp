@@ -75,8 +75,8 @@ import {
 
 const STEP_COMPLETE = 'notifications/chain/step_complete';
 const CHAIN_COMPLETE = 'notifications/chain/complete';
-const PASS = 'GATE_REVIEW: PASS - three options with tradeoffs';
-const FAIL = 'GATE_REVIEW: FAIL - the step misses its gate';
+const PASS = { overall: 'PASS', rationale: 'three options with tradeoffs' };
+const FAIL = { overall: 'FAIL', rationale: 'the step misses its gate' };
 /** Opted out of the default gates, so each step carries exactly the one blocking gate below. */
 const OPT_OUT = { exclude: ['content-structure'], framework_gates: false };
 
@@ -470,7 +470,8 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
   test('P6.53 (a): a check passed under its step review stands again, so the next step is checked', async () => {
     const { call, marker, runs } = await startVerifiedChain(true, '', { authored: true });
     expect(
-      (await call({ user_response: 'A out', gate_verdict: 'GATE_REVIEW: PASS - ok' })).text
+      (await call({ user_response: 'A out', gate_verdict: { overall: 'PASS', rationale: 'ok' } }))
+        .text
     ).toContain('Progress 2/3');
 
     // Step 2's FAIL opens its review; the same call's check passes and leaves the step to it
@@ -479,14 +480,17 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     expect(runs()).toBe(2);
 
     // The review's PASS moves the run: an armed check holds only a capture
-    const passed = await call({ gate_verdict: 'GATE_REVIEW: PASS - ok' });
+    const passed = await call({ gate_verdict: { overall: 'PASS', rationale: 'ok' } });
     expect(passed.text).toContain('Progress 3/3');
     expect(count(passed, STEP_COMPLETE)).toBe(1);
     expect(runs()).toBe(2);
 
     // The check stood again, so step 3's answer is checked and bounces
     unlinkSync(marker);
-    const bounced = await call({ user_response: 'C out', gate_verdict: 'GATE_REVIEW: PASS - ok' });
+    const bounced = await call({
+      user_response: 'C out',
+      gate_verdict: { overall: 'PASS', rationale: 'ok' },
+    });
     expect(bounced.text).toContain('Shell Verification FAILED (Attempt 1/5)');
     expect(count(bounced, CHAIN_COMPLETE)).toBe(0);
     expect(runs()).toBe(3);
@@ -525,7 +529,10 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
 
   test('P6.56 (b) control: skip with only the check pending releases the step, as today', async () => {
     const { call, runs } = await startVerifiedChain(false, '', { authored: true });
-    const bounced = await call({ user_response: 'A out', gate_verdict: 'GATE_REVIEW: PASS - ok' });
+    const bounced = await call({
+      user_response: 'A out',
+      gate_verdict: { overall: 'PASS', rationale: 'ok' },
+    });
     expect(bounced.text).toContain('Shell Verification FAILED (Attempt 1/5)');
 
     // MEASURED 2026-09-25 (P6.74): the skip releases the check and step A's review then takes
@@ -539,7 +546,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
 
   test('P6.69: the FAIL that opens a review beside a passing check replies with the review', async () => {
     const { call, runs } = await startVerifiedChain(true, '', { authored: true });
-    await call({ user_response: 'A out', gate_verdict: 'GATE_REVIEW: PASS - ok' });
+    await call({ user_response: 'A out', gate_verdict: { overall: 'PASS', rationale: 'ok' } });
 
     const opened = await call({ user_response: 'B out', gate_verdict: FAIL });
     expect(opened.text).not.toContain('Execution results missing');
@@ -555,7 +562,7 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     const start = await raw({ command: '>>sv_chain' });
     const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(start.text)?.[1];
     const call: Call = (args) => raw({ chain_id: chainId, ...args });
-    await call({ user_response: 'A out', gate_verdict: 'GATE_REVIEW: PASS - ok' });
+    await call({ user_response: 'A out', gate_verdict: { overall: 'PASS', rationale: 'ok' } });
 
     const opened = await call({ user_response: 'B out', gate_verdict: FAIL });
     expect(opened.text).toContain('Gate Review Required');
@@ -566,7 +573,10 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
 
   /** Answer step 1, then FAIL step 2: the two replies a chain's step 2 is judged by. */
   async function failStepTwo(call: Call): Promise<{ second: ToolOutcome; failed: ToolOutcome }> {
-    const second = await call({ user_response: 'A out', gate_verdict: 'GATE_REVIEW: PASS - ok' });
+    const second = await call({
+      user_response: 'A out',
+      gate_verdict: { overall: 'PASS', rationale: 'ok' },
+    });
     const failed = await call({ user_response: 'B out', gate_verdict: FAIL });
     return { second, failed };
   }

@@ -115,7 +115,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
     // Create context with gate verdict (command can be undefined for chain resume)
     const request: McpToolRequest = {
       chain_id: sessionId,
-      gate_verdict: 'GATE_REVIEW: PASS - All criteria met',
+      gate_verdict: { overall: 'PASS', rationale: 'All criteria met' },
     } as McpToolRequest;
     const context = new ExecutionContext(request, noopLogger);
     context.sessionContext = {
@@ -155,7 +155,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
 
     const request: McpToolRequest = {
       chain_id: sessionId,
-      gate_verdict: 'GATE_REVIEW: FAIL - Missing test coverage',
+      gate_verdict: { overall: 'FAIL', rationale: 'Missing test coverage' },
     } as McpToolRequest;
     const context = new ExecutionContext(request, noopLogger);
     context.sessionContext = {
@@ -203,7 +203,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
 
     const request: McpToolRequest = {
       chain_id: sessionId,
-      gate_verdict: 'GATE_REVIEW: FAIL - Still missing coverage',
+      gate_verdict: { overall: 'FAIL', rationale: 'Still missing coverage' },
     } as McpToolRequest;
     const context = new ExecutionContext(request, noopLogger);
     context.sessionContext = {
@@ -318,7 +318,7 @@ describe('gate events reach a port-only collaborator', () => {
     const context = new ExecutionContext(
       {
         chain_id: sessionId,
-        gate_verdict: 'GATE_REVIEW: FAIL - Missing test coverage',
+        gate_verdict: { overall: 'FAIL', rationale: 'Missing test coverage' },
       } as McpToolRequest,
       noopLogger
     );

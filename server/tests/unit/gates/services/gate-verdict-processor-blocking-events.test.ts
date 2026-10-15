@@ -104,7 +104,7 @@ function createContext() {
   const context = new ExecutionContext(
     {
       chain_id: 'chain-test#1',
-      gate_verdict: 'GATE_REVIEW: FAIL - it did not hold',
+      gate_verdict: { overall: 'FAIL', rationale: 'it did not hold' },
       user_response: 'a response',
     },
     createLogger()
@@ -247,7 +247,10 @@ describe('canonical structural cleared-node flag', () => {
   test.each([false, true])(
     'authored canonical ID sets the cleared flag only with server membership=%j',
     async (marked) => {
-      const f = custodyFixture('ordinary', 'GATE_REVIEW: PASS - The reviewed output is accepted');
+      const f = custodyFixture('ordinary', {
+        overall: 'PASS',
+        rationale: 'The reviewed output is accepted',
+      });
       const review = f.session.reviews?.['node-1'];
       if (review === undefined) throw new Error('Missing review');
       review.gateIds = [PHASE_GUARD_GATE_ID];
@@ -380,7 +383,7 @@ describe('GateVerdictProcessor attempt renewal', () => {
   });
 
   test('exhausted ordinary retry persists the renewed review returned to its caller', async () => {
-    const fixture = custodyFixture('ordinary', 'GATE_REVIEW: FAIL - Retry');
+    const fixture = custodyFixture('ordinary', { overall: 'FAIL', rationale: 'Retry' });
     const original = pinReview(fixture);
     original.phase = 'exhausted';
     original.attemptCount = 2;
@@ -638,10 +641,12 @@ describe('GateVerdictProcessor pinned semantic adjudication', () => {
   // R11.2: a verdict that cannot carry the required report is refused as an error. No attempt is
   // spent, the captured target stays, nothing is recorded, and the reply says what to send.
   const reportless: Record<string, McpToolRequest['gate_verdict']> = {
-    'string PASS': 'GATE_REVIEW: PASS - The output preserves the contract',
-    'string FAIL': 'GATE_REVIEW: FAIL - The output breaks the contract',
     'object entry without evaluation': semanticSubmission('missing-report'),
     'object without per_gate': { overall: 'PASS', rationale: 'Reviewed the captured output' },
+    'FAIL object without per_gate': {
+      overall: 'FAIL',
+      rationale: 'The output breaks the contract',
+    },
   };
   test.each(
     (['ordinary', 'detached'] as const).flatMap((kind) =>
@@ -670,11 +675,7 @@ describe('GateVerdictProcessor pinned semantic adjudication', () => {
       message = fixture.context.response?.content.map((part) => part.text).join('\n') ?? '';
     }
     expect(message).toContain("Semantic gate 'gate-a' needs gate_verdict.per_gate[1].evaluation");
-    expect(message).toContain(
-      shape.startsWith('string')
-        ? 'a string verdict cannot carry it'
-        : 'the submitted verdict carries none'
-    );
+    expect(message).toContain('the submitted verdict carries none');
     expect(message).toContain('No attempt was used. Resubmit:');
     // The resubmit template carries the review's own binding, ready to fill in.
     expect(message).toContain('"attempt_id":"attempt-1"');
@@ -683,8 +684,8 @@ describe('GateVerdictProcessor pinned semantic adjudication', () => {
     expect(message).not.toMatch(/failed: :/);
   });
 
-  test('an exhausted semantic review answers a string verdict with its retry limit, not a resubmit', async () => {
-    const fixture = custodyFixture('ordinary', reportless['string PASS']);
+  test('an exhausted semantic review answers a report-less verdict with its retry limit, not a resubmit', async () => {
+    const fixture = custodyFixture('ordinary', reportless['object without per_gate']);
     const held = pinReview(fixture);
     held.phase = 'exhausted';
     held.attemptCount = held.maxAttempts;
@@ -701,9 +702,12 @@ describe('GateVerdictProcessor pinned semantic adjudication', () => {
       [true, false].map((issued) => ({ kind, issued }))
     )
   )(
-    'ordinary legacy PASS remains supported on $kind reviews (issued=$issued)',
+    'an overall-only PASS answers an ordinary $kind review (issued=$issued)',
     async ({ kind, issued }) => {
-      const fixture = custodyFixture(kind, 'GATE_REVIEW: PASS - Ordinary gate satisfied');
+      const fixture = custodyFixture(kind, {
+        overall: 'PASS',
+        rationale: 'Ordinary gate satisfied',
+      });
       const held = fixture.session.reviews?.['node-1'];
       if (held === undefined) throw new Error('Missing ordinary review');
       if (!issued) delete held.semanticContext;
@@ -829,9 +833,9 @@ describe('GateVerdictProcessor pinned semantic adjudication', () => {
   );
 
   test.each(['ordinary', 'detached'] as const)(
-    'legacy PASS cannot stand in for a required semantic report on a %s review',
+    'an overall-only PASS cannot stand in for a required semantic report on a %s review',
     async (kind) => {
-      const fixture = custodyFixture(kind, 'GATE_REVIEW: PASS - Trust the reviewer');
+      const fixture = custodyFixture(kind, { overall: 'PASS', rationale: 'Trust the reviewer' });
       pinReview(fixture);
       const result = await fixture.submit();
       expect(fixture.store.clearReview).not.toHaveBeenCalled();
@@ -870,26 +874,6 @@ describe('GateVerdictProcessor typed report custody', () => {
       if (kind === 'detached')
         expect(result).toMatchObject({ kind: 'recorded', result: 'failed', attempt: 1 });
       else expect(result).toMatchObject({ passClearedThisCall: false, earlyExit: false });
-    }
-  );
-
-  test.each(['ordinary', 'detached'] as const)(
-    'keeps legacy string summaries available for %s reviews',
-    async (kind) => {
-      const fixture = custodyFixture(
-        kind,
-        'GATE_REVIEW: FAIL - Legacy review\n\nGATE_VERDICTS:\n[1] FAIL - Legacy criterion'
-      );
-
-      await fixture.submit();
-
-      expect(fixture.context.state.gates.perGateVerdicts?.[0]).toMatchObject({
-        gateId: 'gate-a',
-        verdict: 'FAIL',
-        rationale: 'Legacy criterion',
-      });
-      expect(fixture.context.state.gates.perGateVerdicts?.[0]).not.toHaveProperty('evaluation');
-      expect(fixture.store.advanceStep).not.toHaveBeenCalled();
     }
   );
 
@@ -962,12 +946,12 @@ describe('GateVerdictProcessor typed report custody', () => {
     expect(fixture.store.advanceStep).not.toHaveBeenCalled();
   });
 
-  test.each(['structured', 'legacy'] as const)(
+  test.each(['per-gate', 'overall-only'] as const)(
     'authority FAIL joins accept %s verdicts through the typed getter',
     async (form) => {
       const fixture = custodyFixture(
         'ordinary',
-        form === 'structured' ? structuredReview() : 'GATE_REVIEW: FAIL - Retry'
+        form === 'per-gate' ? structuredReview() : { overall: 'FAIL', rationale: 'Retry' }
       );
       const review = fixture.session.reviews?.['node-1'];
       if (review === undefined) throw new Error('Review fixture missing');

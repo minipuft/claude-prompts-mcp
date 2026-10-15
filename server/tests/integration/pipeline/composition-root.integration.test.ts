@@ -68,7 +68,7 @@ const PATH_ENV_KEYS = [
 ];
 const originalEnv = new Map(PATH_ENV_KEYS.map((key) => [key, process.env[key]]));
 
-const PASS = 'GATE_REVIEW: PASS - ok';
+const PASS = { overall: 'PASS', rationale: 'ok' };
 const FRAMEWORK_HEADER = 'C.A.G.E.E.R.F Framework Active';
 const FWS2_FRAMEWORK_ID = 'fws2fw';
 
@@ -1619,7 +1619,11 @@ describe('a single prompt renders its framework guidance through one builder', (
  * released gate still renders, still opens a review, and a FAIL on it still holds the step.
  */
 describe('a run whose temporary gates were released gets them back when it resumes', () => {
-  const FAIL = 'GATE_REVIEW: FAIL - the answer misses the criterion';
+  const FAIL = {
+    overall: 'FAIL',
+    rationale: 'the answer misses the criterion',
+    per_gate: [{ index: 1, passed: false, rationale: 'the answer misses the criterion' }],
+  };
   const registryAndStore = () => {
     const executor = (modules.mcpToolsManager as unknown as { promptExecutor: unknown })
       .promptExecutor as {

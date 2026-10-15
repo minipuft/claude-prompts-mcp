@@ -38,7 +38,7 @@ import {
 } from './helpers/http-mcp-client.js';
 
 const CHAIN_COMPLETE = 'notifications/chain/complete';
-const PASS = 'GATE_REVIEW: PASS - three options with tradeoffs';
+const PASS = { overall: 'PASS', rationale: 'three options with tradeoffs' };
 
 interface ToolOutcome {
   text: string;

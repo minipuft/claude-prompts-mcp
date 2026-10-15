@@ -330,12 +330,14 @@ Gate status distinguishes the runtime switch, `Configuration Enabled`, and
 `Effective Review/Guidance` (runtime AND configuration); health labels the runtime switch. Configuration
 false does not imply schema withdrawal.
 
-**`gate_verdict` accepts two shapes, and one of them is retiring.** The structured object
-(`{overall, rationale, per_gate[]}`) is schema-validated and cannot be malformed; the legacy
-`"GATE_REVIEW: PASS - reason"` string is read back by five regexes and can fail to parse. Both are
-in the union, so accepting the object was not breaking. Removing the legacy string
-member is a separate breaking change that needs a major bump. The structured form is the current
-hook guidance; the backend still accepts both shapes.
+**`gate_verdict` accepts one shape: the structured object** (`{overall, rationale, per_gate?,
+reminders?}`), which is schema-validated and cannot be malformed. A string -- including the
+`GATE_REVIEW: PASS - reason` form earlier majors accepted -- is refused at the schema with a message
+that shows the object to resend. Check-tier gates answer through `per_gate[{index, passed,
+rationale}]`, semantic gates through `per_gate[].evaluation`, reminder gates through
+`reminders:{satisfied, not_applicable}`. Text channels that are not this parameter keep their own
+grammar: an exported skill's Stop hook reads a `GATE_REVIEW:` line, and a delegated worker's
+trailer carries `Proposed Gate Review:`.
 
 **This package is a binary distribution** -- an MCP server, the `cpm` CLI, and Python hooks.
 It publishes no library API: `src/index.ts` exports only `startServer`, `gracefulShutdown`,

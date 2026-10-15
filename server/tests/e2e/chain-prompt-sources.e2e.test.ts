@@ -36,8 +36,8 @@ import {
   waitForHealth,
 } from './helpers/http-mcp-client.js';
 
-const PASS = 'GATE_REVIEW: PASS - ok';
-const FAIL = 'GATE_REVIEW: FAIL - the step misses its gate';
+const PASS = { overall: 'PASS', rationale: 'ok' };
+const FAIL = { overall: 'FAIL', rationale: 'the step misses its gate' };
 const OPT_OUT = { exclude: ['content-structure'], framework_gates: false };
 /** Assembled, so no command literal in this file carries the operator as prose. */
 const ARROW = ' -' + '-> ';
@@ -1674,7 +1674,7 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
 
     async function failTwice(criterion: string): Promise<{ inBudget: string; spent: string }> {
       const run = await start({ command: `>>sv_p672 :: "${criterion}"` });
-      const verdict = `GATE_REVIEW: FAIL - misses ${criterion}`;
+      const verdict = { overall: 'FAIL', rationale: `misses ${criterion}` };
       const inBudget = await run.call({ user_response: 'no sections', gate_verdict: verdict });
       expect(phase(run.chainId)).toEqual({ a: 'awaiting-verdict' });
       const spent = await run.call({ user_response: 'still none', gate_verdict: verdict });

@@ -4,7 +4,6 @@ import type {
   GateReviewSemanticContext,
   PendingGateReview,
 } from '#shared/types/chain-execution.js';
-import type { GateVerdictSource } from '../../../../gates/core/gate-verdict-contract.js';
 
 export type {
   GateVerdictSource as VerdictSource,
@@ -37,14 +36,6 @@ export type GateAction = 'retry' | 'skip';
 /** Pure lifecycle intent; the authority issues fresh pins when the caller applies it. */
 export interface ReviewAttemptIntent {
   readonly renewAttempt?: true;
-}
-
-/**
- * Input for verdict parsing decisions.
- */
-export interface VerdictParseInput {
-  readonly raw: string | undefined;
-  readonly source: GateVerdictSource;
 }
 
 /**

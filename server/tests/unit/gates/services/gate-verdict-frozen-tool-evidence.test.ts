@@ -117,7 +117,7 @@ function metSubmission(review: GateReview): GateVerdictSubmission {
 function fixture(
   review: GateReview,
   live: LightweightGateDefinition[],
-  verdict: string | GateVerdictSubmission = 'GATE_REVIEW: PASS - Accepted'
+  verdict: GateVerdictSubmission = { overall: 'PASS', rationale: 'Accepted' }
 ) {
   const provider = {
     loadGate: jest.fn(async (id: string) => live.find((gate) => gate.id === id) ?? null),
@@ -270,11 +270,10 @@ describe('detached frozen tool evidence caller', () => {
         phase: 'awaiting-verdict',
       };
       const required = [...review.gateIds];
-      const f = fixture(
-        review,
-        kind === 'authored-collision' ? [collision] : [TOOL],
-        'GATE_REVIEW: FAIL - Missing structure'
-      );
+      const f = fixture(review, kind === 'authored-collision' ? [collision] : [TOOL], {
+        overall: 'FAIL',
+        rationale: 'Missing structure',
+      });
       await f.submit();
       expect(f.checks.mock.calls[0][0]).toEqual(
         kind === 'plain' ? [] : kind === 'mixed' ? ['gate-a'] : [PHASE_GUARD_GATE_ID]

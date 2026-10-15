@@ -34,252 +34,245 @@
         "type": "string"
       },
       "gate_verdict": {
-        "anyOf": [
-          {
-            "additionalProperties": false,
-            "properties": {
-              "overall": {
-                "enum": [
-                  "PASS",
-                  "FAIL"
-                ],
-                "type": "string"
-              },
-              "per_gate": {
-                "items": {
+        "additionalProperties": false,
+        "description": "<present>",
+        "properties": {
+          "overall": {
+            "enum": [
+              "PASS",
+              "FAIL"
+            ],
+            "type": "string"
+          },
+          "per_gate": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "evaluation": {
                   "additionalProperties": false,
                   "properties": {
-                    "evaluation": {
+                    "binding": {
                       "additionalProperties": false,
                       "properties": {
-                        "binding": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "attempt_id": {
-                              "type": "string"
-                            },
-                            "definition_digest": {
-                              "type": "string"
-                            },
-                            "gate_id": {
-                              "type": "string"
-                            },
-                            "node_id": {
-                              "type": "string"
-                            },
-                            "target_digest": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "gate_id",
-                            "node_id",
-                            "attempt_id",
-                            "definition_digest",
-                            "target_digest"
-                          ],
-                          "type": "object"
+                        "attempt_id": {
+                          "type": "string"
                         },
-                        "observations": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "criterion_id": {
-                                "type": "string"
-                              },
-                              "evidence": {
-                                "items": {
-                                  "additionalProperties": false,
-                                  "properties": {
-                                    "end": {
-                                      "maximum": 9007199254740991,
-                                      "minimum": 0,
-                                      "type": "integer"
-                                    },
-                                    "quote": {
-                                      "type": "string"
-                                    },
-                                    "start": {
-                                      "maximum": 9007199254740991,
-                                      "minimum": 0,
-                                      "type": "integer"
-                                    },
-                                    "target_digest": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "target_digest",
-                                    "start",
-                                    "end"
-                                  ],
-                                  "type": "object"
-                                },
-                                "type": "array"
-                              },
-                              "rationale": {
-                                "type": "string"
-                              },
-                              "state": {
-                                "enum": [
-                                  "met",
-                                  "unmet",
-                                  "insufficient_evidence",
-                                  "not_applicable"
-                                ],
-                                "type": "string"
-                              },
-                              "value": {
-                                "anyOf": [
-                                  {
-                                    "type": "boolean"
-                                  },
-                                  {
-                                    "type": "string"
-                                  },
-                                  {
-                                    "type": "number"
-                                  }
-                                ]
-                              }
-                            },
-                            "required": [
-                              "criterion_id",
-                              "state",
-                              "evidence",
-                              "rationale"
-                            ],
-                            "type": "object"
-                          },
-                          "type": "array"
+                        "definition_digest": {
+                          "type": "string"
                         },
-                        "reviewer": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "context": {
-                              "enum": [
-                                "self",
-                                "separate_pass",
-                                "isolated_judge",
-                                "unknown"
-                              ],
-                              "type": "string"
-                            },
-                            "model": {
-                              "type": "string"
-                            },
-                            "provenance": {
-                              "enum": [
-                                "client_reported",
-                                "unknown"
-                              ],
-                              "type": "string"
-                            },
-                            "provider": {
-                              "type": "string"
-                            },
-                            "revision": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "provenance"
-                          ],
-                          "type": "object"
+                        "gate_id": {
+                          "type": "string"
+                        },
+                        "node_id": {
+                          "type": "string"
+                        },
+                        "target_digest": {
+                          "type": "string"
                         }
                       },
                       "required": [
-                        "binding",
-                        "observations"
+                        "gate_id",
+                        "node_id",
+                        "attempt_id",
+                        "definition_digest",
+                        "target_digest"
                       ],
                       "type": "object"
                     },
-                    "index": {
-                      "exclusiveMinimum": 0,
-                      "maximum": 9007199254740991,
-                      "type": "integer"
+                    "observations": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "criterion_id": {
+                            "type": "string"
+                          },
+                          "evidence": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "end": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "quote": {
+                                  "type": "string"
+                                },
+                                "start": {
+                                  "maximum": 9007199254740991,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "target_digest": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "target_digest",
+                                "start",
+                                "end"
+                              ],
+                              "type": "object"
+                            },
+                            "type": "array"
+                          },
+                          "rationale": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "enum": [
+                              "met",
+                              "unmet",
+                              "insufficient_evidence",
+                              "not_applicable"
+                            ],
+                            "type": "string"
+                          },
+                          "value": {
+                            "anyOf": [
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "number"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "criterion_id",
+                          "state",
+                          "evidence",
+                          "rationale"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     },
-                    "passed": {
-                      "type": "boolean"
-                    },
-                    "rationale": {
+                    "reviewer": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "context": {
+                          "enum": [
+                            "self",
+                            "separate_pass",
+                            "isolated_judge",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "provenance": {
+                          "enum": [
+                            "client_reported",
+                            "unknown"
+                          ],
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "provenance"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "binding",
+                    "observations"
+                  ],
+                  "type": "object"
+                },
+                "index": {
+                  "exclusiveMinimum": 0,
+                  "maximum": 9007199254740991,
+                  "type": "integer"
+                },
+                "passed": {
+                  "type": "boolean"
+                },
+                "rationale": {
+                  "minLength": 1,
+                  "pattern": "^[^\\r\\n]+$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "index",
+                "passed",
+                "rationale"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "rationale": {
+            "minLength": 1,
+            "pattern": "^[^\\r\\n]+$",
+            "type": "string"
+          },
+          "reminders": {
+            "additionalProperties": false,
+            "properties": {
+              "not_applicable": {
+                "default": [],
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
                       "minLength": 1,
-                      "pattern": "^[^\\r\\n]+$",
+                      "pattern": "^[^\\s,;()]+$",
+                      "type": "string"
+                    },
+                    "reason": {
+                      "allOf": [
+                        {
+                          "pattern": "^[^\\r\\n]+$"
+                        },
+                        {
+                          "pattern": "^[^;)]+$"
+                        }
+                      ],
+                      "minLength": 1,
                       "type": "string"
                     }
                   },
                   "required": [
-                    "index",
-                    "passed",
-                    "rationale"
+                    "id",
+                    "reason"
                   ],
                   "type": "object"
                 },
                 "type": "array"
               },
-              "rationale": {
-                "minLength": 1,
-                "pattern": "^[^\\r\\n]+$",
-                "type": "string"
-              },
-              "reminders": {
-                "additionalProperties": false,
-                "properties": {
-                  "not_applicable": {
-                    "default": [],
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "id": {
-                          "minLength": 1,
-                          "pattern": "^[^\\s,;()]+$",
-                          "type": "string"
-                        },
-                        "reason": {
-                          "allOf": [
-                            {
-                              "pattern": "^[^\\r\\n]+$"
-                            },
-                            {
-                              "pattern": "^[^;)]+$"
-                            }
-                          ],
-                          "minLength": 1,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "reason"
-                      ],
-                      "type": "object"
-                    },
-                    "type": "array"
-                  },
-                  "satisfied": {
-                    "default": [],
-                    "items": {
-                      "minLength": 1,
-                      "pattern": "^[^\\s,;()]+$",
-                      "type": "string"
-                    },
-                    "type": "array"
-                  }
+              "satisfied": {
+                "default": [],
+                "items": {
+                  "minLength": 1,
+                  "pattern": "^[^\\s,;()]+$",
+                  "type": "string"
                 },
-                "type": "object"
+                "type": "array"
               }
             },
-            "required": [
-              "overall",
-              "rationale"
-            ],
             "type": "object"
-          },
-          {
-            "type": "string"
           }
+        },
+        "required": [
+          "overall",
+          "rationale"
         ],
-        "description": "<present>"
+        "type": "object"
       },
       "gates": {
         "description": "<present>",

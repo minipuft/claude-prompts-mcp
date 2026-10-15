@@ -729,8 +729,8 @@ export class GateEnhancementService {
    * A SEMANTIC gate the step declares inline targets that step too (R11.16): its `inlineGateIds`,
    * which also carry the step gate its `inlineGateCriteria` (or a `-->` segment's `::`) registers.
    * Neither carries a registry step target, so the run advanced into such a node and rendered it
-   * with no review open — the legacy `GATE_REVIEW` footer, which the semantic review then refused
-   * one call later. Semantic only: a reminder or check gate's review-less render already carries
+   * with no review open — an ordinary review footer, which the semantic review then refused one
+   * call later. Semantic only: a reminder or check gate's review-less render already carries
    * the footer its later review accepts, so it keeps its timing (the review opens on the call
    * that captures the step's output), as do run-wide gates.
    * An untargeted gate already got its one opportunity to review when its id first entered

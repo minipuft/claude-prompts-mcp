@@ -73,10 +73,6 @@ import type { Implementation } from '@modelcontextprotocol/server';
 
 import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
-import {
-  isValidGateVerdict,
-  GATE_VERDICT_VALIDATION_MESSAGE,
-} from '#engine/gates/core/gate-verdict-contract.js';
 import { GateStateStore, createGateStateStore } from '#engine/gates/gate-state-store.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 // Gate evaluator removed - now using Framework validation
@@ -558,7 +554,7 @@ export class McpToolRouter {
         { applyFrameworkOverride: true }
       ) ?? fallback;
 
-    return buildPromptEngineSchema(isValidGateVerdict, GATE_VERDICT_VALIDATION_MESSAGE, {
+    return buildPromptEngineSchema({
       describe,
       state: this.readToolSurfaceState(),
     });
@@ -973,9 +969,6 @@ export class McpToolRouter {
             const trimmedCommand = args.command?.trim();
             const trimmedChainId = args.chain_id?.trim();
             const trimmedUserResponse = args.user_response?.trim();
-            // Preserve typed reports; only the legacy string branch needs trimming.
-            const normalizedGateVerdict =
-              typeof args.gate_verdict === 'string' ? args.gate_verdict.trim() : args.gate_verdict;
             const trimmedGateAction = args.gate_action?.trim();
 
             const extraPayload = trimmedUserResponse
@@ -988,7 +981,7 @@ export class McpToolRouter {
               ...(trimmedCommand ? { command: trimmedCommand } : {}),
               ...(trimmedChainId ? { chain_id: trimmedChainId } : {}),
               ...(args.user_response !== undefined ? { user_response: trimmedUserResponse } : {}),
-              ...(normalizedGateVerdict ? { gate_verdict: normalizedGateVerdict } : {}),
+              ...(args.gate_verdict ? { gate_verdict: args.gate_verdict } : {}),
               ...(trimmedGateAction
                 ? {
                     gate_action: trimmedGateAction as NonNullable<

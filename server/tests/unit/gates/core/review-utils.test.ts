@@ -51,7 +51,7 @@ describe('review-utils', () => {
     const instructions = buildReviewInstructions(fallbackPrompts);
 
     expect(instructions).toEqual([
-      'Respond explicitly with `GATE_REVIEW: PASS` or `GATE_REVIEW: FAIL`.',
+      'Submit your verdict as the structured `gate_verdict` object shown below.',
       'Include a concise justification referencing the gate criteria.',
     ]);
   });

@@ -31,10 +31,6 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { z } from 'zod/v4';
 
-import {
-  GATE_VERDICT_VALIDATION_MESSAGE,
-  isValidGateVerdict,
-} from '../../../src/engine/gates/core/gate-verdict-contract.js';
 import { buildPromptEngineSchema } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
 import { resourceManagerInputSchema } from '../../../src/mcp/tools/schemas/resource-manager.schema.js';
 import { buildSystemControlSchema } from '../../../src/mcp/tools/schemas/system-control.schema.js';
@@ -546,7 +542,7 @@ function toolContracts(): Map<string, ContractParameter[]> {
  * builder's default) is the one a contract has to describe.
  */
 const TOOL_SCHEMAS: Readonly<Record<string, z.ZodObject<z.ZodRawShape>>> = {
-  prompt_engine: buildPromptEngineSchema(isValidGateVerdict, GATE_VERDICT_VALIDATION_MESSAGE),
+  prompt_engine: buildPromptEngineSchema(),
   resource_manager: resourceManagerInputSchema,
   system_control: buildSystemControlSchema(),
 };

@@ -43,7 +43,6 @@ import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
-import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import { PromptExecutionPipeline } from '../../../src/engine/execution/pipeline/prompt-execution-pipeline.js';
 import { DiagnosticAccumulator } from '../../../src/engine/execution/pipeline/state/accumulators/diagnostic-accumulator.js';
@@ -67,6 +66,7 @@ import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { ArgumentHistoryTracker } from '../../../src/modules/text-refs/argument-history-tracker.js';
 import { ExecutionHistoryActionHandler } from '../../../src/mcp/tools/system-control/handlers/execution-history-action-handler.js';
 
+import type { GateVerdictSubmission } from '../../../src/shared/types/gate-evaluation.js';
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
@@ -576,11 +576,11 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
    * before the pipeline ever sees it. Rendering it here rather than hand-writing the legacy
    * string keeps the drive on the contract a real client goes through.
    */
-  const passVerdict = renderGateVerdict({
+  const passVerdict: GateVerdictSubmission = {
     overall: 'PASS',
     rationale: 'meets the gate',
     per_gate: [{ index: 1, passed: true, rationale: `${GATE_ID}: satisfied` }],
-  });
+  };
 
   /**
    * Drive the two-step chain to completion the way a client does: start, then answer each
@@ -674,11 +674,11 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     ).map((row) => row.gate_verdicts_json);
 
   test("a reviewed step's row carries the per-gate verdicts, keyed by gate id", async () => {
-    const failVerdict = renderGateVerdict({
+    const failVerdict: GateVerdictSubmission = {
       overall: 'FAIL',
       rationale: 'the gate is not met',
       per_gate: [{ index: 1, passed: false, rationale: 'no evidence of review' }],
-    });
+    };
 
     await pipeline.execute({ command: `>>draft --> >>review` });
     const chainId = onlySession().chainId;
@@ -731,7 +731,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       gate_verdicts_json: string;
     }>;
 
-  const driveAnswerThenVerdict = async (verdict: string): Promise<string> => {
+  const driveAnswerThenVerdict = async (verdict: GateVerdictSubmission): Promise<string> => {
     await pipeline.execute({ command: `>>draft --> >>review` });
     const chainId = onlySession().chainId;
     // Answer only. The review stays open, so the run does not advance.
@@ -761,11 +761,11 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
   });
 
   test('a FAIL sent on its own call records the step as still owing its submitter', async () => {
-    const failVerdict = renderGateVerdict({
+    const failVerdict: GateVerdictSubmission = {
       overall: 'FAIL',
       rationale: 'the gate is not met',
       per_gate: [{ index: 1, passed: false, rationale: 'no evidence of review' }],
-    });
+    };
 
     const sessionId = await driveAnswerThenVerdict(failVerdict);
 
@@ -795,11 +795,11 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
       return response.content[0]?.text ?? '';
     };
 
-    const failVerdict = renderGateVerdict({
+    const failVerdict: GateVerdictSubmission = {
       overall: 'FAIL',
       rationale: 'the gate is not met',
       per_gate: [{ index: 1, passed: false, rationale: 'no evidence of review' }],
-    });
+    };
 
     test('a step whose FAIL arrived on its own call reads as its verdict row', async () => {
       const sessionId = await driveAnswerThenVerdict(failVerdict);
@@ -840,11 +840,11 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
    * leaves `input_required` (R66). One test holds both, so neither half can move alone.
    */
   test('P6.161: an answer-only call on a held review records completed; a FAIL records input_required', async () => {
-    const failVerdict = renderGateVerdict({
+    const failVerdict: GateVerdictSubmission = {
       overall: 'FAIL',
       rationale: 'the gate is not met',
       per_gate: [{ index: 1, passed: false, rationale: 'no evidence of review' }],
-    });
+    };
     const newestSession = () =>
       Array.from((sessionStore as any).activeSessions.values()).at(-1) as {
         sessionId: string;
@@ -1230,7 +1230,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
    * — two retry attempts spent on one submission.
    */
   describe('a deferred FAIL is one recorded attempt per submission', () => {
-    const failVerdict = 'GATE_REVIEW: FAIL - the step misses a constraint';
+    const failVerdict = { overall: 'FAIL', rationale: 'the step misses a constraint' };
 
     const attemptCount = (): number | undefined => stepReviewOf(onlySession())?.attemptCount;
 
@@ -1281,7 +1281,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
    * in the P6.308 handoff.
    */
   describe('a verdict answers the review of the node it grades (row 3.3)', () => {
-    const passOnly = 'GATE_REVIEW: PASS - the sections are there now';
+    const passOnly = { overall: 'PASS', rationale: 'the sections are there now' };
     const sectionedAnswer =
       '## Context\nThe situation, stated.\n\n## Analysis\nThe options, weighed.';
     const reviews = () => (onlySession() as unknown as ChainSession).reviews ?? {};
@@ -1694,7 +1694,7 @@ describe('chain run lifecycle, driven the way a client drives it', () => {
     });
 
     test('an exhausted review refuses a further verdict and spends nothing (R9)', async () => {
-      const fail = 'GATE_REVIEW: FAIL - still missing a constraint';
+      const fail = { overall: 'FAIL', rationale: 'still missing a constraint' };
       await pipeline.execute({ command: `>>draft --> >>review` });
       const chainId = onlySession().chainId;
       await pipeline.execute({ chain_id: chainId, gate_verdict: fail } as any);
@@ -1828,11 +1828,11 @@ describe('a mutated run survives a cold load (P4 row 4.2 / F10)', () => {
   const textOf = (response: { content: Array<{ text?: string }> }): string =>
     response.content.map((part) => part.text ?? '').join('\n');
 
-  const passVerdict = renderGateVerdict({
+  const passVerdict: GateVerdictSubmission = {
     overall: 'PASS',
     rationale: 'meets the gate',
     per_gate: [{ index: 1, passed: true, rationale: `${GATE_ID}: satisfied` }],
-  });
+  };
 
   const onlySessionOf = (store: ChainSessionStore): ChainSession => {
     const sessions = Array.from(

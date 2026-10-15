@@ -59,7 +59,7 @@ function createStore() {
 /** A context whose gate authority opens the review a verdict answers — the deferred shape. */
 function createContext(userResponse?: string) {
   const request = {
-    gate_verdict: 'GATE_REVIEW: PASS - fine',
+    gate_verdict: { overall: 'PASS' as const, rationale: 'fine' },
     ...(userResponse === undefined ? {} : { user_response: userResponse }),
   } satisfies Parameters<GateVerdictProcessor['processReviewVerdict']>[0]['mcpRequest'];
   return {
@@ -69,8 +69,9 @@ function createContext(userResponse?: string) {
       parseVerdict: () => ({
         verdict: 'PASS' as const,
         rationale: 'fine',
-        raw: 'GATE_REVIEW: PASS - fine',
+        raw: 'Verdict: PASS - fine',
         source: 'gate_verdict' as const,
+        submission: { overall: 'PASS' as const, rationale: 'fine' },
       }),
       resolveReviewMaxAttempts: () => undefined,
       createReview: async (_sessionId: string, kind: string, nodeId: string) => ({

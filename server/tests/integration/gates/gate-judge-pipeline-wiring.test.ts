@@ -7,8 +7,8 @@ import { join } from 'node:path';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { createGateLoader } from '../../../src/engine/gates/core/gate-loader.js';
-import { GATE_VERDICT_REQUIRED_FORMAT } from '../../../src/engine/gates/core/gate-verdict-contract.js';
 import { JUDGE_OUTPUT_PLACEHOLDER } from '../../../src/engine/gates/core/review-utils.js';
+import { JUDGE_VERDICT_FORMAT } from '../../../src/engine/gates/judge/judge-prompt-builder.js';
 import { GateFileWriter } from '../../../src/mcp/tools/gate-manager/services/index.js';
 
 import type { LightweightGateDefinition } from '../../../src/engine/gates/types.js';
@@ -170,7 +170,7 @@ describe('Judge Gate Pipeline Wiring', () => {
     expect(metadata.judge).toBeDefined();
     expect(metadata.judge.judgeGateIds).toEqual(['judge-gate']);
     expect(metadata.judge.modelHint).toBe('haiku');
-    expect(metadata.judge.judgePrompt).toContain(GATE_VERDICT_REQUIRED_FORMAT);
+    expect(metadata.judge.judgePrompt).toContain(JUDGE_VERDICT_FORMAT);
     expect(metadata.judge.judgePrompt).toContain('## Judge Evaluation');
   });
 

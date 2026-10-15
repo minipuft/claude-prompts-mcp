@@ -18,7 +18,7 @@ import { hashBytes } from '#shared/utils/hash.js';
 
 /**
  * Canonical faults that cannot be attributed to a report's current review attempt. An absent
- * report (`missing_report`, a string verdict or an evaluation-less per_gate entry) is one: there
+ * report (`missing_report`, an evaluation-less or absent per_gate entry) is one: there
  * is nothing to grade, so it refuses without charge rather than grading as a FAIL (R11.2).
  */
 const ATTRIBUTION_FAULTS = new Set([

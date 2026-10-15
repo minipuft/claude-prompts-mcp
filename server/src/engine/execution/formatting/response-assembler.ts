@@ -342,20 +342,15 @@ export class ResponseAssembler {
   }
 
   /**
-   * The resubmit instruction a blocked reply ends on — structured form first, legacy string after.
+   * The resubmit instruction a blocked reply ends on: the review's structured template.
    *
-   * Until P4.101 this was one line offering the legacy string and nothing else, while the
-   * ordinary review footer had been offering the schema-validated object form since the object
-   * form existed. A caller blocked on a gate was therefore steered into the one submission shape
-   * that can fail to parse, on the reply where getting it wrong costs an attempt.
-   *
-   * Falls back to the bare resume line when no review is pending — there is no gate list to key
-   * a template to, and inventing an empty one would advertise a shape the caller cannot fill.
+   * Falls back to the bare object form when no review is pending — there is no gate list to key
+   * a template to, and inventing per-gate slots would advertise a shape the caller cannot fill.
    */
   private buildBlockedResubmitBlock(context: ExecutionContext, chainId: string): string {
     const pendingReview = context.sessionContext?.pendingReview;
     if (pendingReview === undefined) {
-      return `Resume: \`chain_id="${chainId}", gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"\``;
+      return `Resume: \`chain_id="${chainId}", gate_verdict={"overall": "PASS"|"FAIL", "rationale": "<reason>"}\``;
     }
 
     const semantic = semanticReviewResume(pendingReview, chainId);
@@ -372,8 +367,7 @@ export class ResponseAssembler {
     return (
       `Resume:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\n` +
       'Set `"overall": "FAIL"` and say what needs improvement if the gates are still not met. ' +
-      'Rationales are single-line.\n\n' +
-      'A legacy string form is still accepted: `gate_verdict="GATE_REVIEW: PASS - [assessment]"`.'
+      'Rationales are single-line.'
     );
   }
 
@@ -514,10 +508,8 @@ export class ResponseAssembler {
       // Gate review, or a gated step's render: every render of a gated step asks for its verdict
       // the same way (R171) — only when not delegating. A semantic review's resume is one line
       // here: the review call to action above carries its instructions and full resume fence,
-      // and a reply renders them once. The fallback offers the object form, which
-      // carries what the legacy string carries and is the object a semantic report extends
-      // (`per_gate[i].evaluation`); a string can never hold one, so advertising it taught
-      // clients to send the shape a semantic review refuses (R11.2).
+      // and a reply renders them once. The fallback offers the object form, the only shape
+      // `gate_verdict` accepts and the object a semantic report extends (`per_gate[i].evaluation`).
       lines.push(
         semanticResumePointer(sessionContext.pendingReview, chainIdentifier) ??
           `Next: chain_id="${chainIdentifier}", user_response="<your step output>", gate_verdict={"overall": "PASS|FAIL", "rationale": "<why>"}`
@@ -903,7 +895,7 @@ export class ResponseAssembler {
     if (semantic !== undefined)
       return `\n---\n\n**${header}**${attemptInfo}\n\n${judgeBlock}\n\n${semantic}`;
 
-    return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}${this.buildFailedGateSummary(context)}${judgeBlock}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\nSet \`"overall": "FAIL"\` and say what needs improvement if the gates are not met. Rationales are single-line.\n\nA legacy string form is still accepted: \`gate_verdict="GATE_REVIEW: PASS - [assessment]"\`.`;
+    return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}${this.buildFailedGateSummary(context)}${judgeBlock}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\nSet \`"overall": "FAIL"\` and say what needs improvement if the gates are not met. Rationales are single-line.`;
   }
 
   /**

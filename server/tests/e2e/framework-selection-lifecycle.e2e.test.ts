@@ -712,7 +712,7 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
         `## ${header}\n${`The ${header.toLowerCase()} of this answer, in full. `.repeat(6)}`
     )
     .join('\n\n');
-  const PASS = 'GATE_REVIEW: PASS - ok';
+  const PASS = { overall: 'PASS', rationale: 'ok' };
 
   /**
    * The framework system disabled, and a run grown by an inserted and a remainder step. Only the
@@ -807,7 +807,7 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
  */
 describe('R158: the framework toggle decides a run at its first call (Streamable HTTP)', () => {
   const SECTIONS = RADIANT_SECTIONS;
-  const PASS = 'GATE_REVIEW: PASS - ok';
+  const PASS = { overall: 'PASS', rationale: 'ok' };
   const STRUCTURAL_REVIEW = '**Structural Review Required**';
   const rendersNoFramework = (text: string) =>
     FRAMEWORK_MARKERS.filter((marker) => text.includes(marker));
@@ -999,7 +999,7 @@ describe.each([
 ] as const)(
   'P6.284: switching the active framework mid-run leaves a started run alone (%s)',
   (_transport, starter) => {
-    const PASS = 'GATE_REVIEW: PASS - ok';
+    const PASS = { overall: 'PASS', rationale: 'ok' };
     const STRUCTURAL_REVIEW = '**Structural Review Required**';
     /** What radiant, the run's framework, renders: its block and its first required section. */
     const RADIANT_MARKERS = ['RADIANT Design Framework Active', '`## Reference the Vision`'];
@@ -1145,7 +1145,7 @@ describe.each([
  */
 describe('P6.272: gate-guidance frequency never thins a fully blocking-gated chain (Streamable HTTP)', () => {
   const FREQUENCIES = [0, 1, 2] as const;
-  const PASS = 'GATE_REVIEW: PASS - ok';
+  const PASS = { overall: 'PASS', rationale: 'ok' };
   const OPT_OUT = { exclude: ['content-structure'], framework_gates: false };
 
   /** A server whose config sets the gate-guidance frequency, with three plain step prompts. */
@@ -1293,8 +1293,8 @@ describe('P6.272: gate-guidance frequency never thins a fully blocking-gated cha
    * verdict; a gated step that was not the last printed no `GATE_REVIEW: PASS|FAIL` line; the
    * `Next:` line named `gate_verdict` only on a review render; and an ungated LAST step printed
    * the gate coverage lines and the verdict line though it had no gate to grade. Now a normal
-   * render of a gated step names its gates and asks for its verdict (the verdict line and a
-   * `Next:` naming `gate_verdict`), and an ungated render does neither. Gate guidance only: the
+   * render of a gated step names its gates and asks for its verdict (the gate coverage lines and
+   * a `Next:` naming `gate_verdict`), and an ungated render does neither. Gate guidance only: the
    * system prompt and style are not read here.
    */
   it('P6.286: every render of a gated step names its gates and asks for its verdict; an ungated render does neither', async () => {
@@ -1333,12 +1333,11 @@ describe('P6.272: gate-guidance frequency never thins a fully blocking-gated cha
       observed[frequency] = renders.map((render) => [
         /BODY-p272_[abc]/.exec(render.text)?.[0] ?? 'none',
         render.text.includes(`GUIDANCE-${gateId}`),
-        render.text.includes('**GATE_REVIEW: PASS|FAIL') &&
-          render.text.includes('**Gate Coverage**'),
+        !render.text.includes('GATE_REVIEW') && render.text.includes('**Gate Coverage**'),
         /Next: .*gate_verdict=/.test(render.text),
       ]);
     }
-    // [body, names its gate, verdict line with gate coverage, Next: names gate_verdict]
+    // [body, names its gate, gate coverage with no string verdict line, Next: names gate_verdict]
     const everyFrequency: Array<[string, boolean, boolean, boolean]> = [
       ['BODY-p272_a', false, false, false],
       ['BODY-p272_b', true, true, true],

@@ -115,8 +115,8 @@ export interface McpToolRequest {
   /** Chain identifier for resuming executions. Format owned by `shared/utils/chain-id-codec`. */
   readonly chain_id?: string;
 
-  /** Gate review for pending validation; structured reports stay separate from legacy text. */
-  readonly gate_verdict?: string | GateVerdictSubmission;
+  /** Structured gate review answering a pending review. */
+  readonly gate_verdict?: GateVerdictSubmission;
 
   /**
    * Run-level `abort` ends the existing run named by `chain_id` in any nonterminal state.

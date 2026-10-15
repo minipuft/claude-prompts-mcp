@@ -61,7 +61,7 @@ function chainIdOf(text: string): string {
   return match[1];
 }
 
-const PASS = 'GATE_REVIEW: PASS - three options with tradeoffs';
+const PASS = { overall: 'PASS', rationale: 'three options with tradeoffs' };
 
 describe('Streamable HTTP: chain/complete waits for the final review (P4.157)', () => {
   let teardown: Array<() => void | Promise<void>> = [];

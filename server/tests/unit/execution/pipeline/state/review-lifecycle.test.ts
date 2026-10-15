@@ -17,8 +17,9 @@ import type {
 const verdict = (value: 'PASS' | 'FAIL'): ParsedVerdict => ({
   verdict: value,
   rationale: `${value.toLowerCase()} because`,
-  raw: `GATE_REVIEW: ${value} - ${value.toLowerCase()} because`,
+  raw: `Verdict: ${value} - ${value.toLowerCase()} because`,
   source: 'gate_verdict',
+  submission: { overall: value, rationale: `${value.toLowerCase()} because` },
 });
 
 const review = (overrides: Partial<GateReview> = {}): GateReview => ({
@@ -228,7 +229,7 @@ describe('advanceReview', () => {
     expect(next.review).toEqual({
       ...before,
       attemptCount: 2,
-      previousResponse: 'GATE_REVIEW: FAIL - fail because',
+      previousResponse: 'Verdict: FAIL - fail because',
       history: [
         { timestamp: 100, status: 'fail', reasoning: 'fail because', reviewer: 'gate_verdict' },
       ],

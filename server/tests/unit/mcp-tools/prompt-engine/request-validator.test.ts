@@ -82,7 +82,7 @@ describe('McpToolRequestValidator', () => {
         detectedPattern: 'structured',
       });
       expect(parsed?.raw).toBe(
-        'GATE_REVIEW: PASS - Reviewed\nREMINDERS: satisfied=review-notes; n/a=network(No network changes)\n\nGATE_VERDICTS:\n[1] PASS - Evidence supplied'
+        'Verdict: PASS - Reviewed\nReminders: satisfied=review-notes; n/a=network(No network changes)\nPer gate:\n[1] PASS - Evidence supplied'
       );
       expect(submission).toEqual(before);
     });
@@ -252,43 +252,30 @@ describe('McpToolRequestValidator', () => {
       }
     });
 
-    test.each([undefined, '', ' \n\t '])(
-      'canonical parser refuses absent/blank legacy text %j',
-      (raw) => {
-        expect(parseGateVerdict(raw, 'gate_verdict')).toBeNull();
-        expect(isValidGateVerdict(raw)).toBe(false);
-        expect(() => McpToolRequestValidator.validateGateVerdict(raw)).toThrow();
-      }
-    );
-
     test.each([
+      undefined,
+      '',
       'GATE_REVIEW: PASS - Checked',
       'GATE_REVIEW: FAIL: Checked',
       'GATE PASS - Checked',
       'PASS - Checked',
-    ])('preserves legacy parsing and string-only custody for %s', (raw) => {
-      const parsed = parseGateVerdict(` \n${raw}\t `, 'gate_verdict');
-      expect(parsed?.raw).toBe(raw);
-      expect(parsed?.rationale).toBe('Checked');
-      expect(parsed).not.toHaveProperty('submission');
-    });
-
-    test('confines structured verdicts to gate_verdict while preserving legacy user_response parsing', () => {
-      const submission = richVerdict();
-
-      expect(parseGateVerdict(submission, 'gate_verdict')?.submission).toBe(submission);
-      expect(parseGateVerdict(submission, 'user_response')).toBeNull();
-      expect(parseGateVerdict('GATE_REVIEW: PASS - Checked', 'user_response')?.verdict).toBe(
-        'PASS'
+    ])('refuses a value that is not a structured review: %j', (raw) => {
+      expect(parseGateVerdict(raw as never, 'gate_verdict')).toBeNull();
+      expect(isValidGateVerdict(raw)).toBe(false);
+      expect(() => McpToolRequestValidator.validateGateVerdict(raw)).toThrow(
+        'gate_verdict takes the structured object'
       );
     });
 
-    test('keeps the minimal legacy pattern restricted to gate_verdict', () => {
-      expect(parseGateVerdict('PASS - Checked', 'gate_verdict')?.verdict).toBe('PASS');
-      expect(parseGateVerdict('PASS - Checked', 'user_response')).toBeNull();
-      expect(parseGateVerdict('GATE_REVIEW: PASS - Checked', 'user_response')?.verdict).toBe(
-        'PASS'
+    test('names the kind sent, and a malformed object as a shape mismatch', () => {
+      expect(() => McpToolRequestValidator.validateGateVerdict('GATE_REVIEW: PASS - x')).toThrow(
+        'gate_verdict takes the structured object, not a string.'
       );
+      expect(() => McpToolRequestValidator.validateGateVerdict({ overall: 'PASS' })).toThrow(
+        'gate_verdict does not match the structured object.'
+      );
+      // Positive control: the valid twin, differing only in the rationale, is accepted.
+      expect(isValidGateVerdict({ overall: 'PASS', rationale: 'x' })).toBe(true);
     });
 
     test('partial validation leaves an absent verdict absent', () => {
@@ -352,37 +339,34 @@ describe('McpToolRequestValidator', () => {
   });
 
   describe('isValidGateVerdict()', () => {
-    it('should return true for valid gate verdicts', () => {
-      expect(McpToolRequestValidator.isValidGateVerdict('GATE_REVIEW: PASS - All good')).toBe(true);
+    it('should return true for valid structured verdicts', () => {
       expect(
-        McpToolRequestValidator.isValidGateVerdict('GATE_REVIEW: FAIL - Missing criteria')
+        McpToolRequestValidator.isValidGateVerdict({ overall: 'PASS', rationale: 'All good' })
       ).toBe(true);
       expect(
-        McpToolRequestValidator.isValidGateVerdict('GATE_REVIEW: PASS -   spaced reason')
-      ).toBe(true);
-      expect(
-        McpToolRequestValidator.isValidGateVerdict('GATE_REVIEW: FAIL - reason with - dash')
+        McpToolRequestValidator.isValidGateVerdict({
+          overall: 'FAIL',
+          rationale: 'reason with - dash',
+          per_gate: [{ index: 1, passed: false, rationale: 'Missing criteria' }],
+        })
       ).toBe(true);
     });
 
-    it('should return false for invalid gate verdicts', () => {
-      expect(McpToolRequestValidator.isValidGateVerdict('INVALID FORMAT')).toBe(false);
-      expect(McpToolRequestValidator.isValidGateVerdict('GATE_REVIEW: PASS')).toBe(false); // missing reason
-      expect(McpToolRequestValidator.isValidGateVerdict('GATE_REVIEW: INVALID - reason')).toBe(
+    it('should return false for strings, including the retired verdict text', () => {
+      expect(McpToolRequestValidator.isValidGateVerdict('GATE_REVIEW: PASS - All good')).toBe(
         false
       );
+      expect(McpToolRequestValidator.isValidGateVerdict('PASS - reason')).toBe(false);
       expect(McpToolRequestValidator.isValidGateVerdict('')).toBe(false);
     });
 
-    it('should accept case-insensitive verdict formats', () => {
-      // Minimal form is case-insensitive per runtime parser
-      expect(McpToolRequestValidator.isValidGateVerdict('pass - reason')).toBe(true);
-      expect(McpToolRequestValidator.isValidGateVerdict('fail - reason')).toBe(true);
-      expect(McpToolRequestValidator.isValidGateVerdict('PASS - reason')).toBe(true);
-      expect(McpToolRequestValidator.isValidGateVerdict('FAIL - reason')).toBe(true);
-    });
-
-    it('should return false for non-strings', () => {
+    it('should return false for malformed objects and non-objects', () => {
+      expect(McpToolRequestValidator.isValidGateVerdict({ overall: 'MAYBE', rationale: 'x' })).toBe(
+        false
+      );
+      expect(McpToolRequestValidator.isValidGateVerdict({ overall: 'PASS', rationale: ' ' })).toBe(
+        false
+      );
       expect(McpToolRequestValidator.isValidGateVerdict(null)).toBe(false);
       expect(McpToolRequestValidator.isValidGateVerdict(undefined)).toBe(false);
       expect(McpToolRequestValidator.isValidGateVerdict()).toBe(false);
@@ -411,24 +395,20 @@ describe('McpToolRequestValidator', () => {
   });
 
   describe('validateGateVerdict()', () => {
-    it('should return trimmed verdict for valid input', () => {
-      expect(McpToolRequestValidator.validateGateVerdict('  GATE_REVIEW: PASS - test  ')).toBe(
-        'GATE_REVIEW: PASS - test'
-      );
-      expect(McpToolRequestValidator.validateGateVerdict('GATE_REVIEW: FAIL - reason\n')).toBe(
-        'GATE_REVIEW: FAIL - reason'
-      );
+    it('should return the structured verdict unchanged', () => {
+      const verdict = { overall: 'PASS' as const, rationale: 'test' };
+      expect(McpToolRequestValidator.validateGateVerdict(verdict)).toBe(verdict);
     });
 
-    it('should throw for invalid gate verdict', () => {
+    it('should throw the object-form refusal for an invalid gate verdict', () => {
       expect(() => McpToolRequestValidator.validateGateVerdict('INVALID')).toThrow(
-        'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"'
+        'gate_verdict takes the structured object, not a string.'
       );
       expect(() => McpToolRequestValidator.validateGateVerdict('')).toThrow(
-        'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"'
+        'gate_verdict takes the structured object, not a string.'
       );
       expect(() => McpToolRequestValidator.validateGateVerdict(null as any)).toThrow(
-        'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"'
+        'gate_verdict takes the structured object, not null.'
       );
     });
   });
@@ -477,11 +457,11 @@ describe('McpToolRequestValidator', () => {
 
     it('should validate gate_verdict in partial request', () => {
       const partial = {
-        gate_verdict: 'GATE_REVIEW: PASS - test',
+        gate_verdict: { overall: 'PASS' as const, rationale: 'test' },
       };
 
       const result = McpToolRequestValidator.validatePartial(partial);
-      expect(result.gate_verdict).toBe('GATE_REVIEW: PASS - test');
+      expect(result.gate_verdict).toBe(partial.gate_verdict);
     });
 
     it('should throw for invalid command in partial request', () => {
@@ -497,10 +477,10 @@ describe('McpToolRequestValidator', () => {
     it('should throw for invalid gate_verdict in partial request', () => {
       const partial = {
         gate_verdict: 'INVALID',
-      };
+      } as unknown as Parameters<typeof McpToolRequestValidator.validatePartial>[0];
 
       expect(() => McpToolRequestValidator.validatePartial(partial)).toThrow(
-        'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"'
+        'gate_verdict takes the structured object, not a string.'
       );
     });
 

@@ -1,11 +1,7 @@
 // @lifecycle canonical - Shared gate verdict parsing and validation contract.
 import { isGateVerdictSubmission, renderGateVerdict } from './gate-verdict-renderer.js';
 import { isSemanticEvaluationReport } from './semantic-evaluation.js';
-import {
-  loadVerdictPatterns,
-  isPatternRestrictedToSource,
-  getVerdictValidationSettings,
-} from '../config/index.js';
+import { getVerdictValidationSettings } from '../config/index.js';
 
 import type {
   GateVerdictEntry,
@@ -14,7 +10,7 @@ import type {
   GateVerdictSubmission,
 } from '#shared/types/gate-evaluation.js';
 
-export type GateVerdictSource = 'gate_verdict' | 'user_response';
+export type GateVerdictSource = 'gate_verdict';
 
 export interface ParsedGateVerdict {
   readonly verdict: 'PASS' | 'FAIL';
@@ -23,7 +19,7 @@ export interface ParsedGateVerdict {
   readonly source: GateVerdictSource;
   readonly detectedPattern?: string;
   /** Original typed review; raw is display text and cannot preserve semantic reports. */
-  readonly submission?: GateVerdictSubmission;
+  readonly submission: GateVerdictSubmission;
 }
 
 /** Unknown engine callers receive bounded syntax checks; the MCP schema owns boundary parsing. */
@@ -92,71 +88,45 @@ function isStructuredVerdict(value: unknown): value is GateVerdictSubmission {
   );
 }
 
-export const GATE_VERDICT_VALIDATION_MESSAGE =
-  'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"';
+/** The shape a refused `gate_verdict` is told to resend. */
+const GATE_VERDICT_RESEND_SHAPE =
+  'Resend it as {"overall": "PASS"|"FAIL", "rationale": "<one line>", ' +
+  '"per_gate": [{"index": 1, "passed": true, "rationale": "<one line>"}]}: per_gate grades ' +
+  'each check-tier gate by its 1-based index (a semantic gate adds its "evaluation" report), ' +
+  'and "reminders": {"satisfied": [...], "not_applicable": [...]} attests reminder gates. ' +
+  'The review reply carries a template with its indexes filled in.';
 
-export const GATE_VERDICT_THROW_MESSAGE =
-  'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"';
-
-export const GATE_VERDICT_REQUIRED_FORMAT = 'GATE_REVIEW: PASS|FAIL - <rationale>';
-
-export function buildGateVerdictExample(
-  verdict: 'PASS' | 'FAIL',
-  rationale: string = '<rationale>'
-): string {
-  return `GATE_REVIEW: ${verdict} - ${rationale}`;
+/** "a string", "an array", "null" — the JSON kind a sender used instead of an object. */
+function describeKind(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'an array';
+  return `a ${typeof value}`;
 }
 
+/**
+ * The refusal a `gate_verdict` that is not a valid structured review reads, at the MCP schema
+ * and at the engine's own field validator: it names the input, says what is accepted and gives
+ * the shape to resend, so a client still sending the retired string form corrects in one call.
+ */
+export function describeGateVerdictRefusal(value: unknown): string {
+  const isObject = typeof value === 'object' && value !== null && !Array.isArray(value);
+  const lead = isObject
+    ? 'gate_verdict does not match the structured object.'
+    : `gate_verdict takes the structured object, not ${describeKind(value)}.`;
+  return `${lead} ${GATE_VERDICT_RESEND_SHAPE}`;
+}
+
+/** Parse a structured submission, or `null` when it is absent or not a valid review. */
 export function parseGateVerdict(
-  raw: string | GateVerdictSubmission | undefined,
+  raw: GateVerdictSubmission | undefined,
   source: GateVerdictSource
 ): ParsedGateVerdict | null {
-  if (typeof raw !== 'string') return parseStructuredVerdict(raw, source);
-  const normalized = raw.trim();
-  if (!normalized) {
-    return null;
-  }
-
-  // Validate only the first non-empty line (per-gate verdicts may follow)
-  const firstLine =
-    normalized
-      .split('\n')
-      .find((l) => l.trim().length > 0)
-      ?.trim() ?? normalized;
-
-  const patterns = loadVerdictPatterns();
-  const validation = getVerdictValidationSettings();
-
-  for (const pattern of patterns) {
-    if (isPatternRestrictedToSource(pattern, source)) {
-      continue;
-    }
-
-    const match = firstLine.match(pattern.regex);
-    if (!match?.[1]) {
-      continue;
-    }
-
-    const rationale = match[2]?.trim() ?? '';
-    if (validation.requireRationale && rationale.length < validation.minRationaleLength) {
-      continue;
-    }
-
-    return {
-      verdict: match[1].toUpperCase() as 'PASS' | 'FAIL',
-      rationale,
-      raw: normalized,
-      source,
-      detectedPattern: pattern.priority,
-    };
-  }
-
-  return null;
+  return parseStructuredVerdict(raw, source);
 }
 
 /** Parse overall fields directly; rendering is a display projection, never the custody path. */
 function parseStructuredVerdict(raw: unknown, source: GateVerdictSource): ParsedGateVerdict | null {
-  if (source !== 'gate_verdict' || !isStructuredVerdict(raw)) return null;
+  if (!isStructuredVerdict(raw)) return null;
   const rationale = raw.rationale.trim();
   const validation = getVerdictValidationSettings();
   if (validation.requireRationale && rationale.length < validation.minRationaleLength) {
@@ -172,10 +142,6 @@ function parseStructuredVerdict(raw: unknown, source: GateVerdictSource): Parsed
   };
 }
 
-export function isValidGateVerdict(
-  gateVerdict: unknown
-): gateVerdict is string | GateVerdictSubmission {
-  return typeof gateVerdict === 'string'
-    ? parseGateVerdict(gateVerdict, 'gate_verdict') !== null
-    : parseStructuredVerdict(gateVerdict, 'gate_verdict') !== null;
+export function isValidGateVerdict(gateVerdict: unknown): gateVerdict is GateVerdictSubmission {
+  return parseStructuredVerdict(gateVerdict, 'gate_verdict') !== null;
 }

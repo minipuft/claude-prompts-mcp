@@ -191,11 +191,8 @@ export class ChainOperatorExecutor {
     // because the model's prior attempt failed a structural check (a declared header was
     // missing or malformed), so retry is exactly the turn where the model most
     // needs the vocabulary restated — omitting it here would tell the step to fix its
-    // structure without telling it the structure. `isFinalStep`/`gateGuidanceEnabled` reuse
-    // the target step's own coordinates (`targetIndex`) and the chain-wide gate-guidance
-    // decision already resolved above, matching renderNormalStep's semantics exactly rather
-    // than introducing a second definition of "final".
-    const isTargetFinalStep = targetIndex === stepPrompts.length - 1;
+    // structure without telling it the structure. `gateGuidanceEnabled` reuses the chain-wide
+    // gate-guidance decision already resolved above, matching renderNormalStep's semantics.
     const declaredSections = await this.resolveDeclaredSections(targetStep, input);
     const responseFormatSection = this.buildResponseFormatSection(
       {
@@ -203,7 +200,6 @@ export class ChainOperatorExecutor {
           gateGuidanceEnabled && review.protocol.submission === 'legacy'
             ? review.gateIds.length
             : false,
-        verdictLine: isTargetFinalStep && review.protocol.submission === 'legacy',
       },
       declaredSections
     );
@@ -605,7 +601,7 @@ export class ChainOperatorExecutor {
     const declaredSections = await this.resolveDeclaredSections(step, input);
     lines.push(
       this.buildResponseFormatSection(
-        { coverage: asksVerdict ? 'per-gate' : false, verdictLine: asksVerdict },
+        { coverage: asksVerdict ? 'per-gate' : false },
         declaredSections
       )
     );
@@ -1104,10 +1100,9 @@ export class ChainOperatorExecutor {
 
   /**
    * Build Required Response Format section for structured delivery verification. `coverage` adds
-   * the per-gate lines and `verdictLine` the overall verdict line. A normal render passes its
-   * step's verdict request for both: every render of a gated step asks, and no render of an
-   * ungated one does, since it has no gate to grade (R171). A review render keeps its own
-   * rule: its verdict block above asks, and the line closes only its final step.
+   * the per-gate lines. A normal render passes its step's verdict request: every render of a gated
+   * step asks, and no render of an ungated one does, since it has no gate to grade (R171). The
+   * verdict itself is submitted as the structured `gate_verdict`, never written into the output.
    *
    * `coverage` is the number of gates graded, one line each — a review knows its gate list — or
    * `'per-gate'` when the render holds only the step's rendered gate text and not the list, which
@@ -1115,7 +1110,7 @@ export class ChainOperatorExecutor {
    * fixed lines used to render for every step, so a one-gate step was asked for a second gate.
    */
   private buildResponseFormatSection(
-    request: { readonly coverage: false | number | 'per-gate'; readonly verdictLine: boolean },
+    request: { readonly coverage: false | number | 'per-gate' },
     declaredSections: readonly DeclaredSection[] = []
   ): string {
     const lines: string[] = [
@@ -1157,10 +1152,6 @@ export class ChainOperatorExecutor {
         ),
         ''
       );
-    }
-
-    if (request.verdictLine) {
-      lines.push('**GATE_REVIEW: PASS|FAIL - overall assessment**');
     }
 
     return lines.join('\n');

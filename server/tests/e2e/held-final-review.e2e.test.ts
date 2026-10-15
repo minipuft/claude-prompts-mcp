@@ -33,8 +33,8 @@ import {
 
 const CHAIN_COMPLETE = 'notifications/chain/complete';
 const STEP_COMPLETE = 'notifications/chain/step_complete';
-const PASS = 'GATE_REVIEW: PASS - the step meets its gates';
-const FAIL = 'GATE_REVIEW: FAIL - the step misses its gates';
+const PASS = { overall: 'PASS', rationale: 'the step meets its gates' };
+const FAIL = { overall: 'FAIL', rationale: 'the step misses its gates' };
 const HELD_NOTICE = 'Every step has run, but the run stays open';
 /** `documentation_change`'s final node. */
 const FINAL_NODE = 'semantic-and-voice-review-step-2-of-2';

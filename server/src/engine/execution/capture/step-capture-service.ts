@@ -448,7 +448,7 @@ export class StepCaptureService {
    * `gateVerdicts` binds here (P4.76). Measured against a hermetic server on 2026-09-20, not
    * reasoned about: of the five `executionRecordStore.append()` sites, this is the one that
    * runs when the client answers the step and submits the verdict in one call — the shape the
-   * server's own footer advertises (`user_response="..." gate_verdict="..."`). Stage 16 runs
+   * server's own footer advertises (`user_response="..." gate_verdict={...}`). Stage 16 runs
    * `processPendingReviewVerdict` before `captureStep`, so the verdicts are on request state by
    * the time this reads them.
    *

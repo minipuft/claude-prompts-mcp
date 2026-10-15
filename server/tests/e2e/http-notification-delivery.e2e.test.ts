@@ -122,7 +122,7 @@ describe('Streamable HTTP notification delivery', () => {
     const failed = await callTool('prompt_engine', {
       chain_id: chainId,
       user_response: cageerfAnswer('Options: one, two, three.'),
-      gate_verdict: 'GATE_REVIEW: FAIL - the rejected options are not named',
+      gate_verdict: { overall: 'FAIL', rationale: 'the rejected options are not named' },
     });
 
     expect(methodsOf(failed)).toContain('notifications/gate/failed');
@@ -143,14 +143,14 @@ describe('Streamable HTTP notification delivery', () => {
     const first = await callTool('prompt_engine', {
       chain_id: chainId,
       user_response: cageerfAnswer('Options: one, two, three.'),
-      gate_verdict: 'GATE_REVIEW: FAIL - first attempt',
+      gate_verdict: { overall: 'FAIL', rationale: 'first attempt' },
     });
     expect(methodsOf(first)).not.toContain('notifications/gate/retry_exhausted');
 
     const second = await callTool('prompt_engine', {
       chain_id: chainId,
       user_response: cageerfAnswer('Options: one, two, three (again).'),
-      gate_verdict: 'GATE_REVIEW: FAIL - second attempt',
+      gate_verdict: { overall: 'FAIL', rationale: 'second attempt' },
     });
     expect(methodsOf(second)).toContain('notifications/gate/retry_exhausted');
   }, 60000);
@@ -166,7 +166,7 @@ describe('Streamable HTTP notification delivery', () => {
       const outcome = await callTool('prompt_engine', {
         chain_id: chainId,
         user_response: cageerfAnswer(`Step ${attempt + 1}: PostgreSQL, SQLite, DuckDB.`),
-        gate_verdict: 'GATE_REVIEW: PASS - three options with tradeoffs',
+        gate_verdict: { overall: 'PASS', rationale: 'three options with tradeoffs' },
       });
       perCall.push(methodsOf(outcome));
       if (/Chain execution complete/i.test(outcome.text)) break;
@@ -256,7 +256,7 @@ describe('Streamable HTTP notification delivery', () => {
       const failed = await callTool('prompt_engine', {
         chain_id: chainId,
         user_response: cageerfAnswer('Options: one, two, three.'),
-        gate_verdict: 'GATE_REVIEW: FAIL - the tradeoffs are missing',
+        gate_verdict: { overall: 'FAIL', rationale: 'the tradeoffs are missing' },
       });
       expect(methodsOf(failed)).toContain('notifications/gate/failed'); // the stream is read
       expect(failed.text).toContain('→ Progress 1/3');
@@ -264,7 +264,7 @@ describe('Streamable HTTP notification delivery', () => {
 
       const passed = await callTool('prompt_engine', {
         chain_id: chainId,
-        gate_verdict: 'GATE_REVIEW: PASS - the tradeoffs are named',
+        gate_verdict: { overall: 'PASS', rationale: 'the tradeoffs are named' },
       });
       expect(passed.text).toContain('→ Progress 2/3');
       expect(stepCompletesOf(passed).map((n) => n.params['stepIndex'])).toEqual([1]);
@@ -277,7 +277,7 @@ describe('Streamable HTTP notification delivery', () => {
       const passed = await callTool('prompt_engine', {
         chain_id: chainIdOf(start.text),
         user_response: cageerfAnswer('Options: one, two, three.'),
-        gate_verdict: 'GATE_REVIEW: PASS - three options listed',
+        gate_verdict: { overall: 'PASS', rationale: 'three options listed' },
       });
       expect(passed.text).toContain('→ Progress 2/3');
       expect(stepCompletesOf(passed).map((n) => n.params['stepIndex'])).toEqual([1]);
@@ -330,7 +330,7 @@ describe('Streamable HTTP notification delivery', () => {
       callTool('prompt_engine', {
         chain_id: chainId,
         user_response: cageerfAnswer('Options: one, two, three.'),
-        gate_verdict: 'GATE_REVIEW: PASS - three options listed',
+        gate_verdict: { overall: 'PASS', rationale: 'three options listed' },
       }),
       callTool('system_control', {
         action: 'framework',

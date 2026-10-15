@@ -44,8 +44,8 @@ const STEP_2_BODY = 'For each option identified, provide:';
 const RETRY_PROMPT = 'Retry Limit Reached';
 /** The closing line of a verdict's gate guidance (`GATE_ATTESTATION_LINE`). */
 const ATTEST_REMINDERS = /attest reminders/i;
-const PASS = 'GATE_REVIEW: PASS - the step meets its gates';
-const FAIL = 'GATE_REVIEW: FAIL - the step misses its gates';
+const PASS = { overall: 'PASS', rationale: 'the step meets its gates' };
+const FAIL = { overall: 'FAIL', rationale: 'the step misses its gates' };
 
 interface ToolOutcome {
   text: string;

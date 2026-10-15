@@ -32,7 +32,7 @@ export interface ComposedReviewPrompt {
 }
 
 const DEFAULT_INSTRUCTIONS = [
-  'Respond explicitly with `GATE_REVIEW: PASS` or `GATE_REVIEW: FAIL`.',
+  'Submit your verdict as the structured `gate_verdict` object shown below.',
   'Include a concise justification referencing the gate criteria.',
 ];
 
@@ -144,7 +144,7 @@ export function composeReviewPrompt(
 
   const segments = [
     ' [Gate Review] Quality Gate Self-Review',
-    'Respond exactly with `GATE_REVIEW: PASS` or `GATE_REVIEW: FAIL` before continuing.',
+    'Submit the structured `gate_verdict` object shown below before continuing.',
     executionContextBlock, // Phase : Insert execution context after header
     'Instructions:',
     instructionBlock,

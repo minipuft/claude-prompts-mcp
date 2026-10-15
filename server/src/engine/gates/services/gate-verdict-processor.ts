@@ -925,7 +925,7 @@ export class GateVerdictProcessor {
     if (event.type !== 'verdict') return { kind: 'accepted', event, review, failedGateIds: [] };
     const issued = review.semanticContext;
     if (issued === undefined) {
-      return event.verdict.submission?.per_gate?.some((entry) => entry.evaluation !== undefined) ===
+      return event.verdict.submission.per_gate?.some((entry) => entry.evaluation !== undefined) ===
         true
         ? {
             kind: 'refused',
@@ -985,12 +985,12 @@ export class GateVerdictProcessor {
       };
     }
     const expected = resolvePinnedSemanticContext(issued, gateId);
-    const claim = verdict.submission?.per_gate?.find((entry) => entry.index === index);
+    const claim = verdict.submission.per_gate?.find((entry) => entry.index === index);
     const report = claim?.evaluation;
     const result = evaluateSemanticEvaluation(expected, report);
     const faults = semanticAttributionFaults(result);
     if (faults.some((entry) => entry.code === 'missing_report')) {
-      return { kind: 'refused', message: describeMissingSemanticReport(review, gateId, verdict) };
+      return { kind: 'refused', message: describeMissingSemanticReport(review, gateId) };
     }
     if (faults.length > 0) {
       return {
@@ -1243,7 +1243,7 @@ export class GateVerdictProcessor {
   ): GateVerdictSummary[] {
     return (
       context.gateEnforcement?.parseGateVerdicts(
-        verdict.submission ?? verdict.raw,
+        verdict.submission,
         review.gateIds,
         review.attemptCount
       ) ?? []
@@ -1256,7 +1256,7 @@ export class GateVerdictProcessor {
   private parseVerdict(
     context: ExecutionContext,
     raw: McpToolRequest['gate_verdict'],
-    source: 'gate_verdict' | 'user_response'
+    source: 'gate_verdict'
   ): ParsedGateVerdict | null {
     return context.gateEnforcement?.parseVerdict(raw, source) ?? parseGateVerdict(raw, source);
   }

@@ -176,8 +176,7 @@ describe('gate-review render of a current-step review is byte-identical (row 3.5
       **Gate Coverage**:
       - [1] PASS|FAIL: rationale
       - [2] PASS|FAIL: rationale
-
-      **GATE_REVIEW: PASS|FAIL - overall assessment**"
+      "
     `);
   });
 
@@ -216,8 +215,7 @@ describe('gate-review render of a current-step review is byte-identical (row 3.5
       **Gate Coverage**:
       - [1] PASS|FAIL: rationale
       - [2] PASS|FAIL: rationale
-
-      **GATE_REVIEW: PASS|FAIL - overall assessment**"
+      "
     `);
   });
 
@@ -274,8 +272,7 @@ describe('gate-review render of a current-step review is byte-identical (row 3.5
       **Gate Coverage**:
       - [1] PASS|FAIL: rationale
       - [2] PASS|FAIL: rationale
-
-      **GATE_REVIEW: PASS|FAIL - overall assessment**"
+      "
     `);
   });
 });

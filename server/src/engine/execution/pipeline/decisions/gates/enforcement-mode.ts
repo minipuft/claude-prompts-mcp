@@ -29,8 +29,8 @@ function strictest(modes: readonly EnforcementMode[]): EnforcementMode {
  *    counts as `gateSet.undeclared` — never as advisory.
  * 2. **The configured mode** — what stage 11 published for the step from the same gate set.
  * 3. **The strictest gate on the step**, when only the gate set is known. This is also what a
- *    verdict with no per-gate results (an overall-only object, the legacy string) gets, since
- *    it has no failing-gate set.
+ *    verdict with no per-gate results (an overall-only object) gets, since it has no
+ *    failing-gate set.
  * 4. **`blocking`**: an unstated mode means "not yet relaxed", not "relax".
  *
  * This is a pure function rather than a method on `GateEnforcementAuthority` because the

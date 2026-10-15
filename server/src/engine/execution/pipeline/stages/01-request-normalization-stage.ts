@@ -65,7 +65,7 @@ To execute a new prompt:
 To continue an existing chain:
   • Provide 'chain_id' parameter (with optional 'user_response' and 'gate_verdict')
   • Example: { chain_id: "chain-my_prompt#1", user_response: "Step 1 complete" }
-  • For gate reviews: { chain_id: "chain-my_prompt#1", gate_verdict: "GATE_REVIEW: PASS - explanation" } — include user_response only if you reran the step
+  • For gate reviews: { chain_id: "chain-my_prompt#1", gate_verdict: { overall: "PASS", rationale: "explanation" } } — include user_response only if you reran the step
 
 Note: When continuing a chain, the 'command' parameter is optional - the system will restore the execution plan from the chain session.`
         )

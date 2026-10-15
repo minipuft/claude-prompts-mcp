@@ -5,15 +5,7 @@
  * Exports configuration loaders for the gate system.
  */
 
-export {
-  loadVerdictPatterns,
-  getVerdictValidationSettings,
-  clearVerdictPatternCache,
-  getPatternsByPriority,
-  isPatternRestrictedToSource,
-  type VerdictPattern,
-  type VerdictPatternPriority,
-} from './verdict-pattern-loader.js';
+export { getVerdictValidationSettings } from './verdict-pattern-loader.js';
 
 export {
   loadShellPresets,

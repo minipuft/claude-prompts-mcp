@@ -50,7 +50,6 @@ import { StepExecutionStage } from '../../../src/engine/execution/pipeline/stage
 import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
 import { createFrameworkStateStore } from '../../../src/engine/frameworks/framework-state-store.js';
-import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
 import { HookRegistry } from '../../../src/infra/hooks/index.js';
 import {
@@ -61,6 +60,7 @@ import { ResponseFormatter } from '../../../src/mcp/tools/prompt-engine/processo
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 
+import type { GateVerdictSubmission } from '../../../src/shared/types/gate-evaluation.js';
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { ChainHooks } from '../../../src/infra/hooks/index.js';
@@ -465,11 +465,11 @@ describe('chain lifecycle events reach their registered consumers', () => {
    * is under test is the ORDER of two announcements, and a run standing on its final node with a
    * review outstanding is exactly the state a rendered gated step leaves behind.
    */
-  const passVerdict = renderGateVerdict({
+  const passVerdict: GateVerdictSubmission = {
     overall: 'PASS',
     rationale: 'step two meets the gate',
     per_gate: [{ index: 1, passed: true, rationale: 'step-quality: satisfied' }],
-  });
+  };
 
   const driveGatedFinalStep = async (): Promise<{ chainId: string }> => {
     await pipeline.execute({ command: `>>draft ==> >>review` });

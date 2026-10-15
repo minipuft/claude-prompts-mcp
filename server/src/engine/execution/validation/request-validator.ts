@@ -5,7 +5,10 @@
  * Field-level checks (command, chain id, gate verdict) for callers inside the engine. The request
  * as a whole is validated by the `prompt_engine` tool schema (`mcp/tools/schemas/`).
  */
-import { isValidGateVerdict } from '../../gates/core/gate-verdict-contract.js';
+import {
+  describeGateVerdictRefusal,
+  isValidGateVerdict,
+} from '../../gates/core/gate-verdict-contract.js';
 
 import type { McpToolRequest } from '#shared/types/execution.js';
 
@@ -43,7 +46,7 @@ export class McpToolRequestValidator {
    * Type guard to check if a value is a valid gate verdict
    *
    * @param gateVerdict - Value to check
-   * @returns True if a legacy verdict or structured review satisfies the engine contract
+   * @returns True if a structured review satisfies the engine contract
    */
   static isValidGateVerdict(
     gateVerdict: unknown
@@ -83,14 +86,14 @@ export class McpToolRequestValidator {
    * Validates a gate verdict while retaining structured review data.
    *
    * @param gateVerdict - Gate verdict to validate
-   * @returns Trimmed legacy string or original structured review
-   * @throws {Error} If gate verdict is invalid
+   * @returns The original structured review
+   * @throws {Error} If gate verdict is not a valid structured review
    */
   static validateGateVerdict(gateVerdict: unknown): NonNullable<McpToolRequest['gate_verdict']> {
     if (!this.isValidGateVerdict(gateVerdict)) {
-      throw new Error('Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"');
+      throw new Error(describeGateVerdictRefusal(gateVerdict));
     }
-    return typeof gateVerdict === 'string' ? gateVerdict.trim() : gateVerdict;
+    return gateVerdict;
   }
 
   /**

@@ -1,12 +1,9 @@
 import { describe, expect, test } from '@jest/globals';
 
-import { parseGateVerdict } from '../../../src/engine/gates/core/gate-verdict-contract.js';
 import {
   isGateVerdictSubmission,
-  parseGateVerdictReminders,
   renderGateVerdict,
 } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
-import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 
 import type {
   GateVerdictReminders,
@@ -15,61 +12,12 @@ import type {
 } from '../../../src/shared/types/gate-evaluation.js';
 
 /**
- * Ordinary verdict fields render to the canonical string the legacy parser reads.
- * Their lossless round trip is asserted directly. Structured semantic reports
- * stay on the typed submission; rendered text cannot preserve them.
- *
- * A renderer that dropped a rationale or truncated a gate list would be a
- * quieter version of the failure this replaces — the old free-text path at
- * least returned `null` when it could not read a verdict.
+ * A structured verdict renders as display text (`ParsedGateVerdict.raw`, shown by a retry render
+ * as the previous response). Nothing parses it back, so these tests pin what a reader sees: every
+ * ordinary field, in order, with nothing dropped — and no line shaped like a submission format,
+ * which a reply would otherwise teach a client to send.
  */
-
-/** Parse a rendered submission back through both real parsers. */
-function roundTrip(submission: GateVerdictSubmission): {
-  overall: 'PASS' | 'FAIL' | null;
-  rationale: string | null;
-  perGate: Array<{ index: number; passed: boolean; rationale: string }>;
-  reminders: GateVerdictReminders | undefined;
-} {
-  const rendered = renderGateVerdict(submission);
-  const parsed = parseGateVerdict(rendered, 'gate_verdict');
-  // `parseGateVerdicts` reads its string argument and the advertised gate list, but the
-  // constructor requires collaborators it does not touch here. Stubs keep this a unit test
-  // of the parser rather than dragging in a session store.
-  const authority = new GateEnforcementAuthority(
-    {} as ConstructorParameters<typeof GateEnforcementAuthority>[0],
-    { warn: () => undefined } as unknown as ConstructorParameters<
-      typeof GateEnforcementAuthority
-    >[1],
-    undefined,
-    () => ({ evaluation: {} })
-  );
-
-  // The parser resolves `[n]` against the list the review advertised, so the round trip needs
-  // one. Synthetic ids positioned 1..N let the assertion stay in the submission's own
-  // vocabulary (`index`) while exercising the real id resolution.
-  const highestIndex = (submission.per_gate ?? []).reduce(
-    (max, entry) => Math.max(max, entry.index),
-    0
-  );
-  const gateIds = Array.from(
-    { length: highestIndex },
-    (_unused, position) => `gate-${position + 1}`
-  );
-
-  return {
-    overall: parsed?.verdict ?? null,
-    rationale: parsed?.rationale ?? null,
-    perGate: authority.parseGateVerdicts(rendered, gateIds).map((entry) => ({
-      index: gateIds.indexOf(entry.gateId) + 1,
-      passed: entry.verdict === 'PASS',
-      rationale: entry.rationale ?? '',
-    })),
-    reminders: parseGateVerdictReminders(rendered),
-  };
-}
-
-describe('renderGateVerdict round trip', () => {
+describe('renderGateVerdict display text', () => {
   test('leaves a semantic report intact while rendering only ordinary verdict fields', () => {
     const evaluation: SemanticEvaluationReport = {
       binding: {
@@ -80,13 +28,6 @@ describe('renderGateVerdict round trip', () => {
         target_digest: 'target-digest',
       },
       observations: [
-        {
-          criterion_id: 'error-handling',
-          state: 'met',
-          value: true,
-          evidence: [{ target_digest: 'target-digest', start: 2, end: 9, quote: 'handled' }],
-          rationale: 'Captured output handles the error',
-        },
         {
           criterion_id: 'coverage',
           state: 'unmet',
@@ -108,188 +49,34 @@ describe('renderGateVerdict round trip', () => {
     expect(submission.per_gate?.[0]?.evaluation).toBe(evaluation);
     expect(evaluation).toEqual(originalReport);
     expect(rendered).toBe(
-      'GATE_REVIEW: FAIL - One criterion failed\n\nGATE_VERDICTS:\n[1] FAIL - Coverage is insufficient'
+      'Verdict: FAIL - One criterion failed\nPer gate:\n[1] FAIL - Coverage is insufficient'
     );
-    expect(roundTrip(submission).perGate).toEqual([
-      { index: 1, passed: false, rationale: 'Coverage is insufficient' },
-    ]);
   });
 
-  test('preserves a PASS verdict and its rationale', () => {
-    const submission: GateVerdictSubmission = {
-      overall: 'PASS',
-      rationale: 'All criteria met',
-    };
-
-    const result = roundTrip(submission);
-
-    expect(result.overall).toBe('PASS');
-    expect(result.rationale).toBe('All criteria met');
-  });
-
-  test('preserves a FAIL verdict and its rationale', () => {
-    const result = roundTrip({ overall: 'FAIL', rationale: 'Missing error handling' });
-
-    expect(result.overall).toBe('FAIL');
-    expect(result.rationale).toBe('Missing error handling');
-  });
-
-  test('preserves every per-gate entry, in order', () => {
-    const submission: GateVerdictSubmission = {
-      overall: 'FAIL',
-      rationale: 'One gate failed',
-      per_gate: [
-        { index: 1, passed: true, rationale: 'docs present' },
-        { index: 2, passed: false, rationale: 'no tests for the error path' },
-        { index: 3, passed: true, rationale: 'no secrets' },
-      ],
-    };
-
-    const result = roundTrip(submission);
-
-    expect(result.perGate).toEqual(submission.per_gate);
-  });
-
-  test('preserves a rationale containing hyphens', () => {
-    // The separator is `\s*-\s*` and the capture is `(.+)$`, so the remainder
-    // of the line is taken verbatim — no escaping needed. Asserted because a
-    // renderer that escaped hyphens would break exactly this.
-    const rationale = 'well-formed - but under-tested';
-
-    const result = roundTrip({ overall: 'PASS', rationale });
-
-    expect(result.rationale).toBe(rationale);
-  });
-
-  test('preserves a rationale that begins with the separator character', () => {
-    const result = roundTrip({ overall: 'PASS', rationale: '- leading hyphen' });
-
-    expect(result.rationale).toBe('- leading hyphen');
-  });
-
-  test('preserves a rationale containing a colon', () => {
-    // `full-colon` is a *different* pattern; the rendered form must still match
-    // `full-hyphen` first and not be re-read as a colon-separated verdict.
-    const result = roundTrip({ overall: 'PASS', rationale: 'ratio 3:1 as documented' });
-
-    expect(result.rationale).toBe('ratio 3:1 as documented');
-  });
-
-  test('preserves a rationale containing the block header text', () => {
-    // A rationale mentioning GATE_VERDICTS must not be mistaken for the block.
-    const result = roundTrip({
-      overall: 'PASS',
-      rationale: 'see GATE_VERDICTS below for detail',
-      per_gate: [{ index: 1, passed: true, rationale: 'ok' }],
-    });
-
-    expect(result.rationale).toBe('see GATE_VERDICTS below for detail');
-    expect(result.perGate).toEqual([{ index: 1, passed: true, rationale: 'ok' }]);
-  });
-
-  test('matches the primary pattern, not a fallback', () => {
-    // Falling through to `minimal` would still parse, but would mean the
-    // canonical render had drifted from the format it claims to produce.
-    const rendered = renderGateVerdict({ overall: 'PASS', rationale: 'fine' });
-
-    expect(parseGateVerdict(rendered, 'gate_verdict')?.detectedPattern).toBe('primary');
-  });
-
-  test('omits the per-gate block entirely when there are no entries', () => {
-    expect(renderGateVerdict({ overall: 'PASS', rationale: 'fine' })).toBe(
-      'GATE_REVIEW: PASS - fine'
-    );
+  test('renders the overall verdict alone when there are no entries', () => {
+    expect(renderGateVerdict({ overall: 'PASS', rationale: 'fine' })).toBe('Verdict: PASS - fine');
     expect(renderGateVerdict({ overall: 'PASS', rationale: 'fine', per_gate: [] })).toBe(
-      'GATE_REVIEW: PASS - fine'
+      'Verdict: PASS - fine'
     );
   });
 
-  test('renders per-gate lines consecutively', () => {
-    // The block pattern matches consecutive entries and stops at the first line
-    // that does not fit, so a blank line between entries would truncate the
-    // review to whatever preceded it.
-    const rendered = renderGateVerdict({
-      overall: 'PASS',
-      rationale: 'ok',
-      per_gate: [
-        { index: 1, passed: true, rationale: 'a' },
-        { index: 2, passed: true, rationale: 'b' },
-      ],
-    });
-
-    expect(rendered).toContain('GATE_VERDICTS:\n[1] PASS - a\n[2] PASS - b');
-  });
-
-  test.each([1, 2, 5, 12, 40])('preserves a %s-gate review in full', (count) => {
+  test.each([1, 2, 5, 12, 40])('renders every entry of a %s-gate review, in order', (count) => {
     const per_gate = Array.from({ length: count }, (_, i) => ({
       index: i + 1,
       passed: i % 3 !== 0,
       rationale: `gate ${i + 1} rationale`,
     }));
 
-    const result = roundTrip({ overall: 'FAIL', rationale: 'mixed', per_gate });
+    const lines = renderGateVerdict({ overall: 'FAIL', rationale: 'mixed', per_gate }).split('\n');
 
-    expect(result.perGate).toHaveLength(count);
-    expect(result.perGate).toEqual(per_gate);
-  });
-});
-
-/**
- * The reminder attestation is one line, so it is one more thing the round trip has to carry
- * (ruling B4). Reminder-tier gates have no evaluator; this field is the whole of what the
- * reviewer says about them, and losing an n/a reason in transit would leave the review reading
- * as though five gates were silently waved through.
- */
-describe('renderGateVerdict reminders round trip', () => {
-  test('preserves satisfied ids and n/a entries with their reasons', () => {
-    const reminders: GateVerdictReminders = {
-      satisfied: ['code-quality', 'prose-hygiene'],
-      not_applicable: [{ id: 'pr-security', reason: 'no auth surface touched' }],
-    };
-
-    const result = roundTrip({ overall: 'PASS', rationale: 'all good', reminders });
-
-    expect(result.overall).toBe('PASS');
-    expect(result.rationale).toBe('all good');
-    expect(result.reminders).toEqual(reminders);
+    expect(lines.slice(2)).toEqual(
+      per_gate.map(
+        (entry) => `[${entry.index}] ${entry.passed ? 'PASS' : 'FAIL'} - ${entry.rationale}`
+      )
+    );
   });
 
-  test('present-and-empty renders as none and parses back as two empty lists', () => {
-    const reminders: GateVerdictReminders = { satisfied: [], not_applicable: [] };
-
-    const rendered = renderGateVerdict({ overall: 'PASS', rationale: 'ok', reminders });
-
-    expect(rendered).toContain('REMINDERS: none');
-    expect(roundTrip({ overall: 'PASS', rationale: 'ok', reminders }).reminders).toEqual(reminders);
-  });
-
-  test('an absent field stays absent — it is not the same statement as an empty one', () => {
-    const rendered = renderGateVerdict({ overall: 'PASS', rationale: 'ok' });
-
-    expect(rendered).not.toContain('REMINDERS');
-    expect(parseGateVerdictReminders(rendered)).toBeUndefined();
-  });
-
-  test('survives a reason containing commas', () => {
-    // Commas separate n/a ENTRIES, so a reason carrying one is exactly where a naive split
-    // would lose the tail. Parentheses are the delimiter instead, and the schema rejects them
-    // inside a reason.
-    const reminders: GateVerdictReminders = {
-      satisfied: [],
-      not_applicable: [
-        { id: 'math-fidelity', reason: 'no formulas, no derivations, no numbers' },
-        { id: 'creed-fidelity', reason: 'not a creed run' },
-      ],
-    };
-
-    expect(
-      roundTrip({ overall: 'FAIL', rationale: 'one check failed', reminders }).reminders
-    ).toEqual(reminders);
-  });
-
-  test('the verdict line stays first, so the primary pattern still matches', () => {
-    // `parseGateVerdict` validates only the first non-empty line. A REMINDERS line ahead of the
-    // verdict would make every structured submission unparseable.
+  test('never renders a line shaped like the retired string submission', () => {
     const rendered = renderGateVerdict({
       overall: 'PASS',
       rationale: 'fine',
@@ -297,22 +84,43 @@ describe('renderGateVerdict reminders round trip', () => {
       per_gate: [{ index: 1, passed: true, rationale: 'suite green' }],
     });
 
-    expect(rendered.split('\n')[0]).toBe('GATE_REVIEW: PASS - fine');
-    expect(rendered.split('\n')[1]).toBe('REMINDERS: satisfied=code-quality; n/a=');
-    expect(parseGateVerdict(rendered, 'gate_verdict')?.detectedPattern).toBe('primary');
-    expect(
-      roundTrip({
-        overall: 'PASS',
-        rationale: 'fine',
-        reminders: { satisfied: ['code-quality'], not_applicable: [] },
-        per_gate: [{ index: 1, passed: true, rationale: 'suite green' }],
-      }).perGate
-    ).toEqual([{ index: 1, passed: true, rationale: 'suite green' }]);
+    expect(rendered).not.toContain('GATE_REVIEW');
+    expect(rendered).not.toContain('GATE_VERDICTS');
+    expect(rendered).not.toContain('REMINDERS:');
+    // Positive control: the same probe sees the verdict word it does render.
+    expect(rendered).toContain('Verdict: PASS - fine');
+  });
+});
+
+/**
+ * The reminder attestation is the whole of what the reviewer says about reminder-tier gates, so
+ * an n/a reason lost in display would read as though those gates were silently waved through.
+ */
+describe('renderGateVerdict reminders', () => {
+  test('renders satisfied ids and n/a entries with their reasons, after the verdict', () => {
+    const reminders: GateVerdictReminders = {
+      satisfied: ['code-quality', 'prose-hygiene'],
+      not_applicable: [{ id: 'pr-security', reason: 'no auth surface touched, no tokens' }],
+    };
+
+    expect(renderGateVerdict({ overall: 'PASS', rationale: 'all good', reminders })).toBe(
+      'Verdict: PASS - all good\n' +
+        'Reminders: satisfied=code-quality,prose-hygiene; n/a=pr-security(no auth surface touched, no tokens)'
+    );
+  });
+
+  test('present-and-empty renders as none; an absent field renders nothing', () => {
+    const empty: GateVerdictReminders = { satisfied: [], not_applicable: [] };
+
+    expect(renderGateVerdict({ overall: 'PASS', rationale: 'ok', reminders: empty })).toContain(
+      'Reminders: none'
+    );
+    expect(renderGateVerdict({ overall: 'PASS', rationale: 'ok' })).not.toContain('Reminders');
   });
 });
 
 describe('isGateVerdictSubmission', () => {
-  test('distinguishes a submission from the legacy string form', () => {
+  test('distinguishes a submission from a string', () => {
     expect(isGateVerdictSubmission({ overall: 'PASS', rationale: 'x' })).toBe(true);
     expect(isGateVerdictSubmission('GATE_REVIEW: PASS - x')).toBe(false);
   });

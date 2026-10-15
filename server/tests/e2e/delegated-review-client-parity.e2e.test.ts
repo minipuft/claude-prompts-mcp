@@ -321,7 +321,9 @@ describe('delegated review client parity over actual MCP transports', () => {
       expect(waiting.reviews['parity-first']?.attemptCount).toBe(0);
       expect(waiting.records.filter((row) => row.handoff_evidence === 'ok')).toHaveLength(1);
 
-      const failed = await resume({ gate_verdict: 'GATE_REVIEW: FAIL - fixture needs correction' });
+      const failed = await resume({
+        gate_verdict: { overall: 'FAIL', rationale: 'fixture needs correction' },
+      });
       expect(failed.isError).toBe(false);
       expect(failed.text).toContain('Review Context');
       expect(failed.text).not.toContain(BRIEF_START);
@@ -349,7 +351,7 @@ describe('delegated review client parity over actual MCP transports', () => {
       ).toBe(true);
       const done = await resume({
         user_response: runFakeWorker(nextBrief, { body: PRODUCT }),
-        gate_verdict: 'GATE_REVIEW: PASS - final fixture reviewed',
+        gate_verdict: { overall: 'PASS', rationale: 'final fixture reviewed' },
       });
       expect(done.isError).toBe(false);
       expect(done.text).toContain('Chain complete');

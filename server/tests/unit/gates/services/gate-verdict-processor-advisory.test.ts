@@ -47,7 +47,7 @@ function createStore(advancedTo: { ordinal: number; nodeId: string }) {
 
 function createContext(enforcementMode: 'advisory' | 'informational') {
   return {
-    getGateVerdict: () => 'GATE_REVIEW: FAIL - it did not hold',
+    getGateVerdict: () => ({ overall: 'FAIL', rationale: 'it did not hold' }),
     mcpRequest: {},
     gateEnforcement: undefined,
     setResponse: jest.fn(),
@@ -173,7 +173,7 @@ describe('GateVerdictProcessor detached review FAIL (R10)', () => {
 
   const contextWith = (mode: 'advisory' | 'blocking') =>
     ({
-      getGateVerdict: () => 'GATE_REVIEW: FAIL - it did not hold',
+      getGateVerdict: () => ({ overall: 'FAIL', rationale: 'it did not hold' }),
       mcpRequest: {},
       gateEnforcement: {
         parseVerdict: () => null,
