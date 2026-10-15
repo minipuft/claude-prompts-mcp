@@ -15,6 +15,7 @@
 
 import { ChainSessionRouter } from './chain-session-router.js';
 import { PipelineBuilder } from './pipeline-builder.js';
+import { CONTROL_EXCLUSIVE_PARAMETERS } from '../../schemas/prompt-engine.schema.js';
 import { ToolDescriptionLoader } from '../../tool-description-loader.js';
 import { ResponseFormatter } from '../processors/response-formatter.js';
 import { renderPromptEngineGuide } from '../utils/guide.js';
@@ -37,7 +38,6 @@ import type {
 import type { GateSpecification, McpToolRequest } from '#shared/types/execution.js';
 import type { DatabasePort, StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 
-import { isConversationPaused } from '#engine/execution/capture/step-capture-service.js';
 import { ChainOperatorExecutor } from '#engine/execution/operators/chain-operator-executor.js';
 import {
   isAppendCommand,
@@ -85,7 +85,7 @@ import {
 } from '#modules/formatting/index.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 import { TextReferenceStore, ArgumentHistoryTracker } from '#modules/text-refs/index.js';
-import { RunOperationRefusedError } from '#shared/types/chain-session.js';
+import { isConversationPaused, RunOperationRefusedError } from '#shared/types/chain-session.js';
 import {
   type Logger,
   type MetricsCollector,
@@ -611,8 +611,35 @@ export class PromptExecutor {
       command: request.command ?? (args.workflow != null ? '<workflow>' : '<resume>'),
     });
 
-    const pipeline = this.getPromptExecutionPipeline();
-    return this.refuseOnOperationAdmission(pipeline.execute(request));
+    const run = this.peekRun(chainIdValue ?? chainIdFromCommand, sdkExtra);
+    return this.refuseOnOperationAdmission(this.executeHoldingRun(request, run));
+  }
+
+  /**
+   * Run the pipeline holding `run` (T2.2a), so a pause or resume arriving mid-request refuses
+   * `busy` rather than landing after a script tool ran; released once every awaited persist settled.
+   */
+  private async executeHoldingRun(
+    request: McpToolRequest,
+    run: ChainSession | undefined
+  ): Promise<ToolResponse> {
+    const release =
+      run === undefined ? undefined : this.chainSessionStoreInstance.holdRunWork(run.sessionId);
+    try {
+      return await this.getPromptExecutionPipeline().execute(request);
+    } finally {
+      release?.();
+    }
+  }
+
+  /** The run `target` names, read without promoting a dormant one: a control or hold only names it. */
+  private peekRun(target: string | undefined, sdkExtra: unknown): ChainSession | undefined {
+    if (target === undefined) return undefined;
+    return this.chainSessionStore.getSessionByChainIdentifier(target, {
+      ...this.resolveRequestScope(sdkExtra),
+      includeDormant: true,
+      promoteDormant: false,
+    });
   }
 
   /**
@@ -639,10 +666,7 @@ export class PromptExecutor {
     if (chainId.length === 0)
       return this.textError('❌ `gate_action:"pause"` requires `chain_id`: the run to pause.');
     const scope = this.resolveRequestScope(sdkExtra);
-    const session = this.chainSessionStore.getSessionByChainIdentifier(chainId, {
-      ...scope,
-      includeDormant: true,
-    });
+    const session = this.peekRun(chainId, sdkExtra);
     const result = await this.chainSessionStoreInstance.pauseConversation(
       session?.sessionId ?? chainId,
       this.controlScope(scope)
@@ -1264,26 +1288,6 @@ export class PromptExecutor {
 }
 
 type PromptCommandArgs = Parameters<PromptExecutor['executePromptCommand']>[0];
-
-/**
- * Parameters a `pause` or `resume` call may not carry. The same list as the tool schema's
- * `CONTROL_EXCLUSIVE_PARAMETERS` (`mcp/tools/schemas/prompt-engine.schema.ts`), held here for the
- * in-process callers that skip the schema; decided by presence, as there.
- */
-const CONTROL_EXCLUSIVE_PARAMETERS = [
-  'user_response',
-  'gate_verdict',
-  'remainder',
-  'observations',
-  'command',
-  'workflow',
-  'force_restart',
-  'handoff',
-  'claim_token',
-  'inputs',
-  'options',
-  'gates',
-] as const satisfies readonly (keyof PromptCommandArgs)[];
 
 type ControlRefusalReason = Extract<ConversationControlResult, { outcome: 'refused' }>['reason'];
 

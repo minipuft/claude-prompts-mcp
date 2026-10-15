@@ -19,7 +19,7 @@ import type { DeferredAdvance } from '../../gates/services/gate-verdict-processo
 import type { ExecutionContext, SessionContext } from '../context/index.js';
 import type { ChainStepPrompt } from '../operators/types.js';
 
-import { isTerminalRunStatus, RunOperationRefusedError } from '#shared/types/chain-session.js';
+import { isConversationPaused, RunOperationRefusedError } from '#shared/types/chain-session.js';
 import {
   currentOrdinal,
   nodeIdAt,
@@ -39,13 +39,6 @@ const PLACEHOLDER_SOURCE = 'StepResponseCaptureStage';
 export interface StepTarget {
   readonly ordinal: number;
   readonly nodeId: string;
-}
-
-/** True while a nonterminal run holds a conversation pause: only an explicit resume or abort ends it. */
-export function isConversationPaused(
-  session: Pick<ChainSession, 'conversationPause' | 'runStatus'>
-): boolean {
-  return session.conversationPause !== undefined && !isTerminalRunStatus(session.runStatus);
 }
 
 /**

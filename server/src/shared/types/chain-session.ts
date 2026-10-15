@@ -436,6 +436,13 @@ const TERMINAL_RUN_STATUSES: readonly ChainRunStatus[] = [
 export const isTerminalRunStatus = (status: ChainRunStatus): boolean =>
   (TERMINAL_RUN_STATUSES as readonly string[]).includes(status);
 
+/** True while a nonterminal run holds a conversation pause: only an explicit resume or abort ends it. */
+export function isConversationPaused(
+  session: Pick<ChainSession, 'conversationPause' | 'runStatus'> | undefined
+): boolean {
+  return session?.conversationPause !== undefined && !isTerminalRunStatus(session.runStatus);
+}
+
 /**
  * True when a run has finished: its status is terminal, or it has advanced past its last node
  * (`currentNodeId === null`) and nothing holds it open ({@link isRunHeldOpen}).
@@ -599,6 +606,11 @@ export interface ChainSessionSummary {
 
 export interface ChainSessionLookupOptions extends StateStoreOptions {
   includeDormant?: boolean;
+  /**
+   * Default true: a dormant run found is promoted to canonical, as an explicit resume. False
+   * reads it as it stands, for a control that names a run without resuming it.
+   */
+  promoteDormant?: boolean;
 }
 
 /**

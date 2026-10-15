@@ -801,6 +801,54 @@ describe('PromptEngine Validation', () => {
       expect(store().getSession(RUN)?.conversationPause).toBeUndefined();
     });
 
+    test('a pause arriving while a request holds the run is busy; once it settles the pause lands', async () => {
+      await store().createSession(RUN, CHAIN, 2);
+      const capture = jest.spyOn(StepCaptureService.prototype, 'captureStep');
+      const execute = stubPipeline();
+      let duringRequest: Awaited<ReturnType<typeof control>> | undefined;
+      execute.mockImplementationOnce(async () => {
+        // The pipeline awaits before its stages act; the hold must outlive that first await.
+        await new Promise((resolve) => setImmediate(resolve));
+        duringRequest = await control('pause');
+        return { content: [{ type: 'text' as const, text: 'rendered' }], isError: false };
+      });
+      const request = await engine.executePromptCommand(
+        { chain_id: CHAIN, user_response: 'answer' },
+        {}
+      );
+      expect(request.isError).toBe(false);
+      expect(duringRequest?.isError).toBe(true);
+      expect(duringRequest?.content[0]!.text).toContain('Retry the same call');
+      expect(store().getSession(RUN)?.conversationPause).toBeUndefined();
+      expect(capture).not.toHaveBeenCalled();
+      expect(mockTextReferenceStore.storeChainStepResult).not.toHaveBeenCalled();
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect((await control('pause')).isError).toBe(false);
+    });
+
+    test('a request whose pipeline throws releases its hold', async () => {
+      await store().createSession(RUN, CHAIN, 2);
+      stubPipeline().mockRejectedValueOnce(new Error('planted pipeline failure'));
+      await expect(
+        engine.executePromptCommand({ chain_id: CHAIN, user_response: 'answer' }, {})
+      ).rejects.toThrow('planted pipeline failure');
+      expect((await control('pause')).isError).toBe(false);
+    });
+
+    test('pause names a dormant run without promoting it, in memory or in storage', async () => {
+      await store().createSession(RUN, CHAIN, 2);
+      const held = (store() as unknown as { activeSessions: Map<string, { lifecycle?: string }> })
+        .activeSessions;
+      held.get(RUN)!.lifecycle = 'dormant';
+      expect((await control('pause')).isError).toBe(false);
+      const row = abortDatabase!.queryOne<{ state: string }>(
+        'SELECT state FROM chain_runs WHERE session_id = ?',
+        [RUN]
+      );
+      expect(held.get(RUN)?.lifecycle).toBe('dormant');
+      expect(JSON.parse(row!.state).lifecycle).toBe('dormant');
+    });
+
     test('resume clears only the pause and returns the owed action without moving the run', async () => {
       await store().createSession(RUN, CHAIN, 2);
       await store().mintHandoffToken(RUN);

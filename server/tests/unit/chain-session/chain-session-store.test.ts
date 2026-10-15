@@ -1809,6 +1809,22 @@ describe('ChainSessionStore — operation admission while conversation-paused (T
     expect(store.getStepState('cap-ok', 'n1')?.respondedAt).toBeDefined();
   });
 
+  test('a request hold makes pause and resume busy until its last release; a repeated release is a no-op', async () => {
+    await seed('hold');
+    const outer = store.holdRunWork('hold');
+    const inner = store.holdRunWork('hold');
+    inner();
+    inner();
+    expect(await store.pauseConversation('hold', control())).toMatchObject({ reason: 'busy' });
+    expect(await store.resumeConversation('hold', control())).toMatchObject({ reason: 'busy' });
+    outer();
+    outer();
+    expect((await store.pauseConversation('hold', control())).outcome).toBe('paused');
+    // Admitted like work: a paused run refuses a new hold and counts nothing.
+    expect(() => store.holdRunWork('hold')).toThrow(RunOperationRefusedError);
+    expect((await store.resumeConversation('hold', control())).outcome).toBe('resumed');
+  });
+
   test('failure rollback: a capture whose save rejects never reaches the acknowledged pause', async () => {
     await seed('cap-fail');
     const rowsBefore = raw('cap-fail');

@@ -147,3 +147,7 @@ The executor routes abort, then the in-process control-exclusivity twin, then pa
 - **SSOT → T2.2a:** `isConversationPaused` (capture) duplicates the store's private `isProtectedPause`; the executor copies the schema's unexported key list. One definition each.
 - **Dormant pause → T2.2a:** the pause lookup uses `includeDormant:true` and promotes a dormant run in memory before the control; a control must not.
 - **Accepted as is:** the custody-claim executor test mocks `claimHandoff`; a real cross-owner claim is T4.1's process evidence.
+
+### T2.2a accepted (2026-10-15)
+
+`holdRunWork` runs `admitWork` and then counts on the existing work counter, so a hold refuses a paused run or one a control is mid-way through, and a pause during a held request refuses busy. The executor holds across `pipeline.execute` for the guard's resolved run and releases in `finally`; a request that creates a run takes no hold (no client holds its chain id yet). `isConversationPaused` lives once in shared/types; the schema exports the key list; `promoteDormant:false` on lookup options gives the executor's `peekRun` a non-promoting read. Finding (no row): `handleAbort`, `handleHandoff` and the two chain-session-router lookups still promote a dormant run they only name — ordinary control behavior before this plan, left as is. The executor is 1027 code lines; T2.3 moves the control text to ResponseAssembler.

@@ -67,6 +67,7 @@ import { investigatedUnknownIds } from '#engine/execution/pipeline/decisions/mut
 import {
   nodesHoldingRunOpen,
   isRunComplete,
+  isConversationPaused,
   isTerminalRunStatus,
   RunOperationRefusedError,
   stampLegacyReview,
@@ -274,8 +275,8 @@ export class ChainSessionStore implements ChainSessionService {
   /** The tail of the persists in flight: each waits for the one before it (see `persistSessionsOrThrow`). */
   private persistQueue: Promise<void> = Promise.resolve();
   /**
-   * Operation admission (T1.4), per run: admitted work whose `persistMutation` has not settled,
-   * and controls (pause, resume, paused mint) in flight. A control refuses `busy` while work is
+   * Operation admission (T1.4), per run: admitted work whose `persistMutation` has not settled
+   * or whose request holds the run (`holdRunWork`), and controls (pause, resume, paused mint) in flight. A control refuses `busy` while work is
    * counted; work refuses while a control is counted or the run is paused (`admitWork`).
    */
   private readonly runWork = new Map<string, number>();
@@ -735,13 +736,29 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
+   * Count the run's work for a whole request (T2.2a), not only while one persist settles: a pause
+   * or resume arriving before the release refuses `busy`. Admitted like any work (`admitWork`). The
+   * caller releases once everything it awaited has settled; the release is idempotent.
+   */
+  holdRunWork(sessionId: string): () => void {
+    const session = this.activeSessions.get(sessionId);
+    if (session !== undefined) this.admitWork(session);
+    adjustCount(this.runWork, sessionId, 1);
+    let held = true;
+    return () => {
+      if (held) adjustCount(this.runWork, sessionId, -1);
+      held = false;
+    };
+  }
+
+  /**
    * Operation admission for work (T1.4): refuse before any change while the run is conversation-
    * paused or a control holds it. Callers run it synchronously before their mutation and their
    * `persistMutation` call, which counts the run's work until the persist settles; a nested mutator
    * re-checks the same state, so direct and nested calls share one admission.
    */
   private admitWork(session: ChainSession): void {
-    if (this.isProtectedPause(session))
+    if (isConversationPaused(session))
       throw new RunOperationRefusedError(session.sessionId, 'conversation-paused');
     if (this.runControls.has(session.sessionId))
       throw new RunOperationRefusedError(session.sessionId, 'control-in-progress');
@@ -1299,7 +1316,7 @@ export class ChainSessionStore implements ChainSessionService {
           return undefined;
         }
       }
-      if (this.isProtectedPause(session)) return session;
+      if (isConversationPaused(session)) return session;
       // Repair a run pointing at a node that is not in its own list (corrupt or partially
       // written state) by returning it to the first node — the position-keyed equivalent of
       // the old `currentStep < 1` repair. `null` is left alone: that is a completed run, not
@@ -1551,7 +1568,7 @@ export class ChainSessionStore implements ChainSessionService {
     const session = this.activeSessions.get(sessionId);
     // Undefined (no session) and a node id (still standing somewhere) both answer "not held"; a
     // conversation pause is a hold of its own, released only by an explicit resume or abort.
-    if (session?.state.currentNodeId !== null || this.isProtectedPause(session)) {
+    if (session?.state.currentNodeId !== null || isConversationPaused(session)) {
       return false;
     }
     return this.transitionRunStatus(sessionId, 'completed');
@@ -2819,7 +2836,11 @@ export class ChainSessionStore implements ChainSessionService {
     // Scope-aware lookup: find best matching session across active/dormant states
     const found = this.findScopedSessionForChain(chainId, scopeFilter, includeDormant);
     if (found) {
-      if (found.lifecycle === 'dormant' && !this.isProtectedPause(found)) {
+      if (
+        found.lifecycle === 'dormant' &&
+        !isConversationPaused(found) &&
+        options?.promoteDormant !== false
+      ) {
         this.promoteSessionLifecycle(found, 'explicit chain resume');
       }
       return found;
@@ -2851,7 +2872,7 @@ export class ChainSessionStore implements ChainSessionService {
 
       if (this.isDormantSession(session)) {
         if (
-          (includeDormant || this.isProtectedPause(session)) &&
+          (includeDormant || isConversationPaused(session)) &&
           session.lastActivity > bestDormantTime
         ) {
           bestDormant = session;
@@ -2915,7 +2936,7 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
-    if (this.isProtectedPause(session)) throw new Error('Abort paused run before clearing it');
+    if (isConversationPaused(session)) throw new Error('Abort paused run before clearing it');
     const snapshot = this.snapshotRunMembership();
     const release = emptyRunRelease();
     this.removeSessionArtifacts(sessionId, release);
@@ -2945,7 +2966,7 @@ export class ChainSessionStore implements ChainSessionService {
         if (
           session !== undefined &&
           this.matchesScope(session, scopeFilter) &&
-          this.isProtectedPause(session)
+          isConversationPaused(session)
         )
           throw new Error('Abort paused run before clearing it');
       }
@@ -2976,7 +2997,7 @@ export class ChainSessionStore implements ChainSessionService {
 
     const staleSessionIds: string[] = [];
     for (const [sessionId, session] of this.activeSessions) {
-      if (this.isProtectedPause(session)) continue;
+      if (isConversationPaused(session)) continue;
       const isReviewSession = session.chainId.startsWith('prompt-review-');
       const threshold = isReviewSession ? reviewThreshold : defaultThreshold;
       if (session.lastActivity < threshold) {
@@ -3030,7 +3051,7 @@ export class ChainSessionStore implements ChainSessionService {
     const removable = history.filter(
       (chainId) =>
         ![...(this.chainSessionMapping.get(chainId) ?? [])].some((id) =>
-          this.isProtectedPause(this.activeSessions.get(id))
+          isConversationPaused(this.activeSessions.get(id))
         )
     );
     while (removable.length > MAX_RUN_HISTORY) {
@@ -3299,10 +3320,6 @@ export class ChainSessionStore implements ChainSessionService {
     this.logger.debug('In-memory session state cleared');
 
     this.logger.info('ChainSessionStore cleanup complete');
-  }
-
-  private isProtectedPause(session?: ChainSession): boolean {
-    return session?.conversationPause !== undefined && !isTerminalRunStatus(session.runStatus);
   }
 
   private isDormantSession(session?: ChainSession | null): boolean {

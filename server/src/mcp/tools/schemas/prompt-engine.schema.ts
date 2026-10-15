@@ -599,9 +599,10 @@ export function buildPromptEngineSchema(surface: ToolSurfaceResolver = {}) {
 /**
  * Parameters a pause or resume control call may not carry: step output, a review, a rewrite,
  * unknowns, new work, a handoff mint/claim, or prompt arguments and gates, which without a
- * command nothing reads. Each one means work the call would perform or silently drop.
+ * command nothing reads. Each one means work the call would perform or silently drop. The
+ * executor reads the same list for in-process callers that skip the schema.
  */
-const CONTROL_EXCLUSIVE_PARAMETERS = [
+export const CONTROL_EXCLUSIVE_PARAMETERS = [
   'user_response',
   'gate_verdict',
   'remainder',
