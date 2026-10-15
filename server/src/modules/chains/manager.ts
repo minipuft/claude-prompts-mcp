@@ -1238,6 +1238,7 @@ export class ChainSessionStore implements ChainSessionService {
           return undefined;
         }
       }
+      if (this.isProtectedPause(session)) return session;
       // Repair a run pointing at a node that is not in its own list (corrupt or partially
       // written state) by returning it to the first node — the position-keyed equivalent of
       // the old `currentStep < 1` repair. `null` is left alone: that is a completed run, not
@@ -2715,7 +2716,7 @@ export class ChainSessionStore implements ChainSessionService {
     // Scope-aware lookup: find best matching session across active/dormant states
     const found = this.findScopedSessionForChain(chainId, scopeFilter, includeDormant);
     if (found) {
-      if (found.lifecycle === 'dormant') {
+      if (found.lifecycle === 'dormant' && !this.isProtectedPause(found)) {
         this.promoteSessionLifecycle(found, 'explicit chain resume');
       }
       return found;
@@ -2746,7 +2747,10 @@ export class ChainSessionStore implements ChainSessionService {
       if (!session || !this.matchesScope(session, scopeFilter)) continue;
 
       if (this.isDormantSession(session)) {
-        if (includeDormant && session.lastActivity > bestDormantTime) {
+        if (
+          (includeDormant || this.isProtectedPause(session)) &&
+          session.lastActivity > bestDormantTime
+        ) {
           bestDormant = session;
           bestDormantTime = session.lastActivity;
         }
@@ -2808,6 +2812,7 @@ export class ChainSessionStore implements ChainSessionService {
       return false;
     }
 
+    if (this.isProtectedPause(session)) throw new Error('Abort paused run before clearing it');
     const snapshot = this.snapshotRunMembership();
     const release = emptyRunRelease();
     this.removeSessionArtifacts(sessionId, release);
@@ -2831,6 +2836,16 @@ export class ChainSessionStore implements ChainSessionService {
     const baseChainId = stripRunNumber(chainId);
     const runChainIds = chainId === baseChainId ? this.getRunHistory(baseChainId) : [chainId];
 
+    for (const runChainId of runChainIds)
+      for (const id of this.chainSessionMapping.get(runChainId) ?? []) {
+        const session = this.activeSessions.get(id);
+        if (
+          session !== undefined &&
+          this.matchesScope(session, scopeFilter) &&
+          this.isProtectedPause(session)
+        )
+          throw new Error('Abort paused run before clearing it');
+      }
     const snapshot = this.snapshotRunMembership();
     const release = emptyRunRelease();
     for (const runChainId of runChainIds) {
@@ -2858,6 +2873,7 @@ export class ChainSessionStore implements ChainSessionService {
 
     const staleSessionIds: string[] = [];
     for (const [sessionId, session] of this.activeSessions) {
+      if (this.isProtectedPause(session)) continue;
       const isReviewSession = session.chainId.startsWith('prompt-review-');
       const threshold = isReviewSession ? reviewThreshold : defaultThreshold;
       if (session.lastActivity < threshold) {
@@ -2908,8 +2924,14 @@ export class ChainSessionStore implements ChainSessionService {
       return;
     }
 
-    while (history.length > MAX_RUN_HISTORY) {
-      const removedChainId = history.shift();
+    const removable = history.filter(
+      (chainId) =>
+        ![...(this.chainSessionMapping.get(chainId) ?? [])].some((id) =>
+          this.isProtectedPause(this.activeSessions.get(id))
+        )
+    );
+    while (removable.length > MAX_RUN_HISTORY) {
+      const removedChainId = removable.shift();
       if (!removedChainId) {
         break;
       }
@@ -3173,6 +3195,10 @@ export class ChainSessionStore implements ChainSessionService {
     this.logger.debug('In-memory session state cleared');
 
     this.logger.info('ChainSessionStore cleanup complete');
+  }
+
+  private isProtectedPause(session?: ChainSession): boolean {
+    return session?.conversationPause !== undefined && !isTerminalRunStatus(session.runStatus);
   }
 
   private isDormantSession(session?: ChainSession | null): boolean {

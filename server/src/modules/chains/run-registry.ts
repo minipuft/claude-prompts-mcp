@@ -82,7 +82,7 @@ export interface ChainRunRegistry {
     scope?: StateStoreOptions,
     requestContinuityFilter?: string
   ): ClaimRunResult;
-  /** Drop every run owned by a process that is no longer alive. */
+  /** Drop unprotected runs owned by a process that is no longer alive. */
   deleteRunsForOwners(ownerPids: readonly string[]): void;
 }
 
@@ -273,12 +273,18 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     const organizationId = scope?.organizationId ?? null;
     const workspaceId = scope?.workspaceId ?? null;
 
+    const retained = this.protectedPauseIds(runOwnerPid);
+    for (const session of sessions)
+      if (session.conversationPause === undefined || isTerminalRunStatus(session.runStatus))
+        retained.delete(session.sessionId);
+    const removable = `run_owner_pid = ? AND session_id NOT IN (SELECT value FROM json_each(?))`;
+    const selection = [runOwnerPid, JSON.stringify([...retained])];
     this.db.run(
       `DELETE FROM chain_run_nodes
-        WHERE session_id IN (SELECT session_id FROM chain_runs WHERE run_owner_pid = ?)`,
-      [runOwnerPid]
+        WHERE session_id IN (SELECT session_id FROM chain_runs WHERE ${removable})`,
+      selection
     );
-    this.db.run('DELETE FROM chain_runs WHERE run_owner_pid = ?', [runOwnerPid]);
+    this.db.run(`DELETE FROM chain_runs WHERE ${removable}`, selection);
 
     // A run another owner has claimed (2A) still sits in this process's memory until the next
     // persist — which is now. Its row survived the owner-scoped DELETE above because the claim
@@ -292,7 +298,7 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     const updatedAt = Date.now();
     const namespace = { runOwnerPid, organizationId, workspaceId };
     for (const session of sessions) {
-      if (claimedElsewhere.has(session.sessionId)) continue;
+      if (claimedElsewhere.has(session.sessionId) || retained.has(session.sessionId)) continue;
       this.writeSession(serializeSessionRows(session, namespace, updatedAt));
     }
     return [...claimedElsewhere];
@@ -481,14 +487,32 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     return transferred === null ? { status: 'unknown-token' } : { status: 'claimed', session };
   }
 
+  private protectedPauseIds(ownerPid: string): Set<string> {
+    const rows = this.db.query<{ session_id: string; state: string; run_status: ChainRunStatus }>(
+      'SELECT session_id, state, run_status FROM chain_runs WHERE run_owner_pid = ?',
+      [ownerPid]
+    );
+    return new Set(
+      rows
+        .filter(
+          (row) =>
+            parseResidual(row.state).conversationPause !== undefined &&
+            !isTerminalRunStatus(row.run_status)
+        )
+        .map((row) => row.session_id)
+    );
+  }
+
   deleteRunsForOwners(ownerPids: readonly string[]): void {
     for (const pid of ownerPids) {
+      const removable = `run_owner_pid = ? AND session_id NOT IN (SELECT value FROM json_each(?))`;
+      const selection = [pid, JSON.stringify([...this.protectedPauseIds(pid)])];
       this.db.run(
         `DELETE FROM chain_run_nodes
-          WHERE session_id IN (SELECT session_id FROM chain_runs WHERE run_owner_pid = ?)`,
-        [pid]
+          WHERE session_id IN (SELECT session_id FROM chain_runs WHERE ${removable})`,
+        selection
       );
-      this.db.run('DELETE FROM chain_runs WHERE run_owner_pid = ?', [pid]);
+      this.db.run(`DELETE FROM chain_runs WHERE ${removable}`, selection);
     }
   }
 }

@@ -10,8 +10,18 @@
  * store's `loadSessions()` a genuine reconstruction from rows rather than a memory hand-off.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import {
+  afterEach,
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  jest,
+  test,
+} from '@jest/globals';
 
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import * as fs from 'node:fs/promises';
@@ -87,6 +97,194 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     engine.run('DELETE FROM chain_runs');
     engine.run('DELETE FROM chain_sessions');
     engine.run('DELETE FROM execution_records');
+  });
+
+  describe('conversation pause retention', () => {
+    const stores: ChainSessionStore[] = [];
+    const scope = { continuityScopeId: 'caller' };
+    const raw = (id: string) => ({
+      runs: engine.query('SELECT * FROM chain_runs WHERE session_id = ?', [id]),
+      nodes: engine.query('SELECT * FROM chain_run_nodes WHERE session_id = ? ORDER BY position', [
+        id,
+      ]),
+    });
+    const storeForTest = () => {
+      const store = newStore();
+      stores.push(store);
+      return store;
+    };
+    const produce = async (store: ChainSessionStore, id: string, chainId = `chain-${id}#1`) =>
+      store.createSession(
+        id,
+        chainId,
+        1,
+        { evidence: id },
+        { ...scope, nodes: nodes(['n1', 'p', 'One']) }
+      );
+    const pause = async (store: ChainSessionStore, id: string) => {
+      expect(
+        await store.pauseConversation(id, store.getConversationControlScope('caller'))
+      ).toMatchObject({ outcome: 'paused', token: expect.stringMatching(/^hnd_/) });
+    };
+    afterEach(async () => {
+      for (const store of stores) await store.cleanup();
+      stores.length = 0;
+    });
+
+    test('dead-owner fixture retains rows, nodes and credential before replacement initialization', async () => {
+      const store = storeForTest();
+      await produce(store, 'paused');
+      await store.setReview('paused', {
+        nodeId: 'n1',
+        kind: 'gate',
+        phase: 'awaiting-verdict',
+        combinedPrompt: 'frozen',
+        prompts: [],
+        gateIds: ['quality'],
+        createdAt: 1,
+        attemptCount: 1,
+        maxAttempts: 3,
+        reviewedOutput: 'captured evidence',
+      });
+      await pause(store, 'paused');
+      await produce(store, 'ordinary');
+      await produce(store, 'terminal');
+      await pause(store, 'terminal');
+      expect(await store.cancelChain('terminal', scope)).toBe(true);
+      await produce(store, 'unrelated');
+      await store.cleanup();
+      const child = spawnSync(process.execPath, ['-e', '']);
+      expect(child.status).toBe(0);
+      expect(() => process.kill(child.pid, 0)).toThrow();
+      engine.run("UPDATE chain_runs SET run_owner_pid = ? WHERE session_id != 'unrelated'", [
+        String(child.pid),
+      ]);
+      engine.run(
+        "UPDATE chain_runs SET run_owner_pid = 'retained-foreign' WHERE session_id = 'unrelated'"
+      );
+      const before = raw('paused'),
+        unrelated = raw('unrelated');
+      const registry = new DirectChainRunRegistry(engine);
+      registry.deleteRunsForOwners([String(child.pid)]);
+      expect(raw('paused')).toEqual(before);
+      expect(before.runs[0]).toMatchObject({
+        handoff_token: expect.stringMatching(/^hnd_/),
+        organization_id: null,
+        workspace_id: 'ws-storage',
+      });
+      for (const id of ['ordinary', 'terminal']) expect(raw(id)).toEqual({ runs: [], nodes: [] });
+      const replacement = storeForTest();
+      await replacement['initPromise'];
+      expect(replacement.getSession('paused', scope)).toBeUndefined();
+      expect(replacement.getSession('unrelated', scope)).toBeUndefined();
+      await replacement.cleanup();
+      expect(raw('paused')).toEqual(before);
+      expect(raw('unrelated')).toEqual(unrelated);
+    });
+
+    test('ten-plus protected history does not consume the ordinary ten-run cap', async () => {
+      const store = storeForTest();
+      for (let i = 0; i < 12; i++) {
+        await produce(store, `protected-${i}`, `chain-history#${i + 1}`);
+        await pause(store, `protected-${i}`);
+      }
+      const held = Array.from({ length: 12 }, (_, i) => raw(`protected-${i}`));
+      for (let i = 0; i < 12; i++) await produce(store, `ordinary-${i}`, `chain-history#${i + 13}`);
+      expect(store.getRunHistory('chain-history')).toHaveLength(22);
+      expect(Array.from({ length: 12 }, (_, i) => raw(`protected-${i}`))).toEqual(held);
+      for (let i = 0; i < 12; i++) expect(raw(`ordinary-${i}`).runs).toHaveLength(i < 2 ? 0 : 1);
+      await store.cleanup();
+      expect(Array.from({ length: 12 }, (_, i) => raw(`protected-${i}`))).toEqual(held);
+    });
+
+    test('expiry skips only paused nonterminal runs', async () => {
+      const store = storeForTest();
+      const statuses: ChainSession['runStatus'][] = ['working', 'completed', 'failed', 'cancelled'];
+      for (const status of statuses) {
+        const held = await produce(store, status);
+        await pause(store, status);
+        held.runStatus = status;
+        held.lastActivity = 1;
+      }
+      const ordinary = await produce(store, 'ordinary');
+      ordinary.lastActivity = 1;
+      await store['saveSessions']();
+      const before = raw('working');
+      expect(await store.cleanupStaleSessions()).toBe(4);
+      expect(raw('working')).toEqual(before);
+      for (const id of ['ordinary', 'completed', 'failed', 'cancelled'])
+        expect(raw(id)).toEqual({ runs: [], nodes: [] });
+    });
+
+    test('owned dormant lookup is visible and leaves complete memory and raw rows exact', async () => {
+      const store = storeForTest();
+      await produce(store, 'dormant');
+      await pause(store, 'dormant');
+      await store.cleanup();
+      const reader = storeForTest();
+      await reader['initPromise'];
+      const held = reader['activeSessions'].get('dormant');
+      expect(held).toBeDefined();
+      if (!held) throw new Error('missing owned fixture');
+      held.state.currentNodeId = 'invalid-pointer';
+      const memory = structuredClone(held),
+        before = raw('dormant');
+      expect(reader.getSession('dormant', scope)).toBe(held);
+      expect(reader.getSessionByChainIdentifier(held.chainId, scope)).toBe(held);
+      expect(reader.getSession('dormant', { continuityScopeId: 'other' })).toBeUndefined();
+      const exact = reader.getConversationControlScope('caller');
+      expect(reader.inspectConversationControl('dormant', exact)?.scope).toEqual(exact);
+      expect(
+        reader.inspectConversationControl('dormant', { ...exact, organizationId: 'other' })
+      ).toBeUndefined();
+      await reader['persistQueue'];
+      expect(held).toEqual(memory);
+      expect(held.lifecycle).toBe('dormant');
+      expect(raw('dormant')).toEqual(before);
+      await reader.cleanup();
+      await reader.cleanup();
+      expect(raw('dormant')).toEqual(before);
+    });
+
+    test('scoped bulk clear preflights every run, then exact abort permits ordinary clear', async () => {
+      const store = storeForTest();
+      await produce(store, 'peer', 'chain-clear#1');
+      const held = await produce(store, 'paused', 'chain-clear#2');
+      await pause(store, 'paused');
+      await store.createSession('other', 'chain-clear#3', 1, {}, { continuityScopeId: 'other' });
+      expect(
+        await store.pauseConversation('other', store.getConversationControlScope('other'))
+      ).toMatchObject({ outcome: 'paused' });
+      const memory = structuredClone([...store['activeSessions']]),
+        before = ['peer', 'paused', 'other'].map(raw);
+      const ended = jest.fn(),
+        cleared = jest.fn<() => void>();
+      store.onRunEnded(ended);
+      store.onSessionCleared(cleared);
+      const cache = jest.spyOn(store['textReferenceStore'], 'clearChainStepResults');
+      await expect(store.clearSessionsForChain('chain-clear', scope)).rejects.toThrow(
+        'Abort paused run'
+      );
+      expect([...store['activeSessions']]).toEqual(memory);
+      expect(['peer', 'paused', 'other'].map(raw)).toEqual(before);
+      expect(ended).not.toHaveBeenCalled();
+      expect(cleared).not.toHaveBeenCalled();
+      expect(cache).not.toHaveBeenCalled();
+      expect(await store.cancelChain('paused', { continuityScopeId: 'other' })).toBe(false);
+      expect(raw('paused')).toEqual(before[1]);
+      expect(await store.cancelChain('paused', scope)).toBe(true);
+      expect(raw('paused').runs[0]).toMatchObject({
+        run_status: 'cancelled',
+        handoff_token: held.handoffToken,
+      });
+      await store.clearSessionsForChain('chain-clear', scope);
+      for (const id of ['peer', 'paused']) expect(raw(id)).toEqual({ runs: [], nodes: [] });
+      expect(store.getSession('other', { continuityScopeId: 'other' })).toBeDefined();
+      expect(raw('other')).toEqual(before[2]);
+      expect(cache).toHaveBeenCalledWith('peer');
+      expect(cache).toHaveBeenCalledWith('paused');
+      expect(cache).not.toHaveBeenCalledWith('other');
+    });
   });
 
   test('conversation canonical serialization preserves every stored run and node column', async () => {
