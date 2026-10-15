@@ -260,7 +260,7 @@ describe('registered prompt_engine action admission', () => {
       const fixture = await registered(true);
       fixture.setEnabled(false);
       try {
-        const value = key === 'gates' ? ['some-gate'] : 'GATE_REVIEW: PASS - ok';
+        const value = key === 'gates' ? ['some-gate'] : { overall: 'PASS', rationale: 'ok' };
         const result = await fixture.call({ chain_id: 'chain-demo#1', [key]: value });
         expect(result.isError).toBe(true);
         expect(JSON.stringify(result.content)).toContain(

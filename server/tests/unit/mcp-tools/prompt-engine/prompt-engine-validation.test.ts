@@ -485,7 +485,7 @@ describe('PromptEngine Validation', () => {
           claim_token: 'unused-token',
           force_restart: true,
           user_response: 'HANDOFF RESULT: unused report',
-          gate_verdict: 'PASS',
+          gate_verdict: { overall: 'PASS', rationale: 'Unused companion verdict' },
         },
         {}
       );
