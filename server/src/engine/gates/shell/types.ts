@@ -187,8 +187,12 @@ export const SHELL_VERIFY_DEFAULT_MAX_ITERATIONS = 10;
  * and run verification when Claude tries to stop, creating autonomous loops.
  */
 export interface VerifyActiveState {
-  /** Chain session ID for tracking */
+  /** The row's key, repeated so a reader holding only the JSON knows which row it read */
   sessionId: string;
+  /** Workflow rows only (absent on host rows): the run, public chain id and exact scope */
+  runSessionId?: string;
+  chainId?: string;
+  scope?: StateStoreOptions;
   /** Configuration from :: verify:"cmd" syntax */
   config: {
     command: string;
@@ -205,4 +209,12 @@ export interface VerifyActiveState {
     lastResult: ShellVerifyResult | null;
     startedAt: string;
   };
+}
+
+/** What a workflow row is keyed by (`runSessionId` only — a chain id repeats across scopes). */
+export interface WorkflowVerifyIdentity {
+  runSessionId: string;
+  chainId?: string;
+  /** Exact scope; an unscoped run records `{}` */
+  scope: StateStoreOptions;
 }

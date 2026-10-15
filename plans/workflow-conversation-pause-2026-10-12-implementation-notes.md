@@ -186,3 +186,13 @@ Session list and item resources carry `conversationPause`, `runId`, `continuityS
 - **DEV-T2-3:** 193 changed lines against 130 authored — src 98 (within), test 95. The planner's bound did not price a list + item + no-leak + no-mutation test surface. Accepted.
 - **T2.6a (new row):** `runtime/resource-registration.ts` wraps the store and drops `options`, so `promoteDormant:false` does not reach it.
 - **Findings (no rows):** `ChainSessionSummary` carries no pause/scope fields, so list enrichment costs one non-promoting lookup per row; `manager.getSession` is not a pure read for unpaused runs (pre-existing).
+
+### T2.6a and T2.7 accepted (2026-10-15)
+
+T2.6a: the runtime resource wrapper forwards lookup options (a test through the real `registerMcpResources` sees `promoteDormant:false` at the store); 60 lines vs 40, Prettier-expanded fakes. Its commit waited on T2.7: the pre-commit typecheck reads the whole tree, which held T2.7's mid-edit store rename.
+
+T2.7: workflow verify-active rows key `workflow-run-<runUUID>` (exported `workflowVerifyStateKey`), JSON carries `sessionId`, `runSessionId`, `chainId` (display only) and exact `scope`, through one `workflowIdentity` + `writeWorkflowState` / `releaseRunState` at arm, re-run, rearm, final clear (pass, escalation, skip) and abort; no identity → refused. `clearState` (incl. the global DELETE) removed: no src caller. Legacy chain-id rows are released only when their JSON names this run; others are orphaned (verify-state.db has no TTL).
+
+- **R-T2.7-SKIP (accepted):** a skip with no rearm now releases the loop row; before, the Stop hook could keep enforcing a check the user skipped.
+- **For T3.5 (binding):** `hooks/ralph-stop.py:402` and `ralph-context-tracker.py:42` read `WHERE session_id = <client session id>`, which never matched a server key, old or new, and read `LIMIT 1` of any row when the hook session id is empty. T3.5 joins on JSON `runSessionId` / `workflowVerifyStateKey(runUUID)`.
+- **Open:** `writeState(key, pending, runSessionId?)` survives only for gate-abort-terminates-run's legacy fixture; if `unreached-methods` flags it at the boundary, a row moves that fixture to `writeWorkflowState` and deletes it.

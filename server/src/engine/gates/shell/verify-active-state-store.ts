@@ -23,10 +23,18 @@ import { formatCommandForDisplay } from './shell-command-allowlist.js';
 import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from './types.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type { PendingShellVerification, VerifyActiveState } from './types.js';
+import type {
+  PendingShellVerification,
+  VerifyActiveState,
+  WorkflowVerifyIdentity,
+} from './types.js';
 
-type RunBoundVerifyActiveState = VerifyActiveState & { runSessionId?: string };
 type RunReleaseOutcome = 'released' | 'absent' | 'foreign' | 'unbound';
+
+/** A workflow row's key: the run UUID alone, namespaced apart from host (client-session) keys. */
+export function workflowVerifyStateKey(runSessionId: string): string {
+  return `workflow-run-${runSessionId}`;
+}
 
 /**
  * Configuration for the state store.
@@ -60,12 +68,10 @@ export class VerifyActiveStateStore {
   }
 
   /**
-   * Write verify-active state for Stop hook integration.
+   * Write verify-active state under a caller-chosen key, as builds before `writeWorkflowState`
+   * did. The pipeline no longer calls it.
    *
-   * Called when loop mode is enabled. The Stop hook reads this state
-   * to determine if verification is pending and whether to block stop.
-   *
-   * @param sessionId - Chain session ID for tracking
+   * @param sessionId - Row key
    * @param pending - Current pending verification state
    * @param runSessionId - Exact internal run identity, separate from the active-state key
    */
@@ -74,11 +80,30 @@ export class VerifyActiveStateStore {
     pending: PendingShellVerification,
     runSessionId?: string
   ): Promise<void> {
+    this.writeRow(sessionId, pending, runSessionId === undefined ? {} : { runSessionId });
+  }
+
+  /** Enroll, re-run or rearm a run's loop under its derived key; no run identity is refused. */
+  async writeWorkflowState(
+    identity: WorkflowVerifyIdentity,
+    pending: PendingShellVerification
+  ): Promise<void> {
+    if (identity.runSessionId.length === 0) {
+      throw new Error('Verify-loop enrollment requires a workflow run identity');
+    }
+    this.writeRow(workflowVerifyStateKey(identity.runSessionId), pending, identity);
+  }
+
+  private writeRow(
+    sessionId: string,
+    pending: PendingShellVerification,
+    binding: Partial<WorkflowVerifyIdentity>
+  ): void {
     const { shellVerify } = pending;
 
-    const state: RunBoundVerifyActiveState = {
+    const state: VerifyActiveState = {
       sessionId,
-      ...(runSessionId === undefined ? {} : { runSessionId }),
+      ...binding,
       config: {
         // Rendered, not raw: this file is read by the Python Stop hook, whose payload
         // contract declares a string. Widening it there would break a durable surface
@@ -122,32 +147,46 @@ export class VerifyActiveStateStore {
     }
   }
 
-  /** Release only the active obligation bound to this exact internal run identity. */
-  async releaseRunState(sessionId: string, runSessionId: string): Promise<RunReleaseOutcome> {
-    if (sessionId.length === 0 || runSessionId.length === 0) {
-      throw new Error('Verify-loop release requires a key and an internal run identity');
+  /**
+   * Release only this run's obligation: the row under its derived key, plus a row an earlier build
+   * filed under the public chain id (`legacyKey`) when it names this run. No other row is touched.
+   */
+  async releaseRunState(
+    legacyKey: string | undefined,
+    runSessionId: string
+  ): Promise<RunReleaseOutcome> {
+    if (runSessionId.length === 0) {
+      throw new Error('Verify-loop release requires an internal run identity');
     }
+    const key = workflowVerifyStateKey(runSessionId);
     return this.withDb((db) => {
       db.exec('BEGIN IMMEDIATE');
       try {
-        const row = db
-          .prepare('SELECT state_json FROM verify_active_state WHERE session_id = ?')
-          .get(sessionId);
-        const outcome =
-          row === undefined ? 'absent' : this.classifyRunOwner(row['state_json'], runSessionId);
-        if (outcome === 'released') {
-          const result = db
-            .prepare('DELETE FROM verify_active_state WHERE session_id = ? AND state_json = ?')
-            .run(sessionId, row?.['state_json'] ?? null);
-          if (result.changes !== 1) throw new Error('Verify-loop ownership changed during release');
-        }
+        const outcome = this.releaseOwnedRow(db, key, runSessionId);
+        const legacy =
+          legacyKey === undefined ? 'absent' : this.releaseOwnedRow(db, legacyKey, runSessionId);
         db.exec('COMMIT');
-        return outcome;
+        return outcome === 'absent' && legacy === 'released' ? 'released' : outcome;
       } catch (error) {
         db.exec('ROLLBACK');
         throw error;
       }
     });
+  }
+
+  private releaseOwnedRow(db: DatabaseSync, key: string, runSessionId: string): RunReleaseOutcome {
+    const row = db
+      .prepare('SELECT state_json FROM verify_active_state WHERE session_id = ?')
+      .get(key);
+    const outcome =
+      row === undefined ? 'absent' : this.classifyRunOwner(row['state_json'], runSessionId);
+    if (outcome === 'released') {
+      const result = db
+        .prepare('DELETE FROM verify_active_state WHERE session_id = ? AND state_json = ?')
+        .run(key, row?.['state_json'] ?? null);
+      if (result.changes !== 1) throw new Error('Verify-loop ownership changed during release');
+    }
+    return outcome;
   }
 
   private classifyRunOwner(stateJson: unknown, runSessionId: string): RunReleaseOutcome {
@@ -164,38 +203,6 @@ export class VerifyActiveStateStore {
     const owner = state.runSessionId;
     if (typeof owner !== 'string' || owner.length === 0) return 'unbound';
     return owner === runSessionId ? 'released' : 'foreign';
-  }
-
-  /**
-   * Clear verify-active state after verification completes.
-   *
-   * Called when:
-   * - Verification passes (exit 0)
-   * - Max attempts reached (Stop hook shouldn't keep trying)
-   * - User chooses skip/abort
-   */
-  async clearState(sessionId?: string): Promise<void> {
-    // Throws for the same reason writeState above does: a clear that silently failed left
-    // verify-state.db pointing at a stale iteration while the caller believed the loop had
-    // ended (pass, escalation, or session teardown) — the Stop hook would keep blocking on a
-    // verification the pipeline had already moved past.
-    try {
-      this.withDb((db) => {
-        if (sessionId !== undefined) {
-          db.prepare('DELETE FROM verify_active_state WHERE session_id = ?').run(sessionId);
-        } else {
-          db.exec('DELETE FROM verify_active_state');
-        }
-      });
-      this.logger.debug('[VerifyActiveStateStore] Cleared verify-state.db row');
-    } catch (error) {
-      throw new Error(
-        `Failed to clear verify-loop state${sessionId !== undefined ? ` for session ${sessionId}` : ''}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-        { cause: error }
-      );
-    }
   }
 
   // === Private: SQLite helpers ===

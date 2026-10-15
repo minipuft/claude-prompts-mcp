@@ -31,17 +31,17 @@ const createMockExecutor = (passed = true): ShellVerifyExecutor =>
   }) as unknown as ShellVerifyExecutor;
 
 /**
- * `writeState`/`clearState` overrides take an already-configured mock (rather than a plain
+ * Overrides take an already-configured mock (rather than a plain
  * return value) so a caller that needs `mockRejectedValue` can type it explicitly via
- * `jest.fn<VerifyActiveStateStore['writeState']>()` — the bare `jest.fn()` calls below infer
+ * `jest.fn<VerifyActiveStateStore['releaseRunState']>()` — the bare `jest.fn()` calls below infer
  * `never` for their argument in this Jest/TS combination (pre-existing, not fixed here).
  */
 const createMockStateManager = (
-  overrides: Partial<Pick<VerifyActiveStateStore, 'writeState' | 'clearState'>> = {}
+  overrides: Partial<Pick<VerifyActiveStateStore, 'writeWorkflowState' | 'releaseRunState'>> = {}
 ): VerifyActiveStateStore =>
   ({
-    writeState: overrides.writeState ?? jest.fn().mockResolvedValue(undefined),
-    clearState: overrides.clearState ?? jest.fn().mockResolvedValue(undefined),
+    writeWorkflowState: overrides.writeWorkflowState ?? jest.fn().mockResolvedValue(undefined),
+    releaseRunState: overrides.releaseRunState ?? jest.fn().mockResolvedValue('released'),
   }) as unknown as VerifyActiveStateStore;
 
 const createMockSessionService = (): ChainSessionService =>
@@ -207,6 +207,31 @@ describe('ShellVerificationStage', () => {
       expect(saved.nodeId).toBeUndefined();
     });
 
+    test('a loop arms under the run identity and scope; with no run it is refused', async () => {
+      const stateManager = createMockStateManager();
+      const stage = new ShellVerificationStage(
+        createMockExecutor(false),
+        stateManager,
+        createMockSessionService(),
+        createAdvanceOwner(),
+        createLogger()
+      );
+      const armed = new ExecutionContext({ chain_id: 'chain-x#1' });
+      armed.state.session.resumeSessionId = 'uuid-a';
+      armed.state.identity.continuityScopeId = 'scope-a';
+      const loopCheck = { ...inlineCheck(), shellVerify: { command: 'npm test', loop: true } };
+      armed.state.gates.pendingShellVerification = loopCheck;
+      await stage.execute(armed);
+      expect(stateManager.writeWorkflowState).toHaveBeenCalledWith(
+        { runSessionId: 'uuid-a', chainId: 'chain-x#1', scope: { continuityScopeId: 'scope-a' } },
+        loopCheck
+      );
+      const orphan = new ExecutionContext({ chain_id: 'chain-x#1' });
+      orphan.state.gates.pendingShellVerification = loopCheck;
+      await expect(stage.execute(orphan)).rejects.toThrow('no workflow run identity');
+      expect(stateManager.writeWorkflowState).toHaveBeenCalledTimes(1);
+    });
+
     test('control: the reply call restores the saved check and runs it once', async () => {
       const executor = createMockExecutor(false);
       const sessionService = createMockSessionService();
@@ -367,7 +392,7 @@ describe('ShellVerificationStage', () => {
       expect(JSON.stringify(context.response)).toContain('Maximum Attempts Reached');
       expect(context.state.gates.awaitingUserChoice).toBe(true);
       expect(loggedFailure(warn)).toBe(false);
-      expect(stateManager.clearState).not.toHaveBeenCalled();
+      expect(stateManager.releaseRunState).not.toHaveBeenCalled();
     });
 
     test('control: the failing run that spends the last attempt logs the failure and clears the loop state', async () => {
@@ -378,7 +403,7 @@ describe('ShellVerificationStage', () => {
       expect(executor.execute).toHaveBeenCalledTimes(1);
       expect(JSON.stringify(context.response)).toContain('Maximum Attempts Reached');
       expect(loggedFailure(warn)).toBe(true);
-      expect(stateManager.clearState).toHaveBeenCalledWith('chain-test#1');
+      expect(stateManager.releaseRunState).toHaveBeenCalledWith('chain-test#1', 'test-session');
     });
 
     test('control: retry resets to 0/N, and the next answer runs the check', async () => {
@@ -495,12 +520,11 @@ describe('ShellVerificationStage', () => {
       });
       expect(saved['nodeId']).toBeUndefined();
       // The loop's Stop-hook state stands again rather than being cleared
-      expect(stateManager.writeState).toHaveBeenLastCalledWith(
-        'chain-test#1',
-        expect.objectContaining({ attemptCount: 0 }),
-        'test-session'
+      expect(stateManager.writeWorkflowState).toHaveBeenLastCalledWith(
+        { runSessionId: 'test-session', chainId: 'chain-test#1', scope: {} },
+        expect.objectContaining({ attemptCount: 0 })
       );
-      expect(stateManager.clearState).not.toHaveBeenCalled();
+      expect(stateManager.releaseRunState).not.toHaveBeenCalled();
     });
 
     test('control: the pass that completes the run leaves the check cleared', async () => {
@@ -510,7 +534,7 @@ describe('ShellVerificationStage', () => {
 
       expect(sessionService.clearPendingShellVerification).toHaveBeenCalled();
       expect(sessionService.setPendingShellVerification).not.toHaveBeenCalled();
-      expect(stateManager.clearState).toHaveBeenCalledWith('chain-test#1');
+      expect(stateManager.releaseRunState).toHaveBeenCalledWith('chain-test#1', 'test-session');
     });
   });
 
@@ -845,8 +869,8 @@ describe('ShellVerificationStage', () => {
     test('a writeState failure while arming the loop propagates out of execute()', async () => {
       const executor = createMockExecutor(true);
       const stateManager = createMockStateManager({
-        writeState: jest
-          .fn<VerifyActiveStateStore['writeState']>()
+        writeWorkflowState: jest
+          .fn<VerifyActiveStateStore['writeWorkflowState']>()
           .mockRejectedValue(
             new Error('Failed to arm verify-loop state for session test-session: disk full')
           ),
@@ -860,6 +884,7 @@ describe('ShellVerificationStage', () => {
       );
 
       const context = new ExecutionContext({ command: '>>chain', user_response: 'fixed code' });
+      context.state.session.resumeSessionId = 'test-session';
       context.state.gates.pendingShellVerification = {
         gateId: 'shell-verify-inline',
         shellVerify: { command: 'npm test', loop: true },
@@ -879,8 +904,8 @@ describe('ShellVerificationStage', () => {
     test('a clearState failure on verification pass propagates out of execute()', async () => {
       const executor = createMockExecutor(true);
       const stateManager = createMockStateManager({
-        clearState: jest
-          .fn<VerifyActiveStateStore['clearState']>()
+        releaseRunState: jest
+          .fn<VerifyActiveStateStore['releaseRunState']>()
           .mockRejectedValue(
             new Error('Failed to clear verify-loop state for session test-session: disk full')
           ),
@@ -894,6 +919,8 @@ describe('ShellVerificationStage', () => {
       );
 
       const context = new ExecutionContext({ command: '>>chain', user_response: 'fixed code' });
+      context.state.session.resumeSessionId = 'test-session';
+      context.state.session.capturedStep = { nodeId: 'node-1', ordinal: 1 };
       context.state.gates.pendingShellVerification = {
         gateId: 'shell-verify-inline',
         shellVerify: { command: 'npm test', loop: true },
@@ -910,8 +937,8 @@ describe('ShellVerificationStage', () => {
     test('a clearState failure on escalation propagates instead of returning the escalation reply', async () => {
       const executor = createMockExecutor(false);
       const stateManager = createMockStateManager({
-        clearState: jest
-          .fn<VerifyActiveStateStore['clearState']>()
+        releaseRunState: jest
+          .fn<VerifyActiveStateStore['releaseRunState']>()
           .mockRejectedValue(
             new Error('Failed to clear verify-loop state for session test-session: disk full')
           ),
@@ -925,6 +952,8 @@ describe('ShellVerificationStage', () => {
       );
 
       const context = new ExecutionContext({ command: '>>chain', user_response: 'attempt fix' });
+      context.state.session.resumeSessionId = 'test-session';
+      context.state.session.capturedStep = { nodeId: 'node-1', ordinal: 1 };
       context.state.gates.pendingShellVerification = {
         gateId: 'shell-verify-inline',
         shellVerify: { command: 'npm test', loop: true },

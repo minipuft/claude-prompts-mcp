@@ -69,9 +69,44 @@ describe('VerifyActiveStateStore (persistence)', () => {
 
     await expect(store.writeState('session-control', pending)).resolves.toBeUndefined();
     expect(rowCount(store.stateDbPath, 'session-control')).toBe(1);
+  });
 
-    await expect(store.clearState('session-control')).resolves.toBeUndefined();
-    expect(rowCount(store.stateDbPath, 'session-control')).toBe(0);
+  test('one public chain id in two scopes keeps two rows; a release keeps the other and the host row', async () => {
+    const store = createVerifyActiveStateStore(createLogger(), {
+      runtimeStateDir: path.join(tmpRoot, 'two-scopes'),
+    });
+    await store.writeState('host-client-1', pending);
+    const db = new DatabaseSync(store.stateDbPath);
+    const rows = () => db.prepare('SELECT * FROM verify_active_state ORDER BY session_id').all();
+    try {
+      for (const [run, scope] of [
+        ['uuid-a', { workspaceId: 'a' }],
+        ['uuid-b', {}],
+      ] as const) {
+        await store.writeWorkflowState({ runSessionId: run, chainId: 'chain-x#1', scope }, pending);
+      }
+      const keys = ['host-client-1', 'workflow-run-uuid-a', 'workflow-run-uuid-b'];
+      expect(rows().map((row) => row['session_id'])).toEqual(keys);
+      expect(JSON.parse(String(rows()[1]?.['state_json']))).toMatchObject({
+        sessionId: keys[1],
+        runSessionId: 'uuid-a',
+        chainId: 'chain-x#1',
+        scope: { workspaceId: 'a' },
+      });
+      await expect(store.releaseRunState('chain-x#1', 'uuid-a')).resolves.toBe('released');
+      expect(rows().map((row) => row['session_id'])).toEqual([keys[0], keys[2]]);
+      await expect(
+        store.writeWorkflowState({ runSessionId: '', chainId: 'chain-x#1', scope: {} }, pending)
+      ).rejects.toThrow('requires a workflow run identity');
+      // A row an earlier build filed under the public chain id goes only with the run it names
+      await store.writeState('chain-x#1', pending, 'uuid-old');
+      await expect(store.releaseRunState('chain-x#1', 'uuid-other')).resolves.toBe('absent');
+      expect(rows()).toHaveLength(3);
+      await expect(store.releaseRunState('chain-x#1', 'uuid-old')).resolves.toBe('released');
+      expect(rows()).toHaveLength(2);
+    } finally {
+      db.close();
+    }
   });
 
   // `runtimeStateDir` points at a path that already exists as a plain FILE. `fs.mkdirSync`
@@ -88,34 +123,30 @@ describe('VerifyActiveStateStore (persistence)', () => {
     const store = createVerifyActiveStateStore(createLogger(), {
       runtimeStateDir: path.join(tmpRoot, 'owned'),
     });
-    await store.writeState('same-key', pending, 'review-owned');
+    const key = 'workflow-run-review-owned';
+    const owned = { runSessionId: 'review-owned', scope: {} };
+    await store.writeWorkflowState(owned, pending);
     const db = new DatabaseSync(store.stateDbPath);
     const read = () =>
-      db.prepare('SELECT state_json FROM verify_active_state WHERE session_id = ?').get('same-key');
+      db.prepare('SELECT state_json FROM verify_active_state WHERE session_id = ?').get(key);
     try {
       const bound = read();
       expect(JSON.parse(String(bound?.['state_json']))).toMatchObject({
         runSessionId: 'review-owned',
       });
-      await expect(store.releaseRunState('same-key', 'other-run')).resolves.toBe('foreign');
+      await expect(store.releaseRunState('same-key', 'other-run')).resolves.toBe('absent');
       expect(read()).toEqual(bound);
       await expect(store.releaseRunState('same-key', 'review-owned')).resolves.toBe('released');
       expect(read()).toBeUndefined();
       await expect(store.releaseRunState('same-key', 'review-owned')).resolves.toBe('absent');
       for (const raw of ['{}', '{"runSessionId":0}', '{"runSessionId":""}', 'null', '{']) {
-        db.prepare('INSERT INTO verify_active_state VALUES (?, ?, ?)').run(
-          'same-key',
-          raw,
-          'retained'
-        );
+        db.prepare('INSERT INTO verify_active_state VALUES (?, ?, ?)').run(key, raw, 'retained');
         await expect(store.releaseRunState('same-key', 'review-owned')).resolves.toBe('unbound');
         expect(read()?.['state_json']).toBe(raw);
-        db.prepare('DELETE FROM verify_active_state WHERE session_id = ?').run('same-key');
+        db.prepare('DELETE FROM verify_active_state WHERE session_id = ?').run(key);
       }
-      await store.writeState('same-key', pending);
-      await expect(store.releaseRunState('same-key', 'review-owned')).resolves.toBe('unbound');
       await expect(store.releaseRunState('same-key', '')).rejects.toThrow('internal run identity');
-      await store.writeState('same-key', pending, 'review-owned');
+      await store.writeWorkflowState(owned, pending);
       for (const rejection of ["ABORT, 'injected release failure'", 'IGNORE']) {
         db.exec(
           `CREATE TRIGGER deny_release BEFORE DELETE ON verify_active_state BEGIN SELECT RAISE(${rejection}); END`
@@ -153,20 +184,6 @@ describe('VerifyActiveStateStore (persistence)', () => {
   test('a clear that cannot persist rejects instead of resolving with success logged', async () => {
     const store = brokenStore('blocked-clear');
 
-    await expect(store.clearState('session-c')).rejects.toThrow();
-  });
-
-  test('the clear failure states the loop could not be cleared, not that it was', async () => {
-    const store = brokenStore('blocked-clear-message');
-
-    await expect(store.clearState('session-d')).rejects.toThrow(
-      /Failed to clear verify-loop state for session session-d/
-    );
-  });
-
-  test('a clear-all (no sessionId) failure names no session rather than "session undefined"', async () => {
-    const store = brokenStore('blocked-clear-all');
-
-    await expect(store.clearState()).rejects.toThrow(/^Failed to clear verify-loop state: /);
+    await expect(store.releaseRunState('session-c', 'run-c')).rejects.toThrow();
   });
 });
