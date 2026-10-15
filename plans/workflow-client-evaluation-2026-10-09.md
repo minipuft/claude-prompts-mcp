@@ -19,7 +19,7 @@ tags: [hooks, workflows, evaluation, clients]
 
 Goal: coherent abort, conversation pause, and truthful client workflow evidence.
 Slice: source repairs and final corrected wire boundary accepted:367 calls across STDIO/HTTP,30 stages,8 hosts,71 frozen bindings at4e36decc. All85 local validation members and separate fresh bundled HTTP20/schema3 checks passed. Full repository and cleanup guards stayed exact.
-Next: push the bounded #489 unit-fixture repair after its local gates and let CI run again. Pause production is separate: A inspection and B1 canonical factoring accepted, B2 selected strict persistence running; root recut now22 rows. Object-verdict composition, Q6 and installed/native delivery remain open.
+Next: #489 b5cbc7c2 has full green CI; retain the object-verdict composition, Q6 and installed/native merge conditions. Pause production is separate: A/B1/B2 are accepted and committed; C preflight is ruled and its bounded implementation dispatched. Root recut remains22 rows.
 Constraint: root owns HEAD/index; protected stashes and every accepted/failed receipt stay retained. Source publish authorization covers this repository only; no CloudySky, installed client, foreign checkout, shared database, package or release mutation.
 Boundary: earlier355-call and failed104-call receipts stay historical. Current source transport proof is separate from installed/native/model evidence and stop-old-first recovery.
 
