@@ -1046,3 +1046,57 @@ describe('MCP Resources Registration Integration', () => {
     });
   });
 });
+
+describe('registerMcpResources session lookup forwarding', () => {
+  test('a session resource read reaches the wrapped store with promoteDormant:false', async () => {
+    const { registerMcpResources } = await import('../../../src/runtime/resource-registration.js');
+    const handlers = new Map<
+      string,
+      (uri: URL, vars: Record<string, string>) => Promise<unknown>
+    >();
+    const target = {
+      registerResource: (name: string, _t: unknown, _o: unknown, handler: unknown) => {
+        handlers.set(name, handler as (uri: URL, vars: Record<string, string>) => Promise<unknown>);
+      },
+      sendResourceListChanged: () => undefined,
+    };
+    const lookup = jest.fn(
+      (_chainId: string, _options?: { promoteDormant?: boolean }) => undefined
+    );
+    const store = {
+      listActiveSessions: () => [],
+      getSession: () => undefined,
+      getSessionByChainIdentifier: lookup,
+      getSessionStats: () => ({}),
+    };
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
+    const deps = {
+      logger,
+      configManager: {
+        getResourcesConfig: () => ({
+          registerWithMcp: true,
+          prompts: { enabled: false },
+          gates: { enabled: false },
+          frameworks: { enabled: false },
+          observability: { enabled: true, sessions: true, metrics: true },
+          logs: { enabled: false },
+        }),
+      },
+      frameworkStateStore: { getFrameworkManager: () => undefined },
+      mcpToolsManager: {
+        getChainSessionStore: () => store,
+        getMetricsCollector: () => ({ getAnalyticsSummary: () => ({}) }),
+      },
+      getConvertedPrompts: () => [],
+    };
+
+    registerMcpResources(target as never, deps as never);
+    const read = handlers.get('session');
+    expect(read).toBeDefined();
+    await expect(
+      read!(new URL('session://chain-demo%231'), { chainId: encodeURIComponent('chain-demo#1') })
+    ).rejects.toThrow();
+
+    expect(lookup).toHaveBeenCalledWith('chain-demo#1', { promoteDormant: false });
+  });
+});
