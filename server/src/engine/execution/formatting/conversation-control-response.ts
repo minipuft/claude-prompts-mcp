@@ -114,10 +114,16 @@ export function deriveObligations(session: ControlRunSnapshot): ConversationObli
   return owed;
 }
 
-/** The packet's run identity and position, picked field by field off the snapshot. PURE. */
-function projectRun(session: ControlRunSnapshot, scope: ExactControlScope): ConversationControlRun {
+/** `current` is `total` once the run is past its last node. PURE. */
+function stepOf(session: ControlRunSnapshot): ConversationControlRun['step'] {
   const { nodes, currentNodeId } = session.state;
   const total = totalOf(nodes);
+  return { current: currentNodeId === null ? total : currentOrdinal(nodes, currentNodeId), total };
+}
+
+/** The packet's run identity and position, picked field by field off the snapshot. PURE. */
+function projectRun(session: ControlRunSnapshot, scope: ExactControlScope): ConversationControlRun {
+  const { currentNodeId } = session.state;
   return {
     runId: session.sessionId,
     chainId: session.chainId,
@@ -127,13 +133,13 @@ function projectRun(session: ControlRunSnapshot, scope: ExactControlScope): Conv
       continuityScopeId: scope.continuityScopeId,
     },
     currentNodeId,
-    step: { current: currentNodeId === null ? total : currentOrdinal(nodes, currentNodeId), total },
+    step: stepOf(session),
     pause: session.conversationPause ?? null,
     obligations: deriveObligations(session),
   };
 }
 
-function describePosition(run: ConversationControlRun): string {
+function describePosition(run: Pick<ConversationControlRun, 'currentNodeId' | 'step'>): string {
   const { current, total } = run.step;
   return run.currentNodeId === null
     ? `past its last step (${total} of ${total}), still held open`
@@ -182,7 +188,10 @@ function describeObligation(chainId: string, owed: ConversationObligation): stri
   }
 }
 
-function describeOwed(label: string, run: ConversationControlRun): string {
+function describeOwed(
+  label: string,
+  run: Pick<ConversationControlRun, 'chainId' | 'obligations'>
+): string {
   if (run.obligations.length === 0) {
     return `\n\n${label}: no step, review, verification or report.`;
   }
@@ -273,6 +282,23 @@ export function renderPausedRefusal(
       describeOwed(OWED_AFTER_RESUME, run),
     true,
     refused('conversation-paused', run)
+  );
+}
+
+/**
+ * A paused run named by a read (session list, inspect, a refused clear): where it stands, since
+ * when, the two calls that end the pause, and what it still owes. Never the recovery credential. PURE.
+ */
+export function describePausedRun(session: ControlRunSnapshot): string {
+  const { chainId, conversationPause } = session;
+  const since =
+    conversationPause === undefined
+      ? ''
+      : `, since ${new Date(conversationPause.pausedAt).toLocaleString()}`;
+  return (
+    `⏸️ **Paused for conversation**: \`${chainId}\` at ${describePosition({ currentNodeId: session.state.currentNodeId, step: stepOf(session) })}${since}. ` +
+    resumeOrAbort(chainId) +
+    describeOwed(OWED_AFTER_RESUME, { chainId, obligations: deriveObligations(session) })
   );
 }
 

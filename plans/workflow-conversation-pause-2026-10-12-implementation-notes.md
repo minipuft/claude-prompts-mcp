@@ -170,3 +170,11 @@ New pure module `formatting/conversation-control-response.ts` (packet, `deriveOb
 - **For T4.1:** the credential-in-packet plant is caught by one unit test only (the custody path is the only one carrying a live credential); the process drive asserts packet credential absence on both transports.
 - **For T3.x:** an empty `obligations` list is valid (nonterminal paused run past its last node with nothing held).
 - **Finding:** the assembler has ~40 code lines of headroom.
+
+### T2.4 and T2.5 accepted (2026-10-15)
+
+Router views and system_control session list/inspect render the pause through one shared `describePausedRun` (conversation-control-response.ts, with `stepOf` shared with `projectRun`), via non-promoting reads; the token never appears; a paused clear (single or bulk) is refused before the store, which throws on a paused clear rather than returning false. The two rows landed together: T2.4 compiles only against T2.5's export.
+
+- **DEV-T2-2 (T2.5):** edited two files outside its row — exported `describePausedRun` from the shared module (the brief demanded reuse and omitted the file that must export it: the planner's omission), and mocked `getSessionByChainIdentifier` in `session-action.test.ts` whose fake broke on the new lookup. It also ran `git stash -- <its handler>` to measure ESLint before its change; scoped to its own file, popped, sha verified, the other worker untouched — but stash in a shared tree is forbidden in future briefs.
+- **T2.4a (new row):** both lists inherit `listActiveSessions`' dormant exclusion, so a dormant paused run is invisible.
+- **Findings (no rows):** the archive-run-id fallback in the router and `getSession` for inspect still touch an UNPAUSED run as before; `peekRun` (executor) and the router's `peekSession` are the same expression.

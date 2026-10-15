@@ -2,8 +2,10 @@
 
 import { ActionHandler } from '../core/action-handler-base.js';
 
-import type { ToolResponse } from '#shared/types/index.js';
+import type { ChainSession, ToolResponse } from '#shared/types/index.js';
 
+import { describePausedRun } from '#engine/execution/formatting/conversation-control-response.js';
+import { isConversationPaused } from '#shared/types/chain-session.js';
 import { attemptInHand, formatAttempt } from '#shared/utils/attempt-number.js';
 import { currentOrdinal, ordinalOf, totalOf } from '#shared/utils/node-order.js';
 
@@ -30,6 +32,28 @@ export class SessionActionHandler extends ActionHandler {
     }
   }
 
+  /**
+   * The conversation-paused run behind a session id, read the way a control names a run: no
+   * promotion, no `lastActivity` bump. Undefined for any run that is not paused.
+   */
+  private pausedRun(sessionId: string, chainId: string): ChainSession | undefined {
+    const run = this.context.chainSessionStore!.getSessionByChainIdentifier(chainId, {
+      ...this.requestScope,
+      includeDormant: true,
+      promoteDormant: false,
+    });
+    return run?.sessionId === sessionId && isConversationPaused(run) ? run : undefined;
+  }
+
+  private refuseClearOfPaused(id: string, runs: readonly ChainSession[]): ToolResponse {
+    return this.createMinimalSystemResponse(
+      `⚠️ **Nothing Cleared**: \`${id}\` selects ${runs.length} run(s) paused for conversation. ` +
+        `A paused run is never cleared: abort it first, then clear. Nothing was removed.\n\n` +
+        runs.map(describePausedRun).join('\n\n'),
+      'session_clear'
+    );
+  }
+
   private async listSessions(args: any): Promise<ToolResponse> {
     const manager = this.context.chainSessionStore!;
     // The caller's workspace only: a run started under one workspace header is not listed under
@@ -53,7 +77,10 @@ export class SessionActionHandler extends ActionHandler {
       response += `### Session: \`${session.sessionId}\`\n`;
       response += `**Chain**: \`${session.chainId}\`${promptInfo}\n`;
       response += `**Progress**: Step ${session.currentStep}/${session.totalSteps}\n`;
-      response += `**Status**: ${session.pendingReview ? '⚠️ Awaiting Review' : '🟢 Active'}\n`;
+      const paused = this.pausedRun(session.sessionId, session.chainId);
+      const status = session.pendingReview ? '⚠️ Awaiting Review' : '🟢 Active';
+      response += `**Status**: ${paused ? '⏸️ Paused' : status}\n`;
+      if (paused) response += `${describePausedRun(paused)}\n`;
 
       if (args.show_details) {
         response += `**Started**: ${startTime}\n`;
@@ -88,7 +115,8 @@ export class SessionActionHandler extends ActionHandler {
     // blast radius was every run the chain had ever produced. The handler reported success either
     // way, so nothing distinguished a precise clear from a chain-wide sweep after the fact.
     const sessions = manager.listActiveSessions(undefined, this.requestScope);
-    const matchesSession = sessions.some((s) => s.sessionId === sessionId);
+    const target = sessions.find((s) => s.sessionId === sessionId);
+    const matchesSession = target !== undefined;
     const matchingChain = sessions.filter((s) => s.chainId === sessionId);
 
     if (matchesSession && matchingChain.length > 0) {
@@ -100,8 +128,15 @@ export class SessionActionHandler extends ActionHandler {
       );
     }
 
-    if (matchesSession) {
-      await manager.clearSession(sessionId, this.requestScope);
+    if (target) {
+      const paused = this.pausedRun(sessionId, target.chainId);
+      if (paused) return this.refuseClearOfPaused(sessionId, [paused]);
+      if (!(await manager.clearSession(sessionId, this.requestScope))) {
+        return this.createMinimalSystemResponse(
+          `⚠️ **Nothing Cleared**: the store did not remove \`${sessionId}\`. Nothing was removed.`,
+          'session_clear'
+        );
+      }
       return this.createMinimalSystemResponse(
         `✅ **Session Cleared**: \`${sessionId}\`\n\nAll state and artifacts for this session have been removed.`,
         'session_clear'
@@ -109,6 +144,8 @@ export class SessionActionHandler extends ActionHandler {
     }
 
     if (matchingChain.length > 0) {
+      const pausedRuns = matchingChain.flatMap((s) => this.pausedRun(s.sessionId, s.chainId) ?? []);
+      if (pausedRuns.length > 0) return this.refuseClearOfPaused(sessionId, pausedRuns);
       await manager.clearSessionsForChain(sessionId, this.requestScope);
       return this.createMinimalSystemResponse(
         `✅ **Chain Sessions Cleared**: \`${sessionId}\`\n\n` +
@@ -148,6 +185,7 @@ export class SessionActionHandler extends ActionHandler {
     response += `**Started**: ${new Date(session.startTime).toLocaleString()}\n`;
     response += `**Last Activity**: ${new Date(session.lastActivity).toLocaleString()}\n`;
     response += `**Lifecycle**: \`${session.lifecycle}\`\n\n`;
+    if (isConversationPaused(session)) response += `${describePausedRun(session)}\n\n`;
 
     // Every open review, by the node it grades: a run can hold one on the step it stands on, one
     // on a step it already left, and one per reported detached node, all at once.
