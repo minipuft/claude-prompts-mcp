@@ -725,6 +725,12 @@ describe('ChainSessionStore handoff verbs', () => {
       save: jest.fn(async () => evictOnSave),
       claimRunByToken: jest.fn(() => claim),
       deleteRunsForOwners: jest.fn(),
+      readOwnedControlRun: jest.fn(() => {
+        throw new Error('fakeRegistry does not model selected-control custody');
+      }),
+      saveSelectedControlRun: jest.fn(() => {
+        throw new Error('fakeRegistry does not model selected-control custody');
+      }),
     };
   }
 

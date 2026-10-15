@@ -370,6 +370,12 @@ class InMemoryRunRegistry implements ChainRunRegistry {
   }
 
   deleteRunsForOwners(): void {}
+  readOwnedControlRun(): never {
+    throw new Error('InMemoryRunRegistry does not model selected-control custody');
+  }
+  saveSelectedControlRun(): never {
+    throw new Error('InMemoryRunRegistry does not model selected-control custody');
+  }
 }
 
 /** Deep copy that survives the `stepStates` Map, which JSON round-tripping does not. */
