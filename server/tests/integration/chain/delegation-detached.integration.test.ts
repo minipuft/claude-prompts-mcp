@@ -655,7 +655,7 @@ describe('detached delegation (await: run) through the pipeline', () => {
       ]);
     });
 
-    test('cancel still ends a held run — a worker that never reports is not a deadlock', async () => {
+    test('internal cancellation ends a held run when a worker never reports', async () => {
       const pipeline = buildPipeline({
         sessionStore,
         recordStore,
@@ -676,8 +676,8 @@ describe('detached delegation (await: run) through the pipeline', () => {
   describe("row 4.8: a detached step's late report opens its gate review", () => {
     const TRAILER = `HANDOFF RESULT\nnode: ${DETACHED}`;
     // The string form: the MCP layer renders a structured object to this before the pipeline.
-    const PASS = 'GATE_REVIEW: PASS - the result meets the gate';
-    const FAIL = 'GATE_REVIEW: FAIL - the result misses the gate';
+    const PASS = { overall: 'PASS', rationale: 'the result meets the gate' };
+    const FAIL = { overall: 'FAIL', rationale: 'the result misses the gate' };
     const reminderGate = (id: string): LightweightGateDefinition =>
       ({
         id,

@@ -249,7 +249,7 @@ describe.each([
     const blocked = await session.callTool('prompt_engine', {
       chain_id: chainId,
       user_response: cageerfAnswer(`${OUTPUT_MARKER}: one, two, three.`),
-      gate_verdict: 'GATE_REVIEW: FAIL - the rejected options are not named',
+      gate_verdict: { overall: 'FAIL', rationale: 'the rejected options are not named' },
     });
 
     // Exactly once, not merely present: a second announcement of one block is a defect.
@@ -281,7 +281,7 @@ describe.each([
     // Both halves of the number distinguish this from a counter reading a wrong source.
     expect(blocked.text).toContain('**Attempt 2/5** — 3 attempts remain after this one.');
     expect(blocked.text).toContain('"overall": "PASS"');
-    expect(blocked.text).toContain('A legacy string form is still accepted');
+    expect(blocked.text).not.toContain('GATE_REVIEW');
   }, 120000);
 
   /**
@@ -314,7 +314,7 @@ describe.each([
     const blocked = await session.callTool('prompt_engine', {
       chain_id: chainId,
       user_response: `${OUTPUT_MARKER}: still one line.`,
-      gate_verdict: 'GATE_REVIEW: FAIL - the sections are missing',
+      gate_verdict: { overall: 'FAIL', rationale: 'the sections are missing' },
     });
 
     expect(blocked.text).toContain('Response Blocked');
@@ -337,7 +337,7 @@ describe.each([
       const outcome = await session.callTool('prompt_engine', {
         chain_id: chainId,
         user_response: cageerfAnswer(`${OUTPUT_MARKER}: attempt ${attempt}.`),
-        gate_verdict: `GATE_REVIEW: FAIL - attempt ${attempt} is not good enough`,
+        gate_verdict: { overall: 'FAIL', rationale: `attempt ${attempt} is not good enough` },
       });
       counters.push(/\*\*Attempt \d+\/\d+\*\*/.exec(outcome.text)?.[0] ?? '(no counter)');
       replies.push(outcome.text);
@@ -420,7 +420,7 @@ describe.each([
     const blocked = await session.callTool('prompt_engine', {
       chain_id: chainId,
       user_response: cageerfAnswer(`${OUTPUT_MARKER}: one, two, three.`),
-      gate_verdict: 'GATE_REVIEW: FAIL - the rejected options are not named',
+      gate_verdict: { overall: 'FAIL', rationale: 'the rejected options are not named' },
     });
 
     expect(blocked.text).toContain('Response Blocked');
@@ -442,7 +442,7 @@ describe.each([
     const failed = await session.callTool('prompt_engine', {
       chain_id: chainId,
       user_response: cageerfAnswer(`${OUTPUT_MARKER}: one, two, three.`),
-      gate_verdict: 'GATE_REVIEW: FAIL - the rejected options are not named',
+      gate_verdict: { overall: 'FAIL', rationale: 'the rejected options are not named' },
     });
 
     // Positive control for the two absences below: the gate IS attached and DID fail, so the

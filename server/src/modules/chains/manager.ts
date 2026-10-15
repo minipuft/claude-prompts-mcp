@@ -39,6 +39,8 @@ import type {
   RemainderOutcome,
   RemainderRejectionReason,
   ReviewSlot,
+  RunEndedCallback,
+  RunTerminalFact,
   SessionBlueprint,
   UnknownLedgerEntry,
   UnknownObservation,
@@ -77,7 +79,11 @@ import {
   parseStepForNode,
   totalOf,
 } from '#shared/utils/node-order.js';
-import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
+import {
+  buildIdentityScope,
+  DEFAULT_IDENTITY_SCOPE_ID,
+  resolveContinuityScopeId,
+} from '#shared/utils/request-identity-scope.js';
 
 /**
  * Derive the sticky lifecycle value a milestone implies. `rendered` and `responded` are both
@@ -246,7 +252,7 @@ export class ChainSessionStore implements ChainSessionService {
   private runChainToBase: Map<string, string> = new Map(); // runChainId -> baseChainId
   private runRegistry?: ChainRunRegistry;
   private readonly sessionClearedCallbacks: SessionClearedCallback[] = [];
-  private readonly runEndedCallbacks: Array<(sessionId: string) => void> = [];
+  private readonly runEndedCallbacks: RunEndedCallback[] = [];
   private readonly defaultSessionTimeoutMs: number;
   private readonly reviewSessionTimeoutMs: number;
   private readonly cleanupIntervalMs: number;
@@ -436,14 +442,15 @@ export class ChainSessionStore implements ChainSessionService {
    * must tolerate a second call for the same session. Used to release what lives as long as a
    * run, such as its temporary gates (R47).
    */
-  onRunEnded(callback: (sessionId: string) => void): void {
+  onRunEnded(callback: RunEndedCallback): void {
     this.runEndedCallbacks.push(callback);
   }
 
-  private notifyRunEnded(sessionId: string): void {
+  private notifyRunEnded(sessionId: string, terminal?: RunTerminalFact): void {
     for (const callback of this.runEndedCallbacks) {
       try {
-        callback(sessionId);
+        if (terminal === undefined) callback(sessionId);
+        else callback(sessionId, terminal);
       } catch (error) {
         this.logger.warn(
           `Run-ended callback failed for ${sessionId}: ${
@@ -1256,8 +1263,9 @@ export class ChainSessionStore implements ChainSessionService {
 
     const snapshot = this.snapshotRun(session);
     session.runStatus = target;
-    if (isTerminalRunStatus(target)) {
-      session.runCompletedAt = Date.now();
+    const completedAt = isTerminalRunStatus(target) ? Date.now() : undefined;
+    if (completedAt !== undefined) {
+      session.runCompletedAt = completedAt;
     }
     session.lastActivity = Date.now();
 
@@ -1265,7 +1273,9 @@ export class ChainSessionStore implements ChainSessionService {
     this.logger.debug(
       `[ChainRunStatus] Transitioned session ${sessionId} from '${currentStatus}' to '${target}'`
     );
-    await this.announceRunTerminal(session, target);
+    if (completedAt !== undefined) {
+      await this.announceRunTerminal(session, target, completedAt, scope);
+    }
     return true;
   }
 
@@ -1381,21 +1391,25 @@ export class ChainSessionStore implements ChainSessionService {
    * as a dormant session, and persist. Refuses when the row has no blueprint (OQ-1) — nothing
    * here could resume it.
    */
-  async claimHandoff(token: string): Promise<ChainHandoffClaimResult> {
+  async claimHandoff(
+    token: string,
+    requestScope?: StateStoreOptions
+  ): Promise<ChainHandoffClaimResult> {
     await this.initPromise;
+    await this.persistQueue;
     const heldChainId = this.findHeldChainIdForToken(token);
     if (heldChainId !== undefined) {
       this.logger.warn(`[Handoff] Refusing claim: ${heldChainId} already names another run here`);
       return { status: 'chain-id-held', chainId: heldChainId };
     }
-    const result = this.requireRunRegistry().claimRunByToken(token, this.runScope);
+    const result = this.requireRunRegistry().claimRunByToken(
+      token,
+      this.runScope,
+      this.resolveScopeFilter(requestScope)
+    );
     if (result.status !== 'claimed') return result;
 
     const session = result.session;
-    if (!session.blueprint) {
-      this.logger.warn(`[Handoff] Claimed ${session.chainId} carries no blueprint; refusing`);
-      return { status: 'no-blueprint', chainId: session.chainId };
-    }
     // The claim above is its own committed write: the row is this server's now, so a rejected
     // save below restores the run's own fields but keeps it held, which is what the rows say.
     const snapshot = this.snapshotRun(session);
@@ -1456,12 +1470,13 @@ export class ChainSessionStore implements ChainSessionService {
 
     const snapshot = this.snapshotRun(session);
     session.runStatus = 'cancelled';
-    session.runCompletedAt = Date.now();
+    const completedAt = Date.now();
+    session.runCompletedAt = completedAt;
     session.lastActivity = Date.now();
 
     await this.persistMutation(snapshot);
     this.logger.info(`[ChainRunStatus] Cancelled session ${sessionId} (was '${currentStatus}')`);
-    await this.announceRunTerminal(session, 'cancelled');
+    await this.announceRunTerminal(session, 'cancelled', completedAt, scope);
     return true;
   }
 
@@ -1481,9 +1496,37 @@ export class ChainSessionStore implements ChainSessionService {
    * announcement that fails must not turn a persisted terminal status into a failed call —
    * that would make the run look live to its next caller.
    */
-  private async announceRunTerminal(session: ChainSession, status: ChainRunStatus): Promise<void> {
+  private async announceRunTerminal(
+    session: ChainSession,
+    status: ChainRunStatus,
+    completedAt: number,
+    requestScope?: StateStoreOptions
+  ): Promise<void> {
     if (!isTerminalRunStatus(status)) return;
-    this.notifyRunEnded(session.sessionId);
+    const matchingScope =
+      session.continuityScopeId !== DEFAULT_IDENTITY_SCOPE_ID &&
+      requestScope !== undefined &&
+      resolveContinuityScopeId(requestScope) === session.continuityScopeId;
+    const scope = buildIdentityScope({
+      continuityScopeId: session.continuityScopeId,
+      ...(matchingScope
+        ? { workspaceId: requestScope.workspaceId, organizationId: requestScope.organizationId }
+        : {}),
+    });
+    this.notifyRunEnded(
+      session.sessionId,
+      Object.freeze({
+        chainId: session.chainId,
+        status: status as RunTerminalFact['status'],
+        // Both transition writers stamp this field before the durable persist.
+        completedAt,
+        ...(session.blueprint?.parsedCommand.promptId !== undefined
+          ? { promptId: session.blueprint.parsedCommand.promptId }
+          : {}),
+        telemetry: Object.freeze(this.readRunTelemetry(session)),
+        ...(scope !== undefined ? { scope: Object.freeze(scope) } : {}),
+      })
+    );
     if (this.hookRegistry === undefined && this.notificationEmitter === undefined) return;
 
     // `isTerminalRunStatus` is a boolean predicate over the shared TERMINAL_RUN_STATUSES list,
@@ -2198,9 +2241,9 @@ export class ChainSessionStore implements ChainSessionService {
    * a continuously-live one does. A skipped node is still IN the list, so a skip never lowers
    * `stepsPlanned`.
    *
-   * This is the one telemetry source BOTH terminal-record writers read
-   * (`21-formatting-stage.ts` on the completed/cancelled path, `prompt-execution-pipeline.ts`
-   * on the failed path). Deriving a field anywhere else would give failed runs NULLs while
+   * This is the one telemetry source all terminal-record writers read
+   * (formatting on completion, the pipeline on failure, and terminal cancellation observers).
+   * Deriving a field anywhere else would give failed runs NULLs while
    * completed runs carried values — the partial-fix shape the run-telemetry suite rejects.
    */
   getRunTelemetry(sessionId: string, _scope?: StateStoreOptions): RunTelemetry | undefined {
@@ -2209,6 +2252,10 @@ export class ChainSessionStore implements ChainSessionService {
       return undefined;
     }
 
+    return this.readRunTelemetry(session);
+  }
+
+  private readRunTelemetry(session: ChainSession): RunTelemetry {
     const ledger = session.unknownsLedger ?? [];
     const stepStates = this.requireStepStates(session);
     return {
@@ -2426,16 +2473,6 @@ export class ChainSessionStore implements ChainSessionService {
         this.promoteSessionLifecycle(found, 'explicit chain resume');
       }
       return found;
-    }
-
-    // Try base chain fallback
-    const normalized = stripRunNumber(chainId);
-    const baseFallback = this.findScopedSessionForChain(normalized, scopeFilter, includeDormant);
-    if (baseFallback) {
-      if (baseFallback.lifecycle === 'dormant') {
-        this.promoteSessionLifecycle(baseFallback, 'explicit base chain resume');
-      }
-      return baseFallback;
     }
 
     return undefined;

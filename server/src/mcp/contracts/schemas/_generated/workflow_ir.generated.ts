@@ -81,7 +81,7 @@ export const workflow_irParameters: ToolParameter[] = [
     notes: [
       'Server defaults live in DEFAULT_WORKFLOW_CAPS (modules/workflow-ir/types.ts).',
       'maxInsertions narrows the P4 adaptive-insertion ceiling MAX_INSERTIONS_PER_RUN.',
-      "pauseOnBlocking is a DIAL, not a cap: it is a boolean and has no server default to narrow. Default false keeps the run advisory — the interrupt rides on the inserted investigation step and the run continues. True suits a supervised run: the response is the interrupt alone and the run waits on a synthetic '__unknown_interrupt__' review, resolved with gate_action resume/accept_alternative/abort or cancel. It is read back off the run's blueprint per step, the same way maxInsertions is.",
+      "pauseOnBlocking is a DIAL, not a cap: it is a boolean and has no server default to narrow. Default false keeps the run advisory — the interrupt rides on the inserted investigation step and the run continues. True suits a supervised run: the response is the interrupt alone and the run waits on a synthetic '__unknown_interrupt__' review, resolved with gate_action resume/accept_alternative or run-level abort with chain_id. It is read back off the run's blueprint per step, the same way maxInsertions is.",
       "Declarable from a YAML chain's chain-level `budget:` as well as an IR submission — one step vocabulary, three inputs.",
     ],
   },

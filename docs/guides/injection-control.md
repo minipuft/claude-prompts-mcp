@@ -67,7 +67,7 @@ On a resume that passes a step, the system prompt and style count the step the r
 
 Gate guidance counts **gated** steps, not positions: a step with no gates does not advance its frequency, so the first gated step of a chain gets its own gate guidance under the first-step-only default even when ungated steps ran before it. A step with nothing to guide should not use up the one render that shows a gated step its criteria.
 
-Every render of a step that carries gates shows its gates' guidance whatever the frequency, and asks for its verdict the same way on every step: the gate coverage lines, the `GATE_REVIEW: PASS|FAIL` line, and a `Next:` line naming `gate_verdict`. A render that asks for its step's verdict names the gates it grades, so the gate-guidance frequency does not thin a gated step's render; a step with no gates asks for no verdict and has no gate guidance to show.
+Every render of a step that carries gates shows its gates' guidance whatever the frequency, and asks for its verdict the same way on every step: the gate coverage lines and a `Next:` line naming the structured `gate_verdict`. A render that asks for its step's verdict names the gates it grades, so the gate-guidance frequency does not thin a gated step's render; a step with no gates asks for no verdict and has no gate guidance to show.
 
 ### Target
 

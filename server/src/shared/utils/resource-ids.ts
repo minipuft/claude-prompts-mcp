@@ -9,7 +9,7 @@
 /**
  * THE ID CONVENTION, in one sentence:
  *
- *   Ids that appear in the `>>` / `-->` command grammar are snake_case.
+ *   Canonical prompt ids are snake_case; accepted references preserve registered spelling.
  *   Every other id is kebab-case.
  *
  * Measured 2026-08-31 across the bundled tree and one personal library, which is where the rule
@@ -26,9 +26,9 @@
  * WHY PROMPTS ARE THE EXCEPTION, and why it should stay that way:
  * `command-tokenizer.ts` splits chains on `/-->|==>|\+|\?/`. A hyphen inside a prompt id is
  * genuinely ambiguous in that grammar — `>>a-->b` could be the prompt `a-->b` or the prompt `a`
- * chained to `b`. Prompt ids therefore avoid hyphens, and a kebab spelling is accepted as an
- * ALIAS and folded to the canonical underscore form. No other id type enters the symbolic
- * grammar, so kebab is free everywhere else and matches the wider convention for node/gate ids.
+ * chained to `b`. Canonical prompt ids therefore avoid hyphens, and authoring normalization
+ * folds kebab spelling to underscores. Reference acceptance does not normalize or alias ids.
+ * No other id type enters the symbolic grammar, so kebab matches the node/gate convention.
  *
  * The two camelCase prompt ids that measurement found have since been renamed to snake_case.
  * Nothing is grandfathered here: `isCanonicalPromptId` reports any camelCase id, because a
@@ -43,6 +43,12 @@
  * two copies of one rule drifting apart — happened in the first place.
  */
 const PROMPT_ID_PATTERN = /^[a-z][a-z0-9_]*(?:\/[a-z][a-z0-9_]*)*$/;
+
+/** Unanchored accepted-reference grammar for prompt and chain token composition. */
+export const PROMPT_REFERENCE_PATTERN_SOURCE = '[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*';
+
+// Absolute end rejects a trailing newline as well as malformed segments.
+const PROMPT_REFERENCE_PATTERN = new RegExp(`^(?:${PROMPT_REFERENCE_PATTERN_SOURCE})(?![\\s\\S])`);
 
 /** A canonical kebab id, used by every id that is not part of the command grammar. */
 const KEBAB_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -96,6 +102,11 @@ export function slugifyCategoryDirectory(category: string): string {
 /** Does this prompt id match the canonical snake_case convention? */
 export function isCanonicalPromptId(id: string): boolean {
   return PROMPT_ID_PATTERN.test(id);
+}
+
+/** Accept safe flat or slash-qualified references without changing their spelling. */
+export function isAcceptedPromptReference(id: string): boolean {
+  return PROMPT_REFERENCE_PATTERN.test(id);
 }
 
 /** Does this id match the kebab-case convention used by every non-command-grammar id? */

@@ -1,6 +1,10 @@
 import { describe, expect, test } from '@jest/globals';
 import { z } from 'zod/v4';
 
+import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
+import { McpToolRequestValidator } from '../../../src/engine/execution/validation/request-validator.js';
+import { isChainId } from '../../../src/shared/utils/chain-id-codec.js';
 import { buildPromptEngineSchema } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
 
 import type { ToolSurfaceState } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
@@ -18,17 +22,11 @@ import type { ToolSurfaceState } from '../../../src/mcp/tools/schemas/prompt-eng
  *    framework gates and must not withdraw a parameter clients still use.
  */
 
-const GATE_PARAMS = ['gates', 'gate_verdict', 'gate_action'] as const;
+const GATE_PARAMS = ['gates', 'gate_verdict'] as const;
 const CORE_PARAMS = ['command', 'force_restart', 'chain_id', 'user_response', 'options'] as const;
 
-const acceptAnyVerdict = (): boolean => true;
-
 function build(state?: ToolSurfaceState) {
-  return buildPromptEngineSchema(
-    acceptAnyVerdict,
-    'invalid verdict',
-    state != null ? { state } : {}
-  );
+  return buildPromptEngineSchema(state != null ? { state } : {});
 }
 
 /** The JSON Schema a client actually sees on `tools/list`. */
@@ -39,7 +37,91 @@ function advertisedKeys(state?: ToolSurfaceState): string[] {
   return Object.keys(json.properties ?? {}).sort();
 }
 
+describe('chain reference formatter and admission boundaries', () => {
+  test.each([
+    'chain-analysis#1',
+    'chain-implementation_plan/plan_table#1',
+    'chain-Team-Legacy/Child_Name/9deep#01',
+    'chain-9legacy#0',
+  ])('admits the exact formatter-emitted identity %s in every surface state', (raw) => {
+    const context = new ExecutionContext({ chain_id: raw });
+    context.sessionContext = {
+      sessionId: 'session-reference-boundary',
+      chainId: raw,
+      isChainExecution: true,
+      currentStep: 1,
+      totalSteps: 2,
+    };
+    const footer = new ResponseAssembler().buildChainFooter(context);
+    const emitted = footer.match(/Next: chain_id="([^"]+)"/)?.[1];
+    expect(emitted).toBe(raw);
+    expect(isChainId(emitted)).toBe(true);
+    expect(McpToolRequestValidator.validateChainId(emitted)).toBe(raw);
+
+    for (const enabled of [true, false, undefined]) {
+      const schema = build(enabled === undefined ? undefined : { gateSystemEnabled: enabled });
+      expect(schema.parse({ chain_id: emitted }).chain_id).toBe(raw);
+      const json = z.toJSONSchema(schema, { io: 'input' });
+      const chainId = json.properties?.chain_id;
+      if (chainId === null || typeof chainId !== 'object' || typeof chainId.pattern !== 'string') {
+        throw new Error('chain_id pattern missing from published schema');
+      }
+      expect(new RegExp(chainId.pattern).exec(raw)?.[0]).toBe(raw);
+    }
+  });
+
+  test.each([
+    'chain-/child#1',
+    'chain-parent/#1',
+    'chain-parent//child#1',
+    'chain-parent/./child#1',
+    'chain-parent/../child#1',
+    'chain-parent/%63hild#1',
+    'chain-parent\\child#1',
+    'chain-parent/child name#1',
+    'chain-parent/child#1\n',
+    'chain-parent/child#1\r\n',
+    'chain-parent/child#latest',
+    'chain-parent/child#1#2',
+    'chain-parent/child#1 extra',
+  ])('rejects malformed full identity %j at runtime and advertised-pattern boundaries', (raw) => {
+    for (const enabled of [true, false, undefined]) {
+      const schema = build(enabled === undefined ? undefined : { gateSystemEnabled: enabled });
+      expect(schema.safeParse({ chain_id: raw }).success).toBe(false);
+      const json = z.toJSONSchema(schema, { io: 'input' });
+      const chainId = json.properties?.chain_id;
+      if (chainId === null || typeof chainId !== 'object' || typeof chainId.pattern !== 'string') {
+        throw new Error('chain_id pattern missing from published schema');
+      }
+      expect(new RegExp(chainId.pattern).test(raw)).toBe(false);
+    }
+  });
+});
+
 describe('prompt_engine parameter surface', () => {
+  test.each([true, false, undefined])('keeps the widest action enum with gates=%s', (enabled) => {
+    const schema = build(enabled === undefined ? undefined : { gateSystemEnabled: enabled });
+    const json = z.toJSONSchema(schema, { io: 'input' }) as {
+      properties: Record<string, { enum?: string[] }>;
+    };
+    expect(json.properties['gate_action']?.enum).toEqual([
+      'retry',
+      'skip',
+      'abort',
+      'resume',
+      'accept_alternative',
+    ]);
+    for (const gate_action of ['retry', 'skip', 'abort', 'resume', 'accept_alternative']) {
+      expect(schema.parse({ chain_id: 'chain-demo#1', gate_action })).toHaveProperty(
+        'gate_action',
+        gate_action
+      );
+    }
+    expect(schema.safeParse({ chain_id: 'chain-demo#1', gate_action: 'pause' }).success).toBe(
+      false
+    );
+  });
+
   test('advertises the gate parameters while the gate system is enabled', () => {
     const keys = advertisedKeys({ gateSystemEnabled: true });
 
@@ -177,7 +259,7 @@ describe('prompt_engine parameter surface', () => {
     // The two halves of the resolver are independent by design: an overlay that
     // silently reshaped the surface would make every framework switch a
     // breaking change under the semver ruling.
-    const overlaid = buildPromptEngineSchema(acceptAnyVerdict, 'invalid verdict', {
+    const overlaid = buildPromptEngineSchema({
       describe: (name, fallback) => `[OVERLAY ${name}] ${fallback}`,
       state: { gateSystemEnabled: true },
     });

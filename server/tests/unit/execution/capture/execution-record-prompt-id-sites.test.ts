@@ -12,6 +12,7 @@
  * | `18-execution-stage.ts` `ledgerRenderedRunPrompt` | one-node run step working (P6.156) | `recordedStep` |
  * | `20-gate-review-stage.ts` `ledgerFirstRenderedStep` | step working | `recordedStep` |
  * | `21-formatting-stage.ts` `emitChainTerminalRecord` | run terminal | parsed command |
+ * | `prompt-executor.ts` `onRunEnded` | run cancelled | terminal parsed run prompt |
  * | `step-capture-service.ts` `ledgerCapturedStep` | step completed / input_required | `recordedStep` |
  * | `step-capture-service.ts` `ledgerSubmittedVerdict` | step verdict | `recordedStep` |
  * | `step-capture-service.ts` `ledgerSubmittedReviewAction` | skipped node's BYPASS | `recordedStep` |
@@ -63,6 +64,7 @@ const SITES: Readonly<Record<string, number>> = {
   'engine/execution/pipeline/stages/20-gate-review-stage.ts': 1,
   'engine/execution/pipeline/stages/21-formatting-stage.ts': 1,
   'engine/execution/capture/step-capture-service.ts': 3,
+  'mcp/tools/prompt-engine/core/prompt-executor.ts': 1,
 };
 
 const namesPrompt = (literal: string): boolean => /\bpromptId\b/.test(literal);

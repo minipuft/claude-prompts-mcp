@@ -33,7 +33,7 @@ import {
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');
 
-const PASS = 'GATE_REVIEW: PASS - ok';
+const PASS = { overall: 'PASS', rationale: 'ok' };
 /** Assembled, so no command literal in this file carries the operator as prose. */
 const ARROW = ' -' + '-> ';
 const UNGATED = { exclude: ['content-structure'], framework_gates: false };
@@ -265,7 +265,7 @@ describe('Streamable HTTP: an answer is graded before the run advances (P6.274, 
     if (chainId === undefined) throw new Error(`no chain id in: ${result.text}`);
     return { chainId, text: result.text };
   };
-  const answer = (chainId: string, userResponse: string, verdict?: string) =>
+  const answer = (chainId: string, userResponse: string, verdict?: typeof PASS) =>
     tool('prompt_engine', {
       chain_id: chainId,
       user_response: userResponse,
@@ -437,7 +437,7 @@ describe('STDIO: an answer is graded before the run advances (P6.303, R170 trans
     if (chainId === undefined) throw new Error(`no chain id in: ${result.text}`);
     return chainId;
   };
-  const answer = (chainId: string, userResponse: string, verdict?: string) =>
+  const answer = (chainId: string, userResponse: string, verdict?: typeof PASS) =>
     tool('prompt_engine', {
       chain_id: chainId,
       user_response: userResponse,

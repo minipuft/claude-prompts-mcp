@@ -9,8 +9,9 @@ import type { ChainSession, ChainSessionService } from '../../../../src/shared/t
 /**
  * `handleGateAction` answers the step review's exhaustion. `retry` and `skip` are events on the
  * review, applied through the processor's one review path (`advanceReview`, row 3.3), with or
- * without an enforcement authority on the context; `abort` cancels the RUN. A skip accepts the
- * answer the step holds and returns the advance past it (R24), and is refused on a step that holds
+ * without an enforcement authority on the context. Run-level abort exits before this service.
+ * A skip accepts the answer the step holds and returns the advance past it (R24), and is refused
+ * on a step that holds
  * none.
  */
 
@@ -37,14 +38,14 @@ const createStore = () =>
   };
 
 /** A run standing on `n1`, whose review of `n1` stands in `phase`. */
-const sessionWith = (phase: 'exhausted' | 'awaiting-verdict') =>
+const sessionWith = (phase: 'exhausted' | 'awaiting-verdict', kind: 'gate' | 'detached' = 'gate') =>
   ({
     sessionId: 'session-1',
     state: { currentNodeId: 'n1', nodes: [{ id: 'n1' }, { id: 'n2' }] },
     reviews: {
       n1: {
         nodeId: 'n1',
-        kind: 'gate',
+        kind,
         phase,
         combinedPrompt: '',
         gateIds: ['some-gate'],
@@ -76,36 +77,6 @@ describe('GateVerdictProcessor.handleGateAction', () => {
     processor = new GateVerdictProcessor(store, createLogger());
   });
 
-  test('abort cancels the run, not just the in-memory flag', async () => {
-    const context = createContext();
-
-    const advance = await processor.handleGateAction(
-      context,
-      sessionWith('exhausted'),
-      'abort',
-      {} as never
-    );
-
-    expect(advance).toBeUndefined();
-    expect(store.cancelChain).toHaveBeenCalledWith('session-1');
-    expect(
-      (context as never as { state: { session: { aborted?: boolean } } }).state.session.aborted
-    ).toBe(true);
-  });
-
-  test('abort still takes the abort exit when the run is already terminal', async () => {
-    // cancelChain refuses completed/failed runs. The run is over either way.
-    store.cancelChain.mockResolvedValue(false);
-    const context = createContext();
-
-    expect(
-      await processor.handleGateAction(context, sessionWith('exhausted'), 'abort', {} as never)
-    ).toBeUndefined();
-    expect(
-      (context as never as { state: { session: { aborted?: boolean } } }).state.session.aborted
-    ).toBe(true);
-  });
-
   test('retry reopens the exhausted review with its counter reset and decides no advance', async () => {
     const advance = await processor.handleGateAction(
       createContext(),
@@ -118,7 +89,36 @@ describe('GateVerdictProcessor.handleGateAction', () => {
       expect.objectContaining({ nodeId: 'n1', attemptCount: 0, phase: 'awaiting-verdict' })
     );
     expect(advance).toBeUndefined();
+    expect(store.cancelChain).not.toHaveBeenCalled();
   });
+
+  test.each(['retry', 'skip'] as const)(
+    'detached %s resolves only its addressed review',
+    async (action) => {
+      const result = await processor.processDetachedReviewAction(
+        createContext(),
+        sessionWith('exhausted', 'detached'),
+        'n1',
+        action
+      );
+
+      expect(result).toMatchObject({
+        kind: 'recorded',
+        result: action === 'retry' ? 'retry' : 'skipped',
+      });
+      if (action === 'retry') {
+        expect(store.setReview).toHaveBeenCalledWith(
+          'session-1',
+          expect.objectContaining({ nodeId: 'n1', attemptCount: 0, phase: 'awaiting-replacement' })
+        );
+        expect(store.clearReview).not.toHaveBeenCalled();
+      } else {
+        expect(store.clearReview).toHaveBeenCalledWith('session-1', 'n1');
+        expect(store.setReview).not.toHaveBeenCalled();
+      }
+      expect(store.cancelChain).not.toHaveBeenCalled();
+    }
+  );
 
   test('skip clears the review and returns the advance past the answered step (R24)', async () => {
     const advance = await processor.handleGateAction(

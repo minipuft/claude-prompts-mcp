@@ -1,10 +1,10 @@
 {
   "prompt_engine": {
-    "bytes": 17743,
+    "bytes": 17317,
     "ceiling": 18000
   },
   "system_control": {
-    "bytes": 6607,
+    "bytes": 6576,
     "ceiling": 8000
   },
   "resource_manager": {

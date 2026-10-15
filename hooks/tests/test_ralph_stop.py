@@ -373,3 +373,7 @@ class TestStopWaitsOnEveryVisibleRun:
         assert output is not None and output["decision"] == "block"
         assert output["reason"].startswith("Chain chain-demo#1 has a pending gate review (step 3/3).")
         assert "gate_verdict" in output["reason"]
+        assert 'gate_verdict={"overall":"PASS","rationale":"<reason>"}' in output["reason"]
+        assert "Use FAIL" in output["reason"]
+        assert "returned server template for per_gate, reminders and semantic evaluation" in output["reason"]
+        assert "GATE_REVIEW" not in output["reason"]

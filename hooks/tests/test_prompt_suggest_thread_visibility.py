@@ -37,6 +37,9 @@ HOOKS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(HOOKS_DIR))
 sys.path.insert(0, str(HOOKS_DIR / "lib"))
 
+from session_state import UNKNOWN_INTERRUPT_LABEL, parse_prompt_engine_response
+from test_unknown_interrupt_hold import PAUSED_RESPONSE
+
 # Import hyphenated-filename hook module directly (same pattern as
 # test_delegation_deadlock_fixes.py).
 _spec = importlib.util.spec_from_file_location("prompt_suggest", HOOKS_DIR / "prompt-suggest.py")
@@ -101,6 +104,38 @@ def run_hook(monkeypatch, capsys, user_prompt, entrypoint="cli"):
 
 def context_of(out):
     return out["hookSpecificOutput"]["additionalContext"]
+
+
+@pytest.mark.parametrize("entrypoint", ["cli", "sdk-ts"])
+@pytest.mark.parametrize(
+    ("gate", "step", "visible"),
+    [(UNKNOWN_INTERRUPT_LABEL, 0, True), (UNKNOWN_INTERRUPT_LABEL, 1, True), ("review", 0, False), ("review", 1, True)],
+)
+def test_recovered_review_directive_channels(stub_cache, monkeypatch, capsys, entrypoint, gate, step, visible):
+    state = parse_prompt_engine_response(PAUSED_RESPONSE)
+    assert state is not None
+    # Zero-step is a seeded recovery boundary; the server fixture itself carries Progress 1/3.
+    state["current_step"], state["pending_gate"] = step, gate
+    monkeypatch.setattr(prompt_suggest, "load_recoverable_chain_state", lambda _sid: dict(state))
+    code, out = run_hook(monkeypatch, capsys, "continue", entrypoint)
+    assert code == 0
+    if not visible:
+        assert out == {}
+        return
+    directive = context_of(out)
+    assert state["chain_id"] in directive
+    if gate == UNKNOWN_INTERRUPT_LABEL:
+        assert "<INTERRUPT>" in directive
+        assert "gate_verdict" not in directive
+        assert "PASS" not in directive and "FAIL" not in directive
+        for verb in state["interrupt_verbs"]:
+            assert verb in directive
+            if entrypoint == "cli":
+                assert verb in out["systemMessage"]
+    else:
+        assert '<GATE-REVIEW>chain_id="chain-demo#1" gates="review" → Submit gate_verdict</GATE-REVIEW>' in directive
+    if entrypoint == "sdk-ts":
+        assert "systemMessage" not in out
 
 
 # ── Row 3: the hit path must reach the surviving channel ───────────────────

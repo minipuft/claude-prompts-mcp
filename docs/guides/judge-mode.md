@@ -96,9 +96,10 @@ that its evidence points into the exact captured target. Inspect the recorded
 structured results through [execution history](../reference/mcp-tools.md); reading
 those results does not establish the reviewer's identity or calibration accuracy.
 
-For ordinary legacy reviews, the advertised `GATE_REVIEW: PASS|FAIL - reason`
-format remains available. For semantic criteria, a bare verdict line and a hook PASS
-are self-review or stop attestations, not semantic grades. An exported skill's
+A judge for an ordinary gate replies `PASS|FAIL - <one-line rationale>`, which the
+reviewing client carries into that gate's `per_gate` entry; `gate_verdict` itself
+takes only the structured object. For semantic criteria, a bare verdict line and a
+hook PASS are self-review or stop attestations, not semantic grades. An exported skill's
 static rubric likewise supplies no runtime binding. Without bound MCP context,
 semantic contract acceptance is unavailable.
 

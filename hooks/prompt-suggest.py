@@ -37,19 +37,8 @@ from cache_manager import (
 )
 from config_loader import is_expanded_output
 from db_reader import load_recoverable_chain_state
-from session_state import ChainState, format_chain_reminder
-
-# Import generated operator patterns (SSOT: server/tooling/contracts/operators.json)
-try:
-    from operators import OPERATORS, detect_operator, get_delimiter_symbols
-
-    HAS_GENERATED_OPERATORS = True
-except ImportError:
-    HAS_GENERATED_OPERATORS = False
-    OPERATORS = {}
-
-    def get_delimiter_symbols() -> list[str]:
-        return ["-->", "==>"]
+from operators import annotate_prompt_references, detect_operator, has_chain_delimiter
+from session_state import UNKNOWN_INTERRUPT_LABEL, ChainState, format_chain_reminder, format_gate_directive
 
 
 def format_arguments(prompt_id: str) -> dict[str, str]:
@@ -99,19 +88,8 @@ def detect_prompt_invocation(message: str) -> str | None:
         @CAGEERF >>analyze -> "analyze"
         #analytical >>report -> "report"
     """
-    # Try exact start first
-    match = re.match(r"^>>\s*([a-zA-Z0-9_-]+)", message.strip())
-    if match:
-        # Normalize to lowercase for case-insensitive matching (aligns with MCP server)
-        return match.group(1).lower()
-
-    # Also check for >> after operators (@framework, #style)
-    match = re.search(r">>\s*([a-zA-Z0-9_-]+)", message)
-    if match:
-        # Normalize to lowercase for case-insensitive matching (aligns with MCP server)
-        return match.group(1).lower()
-
-    return None
+    annotations = annotate_prompt_references(message)
+    return annotations[0] if annotations else None
 
 
 def detect_explicit_request(message: str) -> bool:
@@ -132,9 +110,9 @@ def detect_explicit_request(message: str) -> bool:
 def detect_chain_syntax(message: str) -> list[str]:
     """
     Detect chain syntax (-->, ==>) in message.
-    Returns list of prompt IDs in chain order (normalized to lowercase).
+    Returns complete prompt references in chain order with their typed spelling.
 
-    Splits on delimiter operators from SSOT registry (plus → unicode alias),
+    Detects unquoted delimiter operators from the SSOT registry,
     then extracts >>prompt_id from each segment. Handles arguments between
     prompt ID and delimiter correctly.
 
@@ -142,23 +120,12 @@ def detect_chain_syntax(message: str) -> list[str]:
     Example with args: >>analyze scope:"backend" --> >>implement
     Example with delegation: >>step1 ==> >>step2
     """
-    # Build split pattern from SSOT delimiter symbols
-    delimiters = get_delimiter_symbols()
-    escaped = [re.escape(d) for d in delimiters] + ["→"]
-    split_pattern = r"\s*(?:" + "|".join(escaped) + r")\s*"
-
-    parts = re.split(split_pattern, message)
-    if len(parts) <= 1:
-        return []
-
-    # Extract >>prompt_id from each segment (ignores arguments safely)
-    prompts = []
-    for part in parts:
-        match = re.search(r">>\s*([a-zA-Z0-9_-]+)", part)
-        if match:
-            prompts.append(match.group(1).lower())
-
-    return prompts
+    annotations = annotate_prompt_references(message)
+    return (
+        [prompt for prompt in annotations if prompt is not None]
+        if has_chain_delimiter(message) and None not in annotations
+        else []
+    )
 
 
 def detect_inline_gates(message: str) -> list[str]:
@@ -194,21 +161,9 @@ def detect_framework(message: str) -> str | None:
 
     Note: Framework IDs are normalized to lowercase to align with MCP server storage.
     """
-    if HAS_GENERATED_OPERATORS:
-        matches = detect_operator(message, "framework")
-        # Normalize to lowercase (MCP server stores framework keys as lowercase)
-        return matches[0].lower() if matches else None
-
-    # Fallback only — the path above derives from the registry via lib/operators.py, which
-    # compiles `pattern.typescript` with Python `re`. This copy exists for when the generated
-    # operators are unavailable, and it is drift by construction: it has already had to be
-    # hand-moved twice (trailing-space relaxation and the `^` alias, both 2026-08-09). Keep it
-    # byte-equivalent to the `framework` entry in
-    # server/tooling/contracts/registries/operators.json.
-    #
-    # `^` is canonical; `@` is the deprecated spelling, removed at the next major.
-    match = re.search(r"(?:^|\s)[@^]([A-Za-z0-9_-]+)(?![A-Za-z0-9_-])", message)
-    return match.group(1).lower() if match else None
+    matches = detect_operator(message, "framework")
+    # Normalize to lowercase (MCP server stores framework keys as lowercase)
+    return matches[0].lower() if matches else None
 
 
 def detect_repetition(message: str) -> int | None:
@@ -220,13 +175,8 @@ def detect_repetition(message: str) -> int | None:
         >>prompt * 3 -> 3
         >>analyze * 5 --> >>summarize -> 5
     """
-    if HAS_GENERATED_OPERATORS:
-        matches = detect_operator(message, "repetition")
-        return int(matches[0]) if matches else None
-
-    # Fallback: hardcoded pattern
-    match = re.search(r"\s+\*\s*(\d+)(?=\s|$|-->)", message)
-    return int(match.group(1)) if match else None
+    matches = detect_operator(message, "repetition")
+    return int(matches[0]) if matches else None
 
 
 def parse_inline_args(message: str) -> dict[str, str]:
@@ -475,10 +425,7 @@ def format_user_message(
         Compact: "[>>] deep_analysis | content:'foo'"
         Expanded: Multi-line with operators, arguments, and support info
     """
-    # Extract prompt ID from command (handle @framework >>prompt syntax)
-    # Normalize to lowercase for case-insensitive matching (aligns with MCP server)
-    match = re.search(r">>\s*([a-zA-Z0-9_-]+)", command)
-    typed = match.group(1) if match else command
+    typed = detect_prompt_invocation(command) or command
     prompt_id = authored_id(typed, prompt_info)
 
     if expanded:
@@ -668,60 +615,38 @@ def main():
         if inline_gates:
             operators["gate"] = inline_gates
 
-        if HAS_GENERATED_OPERATORS:
-            # Delegation: detect ==> presence via SSOT pattern
-            delegation_matches = detect_operator(user_message, "delegation")
-            if delegation_matches:
-                operators["delegation"] = delegation_matches
+        # Delegation: detect ==> presence via SSOT pattern
+        delegation_matches = detect_operator(user_message, "delegation")
+        if delegation_matches:
+            operators["delegation"] = delegation_matches
 
-            # Framework: validate against DB, pass through if DB unavailable
-            fw_matches = detect_operator(user_message, "framework")
-            if fw_matches:
-                valid_fws = get_valid_frameworks()
-                if valid_fws:
-                    filtered = [fw for fw in fw_matches if fw.lower() in valid_fws]
-                    if filtered:
-                        operators["framework"] = filtered
-                else:
-                    # DB unavailable — pass through (server validates)
-                    operators["framework"] = fw_matches
+        # Framework: validate against DB, pass through if DB unavailable
+        fw_matches = detect_operator(user_message, "framework")
+        if fw_matches:
+            valid_fws = get_valid_frameworks()
+            if valid_fws:
+                filtered = [fw for fw in fw_matches if fw.lower() in valid_fws]
+                if filtered:
+                    operators["framework"] = filtered
+            else:
+                # DB unavailable — pass through (server validates)
+                operators["framework"] = fw_matches
 
-            # Style: validate against DB, pass through if DB unavailable
-            style_matches = detect_operator(user_message, "style")
-            if style_matches:
-                valid_styles = get_valid_styles()
-                if valid_styles:
-                    filtered = [s for s in style_matches if s.lower() in valid_styles]
-                    if filtered:
-                        operators["style"] = filtered
-                else:
-                    operators["style"] = style_matches
+        # Style: validate against DB, pass through if DB unavailable
+        style_matches = detect_operator(user_message, "style")
+        if style_matches:
+            valid_styles = get_valid_styles()
+            if valid_styles:
+                filtered = [s for s in style_matches if s.lower() in valid_styles]
+                if filtered:
+                    operators["style"] = filtered
+            else:
+                operators["style"] = style_matches
 
-            # Repetition: no validation needed (it's a number)
-            rep_matches = detect_operator(user_message, "repetition")
-            if rep_matches:
-                operators["repetition"] = rep_matches
-        else:
-            # Fallback: manual detection with DB-aware validation
-            framework = detect_framework(user_message)
-            if framework:
-                valid_fws = get_valid_frameworks()
-                if not valid_fws or framework.lower() in valid_fws:
-                    operators["framework"] = [framework]
-
-            style_match = re.search(r"(?:^|\s)#([A-Za-z][A-Za-z0-9_-]*)(?=\s|$)", user_message)
-            if style_match:
-                style = style_match.group(1)
-                valid_styles = get_valid_styles()
-                if not valid_styles or style.lower() in valid_styles:
-                    operators["style"] = [style]
-
-            repetition = detect_repetition(user_message)
-            if repetition:
-                operators["repetition"] = [str(repetition)]
-
-            if "==>" in user_message:
-                operators["delegation"] = ["==>"]
+        # Repetition: no validation needed (it's a number)
+        rep_matches = detect_operator(user_message, "repetition")
+        if rep_matches:
+            operators["repetition"] = rep_matches
 
         # Parse inline arguments (quoted only)
         parsed_args = parse_inline_args(user_message)
@@ -776,13 +701,11 @@ def main():
 
         # Block if: steps remain OR pending gate/verify at final step
         needs_continuation = chain_id and step > 0 and step < total
-        needs_review = chain_id and step > 0 and pending_gate
+        needs_review = chain_id and pending_gate and (step > 0 or pending_gate == UNKNOWN_INTERRUPT_LABEL)
         if needs_continuation or needs_review:
             # Build imperative directive matching >>syntax pattern
             if pending_gate:
-                directive = (
-                    f'<GATE-REVIEW>chain_id="{chain_id}" gates="{pending_gate}" → Submit gate_verdict</GATE-REVIEW>'
-                )
+                directive = format_gate_directive(session_state)
             else:
                 directive = (
                     f"<CALL-TOOL>\n"

@@ -25,7 +25,6 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
-import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
 
 import type { GateVerdictSubmission } from '../../../src/shared/types/gate-evaluation.js';
@@ -72,9 +71,9 @@ const session = {
  * Submit a rendered verdict through the real processor and return the context it wrote to —
  * the same object the assembler then reads.
  */
-async function submit(rendered: string): Promise<ExecutionContext> {
+async function submit(verdict: GateVerdictSubmission): Promise<ExecutionContext> {
   const store = createStore();
-  const context = new ExecutionContext({ chain_id: 'chain-demo', gate_verdict: rendered } as never);
+  const context = new ExecutionContext({ chain_id: 'chain-demo', gate_verdict: verdict });
   context.gateEnforcement = new GateEnforcementAuthority(store, createLogger(), undefined, () => ({
     evaluation: {},
   }));
@@ -128,7 +127,7 @@ describe('a FAIL reply names the gates the reviewer failed', () => {
   });
 
   test('the chain reply lists exactly the failing gates, above the verdict template', async () => {
-    const context = await submit(renderGateVerdict(twoOfThreeFailed));
+    const context = await submit(twoOfThreeFailed);
 
     const reply = assembler.formatChainResponse(context, { isChainFormatting: true } as never);
 
@@ -141,7 +140,7 @@ describe('a FAIL reply names the gates the reviewer failed', () => {
   });
 
   test('the blocked response carries each failing gate id and its rationale', async () => {
-    const context = await submit(renderGateVerdict(twoOfThreeFailed));
+    const context = await submit(twoOfThreeFailed);
     context.state.gates.blockedGateIds = [...BLOCKED];
     context.state.gates.responseBlocked = true;
 
@@ -152,7 +151,7 @@ describe('a FAIL reply names the gates the reviewer failed', () => {
   });
 
   test('`failedGates[].reason` carries the rationale, not the blocking literal', async () => {
-    const context = await submit(renderGateVerdict(twoOfThreeFailed));
+    const context = await submit(twoOfThreeFailed);
     context.state.gates.blockedGateIds = [...BLOCKED];
     context.state.gates.responseBlocked = true;
 
@@ -165,13 +164,11 @@ describe('a FAIL reply names the gates the reviewer failed', () => {
   test('an all-PASS submission adds no failure block and keeps the literal reason', async () => {
     // Differs from the fixture above only in the two `passed` flags. If the block still
     // appears, the assembler is reading the blocked gate list rather than the verdicts.
-    const context = await submit(
-      renderGateVerdict({
-        ...twoOfThreeFailed,
-        overall: 'PASS',
-        per_gate: twoOfThreeFailed.per_gate!.map((entry) => ({ ...entry, passed: true })),
-      })
-    );
+    const context = await submit({
+      ...twoOfThreeFailed,
+      overall: 'PASS',
+      per_gate: twoOfThreeFailed.per_gate!.map((entry) => ({ ...entry, passed: true })),
+    });
     context.state.gates.blockedGateIds = [...BLOCKED];
     context.state.gates.responseBlocked = true;
 
@@ -185,14 +182,12 @@ describe('a FAIL reply names the gates the reviewer failed', () => {
   test('an overall-only FAIL leaves the reply exactly as it was, with a positive control', async () => {
     // The absence below is only evidence because the SAME drive with per-gate entries does
     // produce the block — the control that shows the probe observes something.
-    const withDetail = await submit(
-      renderGateVerdict({
-        overall: 'FAIL',
-        rationale: 'unmet',
-        per_gate: [{ index: 2, passed: false, rationale: 'error path untested' }],
-      })
-    );
-    const withoutDetail = await submit(renderGateVerdict({ overall: 'FAIL', rationale: 'unmet' }));
+    const withDetail = await submit({
+      overall: 'FAIL',
+      rationale: 'unmet',
+      per_gate: [{ index: 2, passed: false, rationale: 'error path untested' }],
+    });
+    const withoutDetail = await submit({ overall: 'FAIL', rationale: 'unmet' });
 
     const render = (context: ExecutionContext) =>
       assembler.formatChainResponse(context, { isChainFormatting: true } as never);
@@ -202,13 +197,15 @@ describe('a FAIL reply names the gates the reviewer failed', () => {
     expect(withoutDetail.state.gates.perGateVerdicts).toBeUndefined();
   });
 
-  test('an out-of-range index is not attributed to some other gate', async () => {
-    // The parse boundary drops it, so nothing downstream sees a phantom failure.
-    const context = await submit('GATE_REVIEW: FAIL - unmet\n\nGATE_VERDICTS:\n[9] FAIL - nowhere');
-
-    expect(context.state.gates.perGateVerdicts).toBeUndefined();
-    expect(
-      assembler.formatChainResponse(context, { isChainFormatting: true } as never)
-    ).not.toContain('Gates you marked FAIL');
+  test('an out-of-range index is refused, never attributed to some other gate', async () => {
+    // The authority resolves indexes before any summary returns, so the whole submission is
+    // refused rather than one entry landing on the wrong gate.
+    await expect(
+      submit({
+        overall: 'FAIL',
+        rationale: 'unmet',
+        per_gate: [{ index: 9, passed: false, rationale: 'nowhere' }],
+      })
+    ).rejects.toThrow('index [9] names no advertised gate');
   });
 });

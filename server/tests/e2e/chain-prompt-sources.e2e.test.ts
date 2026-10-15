@@ -36,8 +36,8 @@ import {
   waitForHealth,
 } from './helpers/http-mcp-client.js';
 
-const PASS = 'GATE_REVIEW: PASS - ok';
-const FAIL = 'GATE_REVIEW: FAIL - the step misses its gate';
+const PASS = { overall: 'PASS', rationale: 'ok' };
+const FAIL = { overall: 'FAIL', rationale: 'the step misses its gate' };
 const OPT_OUT = { exclude: ['content-structure'], framework_gates: false };
 /** Assembled, so no command literal in this file carries the operator as prose. */
 const ARROW = ' -' + '-> ';
@@ -1674,7 +1674,7 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
 
     async function failTwice(criterion: string): Promise<{ inBudget: string; spent: string }> {
       const run = await start({ command: `>>sv_p672 :: "${criterion}"` });
-      const verdict = `GATE_REVIEW: FAIL - misses ${criterion}`;
+      const verdict = { overall: 'FAIL', rationale: `misses ${criterion}` };
       const inBudget = await run.call({ user_response: 'no sections', gate_verdict: verdict });
       expect(phase(run.chainId)).toEqual({ a: 'awaiting-verdict' });
       const spent = await run.call({ user_response: 'still none', gate_verdict: verdict });
@@ -1912,14 +1912,8 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
     }, 180000);
   });
 
-  /**
-   * P6.89 / R169. MEASURED 2026-09-29 on `610b3696`: a bare call carrying `gate_action` "retry",
-   * "skip" or "abort" on a run holding no review and no shell check answered `isError: false`
-   * with the current step re-rendered, the run state unchanged — neither applied nor refused, so
-   * an "abort" left a run the client believed stopped. Now each is refused by name, in the
-   * refusal family of the in-budget action (P6.76), and records nothing.
-   */
-  describe('P6.89: a gate_action with nothing pending is refused by name', () => {
+  /** Review actions require pending work; run abort needs only the existing run's identifier. */
+  describe('review actions with nothing pending and run abort', () => {
     /** The run's row as stored, less the write timestamp every call may touch. */
     const stored = (chainId: string): unknown => {
       const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state', 'state.db'));
@@ -1937,25 +1931,30 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
       }
     };
 
-    test.each([
-      ['retry', ''],
-      ['skip', ''],
-      ['abort', ' To stop the run, send cancel: true.'],
-    ])(
+    test.each(['retry', 'skip'])(
       '"%s" on a run holding nothing is refused and records nothing',
-      async (action, stop) => {
+      async (action) => {
         const run = await start({ command: '>>sv_pair' });
         const before = stored(run.chainId);
         const reply = await tool('prompt_engine', { chain_id: run.chainId, gate_action: action });
         expect(reply).toEqual({
           isError: true,
-          text: `❌ gate_action "${action}" has nothing to act on: this run holds no gate review and no shell check.${stop} Nothing was recorded.`,
+          text: `❌ gate_action "${action}" has nothing to act on: this run holds no gate review and no shell check. Nothing was recorded.`,
         });
         expect(stored(run.chainId)).toEqual(before);
         expect(before).toMatchObject({ status: 'working', node: 'a' });
       },
       120000
     );
+
+    test('abort ends an active run without a pending review or shell check', async () => {
+      const run = await start({ command: '>>sv_pair' });
+      expect(stored(run.chainId)).toMatchObject({ status: 'working', node: 'a' });
+      const reply = await tool('prompt_engine', { chain_id: run.chainId, gate_action: 'abort' });
+      expect(reply.isError).toBe(false);
+      expect(reply.text).toContain('Chain Cancelled');
+      expect(stored(run.chainId)).toMatchObject({ status: 'cancelled', node: 'a' });
+    }, 120000);
 
     test('control: "retry" on an exhausted review reopens it', async () => {
       const run = await start({ command: '>>sv_chain' });
@@ -2298,7 +2297,7 @@ describe('Streamable HTTP: every command source naming a chain prompt runs its s
    * had ended.
    */
   describe('P6.197: a completed run offers no interrupt verbs and names an unresolved unknown', () => {
-    const VERBS = ['answer the step', 'remainder', 'gate_action:abort', 'cancel'];
+    const VERBS = ['answer the step', 'remainder', 'gate_action:abort'];
     const blocking = {
       observations: [
         { type: 'unknown_discovered', id: 'u-197', statement: 'STATEMENT-u-197', blocking: true },

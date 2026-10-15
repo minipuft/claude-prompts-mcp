@@ -85,23 +85,11 @@ describe('ExecutionContext helpers', () => {
     }
   );
 
-  test('getGateVerdict trims the legacy string branch', () => {
-    const context = new ExecutionContext({
-      ...baseRequest,
-      gate_verdict: ' \nGATE_REVIEW: PASS - checked\t ',
-    });
+  test('getGateVerdict answers undefined when no verdict was sent', () => {
+    const context = new ExecutionContext({ ...baseRequest });
 
-    expect(context.getGateVerdict()).toBe('GATE_REVIEW: PASS - checked');
+    expect(context.getGateVerdict()).toBeUndefined();
   });
-
-  test.each([undefined, '', ' \t\n '])(
-    'getGateVerdict treats absent/blank text %j as absent',
-    (gate_verdict) => {
-      const context = new ExecutionContext({ ...baseRequest, gate_verdict });
-
-      expect(context.getGateVerdict()).toBeUndefined();
-    }
-  );
 
   test('getSessionId prefers resume metadata value', () => {
     const context = new ExecutionContext({ ...baseRequest, chain_id: 'chain-demo' });

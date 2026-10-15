@@ -26,7 +26,7 @@ import {
   waitForHealth,
 } from './helpers/http-mcp-client.js';
 
-const PASS = 'GATE_REVIEW: PASS - ok';
+const PASS = { overall: 'PASS', rationale: 'ok' };
 /** Assembled, so no command literal in this file carries the operator as prose. */
 const ARROW = ' -' + '-> ';
 /** The first line of the bundled `analytical` style's guidance. */

@@ -945,7 +945,24 @@ describe('Tenant Isolation', () => {
        * another server claims `<tag>-gone`, and any persist here evicts it.
        */
       const evictAfterClaim = async (tag: string) => {
-        const session = await store.createSession(`${tag}-gone`, `chain-${tag}#1`, 2, {}, scopeA);
+        const session = await store.createSession(
+          `${tag}-gone`,
+          `chain-${tag}#1`,
+          2,
+          {},
+          {
+            ...scopeA,
+            blueprint: {
+              parsedCommand: { promptId: `chain-${tag}` },
+              executionPlan: {
+                strategy: 'chain',
+                gates: [],
+                requiresFramework: false,
+                requiresSession: true,
+              },
+            },
+          }
+        );
         const nodeId = session.state.nodes[0]!.id;
         await store.updateSessionState(`${tag}-gone`, nodeId, 'GONE-220', {
           outputMapping: { verdict: '$' },
@@ -997,7 +1014,24 @@ describe('Tenant Isolation', () => {
       });
 
       test('P6.229 (a) same base: only the evicted run leaves, the surviving run stays', async () => {
-        const session = await store.createSession('p229b-gone', 'chain-p229b#1', 2, {}, scopeA);
+        const session = await store.createSession(
+          'p229b-gone',
+          'chain-p229b#1',
+          2,
+          {},
+          {
+            ...scopeA,
+            blueprint: {
+              parsedCommand: { promptId: 'chain-p229b' },
+              executionPlan: {
+                strategy: 'chain',
+                gates: [],
+                requiresFramework: false,
+                requiresSession: true,
+              },
+            },
+          }
+        );
         await seed('p229b-kept', 'chain-p229b#2', scopeA, 'KEPT-229');
         expect(store.getRunHistory('chain-p229b')).toEqual(['chain-p229b#1', 'chain-p229b#2']);
 

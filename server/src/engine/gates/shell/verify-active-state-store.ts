@@ -25,6 +25,9 @@ import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from './types.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { PendingShellVerification, VerifyActiveState } from './types.js';
 
+type RunBoundVerifyActiveState = VerifyActiveState & { runSessionId?: string };
+type RunReleaseOutcome = 'released' | 'absent' | 'foreign' | 'unbound';
+
 /**
  * Configuration for the state store.
  */
@@ -64,12 +67,18 @@ export class VerifyActiveStateStore {
    *
    * @param sessionId - Chain session ID for tracking
    * @param pending - Current pending verification state
+   * @param runSessionId - Exact internal run identity, separate from the active-state key
    */
-  async writeState(sessionId: string, pending: PendingShellVerification): Promise<void> {
+  async writeState(
+    sessionId: string,
+    pending: PendingShellVerification,
+    runSessionId?: string
+  ): Promise<void> {
     const { shellVerify } = pending;
 
-    const state: VerifyActiveState = {
+    const state: RunBoundVerifyActiveState = {
       sessionId,
+      ...(runSessionId === undefined ? {} : { runSessionId }),
       config: {
         // Rendered, not raw: this file is read by the Python Stop hook, whose payload
         // contract declares a string. Widening it there would break a durable surface
@@ -111,6 +120,50 @@ export class VerifyActiveStateStore {
         { cause: error }
       );
     }
+  }
+
+  /** Release only the active obligation bound to this exact internal run identity. */
+  async releaseRunState(sessionId: string, runSessionId: string): Promise<RunReleaseOutcome> {
+    if (sessionId.length === 0 || runSessionId.length === 0) {
+      throw new Error('Verify-loop release requires a key and an internal run identity');
+    }
+    return this.withDb((db) => {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const row = db
+          .prepare('SELECT state_json FROM verify_active_state WHERE session_id = ?')
+          .get(sessionId);
+        const outcome =
+          row === undefined ? 'absent' : this.classifyRunOwner(row['state_json'], runSessionId);
+        if (outcome === 'released') {
+          const result = db
+            .prepare('DELETE FROM verify_active_state WHERE session_id = ? AND state_json = ?')
+            .run(sessionId, row?.['state_json'] ?? null);
+          if (result.changes !== 1) throw new Error('Verify-loop ownership changed during release');
+        }
+        db.exec('COMMIT');
+        return outcome;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    });
+  }
+
+  private classifyRunOwner(stateJson: unknown, runSessionId: string): RunReleaseOutcome {
+    if (typeof stateJson !== 'string') return 'unbound';
+    let state: unknown;
+    try {
+      state = JSON.parse(stateJson);
+    } catch {
+      return 'unbound';
+    }
+    if (typeof state !== 'object' || state === null || !('runSessionId' in state)) {
+      return 'unbound';
+    }
+    const owner = state.runSessionId;
+    if (typeof owner !== 'string' || owner.length === 0) return 'unbound';
+    return owner === runSessionId ? 'released' : 'foreign';
   }
 
   /**

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-PreToolUse hook: Enforce gate verdicts on prompt_engine calls.
+PreToolUse hook: Validate verdict parameter shape and pending-run resolution.
 
 Blocks:
-1. GATE_REVIEW: FAIL without retry attempt
+1. Non-object gate_verdict or malformed overall/rationale fields.
 2. Chain resumes carrying NO pending-run resolution parameter while the run is HOLDING.
    Two holds reach this check: an ordinary gate review, and the reserved
    `__unknown_interrupt__` synthetic review a blocking unknown raises under
    `budget.pauseOnBlocking`. They are denied with different prose because they accept
    different exits — no gate_verdict clears an interrupt — but by ONE rule.
-   The accepted resolution parameters (gate_verdict, gate_action, cancel, ...) are generated
+   The accepted resolution parameters (gate_verdict, gate_action) are generated
    from the server contract into lib/_generated/resolution_verbs.py — never hardcoded
    here, so the hook cannot deny an exit the server supports.
 
@@ -17,7 +17,6 @@ Allows Claude to self-correct before the tool executes.
 """
 
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -46,8 +45,7 @@ def load_resolution_params() -> frozenset[str] | None:
     The set is emitted by server/scripts/generate-contracts.ts from parameters flagged
     `resolvesPendingRun` in tooling/contracts/prompt-engine.json, so this hook accepts
     exactly the moves the server accepts. A hardcoded model here rotted twice — it denied
-    `gate_action: "abort"` and `cancel: true`, trapping sessions behind their own pending
-    gate (2026-08-20).
+    `gate_action: "abort"`, trapping sessions behind their own pending gate.
 
     Returns None when the artifact is missing or unreadable: the caller fails open,
     because the server enforces gates authoritatively and a broken hook must never
@@ -74,58 +72,38 @@ def main():
 
     # Extract parameters
     chain_id = tool_input.get("chain_id", "")
-    gate_verdict = tool_input.get("gate_verdict", "")
+    gate_verdict = tool_input.get("gate_verdict")
 
-    # Check 1: FAIL verdict should trigger retry guidance.
-    # gate_verdict has two schema shapes: the structured object
-    # {overall, rationale, per_gate[]} (preferred) and the legacy
-    # "GATE_REVIEW: FAIL - reason" string.
-    if isinstance(gate_verdict, dict):
-        if gate_verdict.get("overall", "").upper() == "FAIL":
-            reason = str(gate_verdict.get("rationale", "unspecified"))[:50]
-
-            hook_response = {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        f"Gate FAIL: {reason}. Review the failing criteria, "
-                        "address the gaps in your output, then resubmit your verdict."
-                    ),
-                }
+    # Shape admission only: an honest FAIL must reach the server's authoritative judgment.
+    if "gate_verdict" in tool_input and (
+        not isinstance(gate_verdict, dict)
+        or gate_verdict.get("overall") not in ("PASS", "FAIL")
+        or not isinstance(gate_verdict.get("rationale"), str)
+        or not gate_verdict["rationale"].strip()
+    ):
+        hook_response = {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": (
+                    'gate_verdict requires an object with overall "PASS" or "FAIL" and a '
+                    "non-empty rationale. Follow the returned server template for per_gate, "
+                    "reminders and semantic evaluation."
+                ),
             }
-            print(json.dumps(hook_response))
-            sys.exit(0)
-    elif gate_verdict:
-        # Parse verdict: "GATE_REVIEW: FAIL - reason" or "GATE_REVIEW: PASS - reason"
-        fail_match = re.search(r"GATE_REVIEW:\s*FAIL", gate_verdict, re.IGNORECASE)
-        if fail_match:
-            # Extract the reason
-            reason_match = re.search(r"FAIL\s*[-:]\s*(.+)", gate_verdict, re.IGNORECASE)
-            reason = reason_match.group(1).strip()[:50] if reason_match else "unspecified"
-
-            hook_response = {
-                "hookSpecificOutput": {
-                    "hookEventName": "PreToolUse",
-                    "permissionDecision": "deny",
-                    "permissionDecisionReason": (
-                        f"Gate FAIL: {reason}. Review the failing criteria, "
-                        "address the gaps in your output, then resubmit your verdict."
-                    ),
-                }
-            }
-            print(json.dumps(hook_response))
-            sys.exit(0)
+        }
+        print(json.dumps(hook_response))
+        sys.exit(0)
 
     # Check 2 reads the pending gate by session_id, and a subagent's call arrives under its
     # PARENT's: a worker resuming its own run is not held by the parent's review. The server
-    # still gates the worker's run. Check 1 above reads only the caller's own verdict, so it
+    # still gates the worker's run. Shape admission reads only the caller's own verdict, so it
     # applies to a worker as it does to its parent.
     if is_subagent_payload(hook_input):
         sys.exit(0)
 
     # Check 2: Resuming chain without any resolution parameter while a gate is pending.
-    # Any contract-flagged resolution verb (gate_verdict, gate_action, cancel, ...) passes:
+    # Any contract-flagged resolution verb (gate_verdict, gate_action) passes:
     # they are all server-supported responses to a pending gate, and denying them is how a
     # gate blocks its own abort.
     if chain_id:

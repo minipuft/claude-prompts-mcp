@@ -51,7 +51,6 @@ import { ExecutionContext } from '../../../src/engine/execution/context/executio
 import { BRIEF_END, BRIEF_START } from '../../../src/engine/execution/delegation/brief.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
-import { renderGateVerdict } from '../../../src/engine/gates/core/gate-verdict-renderer.js';
 import { TemporaryGateRegistry } from '../../../src/engine/gates/core/temporary-gate-registry.js';
 import { GateLoader } from '../../../src/engine/gates/core/gate-loader.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
@@ -74,6 +73,7 @@ import { ExecutionRecordStore } from '../../../src/modules/chains/execution-reco
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
 
+import type { GateVerdictSubmission } from '../../../src/shared/types/gate-evaluation.js';
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { ChainStepPrompt } from '../../../src/engine/execution/operators/types.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
@@ -532,11 +532,11 @@ describe('P5 acceptance: withhold/expose, delegated non-receipt and targeted-gat
   /** The gate list the OPEN review is scoped to — exactly what `buildGateReviewCTA` renders. */
   const openReviewGateIds = (): readonly string[] => stepReviewOf(onlySession())?.gateIds ?? [];
 
-  const passVerdict = renderGateVerdict({
+  const passVerdict: GateVerdictSubmission = {
     overall: 'PASS',
     rationale: 'meets the gates',
     per_gate: [{ index: 1, passed: true, rationale: 'satisfied' }],
-  });
+  };
 
   /** The delegated step's own EXECUTION BRIEF — everything between the R-1 delimiters. */
   const briefSectionOf = (text: string): string => {

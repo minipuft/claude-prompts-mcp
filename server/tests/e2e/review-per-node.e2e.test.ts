@@ -44,8 +44,8 @@ const STEP_2_BODY = 'For each option identified, provide:';
 const RETRY_PROMPT = 'Retry Limit Reached';
 /** The closing line of a verdict's gate guidance (`GATE_ATTESTATION_LINE`). */
 const ATTEST_REMINDERS = /attest reminders/i;
-const PASS = 'GATE_REVIEW: PASS - the step meets its gates';
-const FAIL = 'GATE_REVIEW: FAIL - the step misses its gates';
+const PASS = { overall: 'PASS', rationale: 'the step meets its gates' };
+const FAIL = { overall: 'FAIL', rationale: 'the step misses its gates' };
 
 interface ToolOutcome {
   text: string;
@@ -242,7 +242,8 @@ describe('Streamable HTTP: a gate review is a record of one node (shipped defaul
         gate_verdict: FAIL,
       });
       expect(refused.isError).toBe(true);
-      expect(refused.text).toContain('is waiting for gate_action "retry", "skip" or "abort"');
+      expect(refused.text).toContain('is waiting for gate_action "retry" or "skip"');
+      expect(refused.text).toContain('to stop the run, use gate_action "abort" with chain_id');
       expect(refused.text).toContain('Nothing was recorded');
 
       const retried = await call({ gate_action: 'retry' });

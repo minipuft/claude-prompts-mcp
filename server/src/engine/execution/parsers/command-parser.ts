@@ -14,7 +14,7 @@
 
 import { tokenizeCommand } from './command-tokenizer.js';
 import { RESERVED_OPERATORS } from './operator-patterns.js';
-import { normalizeSymbolicPrefixes } from './parser-utils.js';
+import { normalizeSymbolicPrefixes, readPromptSelector } from './parser-utils.js';
 import {
   SymbolicCommandParser,
   createSymbolicCommandParser,
@@ -396,27 +396,14 @@ export class UnifiedCommandParser {
       name: 'simple',
       confidence: 0.95, // Increased confidence for primary strategy
       canHandle: (_command: string, tokens: TokenizedCommand) => {
-        if (tokens.format !== 'simple') return false;
-        // Validate prompt name pattern (format check alone doesn't guarantee valid prompt name)
-        return /^(?:>>|\/)?[a-zA-Z][a-zA-Z0-9_-]*(?:\s|$)/.test(tokens.raw.trim());
+        if (tokens.format !== 'simple' || tokens.hasSymbolicOperators) return false;
+        return readPromptSelector(tokens.raw) !== null;
       },
       parse: (command: string, _tokens: TokenizedCommand): CommandParseResult | null => {
-        // Enhanced regex to handle more natural command formats
-        // Prefix (>> or /) is now optional to support bare prompt names
-        // Prompt name: starts with letter, contains letters/numbers/underscores/hyphens (no spaces)
-        const match = command.trim().match(/^(?:>>|\/)?([a-zA-Z][a-zA-Z0-9_-]*)(?:\s+([\s\S]*))?$/);
-        if (!match) return null;
+        const selector = readPromptSelector(command);
+        if (selector === null) return null;
+        const { promptId: rawPromptId, remainder: rawArgs } = selector;
 
-        const [, rawPromptId, rawArgs] = match;
-        if (!rawPromptId) {
-          return null;
-        }
-
-        // One owner for the canonical form — see shared/utils/resource-ids.ts. This site used to
-        // inline its own copy carrying an extra `.replace(/[^a-z0-9_]/g, '')`, which the capture
-        // group above (`[a-zA-Z][a-zA-Z0-9_-]*`) already made unreachable: it could never remove a
-        // character. Its only effect was to make the two implementations disagree on inputs
-        // neither could receive.
         const promptId = normalizePromptId(rawPromptId);
 
         const warnings: string[] = [];
@@ -429,7 +416,7 @@ export class UnifiedCommandParser {
         const detectedFormat = hadPrefix ? 'prefixed prompt format' : 'bare prompt name';
 
         return {
-          promptId: promptId,
+          promptId: rawPromptId,
           rawArgs: (rawArgs || '').trim(),
           format: 'simple',
           confidence: 0.98, // High confidence for enhanced parsing
@@ -704,9 +691,8 @@ export class UnifiedCommandParser {
    * Generate concise error message for parsing failures
    */
   private generateHelpfulError(command: string, availablePrompts: ConvertedPrompt[]): string {
-    // Extract prompt name for suggestions
-    const promptMatch = command.match(/^(?:>>|\/)?([a-zA-Z][a-zA-Z0-9_-]*)/);
-    const promptName = promptMatch?.[1];
+    const decoded = unwrapJsonCommand(command)?.command ?? command;
+    const promptName = readPromptSelector(this.extractModifier(decoded).command)?.promptId;
 
     if (promptName) {
       const suggestions = this.generatePromptSuggestions(promptName, availablePrompts);

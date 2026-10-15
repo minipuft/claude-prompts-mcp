@@ -4,7 +4,7 @@ import {
   resolveJudgeGates,
   composeJudgeReviewPrompt,
 } from '../../../../src/engine/gates/core/review-utils.js';
-import { GATE_VERDICT_REQUIRED_FORMAT } from '../../../../src/engine/gates/core/gate-verdict-contract.js';
+import { JUDGE_VERDICT_FORMAT } from '../../../../src/engine/gates/judge/judge-prompt-builder.js';
 
 import type { GateDefinitionProvider } from '../../../../src/engine/gates/core/gate-loader.js';
 import type { LightweightGateDefinition } from '../../../../src/engine/gates/types.js';
@@ -129,7 +129,7 @@ describe('composeJudgeReviewPrompt', () => {
     expect(result.judgePrompt).toContain('## Judge Evaluation');
     expect(result.judgePrompt).toContain('independent quality reviewer');
     expect(result.judgePrompt).toContain('function add(a, b)');
-    expect(result.judgePrompt).toContain(GATE_VERDICT_REQUIRED_FORMAT);
+    expect(result.judgePrompt).toContain(JUDGE_VERDICT_FORMAT);
   });
 
   it('does not render structured pass_criteria fields into the judge prompt', () => {

@@ -442,7 +442,8 @@ describe('ChainOperatorExecutor', () => {
       '- [n] PASS|FAIL: rationale (one line per gate listed above, numbered in order)'
     );
     expect(result.content).not.toContain('[2] PASS|FAIL');
-    expect(result.content).toContain('**GATE_REVIEW: PASS|FAIL - overall assessment**');
+    // The verdict is submitted as the structured `gate_verdict`, never written into the output.
+    expect(result.content).not.toContain('GATE_REVIEW');
     expect(result.asksVerdict).toBe(true);
   });
 

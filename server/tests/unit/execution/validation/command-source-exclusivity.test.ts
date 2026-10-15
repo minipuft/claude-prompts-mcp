@@ -55,7 +55,7 @@ describe('P6.128: command beside a non-append chain_id', () => {
   });
 
   test('the prompt_engine tool schema refuses it with the same sentence', () => {
-    const result = buildPromptEngineSchema(() => true, 'unused').safeParse(REQUEST);
+    const result = buildPromptEngineSchema().safeParse(REQUEST);
     expect(result.success).toBe(false);
     expect(result.error?.issues.map((issue) => issue.message)).toEqual([
       COMMAND_SOURCE_EXCLUSIVITY_MESSAGE,

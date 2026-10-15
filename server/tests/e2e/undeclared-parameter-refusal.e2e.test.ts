@@ -246,7 +246,7 @@ describe.each([
     try {
       const refused = await session.call('prompt_engine', {
         command: '>>listprompts',
-        gate_verdict: 'GATE_REVIEW: PASS - probe',
+        gate_verdict: { overall: 'PASS', rationale: 'probe' },
       });
 
       expect(refused.isError).toBe(true);

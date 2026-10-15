@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { UnifiedCommandParser } from '../../../../src/engine/execution/parsers/command-parser.js';
+import { ArgumentParser } from '../../../../src/engine/execution/parsers/argument-parser.js';
 
-import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';
+import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
 
 const mockLogger = {
   debug: jest.fn(),
@@ -678,5 +679,287 @@ describe('an empty quoted inline gate criterion is refused at parse', () => {
     expect(inArg.promptId).toBe('analyze');
     const asArg = await parser.parseCommand('>>analyze text:""', basePrompts);
     expect(asArg.promptId).toBe('analyze');
+  });
+});
+
+describe('whole registered prompt selectors', () => {
+  const ids = [
+    'implementation_plan',
+    'implementation_plan/plan_table',
+    'implementation_plan/plan_table/detail',
+    'Legacy-Root',
+    'Legacy_Root',
+    '9start/Leaf-2',
+  ];
+  const prompts: ConvertedPrompt[] = ids.map((id) => ({
+    id,
+    name: id,
+    description: id,
+    category: 'planning',
+    arguments: [],
+    userMessageTemplate: '{{input}}',
+  }));
+  let parser: UnifiedCommandParser;
+  beforeEach(() => {
+    parser = new UnifiedCommandParser(mockLogger);
+  });
+
+  test.each(ids)('literal selects exact registered ID %s', async (id) => {
+    for (const marker of ['', '>>', '/']) {
+      const result = await parser.parseCommand(`${marker}${id} input:"a/b"`, prompts);
+      expect(result.promptId).toBe(id);
+      expect(result.rawArgs).toBe('input:"a/b"');
+    }
+  });
+
+  test.each(ids)('JSON selects exact registered ID %s', async (id) => {
+    for (const key of ['command', 'prompt']) {
+      const result = await parser.parseCommand(
+        JSON.stringify({ [key]: `>>${id}`, args: { input: 'https://example.test/a/b?x=1' } }),
+        prompts
+      );
+      expect(result.promptId).toBe(id);
+      expect(result.rawArgs).toBe(JSON.stringify({ input: 'https://example.test/a/b?x=1' }));
+    }
+  });
+
+  test('typed spelling resolves full reference through existing lookup', async () => {
+    expect((await parser.parseCommand('>>IMPLEMENTATION-PLAN/PLAN-TABLE', prompts)).promptId).toBe(
+      'implementation_plan/plan_table'
+    );
+  });
+
+  test.each(['-->', '==>'])(
+    'qualified chain with %s preserves steps and node bindings',
+    async (arrow) => {
+      const command = `>>implementation_plan/plan_table input:"a/b"${arrow}>>implementation_plan/plan_table/detail`;
+      for (const wrapped of [command, JSON.stringify({ command })]) {
+        const result = await parser.parseCommand(wrapped, prompts);
+        expect(result.promptId).toBe('implementation_plan/plan_table');
+        expect(result.executionPlan?.steps.map((step) => step.promptId)).toEqual(ids.slice(1, 3));
+        expect(result.executionPlan?.steps.map((step) => step.nodeId)).toEqual(['n1', 'n2']);
+        expect(result.executionPlan?.steps.map((step) => step.delegated === true)).toEqual([
+          false,
+          arrow === '==>',
+        ]);
+        expect(result.executionPlan?.steps[0]?.args).toBe('input:"a/b"');
+      }
+    }
+  );
+
+  test('qualified repetition preserves every full selector', async () => {
+    const result = await parser.parseCommand(
+      '>>implementation_plan/plan_table input:"a/b" *2',
+      prompts
+    );
+    expect(result.executionPlan?.steps.map((step) => step.promptId)).toEqual([
+      'implementation_plan/plan_table',
+      'implementation_plan/plan_table',
+    ]);
+    expect(result.executionPlan?.steps.map((step) => step.args)).toEqual([
+      'input:"a/b"',
+      'input:"a/b"',
+    ]);
+  });
+
+  test.each(['implementation_plan/missing_child', 'implementation_plan/plan_table/missing'])(
+    'unknown full child diagnostic %s',
+    async (id) => {
+      for (const command of [`>>${id}`, `/${id}`, JSON.stringify({ command: `>>${id}` })]) {
+        await expect(parser.parseCommand(command, prompts)).rejects.toThrow(
+          `Unknown prompt "${id}"`
+        );
+      }
+    }
+  );
+
+  test.each([
+    'implementation_plan/',
+    'implementation_plan//plan_table',
+    'implementation_plan/../plan_table',
+    'implementation_plan/plan.table',
+    'implementation_plan/plan_table%clean',
+    'implementation_plan/plan_table@ReACT',
+    'implementation_plan/plan_table:arg',
+    'implementation_plan/plan_table\\bad',
+    'implementation_plan/plan_tableé',
+  ])('malformed whole selector refuses %s', async (id) => {
+    for (const command of [
+      `>>${id}`,
+      JSON.stringify({ command: `>>${id}` }),
+      `>>implementation_plan --> ${id}`,
+    ]) {
+      await expect(parser.parseCommand(command, prompts)).rejects.toThrow();
+    }
+  });
+
+  test.each([' + implementation_plan', " ? 'ready' : implementation_plan"])(
+    'qualified reserved operator stays refused %s',
+    async (tail) => {
+      for (const command of [
+        `>>implementation_plan/plan_table${tail}`,
+        JSON.stringify({ command: `>>implementation_plan/plan_table${tail}` }),
+      ]) {
+        await expect(parser.parseCommand(command, prompts)).rejects.toThrow(/reserved/);
+      }
+    }
+  );
+
+  test.each(['clean', 'judge', 'lean', 'framework'])(
+    'prefix modifier %s has independent effects',
+    async (modifier) => {
+      for (const command of [
+        `%${modifier} >>implementation_plan/plan_table`,
+        JSON.stringify({ command: `%${modifier} >>implementation_plan/plan_table` }),
+      ]) {
+        const result = await parser.parseCommand(command, prompts);
+        expect(result.promptId).toBe('implementation_plan/plan_table');
+        expect(result.modifiers).toEqual({
+          clean: modifier === 'clean',
+          judge: modifier === 'judge',
+          lean: modifier === 'lean',
+          framework: modifier === 'framework',
+        });
+        expect(result.metadata?.modifierToken).toBe(modifier);
+      }
+    }
+  );
+
+  test('postfix modifier bytes remain arguments without effects', async () => {
+    const tail = 'input:"/tmp/a/b" %clean';
+    for (const command of [
+      `>>implementation_plan/plan_table ${tail}`,
+      JSON.stringify({ command: `>>implementation_plan/plan_table ${tail}` }),
+    ]) {
+      const result = await parser.parseCommand(command, prompts);
+      expect(result.promptId).toBe('implementation_plan/plan_table');
+      expect(result.rawArgs).toBe(tail);
+      expect(result.modifiers).toBeUndefined();
+      expect(result.metadata?.modifierToken).toBeUndefined();
+    }
+    await expect(
+      parser.parseCommand('%clean %judge >>implementation_plan/plan_table', prompts)
+    ).rejects.toThrow(/Only one/);
+  });
+
+  test.each(["'", '"'])(
+    'quoted URL/path/operator bytes stay exact in literal args %s',
+    async (quote) => {
+      const tail = `input:${quote}https://example.test/a/b?x=1 /tmp/a/b : --> ==> + ? # @ :: %clean *2${quote}`;
+      const result = await parser.parseCommand(`>>implementation_plan/plan_table ${tail}`, prompts);
+      expect(result.promptId).toBe('implementation_plan/plan_table');
+      expect(result.rawArgs).toBe(tail);
+      expect(result.operators?.hasOperators ?? false).toBe(false);
+    }
+  );
+
+  test.each(["'", '"'])(
+    'shared prefix normalization keeps quoted marker bytes %s',
+    async (quote) => {
+      const tail = `input:${quote}/tmp/a/b --> >>implementation_plan${quote}`;
+      const result = await parser.parseCommand(`>>implementation_plan/plan_table ${tail}`, prompts);
+      expect(result.rawArgs).toBe(tail);
+    }
+  );
+});
+
+describe('F23.1 composed command processed arguments', () => {
+  const input = 'keep / path --> ==> + ? %clean exactly';
+  const prompts: ConvertedPrompt[] = ['wire_namespace', 'wire_namespace/child/deep'].map((id) => ({
+    id,
+    name: id,
+    description: '',
+    category: 'tests',
+    userMessageTemplate: '{{input}}',
+    arguments: [{ name: 'input', type: 'string', required: false }],
+  }));
+  const rootPrompt = prompts[0];
+  if (rootPrompt === undefined) throw new Error('Root fixture is required');
+  let commandParser: UnifiedCommandParser;
+  let argumentParser: ArgumentParser;
+  beforeEach(() => {
+    commandParser = new UnifiedCommandParser(mockLogger);
+    argumentParser = new ArgumentParser(mockLogger);
+  });
+
+  test('F23.1 documented root JSON command reaches exact processed arguments', async () => {
+    const parsed = await commandParser.parseCommand(
+      JSON.stringify({
+        command: '>>wire_namespace',
+        args: { input },
+      }),
+      prompts
+    );
+    const result = await argumentParser.parseArguments(parsed.rawArgs, rootPrompt, {});
+    expect(parsed.promptId).toBe('wire_namespace');
+    expect(result.metadata.parsingStrategy).toBe('json');
+    expect(result.processedArgs['input']).toBe(input);
+  });
+
+  test('F23.1 deep JSON selector preserves exact registered identity and processed value', async () => {
+    const deepPrompt = prompts[1];
+    if (deepPrompt === undefined) throw new Error('Deep fixture is required');
+    for (const key of ['command', 'prompt']) {
+      const parsed = await commandParser.parseCommand(
+        JSON.stringify({
+          [key]: '>>wire_namespace/child/deep',
+          args: { input },
+        }),
+        prompts
+      );
+      const result = await argumentParser.parseArguments(parsed.rawArgs, deepPrompt, {});
+      expect(parsed.promptId).toBe('wire_namespace/child/deep');
+      expect(result.processedArgs['input']).toBe(input);
+    }
+  });
+
+  test('F23.1 valid symbolic arrows modifiers and first-step JSON preserve processed data', async () => {
+    for (const arrow of ['-->', '==>']) {
+      const parsed = await commandParser.parseCommand(
+        JSON.stringify({
+          command: `%clean >>wire_namespace ${arrow} >>wire_namespace/child/deep input="second > stay"`,
+          args: { input },
+        }),
+        prompts
+      );
+      const steps = parsed.executionPlan?.steps;
+      if (steps === undefined || steps[0] === undefined || steps[1] === undefined) {
+        throw new Error('Both real parsed steps are required');
+      }
+      expect(steps.map((step) => step.promptId)).toEqual([
+        'wire_namespace',
+        'wire_namespace/child/deep',
+      ]);
+      expect(steps[1].delegated === true).toBe(arrow === '==>');
+      expect(parsed.modifiers).toEqual({
+        clean: true,
+        judge: false,
+        lean: false,
+        framework: false,
+      });
+      if (steps[0].args === undefined || steps[1].args === undefined) {
+        throw new Error('Both parsed argument payloads are required');
+      }
+      const first = await argumentParser.parseArguments(steps[0].args, rootPrompt, {});
+      const second = await argumentParser.parseArguments(steps[1].args, rootPrompt, {});
+      expect(first.metadata.parsingStrategy).toBe('json');
+      expect(first.processedArgs['input']).toBe(input);
+      expect(second.processedArgs['input']).toBe('second > stay');
+    }
+  });
+
+  test('F23.1 malformed outside grammar remains refused separately from valid data', async () => {
+    for (const command of [
+      '>>wire_namespace + >>wire_namespace/child/deep',
+      ">>wire_namespace ? 'ready' : >>wire_namespace/child/deep",
+    ]) {
+      await expect(
+        commandParser.parseCommand(JSON.stringify({ command, args: { input } }), prompts)
+      ).rejects.toThrow(/reserved/);
+    }
+    await expect(
+      commandParser.parseCommand('%clean %judge >>wire_namespace', prompts)
+    ).rejects.toThrow(/Only one/);
+    await expect(commandParser.parseCommand('>>wire_namespace//child', prompts)).rejects.toThrow();
   });
 });

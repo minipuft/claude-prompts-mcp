@@ -2,11 +2,125 @@ import { describe, expect, test } from '@jest/globals';
 
 import { tokenizeCommand } from '../../../../src/engine/execution/parsers/command-tokenizer.js';
 import type { TokenizedOperator } from '../../../../src/engine/execution/parsers/command-tokenizer.js';
+import { readPromptSelector } from '../../../../src/engine/execution/parsers/parser-utils.js';
 
 // Helper: collect operator types from result
 const opTypes = (ops: TokenizedOperator[]): string[] => ops.map((o) => o.type);
 
+describe('readPromptSelector', () => {
+  test.each([
+    'root',
+    'parent/child',
+    'parent/child/deep_step',
+    'Parent-2/Child_3/4Deep',
+    '7-leading/root-child',
+    `parent/${'long_child_'.repeat(40)}`,
+  ])('preserves exact reference and marker bytes for %s', (promptId) => {
+    const input = `  >> ${promptId}  marker:"child --> + ? # @ :: % /"  `;
+    const selector = readPromptSelector(input);
+    expect(selector?.promptId).toBe(promptId);
+    expect(input.slice(selector?.start, selector?.end)).toBe(promptId);
+    expect(selector?.remainder).toBe('  marker:"child --> + ? # @ :: % /"  ');
+  });
+
+  test.each([
+    '',
+    'parent/',
+    'parent//child',
+    'parent/../child',
+    'parent/./child',
+    'parent/child.ext',
+    'parent/child%20extra',
+    'parent/child\\extra',
+    'parent/child:tail',
+    'parent/child@tail',
+    'parent/child#tail',
+    'parent/child?tail',
+    'parent/child%clean',
+  ])('refuses malformed whole selector %s without a prefix match', (promptId) => {
+    expect(readPromptSelector(`>>${promptId} marker:"invalid"`)).toBeNull();
+    expect(tokenizeCommand(`>>${promptId} marker:"invalid"`).promptId).toBeNull();
+  });
+
+  test.each(['-->', '==>', '+', '? "condition" : >>fallback'])(
+    'preserves deliberate adjacent delimiter %s',
+    (delimiter) => {
+      const selector = readPromptSelector(`>>root-child/deep-step${delimiter}>>next`);
+      expect(selector?.promptId).toBe('root-child/deep-step');
+      expect(selector?.remainder).toBe(`${delimiter}>>next`);
+    }
+  );
+
+  test('accepts slash command marker without changing qualified identity', () => {
+    expect(readPromptSelector('/parent/child')?.promptId).toBe('parent/child');
+    expect(readPromptSelector('//parent/child')).toBeNull();
+  });
+
+  test('does not use a later conditional to admit a malformed selector suffix', () => {
+    expect(readPromptSelector('>>parent/child?tail ? "condition" : >>fallback')).toBeNull();
+    expect(tokenizeCommand('>>parent/child?tail ? "condition" : >>fallback').promptId).toBeNull();
+  });
+
+  test('leaves prefix modifier extraction to the caller and retains exact suffix bytes', () => {
+    expect(readPromptSelector('%clean >>parent/child')).toBeNull();
+    expect(readPromptSelector('%clean %judge >>parent/child')).toBeNull();
+    expect(readPromptSelector('>>parent/child  %clean  ')?.remainder).toBe('  %clean  ');
+    expect(tokenizeCommand('>>parent/child  %clean  ').rawArgs).toBe('%clean');
+  });
+});
+
 describe('tokenizeCommand', () => {
+  describe('whole qualified selector extraction', () => {
+    test.each(['root', 'parent/child', 'parent/child/deep', 'Parent-2/3Child'])(
+      'selects exact %s with its distinguishing marker',
+      (promptId) => {
+        const marker = `marker:"${promptId}:exact"`;
+        const result = tokenizeCommand(`>>${promptId} ${marker}`);
+        expect(result.promptId).toBe(promptId);
+        expect(result.rawArgs).toBe(marker);
+      }
+    );
+
+    test.each(['-->', '==>', '+', '? "condition" :'])(
+      'preserves quoted URL/path/operator values before real %s boundary',
+      (delimiter) => {
+        const rawArgs =
+          'url:"https://example.test/a/b?x=1+2#frag" path:"/tmp/a/b" text:"--> ==> + ? # @ :: %  :full loop:true max:5 timeout:3"';
+        const command = `@CAGEERF >>Parent-2/3Child ${rawArgs} ${delimiter} >>next/deep`;
+        const result = tokenizeCommand(command);
+        expect(result.promptId).toBe('Parent-2/3Child');
+        expect(result.rawArgs).toBe(rawArgs);
+        expect(result.raw).toBe(command);
+        expect(result.operators.find((op) => op.type === 'framework')?.value).toBe('CAGEERF');
+      }
+    );
+
+    test('preserves escaped quotes, single quotes and question text before a chain', () => {
+      const rawArgs = `text:"an escaped \\"quote\\" --> + ?" path:'/tmp/a/b' question:"why?" why?`;
+      const result = tokenizeCommand(`>>parent/child ${rawArgs} --> >>next/deep`);
+      expect(result.promptId).toBe('parent/child');
+      expect(result.rawArgs).toBe(rawArgs);
+      expect(opTypes(result.operators)).toEqual(['chain']);
+    });
+
+    test.each(['-->', '==>'])(
+      'retains adjacent %s and safe hyphen segment semantics',
+      (delimiter) => {
+        const result = tokenizeCommand(`>>root-child/deep-step${delimiter}>>next-node/deep`);
+        expect(result.promptId).toBe('root-child/deep-step');
+        expect(result.rawArgs).toBe('');
+        expect(result.operators[0]?.raw).toBe(delimiter);
+      }
+    );
+
+    test('retains leading delegation and reserved operator detection', () => {
+      expect(tokenizeCommand('==> >>parent/child marker:"child"').promptId).toBe('parent/child');
+      expect(opTypes(tokenizeCommand('>>parent/child+>>next').operators)).toContain('parallel');
+      expect(opTypes(tokenizeCommand('>>parent/child? "condition" : >>next').operators)).toContain(
+        'conditional'
+      );
+    });
+  });
   // =========================================================================
   // Format detection
   // =========================================================================

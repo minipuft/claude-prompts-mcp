@@ -288,8 +288,13 @@ describe('ResponseAssembler – operator-aware CTA system', () => {
 
       expect(result).toContain('**Review Retry Limit Reached**');
       expect(result).toContain(
-        'Next: chain_id="chain-test#9", gate_action="retry" | gate_action="skip" | cancel: true'
+        'Next: chain_id="chain-test#9", gate_action="retry" | gate_action="skip"'
       );
+      expect(result).toContain(
+        'Stop the whole run at any time: chain_id="chain-test#9", gate_action="abort"'
+      );
+      expect(result).toContain('No node, trailer or report is required.');
+      expect(result).not.toContain('cancel: true');
       expect(result).not.toContain('gate_verdict');
       expect(result).not.toMatch(/attest reminders/i);
     });

@@ -124,7 +124,6 @@ function fixture(
     siblings?: boolean;
     checks?: GateCheckResult[];
     body?: string;
-    legacy?: boolean;
   } = {}
 ) {
   const kind = options.kind ?? 'gate';
@@ -148,7 +147,7 @@ function fixture(
   } as unknown as ChainSession;
   const context = new ExecutionContext(
     {
-      gate_verdict: options.legacy ? 'GATE_REVIEW: PASS - Exact legacy rationale' : submission,
+      gate_verdict: submission,
       ...(options.body !== undefined ? { user_response: options.body } : {}),
     },
     logger
@@ -274,16 +273,12 @@ describe('portable semantic summaries from the actual verdict processor', () => 
 
   // R11.2: an absent report is not a FAIL the client earned, it is a submission that cannot be
   // graded. It records no summary and spends nothing.
-  test.each(
-    (['gate', 'detached'] as const).flatMap((kind) =>
-      (['overall-only', 'legacy'] as const).map((shape) => ({ kind, shape }))
-    )
-  )(
-    '$kind $shape submission without a report records no summary and spends nothing',
-    async ({ kind, shape }) => {
-      const f = fixture({ kind, state: 'met', legacy: shape === 'legacy' });
+  test.each(['gate', 'detached'] as const)(
+    '%s overall-only submission without a report records no summary and spends nothing',
+    async (kind) => {
+      const f = fixture({ kind, state: 'met' });
       // An overall-only structured submission genuinely carries no per-gate report or claim.
-      if (shape === 'overall-only') Object.assign(f.submission, { per_gate: undefined });
+      Object.assign(f.submission, { per_gate: undefined });
       await f.submit();
       expect(f.context.state.gates.perGateVerdicts).toBeUndefined();
       expect(f.store.recordGateReviewOutcome).not.toHaveBeenCalled();

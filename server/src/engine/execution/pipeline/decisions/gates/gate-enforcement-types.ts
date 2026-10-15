@@ -4,7 +4,6 @@ import type {
   GateReviewSemanticContext,
   PendingGateReview,
 } from '#shared/types/chain-execution.js';
-import type { GateVerdictSource } from '../../../../gates/core/gate-verdict-contract.js';
 
 export type {
   GateVerdictSource as VerdictSource,
@@ -30,21 +29,13 @@ export interface GateSetEnforcement {
 }
 
 /**
- * User action choices when retry limit is exceeded.
+ * Review-owned action choices when retry limit is exceeded. Run-level abort belongs to the executor.
  */
-export type GateAction = 'retry' | 'skip' | 'abort';
+export type GateAction = 'retry' | 'skip';
 
 /** Pure lifecycle intent; the authority issues fresh pins when the caller applies it. */
 export interface ReviewAttemptIntent {
   readonly renewAttempt?: true;
-}
-
-/**
- * Input for verdict parsing decisions.
- */
-export interface VerdictParseInput {
-  readonly raw: string | undefined;
-  readonly source: GateVerdictSource;
 }
 
 /**

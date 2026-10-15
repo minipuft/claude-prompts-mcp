@@ -32,6 +32,7 @@ import type {
 } from '#shared/types/chain-session.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 
+import { isTerminalRunStatus } from '#shared/types/chain-session.js';
 import { stripRunNumber } from '#shared/utils/chain-id-codec.js';
 
 export interface ChainRunRegistry {
@@ -50,7 +51,11 @@ export interface ChainRunRegistry {
    * same statement so it cannot be claimed twice (2A). Refuses a row whose workspace differs
    * from the claimant's when both are known.
    */
-  claimRunByToken(token: string, scope?: StateStoreOptions): ClaimRunResult;
+  claimRunByToken(
+    token: string,
+    scope?: StateStoreOptions,
+    requestContinuityFilter?: string
+  ): ClaimRunResult;
   /** Drop every run owned by a process that is no longer alive. */
   deleteRunsForOwners(ownerPids: readonly string[]): void;
 }
@@ -87,7 +92,7 @@ interface ChainRunRow {
 }
 
 /** What a registry claim hands back: the run, or the reason it was refused at the row level. */
-export type ClaimRunResult = Exclude<ChainHandoffClaimResult, { status: 'no-blueprint' }>;
+export type ClaimRunResult = ChainHandoffClaimResult;
 
 interface ChainRunNodeRow {
   session_id: string;
@@ -299,7 +304,27 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     return result;
   }
 
-  claimRunByToken(token: string, scope?: StateStoreOptions): ClaimRunResult {
+  claimRunByToken(
+    token: string,
+    scope?: StateStoreOptions,
+    requestContinuityFilter?: string
+  ): ClaimRunResult {
+    this.db.beginTransaction('immediate');
+    try {
+      const result = this.claimSelectedRun(token, scope, requestContinuityFilter);
+      this.db.commit();
+      return result;
+    } catch (error) {
+      this.db.rollback();
+      throw error;
+    }
+  }
+
+  private claimSelectedRun(
+    token: string,
+    scope?: StateStoreOptions,
+    requestContinuityFilter?: string
+  ): ClaimRunResult {
     const claimantPid = resolveRunOwnerPid(scope);
     const claimantWorkspace = scope?.workspaceId ?? null;
     const claimantOrganization = scope?.organizationId ?? null;
@@ -311,7 +336,9 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
         WHERE handoff_token = ?`,
       [token]
     );
-    if (row === null) return { status: 'unknown-token' };
+    if (row === null || isTerminalRunStatus(row.run_status as ChainRunStatus)) {
+      return { status: 'unknown-token' };
+    }
 
     // OQ-3: a claim never rewrites workspace scope. Known-and-different is refused; an unknown
     // side (NULL) is not evidence of a mismatch.
@@ -327,15 +354,19 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
       };
     }
 
-    // Ownership transfer and token burn in ONE statement: a second claimant racing on the same
-    // token finds no row matching it, rather than a window where both own the run.
-    this.db.run(
-      `UPDATE chain_runs
-          SET run_owner_pid = ?, organization_id = COALESCE(?, organization_id),
-              workspace_id = COALESCE(?, workspace_id), handoff_token = NULL
-        WHERE session_id = ? AND handoff_token = ?`,
-      [claimantPid, claimantOrganization, claimantWorkspace, row.session_id, token]
-    );
+    const residual = parseResidual(row.state);
+    const runContinuityScopeId = residual.continuityScopeId;
+    if (requestContinuityFilter !== undefined && runContinuityScopeId !== requestContinuityFilter) {
+      return {
+        status: 'request-continuity-mismatch',
+        runContinuityScopeId,
+        requestContinuityScopeId: requestContinuityFilter,
+      };
+    }
+
+    if (!isCompatibleBlueprint(residual.blueprint)) {
+      return { status: 'no-blueprint', chainId: row.chain_id };
+    }
 
     const nodeRows = this.db.query<ChainRunNodeRow>(
       `SELECT session_id, node_id, position, prompt_id, step_name, milestone,
@@ -348,7 +379,14 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
       [row.session_id]
     );
     const session = reconstructSession({ ...row, handoff_token: null }, nodeRows);
-    return { status: 'claimed', session };
+    const transferred = this.db.queryOne<{ session_id: string }>(
+      `UPDATE chain_runs
+          SET run_owner_pid = ?, organization_id = COALESCE(?, organization_id),
+              workspace_id = COALESCE(?, workspace_id), handoff_token = NULL
+        WHERE session_id = ? AND handoff_token = ? RETURNING session_id`,
+      [claimantPid, claimantOrganization, claimantWorkspace, row.session_id, token]
+    );
+    return transferred === null ? { status: 'unknown-token' } : { status: 'claimed', session };
   }
 
   deleteRunsForOwners(ownerPids: readonly string[]): void {
@@ -574,6 +612,36 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function isCompatibleBlueprint(value: unknown): boolean {
+  const blueprint = asRecord(value);
+  const parsed = asRecord(blueprint['parsedCommand']);
+  const plan = asRecord(blueprint['executionPlan']);
+  const promptId = parsed['promptId'];
+  const steps = parsed['steps'];
+  const gates = plan['gates'];
+  const usablePrompt = typeof promptId === 'string' && promptId.trim().length > 0;
+  const objectSteps =
+    Array.isArray(steps) &&
+    steps.every(
+      (step: unknown) => step !== null && typeof step === 'object' && !Array.isArray(step)
+    );
+  return (
+    (usablePrompt || (objectSteps && steps.length > 0)) &&
+    (promptId === undefined || usablePrompt) &&
+    (steps === undefined || objectSteps) &&
+    (parsed['commandType'] === undefined ||
+      parsed['commandType'] === 'single' ||
+      parsed['commandType'] === 'chain') &&
+    (plan['strategy'] === 'single' || plan['strategy'] === 'chain') &&
+    Array.isArray(gates) &&
+    gates.every((gate: unknown) => typeof gate === 'string') &&
+    typeof plan['requiresFramework'] === 'boolean' &&
+    typeof plan['requiresSession'] === 'boolean' &&
+    (blueprint['gateInstructions'] === undefined ||
+      typeof blueprint['gateInstructions'] === 'string')
+  );
 }
 
 function reconstructSession(row: ChainRunRow, nodeRows: readonly ChainRunNodeRow[]): ChainSession {

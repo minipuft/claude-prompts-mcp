@@ -2,12 +2,9 @@
 /**
  * PathResolver - Unified Path Resolution System
  *
- * Provides centralized resolution of all configurable paths with a clear priority order:
- *   1. CLI flags (highest priority)
- *   2. MCP_*_PATH env vars (individual resource overrides)
- *   3. MCP_RESOURCES_PATH env var (unified resources base directory)
- *   4. MCP_WORKSPACE/resources (workspace subdirectory)
- *   5. Package defaults (lowest priority - npx fallback)
+ * CLI flags take precedence over their workspace/config environment settings.
+ * Resource types resolve through an explicit MCP_RESOURCES_PATH base, workspace layouts,
+ * then package defaults. An absent type directory is created by its first write.
  *
  * Environment Variables:
  * - MCP_WORKSPACE: Full plugin/workspace directory (server/, hooks/, etc.)
@@ -16,7 +13,7 @@
  *
  * User Customization:
  * - Set MCP_RESOURCES_PATH to point to a directory with your custom resources
- * - The directory should contain subdirs: prompts/, gates/, frameworks/, etc.
+ * - Type subdirs (prompts/, gates/, frameworks/, etc.) are created on first write
  */
 
 import { existsSync, readFileSync, statSync } from 'fs';
@@ -227,8 +224,7 @@ export class PathResolver {
    *   2. ${workspace}/resources (workspace subdirectory)
    *   3. ${packageRoot}/resources (default)
    *
-   * This is used as the base for all resource types (prompts, gates, etc.)
-   * unless individually overridden via MCP_*_PATH variables.
+   * This is the resource base; each type getter also preserves existing legacy workspace dirs.
    */
   getResourcesPath(): string {
     if (this.cache.resources) return this.cache.resources;
@@ -634,15 +630,18 @@ export class PathResolver {
    *   2. ${workspace}/${subdir}/ (legacy, if exists, so an existing collection does not split)
    *   3. ${workspace}/resources/${subdir}/ (not created yet; the first write creates it)
    *
-   * Otherwise (an explicit `MCP_RESOURCES_PATH`, or the package root as the workspace):
+   * An explicit `MCP_RESOURCES_PATH` resolves each type through:
    *   1. ${resources}/${subdir}/ (if exists)
    *   2. ${workspace}/${subdir}/ (legacy, if exists)
-   *   3. ${packageRoot}/resources/${subdir}/ (default)
+   *   3. ${resources}/${subdir}/ (not created yet; the first write creates it)
    *
-   * Step 3 of the workspace chain names a directory that may not exist. Falling through to the
-   * package instead sent every write from an empty workspace into the install directory, which a
-   * plugin update replaces. Readers treat the absent directory as empty, and the bundled tree
-   * still loads underneath (`getBundledResourceDir`).
+   * With neither an explicit base nor a custom workspace, existing resource and legacy dirs
+   * retain their priority, then the package resource directory is the default.
+   *
+   * A write root may not exist yet. Existence-based fallback would send first writes into the
+   * install directory, which a plugin update replaces, or outside an explicit resource boundary.
+   * Readers treat the absent directory as empty; bundled resources still load underneath
+   * (`getBundledResourceDir`).
    */
   private resolveResourceSubdir(subdir: string): { resolved: string; source: string } {
     const workspace = this.getWorkspace();
@@ -673,6 +672,13 @@ export class PathResolver {
 
     if (existsSync(legacyDir)) {
       return { resolved: legacyDir, source: `workspace ${subdir}/ (legacy)` };
+    }
+
+    if (explicitResources !== undefined && explicitResources !== '') {
+      return {
+        resolved: resourcesDir,
+        source: `resources/${subdir}/ (created on first write)`,
+      };
     }
 
     return {

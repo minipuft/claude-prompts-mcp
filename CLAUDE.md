@@ -268,7 +268,7 @@ system_control → SystemControl Router → 12 action handlers
 
 State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `key` to `SqliteStateStoreConfig`. **`state.db` is mixed-posture, not ephemeral.** A `SCHEMA_VERSION` bump drops and recreates, but `version_history` and `skills_sync_manifests` are durable: `ensureSchema()` snapshots their rows, recreates, and restores by column intersection. Adding a `NOT NULL` column with no default to either makes the restore throw by design -- that change needs a real migration. Per-table owner, posture, scope, and retention are declared in `src/infra/database/table-contracts.ts`, which is the SSOT.
 
-**`state.db` is shared across projects, and TWO columns compete to isolate it.** One file serves every project. `workspace_id` has four readers, not zero as this handbook claimed on 2026-08-25 (re-measured 2026-08-27): `SqliteStateStore` filters on it in three queries, `run-registry` compares it to refuse a cross-workspace handoff claim -- a security decision -- `execution-record-store` projects it, and `v_execution_status` selects it. What is true is narrower and more awkward: for `version_history`, `execution_records` and `resource_changes` the column that actually isolates is `tenant_id` (9, 3 and 2 filter sites), so `workspace_id` there is a redundant second scope channel, indexed and written and never the thing that scopes. `tenant_id` meanwhile carries three incompatible meanings across the schema (server PID, workspace id, literal `'default'`). Choosing one scope column per table is open work, not a defect to patch. **Isolation tightened on 2026-08-27** and state written before then under the `'default'` key is not reachable from a workspace-scoped read, with two exceptions: active framework and gate enablement copy a legacy `'default'` row into the launch workspace once, when that workspace has no row of its own (`FrameworkStateStore`; `GateStateStore` since 2026-09-14). Argument history re-derives from config on first read, which costs a re-toggle. No bulk backfill was written on purpose -- it would have run against producers that were still truncating, which hides the defect rather than fixing it, and nothing stated what would ever retire it. Gate enablement could not stay a re-toggle: disabling gates is how a client stops `prompt_engine` advertising three parameters, and before 2026-09-14 every restart silently advertised them again -- the store loaded only the `'default'` row and created any other scope enabled without reading SQLite. It now loads every persisted `gates` row at startup, one per scope.
+**`state.db` is shared across projects, and TWO columns compete to isolate it.** One file serves every project. `workspace_id` has four readers, not zero as this handbook claimed on 2026-08-25 (re-measured 2026-08-27): `SqliteStateStore` filters on it in three queries, `run-registry` compares it to refuse a cross-workspace handoff claim -- a security decision -- `execution-record-store` projects it, and `v_execution_status` selects it. What is true is narrower and more awkward: for `version_history`, `execution_records` and `resource_changes` the column that actually isolates is `tenant_id` (9, 3 and 2 filter sites), so `workspace_id` there is a redundant second scope channel, indexed and written and never the thing that scopes. `tenant_id` meanwhile carries three incompatible meanings across the schema (server PID, workspace id, literal `'default'`). Choosing one scope column per table is open work, not a defect to patch. **Isolation tightened on 2026-08-27** and state written before then under the `'default'` key is not reachable from a workspace-scoped read, with two exceptions: active framework and gate enablement copy a legacy `'default'` row into the launch workspace once, when that workspace has no row of its own (`FrameworkStateStore`; `GateStateStore` since 2026-09-14). Argument history re-derives from config on first read, which costs a re-toggle. No bulk backfill was written on purpose -- it would have run against producers that were still truncating, which hides the defect rather than fixing it, and nothing stated what would ever retire it. Gate enablement could not stay a re-toggle: disabling runtime gates narrows the `gates` and `gate_verdict` parameter surface while core run control stays available, and before 2026-09-14 every restart silently advertised them again -- the store loaded only the `'default'` row and created any other scope enabled without reading SQLite. It now loads every persisted `gates` row at startup, one per scope.
 
 What actually isolates `version_history` is `tenant_id`, which `resolveContinuityScopeId` resolves to `workspaceId ?? organizationId ?? 'default'` -- so rollback history IS workspace-scoped, and every read filters on it. **This paragraph previously claimed the opposite** ("`kv_state` is the only table that writes it… rollback history is shared across every project on the machine"); both halves were false, and the error is kept visible here because a security claim that overstates exposure gets discounted wholesale once someone checks it. The residual limit is real but narrower: a process that resolves no workspace shares the `'default'` bucket with every other such process. For `kv_state`: a scope with no row falls back to `frameworks.defaultFramework`; the scope id derives from `CLAUDE_PROJECT_DIR` → cwd (basename) unless `--workspace-id` is passed. Reading or writing without a scope resolves to the process default set at startup -- passing one explicitly is required only when serving several workspaces from one process (HTTP). -> `docs/guides/identity-scope.md`
 
@@ -308,21 +308,36 @@ reader lands in the same PR (verified 2026-08-05: zero readers of these columns 
 Python side to move with it -- the constraint is atomicity, not a version bump.
 
 **The tool surface is a union, not a snapshot.** `prompt_engine` builds its `inputSchema` from
-runtime state: the three gate parameters (`gates`, `gate_verdict`, `gate_action`) are advertised
-only while the gate system is enabled. The contract is the **union of every reachable shape** --
+runtime state: `gates` and `gate_verdict` are runtime-feature-gated; `gate_action` is core with
+its widest enum (`retry`, `skip`, `abort`, `resume`, `accept_alternative`). Abort and the blocking-
+unknown resolution verbs remain available while runtime gates are off; retry/skip receive a
+named unavailable-action refusal before execution. The contract is the **union of every reachable shape** --
 `tooling/contracts/prompt-engine.json`. Narrowing within that union is not breaking; adding or
 removing a union member is. The alternative reading (contract = shape at current state) makes
 every state change a major bump, which drains the major version of meaning. Since P4.93 a
 narrowed-away gate parameter is REFUSED, not stripped, with its own "declared, but not advertised
 right now" message -- "not a parameter" would be false of a name the contract carries.
 
-**`gate_verdict` accepts two shapes, and one of them is retiring.** The structured object
-(`{overall, rationale, per_gate[]}`) is schema-validated and cannot be malformed; the legacy
-`"GATE_REVIEW: PASS - reason"` string is read back by five regexes and can fail to parse. Both are
-in the union, so accepting the object was not breaking. **Retirement**: the string branch and the
-four non-primary patterns in `resources/gates/config/verdict-patterns.yaml` are deleted once no
-client has submitted a string verdict for one release cycle -- measurable via the `source` field
-already on `ParsedGateVerdict`. That deletion IS breaking and needs a major bump.
+**Abort is whole-run control.** `prompt_engine(chain_id:"...", gate_action:"abort")` exits before
+command parsing, report routing or review admission, retaining durable `cancelled` state and
+artifacts. It needs no node, trailer, report or retry exhaustion and applies in every nonterminal
+run state. Repeated abort is idempotent; terminal completed/failed, missing and out-of-scope runs
+receive truthful non-applied results. The public `cancel` property is removed from the union;
+retired true/false/mixed calls use ordinary undeclared-input refusal, with no mutation or alias.
+Keep internal `cancelChain`, persisted `cancelled` and historical cancellation records.
+
+Gate status distinguishes the runtime switch, `Configuration Enabled`, and
+`Effective Review/Guidance` (runtime AND configuration); health labels the runtime switch. Configuration
+false does not imply schema withdrawal.
+
+**`gate_verdict` accepts one shape: the structured object** (`{overall, rationale, per_gate?,
+reminders?}`), which is schema-validated and cannot be malformed. A string -- including the
+`GATE_REVIEW: PASS - reason` form earlier majors accepted -- is refused at the schema with a message
+that shows the object to resend. Check-tier gates answer through `per_gate[{index, passed,
+rationale}]`, semantic gates through `per_gate[].evaluation`, reminder gates through
+`reminders:{satisfied, not_applicable}`. Text channels that are not this parameter keep their own
+grammar: an exported skill's Stop hook reads a `GATE_REVIEW:` line, and a delegated worker's
+trailer carries `Proposed Gate Review:`.
 
 **This package is a binary distribution** -- an MCP server, the `cpm` CLI, and Python hooks.
 It publishes no library API: `src/index.ts` exports only `startServer`, `gracefulShutdown`,

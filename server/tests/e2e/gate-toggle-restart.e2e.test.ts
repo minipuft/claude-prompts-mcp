@@ -2,7 +2,7 @@
  * A gates toggle through `system_control` survives a restart, on both transports.
  *
  * Disabling gates exists to save tokens: `prompt_engine` stops advertising `gates`,
- * `gate_verdict` and `gate_action`. Measured 2026-09-14 against `dist/index.js`: the narrowing
+ * `gate_verdict`; `gate_action` remains core. Measured 2026-09-14 against `dist/index.js`: the narrowing
  * held only until the server restarted. The toggle was written to `state.db` under the launch
  * workspace, but startup loaded only the literal `default` row, and a scope missing from memory
  * was created enabled without reading SQLite — so the next process advertised all three again.
@@ -213,14 +213,14 @@ describe.each([
       // Positive control: the probe observes all three parameters before anything is toggled.
       expect(await first.gateParams()).toEqual(ALL_GATE_PARAMS);
       await first.setGates('disable');
-      expect(await first.gateParams()).toEqual([]);
+      expect(await first.gateParams()).toEqual(['gate_action']);
     } finally {
       await first.stop();
     }
 
     const second = await startSession(scenario);
     try {
-      expect(await second.gateParams()).toEqual([]);
+      expect(await second.gateParams()).toEqual(['gate_action']);
       await second.setGates('enable');
     } finally {
       await second.stop();

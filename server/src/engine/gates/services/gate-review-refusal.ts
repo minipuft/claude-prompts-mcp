@@ -6,7 +6,6 @@ import type { GateReview } from '#shared/types/chain-execution.js';
 import type { ChainSession } from '#shared/types/chain-session.js';
 import type { GateAction } from '../../execution/pipeline/decisions/gates/gate-enforcement-types.js';
 import type { resolveReviewTarget } from '../../execution/pipeline/decisions/gates/review-target.js';
-import type { ParsedGateVerdict } from '../core/gate-verdict-contract.js';
 
 import { attemptInHand, formatAttempt } from '#shared/utils/attempt-number.js';
 import { ordinalOf } from '#shared/utils/node-order.js';
@@ -19,7 +18,7 @@ import { ordinalOf } from '#shared/utils/node-order.js';
  *   PASS over a recorded exit code is an unnoticed contradiction. `gate_action: skip` is the
  *   operator's override, behind exhaustion; a FAIL is the submitter agreeing with the check.
  * - `phase` — the review is not waiting for this kind of call: an exhausted review answers only
- *   `gate_action`, and a detached review never `abort`s — `cancel: true` stops a run.
+ *   review-owned `gate_action` (`retry`/`skip`). Run-level abort bypasses review handling.
  */
 export function describeRefusal(reason: 'phase' | 'failing-check', review: GateReview): string {
   if (reason === 'failing-check') {
@@ -35,9 +34,7 @@ export function describeRefusal(reason: 'phase' | 'failing-check', review: GateR
     'awaiting-verdict': 'a gate_verdict',
     'awaiting-replacement': "the worker's replacement result",
     exhausted:
-      review.kind === 'detached'
-        ? 'gate_action "retry" or "skip", or cancel: true'
-        : 'gate_action "retry", "skip" or "abort"',
+      'gate_action "retry" or "skip"; to stop the run, use gate_action "abort" with chain_id',
   };
   return (
     `❌ The gate review of node '${review.nodeId}' (${formatAttempt(attemptInHand(review.attemptCount, review.maxAttempts), review.maxAttempts)}) ` +
@@ -97,22 +94,14 @@ export function describeUnansweredStep(session: ChainSession, nodeId: string): s
 
 /**
  * The refusal a verdict reads when it carries no report for a semantic gate the review requires
- * (R11.2): a string verdict, or an object whose matching `per_gate` entry has no `evaluation`.
+ * (R11.2): its matching `per_gate` entry has no `evaluation`.
  * Nothing is graded, so no attempt is spent and the captured target stays; the reply ends on the
  * review's own structured template, its binding already filled in. An exhausted review takes no
  * verdict at all (R9), so it reads the retry-limit sentence instead of an invitation to resubmit.
  */
-export function describeMissingSemanticReport(
-  review: GateReview,
-  gateId: string,
-  verdict: Pick<ParsedGateVerdict, 'submission'>
-): string {
+export function describeMissingSemanticReport(review: GateReview, gateId: string): string {
   if (review.phase === 'exhausted') return describeRefusal('phase', review);
   const index = review.gateIds.indexOf(gateId) + 1;
-  const carrier =
-    verdict.submission === undefined
-      ? 'a string verdict cannot carry it'
-      : 'the submitted verdict carries none';
   const template = buildStructuredVerdictTemplate(
     review.gateIds,
     review.prompts,
@@ -121,7 +110,8 @@ export function describeMissingSemanticReport(
     projectFrozenReview(review)
   );
   return (
-    `Semantic gate '${gateId}' needs gate_verdict.per_gate[${index}].evaluation; ${carrier}. ` +
+    `Semantic gate '${gateId}' needs gate_verdict.per_gate[${index}].evaluation; ` +
+    'the submitted verdict carries none. ' +
     `No attempt was used. Resubmit:\n\n\`\`\`\ngate_verdict=${template}\n\`\`\``
   );
 }

@@ -53,7 +53,7 @@ from session_state import (
 )
 
 
-def run_post_prompt_engine(monkeypatch, capsys, *, session_id, content, tool_input=None):
+def run_post_prompt_engine(monkeypatch, capsys, *, session_id, content, tool_input=None, is_error=None):
     """Simulate a post-prompt-engine.py PostToolUse invocation."""
     payload = {
         "session_id": session_id,
@@ -61,6 +61,8 @@ def run_post_prompt_engine(monkeypatch, capsys, *, session_id, content, tool_inp
         "tool_input": tool_input or {},
         "tool_response": {"content": content},
     }
+    if is_error is not None:
+        payload["tool_response"]["isError"] = is_error
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
     with pytest.raises(SystemExit) as excinfo:
         post_prompt_engine.main()
@@ -303,3 +305,56 @@ class TestSubagentPayloadIsNotTheDelegator:
         code, out = self._run(monkeypatch, capsys, payload)
         assert (code, out) == (0, {})
         assert load_session_state(sid).get("pending_delegation") is True
+
+
+class TestQualifiedRunBinding:
+    TOKEN = "chain-Team-Legacy/Child_Name/9deep#01"
+
+    def test_claim_return_and_delegation_preserve_exact_text_id(self, patch_workspace, monkeypatch, capsys):
+        content = (
+            f"Progress 1/3\nHANDOFF RESULT chain={self.TOKEN} node=work attempt=1 claim=receipt\n"
+            'subagent_type: "general-purpose"\nHandoff via Task tool'
+        )
+        code, out = run_post_prompt_engine(
+            monkeypatch,
+            capsys,
+            session_id="qualified-claim",
+            content=content,
+            is_error=False,
+        )
+        state = load_session_state("qualified-claim")
+        assert code == 0 and state["chain_id"] == self.TOKEN
+        assert state["pending_delegation"] is True
+        assert self.TOKEN in out["hookSpecificOutput"]["additionalContext"]
+
+    @pytest.mark.parametrize("terminal", ["abort", "complete"])
+    @pytest.mark.parametrize("binding", ["exact", "wrong-request", "wrong-response", "refusal"])
+    def test_truthful_terminal_clearing_keeps_exact_run_binding(
+        self,
+        patch_workspace,
+        monkeypatch,
+        capsys,
+        terminal,
+        binding,
+    ):
+        sid = f"qualified-{terminal}-{binding}"
+        tracked = {"chain_id": self.TOKEN, "current_step": 1, "total_steps": 3, "pending_gate": "review"}
+        save_session_state(sid, tracked)
+        other = "chain-Team-Legacy/Child_Name/9deep#2"
+        request = other if binding == "wrong-request" else self.TOKEN
+        response = other if binding == "wrong-response" else self.TOKEN
+        content = (
+            f"🛑 **Chain Cancelled**: `{response}`\n"
+            if terminal == "abort"
+            else f"Chain complete (3/3)\nChain: `{response}`\n"
+        )
+        code, _ = run_post_prompt_engine(
+            monkeypatch,
+            capsys,
+            session_id=sid,
+            content=content,
+            tool_input={"chain_id": request, **({"gate_action": "abort"} if terminal == "abort" else {})},
+            is_error=binding == "refusal",
+        )
+        assert code == 0
+        assert load_session_state(sid) == (None if binding == "exact" else tracked)

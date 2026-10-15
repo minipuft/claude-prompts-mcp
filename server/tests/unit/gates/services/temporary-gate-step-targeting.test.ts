@@ -211,7 +211,7 @@ const selectStepsFor = async (
 
 describe('temporary gate step targeting', () => {
   test('the schema accepts target_step_id beside target_step_number', () => {
-    const schema = buildPromptEngineSchema(() => true, 'verdict must be valid');
+    const schema = buildPromptEngineSchema();
 
     // Typed `unknown` because the returned schema is a union of reachable shapes — its
     // inferred type is the narrow (gate-system-disabled) member, which has no `gates` key.
@@ -228,7 +228,7 @@ describe('temporary gate step targeting', () => {
   });
 
   test('the schema rejects a node id that is not kebab-case or nK', () => {
-    const schema = buildPromptEngineSchema(() => true, 'verdict must be valid');
+    const schema = buildPromptEngineSchema();
 
     expect(() =>
       schema.parse({

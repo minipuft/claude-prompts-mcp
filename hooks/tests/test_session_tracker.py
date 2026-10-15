@@ -1,17 +1,11 @@
 """
-Tests for hooks/lib/session_tracker.py
-
-Covers:
-- SessionTracker creation and state initialization
-- Iteration recording
-- File change tracking
-- Story generation
-- Diff summary
-- Session clearing and persistence
+Session iteration tracking, persistence and chain reminder parameter guidance.
 """
 
 import sys
 from pathlib import Path
+
+import pytest
 
 HOOKS_LIB = Path(__file__).parent.parent / "lib"
 sys.path.insert(0, str(HOOKS_LIB))
@@ -199,3 +193,23 @@ class TestClearRalphSession:
         from hook_state_store import TABLE_RALPH_SESSION_STATE, load_state
 
         assert load_state(TABLE_RALPH_SESSION_STATE, "clear-test") is None
+
+
+class TestVerdictParameterGuidance:
+    @pytest.mark.parametrize("mode", ["full", "inline"])
+    def test_reminder_requests_an_object_verdict(self, mode):
+        from session_state import format_chain_reminder
+
+        message = format_chain_reminder(
+            {
+                "chain_id": "chain-demo#1",
+                "current_step": 1,
+                "total_steps": 2,
+                "pending_gate": "code-quality",
+            },
+            mode,
+        )
+        assert 'gate_verdict={"overall":"PASS","rationale":"<reason>"}' in message
+        assert "Use FAIL" in message
+        assert "returned server template for per_gate, reminders and semantic evaluation" in message
+        assert "GATE_REVIEW" not in message

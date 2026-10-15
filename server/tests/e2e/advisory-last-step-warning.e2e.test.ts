@@ -132,7 +132,7 @@ describe('Streamable HTTP: an advisory FAIL on the last step warns in the comple
     const call = await startChain();
     const reply = await call({
       user_response: 'B out',
-      gate_verdict: `GATE_REVIEW: FAIL - ${RATIONALE}`,
+      gate_verdict: { overall: 'FAIL', rationale: `${RATIONALE}` },
     });
     completes(reply);
     expect(reply.text).toContain('**Advisory Gate Warnings:**');
@@ -142,7 +142,10 @@ describe('Streamable HTTP: an advisory FAIL on the last step warns in the comple
 
   test('control: a PASS on the last step completes the run with no warning', async () => {
     const call = await startChain();
-    const reply = await call({ user_response: 'B out', gate_verdict: 'GATE_REVIEW: PASS - ok' });
+    const reply = await call({
+      user_response: 'B out',
+      gate_verdict: { overall: 'PASS', rationale: 'ok' },
+    });
     completes(reply);
     expect(reply.text).not.toContain('Advisory Gate Warnings');
     expect(reply.text).not.toContain(WARNING);

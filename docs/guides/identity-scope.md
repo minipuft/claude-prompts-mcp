@@ -297,6 +297,14 @@ In practice:
 | Resource index     | No                 | Shared file-based resources (prompts, gates, styles)                                           |
 | Config history     | By FILE, not scope | See "Config Version History Is Scoped By the File"                                             |
 
+Resource files use launch-time paths, independently of `workspaceId`. `MCP_RESOURCES_PATH`
+selects an existing resource base. Each type uses `<base>/<type>` when present, otherwise an
+existing legacy `<workspace>/<type>` directory, otherwise `<base>/<type>` for its first write.
+The type directory need not exist yet; resolving it creates nothing. This also applies when the
+workspace is the package root. Without an explicit base, a custom `MCP_WORKSPACE` or `--workspace`
+uses `<workspace>/resources/<type>` with the same legacy-directory preference. Bundled resources
+and workspace overlays still contribute to reads. A missing explicit base refuses startup.
+
 ## Troubleshooting
 
 **Issue:** All state lands in `default` scope despite passing `--workspace-id`

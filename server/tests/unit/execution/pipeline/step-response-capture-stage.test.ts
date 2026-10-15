@@ -227,7 +227,7 @@ describe('StepResponseCaptureStage', () => {
 
     const context = new ExecutionContext({
       command: '>>chain',
-      gate_verdict: 'GATE_REVIEW: PASS - confirmed upstream',
+      gate_verdict: { overall: 'PASS', rationale: 'confirmed upstream' },
     });
     context.sessionContext = {
       sessionId: 'sess-1',
@@ -657,7 +657,7 @@ describe('StepResponseCaptureStage — adaptive mutation (P4)', () => {
     const stage = createStage(harness.manager);
     const retry = new ExecutionContext({
       command: '>>chain',
-      gate_verdict: 'GATE_REVIEW: FAIL - try again',
+      gate_verdict: { overall: 'FAIL', rationale: 'try again' },
     });
     retry.sessionContext = {
       sessionId: 'sess-1',

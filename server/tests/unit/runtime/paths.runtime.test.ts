@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   writeFileSync,
@@ -415,7 +416,7 @@ describe('PathResolver.assertUsablePathSettings refuses an unusable path setting
 });
 
 /**
- * A custom workspace is where new resources are written, even before it holds any.
+ * A custom workspace or explicit resource base receives new resources before type dirs exist.
  *
  * `resolveResourceSubdir` used to return the first directory that EXISTED, so an empty workspace
  * resolved every type to the package tree. That is the Claude Code plugin's data directory on its
@@ -496,15 +497,58 @@ describe('PathResolver resolves resource directories inside a custom workspace',
     ]);
   });
 
-  it('leaves an explicit MCP_RESOURCES_PATH its meaning: its own directory, else the package', () => {
+  it.each(['environment', 'cli', 'package'] as const)(
+    'keeps first-write getters inside an explicit resource base with a %s workspace',
+    (workspaceSource) => {
+      const resources = path.join(dir, 'desired-resource-boundary');
+      mkdirSync(resources);
+      process.env['MCP_RESOURCES_PATH'] = resources;
+      if (workspaceSource === 'environment') process.env['MCP_WORKSPACE'] = workspace;
+      const cli = workspaceSource === 'cli' ? { workspace } : {};
+      const resolver = new PathResolver({ cli, packageRoot });
+      expect(() => resolver.assertUsablePathSettings()).not.toThrow();
+      expect(resolver.getResourcesPath()).toBe(resources);
+      expect(directoriesOf(resolver)).toEqual(expectedUnder(resources));
+      expect(readdirSync(resources)).toEqual([]);
+
+      for (const type of TYPES) {
+        const writeRoot = directoriesOf(resolver)[type];
+        const marker = `${type}-desired-root`;
+        mkdirSync(writeRoot);
+        writeFileSync(path.join(writeRoot, '.write-root-marker'), marker);
+        const readRoot = directoriesOf(new PathResolver({ cli, packageRoot }))[type];
+        expect(readFileSync(path.join(readRoot, '.write-root-marker'), 'utf8')).toBe(marker);
+        expect(readFileSync(path.join(resources, type, '.write-root-marker'), 'utf8')).toBe(marker);
+        expect(existsSync(path.join(packageRoot, 'resources', type, '.write-root-marker'))).toBe(
+          false
+        );
+        expect(resolver.getBundledResourceDir(type)).toBe(
+          path.join(packageRoot, 'resources', type)
+        );
+        expect(resolver.getOverlayResourceDirs(type, writeRoot)).toEqual([]);
+      }
+      expect(readdirSync(workspace)).toEqual([]);
+    }
+  );
+
+  it('retains existing explicit and legacy type directories and workspace overlays', () => {
     const resources = path.join(dir, 'personal');
     mkdirSync(path.join(resources, 'prompts'), { recursive: true });
+    mkdirSync(path.join(workspace, 'gates'));
+    mkdirSync(path.join(resources, 'frameworks'));
+    mkdirSync(path.join(workspace, 'frameworks'));
+    mkdirSync(path.join(workspace, 'resources', 'frameworks'), { recursive: true });
     process.env['MCP_WORKSPACE'] = workspace;
     process.env['MCP_RESOURCES_PATH'] = resources;
     const resolver = new PathResolver({ cli: {}, packageRoot });
 
     expect(resolver.getPromptsPath()).toBe(path.join(resources, 'prompts'));
-    expect(resolver.getGatesPath()).toBe(path.join(packageRoot, 'resources', 'gates'));
+    expect(resolver.getGatesPath()).toBe(path.join(workspace, 'gates'));
+    expect(resolver.getFrameworksPath()).toBe(path.join(resources, 'frameworks'));
+    expect(resolver.getOverlayResourceDirs('frameworks', resolver.getFrameworksPath())).toEqual([
+      path.join(workspace, 'frameworks'),
+      path.join(workspace, 'resources', 'frameworks'),
+    ]);
   });
 
   it('leaves a server whose workspace is the package root on the package tree', () => {

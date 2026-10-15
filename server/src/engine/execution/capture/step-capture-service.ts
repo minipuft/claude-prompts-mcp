@@ -73,6 +73,27 @@ function resolveCaptureTarget(
   return nodeId === null ? undefined : { ordinal, nodeId };
 }
 
+/** A released hold advances only past its completed real capture, with its output still retained. */
+export function resolveCompletedCaptureAdvance(
+  session: ChainSession,
+  nodeId: string,
+  results: unknown
+): DeferredAdvance | undefined {
+  const completed = session.state.stepStates?.get(nodeId);
+  const output =
+    results !== null && typeof results === 'object'
+      ? (results as Record<string, unknown>)[String(ordinalOf(session.state.nodes, nodeId))]
+      : undefined;
+  return session.state.currentNodeId === nodeId &&
+    completed?.state === 'completed' &&
+    completed.isPlaceholder === false &&
+    typeof output === 'string' &&
+    output.length > 0 &&
+    reviewHolding(session, nodeId) === undefined
+    ? { sessionId: session.sessionId, nodeId, reason: 'captured' }
+    : undefined;
+}
+
 /**
  * Input from verdict processing that affects step capture behavior.
  */
@@ -427,7 +448,7 @@ export class StepCaptureService {
    * `gateVerdicts` binds here (P4.76). Measured against a hermetic server on 2026-09-20, not
    * reasoned about: of the five `executionRecordStore.append()` sites, this is the one that
    * runs when the client answers the step and submits the verdict in one call — the shape the
-   * server's own footer advertises (`user_response="..." gate_verdict="..."`). Stage 16 runs
+   * server's own footer advertises (`user_response="..." gate_verdict={...}`). Stage 16 runs
    * `processPendingReviewVerdict` before `captureStep`, so the verdicts are on request state by
    * the time this reads them.
    *
@@ -725,7 +746,7 @@ export class StepCaptureService {
     const updatedSession = this.chainSessionStore.getSession(sessionId, scopeOptions);
     if (updatedSession !== undefined) {
       context.sessionContext = {
-        ...sessionContext,
+        ...(context.sessionContext ?? sessionContext),
         currentStep: currentOrdinal(updatedSession.state.nodes, updatedSession.state.currentNodeId),
         totalSteps: totalOf(updatedSession.state.nodes),
         currentNodeId: updatedSession.state.currentNodeId,

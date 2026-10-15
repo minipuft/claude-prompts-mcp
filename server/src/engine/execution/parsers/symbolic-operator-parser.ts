@@ -4,6 +4,7 @@ import {
   stripStyleOperators,
   findFrameworkOperatorOutsideQuotes,
   isPositionInsideQuotes,
+  readPromptSelector,
 } from './parser-utils.js';
 import {
   type ChainOperator,
@@ -85,6 +86,7 @@ export function formatShellVerifyToken(shellVerify: ShellVerifyGate): string {
  */
 export function rejectQuoteInGateText(command: string): void {
   for (const match of command.matchAll(OPERATOR_PATTERNS.gate.pattern)) {
+    if (isPositionInsideQuotes(command, match.index)) continue;
     const text = match[3] ?? match[4] ?? match[5] ?? '';
     const end = match.index + match[0].length;
     const next = command.charAt(end);
@@ -134,6 +136,16 @@ export function rejectEmptyGateText(command: string): void {
           );
     throw new ValidationError(`[gate-criteria-invalid] ${detail}`);
   }
+}
+
+function advanceQuoteState(
+  quoteChar: string,
+  char: string | undefined,
+  previousChar: string | undefined
+): string {
+  if ((char !== '"' && char !== "'") || previousChar === '\\') return quoteChar;
+  if (quoteChar === '') return char;
+  return char === quoteChar ? '' : quoteChar;
 }
 
 /**
@@ -203,9 +215,11 @@ export class SymbolicCommandParser {
     expandedCommand: string;
     repetitionOp: RepetitionOperator | null;
   } {
-    const match = command.match(this.OPERATOR_REGEX.repetition);
+    const match = [...command.matchAll(new RegExp(this.OPERATOR_REGEX.repetition, 'g'))].find(
+      (candidate) => !isPositionInsideQuotes(command, candidate.index)
+    );
     const countStr = match?.[1];
-    if (match === null || countStr === undefined) {
+    if (match === undefined || countStr === undefined) {
       return { expandedCommand: command, repetitionOp: null };
     }
 
@@ -217,7 +231,7 @@ export class SymbolicCommandParser {
     this.logger.debug(`[expandRepetition] Detected * ${count} in: ${command}`);
 
     // Find the segment to repeat (everything before * N, after last -->)
-    const matchIndex = match.index ?? 0;
+    const matchIndex = match.index;
     const beforeRepetition = command.slice(0, matchIndex);
     const afterRepetition = command.slice(matchIndex + match[0].length);
 
@@ -292,20 +306,16 @@ export class SymbolicCommandParser {
   private splitByChainDelimiter(command: string): string[] {
     const segments: string[] = [];
     let current = '';
-    let inQuotes = false;
+    let quoteChar = '';
 
     for (let i = 0; i < command.length; i++) {
       const char = command[i];
 
       // Toggle quote state
-      if (char === '"' && (i === 0 || command[i - 1] !== '\\')) {
-        inQuotes = !inQuotes;
-        current += char;
-        continue;
-      }
+      quoteChar = advanceQuoteState(quoteChar, char, command[i - 1]);
 
       // Check for --> outside quotes
-      if (!inQuotes && command.slice(i, i + 3) === '-->') {
+      if (quoteChar === '' && command.slice(i, i + 3) === '-->') {
         if (current.trim()) {
           segments.push(current.trim());
         }
@@ -392,7 +402,9 @@ export class SymbolicCommandParser {
       }
     }
 
-    const styleMatch = command.match(this.OPERATOR_REGEX.style);
+    const styleMatch = [...command.matchAll(new RegExp(this.OPERATOR_REGEX.style, 'g'))].find(
+      (match) => !isPositionInsideQuotes(command, match.index)
+    );
     if (styleMatch) {
       const matchedId = styleMatch[1];
       if (matchedId) {
@@ -406,18 +418,21 @@ export class SymbolicCommandParser {
       }
     }
 
-    const chainMatches = command.match(this.OPERATOR_REGEX.chain);
-    const delegationMatches = command.match(/==>/g);
-    if (
-      (chainMatches != null && chainMatches.length > 0) ||
-      (delegationMatches != null && delegationMatches.length > 0)
-    ) {
+    const chainMatches = [...command.matchAll(this.OPERATOR_REGEX.chain)].filter(
+      (match) => !isPositionInsideQuotes(command, match.index)
+    );
+    const delegationMatches = [...command.matchAll(/==>/g)].filter(
+      (match) => !isPositionInsideQuotes(command, match.index)
+    );
+    if (chainMatches.length > 0 || delegationMatches.length > 0) {
       operatorTypes.push('chain');
       operators.push(this.parseChainOperator(command));
     }
 
     // Collect ALL gate matches using matchAll() for multiple :: operators
-    const gateMatches = [...command.matchAll(this.OPERATOR_REGEX.gate)];
+    const gateMatches = [...command.matchAll(this.OPERATOR_REGEX.gate)].filter(
+      (match) => !isPositionInsideQuotes(command, match.index)
+    );
     if (gateMatches.length > 0) {
       operatorTypes.push('gate');
 
@@ -507,11 +522,7 @@ export class SymbolicCommandParser {
     }
 
     const parallelMatches = command.match(this.OPERATOR_REGEX.parallel);
-    if (
-      parallelMatches &&
-      parallelMatches.length > 0 &&
-      !(chainMatches && chainMatches.length > 0)
-    ) {
+    if (parallelMatches && parallelMatches.length > 0 && chainMatches.length === 0) {
       operatorTypes.push('parallel');
       operators.push(this.parseParallelOperator(command));
     }
@@ -548,7 +559,12 @@ export class SymbolicCommandParser {
 
   private parseChainOperator(command: string): ChainOperator {
     // Remove framework operator prefix if present
-    let cleanCommand = command.replace(this.OPERATOR_REGEX.framework, '');
+    const framework = findFrameworkOperatorOutsideQuotes(command);
+    let cleanCommand =
+      framework === null
+        ? command
+        : command.slice(0, framework.position) +
+          command.slice(framework.position + framework.fullMatch.length);
     cleanCommand = stripStyleOperators(cleanCommand);
     // NOTE: Only `::`-form gate tokens are stripped, and only per-segment (see
     // extractInlineGateTokens below). The deprecated `=` form is deliberately left in the
@@ -583,7 +599,7 @@ export class SymbolicCommandParser {
         namedOccurrences
       );
 
-      const stepMatch = gateFreeStep.match(/^(?:>>)?([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/);
+      const stepMatch = readPromptSelector(gateFreeStep);
       if (!stepMatch) {
         this.logger.error(
           `[parseChainOperator] Failed to match step: "${result.text}" (cleaned: "${gateFreeStep}")`
@@ -591,18 +607,15 @@ export class SymbolicCommandParser {
         throw new ValidationError(`Invalid chain step format: ${result.text}`);
       }
 
-      const promptId = stepMatch[1];
-      if (!promptId) {
-        throw new ValidationError(`Invalid chain step format: missing prompt ID in ${result.text}`);
-      }
+      const { promptId, remainder } = stepMatch;
 
       this.logger.debug(
-        `[parseChainOperator] Step ${index + 1}: promptId="${promptId}", args="${stepMatch[2]?.trim() ?? ''}"${result.delegated ? ' [DELEGATED]' : ''}`
+        `[parseChainOperator] Step ${index + 1}: promptId="${promptId}", args="${remainder.trim()}"${result.delegated ? ' [DELEGATED]' : ''}`
       );
 
       return {
         promptId,
-        args: stepMatch[2]?.trim() ?? '',
+        args: remainder.trim(),
         position: index,
         variableName: `step${index + 1}_result`,
         ...(result.delegated === true ? { delegated: true } : {}),
@@ -731,7 +744,7 @@ export class SymbolicCommandParser {
   private splitChainSteps(command: string): { text: string; delegated: boolean }[] {
     const steps: { text: string; delegated: boolean }[] = [];
     let current = '';
-    let inQuotes = false;
+    let quoteChar = '';
     let nextDelegated = false;
     let i = 0;
 
@@ -739,15 +752,10 @@ export class SymbolicCommandParser {
       const char = command[i];
 
       // Toggle quote state (handle escaped quotes)
-      if (char === '"' && (i === 0 || command[i - 1] !== '\\')) {
-        inQuotes = !inQuotes;
-        current += char;
-        i++;
-        continue;
-      }
+      quoteChar = advanceQuoteState(quoteChar, char, command[i - 1]);
 
       // Check for chain delimiters outside quotes
-      if (!inQuotes) {
+      if (quoteChar === '') {
         const delimiter = this.detectChainDelimiter(command, i);
         if (delimiter != null) {
           if (current.trim().length > 0) {
@@ -798,21 +806,16 @@ export class SymbolicCommandParser {
     const prompts = promptStrings.map((promptStr, index) => {
       // Defense-in-depth: Handle optional >> prefix in parallel prompts
       // Centralized normalization strips "+ >>" patterns, but this handles edge cases
-      const promptMatch = promptStr.match(/^(?:>>)?\s*([A-Za-z0-9_-]+)(?:\s+([\s\S]*))?$/);
+      const promptMatch = readPromptSelector(promptStr);
       if (!promptMatch) {
         throw new ValidationError(`Invalid parallel prompt format: ${promptStr}`);
       }
 
-      const promptId = promptMatch[1];
-      if (!promptId) {
-        throw new ValidationError(
-          `Invalid parallel prompt format: missing prompt ID in ${promptStr}`
-        );
-      }
+      const { promptId, remainder } = promptMatch;
 
       return {
         promptId,
-        args: promptMatch[2]?.trim() ?? '',
+        args: remainder.trim(),
         position: index,
       };
     });

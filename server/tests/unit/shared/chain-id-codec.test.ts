@@ -88,6 +88,61 @@ describe('chain-id-codec', () => {
     });
   });
 
+  describe('accepted full prompt references', () => {
+    it.each([
+      'analysis',
+      'implementation_plan/plan_table',
+      'team/phase/plan_table',
+      'Legacy-Prompt',
+      'Team-Legacy/Child_Name/9deep',
+      '9legacy',
+      'a'.repeat(1024) + '/child',
+    ])('preserves the accepted reference %s through run formatting', (promptId) => {
+      const base = `chain-${promptId}`;
+      expect(isChainId(base)).toBe(true);
+      const run = formatChainId(base, 7);
+      expect(run).toBe(`${base}#7`);
+      expect(isChainId(run)).toBe(true);
+      expect(stripRunNumber(run)).toBe(base);
+      expect(parseRunNumber(run)).toBe(7);
+    });
+
+    it.each(['0', '01'])('accepts the exact numeric suffix #%s without rewriting it', (digits) => {
+      const raw = `chain-Team/9child#${digits}`;
+      expect(isChainId(raw)).toBe(true);
+      expect(CHAIN_ID_PATTERN.exec(raw)?.[0]).toBe(raw);
+      expect(parseRunNumber(raw)).toBe(Number(digits));
+      expect(stripRunNumber(raw)).toBe('chain-Team/9child');
+    });
+
+    it.each([
+      'chain-',
+      'chain-/child#1',
+      'chain-parent/#1',
+      'chain-parent//child#1',
+      'chain-parent/./child#1',
+      'chain-parent/../child#1',
+      'chain-parent.child#1',
+      'chain-parent/%63hild#1',
+      'chain-parent\\child#1',
+      'chain-parent/child name#1',
+      'chain-parent/child\n#1',
+      'chain-parent/child#1\n',
+      'chain-parent/child#1\r\n',
+      'chain-parent/child#',
+      'chain-parent/child#latest',
+      'chain-parent/child#-1',
+      'chain-parent/child#1.0',
+      'chain-parent/child#1#2',
+      'chain-parent/child#1 extra',
+      'chain-parent/child#1/extra',
+      'prefix chain-parent/child#1',
+    ])('rejects the complete malformed token %j without accepting a prefix', (raw) => {
+      expect(isChainId(raw)).toBe(false);
+      expect(CHAIN_ID_PATTERN.exec(raw)).toBeNull();
+    });
+  });
+
   describe('isChainId / CHAIN_ID_PATTERN', () => {
     it('accepts a base id with or without a run suffix', () => {
       expect(isChainId('chain-analysis-flow')).toBe(true);

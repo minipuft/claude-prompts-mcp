@@ -30,7 +30,6 @@ export type prompt_engineParamName =
   | 'gate_action'
   | 'gates'
   | 'force_restart'
-  | 'cancel'
   | 'handoff'
   | 'claim_token'
   | 'options'
@@ -82,20 +81,19 @@ export const prompt_engineParameters: ToolParameter[] = [
   },
   {
     name: 'gate_verdict',
-    type: 'union[object|string]',
+    type: 'object',
     description:
-      "Review object {overall:'PASS'|'FAIL',rationale,per_gate?:[{index,passed,rationale,evaluation?}],reminders?} or legacy string. Check/evaluation entries are per_gate; reminders attest reminder-tier gates. Required semantic_evaluation needs evaluation with server-issued binding, typed observations and captured evidence; report pins never supply authority. Failed attributable reports derive FAIL despite client PASS; missing, stale or misaddressed reports refuse without charge. A string verdict never satisfies semantic_evaluation. Evidence uses UTF-16 spans and captured UTF-8 hashBytes digest. Requested evaluation is separate from optional client-reported reviewer; host/native identity remains unknown. Legacy forms: 'GATE_REVIEW: PASS|FAIL - reason', 'GATE PASS - reason', 'GATE_REVIEW: FAIL: reason', 'PASS - reason'.",
+      "Review object {overall:'PASS'|'FAIL',rationale,per_gate?:[{index,passed,rationale,evaluation?}],reminders?}; a string is refused. Check/evaluation entries are per_gate; reminders attest reminder-tier gates. Required semantic_evaluation needs evaluation with server-issued binding, typed observations and captured evidence; report pins never supply authority. Failed attributable reports derive FAIL despite client PASS; missing, stale or misaddressed reports refuse without charge. Evidence uses UTF-16 spans and captured UTF-8 hashBytes digest. Requested evaluation is separate from optional client-reported reviewer; host/native identity remains unknown.",
     status: 'working',
     compatibility: 'canonical',
     notes: [
       'State-conditional: advertised only while the gate system is enabled. Part of the declared union surface regardless — see CLAUDE.md §Public API Contract.',
       'Overall and per_gate rationales are nonempty, single-line and trimmed. Report observation rationales are strings and may span lines; they are not rendered into the verdict rationale.',
-      'Reports live only at per_gate[i].evaluation within the existing gate_verdict object/string union. Do not encode reports as JSON in rationale or introduce a separate findings parameter. Every report, binding, observation, evidence reference and reviewer object rejects undeclared keys.',
+      'Reports live only at per_gate[i].evaluation within the gate_verdict object. Do not encode reports as JSON in rationale or introduce a separate findings parameter. Every report, binding, observation, evidence reference and reviewer object rejects undeclared keys.',
       'binding requires nonempty string gate_id, node_id, attempt_id, definition_digest and target_digest. Each observation requires nonempty criterion_id, a declared state, an evidence array and string rationale; optional value is boolean, string or finite number. Evidence target_digest is nonempty; start/end are integers >=0, quote is optional string. Identity strings are retained verbatim; whitespace-only identities are rejected.',
       'The existing acceptance kernel runs against server-issued frozen definitions/node/attempt and independently captured target. target_digest is hashBytes(actual captured UTF-8 content), sha256:<hex>; evidence [start,end) uses JavaScript UTF-16 offsets. It checks binding, bounds, digest, optional quote, evidence requirements and predicates. Shape validation alone is not report acceptance or model accuracy.',
       'reviewer is optional; absent means unknown. Submitted provenance is only client_reported or unknown, never host_verified. Optional provider/model/revision must be nonempty strings; context is self, separate_pass, isolated_judge or unknown. These are client identity claims, not acceptance authority, and are separate from requested routing metadata.',
       "Capture-alone first; prefer report-only. If resending the same node's body with a verdict, its whole trim() bytes must equal the captured target. Different/defined-empty canonical work refuses before writes. Renewing FAIL consumes the old same-node body, preserves old ledger pins and requires separate replacement capture; exhausted FAIL does not renew until retry. Detached routing-only HANDOFF metadata is exempt only on the actual addressed detached verdict route. Artifact declarations are valid, but runtime artifact capture is unavailable.",
-      'The legacy string branch and the four non-primary verdict patterns are retired once no client has submitted a string verdict for one release cycle, measured via the `source` field on ParsedGateVerdict.',
     ],
     resolvesPendingRun: true,
   },
@@ -103,11 +101,11 @@ export const prompt_engineParameters: ToolParameter[] = [
     name: 'gate_action',
     type: 'enum',
     description:
-      "Your move on a run that is waiting for one. THREE ANSWER A FAILED GATE after the retry limit is exhausted: 'retry' resets attempts (semantic retry renews server attempt and requires separate replacement capture), 'skip' records operational BYPASS and continues without an evaluated PASS/FAIL, 'abort' stops chain execution entirely. TWO ANSWER A PAUSED RUN holding a blocking-unknown interrupt (reserved review id '__unknown_interrupt__', raised only when the run declared budget.pauseOnBlocking): 'resume' clears the pause and issues the investigation step as written, 'accept_alternative' replaces the remainder of the run with the nodes supplied in 'remainder' on the SAME call. 'abort' and cancel:true exit either state.",
+      "Run action. 'abort' stops the existing run named by 'chain_id' in any nonterminal state, including active runs, blocking-unknown pauses, ordinary reviews and detached holds. No command, review, retry exhaustion, node selection, trailer or report is required; it starts no work and consumes no report. State and artifacts are retained; repeated abort of an already-cancelled run succeeds. Completed, failed, missing or out-of-scope runs return a non-applied refusal. AFTER A FAILED GATE exhausts its retry limit: 'retry' resets attempts (semantic retry renews the server attempt and requires separate replacement capture), 'skip' records operational BYPASS and continues without an evaluated PASS/FAIL. ON A BLOCKING-UNKNOWN INTERRUPT ('__unknown_interrupt__', raised only with budget.pauseOnBlocking): 'resume' clears the pause and issues the investigation step as written, 'accept_alternative' replaces the remaining run with 'remainder' on the SAME call (refused without one).",
     status: 'working',
     compatibility: 'canonical',
     notes: [
-      'State-conditional: advertised only while the gate system is enabled. Part of the declared union surface regardless — see CLAUDE.md §Public API Contract.',
+      "Core parameter: advertised independently of gate-system enablement. With gates disabled, 'retry' and 'skip' receive a named refusal; 'abort', 'resume' and 'accept_alternative' remain available.",
       "'accept_alternative' without a 'remainder' in the same call is refused by name — it is the acceptance of an alternative, not a request for one.",
       "'resume' and 'accept_alternative' are meaningful only while '__unknown_interrupt__' is the pending review; against a failed-gate review they are refused the same way 'retry' is against an interrupt.",
     ],
@@ -137,18 +135,9 @@ export const prompt_engineParameters: ToolParameter[] = [
     name: 'force_restart',
     type: 'boolean',
     description:
-      "Start a new execution instead of resuming one. Cannot be combined with 'chain_id' (that pair is rejected). Redundant with a plain 'command', which already starts a new chain; it matters only when the command text itself carries a chain id. Distinct from 'cancel': force_restart abandons the current run and immediately begins a new one, while cancel ends it and starts nothing.",
+      "Start a new execution instead of resuming one. Cannot be combined with 'chain_id' (that pair is rejected). Redundant with a plain 'command', which already starts a new chain; it matters only when the command text itself carries a chain id. Distinct from gate_action:'abort': force_restart abandons the current run and immediately begins a new one, while abort ends it and starts nothing.",
     status: 'working',
     compatibility: 'canonical',
-  },
-  {
-    name: 'cancel',
-    type: 'boolean',
-    description:
-      "Stop the run named by 'chain_id' and block further progression. Requires 'chain_id'; no other parameter is read. Moved here from system_control session cancel because a chain id is held BECAUSE you are running the chain, so ending that run is part of running it — system_control keeps list/inspect/clear, which are keyed on a session_id read from a listing. Cancel retains the session's state and artifacts; remove them with system_control(action:\"session\", operation:\"clear\").",
-    status: 'working',
-    compatibility: 'canonical',
-    resolvesPendingRun: true,
   },
   {
     name: 'handoff',
@@ -199,7 +188,7 @@ export const prompt_engineParameters: ToolParameter[] = [
       "`resolution` is required when type is 'unknown_resolved'; omitted for 'unknown_discovered'.",
       "A blocking `unknown_discovered` (with or without `target_step_id`) inserts one `investigate_unknown` step immediately after the current node; `target_step_id` instead governs the skip side — a later `unknown_resolved` with resolution 'irrelevant' skips that ledger entry's target once it is strictly ahead of the current step. Capped at 1 insertion per unknown id and 3 per run, and one insertion per call: when one call declares several blocking unknowns, only the first gets a step and the interrupt names the rest as open with no investigation step (`uninvestigated_unknown_ids`). The server never infers a target and only ever mutates in reaction to an observation — enforcement stays advisory.",
       "A blocking `unknown_discovered` also raises a CHAIN INTERRUPT: the response carries `structuredContent.chain_interrupt` — `{kind:'chain_interrupt', reason:'blocking_unknown', unknown:{id,statement}, open_blocking_unknowns:[{id,statement}…], uninvestigated_unknown_ids:[…], affected_step_ids:[…], remaining_nodes:[…], paused:<bool>, resume:{chain_id, verbs:[…]}}`. `affected_step_ids` is derived from DECLARED `target_step_id` links only; the server never scans text for affected steps.",
-      "By default the interrupt rides on the inserted investigation step and the run continues — answer that step to resume. When the run declared `budget.pauseOnBlocking: true` the run instead PAUSES on a synthetic review with the reserved id '__unknown_interrupt__', the response is the interrupt alone, and it is resolved with `gate_action: 'resume' | 'accept_alternative'` (or `abort` / `cancel`). Either way a `remainder` may be submitted to replace the rest of the run.",
+      "By default the interrupt rides on the inserted investigation step and the run continues — answer that step to resume. When the run declared `budget.pauseOnBlocking: true` the run instead PAUSES on a synthetic review with the reserved id '__unknown_interrupt__', the response is the interrupt alone, and it is resolved with `gate_action: 'resume' | 'accept_alternative'` (or run-level `abort`). Either way a `remainder` may be submitted to replace the rest of the run.",
     ],
   },
   {

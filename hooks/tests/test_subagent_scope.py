@@ -55,7 +55,7 @@ def _post(session_id, content, tool_input, *, agent_id):
         tool_input,
         agent_id=agent_id,
         event="PostToolUse",
-        tool_response={"content": [{"type": "text", "text": content}]},
+        tool_response={"content": [{"type": "text", "text": content}], "isError": False},
     )
 
 
@@ -111,9 +111,9 @@ class TestPostPromptEngineSubagentWritesNothing:
         ("content", "tool_input"),
         [
             ("Chain complete (3/3) chain-worker#1", {"chain_id": "chain-worker#1"}),
-            ("Run cancelled.", {"chain_id": "chain-worker#1", "cancel": True}),
+            ("🛑 **Chain Cancelled**: `chain-worker#1`", {"chain_id": "chain-worker#1", "gate_action": "abort"}),
         ],
-        ids=["completion-marker", "cancel"],
+        ids=["completion-marker", "abort"],
     )
     def test_subagent_clearing_reply_leaves_the_parent_row(
         self, patch_workspace, monkeypatch, capsys, content, tool_input
@@ -128,7 +128,15 @@ class TestPostPromptEngineSubagentWritesNothing:
         assert (code, out) == (0, "")
         assert load_session_state(sid) == before
 
-    def test_control_the_parent_clearing_reply_clears(self, patch_workspace, monkeypatch, capsys):
+    @pytest.mark.parametrize(
+        ("content", "tool_input"),
+        [
+            ("Chain complete (3/3) chain-parent#1", {"chain_id": "chain-parent#1"}),
+            ("🛑 **Chain Cancelled**: `chain-parent#1`", {"chain_id": "chain-parent#1", "gate_action": "abort"}),
+        ],
+        ids=["completion-marker", "abort"],
+    )
+    def test_control_the_parent_clearing_reply_clears(self, patch_workspace, monkeypatch, capsys, content, tool_input):
         """Positive control for the absence above: the same reply on the parent's call clears."""
         sid = "p642-parent-clear"
         _arm_parent(monkeypatch, capsys, sid)
@@ -136,7 +144,7 @@ class TestPostPromptEngineSubagentWritesNothing:
             post_prompt_engine,
             monkeypatch,
             capsys,
-            _post(sid, "Chain complete (3/3) chain-parent#1", {"chain_id": "chain-parent#1"}, agent_id=None),
+            _post(sid, content, tool_input, agent_id=None),
         )
         assert load_session_state(sid) is None
 
@@ -182,21 +190,20 @@ class TestGateEnforceSubagentIsNotHeldByTheParentGate:
     def test_control_the_parent_resume_with_a_verdict_is_allowed(self, patch_workspace, monkeypatch, capsys):
         sid = "p643-parent-verdict"
         save_session_state(sid, dict(PARENT_GATE_PENDING))
-        tool_input = {"chain_id": "chain-parent#1", "gate_verdict": "GATE_REVIEW: PASS - criteria met"}
+        tool_input = {"chain_id": "chain-parent#1", "gate_verdict": {"overall": "PASS", "rationale": "criteria met"}}
 
         code, out = _run(gate_enforce, monkeypatch, capsys, _pre(sid, tool_input, agent_id=None))
 
         assert (code, out) == (0, "")
 
-    def test_subagent_fail_verdict_still_gets_the_retry_guidance(self, patch_workspace, monkeypatch, capsys):
-        """Check 1 reads the caller's OWN verdict, not the parent's state, so it applies to a
-        worker exactly as to its parent."""
+    def test_subagent_structured_fail_verdict_is_allowed(self, patch_workspace, monkeypatch, capsys):
+        """A valid worker FAIL reaches the server's authoritative ledger without applying
+        the parent's pending-review policy."""
         sid = "p643-sub-fail"
-        tool_input = {"chain_id": "chain-worker#1", "gate_verdict": "GATE_REVIEW: FAIL - criteria unmet"}
+        save_session_state(sid, dict(PARENT_GATE_PENDING))
+        tool_input = {"chain_id": "chain-worker#1", "gate_verdict": {"overall": "FAIL", "rationale": "criteria unmet"}}
 
         code, out = _run(gate_enforce, monkeypatch, capsys, _pre(sid, tool_input, agent_id=WORKER_AGENT_ID))
 
-        assert code == 0
-        decision = json.loads(out)["hookSpecificOutput"]
-        assert decision["permissionDecision"] == "deny"
-        assert decision["permissionDecisionReason"].startswith("Gate FAIL: criteria unmet.")
+        assert (code, out) == (0, "")
+        assert load_session_state(sid) == PARENT_GATE_PENDING

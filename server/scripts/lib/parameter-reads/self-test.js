@@ -493,7 +493,7 @@ export class Tools {
       const trimmedCommand = args.command?.trim();
       const normalizedArgs: any = {
         ...(trimmedCommand ? { command: trimmedCommand } : {}),
-        ...(args.cancel !== undefined ? { cancel: args.cancel } : {}),
+        ...(args.gate_action !== undefined ? { gate_action: args.gate_action } : {}),
         ...(args.options != null ? { options: args.options } : {}),
         ${planted ? '' : '...(args.inputs != null ? { inputs: args.inputs } : {}),'}
         ${copiesUndeclared ? '...(args.dry_run ? { dry_run: args.dry_run } : {}),' : ''}
@@ -514,7 +514,7 @@ export class Tools {
     `
 export class Executor {
   async executePromptCommand(args: any, extra: any) {
-    if (args.cancel === true) return this.handleCancel();
+    if (args.gate_action === 'abort') return this.handleAbort();
     const request = {
       ...(args.command && { command: args.command }),
       ...(args.options && { options: args.options }),
@@ -523,7 +523,7 @@ export class Executor {
     } as any;
     return this.pipeline.execute(request, extra);
   }
-  private handleCancel() { return 'cancelled'; }
+  private handleAbort() { return 'aborted'; }
 }
 `
   );
@@ -546,7 +546,9 @@ export class Stage {
       routerPath: '/index.ts',
       commands: [],
       contract: {
-        parameters: ['command', 'cancel', 'options', 'inputs', 'gates'].map((name) => ({ name })),
+        parameters: ['command', 'gate_action', 'options', 'inputs', 'gates'].map((name) => ({
+          name,
+        })),
       },
       pipelinePath: '/engine',
     })
@@ -558,7 +560,7 @@ function selfTestPromptEngine(subject) {
   // Planted: the registration allowlist never copies `inputs` (the hop `remainder`, `handoff` and
   // `claim_token` were each lost at), and `gates` reaches the pipeline request but no stage reads
   // it — the stage reads a `gates` off another object instead. Both are named in string literals.
-  // `cancel` is consumed by the executor itself.
+  // `gate_action:abort` is consumed by the executor itself.
   const planted = promptEngineFixture(subject, { planted: true });
   const expected = ['call/gates', 'call/inputs'];
   if (JSON.stringify(keys(planted)) !== JSON.stringify(expected)) {

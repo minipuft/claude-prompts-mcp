@@ -23,17 +23,6 @@ export class SessionActionHandler extends ActionHandler {
         return await this.clearSession(args);
       case 'inspect':
         return await this.inspectSession(args);
-      case 'cancel':
-        // Relocated to `prompt_engine(chain_id, cancel: true)`. Refused with the replacement
-        // rather than falling into the generic "unknown operation" branch, because a caller
-        // reaching for it here is not confused about the vocabulary — they are using the
-        // interface that used to have it.
-        throw new Error(
-          '`session cancel` moved to prompt_engine: call prompt_engine(chain_id: "<id>", cancel: true). ' +
-            'It is keyed on `chain_id` because a chain id is held BECAUSE you are running the ' +
-            'chain, and stopping that run is part of running it. `list`, `inspect` and `clear` ' +
-            'stay here — they are keyed on a session_id read from a listing.'
-        );
       default:
         throw new Error(
           `Unknown session operation: ${operation}. Valid operations: list, clear, inspect`

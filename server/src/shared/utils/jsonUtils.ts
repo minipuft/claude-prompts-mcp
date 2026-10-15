@@ -146,9 +146,7 @@ export function validateJsonArguments(
       // This is a simple implementation - expand as needed for your use case
       if (typeof value === 'string') {
         // Sanitize string inputs
-        sanitizedArgs[arg.name] = value
-          .replace(/[<>]/g, '') // Remove potentially dangerous HTML characters
-          .trim();
+        sanitizedArgs[arg.name] = value.trim();
       } else if (typeof value === 'number') {
         // Ensure it's a valid number
         sanitizedArgs[arg.name] = isNaN(value) ? 0 : value;
@@ -157,7 +155,7 @@ export function validateJsonArguments(
       } else if (Array.isArray(value)) {
         // For arrays, sanitize each element if they're strings
         sanitizedArgs[arg.name] = value.map((item) =>
-          typeof item === 'string' ? item.replace(/[<>]/g, '').trim() : item
+          typeof item === 'string' ? item.trim() : item
         );
       } else if (value !== null && typeof value === 'object') {
         // For objects, convert to string for simplicity

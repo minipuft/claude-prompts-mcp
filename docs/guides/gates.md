@@ -49,7 +49,7 @@ capture is unavailable; no path lookup or invented binding is performed.
 > it.
 
 > [!NOTE]
-> The former `content_check` and `pattern_check` types have been renamed to `inline_guidance` (commit `380655e4`). Neither had a runtime enforcement path wired — both rendered guidance text and relied on the agent's `GATE_REVIEW` self-report. The rename makes the actual behavior honest. See [Phase Guards Guide](./phase-guards.md) for `framework_compliance` and the schema header in `server/src/engine/gates/core/gate-schema.ts` for the canonical taxonomy.
+> The former `content_check` and `pattern_check` types have been renamed to `inline_guidance` (commit `380655e4`). Neither had a runtime enforcement path wired — both rendered guidance text and relied on the agent's self-reported verdict. The rename makes the actual behavior honest. See [Phase Guards Guide](./phase-guards.md) for `framework_compliance` and the schema header in `server/src/engine/gates/core/gate-schema.ts` for the canonical taxonomy.
 
 ### Single prompts and pending reviews
 
@@ -112,9 +112,8 @@ Criteria gates use inline text criteria that Claude evaluates against its own ou
 
 1. Claude executes the prompt
 2. Gate criteria are injected into the response context
-3. Claude submits a `gate_verdict` in the structured form the review template shows. A check or
-   reminder gate also accepts the legacy string `GATE_REVIEW: PASS|FAIL - reason`; a semantic
-   (`semantic_evaluation`) gate does not — see [Gate Responses](#gate-responses)
+3. Claude submits a `gate_verdict` in the structured form the review template shows — the only
+   shape the parameter accepts; a string is refused — see [Gate Responses](#gate-responses)
 4. A blocking FAIL holds the step for correction within its retry budget
 5. After retry exhaustion, resolve the review with an accepted `gate_action`
 
@@ -366,10 +365,10 @@ User gates are hot-reloaded. Editing `gate.yaml` or `guidance.md` in workspace g
 ## Gate Responses
 
 > [!WARNING]
-> Follow the action shown for the pending review. Prefer the structured `gate_verdict` below.
-> For check and reminder gates, the legacy strings `GATE_REVIEW: PASS - reason` and
-> `GATE_REVIEW: FAIL - reason` are also accepted. Initial advisory single-prompt guidance does not
-> require a verdict.
+> Follow the action shown for the pending review. `gate_verdict` takes only the structured object
+> below; a string (including `GATE_REVIEW: PASS - reason`, which earlier majors accepted) is
+> refused with the object to resend. Initial advisory single-prompt guidance does not require a
+> verdict.
 
 A review with a semantic gate takes two calls, and no string answers it:
 
@@ -378,43 +377,60 @@ A review with a semantic gate takes two calls, and no string answers it:
 2. Send the structured `gate_verdict` with that gate's report in its `per_gate` entry under
    `evaluation`, copying the binding unchanged.
 
-A string verdict, or an object whose entry for the semantic gate has no `evaluation`, is refused
-as an error: no attempt is used, the captured output stays, nothing is recorded, and the reply
+An object whose entry for the semantic gate has no `evaluation` is refused as an error: no attempt is used, the captured output stays, nothing is recorded, and the reply
 ends with the template to resubmit. A verdict sent before the output is captured is refused the
 same way, with the two-call order.
 
-The string examples below apply to check and reminder gates.
+The examples below answer a review of one check-tier gate.
 
 ### Pass Response
 
-```
-GATE_REVIEW: PASS - All criteria met. Code includes error handling and follows naming conventions.
+```json
+{
+  "overall": "PASS",
+  "rationale": "All criteria met.",
+  "per_gate": [
+    {
+      "index": 1,
+      "passed": true,
+      "rationale": "Error handling and naming conventions in place."
+    }
+  ]
+}
 ```
 
 ### Fail Response (Retry Available)
 
+```json
+{
+  "overall": "FAIL",
+  "rationale": "Missing error handling for edge case X.",
+  "per_gate": [
+    { "index": 1, "passed": false, "rationale": "Edge case X is unhandled." }
+  ]
+}
 ```
-GATE_REVIEW: FAIL - Missing error handling for edge case X.
 
-[Claude automatically retries with this feedback]
-```
+A blocking FAIL holds the step; Claude retries with this feedback.
 
 ### Escalation (Max Retries)
 
-After max attempts, user is prompted for `gate_action`:
+After max attempts, resolve the exhausted review with `gate_action`:
 
 - `retry` - Reset attempts and try again
 - `skip` - Continue without validation
-- `abort` - Stop execution
 
 ```bash
 prompt_engine(chain_id:"chain-abc", gate_action:"retry")
 ```
 
-`abort` is terminal: the run moves to `cancelled`, and resuming that `chain_id` answers
-"Chain run already complete" instead of re-rendering the step. Start a fresh run with the chain
-command, or pass `force_restart`. To end a run that is not sitting at a gate, use
-`prompt_engine(chain_id:"...", cancel:true)`.
+To stop the whole run at any time, send `prompt_engine(chain_id:"...", gate_action:"abort")`.
+It works during active execution, a blocking-unknown pause, an ordinary review or a detached hold.
+No node, trailer, report, retry exhaustion or command is required. The run moves durably to
+`cancelled`, retaining its state and artifacts; a later resume answers "Chain run already complete".
+Repeated abort succeeds for an already-cancelled run. Completed, failed, missing or out-of-scope
+runs return a non-applied refusal. Start a fresh run with the chain command or `force_restart`.
+The public `cancel` property has been removed; use the abort call above.
 
 ## Verdicts and reminders
 
@@ -450,18 +466,8 @@ Use only reminder IDs advertised by that review. `satisfied` is an array of IDs;
 `not_applicable` is an array of `{id, reason}` objects, with a reason for each exemption.
 Neither field is a map keyed by gate ID. Reminder attestations are distinct from executed checks.
 
-The legacy string form carries the same attestation as one `REMINDERS:` line, directly after the
-verdict line:
-
-```
-REMINDERS: satisfied=code-quality; n/a=security-awareness(no network code touched)
-```
-
-or, when the review advertised reminders but nothing is being attested or excused:
-
-```
-REMINDERS: none
-```
+When the review advertised reminders but nothing is being attested or excused, send
+`"reminders": {}` — present and empty, which says something an absent field does not.
 
 ### Evidence for delegated work
 
@@ -534,7 +540,7 @@ A decision table for picking the right `pass_criteria.type` for the check you ac
 
 | If you want to...                                                          | Use                                                      | Why                                                                                                                                                                                                                                                                                                                              |
 | -------------------------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Display a self-assessment checklist to the agent                           | `inline_guidance`                                        | No runtime check exists; the checklist is rendered into context and the agent self-reports via `GATE_REVIEW`. Accept that a fabricated `PASS` slips through.                                                                                                                                                                     |
+| Display a self-assessment checklist to the agent                           | `inline_guidance`                                        | No runtime check exists; the checklist is rendered into context and the agent self-reports its verdict. Accept that a fabricated `PASS` slips through.                                                                                                                                                                           |
 | Enforce required framework sections (e.g., CAGEERF Context/Analysis/Goals) | Guards in the framework's `phases.yaml`                  | Stage 19 inspects section headers + length + forbidden terms deterministically, and only blocks on a header the render actually [declared](./phase-guards.md#declared-sections). Zero LLM cost; clear "Improvements Needed" feedback on failure. Setting `pass_criteria.type: framework_compliance` does **not** switch this on. |
 | Verify the agent's claims against the filesystem or other ground truth     | `shell_verify` with `shell_stdin_source: agent_response` | Pipes the response into a script that can run `statSync`, `rg`, `wc -l`, etc. Exit code is ground truth — the agent cannot fake it. See `path-verification` worked example above.                                                                                                                                                |
 | Run tests, lint, or build against the codebase (no response inspection)    | `shell_verify` (no `shell_stdin_source`)                 | Plain exit-code check. The response is irrelevant; the command operates on files on disk.                                                                                                                                                                                                                                        |
@@ -542,16 +548,25 @@ A decision table for picking the right `pass_criteria.type` for the check you ac
 
 ### Anti-patterns
 
-- **Using `inline_guidance` for a check the runtime could verify cheaply** — the checklist is display-only, and `GATE_REVIEW: PASS` from a fabricated self-assessment is indistinguishable from a real one. If a 3-line shell script can confirm the claim, prefer `shell_verify`.
+- **Using `inline_guidance` for a check the runtime could verify cheaply** — the checklist is display-only, and a `PASS` verdict from a fabricated self-assessment is indistinguishable from a real one. If a 3-line shell script can confirm the claim, prefer `shell_verify`.
 - **Using `shell_verify` for section-structure enforcement** — phase guards in `phases.yaml` are faster (no subprocess), produce clearer per-section feedback, and integrate with the phase-guards UI. Reserve `shell_verify` for checks that genuinely need to run a command.
 - **Mixing `shell_stdin_source: agent_response` with commands that don't read stdin** — the response is discarded silently and the gate becomes a plain exit-code check with extra overhead. The receiving script must `readFileSync(0)` (or equivalent) to consume the response.
 - **Declaring `type: llm_self_check`** — it is not a valid `type` and never had a runner. Schema validation rejects it at load, naming the replacement: `inline_guidance` (reminder) or `shell_verify` / `script_tool` (check). Use [`%judge`](./judge-mode.md) / `gates.evaluation.defaultMode` when you want a model to grade the output instead — that path runs in the client's own subagent and returns through `gate_verdict`.
 
 ## Turning the Gate System Off
 
-`system_control(action:"gates", operation:"disable")` turns the gate system off, and `operation:"enable"` turns it back on. While it is off, gate guidance and validation are skipped, and `prompt_engine` stops advertising its `gates`, `gate_verdict` and `gate_action` parameters. A client that never uses gates stops paying tokens for those three parameter descriptions on every tool listing, which is why the switch exists.
+`system_control(action:"gates", operation:"disable")` turns the runtime gate switch off, and
+`operation:"enable"` turns it back on. `gates` and `gate_verdict` are runtime-feature-gated;
+`gate_action` remains a core field with its full enum. `abort`, `resume` and `accept_alternative`
+remain available while the switch is off; `retry` and `skip` receive a named unavailable-action
+refusal. Keeping run control available lets you stop a run or resolve a blocking unknown without
+turning gate review back on.
 
-**A toggle persists across restarts.** It is saved in `state.db` (`kv_state`, key `gates`) under the workspace the call resolves to: the request's own identity, or, when the request carries none, the launch workspace (`--workspace-id`, then `identity.launchDefaults.workspaceId` in your config file, then the basename of `CLAUDE_PROJECT_DIR`, else of the working directory). A server started later with the same runtime root and workspace reads it back at startup and advertises the same schema, on STDIO and Streamable HTTP alike. This matters because the narrowing is the point: a restart that silently restored the three parameters would spend the tokens the toggle was saving, and nothing would say so.
+`operation:"status"` separates the runtime switch from `Configuration Enabled` and effective
+`Effective Review/Guidance`, which requires both runtime and configuration enablement. Health metrics label
+the runtime switch. Configuration disablement does not itself specify schema withdrawal.
+
+**A toggle persists across restarts.** It is saved in `state.db` (`kv_state`, key `gates`) under the workspace the call resolves to: the request's own identity, or, when the request carries none, the launch workspace (`--workspace-id`, then `identity.launchDefaults.workspaceId` in your config file, then the basename of `CLAUDE_PROJECT_DIR`, else of the working directory). A server started later with the same runtime root and workspace reads the saved switch at startup. The narrower gate-parameter surface saves listing tokens while core run control stays available.
 
 What that does not cover:
 

@@ -29,6 +29,8 @@
  * twice is how two answers to one question start.
  */
 
+import { isPositionInsideQuotes, readPromptSelector } from './parser-utils.js';
+
 /**
  * The token a command must begin with to be read as an append rather than a new run.
  *
@@ -94,7 +96,11 @@ export function parseAppendCommand(command: string): AppendCommandParse {
     };
   }
 
-  if (/(^|\s)::/.test(fragment)) {
+  if (
+    [...fragment.matchAll(/(^|\s)::/g)].some(
+      (match) => !isPositionInsideQuotes(fragment, match.index)
+    )
+  ) {
     return {
       ok: false,
       message:
@@ -116,8 +122,8 @@ export function parseAppendCommand(command: string): AppendCommandParse {
         message: `append refused: "${command.trim()}" has an empty step between two "-->" arrows.`,
       };
     }
-    const match = /^>>\s*([A-Za-z0-9_][A-Za-z0-9_-]*)\s*([\s\S]*)$/.exec(segment);
-    if (match === null) {
+    const selector = segment.startsWith('>>') ? readPromptSelector(segment) : null;
+    if (selector === null) {
       return {
         ok: false,
         message:
@@ -125,11 +131,18 @@ export function parseAppendCommand(command: string): AppendCommandParse {
           'Every step of an append is spelled ">>prompt_id".',
       };
     }
-    const promptId = match[1] ?? '';
+    const inlineArgs = parseInlineArgs(selector.remainder);
+    if (inlineArgs === null) {
+      return {
+        ok: false,
+        message: `append refused: step "${segment}" has malformed arguments. Use key="value" pairs.`,
+      };
+    }
+    const promptId = selector.promptId;
     const node: AppendNode = {
       id: mintAppendId(promptId, taken),
       promptId,
-      ...(parseInlineArgs(match[2] ?? '') ?? {}),
+      ...(inlineArgs ?? {}),
       ...(delegated ? { delegated: true } : {}),
     };
     nodes.push(node);
@@ -143,15 +156,11 @@ export function parseAppendCommand(command: string): AppendCommandParse {
  *
  * The delimiter semantics are `SymbolicOperatorParser.splitChainSteps`': `==>` marks the step
  * that FOLLOWS it, so `>>a ==> >>b` delegates b and leaves a alone, and a fragment that opens
- * with `==>` delegates its first step. Reimplemented here rather than shared, for the reason the
- * module header gives for `parseInlineArgs`: the symbolic splitter also tracks quote state for
- * positional argument strings this grammar does not accept, and importing the parser would give
- * this module a reason to know a class it otherwise does not touch.
+ * with `==>` delegates its first step. This splitter stays local to the equal-only grammar:
+ * importing the symbolic parser would couple this pure translator to a
+ * class it otherwise does not touch. Quote boundaries use the shared parser utility.
  *
- * The `--> a --> b` arrows inside a QUOTED argument value are not defended against here for the
- * same reason the symbolic form defends them: it is `parseInlineArgs` that reads quotes, and a
- * split arrow inside one produces a segment that fails the `>>prompt_id` match with a named
- * refusal rather than a silently wrong plan.
+ * Arrows inside quoted argument values remain argument bytes.
  */
 function splitAppendSegments(fragment: string): { text: string; delegated: boolean }[] {
   const segments: { text: string; delegated: boolean }[] = [];
@@ -168,7 +177,7 @@ function splitAppendSegments(fragment: string): { text: string; delegated: boole
       : fragment.startsWith('-->', index)
         ? 'chain'
         : undefined;
-    if (delimiter !== undefined) {
+    if (delimiter !== undefined && !isPositionInsideQuotes(fragment, index)) {
       segments.push({ text: current.trim(), delegated });
       delegated = delimiter === 'delegation';
       current = '';
@@ -219,20 +228,21 @@ function mintAppendId(promptId: string, taken: Set<string>): string {
  * Positional arguments are still not accepted, because a contributed node has no positional form
  * to carry them into.
  */
-function parseInlineArgs(raw: string): { args: Record<string, unknown> } | undefined {
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) {
+function parseInlineArgs(raw: string): { args: Record<string, unknown> } | undefined | null {
+  let remainder = raw.trim();
+  if (remainder.length === 0) {
     return undefined;
   }
   const args: Record<string, unknown> = {};
-  const pattern = /([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/g;
-  let match: RegExpExecArray | null = pattern.exec(trimmed);
-  while (match !== null) {
+  const pattern = /^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^"'\s]\S*))(?=\s|$)/;
+  while (remainder.length > 0) {
+    const match = pattern.exec(remainder);
+    if (match === null) return null;
     const key = match[1];
     if (key !== undefined) {
       args[key] = match[2] ?? match[3] ?? match[4] ?? '';
     }
-    match = pattern.exec(trimmed);
+    remainder = remainder.slice(match[0].length).trimStart();
   }
   return Object.keys(args).length > 0 ? { args } : undefined;
 }

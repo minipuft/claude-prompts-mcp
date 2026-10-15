@@ -17,6 +17,8 @@ import {
   projectCurrentResponseTarget,
   announceAdvancedStep,
   recordedStep,
+  reviewHolding,
+  resolveCompletedCaptureAdvance,
 } from '../../execution/capture/step-capture-service.js';
 import { collectDetachedNodeFacts, collectRunHolds } from '../../execution/delegation/detached.js';
 import { physicalReviewDefinitionIndex } from '../../execution/pipeline/decisions/gates/frozen-review-definitions.js';
@@ -82,7 +84,8 @@ import { currentOrdinal, ordinalOf } from '#shared/utils/node-order.js';
  * ends up retrying the one thing that cannot work.
  */
 export type InterruptResolution =
-  { readonly kind: 'resolved' } | { readonly kind: 'refused'; readonly message: string };
+  | { readonly kind: 'resolved'; readonly deferredAdvance?: DeferredAdvance }
+  | { readonly kind: 'refused'; readonly message: string };
 
 /**
  * A step advance this call DECIDED but has not performed (P4.89).
@@ -202,7 +205,7 @@ export function addressedReview(
 }
 
 /**
- * Processes gate verdicts, handles gate actions (retry/skip/abort),
+ * Processes gate verdicts, handles review actions (retry/skip),
  * and emits gate lifecycle events via hooks and notifications.
  *
  * Extracted from StepResponseCaptureStage.
@@ -314,7 +317,7 @@ export class GateVerdictProcessor {
     );
     return {
       kind: 'recorded',
-      // A verdict lands on one of these four; `reopened` and `aborted` answer other events.
+      // A verdict lands on one of these four; `reopened` answers other review events.
       result: advance.outcome as 'passed' | 'failed' | 'exhausted' | 'cleared',
       attempt: advance.attempt,
       maxAttempts: review.maxAttempts,
@@ -324,7 +327,7 @@ export class GateVerdictProcessor {
   /**
    * Resolve an exhausted detached review with `gate_action` (row 4.8): `retry` resets the counter
    * and asks for another replacement; `skip` accepts the recorded result and deletes the review.
-   * `abort` is refused here — `cancel: true` is how a run is stopped, and it needs no node.
+   * Run-level abort is consumed by the executor before review routing and needs no node.
    */
   async processDetachedReviewAction(
     context: ExecutionContext,
@@ -342,7 +345,7 @@ export class GateVerdictProcessor {
     if (answer?.kind !== 'answered') {
       return {
         kind: 'refused',
-        message: `❌ gate_action "${action}" does not resolve a detached review: use "retry" or "skip", or cancel: true. Nothing was recorded.`,
+        message: `❌ gate_action "${action}" does not resolve a detached review: use "retry" or "skip". To stop the run, use gate_action "abort" with chain_id. Nothing was recorded.`,
       };
     }
     return {
@@ -381,7 +384,7 @@ export class GateVerdictProcessor {
    * answers "the retry budget is spent, what now", and every branch of it addresses a gate the
    * run failed. This one addresses a hold NO gate produced — the run's steps all passed, and what
    * stopped it is a caller-declared unknown. Sharing an entry point would put a retry's counter
-   * reset and a `cancelChain` in reach of a verb that means neither.
+   * reset in reach of a verb that means neither.
    *
    * BOTH verbs are refused, by name, in the two states where they could otherwise acquire an
    * unintended meaning:
@@ -460,11 +463,21 @@ export class GateVerdictProcessor {
       remainderAccepted,
     });
 
-    return { kind: 'resolved' };
+    const deferredAdvance =
+      session === undefined
+        ? undefined
+        : resolveCompletedCaptureAdvance(
+            session,
+            pending.nodeId,
+            this.chainSessionStore.getChainContext(sessionId, context.getScopeOptions())[
+              'step_results'
+            ]
+          );
+    return { kind: 'resolved', ...(deferredAdvance === undefined ? {} : { deferredAdvance }) };
   }
 
   /**
-   * Resolve the step review's exhaustion with `gate_action` (retry/skip/abort).
+   * Resolve the step review's exhaustion with `gate_action` (retry/skip).
    *
    * Only an exhausted review accepts one (R9); {@link refusesInBudgetAction} answers an action
    * sent while the review still has attempts left.
@@ -473,11 +486,7 @@ export class GateVerdictProcessor {
    * counter reset, skip clears it and accepts the answer the step already holds (R24) — it
    * announces that step and returns the advance past it, for the stage to apply. A skip on a step
    * that holds no answer is refused by name and records nothing: a call with no answer advances
-   * nothing (R19). `abort` cancels the RUN, not just the request:
-   * `context.state.session.aborted` is per-request state that stage 21 reads to write a
-   * `cancelled` execution record — it says the run ended without ending it, and until the cancel
-   * landed the next call resumed the chain the user had just aborted. `cancelChain` returns false
-   * for an already-terminal run; the run is over either way, so the abort exit still stands.
+   * nothing (R19). Run-level abort is consumed before this review dispatcher.
    *
    * @returns the advance a skip decided; the pipeline exits early after every action.
    */
@@ -491,24 +500,6 @@ export class GateVerdictProcessor {
     context.state.gates.retryLimitExceeded = false;
     context.state.gates.awaitingUserChoice = false;
     context.state.gates.gateActionAnsweredReview = true;
-
-    if (gateAction === 'abort') {
-      if (!(await this.chainSessionStore.cancelChain(sessionId))) {
-        this.logger.warn(
-          `[GateVerdictProcessor] Abort requested for session ${sessionId}, but the run could not be cancelled (already terminal or out of scope)`
-        );
-      }
-      context.state.session.aborted = true;
-      context.diagnostics.info(
-        'GateVerdictProcessor',
-        'User chose to abort chain after gate failure',
-        {
-          sessionId,
-          failedGates: context.state.gates.retryExhaustedGateIds,
-        }
-      );
-      return undefined;
-    }
 
     const target = addressedReview(session);
     if (
@@ -578,8 +569,8 @@ export class GateVerdictProcessor {
    * Refuse, by name, a `gate_action` sent while the run holds nothing it could act on — no review
    * and no pending shell check (R169) — and record nothing. Before this the action fell through
    * to the verdict path and the call re-rendered the step with `isError: false`, neither applied
-   * nor refused: a client that sent `retry` read the step as its retry, and one that sent `abort`
-   * read a run it believed stopped. The same refusal family as {@link refusesInBudgetAction}.
+   * nor refused: a client that sent `retry` read the step as its retry. The same refusal family
+   * as {@link refusesInBudgetAction}.
    *
    * @returns true when the call was refused and its response is set.
    */
@@ -594,10 +585,9 @@ export class GateVerdictProcessor {
     ) {
       return false;
     }
-    const stop = gateAction === 'abort' ? ' To stop the run, send cancel: true.' : '';
     const message =
       `❌ gate_action "${gateAction}" has nothing to act on: this run holds no gate review and ` +
-      `no shell check.${stop} Nothing was recorded.`;
+      'no shell check. Nothing was recorded.';
     context.setResponse({ content: [{ type: 'text', text: message }], isError: true });
     return true;
   }
@@ -935,7 +925,7 @@ export class GateVerdictProcessor {
     if (event.type !== 'verdict') return { kind: 'accepted', event, review, failedGateIds: [] };
     const issued = review.semanticContext;
     if (issued === undefined) {
-      return event.verdict.submission?.per_gate?.some((entry) => entry.evaluation !== undefined) ===
+      return event.verdict.submission.per_gate?.some((entry) => entry.evaluation !== undefined) ===
         true
         ? {
             kind: 'refused',
@@ -995,12 +985,12 @@ export class GateVerdictProcessor {
       };
     }
     const expected = resolvePinnedSemanticContext(issued, gateId);
-    const claim = verdict.submission?.per_gate?.find((entry) => entry.index === index);
+    const claim = verdict.submission.per_gate?.find((entry) => entry.index === index);
     const report = claim?.evaluation;
     const result = evaluateSemanticEvaluation(expected, report);
     const faults = semanticAttributionFaults(result);
     if (faults.some((entry) => entry.code === 'missing_report')) {
-      return { kind: 'refused', message: describeMissingSemanticReport(review, gateId, verdict) };
+      return { kind: 'refused', message: describeMissingSemanticReport(review, gateId) };
     }
     if (faults.length > 0) {
       return {
@@ -1117,6 +1107,8 @@ export class GateVerdictProcessor {
       return;
     }
     const session = this.chainSessionStore.getSession(advance.sessionId, context.getScopeOptions());
+    if (session !== undefined && isUnknownInterruptPending(reviewHolding(session, advance.nodeId)))
+      return;
     const fromNodeId = session?.state.currentNodeId;
     const advanced = await this.chainSessionStore.advanceStep(advance.sessionId, advance.nodeId);
     if (session !== undefined && advanced !== false && advanced.nodeId !== fromNodeId) {
@@ -1251,7 +1243,7 @@ export class GateVerdictProcessor {
   ): GateVerdictSummary[] {
     return (
       context.gateEnforcement?.parseGateVerdicts(
-        verdict.submission ?? verdict.raw,
+        verdict.submission,
         review.gateIds,
         review.attemptCount
       ) ?? []
@@ -1264,7 +1256,7 @@ export class GateVerdictProcessor {
   private parseVerdict(
     context: ExecutionContext,
     raw: McpToolRequest['gate_verdict'],
-    source: 'gate_verdict' | 'user_response'
+    source: 'gate_verdict'
   ): ParsedGateVerdict | null {
     return context.gateEnforcement?.parseVerdict(raw, source) ?? parseGateVerdict(raw, source);
   }

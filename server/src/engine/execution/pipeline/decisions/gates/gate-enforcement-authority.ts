@@ -9,15 +9,9 @@ import {
   createSemanticReviewContext,
   renewSemanticReviewAttempt,
 } from './semantic-review-context.js';
-import {
-  loadVerdictPatterns,
-  isPatternRestrictedToSource,
-  type VerdictPattern,
-} from '../../../../gates/config/index.js';
 import { DEFAULT_RETRY_LIMIT } from '../../../../gates/constants.js';
 import { deriveGateTier } from '../../../../gates/core/gate-tier.js';
 import { parseGateVerdict } from '../../../../gates/core/gate-verdict-contract.js';
-import { parseGateVerdictReminders } from '../../../../gates/core/gate-verdict-renderer.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { GateReview, GateReviewKind } from '#shared/types/chain-execution.js';
@@ -41,8 +35,6 @@ import type { ExecutionContext, SessionContext } from '../../../context/index.js
 
 import { acceptsVerdictlessJoin } from '#shared/types/chain-session.js';
 import { parseStepForNode } from '#shared/utils/node-order.js';
-
-// VerdictPattern type is now imported from gates/config
 
 /**
  * The resolved gates section a new review's judge defaults come from. Required: an authority
@@ -70,9 +62,6 @@ export class GateEnforcementAuthority {
   private readonly gateLoader: GateDefinitionProvider | undefined;
   private readonly gatesConfigProvider: GateEvaluationSettingsProvider;
 
-  // Verdict patterns loaded from YAML configuration
-  private verdictPatterns: VerdictPattern[] | null = null;
-
   constructor(
     chainSessionStore: ChainSessionService,
     logger: Logger,
@@ -86,153 +75,47 @@ export class GateEnforcementAuthority {
   }
 
   /**
-   * Get verdict patterns, loading from YAML config on first access.
-   */
-  private getVerdictPatterns(): VerdictPattern[] {
-    if (!this.verdictPatterns) {
-      this.verdictPatterns = loadVerdictPatterns();
-    }
-    return this.verdictPatterns;
-  }
-
-  /**
-   * Parse typed submissions directly, or match legacy text against cached verdict patterns.
-   * Supports multiple formats for flexibility while maintaining security.
-   * Patterns are loaded from YAML configuration for runtime customization.
+   * Parse a structured submission into the verdict the review lifecycle reads.
    *
-   * @param raw - Validated structured submission or legacy verdict text
-   * @param source - Where the verdict came from (affects security validation)
-   * @returns Parsed verdict or null if no pattern matched
+   * @param raw - The request's `gate_verdict`, already validated by the MCP schema
+   * @param source - Where the verdict came from
+   * @returns Parsed verdict, or null when absent or not a valid structured review
    */
   parseVerdict(
-    raw: string | GateVerdictSubmission | undefined,
+    raw: GateVerdictSubmission | undefined,
     source: VerdictSource
   ): ParsedVerdict | null {
-    if (typeof raw !== 'string') return parseGateVerdict(raw, source);
-    if (!raw) {
-      return null;
-    }
-
-    // Validate only the first non-empty line (per-gate verdicts may follow)
-    const trimmed = raw.trim();
-    const firstLine =
-      trimmed
-        .split('\n')
-        .find((l) => l.trim().length > 0)
-        ?.trim() ?? trimmed;
-
-    const patterns = this.getVerdictPatterns();
-
-    for (const pattern of patterns) {
-      // Security: Skip patterns restricted to specific sources
-      if (isPatternRestrictedToSource(pattern, source)) {
-        continue;
-      }
-
-      const match = firstLine.match(pattern.regex);
-      if (match) {
-        const rationale = match[2]?.trim();
-
-        // Validation: Require non-empty rationale
-        if (!rationale) {
-          this.logger.warn(
-            `[GateEnforcementAuthority] Verdict detected but missing rationale: "${raw.substring(0, 50)}..."`
-          );
-          continue; // Try next pattern
-        }
-
-        const verdictValue = match[1];
-        if (!verdictValue) {
-          continue;
-        }
-
-        return {
-          verdict: verdictValue.toUpperCase() as 'PASS' | 'FAIL',
-          rationale,
-          raw,
-          source,
-          detectedPattern: pattern.priority,
-        };
-      }
-    }
-
-    // No pattern matched
-    return null;
+    return parseGateVerdict(raw, source);
   }
 
   /**
-   * Parse per-gate verdicts from a GATE_VERDICTS (or legacy CRITERION_VERDICTS) block into
-   * the shared {@link GateVerdictSummary} record, keyed by gate id.
+   * Resolve a submission's per-gate entries and reminder attestation into the shared
+   * {@link GateVerdictSummary} record, keyed by gate id.
    *
    * Called alongside parseVerdict() — the overall verdict drives PASS/FAIL, these entries say
    * WHICH gate the reviewer failed, which is what `GateVerdictProcessor` puts on
    * `context.state.gates.perGateVerdicts` and what `ExecutionRecordStore` persists.
    *
-   * **This is the only place `index` exists.** The submitted `[n]` is a position in the gate
+   * **This is the only place `index` exists.** The submitted `index` is a position in the gate
    * list THIS review advertised, which is meaningless to anything that does not hold that list;
    * the id is not. Resolving here, where `review.gateIds` is in hand, means no downstream reader
    * ever has to carry the list around to interpret a verdict — the same key `GateCheckResult`
    * already uses, so the reviewer's opinion and the engine's ground truth are joinable.
    *
-   * Structured entries resolve directly from the original submission, preserving reports.
-   * An unknown or duplicate structured index refuses the whole submission before any summaries
-   * return. Legacy strings keep their diagnostic-and-drop behavior for out-of-range indexes.
+   * Entries resolve directly from the original submission, preserving reports. An unknown or
+   * duplicate index refuses the whole submission before any summaries return.
    *
-   * @param raw - Validated typed submission or text containing a GATE_VERDICTS block
+   * @param submission - The validated structured submission
    * @param gateIds - The gate list this review advertised, in the order it advertised them
    * @param attempt - Review attempt this submission answers, recorded on each entry
-   * @returns Gate-id-keyed summaries (empty if no block found or none resolved)
+   * @returns Gate-id-keyed summaries (empty when the submission grades no gate)
    */
   parseGateVerdicts(
-    raw: string | GateVerdictSubmission,
+    submission: GateVerdictSubmission,
     gateIds: readonly string[],
     attempt?: number
   ): GateVerdictSummary[] {
-    if (!raw) {
-      return [];
-    }
-
-    const timestamp = Date.now();
-    if (typeof raw !== 'string') {
-      return this.readStructuredVerdicts(raw, gateIds, timestamp, attempt);
-    }
-    const summaries: GateVerdictSummary[] = [
-      ...this.readReminderAttestation(raw, gateIds, timestamp, attempt),
-    ];
-
-    const block = raw.match(
-      /(?:CRITERION_VERDICTS|GATE_VERDICTS):\s*\n((?:\[?\d+\]?\s*(?:PASS|FAIL).*\n?)*)/i
-    );
-    if (!block?.[1]) {
-      return summaries;
-    }
-
-    for (const line of block[1].trim().split('\n')) {
-      const match = line.match(/\[?(\d+)\]?\s*(PASS|FAIL)\s*[-–—:]\s*(.*)/i);
-      if (!match) {
-        continue;
-      }
-
-      const index = parseInt(match[1]!, 10);
-      const gateId = gateIds[index - 1];
-      if (gateId === undefined) {
-        this.logger.warn(
-          `[GateEnforcementAuthority] Per-gate verdict [${index}] names no advertised gate ` +
-            `(the review advertised ${gateIds.length}); entry dropped.`
-        );
-        continue;
-      }
-
-      summaries.push({
-        gateId,
-        verdict: match[2]!.toUpperCase() === 'PASS' ? 'PASS' : 'FAIL',
-        rationale: match[3]!.trim(),
-        timestamp,
-        ...(attempt !== undefined ? { attempt } : {}),
-      });
-    }
-
-    return summaries;
+    return this.readStructuredVerdicts(submission, gateIds, Date.now(), attempt);
   }
 
   /** Resolve structured indexes once, then project reminders after every index has passed. */
@@ -268,29 +151,27 @@ export class GateEnforcementAuthority {
   }
 
   /**
-   * Fold typed reminders or a legacy `REMINDERS:` line into the same gate-id-keyed record.
+   * Fold the submission's reminder attestation into the same gate-id-keyed record.
    *
-   * `parseGateVerdictReminders` was the render half's reader and had none of its own: the line
-   * was produced, round-trip tested, and consumed by nothing (P4.78). This is where it earns a
-   * reader, and the reason it can share `GateVerdictSummary` without lying is `tier` — a
-   * reminder is self-declared, so it is recorded as an attestation and counted separately from
-   * an evaluated check, never averaged into the same pass rate.
+   * It can share `GateVerdictSummary` without lying because of `tier` — a reminder is
+   * self-declared, so it is recorded as an attestation and counted separately from an evaluated
+   * check, never averaged into the same pass rate.
    *
    * A `not_applicable` entry is still `PASS`: the reviewer is asserting the gate does not bind,
    * which is not a failure, and the reason it gave is the rationale. The PASS/FAIL union is
    * deliberately not widened for it — a third member would reach every reader of the record for
    * a distinction only this branch makes, and the `tier` + rationale already carry it.
    *
-   * An id the review never advertised is dropped with a diagnostic, exactly as an out-of-range
-   * index is: an attestation about a gate that was not under review is not a fact about it.
+   * An id the review never advertised is dropped with a diagnostic: an attestation about a gate
+   * that was not under review is not a fact about it.
    */
   private readReminderAttestation(
-    raw: string | GateVerdictSubmission,
+    submission: GateVerdictSubmission,
     gateIds: readonly string[],
     timestamp: number,
     attempt?: number
   ): GateVerdictSummary[] {
-    const reminders = typeof raw === 'string' ? parseGateVerdictReminders(raw) : raw.reminders;
+    const reminders = submission.reminders;
     if (reminders === undefined) {
       return [];
     }

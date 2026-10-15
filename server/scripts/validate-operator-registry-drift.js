@@ -2,20 +2,14 @@
 /**
  * Every hand-written copy of a registry operator must agree with `operators.json`.
  *
- * WHY THIS EXISTS. The framework operator had five definitions and no gate holding them together:
- * the registry, the extractor in `parser-utils.ts`, the routing allowlist in `tool-routing.ts`,
- * the CTA renderer in `response-assembler.ts`, and a fallback copy in `hooks/prompt-suggest.py`
- * — plus a documentation table. Two changes landed on the extractor and the registry was left at
- * its pre-change state for two revisions. Nothing failed, because the registry pattern's only
- * consumer is the chain-prefix STRIP and no test drove a framework operator through a chain. The
- * canonical `^` sigil therefore threw `Invalid chain step format` on every chained command while
- * the plan recorded it as shipped.
+ * WHY THIS EXISTS. Framework sigils travel through parsing, routing, rendered guidance, and
+ * documentation. When those consumers disagree, chain-prefix stripping or command routing
+ * can reject a sigil the CTA or README tells the caller to use.
  *
- * WHAT IT CHECKS, AND WHY THESE SITES. `parser-utils.ts` is absent from this file on purpose: it
- * now derives its pattern from the registry, so it cannot drift and a check on it would be
- * vacuous. The four sites below CANNOT derive — an allowlist of literal tokens, a template
- * literal, a Python fallback that exists precisely for when the registry is unreachable, and a
- * markdown table. Those are the ones that need a gate rather than a refactor.
+ * WHAT IT CHECKS, AND WHY THESE SITES. `parser-utils.ts` and `hooks/prompt-suggest.py` derive
+ * their framework patterns from the registry. The three sites below retain literal values:
+ * the routing allowlist, the CTA token, and the parser README table. Cross-engine compilation
+ * and registry examples have separate controls.
  *
  * SCOPE. Paths are enumerated literally, not walked, so untracked files cannot enter and a moved
  * file fails loudly rather than silently passing.
@@ -35,7 +29,6 @@ const REGISTRY = path.join(SERVER, 'tooling/contracts/registries/operators.json'
 const SITES = {
   routing: 'server/src/engine/execution/pipeline/routing/tool-routing.ts',
   cta: 'server/src/engine/execution/formatting/response-assembler.ts',
-  hookFallback: 'hooks/prompt-suggest.py',
   parserDoc: 'server/src/engine/execution/parsers/README.md',
 };
 
@@ -91,31 +84,6 @@ function checkCtaSymbol(operator, source) {
     );
 }
 
-/**
- * The Python fallback runs only when `lib/operators.py` cannot load the registry, so it is
- * unreachable in every normal run — which is exactly why it drifts unnoticed. It must stay
- * byte-equal to the registry pattern.
- */
-function checkHookFallback(operator, source) {
-  // Scope to the framework detector's body first. Matching the first `re.search` in the file
-  // finds the `>>`-prompt-id regex instead — a probe for something merely ADJACENT to the
-  // property, which is the failure this whole gate was written to catch.
-  const fn = source.match(/def detect_framework\([\s\S]*?(?=\ndef )/);
-  if (!fn) return [`${SITES.hookFallback}: detect_framework not found (moved or renamed?)`];
-
-  const match = fn[0].match(/re\.search\(\s*r"((?:[^"\\]|\\.)*)",\s*message\)/);
-  if (!match) return [`${SITES.hookFallback}: framework fallback regex not found`];
-
-  // Python `r"..."` is a raw string, so the source text IS the pattern — no unescaping. The JSON
-  // side is already unescaped by the parse above, so both sides are compared as regex source.
-  if (match[1] === operator.pattern) return [];
-  return [
-    `${SITES.hookFallback}: fallback regex has drifted from operators.json.\n` +
-      `    registry: ${operator.pattern}\n` +
-      `    fallback: ${match[1]}`,
-  ];
-}
-
 /** The parser README publishes an operator table; a stale row documents a sigil that is wrong. */
 function checkParserDoc(operator, source) {
   const row = source.split('\n').find((line) => /^\|\s*Framework\s*\|/.test(line));
@@ -149,7 +117,6 @@ function runChecks(operator, sources) {
   return [
     ...checkRoutingAllowlist(operator, sources.routing),
     ...checkCtaSymbol(operator, sources.cta),
-    ...checkHookFallback(operator, sources.hookFallback),
     ...checkParserDoc(operator, sources.parserDoc),
   ];
 }
@@ -252,8 +219,8 @@ function loadSources() {
 }
 
 /**
- * Proves each check CAN fail. A gate that has never failed is unverified — and this gate exists
- * because four sites passed for two revisions while being wrong.
+ * Proves each check CAN fail. Each criterion's unmutated baseline must be clean, so existing
+ * drift cannot produce a passing self-test.
  */
 function selfTest() {
   const operator = loadFrameworkOperator(readFileSync(REGISTRY, 'utf8'));
@@ -262,11 +229,6 @@ function selfTest() {
   const mutations = [
     ['routing allowlist drops the canonical sigil', 'routing', (s) => s.replace(/'\^', /, '')],
     ['CTA renders a deprecated sigil', 'cta', (s) => s.replace(/`\^\$\{/g, '`@${')],
-    [
-      'hook fallback pattern drifts',
-      'hookFallback',
-      (s) => s.replace(/\[@\^\]/, '@').replace(/\(\?!\[A-Za-z0-9_-\]\)/, '(?=\\s|$)'),
-    ],
     ['README documents a stale pattern', 'parserDoc', (s) => s.replace(/\[@\\?\^\]/, '@')],
   ];
 

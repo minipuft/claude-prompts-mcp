@@ -38,18 +38,12 @@ import { attemptInHand, formatAttempt } from '#shared/utils/attempt-number.js';
 import { ordinalOf, parseStepForNode } from '#shared/utils/node-order.js';
 
 /**
- * The verbs that answer a SOFT (unpaused) interrupt, verbatim from the plan's §Interrupt payload
- * block.
+ * The resolution verbs offered by a soft (unpaused) interrupt.
  *
  * `gate_action` spellings match the contract enum (`tooling/contracts/prompt-engine.json`)
  * exactly, because a client reads this list and puts the string back on the wire.
  */
-const SOFT_INTERRUPT_VERBS = [
-  'answer the step',
-  'remainder',
-  'gate_action:abort',
-  'cancel',
-] as const;
+const SOFT_INTERRUPT_VERBS = ['answer the step', 'remainder', 'gate_action:abort'] as const;
 
 /**
  * The verbs a HARD-paused run offers — the RESOLUTION verbs only, and this list is not a
@@ -68,7 +62,6 @@ const PAUSED_INTERRUPT_VERBS = [
   'gate_action:resume',
   'gate_action:accept_alternative (with remainder)',
   'gate_action:abort',
-  'cancel',
 ] as const;
 
 /**
@@ -349,20 +342,15 @@ export class ResponseAssembler {
   }
 
   /**
-   * The resubmit instruction a blocked reply ends on — structured form first, legacy string after.
+   * The resubmit instruction a blocked reply ends on: the review's structured template.
    *
-   * Until P4.101 this was one line offering the legacy string and nothing else, while the
-   * ordinary review footer had been offering the schema-validated object form since the object
-   * form existed. A caller blocked on a gate was therefore steered into the one submission shape
-   * that can fail to parse, on the reply where getting it wrong costs an attempt.
-   *
-   * Falls back to the bare resume line when no review is pending — there is no gate list to key
-   * a template to, and inventing an empty one would advertise a shape the caller cannot fill.
+   * Falls back to the bare object form when no review is pending — there is no gate list to key
+   * a template to, and inventing per-gate slots would advertise a shape the caller cannot fill.
    */
   private buildBlockedResubmitBlock(context: ExecutionContext, chainId: string): string {
     const pendingReview = context.sessionContext?.pendingReview;
     if (pendingReview === undefined) {
-      return `Resume: \`chain_id="${chainId}", gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"\``;
+      return `Resume: \`chain_id="${chainId}", gate_verdict={"overall": "PASS"|"FAIL", "rationale": "<reason>"}\``;
     }
 
     const semantic = semanticReviewResume(pendingReview, chainId);
@@ -379,8 +367,7 @@ export class ResponseAssembler {
     return (
       `Resume:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\n` +
       'Set `"overall": "FAIL"` and say what needs improvement if the gates are still not met. ' +
-      'Rationales are single-line.\n\n' +
-      'A legacy string form is still accepted: `gate_verdict="GATE_REVIEW: PASS - [assessment]"`.'
+      'Rationales are single-line.'
     );
   }
 
@@ -521,10 +508,8 @@ export class ResponseAssembler {
       // Gate review, or a gated step's render: every render of a gated step asks for its verdict
       // the same way (R171) — only when not delegating. A semantic review's resume is one line
       // here: the review call to action above carries its instructions and full resume fence,
-      // and a reply renders them once. The fallback offers the object form, which
-      // carries what the legacy string carries and is the object a semantic report extends
-      // (`per_gate[i].evaluation`); a string can never hold one, so advertising it taught
-      // clients to send the shape a semantic review refuses (R11.2).
+      // and a reply renders them once. The fallback offers the object form, the only shape
+      // `gate_verdict` accepts and the object a semantic report extends (`per_gate[i].evaluation`).
       lines.push(
         semanticResumePointer(sessionContext.pendingReview, chainIdentifier) ??
           `Next: chain_id="${chainIdentifier}", user_response="<your step output>", gate_verdict={"overall": "PASS|FAIL", "rationale": "<why>"}`
@@ -910,7 +895,7 @@ export class ResponseAssembler {
     if (semantic !== undefined)
       return `\n---\n\n**${header}**${attemptInfo}\n\n${judgeBlock}\n\n${semantic}`;
 
-    return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}${this.buildFailedGateSummary(context)}${judgeBlock}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\nSet \`"overall": "FAIL"\` and say what needs improvement if the gates are not met. Rationales are single-line.\n\nA legacy string form is still accepted: \`gate_verdict="GATE_REVIEW: PASS - [assessment]"\`.`;
+    return `\n---\n\n**${header}**${attemptInfo}\n\n${gatesLine}${this.buildFailedGateSummary(context)}${judgeBlock}\n\nReview your output above against the gates, then submit:\n\n\`\`\`\nchain_id="${chainId}"\ngate_verdict=${structuredTemplate}\n\`\`\`\n\nSet \`"overall": "FAIL"\` and say what needs improvement if the gates are not met. Rationales are single-line.`;
   }
 
   /**
@@ -1070,7 +1055,7 @@ export class ResponseAssembler {
       .map((verb) => `- ${verb}`)
       .join('\n');
 
-    return `\n---\n\n**${header}**\n\n${interrupt.statement}${uninvestigated}${affected}${remaining}\n\nResolve with \`chain_id="${context.sessionContext?.chainId ?? ''}"\` plus one of:\n\n${verbs}`;
+    return `\n---\n\n**${header}**\n\n${interrupt.statement}${uninvestigated}${affected}${remaining}\n\nResolve with \`chain_id="${context.sessionContext?.chainId ?? ''}"\` plus one of:\n\n${verbs}\n\nAbort stops the whole run at any time. No node, trailer, report or retry exhaustion is required.`;
   }
 
   /**
@@ -1619,9 +1604,9 @@ export class ResponseAssembler {
 
 /** What an exhausted review accepts, in the words every reply holding one uses. */
 const EXHAUSTED_REVIEW_CHOICE =
-  'The retry budget is spent. Choose a `gate_action`: `retry`, or `skip` to accept the answer already given, or send `cancel: true`.';
+  'The retry budget is spent. Choose a review `gate_action`: `retry`, or `skip` to accept the answer already given.';
 
-/** The `Next:` line of a reply holding an exhausted review: the only moves it accepts (P6.23). */
+/** Review-scoped next actions and the independent run-level stop action. */
 function exhaustedReviewMoves(chainId: string): string {
-  return `Next: chain_id="${chainId}", gate_action="retry" | gate_action="skip" | cancel: true`;
+  return `Next: chain_id="${chainId}", gate_action="retry" | gate_action="skip"\nStop the whole run at any time: chain_id="${chainId}", gate_action="abort". No node, trailer or report is required.`;
 }

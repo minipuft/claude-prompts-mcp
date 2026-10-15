@@ -8,6 +8,7 @@ import os
 import re
 from typing import Any, TypedDict, cast
 
+from _generated.extraction_patterns import EXTRACTION_PATTERNS
 from hook_state_store import (
     TABLE_CHAIN_SESSION_STATE,
     cleanup_stale_rows,
@@ -16,32 +17,16 @@ from hook_state_store import (
     save_state,
 )
 
-# Extraction patterns shared with the opencode-prompts plugin. The generated
-# hooks/lib/_generated/extraction-patterns.json is the single source (regenerate
-# with `npm run generate:contracts` in server/); these hardcoded defaults are the
-# fail-open fallback used when the generated file is missing or unreadable, so a
-# stale checkout degrades to today's behavior rather than crashing the hook.
-_DEFAULT_PATTERNS = {
-    "step": r"(?:[Ss]tep|[Pp]rogress|[Cc]omplete)\s*\(?(\d+)\s*(?:of|/)\s*(\d+)",
-    "chainId": r"(chain-[a-zA-Z0-9_#-]+)",
-    "gateHeader": r"\*\*(?:Structural \+ Gate |Structural |Gate )?Review Required\*\*",
-    "gatesList": r"\*\*Gates\*\*:\s*(.+?)(?:\n|$)",
-    "structuredVerdict": r'"overall"\s*:\s*"(PASS|FAIL)"',
-    # A HARD-PAUSED blocking-unknown interrupt. Deliberately does not match the SOFT variant's
-    # `**Blocking Unknown**`: a soft interrupt issues the step and a bare chain_id resume is a
-    # legitimate answer to it, so treating it as a hold would deny a call the server accepts.
-    "interruptHeader": r"\*\*Chain Paused[^\n*]*\*\*",
-    # The exits the server itself printed for this hold. Read back rather than modelled here:
-    # the paused verb list is state-dependent (`response-assembler.ts` §PAUSED_INTERRUPT_VERBS)
-    # and a hardcoded copy in a hook is exactly what rotted twice in 2026-08.
-    "interruptVerbs": r"Resolve with `chain_id=[^\n]*plus one of:\n\n((?:-\s*.+\n?)+)",
-}
-
 # The reserved synthetic review id stage 16 raises for a blocking-unknown interrupt
 # (`UNKNOWN_INTERRUPT_GATE_ID`, `decisions/mutation/types.ts`). It is a run-state marker, not a
 # gate anyone authored, so every human-facing surface renders the label instead of the dunder.
 UNKNOWN_INTERRUPT_GATE_ID = "__unknown_interrupt__"
 UNKNOWN_INTERRUPT_LABEL = "blocking unknown interrupt"
+
+GATE_VERDICT_GUIDANCE = (
+    'gate_verdict={"overall":"PASS","rationale":"<reason>"}. Use FAIL for unmet criteria. '
+    "Follow the returned server template for per_gate, reminders and semantic evaluation."
+)
 
 
 def label_gate_ids(gate_ids: list[str]) -> str:
@@ -57,7 +42,8 @@ def label_gate_ids(gate_ids: list[str]) -> str:
 
 
 def _load_patterns() -> dict[str, str]:
-    patterns = dict(_DEFAULT_PATTERNS)
+    """Load the JSON projection, retaining its generated twin when JSON is unavailable."""
+    patterns = dict(EXTRACTION_PATTERNS)
     try:
         path = os.path.join(os.path.dirname(__file__), "_generated", "extraction-patterns.json")
         with open(path, encoding="utf-8") as f:
@@ -107,12 +93,14 @@ def _fallback_interrupt_exits() -> list[str]:
 
         return sorted(PENDING_RUN_RESOLUTION_PARAMS - {"gate_verdict"})
     except Exception:
-        return ["cancel", "gate_action"]
+        return ["gate_action"]
 
 
 def interrupt_exits(state: ChainState) -> list[str]:
     """The exits a paused run accepts — the server's own list when it printed one."""
-    verbs = [verb for verb in state.get("interrupt_verbs", []) if verb]
+    # Persisted interrupt text may predate the current server resolution vocabulary.
+    supported = set(_fallback_interrupt_exits())
+    verbs = [verb for verb in state.get("interrupt_verbs", []) if verb and verb.split(":", 1)[0] in supported]
     return verbs if verbs else _fallback_interrupt_exits()
 
 
@@ -147,7 +135,7 @@ def save_session_state(session_id: str, state: ChainState) -> None:
 
 
 def clear_session_state(session_id: str) -> None:
-    """Clear chain state when chain completes."""
+    """Clear chain state after the tracked run terminates."""
     delete_state(TABLE_CHAIN_SESSION_STATE, session_id)
 
 
@@ -322,7 +310,7 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
         elif gate == UNKNOWN_INTERRUPT_LABEL:
             line2 = f"→ {_interrupt_exits(state)}"
         elif gate:
-            line2 = '→ gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"'
+            line2 = f"→ {GATE_VERDICT_GUIDANCE}"
         elif step > 0 and step < total:
             line2 = f'→ prompt_engine(chain_id:"{chain_id}") to continue'
         else:
@@ -341,10 +329,19 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
     if gate == UNKNOWN_INTERRUPT_LABEL:
         lines.append(f"[Interrupt] {gate} - Resolve with: {_interrupt_exits(state)}")
     elif gate:
-        lines.append(f'[Gate] {gate} - Submit: gate_verdict="GATE_REVIEW: PASS|FAIL - <reason>"')
+        lines.append(f"[Gate] {gate} - Submit: {GATE_VERDICT_GUIDANCE}")
 
     if verify_cmd:
         lines.append(f"[Verify] `{verify_cmd}` - Attempt {verify_attempts}/5")
         lines.append("Run implementation, then prompt_engine validates with shell command")
 
     return "\n".join(lines)
+
+
+def format_gate_directive(state: ChainState) -> str:
+    """Render the pending hold's instruction without offering a gate verdict for an interrupt."""
+    chain_id = state.get("chain_id", "")
+    gate = state.get("pending_gate")
+    if gate == UNKNOWN_INTERRUPT_LABEL:
+        return f'<INTERRUPT>chain_id="{chain_id}"\n{format_chain_reminder(state)}</INTERRUPT>'
+    return f'<GATE-REVIEW>chain_id="{chain_id}" gates="{gate}" → Submit gate_verdict</GATE-REVIEW>'

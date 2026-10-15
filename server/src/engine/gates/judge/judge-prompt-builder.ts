@@ -7,11 +7,9 @@
  * reasoning, chain history, or framework context. This prevents context
  * contamination and self-evaluation bias.
  *
- * Uses the same verdict contract as self-review (`GATE_VERDICT_REQUIRED_FORMAT`, plus structured
- * `per_gate` reports for semantic gates), so existing verdict parsing works unchanged.
+ * The judge answers in plain text (or, for semantic gates, structured `per_gate` reports); the
+ * reviewing client transcribes that answer into its structured `gate_verdict` submission.
  */
-
-import { GATE_VERDICT_REQUIRED_FORMAT } from '../core/gate-verdict-contract.js';
 
 import type { SemanticCriterion } from '#shared/types/gate-evaluation.js';
 import type {
@@ -21,6 +19,13 @@ import type {
   ResolvedJudgeConfig,
   SemanticReviewPromptInput,
 } from './types.js';
+
+/**
+ * The reply a judge gives for a gate with no semantic criteria: a verdict word and one line of
+ * rationale, which the reviewing client carries into that gate's `per_gate` entry. Not a
+ * submission format — the judge never calls the tool.
+ */
+export const JUDGE_VERDICT_FORMAT = 'PASS|FAIL - <one-line rationale>';
 
 /**
  * Resolve per-gate evaluation config against global defaults.
@@ -57,7 +62,7 @@ export function buildJudgeEnvelope(
     gateName,
     gateId,
     strict,
-    verdictFormat: GATE_VERDICT_REQUIRED_FORMAT,
+    verdictFormat: JUDGE_VERDICT_FORMAT,
     ...(semanticReviews !== undefined ? { semanticReviews } : {}),
   };
 }
@@ -153,7 +158,7 @@ export function renderSemanticReviewPrompt(reviews: readonly SemanticReviewPromp
  * - "You did NOT produce this output" — prevents self-identification bias
  * - "List failures FIRST" — strict framing forces evidence-based evaluation
  * - No generation reasoning included — prevents context contamination
- * - Standard verdict format — reuses existing verdict parsing infrastructure
+ * - One-line verdict reply — the client carries it into its structured submission
  */
 export function renderJudgePrompt(envelope: JudgeEnvelope): string {
   const sections: string[] = [];
@@ -206,8 +211,7 @@ export function renderJudgePrompt(envelope: JudgeEnvelope): string {
   sections.push('');
   sections.push(
     semanticPrompt.length > 0
-      ? 'Respond with structured gate_verdict.per_gate entries, each carrying an evaluation report with the unchanged server-issued binding and observations. ' +
-          `A legacy verdict line \`${envelope.verdictFormat}\` is a companion only and is insufficient without those structured reports.`
+      ? 'Respond with structured gate_verdict.per_gate entries, each carrying an evaluation report with the unchanged server-issued binding and observations.'
       : `Respond with: \`${envelope.verdictFormat}\``
   );
 

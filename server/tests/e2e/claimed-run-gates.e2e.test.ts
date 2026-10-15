@@ -48,8 +48,8 @@ import type { ChildProcess } from 'node:child_process';
 import type { GateReview, GateVerdictSummary } from '../../src/shared/types/chain-execution.js';
 import type { SemanticEvaluationReport } from '../../src/shared/types/gate-evaluation.js';
 
-const PASS = 'GATE_REVIEW: PASS - ok';
-const FAIL = 'GATE_REVIEW: FAIL - the step misses its gate';
+const PASS = { overall: 'PASS', rationale: 'ok' };
+const FAIL = { overall: 'FAIL', rationale: 'the step misses its gate' };
 const OPT_OUT = { exclude: ['content-structure'], framework_gates: false };
 const GATED_COMMAND = '>>sv_chain :: g112:"NAMED-112" :: "ANON-112"';
 const REQUEST_GATES = [{ id: 'rq112', name: 'rq112', criteria: ['REQ-112'], target_step_id: 'b' }];
@@ -1074,7 +1074,8 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     const kept = chainIdOf((await server.call('prompt_engine', { command: '>>sv_chain164' })).text);
     expect([await chainLine(ended), await chainLine(kept)]).toEqual(['cg164', 'cg164']);
 
-    await server.call('prompt_engine', { chain_id: ended, cancel: true });
+    const aborted = await server.call('prompt_engine', { chain_id: ended, gate_action: 'abort' });
+    expect(aborted.isError).toBe(false);
     expect([await chainLine(ended), await chainLine(kept)]).toEqual(['none', 'cg164']);
     const failed = await server.call('prompt_engine', {
       chain_id: kept,

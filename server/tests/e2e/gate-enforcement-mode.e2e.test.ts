@@ -14,7 +14,7 @@
  * The second case keeps the defaults. Step A then also carries `content-structure`, which
  * declares no mode and so counts as blocking. Owner ruling R107: a verdict that fails gates BY
  * NAME is decided by those gates only, so failing the advisory gate alone advances, failing
- * `content-structure` holds, and a legacy string verdict — no per-gate set — falls back to the
+ * `content-structure` holds, and an overall-only verdict — no per-gate set — falls back to the
  * strictest gate on the step and holds.
  *
  * The third case drives `gate_action: "skip"` on an exhausted advisory review (P6.49).
@@ -287,7 +287,7 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
                       rationale: 'bounded control',
                       reminders: { satisfied: [BLOCK_GATE], not_applicable: [] },
                     }
-                  : 'GATE_REVIEW: FAIL - bounded control',
+                  : { overall: 'FAIL', rationale: 'bounded control' },
             }),
       });
       expect(reply.isError).toBe(false);
@@ -340,7 +340,7 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
     const failed = await session.callTool('prompt_engine', {
       chain_id: chainId,
       user_response: cageerfAnswer('single output'),
-      gate_verdict: 'GATE_REVIEW: FAIL - needs acceptance',
+      gate_verdict: { overall: 'FAIL', rationale: 'needs acceptance' },
     });
     expect(failed.isError).toBe(false);
     const persisted = session.run(chainId);
@@ -447,12 +447,10 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
 
     const adviseFailed = await failStepA(session, 'r107_advise', stepA, failIndex(1));
     const contentFailed = await failStepA(session, 'r107_content', stepA, failIndex(2));
-    const legacy = await failStepA(
-      session,
-      'r107_legacy',
-      stepA,
-      `GATE_REVIEW: FAIL - ${RATIONALE}`
-    );
+    const legacy = await failStepA(session, 'r107_legacy', stepA, {
+      overall: 'FAIL',
+      rationale: `${RATIONALE}`,
+    });
 
     // The advisory gate alone failed: the run is on B, and the warning names that gate only.
     expect(adviseFailed.text).toContain(STEP_B_MARKER);
@@ -482,7 +480,7 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
    */
   test('skip on an exhausted advisory review: refused with no answer, accepts a captured one', async () => {
     const session = await authoredSession();
-    const bareFail = { gate_verdict: `GATE_REVIEW: FAIL - ${RATIONALE}` };
+    const bareFail = { gate_verdict: { overall: 'FAIL', rationale: `${RATIONALE}` } };
     const exhaustedRun = async (twin: string) => {
       const id = `em_chain_${twin}`;
       const created = await session.callTool('resource_manager', {
@@ -547,7 +545,7 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
     const single = await session.callTool('prompt_engine', {
       chain_id: chainIdOf(start.text),
       user_response: 'review output',
-      gate_verdict: `GATE_REVIEW: FAIL - ${RATIONALE}`,
+      gate_verdict: { overall: 'FAIL', rationale: `${RATIONALE}` },
     });
     const failedIds = single.notifications
       .filter((n) => n.method === 'notifications/gate/failed')
@@ -562,7 +560,7 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
       session,
       'p675_control',
       { promptId: 'em_a', stepName: 'A', inlineGateIds: [ADVISE_GATE] },
-      `GATE_REVIEW: FAIL - ${RATIONALE}`
+      { overall: 'FAIL', rationale: `${RATIONALE}` }
     );
     expect(chainStep.text).toContain(`Gate ${ADVISE_GATE} failed: ${RATIONALE}`);
   }, 180000);
@@ -603,14 +601,14 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
     ]);
     const gateless = 'Step 1 carries no gates, so a FAIL verdict has nothing to grade';
 
-    const bare = await call({ gate_verdict: `GATE_REVIEW: FAIL - ${RATIONALE}` });
+    const bare = await call({ gate_verdict: { overall: 'FAIL', rationale: `${RATIONALE}` } });
     expect(bare.isError).toBe(true);
     expect(bare.text).toContain(gateless);
     expect(bare.notifications).toEqual([]);
 
     const answered = await call({
       user_response: 'step B output',
-      gate_verdict: `GATE_REVIEW: FAIL - ${RATIONALE}`,
+      gate_verdict: { overall: 'FAIL', rationale: `${RATIONALE}` },
     });
     expect(answered.isError).toBe(true);
     expect(answered.text).toContain(gateless);
@@ -619,7 +617,7 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
     // Control: the same step answered with a PASS moves on, once — nothing was held or charged.
     const passed = await call({
       user_response: 'step B output',
-      gate_verdict: 'GATE_REVIEW: PASS - ok',
+      gate_verdict: { overall: 'PASS', rationale: 'ok' },
     });
     expect(passed.isError).toBe(false);
     expect(passed.text).toContain('EM-STEP-A-BODY');
@@ -644,7 +642,7 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
     ]);
     const failed = await call({
       user_response: 'step A output',
-      gate_verdict: `GATE_REVIEW: FAIL - ${RATIONALE}`,
+      gate_verdict: { overall: 'FAIL', rationale: `${RATIONALE}` },
     });
     expect(failed.text).toContain('Gate Review Required');
     expect(failed.text).not.toContain(STEP_B_MARKER);
@@ -661,7 +659,7 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
     // Nothing was recorded: the review still takes its verdict and the run moves on.
     const passed = await call({
       user_response: 'step A output',
-      gate_verdict: 'GATE_REVIEW: PASS - ok',
+      gate_verdict: { overall: 'PASS', rationale: 'ok' },
     });
     expect(passed.isError).toBe(false);
     expect(passed.text).toContain(STEP_B_MARKER);

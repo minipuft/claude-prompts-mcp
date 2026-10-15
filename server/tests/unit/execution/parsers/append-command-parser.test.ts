@@ -38,6 +38,78 @@ describe('parseAppendCommand', () => {
     });
   });
 
+  test.each([
+    ['root', 'root'],
+    ['implementation_plan/plan_table', 'implementation-plan-plan-table'],
+    ['development/planning/plan_table', 'development-planning-plan-table'],
+    ['9Legacy-Root/Child_Step/deep-2', '9legacy-root-child-step-deep-2'],
+  ])('preserves exact append selector %s and its complete argument tail', (promptId, id) => {
+    expect(parseAppendCommand(`--> >>${promptId} marker="child / exact" depth=2`)).toEqual({
+      ok: true,
+      nodes: [{ id, promptId, args: { marker: 'child / exact', depth: '2' } }],
+    });
+  });
+
+  test('qualified repeated and delegated steps keep full identities and existing node ids', () => {
+    expect(parseAppendCommand('--> >>parent/child==> >>parent/child--> >>parent/child')).toEqual({
+      ok: true,
+      nodes: [
+        { id: 'parent-child', promptId: 'parent/child' },
+        { id: 'parent-child-2', promptId: 'parent/child', delegated: true },
+        { id: 'parent-child-3', promptId: 'parent/child' },
+      ],
+    });
+  });
+
+  test.each(['"', "'"])('preserves slash and named operator bytes inside %s quotes', (quote) => {
+    const value =
+      '/parent/child --> >>other ==> >>delegated :: gate @CAGEERF #analytical %clean %judge + >>extra ? true : >>else *3';
+    expect(
+      parseAppendCommand(`--> >>parent/child note=${quote}${value}${quote} --> >>root`)
+    ).toEqual({
+      ok: true,
+      nodes: [
+        { id: 'parent-child', promptId: 'parent/child', args: { note: value } },
+        { id: 'root', promptId: 'root' },
+      ],
+    });
+  });
+
+  test.each([
+    'parent//child',
+    'parent/../child',
+    'parent/child/',
+    'parent/child.dot',
+    'parent/child%20tail',
+    'parent/child\\tail',
+    'parent/child?tail',
+    'parent/childmarker="tail"',
+  ])('refuses malformed whole append selector %s', (promptId) => {
+    const parsed = parseAppendCommand(`--> >>${promptId}`);
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.message).toContain('not a prompt reference');
+  });
+
+  test.each([
+    'positional text',
+    'topic:"colon is not admitted"',
+    'marker="kept" ignored',
+    'ignored marker="kept"',
+    'marker="unclosed',
+    "marker='unclosed",
+    'marker=',
+    'marker="kept"depth=2',
+    'marker="kept" %clean',
+    '+ >>other',
+    '#analytical',
+  ])('refuses the complete malformed append argument tail %s', (tail) => {
+    const parsed = parseAppendCommand(`--> >>parent/child ${tail}`);
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.message).toContain('malformed arguments');
+  });
+
   test('several steps become several nodes, in written order', () => {
     const parsed = parseAppendCommand('--> >>research_docs --> >>write_summary');
     expect(parsed.ok).toBe(true);

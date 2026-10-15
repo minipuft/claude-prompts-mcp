@@ -7,7 +7,11 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
-import type { FormatterExecutionContext, StepLifecycle } from '#shared/types/chain-execution.js';
+import type {
+  ChainRunStatus,
+  FormatterExecutionContext,
+  StepLifecycle,
+} from '#shared/types/chain-execution.js';
 import type { ChainSessionService } from '#shared/types/chain-session.js';
 import type { ResponseFormatterPort } from '#shared/types/index.js';
 import type { ExecutionContext } from '../../context/index.js';
@@ -50,7 +54,11 @@ export class ResponseFormattingStage extends BasePipelineStage {
     const session = context.sessionContext;
     if (session === undefined) return;
 
-    const status = resolveTerminalStatus(context);
+    const runStatus = this.chainSessionStore?.getSession(
+      session.sessionId,
+      context.getScopeOptions()
+    )?.runStatus;
+    const status = resolveTerminalStatus(context, runStatus);
     if (status === undefined) return;
 
     const completedAt = Date.now();
@@ -237,17 +245,18 @@ export class ResponseFormattingStage extends BasePipelineStage {
 /**
  * Which terminal record, if any, this run has earned.
  *
- * Abort was previously unobservable in the ledger: `state.session.aborted` is written by
- * GateVerdictProcessor and the shell-verification stage, and was read by nothing — so a
- * user-aborted chain left its last record at `working` permanently. Aborted is checked
- * first because a run can be flagged complete and aborted in the same pass, and the abort
- * is the more specific outcome.
+ * Completion is recorded here; cancellation is recorded by the executor's durable terminal
+ * observer, and failure by the pipeline's catch boundary.
  *
  * Returns undefined for a run still in progress, which is not a terminal state and must
  * not produce a record.
  */
-function resolveTerminalStatus(context: ExecutionContext): StepLifecycle | undefined {
-  if (context.state.session.aborted === true) return 'cancelled';
+function resolveTerminalStatus(
+  context: ExecutionContext,
+  runStatus?: ChainRunStatus
+): StepLifecycle | undefined {
+  // Completion can precede its latch; a known unsuccessful terminal outcome cannot become success.
+  if (runStatus === 'cancelled' || runStatus === 'failed') return undefined;
   if (context.state.session.chainComplete) return 'completed';
   return undefined;
 }

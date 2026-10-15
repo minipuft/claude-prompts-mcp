@@ -19,7 +19,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { describe, expect, it } from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
+import { McpServer } from '@modelcontextprotocol/server';
+import { z } from 'zod/v4';
+
+import { McpToolRouter } from '../../../src/mcp/tools/index.js';
+import type { PromptExecutor } from '../../../src/mcp/tools/prompt-engine/core/prompt-executor.js';
+import type { PromptEngineInput } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
 
 import {
   DECLARED_PARAMETERS_BY_TOOL,
@@ -139,12 +145,12 @@ describe('undeclared parameter refusal', () => {
   describe('declared but not advertised (the prompt_engine union)', () => {
     it('says the gate system is off — NOT "not a parameter"', () => {
       // `gate_verdict` IS in the contract (CLAUDE.md §Public API Contract: the tool surface is a
-      // union, and the gate trio is a member advertised only while gates are enabled). Telling its
+      // union, and gates/verdict are advertised only while gates are enabled). Telling its
       // sender it is not a parameter would be false, and would send them to fix a spelling that is
       // already right.
       const message = describeUndeclaredParameterRefusal(
         'prompt_engine',
-        { command: '>>demo', gate_verdict: 'GATE_REVIEW: PASS - ok' },
+        { command: '>>demo', gate_verdict: { overall: 'PASS', rationale: 'ok' } },
         GATE_PARAMETERS_UNAVAILABLE
       );
 
@@ -157,7 +163,7 @@ describe('undeclared parameter refusal', () => {
       expect(
         describeUndeclaredParameterRefusal('prompt_engine', {
           command: '>>demo',
-          gate_verdict: 'GATE_REVIEW: PASS - ok',
+          gate_verdict: { overall: 'PASS', rationale: 'ok' },
         })
       ).toBeNull();
     });
@@ -172,26 +178,135 @@ describe('undeclared parameter refusal', () => {
   });
 });
 
+describe('registered prompt_engine action admission', () => {
+  async function registered(enabled: boolean) {
+    const server = new McpServer({ name: 'action-admission-test', version: '1' });
+    const registrations = jest.spyOn(server, 'registerTool');
+    const execute = jest.fn<PromptExecutor['executePromptCommand']>().mockResolvedValue({
+      content: [{ type: 'text', text: 'executor reached' }],
+      isError: false,
+    });
+    let current = enabled;
+    // Skip initialize's persistence/I/O; keep the real router registration, schema and admission.
+    const router = Object.create(McpToolRouter.prototype) as McpToolRouter;
+    Object.assign(router, {
+      logger: { info() {}, warn() {}, debug() {}, error() {} },
+      mcpServer: server,
+      promptExecutor: { executePromptCommand: execute },
+      gateStateStore: { isGateSystemEnabled: () => current },
+    });
+    await router.registerAllTools(server);
+    const registration = registrations.mock.calls.find(([name]) => name === 'prompt_engine');
+    if (registration === undefined) throw new Error('prompt_engine was not registered');
+    const schema = registration[1].inputSchema;
+    if (!(schema instanceof z.ZodObject))
+      throw new Error('prompt_engine schema is not a ZodObject');
+    const callback = registration[2] as (
+      args: PromptEngineInput,
+      extra: unknown
+    ) => ReturnType<PromptExecutor['executePromptCommand']>;
+    return {
+      execute,
+      server,
+      call: (args: object) => callback(schema.parse(args), {}),
+      setEnabled: (value: boolean) => {
+        current = value;
+      },
+    };
+  }
+
+  it.each(['retry', 'skip'])(
+    'refuses gates-off %s by name before the executor',
+    async (gate_action) => {
+      const fixture = await registered(false);
+      try {
+        const result = await fixture.call({ chain_id: 'chain-demo#1', gate_action });
+        expect(result.isError).toBe(true);
+        expect(result.content).toEqual([
+          expect.objectContaining({
+            text: expect.stringContaining(`gate_action:"${gate_action}"`),
+          }),
+        ]);
+        expect(JSON.stringify(result.content)).toContain(
+          'unavailable while the gate system is disabled'
+        );
+        expect(fixture.execute).not.toHaveBeenCalled();
+      } finally {
+        await fixture.server.close();
+      }
+    }
+  );
+
+  it.each(['abort', 'resume', 'accept_alternative'] as const)(
+    'admits gates-off %s to the executor unchanged',
+    async (gate_action) => {
+      const fixture = await registered(false);
+      try {
+        const result = await fixture.call({ chain_id: 'chain-demo#1', gate_action });
+        expect(result.isError).toBe(false);
+        expect(fixture.execute).toHaveBeenCalledWith(
+          { chain_id: 'chain-demo#1', gate_action },
+          expect.anything()
+        );
+      } finally {
+        await fixture.server.close();
+      }
+    }
+  );
+
+  it.each(['gates', 'gate_verdict'])(
+    'still refuses unavailable %s from cached input',
+    async (key) => {
+      const fixture = await registered(true);
+      fixture.setEnabled(false);
+      try {
+        const value = key === 'gates' ? ['some-gate'] : { overall: 'PASS', rationale: 'ok' };
+        const result = await fixture.call({ chain_id: 'chain-demo#1', [key]: value });
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(
+          `'${key}' is a parameter of prompt_engine`
+        );
+        expect(fixture.execute).not.toHaveBeenCalled();
+      } finally {
+        await fixture.server.close();
+      }
+    }
+  );
+
+  it('checks current gate state on a cached schema in both toggle directions', async () => {
+    const fixture = await registered(true);
+    try {
+      fixture.setEnabled(false);
+      expect((await fixture.call({ chain_id: 'chain-demo#1', gate_action: 'retry' })).isError).toBe(
+        true
+      );
+      expect(fixture.execute).not.toHaveBeenCalled();
+      fixture.setEnabled(true);
+      expect((await fixture.call({ chain_id: 'chain-demo#1', gate_action: 'retry' })).isError).toBe(
+        false
+      );
+      expect(fixture.execute).toHaveBeenCalledTimes(1);
+    } finally {
+      await fixture.server.close();
+    }
+  });
+});
+
 /**
  * The same class one level down: a key a NESTED object does not declare (P4.103).
  *
  * The top-level refusal names a key because the key ARRIVES. Inside a parameter, zod does the
- * refusing — and for a UNION it reports one `invalid_union` issue whose sub-issues are nested,
- * while the SDK renders top-level issues only. `gate_verdict` is the union that matters: it is
- * the safety-review submission, and `{pased: true}` also leaves `passed` absent, which reads as
- * FAIL. The client saw exactly `gate_verdict: Invalid input`.
+ * refusing, and its default message names neither the key's full path nor a correction.
+ * `gate_verdict` is the object that matters: it is the safety-review submission, and
+ * `{pased: true}` also leaves `passed` absent, which reads as FAIL.
  */
 describe('nested key refusal (P4.103)', () => {
   const parse = (value: unknown): { ok: boolean; message: string } => {
-    const schema = buildPromptEngineSchema(
-      (v) => /^GATE_REVIEW:/.test(v),
-      'Gate verdict must follow format: "GATE_REVIEW: PASS/FAIL - reason"'
-    );
+    const schema = buildPromptEngineSchema();
     const result = schema.safeParse({ command: '>>demo', gate_verdict: value });
     return {
       ok: result.success,
-      // The SDK prefixes each top-level issue with its path. Refinements may report directly,
-      // while union failures already carry nested paths inside their message.
+      // The SDK prefixes each top-level issue with its path.
       message: result.success
         ? ''
         : result.error.issues
@@ -295,10 +410,6 @@ describe('nested key refusal (P4.103)', () => {
       expect(parse({ overall: 'PASS', rationale: 'all good' }).ok).toBe(true);
     });
 
-    it('CONTROL: the legacy string form is still accepted', () => {
-      expect(parse('GATE_REVIEW: PASS - fine').ok).toBe(true);
-    });
-
     it('a misspelled nested key reaches the client with its path and a suggestion', () => {
       const { ok, message } = parse({
         overall: 'FAIL',
@@ -325,22 +436,23 @@ describe('nested key refusal (P4.103)', () => {
       expect(message).toContain("did you mean 'satisfied'?");
     });
 
-    it('a bad string is answered by the STRING branch, not the object branch', () => {
-      // Branch selection is by the value's JS type. Reporting "expected object" at a string, or
-      // an object's field errors at a string, would name a shape the sender never sent.
-      const { ok, message } = parse('nonsense');
+    it('a string is refused with the object to resend, not zod\'s bare "expected object"', () => {
+      const { ok, message } = parse('GATE_REVIEW: PASS - fine');
 
       expect(ok).toBe(false);
-      expect(message).toContain('GATE_REVIEW');
+      expect(message).toContain('gate_verdict takes the structured object, not a string.');
+      expect(message).toContain('"overall": "PASS"|"FAIL"');
+      expect(message).toContain('"per_gate"');
+      expect(message).not.toContain('expected object');
       expect(message).not.toContain('is not a declared key');
     });
 
-    it('a value that is neither is told what the parameter takes', () => {
-      const { ok, message } = parse(42);
-
-      expect(ok).toBe(false);
-      expect(message).toContain('structured object');
-      expect(message).toContain('legacy string form');
+    it('any other non-object kind is named the same way', () => {
+      expect(parse(42).message).toContain(
+        'gate_verdict takes the structured object, not a number.'
+      );
+      expect(parse([]).message).toContain('not an array.');
+      expect(parse(null).message).toContain('not null.');
     });
 
     it('pass_criteria carries no `description` — the fork is SURPLUS, not a missing declaration', () => {
@@ -399,7 +511,7 @@ describe('nested key refusal (P4.103)', () => {
       })),
     ])('retains the rich report with optional reviewer %j', (reviewer) => {
       const report = { ...evaluation, ...(reviewer === undefined ? {} : { reviewer }) };
-      const schema = buildPromptEngineSchema((value) => /^GATE_REVIEW:/.test(value), 'Bad verdict');
+      const schema = buildPromptEngineSchema();
       const parsed = schema.parse({ command: '>>demo', gate_verdict: verdict(report) });
       expect(parsed['gate_verdict']).toEqual(verdict(report));
       if (reviewer === undefined)

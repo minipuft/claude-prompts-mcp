@@ -195,7 +195,7 @@ describe('Streamable HTTP: a gate review states one state', () => {
         await session.call({
           chain_id: chainId,
           user_response: step === 3 ? shortSections(step) : fullSections(step),
-          gate_verdict: 'GATE_REVIEW: PASS - reviewed',
+          gate_verdict: { overall: 'PASS', rationale: 'reviewed' },
         })
       );
     }
@@ -214,14 +214,17 @@ describe('Streamable HTTP: a gate review states one state', () => {
     // The verdict it waits for is accepted — not refused as a resume of a finished run.
     const landed = await session.call({
       chain_id: chainId,
-      gate_verdict: 'GATE_REVIEW: PASS - sections expanded',
+      gate_verdict: { overall: 'PASS', rationale: 'sections expanded' },
     });
     expect(landed).not.toContain('already complete');
     expect(landed).toContain('✓ Chain complete (3/3)');
     expect(landed).not.toContain('Next:');
 
     // And only now is the run finished.
-    const after = await session.call({ chain_id: chainId, gate_verdict: 'GATE_REVIEW: PASS - x' });
+    const after = await session.call({
+      chain_id: chainId,
+      gate_verdict: { overall: 'PASS', rationale: 'x' },
+    });
     expect(after).toContain('Chain run already complete');
   }, 180000);
 
@@ -236,7 +239,7 @@ describe('Streamable HTTP: a gate review states one state', () => {
     const reply = await session.call({
       chain_id: chainId,
       user_response: 'review output',
-      gate_verdict: 'GATE_REVIEW: FAIL - misses a constraint',
+      gate_verdict: { overall: 'FAIL', rationale: 'misses a constraint' },
     });
 
     expect(session.review()?.attemptCount).toBe(1);
@@ -252,14 +255,14 @@ describe('Streamable HTTP: a gate review states one state', () => {
 
     await session.call({
       chain_id: chainId,
-      gate_verdict: 'GATE_REVIEW: FAIL - misses a constraint',
+      gate_verdict: { overall: 'FAIL', rationale: 'misses a constraint' },
     });
     expect(session.review()?.attemptCount).toBe(1);
 
     const reply = await session.call({
       chain_id: chainId,
       user_response: 'review output',
-      gate_verdict: 'GATE_REVIEW: FAIL - still misses it',
+      gate_verdict: { overall: 'FAIL', rationale: 'still misses it' },
     });
     expect(session.review()?.attemptCount).toBe(2);
     expect(reply).toContain('Retry Limit Reached');
@@ -270,7 +273,7 @@ describe('Streamable HTTP: a gate review states one state', () => {
     await session.call({
       chain_id: chainId,
       user_response: 'review output',
-      gate_verdict: 'GATE_REVIEW: FAIL - first failure',
+      gate_verdict: { overall: 'FAIL', rationale: 'first failure' },
     });
     const held = session.review();
     expect(held?.attemptCount).toBe(1);
@@ -354,7 +357,7 @@ describe('Streamable HTTP: a gate review states one state', () => {
     await session.call({
       chain_id: chainId,
       user_response: 'reader setup output',
-      gate_verdict: 'GATE_REVIEW: FAIL - initialize ledger scope',
+      gate_verdict: { overall: 'FAIL', rationale: 'initialize ledger scope' },
     });
     const binding = {
       gate_id: 'reader-mixed',

@@ -167,7 +167,7 @@ function walk(
 const TOOL_ROOTS: Readonly<Record<string, z.ZodType>> = {
   // The WIDEST prompt_engine shape: the narrowed one omits the gate parameters, so walking it
   // instead would silently drop `gate_verdict` — the very schema this row cares most about.
-  prompt_engine: buildPromptEngineSchema(() => true, 'unused'),
+  prompt_engine: buildPromptEngineSchema(),
   system_control: buildSystemControlSchema(),
   resource_manager: resourceManagerInputSchema,
 };
@@ -193,8 +193,8 @@ describe('nested object schemas refuse an unknown key', () => {
     expect(objects.length).toBeGreaterThan(15);
     expect(objects.map((entry) => entry.path)).toEqual(
       expect.arrayContaining([
-        'prompt_engine.gate_verdict|0',
-        'prompt_engine.gate_verdict|0.per_gate[]',
+        'prompt_engine.gate_verdict',
+        'prompt_engine.gate_verdict.per_gate[]',
         'system_control.config',
       ])
     );
@@ -222,19 +222,18 @@ describe('nested object schemas refuse an unknown key', () => {
 });
 
 describe('gate_verdict: a misspelled key cannot read as a missing verdict', () => {
-  const schema = buildPromptEngineSchema(() => true, 'unused');
+  const schema = buildPromptEngineSchema();
 
   const submission = (perGateEntry: Record<string, unknown>): Record<string, unknown> => ({
     command: '>>demo',
     gate_verdict: { overall: 'PASS', rationale: 'ok', per_gate: [perGateEntry] },
   });
 
-  /** The union member that matched the object — zod nests a union's sub-issues under `errors`. */
+  /** The issues inside `gate_verdict`, with paths relative to it. */
   function objectBranchIssues(result: z.ZodSafeParseResult<unknown>): z.core.$ZodIssue[] {
-    const union = (result.error?.issues ?? []).find((issue) => issue.code === 'invalid_union');
-    const branches = (union as { errors?: z.core.$ZodIssue[][] } | undefined)?.errors ?? [];
-    // Branch 0 is the structured object, branch 1 the legacy string — the union's declared order.
-    return branches[0] ?? [];
+    return (result.error?.issues ?? [])
+      .filter((issue) => issue.path[0] === 'gate_verdict')
+      .map((issue) => ({ ...issue, path: issue.path.slice(1) }));
   }
 
   it('REJECTS the submission rather than accepting it with the verdict absent', () => {
@@ -268,21 +267,16 @@ describe('gate_verdict: a misspelled key cannot read as a missing verdict', () =
     ).toHaveLength(1);
   });
 
-  it('KNOWN LIMIT (as of 2026-09-21): the union flattens the path out of the client message', () => {
-    // Stamped, not prose. `gate_verdict` is a union of the structured object and the legacy
-    // string, and zod reports a union failure as ONE `invalid_union` issue whose sub-issues live
-    // under `errors`. The MCP SDK's `formatIssue` renders only top-level issues, so a client sees
-    // `gate_verdict: Invalid input` — correct and safe, but not the path.
-    //
-    // FLIPS WHEN: `gate_verdict` dispatches on the value's JS type instead of unioning, which was
-    // measured to yield `gate_verdict.per_gate.0: Unrecognized key: "pased"` verbatim. Not done
-    // here because every mechanism for it either drops the published object shape out of
-    // `tools/list` (`z.custom`) or adds a second validation pass — a published-contract call, not
-    // a worker's. Returned under concerns.
+  it('the path reaches the top-level issues the client message is rendered from', () => {
+    // `gate_verdict` is one object, not a union, so zod reports each nested issue at the top
+    // level with its full path, and the SDK's rendering of top-level issues carries it.
     const result = schema.safeParse(submission({ index: 1, pased: true, rationale: 'r' }));
     const topLevel = (result.error?.issues ?? []).map((issue) => issue.path.join('.'));
 
-    expect(topLevel).toEqual(['gate_verdict']);
+    expect(topLevel).toEqual(
+      expect.arrayContaining(['gate_verdict.per_gate.0.passed', 'gate_verdict.per_gate.0'])
+    );
+    expect(topLevel).not.toContain('gate_verdict');
   });
 
   it('CONTROL: the correctly spelled submission still parses', () => {
@@ -299,15 +293,16 @@ describe('gate_verdict: a misspelled key cannot read as a missing verdict', () =
     expect(result.success).toBe(true);
   });
 
-  it('CONTROL: the legacy STRING verdict shape is untouched', () => {
-    // The union's other member. This row narrows the structured object only; the string form is
-    // read back by regex and is on its own retirement clock (CLAUDE.md §Public API Contract).
+  it('a string verdict is refused, naming the object to send instead', () => {
     const result = schema.safeParse({
       command: '>>demo',
       gate_verdict: 'GATE_REVIEW: PASS - looks right',
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.message).toContain(
+      'gate_verdict takes the structured object, not a string.'
+    );
   });
 });
 
@@ -487,7 +482,7 @@ describe('every nested refusal names its path and the nearest key', () => {
       ])
     );
     expect(unions.map((entry) => entry.path)).toEqual(
-      expect.arrayContaining(['prompt_engine.gate_verdict', 'prompt_engine.workflow.gates[]'])
+      expect.arrayContaining(['prompt_engine.observations[]', 'prompt_engine.workflow.gates[]'])
     );
   });
 

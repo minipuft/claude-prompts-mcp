@@ -115,23 +115,17 @@ export interface McpToolRequest {
   /** Chain identifier for resuming executions. Format owned by `shared/utils/chain-id-codec`. */
   readonly chain_id?: string;
 
-  /** Gate review for pending validation; structured reports stay separate from legacy text. */
-  readonly gate_verdict?: string | GateVerdictSubmission;
+  /** Structured gate review answering a pending review. */
+  readonly gate_verdict?: GateVerdictSubmission;
 
   /**
-   * The verb a caller uses to resolve a run that is holding. Two disjoint vocabularies share one
-   * parameter, and which one applies is decided by WHAT the run is holding on:
+   * Run-level `abort` ends the existing run named by `chain_id` in any nonterminal state.
+   * The executor consumes it before command, review, node or report handling.
    *
-   * - retry-limit exhaustion (`GateAction`): 'retry' resets the attempt count, 'skip' passes the
-   *   failed gate, 'abort' stops the run.
-   * - a mid-chain blocking-unknown interrupt ({@link InterruptResolutionAction}): 'resume'
-   *   acknowledges the unknown and issues the investigation step, 'accept_alternative' takes the
-   *   `remainder` submitted in the SAME call. Both are refused by name anywhere else — on an
-   *   ordinary gate review and on a run with nothing pending — so the union never becomes a
-   *   grab-bag whose members mean whatever the current state allows.
-   *
-   * 'abort' belongs to both, deliberately: stopping the run means the same thing either way, and
-   * a second spelling of it would be a synonym a client has to choose between.
+   * Exhausted reviews accept `retry` (reset attempts) and `skip` (operational bypass).
+   * A blocking-unknown interrupt accepts `resume` (issue its investigation step) or
+   * `accept_alternative` (apply the `remainder` supplied on the same call). These review and
+   * interrupt actions retain their own phase requirements.
    *
    * @since 2.1.0
    */

@@ -60,6 +60,10 @@ import {
 } from '#engine/gates/guidance/GateGuidanceRenderer.js';
 import { GateManagerProvider } from '#engine/gates/registry/gate-provider-adapter.js';
 import { GateReferenceResolver } from '#engine/gates/services/gate-reference-resolver.js';
+import {
+  createVerifyActiveStateStore,
+  type VerifyActiveStateStore,
+} from '#engine/gates/shell/verify-active-state-store.js';
 import { WorkspaceScriptLoader } from '#modules/automation/core/index.js';
 import { createScriptExecutor } from '#modules/automation/execution/script-executor.js';
 import {
@@ -84,7 +88,10 @@ import {
   ChainSessionService,
 } from '#shared/types/index.js';
 import { isChainId } from '#shared/utils/chain-id-codec.js';
-import { resolveRequestIdentity } from '#shared/utils/request-identity-resolver.js';
+import {
+  resolveRequestIdentity,
+  resolveRequestIdentityContext,
+} from '#shared/utils/request-identity-resolver.js';
 import {
   buildIdentityScope,
   resolveContinuityScopeId,
@@ -124,6 +131,7 @@ export class PromptExecutor {
   private toolDescriptionLoader?: ToolDescriptionLoader;
   private analyticsService?: MetricsCollector;
   private promptPipeline: PromptExecutionPipeline | undefined;
+  private verifyActiveStateStore: VerifyActiveStateStore | undefined;
   private mcpToolsManager?: any;
   /** GateManager for registry-based gate selection in pipeline stages */
   private readonly gateManager: GateManager;
@@ -232,6 +240,20 @@ export class PromptExecutor {
       this.argumentHistoryTracker
     );
     this.chainSessionStore = this.chainSessionStoreInstance;
+    // Abort can be the first call: observe the durable event without building the pipeline.
+    this.chainSessionStore.onRunEnded((sessionId, terminal) => {
+      if (terminal?.status !== 'cancelled') return;
+      this.executionRecordStore?.append({
+        sessionId,
+        chainId: terminal.chainId,
+        ...(terminal.promptId !== undefined ? { promptId: terminal.promptId } : {}),
+        status: 'cancelled',
+        startedAt: terminal.completedAt,
+        completedAt: terminal.completedAt,
+        ...(terminal.scope !== undefined ? { scope: terminal.scope } : {}),
+        ...terminal.telemetry,
+      });
+    });
     const temporaryGateRegistry = createTemporaryGateRegistry(logger, {
       maxMemoryGates: 100,
       defaultExpirationMs: 30 * 60 * 1000,
@@ -415,8 +437,6 @@ export class PromptExecutor {
       command?: string; // Optional - not needed for chain resume (chain_id + user_response)
       force_restart?: boolean;
       chain_id?: string;
-      /** Stop the run named by `chain_id`. See `handleCancel`. */
-      cancel?: boolean;
       /** Mint a single-use handoff token for the run named by `chain_id` (2A). See `handleHandoff`. */
       handoff?: boolean;
       /** Claim a run minted elsewhere and resume it here (2A). See `handleClaim`. */
@@ -452,12 +472,12 @@ export class PromptExecutor {
       extra != null && typeof extra === 'object' && '_sdkExtra' in extra
         ? (extra as Record<string, unknown>)['_sdkExtra']
         : undefined;
-    // `cancel` short-circuits before any command parsing: it names an existing run rather than
+    // `abort` short-circuits before any command parsing: it names an existing run rather than
     // describing one to start, so nothing below it applies.
-    if (args.cancel === true) {
-      return await this.handleCancel(args.chain_id, sdkExtra);
+    if (args.gate_action === 'abort') {
+      return await this.handleAbort(args.chain_id, sdkExtra);
     }
-    // `handoff` is the same shape as cancel: it names an existing run and starts nothing.
+    // `handoff` names an existing run and starts nothing.
     if (args.handoff === true) {
       return await this.handleHandoff(args.chain_id, sdkExtra);
     }
@@ -466,17 +486,16 @@ export class PromptExecutor {
     // the chain id from the rendered response (the hook-adoption decision in plan 2A).
     let claimedChainId: string | undefined;
     if (typeof args.claim_token === 'string' && args.claim_token.trim().length > 0) {
-      const claim = await this.handleClaim(args.claim_token.trim());
+      const claim = await this.handleClaim(args.claim_token.trim(), sdkExtra);
       if (claim.refusal !== undefined) return claim.refusal;
       claimedChainId = claim.chainId;
     }
 
     const normalizedCommand = typeof args.command === 'string' ? args.command.trim() : '';
-    const normalizedGateVerdict =
-      typeof args.gate_verdict === 'string' ? args.gate_verdict.trim() : args.gate_verdict;
+    const gateVerdict = args.gate_verdict;
     const chainIdFromCommand = this.extractChainId(normalizedCommand);
     const hasResumePayload = Boolean(
-      (args.user_response && args.user_response.trim().length > 0) || normalizedGateVerdict
+      (args.user_response && args.user_response.trim().length > 0) || gateVerdict
     );
     const shouldTreatAsResumeOnly =
       Boolean(chainIdFromCommand) && hasResumePayload && args.force_restart !== true;
@@ -547,7 +566,7 @@ export class PromptExecutor {
     const request = {
       ...(commandValue && { command: commandValue }),
       ...(chainIdValue && { chain_id: chainIdValue }),
-      ...(normalizedGateVerdict && { gate_verdict: normalizedGateVerdict }),
+      ...(gateVerdict && { gate_verdict: gateVerdict }),
       ...(args.gate_action && { gate_action: args.gate_action }),
       ...(args.user_response !== undefined && { user_response: args.user_response }),
       ...(args.force_restart !== undefined && { force_restart: args.force_restart }),
@@ -589,28 +608,17 @@ export class PromptExecutor {
   /**
    * Stop the run named by `chainId` and block further progression.
    *
-   * Relocated from `system_control session cancel`. The rule that decides the placement is which
-   * id the caller holds: a `chain_id` is held BECAUSE you are running the chain, so ending that
-   * run is part of running it. `system_control session` keeps `list`/`inspect`/`clear`, which are
-   * operator work across runs you are not in, keyed on a `session_id` read from a listing.
-   *
-   * Cancel is NOT clear. It transitions the run to `cancelled` and leaves its state and artifacts
-   * in place so the operator can still inspect what happened; removing them is `clear`'s job.
-   * It is also not `force_restart`: that abandons this run and immediately begins a new one, which
-   * is cancel-then-start. Both verbs now live on one tool, so the distinction is stated in both
-   * descriptions rather than being implied by which tool you reached for.
+   * Abort transitions the run to `cancelled`, retaining state and artifacts for inspection.
+   * It starts no work and requires no review, node, report or retry-budget admission.
    */
-  private async handleCancel(
-    chainId: string | undefined,
-    sdkExtra: unknown
-  ): Promise<ToolResponse> {
+  private async handleAbort(chainId: string | undefined, sdkExtra: unknown): Promise<ToolResponse> {
     if (chainId === undefined || chainId.trim().length === 0) {
       return {
         content: [
           {
             type: 'text' as const,
             text:
-              '❌ `cancel: true` requires `chain_id` — it names the run to stop.\n\n' +
+              '❌ `gate_action:"abort"` requires `chain_id` — it names the run to stop.\n\n' +
               'Use `system_control(action:"session", operation:"list")` to find one.',
           },
         ],
@@ -618,18 +626,15 @@ export class PromptExecutor {
       };
     }
 
-    // Same scope posture the relocated handler used: a cancel must not reach another workspace's
-    // session. `cancelChain` enforces it via `getSessionForMutation`; the caller has to supply it.
+    // `cancelChain` enforces workspace ownership via `getSessionForMutation` using request scope.
     const scope = this.resolveRequestScope(sdkExtra);
     const trimmed = chainId.trim();
 
     // `cancelChain` is keyed on the INTERNAL session id (e.g.
     // `review-content_analysis-1786998494932`), while the caller holds the resume token
-    // (`chain-content_analysis#1`). Resolving one to the other here is the substance of the
-    // relocation, not a detail of it: the old `system_control` operation took the internal id, so
-    // stopping your own run meant listing sessions first to look up an identifier you never chose.
+    // (`chain-content_analysis#1`). Resolve the caller's run token before applying the transition.
     // `includeDormant` is set because a run parked awaiting review is exactly the one an operator
-    // reaches for cancel on.
+    // reaches for abort on.
     const session = this.chainSessionStore.getSessionByChainIdentifier(trimmed, {
       ...scope,
       includeDormant: true,
@@ -645,10 +650,35 @@ export class PromptExecutor {
           {
             type: 'text' as const,
             text:
-              `⚠️ **Cancel Not Applied**: \`${chainId}\`\n\n` +
-              'The run is already in a terminal state (completed/failed/cancelled), or no run ' +
+              `⚠️ **Abort Not Applied**: \`${chainId}\`\n\n` +
+              'The run is already in a terminal state (completed/failed), or no run ' +
               'with that id exists in this workspace. Use `system_control(action:"session", ' +
               'operation:"inspect")` to view its current status.',
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    try {
+      if (session === undefined) throw new Error('Resolved run identity unavailable for release');
+      const outcome = await this.getVerifyActiveStateStore().releaseRunState(
+        session.chainId,
+        session.sessionId
+      );
+      if (outcome === 'foreign' || outcome === 'unbound') {
+        throw new Error(`Verify-loop state is ${outcome}`);
+      }
+    } catch (error) {
+      this.logger.warn('[PromptExecutor] Verify-loop release incomplete', { chainId, error });
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `🛑 **Chain Cancelled**: \`${chainId}\`\n\n` +
+              'Verify-loop release incomplete. Cancellation and artifacts are retained; ' +
+              'retry `gate_action:"abort"` with the same `chain_id` to retry release.',
           },
         ],
         isError: true,
@@ -672,7 +702,7 @@ export class PromptExecutor {
   /**
    * Mint a single-use handoff token for the run named by `chainId` (plan 2A).
    *
-   * Same placement rule as cancel: the caller holds the chain id because they are running the
+   * The caller holds the chain id because they are running the
    * chain, and exporting that run to another client is part of running it. The token is the
    * ONLY key the claimer needs — `chain_id` run numbers are a per-server sequence and collide
    * across servers sharing a db, so a claim keyed on the name could select the wrong run.
@@ -728,11 +758,27 @@ export class PromptExecutor {
    * "missing blueprint" incident that motivated the feature.
    */
   private async handleClaim(
-    token: string
+    token: string,
+    sdkExtra: unknown
   ): Promise<
     { chainId: string; refusal?: undefined } | { chainId?: undefined; refusal: ToolResponse }
   > {
-    const result = await this.chainSessionStore.claimHandoff(token);
+    let requestScope: StateStoreOptions | undefined;
+    if (sdkExtra !== null && typeof sdkExtra === 'object') {
+      const identityConfig = this.configManager.getConfig().identity;
+      const context = resolveRequestIdentityContext(sdkExtra, {
+        mode: identityConfig.mode,
+        allowPerRequestOverride: identityConfig.allowPerRequestOverride,
+        launchDefaults: identityConfig.launchDefaults,
+        transportMode: this.configManager.getTransportMode(),
+      });
+      requestScope = buildIdentityScope({
+        continuityScopeId: context.continuityScopeId,
+        workspaceId: context.workspaceId,
+        organizationId: context.organizationId,
+      });
+    }
+    const result = await this.chainSessionStore.claimHandoff(token, requestScope);
     switch (result.status) {
       case 'claimed':
         return { chainId: result.session.chainId };
@@ -753,11 +799,20 @@ export class PromptExecutor {
               'rewrites workspace scope.'
           ),
         };
+      case 'request-continuity-mismatch':
+        return {
+          refusal: this.textError(
+            `❌ **Claim Refused**: request continuity \`${result.requestContinuityScopeId}\` ` +
+              `does not match run continuity \`${result.runContinuityScopeId ?? 'absent'}\`. ` +
+              'The token and run stay with their owner; claim from the original request scope.'
+          ),
+        };
       case 'no-blueprint':
         return {
           refusal: this.textError(
-            `❌ **Claim Refused**: \`${result.chainId}\` was transferred but carries no ` +
-              'blueprint, so nothing here can resume it. Restart it from its command instead.'
+            `❌ **Claim Refused**: \`${result.chainId}\` carries no compatible blueprint, ` +
+              'so nothing here can resume it. The run and token stay with their owner. ' +
+              'Restart it from its command instead.'
           ),
         };
       case 'chain-id-held':
@@ -765,7 +820,7 @@ export class PromptExecutor {
           refusal: this.textError(
             `❌ **Claim Refused**: this server already runs a different run under ` +
               `\`${result.chainId}\`, so that \`chain_id\` could not tell the two apart. The ` +
-              'run stays with its owner; finish or cancel the run here first, or claim it on ' +
+              'run stays with its owner; finish or abort the run here first, or claim it on ' +
               'another server.'
           ),
         };
@@ -787,7 +842,7 @@ export class PromptExecutor {
    * verb moved from: `getSessionForMutation` SKIPS the scope check when it receives `undefined`
    * and enforces it when it receives a value. Falling back to the process workspace scope here
    * looks more careful and is strictly worse — a session created without a `continuityScopeId`
-   * then compares unequal to the substituted one and every cancel returns "not applied". That is
+   * then compares unequal to the substituted one and every abort returns "not applied". That is
    * exactly what happened before this comment existed, and only a live drive showed it: the unit
    * tests pass a mock store whose `cancelChain` resolves `true` regardless of scope.
    */
@@ -1055,6 +1110,7 @@ export class PromptExecutor {
       const builder = new PipelineBuilder({
         logger: this.logger,
         configManager: this.configManager,
+        verifyActiveStateStore: this.getVerifyActiveStateStore(),
         parsingSystem: this.parsingSystem,
         executionPlanner: this.executionPlanner,
         chainSessionStore: this.chainSessionStore,
@@ -1085,6 +1141,13 @@ export class PromptExecutor {
       this.promptPipeline = builder.build();
     }
     return this.promptPipeline;
+  }
+
+  private getVerifyActiveStateStore(): VerifyActiveStateStore {
+    this.verifyActiveStateStore ??= createVerifyActiveStateStore(this.logger, {
+      runtimeStateDir: this.configManager.getRuntimeStateDirectory(),
+    });
+    return this.verifyActiveStateStore;
   }
 }
 

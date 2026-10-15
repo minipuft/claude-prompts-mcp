@@ -19,7 +19,6 @@ const createSessionStore = () => {
   const clearSessionsForChain = jest.fn().mockResolvedValue(undefined);
   const getSession = jest.fn();
   const getChainContext = jest.fn().mockReturnValue({});
-  const cancelChain = jest.fn().mockResolvedValue(true);
 
   return {
     store: {
@@ -28,14 +27,12 @@ const createSessionStore = () => {
       clearSessionsForChain,
       getSession,
       getChainContext,
-      cancelChain,
     } as unknown as ChainSessionService,
     listActiveSessions,
     clearSession,
     clearSessionsForChain,
     getSession,
     getChainContext,
-    cancelChain,
   };
 };
 
@@ -281,29 +278,25 @@ describe('System Control session action scope propagation', () => {
     expect(text).not.toContain('Open Reviews');
   });
 
-  /**
-   * `cancel` was relocated to `prompt_engine(chain_id, cancel: true)`.
-   *
-   * The four tests that stood here asserted routing, idempotence, terminal-state refusal and a
-   * missing-id throw against this tool. They are not deleted-and-forgotten: the behaviour they
-   * covered now belongs to `prompt_engine`, and what remains true HERE is that the operation is
-   * gone and says where it went. The rule that decided the move — a `chain_id` is held because you
-   * are running the chain, a `session_id` comes from a listing — is stated in
-   * `docs/reference/mcp-tools.md`.
-   */
-  test('cancel is no longer served here, and the refusal names where it went', async () => {
-    const sessions = createSessionStore();
-    const systemControl = createSystemControl(sessions.store);
+  test.each(['cancel', 'nonsense'])(
+    'routes unknown %s through the generic session-operation refusal',
+    async (operation) => {
+      const sessions = createSessionStore();
+      const systemControl = createSystemControl(sessions.store);
 
-    await expect(
-      systemControl.handleAction(
-        { action: 'session', operation: 'cancel', session_id: 'sess-active' },
-        { organizationId: 'org-acme' }
-      )
-    ).rejects.toThrow(/prompt_engine/);
+      await expect(
+        systemControl.handleAction(
+          { action: 'session', operation, session_id: 'sess-active' },
+          { organizationId: 'org-acme' }
+        )
+      ).rejects.toThrow(
+        `Unknown session operation: ${operation}. Valid operations: list, clear, inspect`
+      );
 
-    expect(sessions.cancelChain).not.toHaveBeenCalled();
-  });
+      expect(sessions.clearSession).not.toHaveBeenCalled();
+      expect(sessions.clearSessionsForChain).not.toHaveBeenCalled();
+    }
+  );
 
   test('keeps each concurrent request on its own session id', async () => {
     // NARROWED, and the narrowing is the point. This test was named "keeps scope context isolated
