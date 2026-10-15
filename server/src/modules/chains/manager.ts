@@ -2891,7 +2891,9 @@ export class ChainSessionStore implements ChainSessionService {
     const scopeFilter = this.resolveScopeFilter(scope);
     const summaries: ChainSessionSummary[] = [];
     for (const session of this.activeSessions.values()) {
-      if (this.isDormantSession(session)) {
+      // A conversation-paused run parked dormant (e.g. claimed while paused) is still a run the
+      // caller must see and be able to abort; listing reads it, never promotes it.
+      if (this.isDormantSession(session) && !isConversationPaused(session)) {
         continue;
       }
       if (!this.matchesScope(session, scopeFilter)) {

@@ -1740,6 +1740,28 @@ describe('ChainSessionStore — operation admission while conversation-paused (T
     expect(raw('ctl')).toEqual(rows);
   });
 
+  test('listing includes a dormant paused run without promoting it; a dormant unpaused run stays out', async () => {
+    const scope = { continuityScopeId: SCOPE };
+    const ids = () => store.listActiveSessions(50, scope).map((summary) => summary.sessionId);
+    await seed('list-active-paused');
+    await seed('list-dormant-paused');
+    await seed('list-dormant-plain');
+    await store.pauseConversation('list-active-paused', control());
+    await store.pauseConversation('list-dormant-paused', control());
+    held('list-dormant-paused').lifecycle = 'dormant';
+    held('list-dormant-plain').lifecycle = 'dormant';
+    const before = memory('list-dormant-paused');
+    const rows = raw('list-dormant-paused');
+
+    const listed = ids();
+    expect(listed).toContain('list-active-paused');
+    expect(listed).toContain('list-dormant-paused');
+    expect(listed).not.toContain('list-dormant-plain');
+    expect(held('list-dormant-paused').lifecycle).toBe('dormant');
+    expect(memory('list-dormant-paused')).toEqual(before);
+    expect(raw('list-dormant-paused')).toEqual(rows);
+  });
+
   test('abort is never refused: a paused run cancels, and terminal then wins over the pause', async () => {
     await seed('abort-paused');
     await store.pauseConversation('abort-paused', control());
