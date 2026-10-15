@@ -124,3 +124,9 @@ The store holds per-run work and control counts; `admitWork` throws `RunOperatio
 - **For T2.3:** `busy` is now a `ConversationControlResult` refusal and needs a projection; a paused mint that meets `busy` returns `undefined`, indistinguishable from unknown/terminal at the caller.
 - **Finding (no row):** a rejected save's rollback can overwrite another mutator's newer in-memory change on the same run (the accepted P6.191 scope); behind an abort, that could roll memory back from `cancelled` after the cancelled row was written. Pre-existing; fixing it means abort waits for the run's in-flight work.
 - **T1.4a (new row):** the rule "every new mutator calls admitWork in the same synchronous step as persistMutation" was stated, not enforced; the P6.190 audit already enumerates mutators, so it gains the check.
+
+### P1 boundary red → R-P-SLICES-AMEND (2026-10-15)
+
+`validate:all` on the P1 tree: 81 green, 4 red, all new this run. (1) `unreached-methods`: `pauseConversation`, `resumeConversation`, `inspectConversationControl` have no src caller, by construction, because the executor wiring is T2.2. (2) `knip-ratchet` types 613 → 614, an export with no consumer yet. (3) `module-catalog` drift (generated; regenerated at the boundary). (4) `no-phantom-columns`: 28 columns "never populated" because the validator reads INSERT column lists as text and the factoring moved them behind `${RUN_COLUMNS}`/`${NODE_COLUMNS}` — the second reader of that shape after P6.101 (R0), so the resolver becomes shared (row R0b) rather than fixed twice.
+
+**R-P-SLICES-AMEND (ruled):** P1 does not open alone. A store foundation with no caller is exactly what `unreached-methods` refuses, and an exception would put dead public methods on main. P1 and P2 ship as one PR (the pause becomes reachable in the same change that adds it); P3 (hooks) and P4 (transport proof, docs) stay separate. R-P-PAR applies: R0b and T2.1 touch disjoint files and run together.
