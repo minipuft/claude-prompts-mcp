@@ -677,18 +677,6 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     }
   });
 
-  test('transitionStepState refuses to overwrite a COMPLETED step', async () => {
-    manager = newManager('step-stickiness');
-    await manager.createSession('s1', 'chain-a', 2);
-    manager.setStepState('s1', 'n1', 'completed', false);
-
-    const result = await manager.transitionStepState('s1', 'n1', 'rendered');
-    expect(result).toBe(false);
-
-    const metadata = manager.getStepState('s1', 'n1');
-    expect(metadata?.state).toBe('completed');
-  });
-
   /**
    * P4.115. A gate review can re-render after the reviewed step's answer was captured; recording
    * what that render declared must not walk the node back to `rendered`.
@@ -714,13 +702,17 @@ describe('ChainSessionStore — run-status lifecycle (Tier 2)', () => {
     expect(manager.getStepState('s1', 'n1')?.declaredSections).toEqual([]);
   });
 
-  test('transitionStepState allows re-asserting the same terminal state (idempotent no-op)', async () => {
-    manager = newManager('step-idempotent');
-    await manager.createSession('s1', 'chain-a', 2);
-    manager.setStepState('s1', 'n1', 'completed', false);
+  /**
+   * Every construction site (createSession, and the registry's `toStepStates` behind load and
+   * claim) gives a run its step map, so a run without one is a defect upstream. It fails loudly,
+   * naming the run, rather than being handed a fresh empty map that forgets every recorded step.
+   */
+  test('a run whose step map is missing refuses a step write, naming the run', async () => {
+    manager = newManager('missing-step-map');
+    await manager.createSession('s-no-map', 'chain-a', 2);
+    delete (manager as any).activeSessions.get('s-no-map').state.stepStates;
 
-    const result = await manager.transitionStepState('s1', 'n1', 'completed');
-    expect(result).toBe(true);
+    expect(() => manager.setStepState('s-no-map', 'n1', 'rendered')).toThrow(/s-no-map/);
   });
 
   test('promoteSessionLifecycle refuses promotion of terminal sessions', async () => {
@@ -1058,15 +1050,6 @@ describe('ChainSessionStore — adaptive mutation (P4 Tier 2)', () => {
     expect(manager.getStepState('s1', 'n3')?.state).toBe('skipped');
   });
 
-  test('a skipped node cannot be transitioned back out (terminal stickiness)', async () => {
-    manager = newManager('skip-sticky');
-    await manager.createSession('s1', 'chain-a', 3);
-    await manager.markNodeSkipped('s1', 'n2', 'u1');
-
-    expect(await manager.transitionStepState('s1', 'n2', 'rendered')).toBe(false);
-    expect(manager.getStepState('s1', 'n2')?.state).toBe('skipped');
-  });
-
   // --- advanceStep over skipped nodes ---------------------------------------------------
 
   test('advanceStep passes over a skipped node and lands on the next live one', async () => {
@@ -1168,5 +1151,365 @@ describe('P6.191: interleaved mutators roll back together', () => {
       loadSpy.mockRestore();
       schedulerSpy.mockRestore();
     }
+  });
+});
+
+describe('ChainSessionStore — scheduled cleanup', () => {
+  let manager: ChainSessionStore;
+  let loadSpy: { mockRestore: () => void };
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    // Only the load is stubbed: this block exists for the REAL `startCleanupScheduler`.
+    loadSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'loadSessions')
+      .mockResolvedValue(undefined);
+  });
+
+  afterEach(async () => {
+    await manager.cleanup();
+    loadSpy.mockRestore();
+    jest.useRealTimers();
+  });
+
+  const INTERVAL_MS = 1000;
+
+  const newScheduledStore = (logger: Logger): ChainSessionStore =>
+    new ChainSessionStore(logger, new StubTextReferenceStore() as any, {
+      cleanupIntervalMs: INTERVAL_MS,
+    });
+
+  test('a scheduled cleanup that rejects is logged as a warning and does not throw', async () => {
+    const logger = createLogger();
+    manager = newScheduledStore(logger);
+    const cleanupSpy = jest
+      .spyOn(manager, 'cleanupStaleSessions')
+      .mockRejectedValue(new Error('sweep exploded'));
+
+    await jest.advanceTimersByTimeAsync(INTERVAL_MS);
+
+    expect(cleanupSpy).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Failed to run scheduled session cleanup: sweep exploded'
+    );
+  });
+
+  test('a scheduled cleanup that resolves logs no warning', async () => {
+    const logger = createLogger();
+    manager = newScheduledStore(logger);
+    const cleanupSpy = jest.spyOn(manager, 'cleanupStaleSessions').mockResolvedValue(0);
+
+    await jest.advanceTimersByTimeAsync(INTERVAL_MS);
+
+    expect(cleanupSpy).toHaveBeenCalledTimes(1);
+    // Not `not.toHaveBeenCalled()`: construction itself warns that no database port is bound.
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('scheduled session cleanup')
+    );
+  });
+});
+
+describe('ChainSessionStore — run creation, review writes, pending verification and remainder refusal order', () => {
+  let manager: ChainSessionStore;
+  let logger: Logger;
+  let saveSpy: jest.SpiedFunction<() => Promise<void>>;
+  let loadSpy: { mockRestore: () => void };
+  let schedulerSpy: { mockRestore: () => void };
+
+  beforeEach(() => {
+    saveSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'saveSessions')
+      .mockResolvedValue(undefined);
+    loadSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'loadSessions')
+      .mockResolvedValue(undefined);
+    schedulerSpy = jest
+      .spyOn(ChainSessionStore.prototype as any, 'startCleanupScheduler')
+      .mockImplementation(() => {});
+    logger = createLogger();
+    manager = new ChainSessionStore(logger, new StubTextReferenceStore() as any, {
+      cleanupIntervalMs: 1000,
+    });
+  });
+
+  afterEach(async () => {
+    await manager.cleanup();
+    saveSpy.mockRestore();
+    loadSpy.mockRestore();
+    schedulerSpy.mockRestore();
+  });
+
+  const sessionOf = (sessionId: string): any => (manager as any).activeSessions.get(sessionId);
+
+  const reviewOf = (overrides: Record<string, unknown> = {}): any => ({
+    nodeId: 'n1',
+    kind: 'gate',
+    phase: 'awaiting-verdict',
+    combinedPrompt: '',
+    gateIds: ['g1'],
+    prompts: [{ gateId: 'g1', criteriaSummary: 'ONE' }],
+    createdAt: 1,
+    attemptCount: 0,
+    maxAttempts: 2,
+    ...overrides,
+  });
+
+  // --- creation node list ----------------------------------------------------------------
+
+  test('an explicit node list that disagrees with totalSteps is used, and the disagreement is warned', async () => {
+    await manager.createSession('s-mismatch', 'chain-mismatch', 5, {}, {
+      nodes: [
+        { id: 'alpha', promptId: 'p', stepName: 'Alpha' },
+        { id: 'beta', promptId: 'p', stepName: 'Beta' },
+      ],
+    } as never);
+
+    const { nodes, currentNodeId } = sessionOf('s-mismatch').state;
+    expect(nodes.map((node: { id: string }) => node.id)).toEqual(['alpha', 'beta']);
+    expect(nodes.map((node: { origin: string }) => node.origin)).toEqual(['planned', 'planned']);
+    expect(currentNodeId).toBe('alpha');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Node list length 2 disagrees with totalSteps 5 for chain chain-mismatch'
+      )
+    );
+  });
+
+  test('an explicit node list that agrees with totalSteps, or a totalSteps of 0, warns nothing', async () => {
+    await manager.createSession('s-agree', 'chain-agree', 2, {}, {
+      nodes: [
+        { id: 'a', promptId: 'p', stepName: 'A' },
+        { id: 'b', promptId: 'p', stepName: 'B' },
+      ],
+    } as never);
+    await manager.createSession('s-zero-count', 'chain-zero-count', 0, {}, {
+      nodes: [{ id: 'only', promptId: 'p', stepName: 'Only' }],
+    } as never);
+
+    expect(sessionOf('s-zero-count').state.nodes.map((node: { id: string }) => node.id)).toEqual([
+      'only',
+    ]);
+    expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('disagrees'));
+  });
+
+  test('totalSteps 0 with no nodes creates a run with no nodes, standing on none', async () => {
+    await manager.createSession('s-empty', 'chain-empty', 0);
+
+    const { nodes, currentNodeId } = sessionOf('s-empty').state;
+    expect(nodes).toEqual([]);
+    expect(currentNodeId).toBeNull();
+  });
+
+  // --- corrupt pointer -------------------------------------------------------------------
+
+  test('getSession returns a run whose pointer names no node to its first node', async () => {
+    await manager.createSession('s-corrupt', 'chain-corrupt', 3);
+    sessionOf('s-corrupt').state.currentNodeId = 'ghost';
+
+    // Positive control: the corruption is in place before the read.
+    expect(sessionOf('s-corrupt').state.currentNodeId).toBe('ghost');
+    expect(manager.getSession('s-corrupt')?.state.currentNodeId).toBe('n1');
+    expect(sessionOf('s-corrupt').state.currentNodeId).toBe('n1');
+  });
+
+  test('getSession leaves a valid pointer and a completed run (null pointer) alone', async () => {
+    await manager.createSession('s-valid', 'chain-valid', 3);
+    sessionOf('s-valid').state.currentNodeId = 'n2';
+    await manager.createSession('s-done', 'chain-done', 3);
+    sessionOf('s-done').state.currentNodeId = null;
+
+    expect(manager.getSession('s-valid')?.state.currentNodeId).toBe('n2');
+    expect(manager.getSession('s-done')?.state.currentNodeId).toBeNull();
+  });
+
+  // --- review write collision ------------------------------------------------------------
+
+  test('a detached review cannot overwrite the open current-step review of its node, nor the reverse', async () => {
+    await manager.createSession('s-collide', 'chain-collide', 2);
+    await manager.setReview('s-collide', reviewOf({ kind: 'gate' }));
+
+    await expect(manager.setReview('s-collide', reviewOf({ kind: 'detached' }))).rejects.toThrow(
+      "Gate review of node 'n1' (detached) would overwrite its open gate review"
+    );
+    expect(manager.getReview('s-collide', 'n1')?.kind).toBe('gate');
+
+    await manager.clearReview('s-collide', 'n1');
+    await manager.setReview('s-collide', reviewOf({ kind: 'detached' }));
+    await expect(manager.setReview('s-collide', reviewOf({ kind: 'structural' }))).rejects.toThrow(
+      "Gate review of node 'n1' (structural) would overwrite its open detached review"
+    );
+    expect(manager.getReview('s-collide', 'n1')?.kind).toBe('detached');
+  });
+
+  test('a review of the same side replaces the open one instead of colliding', async () => {
+    await manager.createSession('s-replace', 'chain-replace', 2);
+    await manager.setReview('s-replace', reviewOf({ kind: 'gate', attemptCount: 0 }));
+    await manager.setReview('s-replace', reviewOf({ kind: 'structural', attemptCount: 1 }));
+    expect(manager.getReview('s-replace', 'n1')).toMatchObject({
+      kind: 'structural',
+      attemptCount: 1,
+    });
+
+    await manager.clearReview('s-replace', 'n1');
+    await manager.setReview('s-replace', reviewOf({ kind: 'detached', attemptCount: 0 }));
+    await manager.setReview('s-replace', reviewOf({ kind: 'detached', attemptCount: 2 }));
+    expect(manager.getReview('s-replace', 'n1')).toMatchObject({
+      kind: 'detached',
+      attemptCount: 2,
+    });
+  });
+
+  // --- review copy -----------------------------------------------------------------------
+
+  test('a review round-trips its optional fields unchanged and is stored and returned as a copy', async () => {
+    await manager.createSession('s-clone', 'chain-clone', 2);
+    const written = reviewOf({
+      structuralGateIds: ['phase-guard'],
+      gateIds: ['g1', 'phase-guard'],
+      prompts: [
+        {
+          gateId: 'g1',
+          criteriaSummary: 'ONE',
+          explicitInstructions: ['say it plainly'],
+          retryHints: ['try again'],
+          metadata: { origin: 'unit' },
+        },
+      ],
+      gateTiers: { g1: 'reminder' },
+      retryHints: ['hint-a'],
+      history: [{ timestamp: 1, status: 'fail', reasoning: 'thin' }],
+      metadata: { source: 'unit' },
+    });
+    const pristine = structuredClone(written);
+
+    await manager.setReview('s-clone', written);
+    // The stored review is a copy of what the caller wrote.
+    written.gateIds.push('mutated-after-write');
+    written.prompts[0].explicitInstructions.push('mutated-after-write');
+    written.prompts[0].metadata.origin = 'mutated-after-write';
+
+    const first = manager.getReview('s-clone', 'n1');
+    expect(first).toEqual(pristine);
+
+    // ...and each read is a copy of what is stored.
+    first!.gateIds.push('mutated-after-read');
+    first!.structuralGateIds = ['mutated-after-read'];
+    first!.prompts[0]!.explicitInstructions!.push('mutated-after-read');
+    first!.prompts[0]!.metadata!['origin'] = 'mutated-after-read';
+    first!.retryHints!.push('mutated-after-read');
+    first!.history![0]!.reasoning = 'mutated-after-read';
+    first!.metadata!['source'] = 'mutated-after-read';
+
+    expect(manager.getReview('s-clone', 'n1')).toEqual(pristine);
+  });
+
+  test('a review shares no nested value with what was written or with what was read', async () => {
+    await manager.createSession('s-deep', 'chain-deep', 2);
+    const nested = (): Record<string, unknown> => ({
+      prompts: [
+        { gateId: 'g1', criteriaSummary: 'ONE', retryHints: ['try again'] },
+        { gateId: 'g2', criteriaSummary: 'TWO', retryHints: ['and again'] },
+      ],
+      gateIds: ['g1', 'g2'],
+      gateTiers: { g1: 'check', g2: 'reminder' },
+      checkResults: [{ gateId: 'g1', passed: false, summary: 'npm test exit 1' }],
+    });
+    const mutate = (review: any, marker: string): void => {
+      review.prompts[0].retryHints[0] = marker;
+      review.prompts[1].retryHints.push(marker);
+      review.gateTiers.g1 = marker;
+      review.gateTiers[marker] = 'check';
+      review.checkResults[0].passed = true;
+      review.checkResults[0].summary = marker;
+      review.checkResults.push({ gateId: marker, passed: true, summary: marker });
+    };
+    const pristine = structuredClone(reviewOf(nested()));
+
+    // Written side: changing the object after `setReview` leaves what is stored unchanged.
+    const written = reviewOf(nested());
+    await manager.setReview('s-deep', written);
+    mutate(written, 'mutated-after-write');
+    expect(manager.getReview('s-deep', 'n1')).toEqual(pristine);
+
+    // Read side: changing what `getReview` returned leaves a second read unchanged.
+    const read = manager.getReview('s-deep', 'n1');
+    mutate(read, 'mutated-after-read');
+    expect(manager.getReview('s-deep', 'n1')).toEqual(pristine);
+  });
+
+  // --- pending shell verification --------------------------------------------------------
+
+  const pendingVerification = (): any => ({
+    gateId: 'shell-gate',
+    shellVerify: { command: ['npm', 'test'], timeout: 5000 },
+    attemptCount: 1,
+    maxAttempts: 3,
+    previousResults: [],
+  });
+
+  test('pending shell verification is set, read back as a copy, cleared, and each change is persisted', async () => {
+    await manager.createSession('s-shell', 'chain-shell', 2);
+    expect(manager.getPendingShellVerification('s-shell')).toBeUndefined();
+    const savesBefore = saveSpy.mock.calls.length;
+
+    await manager.setPendingShellVerification('s-shell', pendingVerification());
+    expect(saveSpy.mock.calls.length).toBe(savesBefore + 1);
+    const read = manager.getPendingShellVerification('s-shell');
+    expect(read).toEqual(pendingVerification());
+    read!.gateId = 'mutated-after-read';
+    expect(manager.getPendingShellVerification('s-shell')?.gateId).toBe('shell-gate');
+
+    await manager.clearPendingShellVerification('s-shell');
+    expect(saveSpy.mock.calls.length).toBe(savesBefore + 2);
+    expect(manager.getPendingShellVerification('s-shell')).toBeUndefined();
+
+    // Clearing what is not there changes and persists nothing.
+    await manager.clearPendingShellVerification('s-shell');
+    expect(saveSpy.mock.calls.length).toBe(savesBefore + 2);
+  });
+
+  test('a rejected save rolls pending shell verification back, on set and on clear', async () => {
+    await manager.createSession('s-shell-roll', 'chain-shell-roll', 2);
+
+    saveSpy.mockRejectedValueOnce(new Error('disk full'));
+    await expect(
+      manager.setPendingShellVerification('s-shell-roll', pendingVerification())
+    ).rejects.toThrow('disk full');
+    expect(manager.getPendingShellVerification('s-shell-roll')).toBeUndefined();
+
+    await manager.setPendingShellVerification('s-shell-roll', pendingVerification());
+    saveSpy.mockRejectedValueOnce(new Error('disk full'));
+    await expect(manager.clearPendingShellVerification('s-shell-roll')).rejects.toThrow(
+      'disk full'
+    );
+    expect(manager.getPendingShellVerification('s-shell-roll')?.gateId).toBe('shell-gate');
+  });
+
+  test('pending shell verification of an unknown session is refused with a warning and reads as absent', async () => {
+    await manager.setPendingShellVerification('no-such-run', pendingVerification());
+
+    expect(manager.getPendingShellVerification('no-such-run')).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Attempted to set pending shell verification for non-existent session: no-such-run'
+    );
+  });
+
+  // --- remainder refusal order -----------------------------------------------------------
+
+  test('an empty remainder for an unknown session is refused as empty, not as an unknown session', async () => {
+    expect(await manager.replaceRemainder('no-such-run', [], 'u', 'replace')).toEqual({
+      kind: 'rejected',
+      reason: 'empty-remainder',
+    });
+    // Positive control: the same session with a non-empty list is refused for the other reason,
+    // so the order above is what picked the reason, not a session that happens to be missing.
+    expect(
+      await manager.replaceRemainder(
+        'no-such-run',
+        [{ promptId: 'p', stepName: 'X' }],
+        'u',
+        'replace'
+      )
+    ).toEqual({ kind: 'rejected', reason: 'session-unknown' });
   });
 });

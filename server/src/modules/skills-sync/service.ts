@@ -1,10 +1,10 @@
 // @lifecycle canonical - Exports canonical YAML resources to client-native skill packages.
-/* Rule-scoped exceptions for this file (P4.123), each measured 2026-09-22 with every other rule
+/* Rule-scoped exceptions for this file (P4.123), each measured 2026-10-13 with every other rule
  * of the project in force here. An entry whose count reaches 0 is reported as an unused
  * directive, which is the cue to delete it. */
-/* eslint-disable @typescript-eslint/strict-boolean-expressions -- 191 sites, as of 2026-09-22: truthiness tests over values read from `yaml.load(...) as T` casts, where each rewrite has to choose what '' / 0 / null mean at that site — a behaviour decision per site, not a mechanical fix. Flips when a site-by-site pass (or the decomposition below) takes the count to 0. */
-/* eslint-disable @typescript-eslint/no-unnecessary-condition -- 15 sites, as of 2026-09-22: the types those checks call impossible come from unvalidated `yaml.load(...) as T` casts, so the check is live against malformed YAML and deleting it changes behaviour. Flips when parsed input is schema-validated instead of cast. */
-/* eslint-disable @typescript-eslint/no-non-null-assertion, max-depth, max-params, max-lines, sonarjs/cognitive-complexity -- 23 / 32 / 2 / 1 / 19 warnings, as of 2026-09-22: structural, from one ~5,100-line module lifted whole from the CLI. Flips when the module is decomposed by responsibility (export, sync, diff, pull, adoption). */
+/* eslint-disable @typescript-eslint/strict-boolean-expressions -- 153 sites, as of 2026-10-13: truthiness tests over values read from `yaml.load(...) as T` casts, where each rewrite has to choose what '' / 0 / null mean at that site — a behaviour decision per site, not a mechanical fix. Flips when a site-by-site pass (or the decomposition below) takes the count to 0. */
+/* eslint-disable @typescript-eslint/no-unnecessary-condition -- 11 sites, as of 2026-10-13: the types those checks call impossible come from unvalidated `yaml.load(...) as T` casts, so the check is live against malformed YAML and deleting it changes behaviour. Flips when parsed input is schema-validated instead of cast. */
+/* eslint-disable @typescript-eslint/no-non-null-assertion, max-depth, max-params, max-lines, sonarjs/cognitive-complexity -- 25 / 14 / 2 / 1 / 16 warnings, as of 2026-10-13: structural, from one ~5,060-line module lifted whole from the CLI. Flips when the module is decomposed by responsibility (export, sync, diff, pull, adoption). */
 /**
  * Skills Sync CLI
  *
@@ -22,6 +22,19 @@ import { parseArgs } from 'node:util';
 import { createTwoFilesPatch } from 'diff';
 import * as yaml from 'js-yaml';
 
+import {
+  CLIENT_REGISTRY,
+  clientScopeTargets,
+  DIFF_TARGETS,
+  PULL_TARGETS,
+  WRITER_TARGETS,
+  type AgentSkillsClientConfig,
+  type ClaudeCodeClientConfig,
+  type ClientConfig,
+  type ClientTarget,
+  type NormalizedExport,
+  type SyncConfig,
+} from './client-targets.js';
 import {
   applyRegistrationMutations,
   previewRegistrationMutations,
@@ -295,7 +308,8 @@ export interface SkillIR {
   } | null;
 
   extensions: Record<string, unknown>;
-  sourcePaths: string[];
+  /** The files the resource was loaded from; every loader records its definition file first. */
+  sourcePaths: [string, ...string[]];
   sourceHash: string;
   /** Raw source file contents keyed by filename, for drift diffing */
   sourceContents?: Record<string, string>;
@@ -415,141 +429,38 @@ interface StyleYaml {
   activation?: unknown;
 }
 
-interface ClientCapabilities {
-  scripts: boolean;
-  references: boolean;
-  assets: boolean;
-  subagents: boolean;
-  /**
-   * Client honors a `hooks` block in SKILL.md frontmatter, letting an exported
-   * skill carry real gate enforcement instead of only describing it. Claude Code
-   * registers such hooks when the skill is invoked; the Agent Skills spec assigns
-   * no meaning to the key, so those variants get the prose protocol alone.
-   *
-   * Necessary but not sufficient: even here, a prompt still needs `enforceGateHooks: true`
-   * (Ruling A3) before a hook ships. Frontmatter hooks register at SESSION scope, and an
-   * Agent-tool subagent's Skill invocation was measured (2026-09-14) firing its hook at the
-   * PLANNER session's own stop — enforcement is opt-in per prompt, default is prose only.
-   */
-  skillFrontmatterHooks: boolean;
+/** The resource types whose guidance is read from their own definition, not from a prompt message. */
+type GuidanceBearingType = Exclude<ResourceType, 'prompt'>;
+
+/** The `framework.yaml` field a framework's guidance is served from. */
+const FRAMEWORK_GUIDANCE_FIELD = 'systemPromptGuidance' as const;
+
+/** Where a resource's guidance text lives: a file beside its YAML, or a field inside the YAML. */
+interface GuidanceLocation {
+  /** The file, relative to the resource directory. */
+  file: string;
+  /** Set when the text is a field of `file` rather than the whole of it. */
+  yamlField?: typeof FRAMEWORK_GUIDANCE_FIELD;
 }
 
-interface ClientConfig {
-  adapter: 'claude-code' | 'agent-skills';
-  variant?: string;
-  outputDir: { user: string; project: string };
-  capabilities: ClientCapabilities;
-  extensions?: Record<string, unknown>;
-}
-
-/** Scope-keyed exports: each resource listed under exactly one scope. */
-interface ScopedExports {
-  user?: string[];
-  project?: string[];
-}
-
-/** Normalized export with resolved scope — used internally after parsing config. */
-interface NormalizedExport {
-  key: string;
-  scope: 'user' | 'project';
-}
-
-interface SyncConfig {
-  registrations?: Record<string, ScopedExports | 'all'>;
-  /** @deprecated Legacy global export list; prefer registrations. */
-  exports?: ScopedExports | 'all';
-  overrides?: Record<string, { outputDir?: { user?: string; project?: string } }>;
-}
-
-type ConfigSelectionSource = 'registrations' | 'exports' | 'none';
-
-interface ClientResourceSelection {
-  source: ConfigSelectionSource;
-  mode: 'all' | 'scoped' | 'unregistered';
-  normalized: NormalizedExport[];
-  allowList?: Set<string>;
+/**
+ * The one answer to "where does this resource's guidance live". The loaders read through it and
+ * `pullCommand` writes through it, so an edit pulled back lands where the next load reads it.
+ * A framework serves the inline `systemPromptGuidance` field of `framework.yaml` (R91); a gate or
+ * style serves the file its `guidanceFile` names, `guidance.md` when it names none.
+ */
+function resolveGuidanceLocation(
+  resourceType: GuidanceBearingType,
+  data: { guidanceFile?: string }
+): GuidanceLocation {
+  if (resourceType === 'framework') {
+    return { file: 'framework.yaml', yamlField: FRAMEWORK_GUIDANCE_FIELD };
+  }
+  return { file: data.guidanceFile ?? 'guidance.md' };
 }
 
 /** Built-in defaults shared across adapters. */
 const SYNC_DEFAULTS = { license: 'MIT', adapterVersion: '1.0.0' } as const;
-
-/**
- * Hardcoded client registry — the CLI knows everything about each client.
- * Users configure WHAT to export; the CLI handles HOW.
- */
-const CLIENT_REGISTRY: Record<string, ClientConfig> = {
-  'claude-code': {
-    adapter: 'claude-code',
-    outputDir: { user: '~/.claude/skills', project: '.claude/skills' },
-    capabilities: {
-      scripts: true,
-      references: true,
-      assets: false,
-      subagents: true,
-      skillFrontmatterHooks: true,
-    },
-  },
-  cursor: {
-    adapter: 'agent-skills',
-    variant: 'cursor',
-    outputDir: { user: '~/.cursor/skills', project: '.cursor/skills' },
-    capabilities: {
-      scripts: true,
-      references: true,
-      assets: true,
-      subagents: true,
-      skillFrontmatterHooks: false,
-    },
-    extensions: { alwaysApply: false },
-  },
-  codex: {
-    adapter: 'agent-skills',
-    variant: 'codex',
-    outputDir: { user: '~/.codex/skills', project: '.codex/skills' },
-    capabilities: {
-      scripts: true,
-      references: true,
-      assets: true,
-      subagents: false,
-      skillFrontmatterHooks: false,
-    },
-  },
-  opencode: {
-    adapter: 'agent-skills',
-    variant: 'opencode',
-    outputDir: { user: '~/.config/opencode/skills', project: '.opencode/skills' },
-    capabilities: {
-      scripts: true,
-      references: true,
-      assets: true,
-      subagents: true,
-      skillFrontmatterHooks: false,
-    },
-  },
-  /**
-   * Agent Plugins 1.0.0 canonical tree.
-   *
-   * Unlike the entries above, this one does not target an installed client directory — the spec
-   * fixes `skills/<name>/SKILL.md` at the PLUGIN root, so `project` is a bare `skills` and the
-   * export lands in the repository beside `plugin.json` and `mcp.json`.
-   *
-   * `variant` deliberately matches neither the `cursor` nor the `opencode` branch below: the
-   * spec says SKILL.md conforms to agentskills.io and assigns no further frontmatter, so the
-   * neutral shape is the conforming one. `subagents: false` because v1 defines no core agents.
-   */
-  'agent-plugins': {
-    adapter: 'agent-skills',
-    variant: 'agent-plugins',
-    outputDir: { user: '~/.agent-plugins/skills', project: 'skills' },
-    capabilities: {
-      scripts: true,
-      references: true,
-      assets: true,
-      subagents: false,
-      skillFrontmatterHooks: false,
-    },
-  },
-};
 
 interface OutputFile {
   relativePath: string;
@@ -683,10 +594,11 @@ const VALID_COMMANDS = new Set(['export', 'sync', 'diff', 'patch', 'pull', 'clon
 const VALID_SCOPES = new Set(['user', 'project']);
 const VALID_RESOURCE_TYPES = new Set(['prompt', 'gate', 'framework', 'style']);
 
+/** A usage error: the CLI wrapper exits with `exitCode` (2); every other failure exits 1. */
 export class SkillsSyncCommandError extends Error {
   constructor(
     message: string,
-    public readonly exitCode: 1 | 2 = 1
+    public readonly exitCode: 2
   ) {
     super(message);
     this.name = 'SkillsSyncCommandError';
@@ -702,7 +614,11 @@ function validateSkillsSyncOptions(opts: SkillsSyncOptions): void {
     throw usageError(`Unknown command: ${opts.command}. Run skills-sync help for usage.`);
   }
 
-  if (opts.client != null && opts.client !== 'all' && CLIENT_REGISTRY[opts.client] == null) {
+  if (
+    opts.client != null &&
+    opts.client !== 'all' &&
+    !Object.hasOwn(CLIENT_REGISTRY, opts.client)
+  ) {
     throw usageError(
       `Unknown client: ${opts.client} (available: ${Object.keys(CLIENT_REGISTRY).join(', ')}, all)`
     );
@@ -773,6 +689,7 @@ async function loadToolsCache(
   output: SkillsSyncOutput,
   dbManager?: DatabasePort
 ): Promise<Record<string, ToolIndexEntry>> {
+  let readFailure: string | undefined;
   if (dbManager?.isInitialized()) {
     try {
       const rows = dbManager.query<{
@@ -809,32 +726,15 @@ async function loadToolsCache(
         }
       }
       if (Object.keys(result).length > 0) return result;
-    } catch (_error) {
-      // DB read failed
+    } catch (error) {
+      readFailure = error instanceof Error ? error.message : String(error);
     }
   }
 
   output.warn(
-    '  Tools not found in resource index — run server once to index, or tools will export without schemas'
+    `  Tools not found in resource index${readFailure === undefined ? '' : ` (index read failed: ${readFailure})`} — run server once to index, or tools will export without schemas`
   );
   return {};
-}
-
-/** Normalize scope-keyed map to flat list with resolved scope. */
-function normalizeScopedSelections(scoped: ScopedExports): NormalizedExport[] {
-  const result: NormalizedExport[] = [];
-  for (const key of scoped.user ?? []) {
-    result.push({ key, scope: 'user' });
-  }
-  for (const key of scoped.project ?? []) {
-    result.push({ key, scope: 'project' });
-  }
-  return result;
-}
-
-/** Extract all resource keys from scoped config for allow-list filtering. */
-function buildScopedAllowList(scoped: ScopedExports): Set<string> {
-  return new Set([...(scoped.user ?? []), ...(scoped.project ?? [])]);
 }
 
 /** Check if a resource should be exported for the given target scope. */
@@ -844,60 +744,21 @@ function shouldExportForScope(
   normalized: NormalizedExport[]
 ): boolean {
   const entry = normalized.find((e) => e.key === resourceKey);
-  if (!entry) return true; // Not in exports list → export to requested scope
+  // `filterResourcesForScope` narrows to the scoped allow-list first, and the allow-list and
+  // `normalized` are built from the same `user`/`project` lists, so every key has an entry.
+  if (!entry) {
+    throw new Error(
+      `skills-sync invariant: '${resourceKey}' passed the scoped allow-list but has no scope entry`
+    );
+  }
   return entry.scope === targetScope;
-}
-
-/** Type guard: scope-keyed list object (not 'all' or undefined). */
-function isScopedExports(value: unknown): value is ScopedExports {
-  return value != null && typeof value === 'object' && !Array.isArray(value);
-}
-
-/** Resolve client resource selection from canonical registrations (fallback: legacy exports). */
-function resolveClientResourceSelection(
-  config: SyncConfig,
-  clientId: string
-): ClientResourceSelection {
-  if (config.registrations != null && typeof config.registrations === 'object') {
-    const registration = config.registrations[clientId];
-    if (registration == null) {
-      return { source: 'registrations', mode: 'unregistered', normalized: [] };
-    }
-    if (registration === 'all') {
-      return { source: 'registrations', mode: 'all', normalized: [] };
-    }
-    if (isScopedExports(registration)) {
-      return {
-        source: 'registrations',
-        mode: 'scoped',
-        normalized: normalizeScopedSelections(registration),
-        allowList: buildScopedAllowList(registration),
-      };
-    }
-    return { source: 'registrations', mode: 'unregistered', normalized: [] };
-  }
-
-  if (config.exports === 'all') {
-    return { source: 'exports', mode: 'all', normalized: [] };
-  }
-  if (isScopedExports(config.exports)) {
-    return {
-      source: 'exports',
-      mode: 'scoped',
-      normalized: normalizeScopedSelections(config.exports),
-      allowList: buildScopedAllowList(config.exports),
-    };
-  }
-
-  return { source: 'none', mode: 'all', normalized: [] };
 }
 
 function filterResourcesForScope(
   resources: SkillIR[],
-  scope: 'user' | 'project',
-  selection: ClientResourceSelection,
-  ignoreSelection: boolean
+  target: Pick<ClientTarget, 'scope' | 'selection' | 'ignoreSelection'>
 ): SkillIR[] {
+  const { scope, selection, ignoreSelection } = target;
   const candidateResources =
     !ignoreSelection && selection.allowList
       ? resources.filter((ir) => selection.allowList!.has(manifestKey(ir)))
@@ -910,78 +771,6 @@ function filterResourcesForScope(
   return candidateResources.filter((ir) =>
     shouldExportForScope(manifestKey(ir), scope, selection.normalized)
   );
-}
-
-/** Resolve a client config from the hardcoded registry, applying user overrides. */
-function resolveClientConfig(clientId: string, config: SyncConfig): ClientConfig | null {
-  const base = CLIENT_REGISTRY[clientId];
-  if (!base) return null;
-
-  const overrides = config.overrides?.[clientId];
-  if (!overrides?.outputDir) return base;
-
-  return {
-    ...base,
-    outputDir: {
-      user: overrides.outputDir.user ?? base.outputDir.user,
-      project: overrides.outputDir.project ?? base.outputDir.project,
-    },
-  };
-}
-
-function resolveOutputDir(
-  clientConfig: ClientConfig,
-  scope: 'user' | 'project',
-  paths: SkillsSyncPaths
-): string {
-  const dir = clientConfig.outputDir[scope];
-  let resolved: string;
-  if (dir.startsWith('~')) {
-    resolved = path.join(process.env['HOME'] ?? '', dir.slice(1));
-  } else if (path.isAbsolute(dir)) {
-    resolved = dir;
-  } else if (scope === 'project') {
-    resolved = path.resolve(resolveProjectRoot(paths), dir);
-  } else {
-    resolved = path.resolve(dir);
-  }
-
-  // Resolve symlinks so two clients can't silently map to the same physical directory
-  try {
-    if (existsSync(resolved)) {
-      resolved = realpathSync(resolved);
-    }
-  } catch (_error) {
-    // Directory doesn't exist yet or can't be resolved — use logical path
-  }
-
-  return resolved;
-}
-
-function resolveProjectRoot(paths: SkillsSyncPaths): string {
-  const fromWorkspaceEnv = process.env['MCP_WORKSPACE'];
-  if (fromWorkspaceEnv) {
-    // Refused like the server refuses it: a project-scope export resolved against a workspace that
-    // is not there writes skills into a directory tree the operator never named.
-    return path.resolve(
-      assertUsableDirectorySetting(
-        { name: 'MCP_WORKSPACE', value: fromWorkspaceEnv },
-        { verb: 'run' }
-      )
-    );
-  }
-
-  // A `server/` directory is a checkout's package when its parent carries `.git`; in a linked
-  // worktree `.git` is a file, which `existsSync` accepts as it does a directory.
-  const serverRoot = paths.packageRoot;
-  if (path.basename(serverRoot) === 'server') {
-    const repoRoot = path.dirname(serverRoot);
-    if (existsSync(path.join(repoRoot, '.git'))) {
-      return repoRoot;
-    }
-  }
-
-  return process.cwd();
 }
 
 // ─── Section 3: Resource Loaders ────────────────────────────────────────────
@@ -1016,6 +805,31 @@ function dependsOnFramework(gate: GateYaml): boolean {
   return contexts !== undefined && contexts.length > 0;
 }
 
+/** Where the gate scan reports a gate it cannot use: the run log and the run report. */
+interface GateScanSink {
+  output?: SkillsSyncOutput;
+  report?: SkillsSyncRunReport;
+}
+
+/**
+ * Parses a gate.yaml, naming the file in the error. The gate scan and the gate loader both read
+ * through it, so a malformed file reads the same whichever of them meets it first.
+ */
+function parseGateYaml(raw: string, yamlPath: string): GateYaml {
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(raw);
+  } catch (error) {
+    throw new Error(`${yamlPath}: ${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    });
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`${yamlPath}: not a YAML mapping`);
+  }
+  return parsed as GateYaml;
+}
+
 /**
  * Resolves the gate IDs active for a prompt, delegating activation to the engine.
  *
@@ -1030,8 +844,9 @@ async function resolveActiveGateRefs(
   gateConfig: PromptYaml['gateConfiguration'],
   promptCategory: string,
   gateRoots: readonly string[],
-  chainSteps: PromptYamlChainStep[] = [],
-  declaredArtifacts?: ArtifactKind[]
+  chainSteps: PromptYamlChainStep[],
+  declaredArtifacts: ArtifactKind[] | undefined,
+  scanSink: GateScanSink
 ): Promise<IRGateRef[]> {
   const refs: IRGateRef[] = [];
   const excludeSet = new Set(gateConfig?.exclude ?? []);
@@ -1046,13 +861,28 @@ async function resolveActiveGateRefs(
   );
 
   const gatesById = new Map<string, GateYaml>();
+  // The registry key is the declared id, which need not be the directory name: step 3 resolves a
+  // registered id back to its directory through this map, not through `gateDirs`.
+  const gateDirById = new Map<string, string>();
+  const gateYamlRawById = new Map<string, string>();
   for (const [dirName, gateDir] of gateDirs) {
     const gateYamlRaw = await readOptionalFile(path.join(gateDir, 'gate.yaml'));
     if (!gateYamlRaw) continue;
-    const gate = yaml.load(gateYamlRaw) as GateYaml;
+    let gate: GateYaml;
+    try {
+      gate = parseGateYaml(gateYamlRaw, path.join(gateDir, 'gate.yaml'));
+    } catch (error) {
+      // One unparsable gate is that gate's problem: it is left out of the scan and recorded once
+      // per run, and the prompts that would have been resolved through it export without it.
+      recordSkippedResource('gate', dirName, error, scanSink.output, scanSink.report);
+      continue;
+    }
     // `getAllGuides(enabledOnly)` defaults to true in `selectGates`; match it.
     if (gate.enabled === false) continue;
-    gatesById.set(gate.id ?? dirName, gate);
+    const gateId = gate.id ?? dirName;
+    gatesById.set(gateId, gate);
+    gateDirById.set(gateId, gateDir);
+    gateYamlRawById.set(gateId, gateYamlRaw);
   }
 
   /** Registers a gate id unless it is excluded, unknown, or unhonourable in a skill. */
@@ -1090,13 +920,14 @@ async function resolveActiveGateRefs(
 
   // 3. Load registered gate content
   for (const gateId of registeredIds) {
-    const gateDir = gateDirs.get(gateId);
-    if (gateDir === undefined) continue;
-    const gateYamlRaw = await readOptionalFile(path.join(gateDir, 'gate.yaml'));
-    if (!gateYamlRaw) continue;
-    const gate = yaml.load(gateYamlRaw) as GateYaml;
-    const guidanceFile = gate.guidanceFile ?? 'guidance.md';
-    const guidance = await readOptionalFile(path.join(gateDir, guidanceFile));
+    // Registered only from `gatesById`, which fills these maps in the same step: the scan above
+    // is the one place a gate.yaml is read and parsed.
+    const gateDir = gateDirById.get(gateId)!;
+    const gateYamlRaw = gateYamlRawById.get(gateId)!;
+    const gate = gatesById.get(gateId)!;
+    const guidance = await readOptionalFile(
+      path.join(gateDir, resolveGuidanceLocation('gate', gate).file)
+    );
     const activation = gate.activation as Record<string, unknown> | undefined;
 
     refs.push({
@@ -1261,7 +1092,8 @@ async function loadPromptIR(
     category,
     gateRoots,
     data.chainSteps ?? [],
-    data.artifacts?.produces
+    data.artifacts?.produces,
+    { output, report }
   );
 
   // Load chain step sub-prompt content
@@ -1357,9 +1189,9 @@ async function loadPromptIR(
 async function loadGateIR(gateDir: string): Promise<SkillIR> {
   const yamlPath = path.join(gateDir, 'gate.yaml');
   const raw = await readFile(yamlPath, 'utf-8');
-  const data = yaml.load(raw) as GateYaml;
+  const data = parseGateYaml(raw, yamlPath);
 
-  const guidanceFile = data.guidanceFile ?? 'guidance.md';
+  const guidanceFile = resolveGuidanceLocation('gate', data).file;
   const guidance = await readOptionalFile(path.join(gateDir, guidanceFile));
 
   const sourceContentsMap: Record<string, string> = { 'gate.yaml': raw };
@@ -1407,7 +1239,7 @@ async function loadFrameworkIR(methDir: string): Promise<SkillIR> {
   // One source for the system prompt (R91): the inline `systemPromptGuidance`, which is the text
   // the runtime serves. A second, file-named key was read here while no writer emitted it and the
   // server's schema never declared it, so an export could carry text the server never serves.
-  const guidance = data.systemPromptGuidance ?? '';
+  const guidance = data[FRAMEWORK_GUIDANCE_FIELD] ?? '';
 
   const sourceContentsMap: Record<string, string> = { 'framework.yaml': raw };
   if (phasesRaw) sourceContentsMap[phasesFile] = phasesRaw;
@@ -1451,7 +1283,7 @@ async function loadStyleIR(styleDir: string): Promise<SkillIR> {
   const raw = await readFile(yamlPath, 'utf-8');
   const data = yaml.load(raw) as StyleYaml;
 
-  const guidanceFile = data.guidanceFile ?? 'guidance.md';
+  const guidanceFile = resolveGuidanceLocation('style', data).file;
   const guidance = await readOptionalFile(path.join(styleDir, guidanceFile));
 
   const sourceContentsMap: Record<string, string> = { 'style.yaml': raw };
@@ -1490,7 +1322,6 @@ async function loadStyleIR(styleDir: string): Promise<SkillIR> {
 interface LoadFilters {
   resourceType?: ResourceType;
   id?: string;
-  exportAllowList?: Set<string>;
 }
 
 /**
@@ -1541,6 +1372,26 @@ async function collectPromptDirs(
   return prompts;
 }
 
+/**
+ * A resource whose files could not be loaded: logged for the operator AND recorded in the run
+ * report, so a run (and its `--json` output) cannot read as clean while a resource was skipped.
+ */
+function recordSkippedResource(
+  kind: ResourceType,
+  id: string,
+  error: unknown,
+  output: SkillsSyncOutput | undefined,
+  report: SkillsSyncRunReport | undefined
+): void {
+  const message = (error as Error).message;
+  const failureId = `${kind === 'prompt' ? '' : `${kind}/`}${id}`;
+  // Once per run: every prompt's gate scan meets the same unparsable gate.yaml, and the gate
+  // loader meets it again in an unfiltered run. The first to record it names it.
+  if (report?.failures.some((failure) => failure.id === failureId)) return;
+  output?.error(`  skip ${kind} ${id}: ${message}`);
+  report?.failures.push({ id: failureId, reason: `${kind} skipped: ${message}` });
+}
+
 async function loadAllResources(
   filters: LoadFilters | undefined,
   output: SkillsSyncOutput,
@@ -1569,11 +1420,7 @@ async function loadAllResources(
           )
         );
       } catch (e) {
-        output.error(`  skip prompt ${prompt.category}/${prompt.id}: ${(e as Error).message}`);
-        report?.failures.push({
-          id: `${prompt.category}/${prompt.id}`,
-          reason: `prompt skipped: ${(e as Error).message}`,
-        });
+        recordSkippedResource('prompt', `${prompt.category}/${prompt.id}`, e, output, report);
       }
     }
   }
@@ -1588,7 +1435,7 @@ async function loadAllResources(
       try {
         resources.push(await loadGateIR(dir));
       } catch (e) {
-        output.error(`  skip gate ${name}: ${(e as Error).message}`);
+        recordSkippedResource('gate', name, e, output, report);
       }
     }
   }
@@ -1600,7 +1447,7 @@ async function loadAllResources(
       try {
         resources.push(await loadFrameworkIR(dir));
       } catch (e) {
-        output.error(`  skip framework ${name}: ${(e as Error).message}`);
+        recordSkippedResource('framework', name, e, output, report);
       }
     }
   }
@@ -1612,31 +1459,23 @@ async function loadAllResources(
       try {
         resources.push(await loadStyleIR(dir));
       } catch (e) {
-        output.error(`  skip style ${name}: ${(e as Error).message}`);
+        recordSkippedResource('style', name, e, output, report);
       }
     }
   }
 
   // Filter disabled resources
-  const enabled = resources.filter((r) => {
+  return resources.filter((r) => {
     if (!r.enabled) {
       output.log(`  skip disabled: ${r.resourceType}/${r.id}`);
     }
     return r.enabled;
   });
+}
 
-  // Filter by export allow-list (if provided)
-  if (filters?.exportAllowList) {
-    const allowed = filters.exportAllowList;
-    const filtered = enabled.filter((r) => allowed.has(manifestKey(r)));
-    const skipped = enabled.length - filtered.length;
-    if (skipped > 0) {
-      output.log(`  ${skipped} resource(s) not in configured allow-list (skipped)`);
-    }
-    return filtered;
-  }
-
-  return enabled;
+/** The file a resource was loaded from: its definition, which every loader records first. */
+function primarySourcePath(ir: SkillIR): string {
+  return ir.sourcePaths[0];
 }
 
 /** Qualified manifest key: prevents collisions across categories and resource types. */
@@ -1680,11 +1519,11 @@ const LITERAL_ARGUMENT_NOTE =
  */
 function literalArgumentsAfterCompile(
   ir: SkillIR,
-  compile: (template: string, args: IRArgument[]) => string
+  compile: (template: string) => string
 ): string[] {
   const compiled = [ir.systemMessage, ir.guidanceContent, ir.userMessage]
     .filter((section): section is string => Boolean(section))
-    .map((section) => compile(section, ir.arguments))
+    .map((section) => compile(section))
     .join('\n');
 
   const found = new Set<string>();
@@ -1809,11 +1648,7 @@ function compileTemplateChains(segment: string, supplied: SuppliedArgs): string 
   );
 }
 
-export function compileTemplate(
-  template: string,
-  _args: IRArgument[],
-  supplied?: Record<string, string>
-): string {
+export function compileTemplate(template: string, supplied?: Record<string, string>): string {
   // `{% if arg %}A{% else %}B{% endif %}` compiles to B, not A.
   //
   // The if-branch is written for the case where `arg` was supplied, and in a skill
@@ -1953,23 +1788,6 @@ function reportTemplateFidelityGaps(
   );
 }
 
-/**
- * Compiles Nunjucks templates to plain text for Agent Skills (no template syntax).
- * - {{argName}} → {argName} (readable placeholder)
- * - {% if %} chains → the selected branch text, via the shared compileIfChain rules
- */
-export function compileTemplateToPlaintext(
-  template: string,
-  _args: IRArgument[],
-  supplied?: Record<string, string>
-): string {
-  // Same else-branch preference as `compileTemplate` -- see the reasoning there.
-  return compileTemplateChains(template, supplied).replace(
-    /\{\{\s*(\w+)\s*\}\}/g,
-    (_match, varName: string) => `{${varName}}`
-  );
-}
-
 /** Output subdirectory for a resource. Flat structure — clients expect one level. */
 function outputSubDir(ir: SkillIR, duplicateIds?: Set<string>): string {
   if (ir.resourceType === 'prompt') {
@@ -1995,32 +1813,26 @@ function buildArgumentHint(args: IRArgument[]): string {
  * Used by pullCommand to detect which sections the user actually edited:
  * if parsed section matches expected → user didn't edit → skip (preserve conditionals).
  */
-function buildExpectedSectionContent(
-  ir: SkillIR,
-  isClaudeCode: boolean
-): { systemMessage: string | null; userMessage: string | null; guidanceContent: string | null } {
-  const compile = isClaudeCode ? compileTemplate : compileTemplateToPlaintext;
+function buildExpectedSectionContent(ir: SkillIR): {
+  systemMessage: string | null;
+  userMessage: string | null;
+  guidanceContent: string | null;
+} {
+  const compile = (section: string): string => compileTemplate(section.trim());
   return {
-    systemMessage: ir.systemMessage ? compile(ir.systemMessage.trim(), ir.arguments) : null,
-    userMessage: ir.userMessage ? compile(ir.userMessage.trim(), ir.arguments) : null,
-    guidanceContent: ir.guidanceContent ? compile(ir.guidanceContent.trim(), ir.arguments) : null,
+    systemMessage: ir.systemMessage ? compile(ir.systemMessage) : null,
+    userMessage: ir.userMessage ? compile(ir.userMessage) : null,
+    guidanceContent: ir.guidanceContent ? compile(ir.guidanceContent) : null,
   };
 }
 
 // ─── Reverse Template Compiler ────────────────────────────────────────────────
 
 /**
- * Reverse-compiles Claude Code {argName} syntax back to Nunjucks {{argName}}.
- * Same as Agent Skills reverse since both formats now use named placeholders.
+ * Reverse-compiles {argName} placeholders back to Nunjucks {{argName}}. One function serves both
+ * formats because Claude Code and Agent Skills exports use the same named placeholders.
  */
-function reverseCompileTemplate(compiled: string, _args: IRArgument[]): string {
-  return compiled.replace(/\{(\w+)\}/g, '{{$1}}');
-}
-
-/**
- * Reverse-compiles Agent Skills {argName} syntax back to Nunjucks {{argName}}.
- */
-function reverseCompilePlaintext(compiled: string): string {
+function reverseCompileTemplate(compiled: string): string {
   return compiled.replace(/\{(\w+)\}/g, '{{$1}}');
 }
 
@@ -2044,7 +1856,6 @@ interface ParsedSkillMd {
   guidanceContent: string | null;
   arguments: ParsedArgument[];
   qualityGates: Array<{ id: string; source: string }>;
-  chainResources: Array<{ stepId: string; promptId: string }>;
 }
 
 /**
@@ -2164,20 +1975,6 @@ function parseSkillMd(content: string): ParsedSkillMd {
     }
   }
 
-  // Parse Chain Workflow resource references: | N | name | [`resources/stepId/`] |
-  const chainResources: Array<{ stepId: string; promptId: string }> = [];
-  const chainSection = sections.get('Chain Workflow') ?? '';
-  if (chainSection) {
-    const resourceRegex = /resources\/([^/]+)\//g;
-    let resMatch;
-    while ((resMatch = resourceRegex.exec(chainSection)) !== null) {
-      const stepId = resMatch[1]!;
-      if (!chainResources.some((r) => r.stepId === stepId)) {
-        chainResources.push({ stepId, promptId: stepId });
-      }
-    }
-  }
-
   return {
     format,
     frontmatter,
@@ -2189,8 +1986,13 @@ function parseSkillMd(content: string): ParsedSkillMd {
     guidanceContent: sections.get('Guidance') ?? null,
     arguments: parsedArgs.sort((a, b) => a.index - b.index),
     qualityGates,
-    chainResources,
   };
+}
+
+/** The client a removal warning is about, and whether its SKILL.md frontmatter carries hooks. */
+interface SkillRemovalClient {
+  id: string;
+  carriesHooks: boolean;
 }
 
 /**
@@ -2200,15 +2002,24 @@ function parseSkillMd(content: string): ParsedSkillMd {
  * frontmatter `hooks` block loses it on the next export unless the prompt YAML opts back in, and
  * the diff reads as a break rather than a config change. Reports removals only — an added or
  * reworded section is ordinary sync output, not a warning.
+ *
+ * The advice depends on the client: `enforceGateHooks` keeps the block only where the client
+ * carries one (`skillFrontmatterHooks`). Elsewhere no prompt setting can, so the warning says so.
  */
-function describeSkillRemovals(existing: string, next: string): string[] {
+function describeSkillRemovals(
+  existing: string,
+  next: string,
+  client: SkillRemovalClient
+): string[] {
   const warnings: string[] = [];
 
   const existingFrontmatter = parseSkillMd(existing).frontmatter;
   const nextFrontmatter = parseSkillMd(next).frontmatter;
   if ('hooks' in existingFrontmatter && !('hooks' in nextFrontmatter)) {
     warnings.push(
-      'export removes the frontmatter hooks block; set enforceGateHooks: true in the prompt YAML to keep it'
+      client.carriesHooks
+        ? 'export removes the frontmatter hooks block; set enforceGateHooks: true in the prompt YAML to keep it'
+        : `export removes the frontmatter hooks block; ${client.id} does not carry a hooks block in SKILL.md, so no prompt setting keeps it`
     );
   }
 
@@ -2246,9 +2057,10 @@ function warnSkillRemovals(
   resourceId: string,
   existingSkillMd: string,
   nextSkillMd: string,
+  client: SkillRemovalClient,
   output: SkillsSyncOutput
 ): void {
-  for (const removal of describeSkillRemovals(existingSkillMd, nextSkillMd)) {
+  for (const removal of describeSkillRemovals(existingSkillMd, nextSkillMd, client)) {
     output.warn(`  ${resourceId}: ${removal}`);
   }
 }
@@ -2405,6 +2217,28 @@ interface PartitionedGateRefs {
 }
 
 /**
+ * Parses the yaml a registered gate ref carries, or warns and returns null.
+ *
+ * The loader has already parsed this text once, so a failure here is not expected; if it happens
+ * the gate would otherwise export with no criteria and no word, which reads as a gate with nothing
+ * to check. The prompt still exports — the warning is the only signal the gate degraded.
+ */
+function parseRegisteredGateYaml(
+  ref: IRGateRef,
+  content: string,
+  output: SkillsSyncOutput | undefined
+): Record<string, unknown> | null {
+  try {
+    return (yaml.load(content) as Record<string, unknown> | null) ?? {};
+  } catch (error) {
+    output?.warn(
+      `  ${ref.id}: gates/${ref.id}/gate.yaml could not be parsed (${error instanceof Error ? error.message : String(error)}) — exported without its criteria`
+    );
+    return null;
+  }
+}
+
+/**
  * Parses each `registered` gate ref's yaml once and splits the result into checks and independent semantic requirements,
  * live reminders, and reminders this installation's harness already covers.
  *
@@ -2415,7 +2249,8 @@ interface PartitionedGateRefs {
  */
 function partitionGateRefs(
   gateRefs: IRGateRef[],
-  harnessCovers: readonly string[]
+  harnessCovers: readonly string[],
+  output?: SkillsSyncOutput
 ): PartitionedGateRefs {
   const registered = gateRefs.filter((g) => g.source === 'registered');
   const passthrough = gateRefs.filter((g) => g.source !== 'registered');
@@ -2424,12 +2259,9 @@ function partitionGateRefs(
   // the raw yaml text each registered ref already carries — so this constructs the minimal
   // `{ pass_criteria }` structure `deriveGateTier` actually reads.
   const tiered: TieredGateRef[] = registered.map((ref) => {
-    let parsed: GateYaml | null;
-    try {
-      parsed = ref.gateYamlContent ? (yaml.load(ref.gateYamlContent) as GateYaml) : null;
-    } catch {
-      parsed = null;
-    }
+    const parsed = ref.gateYamlContent
+      ? (parseRegisteredGateYaml(ref, ref.gateYamlContent, output) as GateYaml | null)
+      : null;
     const passCriteria = parsed?.pass_criteria ?? [];
     return {
       ref,
@@ -2456,6 +2288,26 @@ function partitionGateRefs(
   return { checks, evaluations, reminders, omitted, passthrough };
 }
 
+/**
+ * Runs one gate's render step, naming the gate in whatever it throws. A schema error alone says
+ * which field is missing and not whose it is, which is the only thing the operator needs to act on.
+ */
+function namingGate<T>(gateId: string, render: () => T): T {
+  try {
+    return render();
+  } catch (error) {
+    const issues = (error as { issues?: Array<{ path: PropertyKey[]; message: string }> }).issues;
+    const detail = Array.isArray(issues)
+      ? issues
+          .map((issue) => `${issue.path.map(String).join('.') || '$'}: ${issue.message}`)
+          .join('; ')
+      : error instanceof Error
+        ? error.message
+        : String(error);
+    throw new Error(`gate ${gateId}: ${detail}`, { cause: error });
+  }
+}
+
 /** Normalize only public semantic criteria through the canonical schema; never load a suite. */
 function semanticCriteriaForExport(
   criteria: readonly unknown[]
@@ -2479,9 +2331,11 @@ function renderEvaluationRequirements(evaluations: readonly TieredGateRef[]): st
     '### Evaluation Requirements\n\n' +
     evaluations
       .map((entry) =>
-        renderSemanticReviewPrompt([
-          { gateId: entry.ref.id, criteria: semanticCriteriaForExport(entry.passCriteria) },
-        ])
+        namingGate(entry.ref.id, () =>
+          renderSemanticReviewPrompt([
+            { gateId: entry.ref.id, criteria: semanticCriteriaForExport(entry.passCriteria) },
+          ])
+        )
       )
       .join('\n\n') +
     '\n\n'
@@ -2760,9 +2614,9 @@ function buildPassCriteriaSection(passCriteria: unknown[]): string {
 /**
  * Builds the enhanced Chain Workflow section with arrow flow and resource links.
  */
-function buildEnhancedChainSection(ir: SkillIR, opts: { hasSubagents?: boolean } = {}): string {
+function buildEnhancedChainSection(ir: SkillIR, opts: { hasSubagents: boolean }): string {
   if (ir.chainSteps.length === 0) return '';
-  const hasSubagents = opts.hasSubagents ?? true;
+  const { hasSubagents } = opts;
 
   let section = `## Chain Workflow\n\n`;
 
@@ -2890,7 +2744,8 @@ function publicGateManifestEntry(
 export function emitGateFiles(
   gateRefs: IRGateRef[],
   subDir: string,
-  skillId?: string
+  skillId?: string,
+  output?: SkillsSyncOutput
 ): OutputFile[] {
   const files: OutputFile[] = [];
   const manifestGates: Array<Record<string, unknown>> = [];
@@ -2908,13 +2763,8 @@ export function emitGateFiles(
     }
     // Machine-readable manifest entry — lets enforcement tooling (opencode-prompts
     // plugin) read gate ids and criteria without a YAML dependency. Plan row 2.3.
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = (yaml.load(ref.gateYamlContent) as Record<string, unknown>) ?? {};
-    } catch {
-      parsed = {};
-    }
-    manifestGates.push(publicGateManifestEntry(ref, parsed));
+    const parsed = parseRegisteredGateYaml(ref, ref.gateYamlContent, output) ?? {};
+    manifestGates.push(namingGate(ref.id, () => publicGateManifestEntry(ref, parsed)));
   }
   if (skillId && manifestGates.length > 0) {
     files.push({
@@ -3022,111 +2872,97 @@ function emitChainResourceFiles(
   return files;
 }
 
-// ─── Section 4: Claude Code Adapter ─────────────────────────────────────────
+// ─── Section 4: Shared Skill Emitters ───────────────────────────────────────
+//
+// Both adapters render the same body and the same tool files. Each section is emitted here once,
+// so a change to one cannot leave the two adapters' output disagreeing.
 
-function buildClaudeCodeSkill(
-  ir: SkillIR,
-  config: ClientConfig,
-  placement: SkillPlacement,
-  duplicateIds?: Set<string>,
-  harnessCovers: readonly string[] = []
-): OutputFile[] {
-  const files: OutputFile[] = [];
-  const subDir = outputSubDir(ir, duplicateIds);
-  const hookEnforced =
-    config.capabilities.skillFrontmatterHooks &&
-    ir.gateRefs.length > 0 &&
-    ir.enforceGateHooks === true;
-  const gatePartition = partitionGateRefs(ir.gateRefs, harnessCovers);
-
-  // Frontmatter
-  const fm: Record<string, unknown> = { name: ir.name, description: ir.description };
-  if (ir.arguments.length > 0) fm['argument-hint'] = buildArgumentHint(ir.arguments);
-  const scriptPermissions = buildScriptToolPermissions(ir);
-  if (scriptPermissions.length > 0) fm['allowed-tools'] = scriptPermissions;
-  if (hookEnforced) fm['hooks'] = buildGateHookFrontmatter(placement, subDir);
-
-  let body = `---\n${yaml.dump(fm, { lineWidth: 120 }).trim()}\n---\n\n`;
-
-  // Instructions section
+/** `## Instructions` and `## Guidance`, compiled to plain markdown. */
+function buildInstructionSections(ir: SkillIR): string {
+  let body = '';
   if (ir.systemMessage) {
-    body += `## Instructions\n\n${compileTemplate(ir.systemMessage.trim(), ir.arguments)}\n\n`;
+    body += `## Instructions\n\n${compileTemplate(ir.systemMessage.trim())}\n\n`;
   }
   if (ir.guidanceContent) {
-    body += `## Guidance\n\n${compileTemplate(ir.guidanceContent.trim(), ir.arguments)}\n\n`;
+    body += `## Guidance\n\n${compileTemplate(ir.guidanceContent.trim())}\n\n`;
   }
+  return body;
+}
 
-  // Arguments reference
-  if (ir.arguments.length > 0) {
-    body += `## Arguments\n\n`;
-    if (literalArgumentsAfterCompile(ir, compileTemplate).length > 0) {
-      body += `${LITERAL_ARGUMENT_NOTE}\n\n`;
-    }
-    for (const a of ir.arguments) {
-      body += `- **${a.name}**${a.required ? ' (required)' : ''}: ${a.description}\n`;
-    }
-    body += '\n';
+/** `## Arguments`: descriptive, since neither adapter has positional argument syntax. */
+function buildArgumentsSection(ir: SkillIR): string {
+  if (ir.arguments.length === 0) return '';
+  let body = `## Arguments\n\n`;
+  if (literalArgumentsAfterCompile(ir, compileTemplate).length > 0) {
+    body += `${LITERAL_ARGUMENT_NOTE}\n\n`;
   }
-
-  // Quality Gates section (after Arguments, before Usage)
-  body += buildQualityGatesSection(gatePartition, hookEnforced);
-
-  // Usage / user message template (compiled)
-  if (ir.userMessage) {
-    body += `## Usage\n\n${compileTemplate(ir.userMessage.trim(), ir.arguments)}\n`;
+  for (const a of ir.arguments) {
+    body += `- **${a.name}**${a.required ? ' (required)' : ''}: ${a.description}\n`;
   }
+  return body + '\n';
+}
 
-  // Chain workflow with resource links (Claude Code supports sub-agents)
-  body += buildEnhancedChainSection(ir, { hasSubagents: true });
+/** `## Usage`: the user message template, compiled. */
+function buildUsageSection(ir: SkillIR): string {
+  return ir.userMessage ? `## Usage\n\n${compileTemplate(ir.userMessage.trim())}\n` : '';
+}
 
-  body += buildScriptToolsSection(ir);
-
-  // Gate-specific: pass criteria checklist
-  if (ir.gateData) {
-    body += buildPassCriteriaSection(ir.gateData.passCriteria);
+/** Framework-specific: one `###` per phase. */
+function buildPhasesSection(ir: SkillIR): string {
+  if (!ir.frameworkData || !Array.isArray(ir.frameworkData.phases)) return '';
+  let body = `## Phases\n\n`;
+  const phases = ir.frameworkData.phases as Array<Record<string, unknown>>;
+  for (const phase of phases) {
+    const pName = (phase['name'] as string) ?? (phase['id'] as string) ?? 'Phase';
+    body += `### ${pName}\n\n${(phase['description'] as string) ?? ''}\n\n`;
   }
+  return body;
+}
 
-  // Framework-specific: phase summary
-  if (ir.frameworkData && Array.isArray(ir.frameworkData.phases)) {
-    body += `## Phases\n\n`;
-    const phases = ir.frameworkData.phases as Array<Record<string, unknown>>;
-    for (const phase of phases) {
-      const pName = (phase['name'] as string) ?? (phase['id'] as string) ?? 'Phase';
-      body += `### ${pName}\n\n${(phase['description'] as string) ?? ''}\n\n`;
-    }
+/** Style-specific: activation info. */
+function buildStyleConfigSection(ir: SkillIR): string {
+  if (!ir.styleData) return '';
+  let body = `## Style Configuration\n\n`;
+  body += `- **Priority**: ${ir.styleData.priority}\n`;
+  body += `- **Enhancement Mode**: ${ir.styleData.enhancementMode}\n`;
+  if (ir.styleData.compatibleFrameworks) {
+    body += `- **Compatible Frameworks**: ${ir.styleData.compatibleFrameworks.join(', ')}\n`;
   }
+  return body + '\n';
+}
 
-  // Style-specific: activation info
-  if (ir.styleData) {
-    body += `## Style Configuration\n\n`;
-    body += `- **Priority**: ${ir.styleData.priority}\n`;
-    body += `- **Enhancement Mode**: ${ir.styleData.enhancementMode}\n`;
-    if (ir.styleData.compatibleFrameworks) {
-      body += `- **Compatible Frameworks**: ${ir.styleData.compatibleFrameworks.join(', ')}\n`;
-    }
-    body += '\n';
-  }
+/**
+ * The SKILL.md body below the frontmatter, in the order both adapters emit it. The two differ only
+ * in whether the gates section describes a shipped hook and whether chain steps run as sub-agents.
+ */
+function buildSkillBody(
+  ir: SkillIR,
+  gatePartition: PartitionedGateRefs,
+  shape: { hookEnforced: boolean; hasSubagents: boolean }
+): string {
+  return (
+    buildInstructionSections(ir) +
+    buildArgumentsSection(ir) +
+    // Quality Gates section (after Arguments, before Usage)
+    buildQualityGatesSection(gatePartition, shape.hookEnforced) +
+    buildUsageSection(ir) +
+    buildEnhancedChainSection(ir, { hasSubagents: shape.hasSubagents }) +
+    buildScriptToolsSection(ir) +
+    (ir.gateData ? buildPassCriteriaSection(ir.gateData.passCriteria) : '') +
+    buildPhasesSection(ir) +
+    buildStyleConfigSection(ir)
+  );
+}
 
-  files.push({ relativePath: `${subDir}/SKILL.md`, content: body });
-
-  // Gate-review Stop hook — emitted only when the frontmatter above references it,
-  // so the two can never disagree about whether enforcement exists.
-  if (hookEnforced) {
-    files.push({
-      relativePath: `${subDir}/${GATE_HOOK_RELATIVE_PATH}`,
-      content: buildGateReviewHookScript(ir),
-    });
-  }
-
-  // Script files and tool metadata
-  for (const tool of ir.scriptTools) {
+/** Each script tool's `script.<ext>`, `schema.json` (when indexed) and `tool.json` (execution settings). */
+function emitScriptToolFiles(scriptTools: readonly IRScriptTool[], subDir: string): OutputFile[] {
+  const files: OutputFile[] = [];
+  for (const tool of scriptTools) {
     const toolSubDir = `${subDir}/tools/${tool.id}`;
 
-    // Script file
     if (tool.scriptContent) {
-      const ext = scriptExtension(tool.runtime);
       files.push({
-        relativePath: `${toolSubDir}/script${ext}`,
+        relativePath: `${toolSubDir}/script${scriptExtension(tool.runtime)}`,
         content: tool.scriptContent,
       });
     }
@@ -3139,7 +2975,6 @@ function buildClaudeCodeSkill(
       });
     }
 
-    // Tool config file (execution settings)
     if (tool.execution) {
       const toolConfig = {
         name: tool.name,
@@ -3156,17 +2991,71 @@ function buildClaudeCodeSkill(
       });
     }
   }
+  return files;
+}
 
-  // Gate files (gate.yaml + guidance.md) — same partition the section above rendered from, so
-  // a reminder this harness covers ships neither the SKILL.md line nor its gates/<id>/ files.
-  files.push(...emitGateFiles(gateRefsForEmit(gatePartition), subDir, ir.id));
+/**
+ * The files both adapters bundle after their own: gate definitions, docs, and chain step
+ * resources. Gate files come from the same partition the body's gates section rendered from, so a
+ * reminder this harness covers ships neither the SKILL.md line nor its `gates/<id>/` files.
+ */
+function emitBundledResourceFiles(
+  ir: SkillIR,
+  gatePartition: PartitionedGateRefs,
+  subDir: string,
+  output?: SkillsSyncOutput
+): OutputFile[] {
+  return [
+    ...emitGateFiles(gateRefsForEmit(gatePartition), subDir, ir.id, output),
+    ...emitDocFiles(ir.docFiles, subDir),
+    ...emitChainResourceFiles(ir.chainStepContents, subDir),
+  ];
+}
 
-  // Doc files (docs/*.md bundled from source prompt)
-  files.push(...emitDocFiles(ir.docFiles, subDir));
+function renderSkillMd(frontmatter: Record<string, unknown>, body: string): string {
+  return `---\n${yaml.dump(frontmatter, { lineWidth: 120 }).trim()}\n---\n\n${body}`;
+}
 
-  // Chain step resource files
-  files.push(...emitChainResourceFiles(ir.chainStepContents, subDir));
+// ─── Section 4b: Claude Code Adapter ────────────────────────────────────────
 
+function buildClaudeCodeSkill(
+  ir: SkillIR,
+  config: ClaudeCodeClientConfig,
+  placement: SkillPlacement,
+  duplicateIds: Set<string>,
+  harnessCovers: readonly string[],
+  output?: SkillsSyncOutput
+): OutputFile[] {
+  const subDir = outputSubDir(ir, duplicateIds);
+  const hookEnforced =
+    config.capabilities.skillFrontmatterHooks &&
+    ir.gateRefs.length > 0 &&
+    ir.enforceGateHooks === true;
+  const gatePartition = partitionGateRefs(ir.gateRefs, harnessCovers, output);
+
+  const fm: Record<string, unknown> = { name: ir.name, description: ir.description };
+  if (ir.arguments.length > 0) fm['argument-hint'] = buildArgumentHint(ir.arguments);
+  const scriptPermissions = buildScriptToolPermissions(ir);
+  if (scriptPermissions.length > 0) fm['allowed-tools'] = scriptPermissions;
+  if (hookEnforced) fm['hooks'] = buildGateHookFrontmatter(placement, subDir);
+
+  // Chain steps link as sub-agents: Claude Code runs them.
+  const body = buildSkillBody(ir, gatePartition, { hookEnforced, hasSubagents: true });
+  const files: OutputFile[] = [
+    { relativePath: `${subDir}/SKILL.md`, content: renderSkillMd(fm, body) },
+  ];
+
+  // Gate-review Stop hook — emitted only when the frontmatter above references it,
+  // so the two can never disagree about whether enforcement exists.
+  if (hookEnforced) {
+    files.push({
+      relativePath: `${subDir}/${GATE_HOOK_RELATIVE_PATH}`,
+      content: buildGateReviewHookScript(ir),
+    });
+  }
+
+  files.push(...emitScriptToolFiles(ir.scriptTools, subDir));
+  files.push(...emitBundledResourceFiles(ir, gatePartition, subDir, output));
   return files;
 }
 
@@ -3174,14 +3063,13 @@ function buildClaudeCodeSkill(
 
 function buildAgentSkillsSkill(
   ir: SkillIR,
-  config: ClientConfig,
-  duplicateIds?: Set<string>,
-  harnessCovers: readonly string[] = []
+  config: AgentSkillsClientConfig,
+  duplicateIds: Set<string>,
+  harnessCovers: readonly string[],
+  output?: SkillsSyncOutput
 ): OutputFile[] {
-  const files: OutputFile[] = [];
   const subDir = outputSubDir(ir, duplicateIds);
-  const variant = config.variant ?? 'codex';
-  const gatePartition = partitionGateRefs(ir.gateRefs, harnessCovers);
+  const gatePartition = partitionGateRefs(ir.gateRefs, harnessCovers, output);
 
   // Core Agent Skills frontmatter
   const fm: Record<string, unknown> = {
@@ -3200,144 +3088,37 @@ function buildAgentSkillsSkill(
   fm['metadata'] = metadata;
 
   // Variant-specific extensions
-  if (variant === 'cursor') {
-    fm['alwaysApply'] = config.extensions?.['alwaysApply'] ?? false;
+  if (config.variant === 'cursor') {
+    fm['alwaysApply'] = config.extensions.alwaysApply;
     if (ir.category) fm['category'] = ir.category;
   }
 
-  let body = `---\n${yaml.dump(fm, { lineWidth: 120 }).trim()}\n---\n\n`;
+  // The Agent Skills spec assigns no meaning to a frontmatter `hooks` key: prose protocol only.
+  const body = buildSkillBody(ir, gatePartition, {
+    hookEnforced: false,
+    hasSubagents: config.capabilities.subagents,
+  });
+  const files: OutputFile[] = [
+    { relativePath: `${subDir}/SKILL.md`, content: renderSkillMd(fm, body) },
+  ];
 
-  // Body content (compiled to plain markdown — Agent Skills has no template syntax)
-  if (ir.systemMessage) {
-    body += `## Instructions\n\n${compileTemplateToPlaintext(ir.systemMessage.trim(), ir.arguments)}\n\n`;
+  files.push(...emitScriptToolFiles(ir.scriptTools, subDir));
+
+  // Framework references
+  if (ir.frameworkData?.systemPromptGuidance) {
+    files.push({
+      relativePath: `${subDir}/references/system-prompt.md`,
+      content: ir.frameworkData.systemPromptGuidance,
+    });
   }
-  if (ir.guidanceContent) {
-    body += `## Guidance\n\n${compileTemplateToPlaintext(ir.guidanceContent.trim(), ir.arguments)}\n\n`;
-  }
-
-  // Arguments (descriptive — no positional syntax in Agent Skills)
-  if (ir.arguments.length > 0) {
-    body += `## Arguments\n\n`;
-    if (literalArgumentsAfterCompile(ir, compileTemplateToPlaintext).length > 0) {
-      body += `${LITERAL_ARGUMENT_NOTE}\n\n`;
-    }
-    for (const a of ir.arguments) {
-      body += `- **${a.name}**${a.required ? ' (required)' : ''}: ${a.description}\n`;
-    }
-    body += '\n';
-  }
-
-  // Quality Gates section (after Arguments, before Usage)
-  body += buildQualityGatesSection(gatePartition, false);
-
-  if (ir.userMessage) {
-    body += `## Usage\n\n${compileTemplateToPlaintext(ir.userMessage.trim(), ir.arguments)}\n`;
+  if (ir.frameworkData?.phases && ir.frameworkData.phases.length > 0) {
+    files.push({
+      relativePath: `${subDir}/references/phases.md`,
+      content: `# Phases\n\n${yaml.dump(ir.frameworkData.phases, { lineWidth: 120 })}`,
+    });
   }
 
-  // Chain workflow with resource links (capability-aware)
-  body += buildEnhancedChainSection(ir, { hasSubagents: config.capabilities.subagents });
-
-  // Script tools are only shipped when the client can carry them, so the section
-  // that documents how to run them is gated on the same capability.
-  if (config.capabilities.scripts) body += buildScriptToolsSection(ir);
-
-  // Gate pass criteria
-  if (ir.gateData) {
-    body += buildPassCriteriaSection(ir.gateData.passCriteria);
-  }
-
-  // Framework phases
-  if (ir.frameworkData && Array.isArray(ir.frameworkData.phases)) {
-    body += `## Phases\n\n`;
-    const phases = ir.frameworkData.phases as Array<Record<string, unknown>>;
-    for (const phase of phases) {
-      const pName = (phase['name'] as string) ?? (phase['id'] as string) ?? 'Phase';
-      body += `### ${pName}\n\n${(phase['description'] as string) ?? ''}\n\n`;
-    }
-  }
-
-  // Style config
-  if (ir.styleData) {
-    body += `## Style Configuration\n\n`;
-    body += `- **Priority**: ${ir.styleData.priority}\n`;
-    body += `- **Enhancement Mode**: ${ir.styleData.enhancementMode}\n`;
-    if (ir.styleData.compatibleFrameworks) {
-      body += `- **Compatible Frameworks**: ${ir.styleData.compatibleFrameworks.join(', ')}\n`;
-    }
-    body += '\n';
-  }
-
-  files.push({ relativePath: `${subDir}/SKILL.md`, content: body });
-
-  // Scripts and tool metadata (if client supports)
-  if (config.capabilities.scripts) {
-    for (const tool of ir.scriptTools) {
-      const toolSubDir = `${subDir}/tools/${tool.id}`;
-
-      // Script file
-      if (tool.scriptContent) {
-        const ext = scriptExtension(tool.runtime);
-        files.push({
-          relativePath: `${toolSubDir}/script${ext}`,
-          content: tool.scriptContent,
-        });
-      }
-
-      // Schema file (if available from cache)
-      if (tool.inputSchema && Object.keys(tool.inputSchema).length > 0) {
-        files.push({
-          relativePath: `${toolSubDir}/schema.json`,
-          content: JSON.stringify(tool.inputSchema, null, 2),
-        });
-      }
-
-      // Tool config file (execution settings)
-      if (tool.execution) {
-        const toolConfig = {
-          name: tool.name,
-          runtime: tool.runtime,
-          trigger: tool.execution.trigger,
-          confirm: tool.execution.confirm,
-          strict: tool.execution.strict,
-          ...(tool.execution.timeout !== undefined && { timeout: tool.execution.timeout }),
-          ...(tool.env !== undefined && { env: tool.env }),
-        };
-        files.push({
-          relativePath: `${toolSubDir}/tool.json`,
-          content: JSON.stringify(toolConfig, null, 2),
-        });
-      }
-    }
-  }
-
-  // References (if client supports)
-  if (config.capabilities.references) {
-    if (ir.frameworkData?.systemPromptGuidance) {
-      files.push({
-        relativePath: `${subDir}/references/system-prompt.md`,
-        content: ir.frameworkData.systemPromptGuidance,
-      });
-    }
-    if (ir.frameworkData?.phases && ir.frameworkData.phases.length > 0) {
-      files.push({
-        relativePath: `${subDir}/references/phases.md`,
-        content: `# Phases\n\n${yaml.dump(ir.frameworkData.phases, { lineWidth: 120 })}`,
-      });
-    }
-  }
-
-  // Gate files (gate.yaml + guidance.md) — same partition the section above rendered from, so
-  // a reminder this harness covers ships neither the SKILL.md line nor its gates/<id>/ files.
-  files.push(...emitGateFiles(gateRefsForEmit(gatePartition), subDir, ir.id));
-
-  // Doc files (behind assets capability)
-  if (config.capabilities.assets) {
-    files.push(...emitDocFiles(ir.docFiles, subDir));
-  }
-
-  // Chain step resource files
-  files.push(...emitChainResourceFiles(ir.chainStepContents, subDir));
-
+  files.push(...emitBundledResourceFiles(ir, gatePartition, subDir, output));
   return files;
 }
 
@@ -3347,13 +3128,38 @@ function adaptResource(
   ir: SkillIR,
   clientConfig: ClientConfig,
   placement: SkillPlacement,
-  duplicateIds?: Set<string>,
-  harnessCovers: readonly string[] = []
+  duplicateIds: Set<string>,
+  harnessCovers: readonly string[],
+  output?: SkillsSyncOutput
 ): OutputFile[] {
   if (clientConfig.adapter === 'claude-code') {
-    return buildClaudeCodeSkill(ir, clientConfig, placement, duplicateIds, harnessCovers);
+    return buildClaudeCodeSkill(ir, clientConfig, placement, duplicateIds, harnessCovers, output);
   }
-  return buildAgentSkillsSkill(ir, clientConfig, duplicateIds, harnessCovers);
+  return buildAgentSkillsSkill(ir, clientConfig, duplicateIds, harnessCovers, output);
+}
+
+/**
+ * `adaptResource` for a run that must not die with one resource: a render that throws (a gate
+ * criterion the schema refuses, say) is recorded in the report against this resource and the
+ * caller moves on to the next. Returns `null` for a resource that was recorded.
+ */
+function adaptResourceOrRecord(
+  ir: SkillIR,
+  clientConfig: ClientConfig,
+  placement: SkillPlacement,
+  duplicateIds: Set<string>,
+  harnessCovers: readonly string[],
+  output: SkillsSyncOutput,
+  report: SkillsSyncRunReport
+): OutputFile[] | null {
+  try {
+    return adaptResource(ir, clientConfig, placement, duplicateIds, harnessCovers, output);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    output.error(`  skip ${ir.resourceType} ${ir.id}: ${reason}`);
+    report.failures.push({ id: ir.id, reason });
+    return null;
+  }
 }
 
 // ─── Section 7: Manifest Operations (SQLite-backed) ────────────────────────
@@ -3406,9 +3212,13 @@ function loadManifestEntries(
   return map;
 }
 
-/** Bulk save manifest entries within a single transaction. */
 /**
- * Persist the manifest for one client+scope.
+ * Persist the manifest for one client+scope, in a single transaction.
+ *
+ * `replaceSet` is the run's claim to be the whole truth for the pair: an unfiltered run replaces
+ * every row, which is how a retired resource leaves the manifest. A run narrowed by `--id` or
+ * `--resource-type` saw only part of the set, so it replaces just the keys it wrote — the table is
+ * durable, and deleting the rest would erase rows nothing re-creates until the next full run.
  *
  * Returns false when no initialized database is available — the CLI entry point
  * passes no `dbManager`, so a plain `skills:export` writes files but records
@@ -3421,17 +3231,25 @@ async function saveManifestBatch(
   scope: 'user' | 'project',
   entries: Map<string, SyncManifestEntry>,
   configHash: string,
+  replaceSet: boolean,
   dbManager?: DatabasePort
 ): Promise<boolean> {
   if (!dbManager?.isInitialized()) return false;
 
   await dbManager.transaction(() => {
-    // Clear previous entries for this client+scope
-    dbManager.run('DELETE FROM skills_sync_manifests WHERE client = ? AND scope = ?', [
-      clientId,
-      scope,
-    ]);
+    if (replaceSet) {
+      dbManager.run('DELETE FROM skills_sync_manifests WHERE client = ? AND scope = ?', [
+        clientId,
+        scope,
+      ]);
+    }
     for (const [key, entry] of entries) {
+      if (!replaceSet) {
+        dbManager.run(
+          'DELETE FROM skills_sync_manifests WHERE client = ? AND scope = ? AND resource_key = ?',
+          [clientId, scope, key]
+        );
+      }
       dbManager.run(
         `INSERT INTO skills_sync_manifests
          (client, scope, resource_key, resource_id, resource_type, source_hash, output_hash,
@@ -3509,6 +3327,54 @@ function findForeignAliasForResource(
   return null;
 }
 
+// ─── Section 7b: Client-run inputs ─────────────────────────────────────────
+
+/** What `export`, `sync`, `diff` and `pull` load before they walk their client targets. */
+interface ClientRunInputs {
+  /** The skills-sync.yaml read, which `export` and `sync` write registrations back to. */
+  configPath: string;
+  config: SyncConfig;
+  harnessCovers: readonly string[];
+  resources: SkillIR[];
+  /** Prompt ids two categories share; their skill directories are category-prefixed. */
+  duplicateIds: Set<string>;
+}
+
+async function loadClientRunInputs(
+  opts: SkillsSyncOptions,
+  output: SkillsSyncOutput,
+  report: SkillsSyncRunReport,
+  paths: SkillsSyncPaths
+): Promise<ClientRunInputs> {
+  const configPath = getSkillsSyncConfigPath(paths);
+  const config = await loadSyncConfig(configPath, paths);
+  const harnessCovers = await resolveHarnessCovers(paths);
+
+  const filters: LoadFilters = {};
+  if (opts.resourceType) filters.resourceType = opts.resourceType;
+  if (opts.id) filters.id = opts.id;
+
+  const resources = await loadAllResources(filters, output, opts.dbManager, report, paths);
+  report.resources = resources.length;
+  return {
+    configPath,
+    config,
+    harnessCovers,
+    resources,
+    duplicateIds: duplicatePromptIds(resources),
+  };
+}
+
+function duplicatePromptIds(resources: readonly SkillIR[]): Set<string> {
+  const idCounts = new Map<string, number>();
+  for (const r of resources) {
+    if (r.resourceType === 'prompt') {
+      idCounts.set(r.id, (idCounts.get(r.id) ?? 0) + 1);
+    }
+  }
+  return new Set([...idCounts.entries()].filter(([, c]) => c > 1).map(([id]) => id));
+}
+
 // ─── Section 8: Export Command ──────────────────────────────────────────────
 
 async function exportCommand(
@@ -3517,29 +3383,14 @@ async function exportCommand(
   report: SkillsSyncRunReport,
   paths: SkillsSyncPaths
 ): Promise<void> {
-  const configPath = getSkillsSyncConfigPath(paths);
-  const config = await loadSyncConfig(configPath, paths);
-  const harnessCovers = await resolveHarnessCovers(paths);
-  const cliScope = opts.scope; // undefined = use per-resource scope; set = override all
-  const clientIds =
-    opts.client === 'all' || !opts.client ? Object.keys(CLIENT_REGISTRY) : [opts.client];
-
-  const filters: LoadFilters = {};
-  if (opts.resourceType) filters.resourceType = opts.resourceType;
-  if (opts.id) filters.id = opts.id;
-
-  const resources = await loadAllResources(filters, output, opts.dbManager, report, paths);
-  report.resources = resources.length;
+  const { configPath, config, harnessCovers, resources, duplicateIds } = await loadClientRunInputs(
+    opts,
+    output,
+    report,
+    paths
+  );
   output.log(`Loaded ${resources.length} resources`);
 
-  // Detect duplicate prompt IDs across categories
-  const idCounts = new Map<string, number>();
-  for (const r of resources) {
-    if (r.resourceType === 'prompt') {
-      idCounts.set(r.id, (idCounts.get(r.id) ?? 0) + 1);
-    }
-  }
-  const duplicateIds = new Set([...idCounts.entries()].filter(([, c]) => c > 1).map(([id]) => id));
   if (duplicateIds.size > 0) {
     output.log(
       `  note: ${duplicateIds.size} duplicate prompt ID(s) will be category-prefixed: ${[...duplicateIds].join(', ')}`
@@ -3549,169 +3400,147 @@ async function exportCommand(
   const configRaw = await readFile(configPath, 'utf-8');
   const configHash = computeContentHash([configRaw]);
 
-  // Determine which scopes to export to (default: user-global only)
-  const targetScopes: Array<'user' | 'project'> = cliScope ? [cliScope] : ['user'];
   const registrationMutations: RegistrationMutation[] = [];
 
-  // Track resolved directories to detect symlink collisions (e.g., ~/.codex/skills -> ~/.claude/skills)
-  const seenDirs = new Map<string, string>(); // realpath → first clientId that claimed it
+  for (const target of clientScopeTargets(opts, config, paths, output, WRITER_TARGETS)) {
+    const { clientId, clientConfig, scope, baseDir } = target;
+    const manifestEntries = new Map<string, SyncManifestEntry>();
 
-  for (const clientId of clientIds) {
-    const clientConfig = resolveClientConfig(clientId, config);
-    if (!clientConfig) {
-      throw usageError(
-        `Unknown client: ${clientId} (available: ${Object.keys(CLIENT_REGISTRY).join(', ')}, all)`
+    const scopedResources = filterResourcesForScope(resources, target);
+
+    if (scopedResources.length === 0) continue;
+
+    output.log(`\n── ${clientId} (${scope}) → ${baseDir}`);
+
+    for (const ir of scopedResources) {
+      reportTemplateFidelityGaps(ir, findTemplateFidelityGaps(ir), output);
+      const resourceKey = manifestKey(ir);
+      const adapted = adaptResourceOrRecord(
+        ir,
+        clientConfig,
+        { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
+        duplicateIds,
+        harnessCovers,
+        output,
+        report
       );
-    }
-    const selection = resolveClientResourceSelection(config, clientId);
-    const ignoreSelection = opts.id != null;
-    if (!ignoreSelection && selection.mode === 'unregistered') {
-      output.log(`\n── ${clientId}: skipped — no registrations in skills-sync.yaml`);
-      continue;
-    }
+      if (adapted === null) continue;
+      let outputFiles = adapted;
+      outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
+      const outputHash = hashOutputFiles(outputFiles);
 
-    for (const scope of targetScopes) {
-      const baseDir = resolveOutputDir(clientConfig, scope, paths);
-
-      // Collision guard: skip if another client already wrote to this physical directory
-      const dirKey = `${baseDir}:${scope}`;
-      const previousClient = seenDirs.get(dirKey);
-      if (previousClient) {
-        output.warn(
-          `  skipping ${clientId} (${scope}) → ${baseDir} — directory already written by ${previousClient} (symlink collision?)`
-        );
+      const alias = findForeignAliasForResource(baseDir, outputFiles);
+      if (alias) {
+        const reason =
+          `output directory ${alias.relativeDir} resolves outside ${baseDir} (→ ${alias.target}); ` +
+          "not written — it would overwrite another client's export through the link. " +
+          'Replace the link with a real directory and re-run.';
+        output.warn(`  ${ir.id}: ${reason}`);
+        report.failures.push({ id: ir.id, reason });
         continue;
       }
-      seenDirs.set(dirKey, clientId);
 
-      const manifestEntries = new Map<string, SyncManifestEntry>();
+      let skillIsManaged = false;
+      for (const file of outputFiles) {
+        // Contained against the OUTPUT dir, not the resources root: this writer's destination is
+        // the client's skills directory. `relativePath` is built from resource ids, so a
+        // traversing id would place a skill file outside the directory the operator pointed the
+        // export at.
+        const fullPath = resolveContainedPath(baseDir, file.relativePath);
 
-      const scopedResources = filterResourcesForScope(resources, scope, selection, ignoreSelection);
-
-      if (scopedResources.length === 0) continue;
-
-      output.log(`\n── ${clientId} (${scope}) → ${baseDir}`);
-
-      for (const ir of scopedResources) {
-        reportTemplateFidelityGaps(ir, findTemplateFidelityGaps(ir), output);
-        const resourceKey = manifestKey(ir);
-        let outputFiles = adaptResource(
-          ir,
-          clientConfig,
-          { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
-          duplicateIds,
-          harnessCovers
-        );
-        outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
-        const outputHash = hashOutputFiles(outputFiles);
-
-        const alias = findForeignAliasForResource(baseDir, outputFiles);
-        if (alias) {
-          const reason =
-            `output directory ${alias.relativeDir} resolves outside ${baseDir} (→ ${alias.target}); ` +
-            "not written — it would overwrite another client's export through the link. " +
-            'Replace the link with a real directory and re-run.';
-          output.warn(`  ${ir.id}: ${reason}`);
-          report.failures.push({ id: ir.id, reason });
-          continue;
-        }
-
-        let skillIsManaged = false;
-        for (const file of outputFiles) {
-          // Contained against the OUTPUT dir, not the resources root: this writer's destination is
-          // the client's skills directory. `relativePath` is built from resource ids, so a
-          // traversing id would place a skill file outside the directory the operator pointed the
-          // export at.
-          const fullPath = resolveContainedPath(baseDir, file.relativePath);
-
-          // Warn before overwriting a SKILL.md this tool manages: a hand-written file being
-          // overwritten is a different, pre-existing behaviour (unmarked, never warned about
-          // here) — this only compares against what the tool itself last wrote.
-          if (file.relativePath.endsWith('/SKILL.md')) {
-            const existingSkillMd = await readOptionalFile(fullPath);
-            if (existingSkillMd !== null && parseManagedSkillMarker(existingSkillMd) !== null) {
-              skillIsManaged = true;
-              warnSkillRemovals(ir.id, existingSkillMd, file.content, output);
-            }
-          }
-
-          if (opts.preview) {
-            output.log(`  [preview] ${file.relativePath}`);
-          } else {
-            await mkdir(path.dirname(fullPath), { recursive: true });
-            await writeFile(fullPath, file.content);
-            report.written++;
-            report.writtenByClient = report.writtenByClient ?? {};
-            report.writtenByClient[clientId] = (report.writtenByClient[clientId] ?? 0) + 1;
-            output.log(`  wrote ${file.relativePath}`);
+        // Warn before overwriting a SKILL.md this tool manages: a hand-written file being
+        // overwritten is a different, pre-existing behaviour (unmarked, never warned about
+        // here) — this only compares against what the tool itself last wrote.
+        if (file.relativePath.endsWith('/SKILL.md')) {
+          const existingSkillMd = await readOptionalFile(fullPath);
+          if (existingSkillMd !== null && parseManagedSkillMarker(existingSkillMd) !== null) {
+            skillIsManaged = true;
+            warnSkillRemovals(
+              ir.id,
+              existingSkillMd,
+              file.content,
+              { id: clientId, carriesHooks: clientConfig.capabilities.skillFrontmatterHooks },
+              output
+            );
           }
         }
 
-        // Same managed-marker guard as the removal warnings above: a gate dropped from this
-        // skill's set left a `gates/<id>/` directory this tool wrote on an earlier run behind.
-        if (skillIsManaged) {
-          const subDir = outputSubDir(ir, duplicateIds);
-          await pruneStaleGates(
-            ir.id,
-            baseDir,
-            subDir,
-            outputFiles,
-            opts.preview === true,
-            output,
-            report
-          );
+        if (opts.preview) {
+          output.log(`  [preview] ${file.relativePath}`);
+        } else {
+          await mkdir(path.dirname(fullPath), { recursive: true });
+          await writeFile(fullPath, file.content);
+          report.written++;
+          report.writtenByClient = report.writtenByClient ?? {};
+          report.writtenByClient[clientId] = (report.writtenByClient[clientId] ?? 0) + 1;
+          output.log(`  wrote ${file.relativePath}`);
         }
-
-        // Load version history for the resource
-        const firstSourcePath = ir.sourcePaths[0];
-        if (!firstSourcePath) continue;
-        // The path only locates state.db; the rows are the IR's own type and id. Read from the
-        // path, a gate under any directory named `prompts` was looked up as a prompt.
-        const history = loadHistory(path.dirname(firstSourcePath), {
-          resourceType: ir.resourceType,
-          resourceId: ir.id,
-        });
-
-        manifestEntries.set(resourceKey, {
-          resourceId: ir.id,
-          resourceType: ir.resourceType,
-          sourceHash: ir.sourceHash,
-          outputHash,
-          outputFiles: outputFiles.map((f) => f.relativePath),
-          exportedAt: new Date().toISOString(),
-          sourceSnapshot: ir.sourceContents,
-          ...(history && {
-            version: history.current_version,
-            versionDate: history.versions[0]?.date,
-          }),
-        });
       }
 
-      if (!opts.preview) {
-        const manifestSaved = await saveManifestBatch(
-          clientId,
-          scope,
-          manifestEntries,
-          configHash,
-          opts.dbManager
+      // Same managed-marker guard as the removal warnings above: a gate dropped from this
+      // skill's set left a `gates/<id>/` directory this tool wrote on an earlier run behind.
+      if (skillIsManaged) {
+        const subDir = outputSubDir(ir, duplicateIds);
+        await pruneStaleGates(
+          ir.id,
+          baseDir,
+          subDir,
+          outputFiles,
+          opts.preview === true,
+          output,
+          report
         );
-        if (!manifestSaved) {
-          report.failures.push({
-            id: `${clientId}:${scope}`,
-            reason: `manifest not saved (no database) — ${manifestEntries.size} entries dropped; diff/prune will not see this export`,
-          });
-        }
-        output.log(
-          manifestSaved
-            ? `  manifest saved (${manifestEntries.size} entries, scope: ${scope})`
-            : `  manifest NOT saved (no database) — ${manifestEntries.size} entries dropped; diff/prune will not see this export`
-        );
-        registrationMutations.push({
-          clientId,
-          scope,
-          resourceKeys: scopedResources.map((resource) => manifestKey(resource)),
+      }
+
+      // Load version history for the resource
+      const firstSourcePath = primarySourcePath(ir);
+      // The path only locates state.db; the rows are the IR's own type and id. Read from the
+      // path, a gate under any directory named `prompts` was looked up as a prompt.
+      const history = loadHistory(path.dirname(firstSourcePath), {
+        resourceType: ir.resourceType,
+        resourceId: ir.id,
+      });
+
+      manifestEntries.set(resourceKey, {
+        resourceId: ir.id,
+        resourceType: ir.resourceType,
+        sourceHash: ir.sourceHash,
+        outputHash,
+        outputFiles: outputFiles.map((f) => f.relativePath),
+        exportedAt: new Date().toISOString(),
+        sourceSnapshot: ir.sourceContents,
+        ...(history && {
+          version: history.current_version,
+          versionDate: history.versions[0]?.date,
+        }),
+      });
+    }
+
+    if (!opts.preview) {
+      const manifestSaved = await saveManifestBatch(
+        clientId,
+        scope,
+        manifestEntries,
+        configHash,
+        describeLoadFilter(opts) === undefined,
+        opts.dbManager
+      );
+      if (!manifestSaved) {
+        report.failures.push({
+          id: `${clientId}:${scope}`,
+          reason: `manifest not saved (no database) — ${manifestEntries.size} entries dropped; diff/prune will not see this export`,
         });
       }
+      output.log(
+        manifestSaved
+          ? `  manifest saved (${manifestEntries.size} entries, scope: ${scope})`
+          : `  manifest NOT saved (no database) — ${manifestEntries.size} entries dropped; diff/prune will not see this export`
+      );
+      registrationMutations.push({
+        clientId,
+        scope,
+        resourceKeys: scopedResources.map((resource) => manifestKey(resource)),
+      });
     }
   }
 
@@ -3813,20 +3642,15 @@ async function adoptUnmarkedSkillDirs(
   baseDir: string,
   clientId: string,
   scope: 'user' | 'project',
-  markerManagedSkillDirs: ManagedSkillDirMap,
   preview: boolean,
   output: SkillsSyncOutput,
   report: SkillsSyncRunReport
 ): Promise<string[]> {
-  const alreadyMarked = new Set<string>();
-  for (const dirs of markerManagedSkillDirs.values()) {
-    for (const dir of dirs) alreadyMarked.add(dir);
-  }
-
+  // `findAdoptableSkillDirs` already excludes every directory carrying a marker
+  // (`isAdoptableSkillMarkdown` rejects any SKILL.md `parseManagedSkillMarker` reads), so the
+  // marked set needs no second check here.
   const adopted: string[] = [];
   for (const skillDir of await findAdoptableSkillDirs(baseDir)) {
-    if (alreadyMarked.has(skillDir)) continue;
-
     const skillPath = path.join(baseDir, skillDir, 'SKILL.md');
     const content = await readOptionalFile(skillPath);
     if (!content) continue;
@@ -3877,255 +3701,233 @@ async function applySyncPrune(
   }
 }
 
+/** The flag that narrows which resources a run loads, or undefined for an unfiltered run. */
+function describeLoadFilter(opts: SkillsSyncOptions): '--id' | '--resource-type' | undefined {
+  if (opts.id) return '--id';
+  if (opts.resourceType) return '--resource-type';
+  return undefined;
+}
+
 async function syncCommand(
   opts: SkillsSyncOptions,
   output: SkillsSyncOutput,
   report: SkillsSyncRunReport,
   paths: SkillsSyncPaths
 ): Promise<void> {
-  const configPath = getSkillsSyncConfigPath(paths);
-  const config = await loadSyncConfig(configPath, paths);
-  const harnessCovers = await resolveHarnessCovers(paths);
-  const cliScope = opts.scope;
   const shouldPrune = opts.prune ?? true;
-  const clientIds =
-    opts.client === 'all' || !opts.client ? Object.keys(CLIENT_REGISTRY) : [opts.client];
-
-  const filters: LoadFilters = {};
-  if (opts.resourceType) filters.resourceType = opts.resourceType;
-  if (opts.id) filters.id = opts.id;
-
-  const resources = await loadAllResources(filters, output, opts.dbManager, report, paths);
-  report.resources = resources.length;
+  const filterNarrowsLoad = describeLoadFilter(opts);
+  const { configPath, config, harnessCovers, resources, duplicateIds } = await loadClientRunInputs(
+    opts,
+    output,
+    report,
+    paths
+  );
   output.log(`Loaded ${resources.length} resources`);
 
-  const idCounts = new Map<string, number>();
-  for (const r of resources) {
-    if (r.resourceType === 'prompt') {
-      idCounts.set(r.id, (idCounts.get(r.id) ?? 0) + 1);
-    }
-  }
-  const duplicateIds = new Set([...idCounts.entries()].filter(([, c]) => c > 1).map(([id]) => id));
+  for (const target of clientScopeTargets(opts, config, paths, output, WRITER_TARGETS)) {
+    const { clientId, clientConfig, scope, baseDir } = target;
+    const scopedResources = filterResourcesForScope(resources, target);
+    const desiredResourceKeys = scopedResources.map((resource) => manifestKey(resource));
+    const desiredResourceKeySet = new Set(desiredResourceKeys);
 
-  const targetScopes: Array<'user' | 'project'> = cliScope ? [cliScope] : ['user'];
-  const seenDirs = new Map<string, string>();
+    output.log(`\n── ${clientId} (${scope}) → ${baseDir}`);
 
-  for (const clientId of clientIds) {
-    const clientConfig = resolveClientConfig(clientId, config);
-    if (!clientConfig) {
-      throw usageError(
-        `Unknown client: ${clientId} (available: ${Object.keys(CLIENT_REGISTRY).join(', ')}, all)`
-      );
-    }
-
-    const selection = resolveClientResourceSelection(config, clientId);
-    const ignoreSelection = opts.id != null;
-    if (!ignoreSelection && selection.mode === 'unregistered') {
-      output.log(`\n── ${clientId}: skipped — no registrations in skills-sync.yaml`);
-      continue;
-    }
-
-    for (const scope of targetScopes) {
-      const baseDir = resolveOutputDir(clientConfig, scope, paths);
-      const dirKey = `${baseDir}:${scope}`;
-      const previousClient = seenDirs.get(dirKey);
-      if (previousClient) {
-        output.warn(
-          `  skipping ${clientId} (${scope}) → ${baseDir} — directory already written by ${previousClient} (symlink collision?)`
+    const registrationMutations: RegistrationMutation[] = [
+      { clientId, scope, resourceKeys: desiredResourceKeys },
+    ];
+    if (opts.preview) {
+      const previewResult = await previewRegistrationMutations(configPath, registrationMutations);
+      if (previewResult.updated) {
+        output.log(
+          `  [preview] update skills-sync.yaml registrations (+${previewResult.addedKeys} key(s))`
         );
-        continue;
       }
-      seenDirs.set(dirKey, clientId);
-
-      const scopedResources = filterResourcesForScope(resources, scope, selection, ignoreSelection);
-      const desiredResourceKeys = scopedResources.map((resource) => manifestKey(resource));
-      const desiredResourceKeySet = new Set(desiredResourceKeys);
-
-      output.log(`\n── ${clientId} (${scope}) → ${baseDir}`);
-
-      const registrationMutations: RegistrationMutation[] = [
-        { clientId, scope, resourceKeys: desiredResourceKeys },
-      ];
-      if (opts.preview) {
-        const previewResult = await previewRegistrationMutations(configPath, registrationMutations);
-        if (previewResult.updated) {
-          output.log(
-            `  [preview] update skills-sync.yaml registrations (+${previewResult.addedKeys} key(s))`
-          );
-        }
-      } else {
-        const mutationResult = await applyRegistrationMutations(configPath, registrationMutations);
-        if (mutationResult.updated) {
-          output.log(
-            `  updated skills-sync.yaml registrations (+${mutationResult.addedKeys} key(s))`
-          );
-        }
+    } else {
+      const mutationResult = await applyRegistrationMutations(configPath, registrationMutations);
+      if (mutationResult.updated) {
+        output.log(
+          `  updated skills-sync.yaml registrations (+${mutationResult.addedKeys} key(s))`
+        );
       }
+    }
 
-      const previousManifestEntries = loadManifestEntries(clientId, scope, opts.dbManager);
-      const markerManagedSkillDirs = await collectManagedSkillDirsFromMarkers(
-        baseDir,
-        clientId,
-        scope
+    const previousManifestEntries = loadManifestEntries(clientId, scope, opts.dbManager);
+    const markerManagedSkillDirs = await collectManagedSkillDirsFromMarkers(
+      baseDir,
+      clientId,
+      scope
+    );
+    const manifestManagedSkillDirs = collectManifestManagedSkillDirs(previousManifestEntries);
+    const prunePlan = buildSyncPrunePlan({
+      desiredResourceKeys: desiredResourceKeySet,
+      manifestManagedSkillDirs,
+      markerManagedSkillDirs,
+    });
+
+    // Pre-marker exports carry no marker and no manifest row, so neither input
+    // above can see them. Stamp a marker instead of pruning: adoption makes them
+    // reachable by the ordinary marker path on the NEXT run, and a false positive
+    // then costs a revertible edit rather than a hand-written skill.
+    const adoptedSkillDirs = await adoptUnmarkedSkillDirs(
+      baseDir,
+      clientId,
+      scope,
+      opts.preview === true,
+      output,
+      report
+    );
+    if (adoptedSkillDirs.length > 0) {
+      output.log(
+        `  adopted ${adoptedSkillDirs.length} unmarked skill dir(s) emitted before markers existed: ${adoptedSkillDirs.join(', ')}`
       );
-      const manifestManagedSkillDirs = collectManifestManagedSkillDirs(previousManifestEntries);
-      const prunePlan = buildSyncPrunePlan({
-        desiredResourceKeys: desiredResourceKeySet,
-        manifestManagedSkillDirs,
-        markerManagedSkillDirs,
-      });
+    }
 
-      // Pre-marker exports carry no marker and no manifest row, so neither input
-      // above can see them. Stamp a marker instead of pruning: adoption makes them
-      // reachable by the ordinary marker path on the NEXT run, and a false positive
-      // then costs a revertible edit rather than a hand-written skill.
-      const adoptedSkillDirs = await adoptUnmarkedSkillDirs(
-        baseDir,
-        clientId,
-        scope,
-        markerManagedSkillDirs,
-        opts.preview === true,
+    const manifestEntries = new Map<string, SyncManifestEntry>();
+    for (const ir of scopedResources) {
+      const resourceKey = manifestKey(ir);
+      const adapted = adaptResourceOrRecord(
+        ir,
+        clientConfig,
+        { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
+        duplicateIds,
+        harnessCovers,
         output,
         report
       );
-      if (adoptedSkillDirs.length > 0) {
-        output.log(
-          `  adopted ${adoptedSkillDirs.length} unmarked skill dir(s) emitted before markers existed: ${adoptedSkillDirs.join(', ')}`
-        );
+      if (adapted === null) continue;
+      let outputFiles = adapted;
+      outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
+      const outputHash = hashOutputFiles(outputFiles);
+
+      const alias = findForeignAliasForResource(baseDir, outputFiles);
+      if (alias) {
+        const reason =
+          `output directory ${alias.relativeDir} resolves outside ${baseDir} (→ ${alias.target}); ` +
+          "not written — it would overwrite another client's export through the link. " +
+          'Replace the link with a real directory and re-run.';
+        output.warn(`  ${ir.id}: ${reason}`);
+        report.failures.push({ id: ir.id, reason });
+        continue;
       }
 
-      const manifestEntries = new Map<string, SyncManifestEntry>();
-      for (const ir of scopedResources) {
-        const resourceKey = manifestKey(ir);
-        let outputFiles = adaptResource(
-          ir,
-          clientConfig,
-          { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
-          duplicateIds,
-          harnessCovers
-        );
-        outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
-        const outputHash = hashOutputFiles(outputFiles);
+      let skillIsManaged = false;
+      for (const file of outputFiles) {
+        // Contained against the OUTPUT dir, not the resources root: this writer's destination is
+        // the client's skills directory. `relativePath` is built from resource ids, so a
+        // traversing id would place a skill file outside the directory the operator pointed the
+        // export at.
+        const fullPath = resolveContainedPath(baseDir, file.relativePath);
 
-        const alias = findForeignAliasForResource(baseDir, outputFiles);
-        if (alias) {
-          const reason =
-            `output directory ${alias.relativeDir} resolves outside ${baseDir} (→ ${alias.target}); ` +
-            "not written — it would overwrite another client's export through the link. " +
-            'Replace the link with a real directory and re-run.';
-          output.warn(`  ${ir.id}: ${reason}`);
-          report.failures.push({ id: ir.id, reason });
-          continue;
-        }
-
-        let skillIsManaged = false;
-        for (const file of outputFiles) {
-          // Contained against the OUTPUT dir, not the resources root: this writer's destination is
-          // the client's skills directory. `relativePath` is built from resource ids, so a
-          // traversing id would place a skill file outside the directory the operator pointed the
-          // export at.
-          const fullPath = resolveContainedPath(baseDir, file.relativePath);
-
-          // Same removal warning as `exportCommand`: a hand-written file being overwritten is a
-          // different, pre-existing behaviour (unmarked, never warned about here) — this only
-          // compares against what the tool itself last wrote.
-          if (file.relativePath.endsWith('/SKILL.md')) {
-            const existingSkillMd = await readOptionalFile(fullPath);
-            if (existingSkillMd !== null && parseManagedSkillMarker(existingSkillMd) !== null) {
-              skillIsManaged = true;
-              warnSkillRemovals(ir.id, existingSkillMd, file.content, output);
-            }
-          }
-
-          if (opts.preview) {
-            output.log(`  [preview] ${file.relativePath}`);
-          } else {
-            await mkdir(path.dirname(fullPath), { recursive: true });
-            await writeFile(fullPath, file.content);
-            report.written++;
-            report.writtenByClient = report.writtenByClient ?? {};
-            report.writtenByClient[clientId] = (report.writtenByClient[clientId] ?? 0) + 1;
-            output.log(`  wrote ${file.relativePath}`);
+        // Same removal warning as `exportCommand`: a hand-written file being overwritten is a
+        // different, pre-existing behaviour (unmarked, never warned about here) — this only
+        // compares against what the tool itself last wrote.
+        if (file.relativePath.endsWith('/SKILL.md')) {
+          const existingSkillMd = await readOptionalFile(fullPath);
+          if (existingSkillMd !== null && parseManagedSkillMarker(existingSkillMd) !== null) {
+            skillIsManaged = true;
+            warnSkillRemovals(
+              ir.id,
+              existingSkillMd,
+              file.content,
+              { id: clientId, carriesHooks: clientConfig.capabilities.skillFrontmatterHooks },
+              output
+            );
           }
         }
 
-        // Same managed-marker guard as the removal warnings above: a gate dropped from this
-        // skill's set left a `gates/<id>/` directory this tool wrote on an earlier run behind.
-        if (skillIsManaged) {
-          const subDir = outputSubDir(ir, duplicateIds);
-          await pruneStaleGates(
-            ir.id,
-            baseDir,
-            subDir,
-            outputFiles,
-            opts.preview === true,
-            output,
-            report
-          );
+        if (opts.preview) {
+          output.log(`  [preview] ${file.relativePath}`);
+        } else {
+          await mkdir(path.dirname(fullPath), { recursive: true });
+          await writeFile(fullPath, file.content);
+          report.written++;
+          report.writtenByClient = report.writtenByClient ?? {};
+          report.writtenByClient[clientId] = (report.writtenByClient[clientId] ?? 0) + 1;
+          output.log(`  wrote ${file.relativePath}`);
         }
-
-        const firstSourcePath = ir.sourcePaths[0];
-        if (!firstSourcePath) continue;
-        // The path only locates state.db; the rows are the IR's own type and id. Read from the
-        // path, a gate under any directory named `prompts` was looked up as a prompt.
-        const history = loadHistory(path.dirname(firstSourcePath), {
-          resourceType: ir.resourceType,
-          resourceId: ir.id,
-        });
-
-        manifestEntries.set(resourceKey, {
-          resourceId: ir.id,
-          resourceType: ir.resourceType,
-          sourceHash: ir.sourceHash,
-          outputHash,
-          outputFiles: outputFiles.map((file) => file.relativePath),
-          exportedAt: new Date().toISOString(),
-          sourceSnapshot: ir.sourceContents,
-          ...(history && {
-            version: history.current_version,
-            versionDate: history.versions[0]?.date,
-          }),
-        });
       }
 
-      if (shouldPrune) {
-        await applySyncPrune(
+      // Same managed-marker guard as the removal warnings above: a gate dropped from this
+      // skill's set left a `gates/<id>/` directory this tool wrote on an earlier run behind.
+      if (skillIsManaged) {
+        const subDir = outputSubDir(ir, duplicateIds);
+        await pruneStaleGates(
+          ir.id,
           baseDir,
-          prunePlan.pruneSkillDirs,
+          subDir,
+          outputFiles,
           opts.preview === true,
           output,
           report
         );
-      } else if (prunePlan.pruneSkillDirs.length > 0) {
-        output.log(`  prune skipped (${prunePlan.pruneSkillDirs.length} stale managed skill(s))`);
       }
 
-      if (opts.preview) {
-        output.log(
-          `  [preview] manifest update (${manifestEntries.size} entries, scope: ${scope})`
-        );
-      } else {
-        const updatedConfigRaw = await readFile(configPath, 'utf-8');
-        const configHash = computeContentHash([updatedConfigRaw]);
-        const manifestSaved = await saveManifestBatch(
-          clientId,
-          scope,
-          manifestEntries,
-          configHash,
-          opts.dbManager
-        );
-        if (!manifestSaved) {
-          report.failures.push({
-            id: `${clientId}:${scope}`,
-            reason: `manifest not saved (no database) — ${manifestEntries.size} entries dropped; diff/prune will not see this export`,
-          });
-        }
-        output.log(
-          manifestSaved
-            ? `  manifest saved (${manifestEntries.size} entries, scope: ${scope})`
-            : `  manifest NOT saved (no database) — ${manifestEntries.size} entries dropped; diff/prune will not see this export`
-        );
+      const firstSourcePath = primarySourcePath(ir);
+      // The path only locates state.db; the rows are the IR's own type and id. Read from the
+      // path, a gate under any directory named `prompts` was looked up as a prompt.
+      const history = loadHistory(path.dirname(firstSourcePath), {
+        resourceType: ir.resourceType,
+        resourceId: ir.id,
+      });
+
+      manifestEntries.set(resourceKey, {
+        resourceId: ir.id,
+        resourceType: ir.resourceType,
+        sourceHash: ir.sourceHash,
+        outputHash,
+        outputFiles: outputFiles.map((file) => file.relativePath),
+        exportedAt: new Date().toISOString(),
+        sourceSnapshot: ir.sourceContents,
+        ...(history && {
+          version: history.current_version,
+          versionDate: history.versions[0]?.date,
+        }),
+      });
+    }
+
+    if (shouldPrune && filterNarrowsLoad) {
+      // The plan above is built from the resources this run loaded; a filter narrows that set, so
+      // every skill outside it would read as stale. Only an unfiltered sync can tell stale from
+      // out of scope.
+      output.log(
+        `  prune skipped (filtered by ${filterNarrowsLoad}: only an unfiltered sync prunes)`
+      );
+    } else if (shouldPrune) {
+      await applySyncPrune(
+        baseDir,
+        prunePlan.pruneSkillDirs,
+        opts.preview === true,
+        output,
+        report
+      );
+    } else if (prunePlan.pruneSkillDirs.length > 0) {
+      output.log(`  prune skipped (${prunePlan.pruneSkillDirs.length} stale managed skill(s))`);
+    }
+
+    if (opts.preview) {
+      output.log(`  [preview] manifest update (${manifestEntries.size} entries, scope: ${scope})`);
+    } else {
+      const updatedConfigRaw = await readFile(configPath, 'utf-8');
+      const configHash = computeContentHash([updatedConfigRaw]);
+      const manifestSaved = await saveManifestBatch(
+        clientId,
+        scope,
+        manifestEntries,
+        configHash,
+        describeLoadFilter(opts) === undefined,
+        opts.dbManager
+      );
+      if (!manifestSaved) {
+        report.failures.push({
+          id: `${clientId}:${scope}`,
+          reason: `manifest not saved (no database) — ${manifestEntries.size} entries dropped; diff/prune will not see this export`,
+        });
       }
+      output.log(
+        manifestSaved
+          ? `  manifest saved (${manifestEntries.size} entries, scope: ${scope})`
+          : `  manifest NOT saved (no database) — ${manifestEntries.size} entries dropped; diff/prune will not see this export`
+      );
     }
   }
 }
@@ -4148,18 +3950,12 @@ async function diffCommand(
   report: SkillsSyncRunReport,
   paths: SkillsSyncPaths
 ): Promise<void> {
-  const config = await loadSyncConfig(getSkillsSyncConfigPath(paths), paths);
-  const harnessCovers = await resolveHarnessCovers(paths);
-  const cliScope = opts.scope;
-  const clientIds =
-    opts.client === 'all' || !opts.client ? Object.keys(CLIENT_REGISTRY) : [opts.client];
-
-  const filters: LoadFilters = {};
-  if (opts.resourceType) filters.resourceType = opts.resourceType;
-  if (opts.id) filters.id = opts.id;
-  const resources = await loadAllResources(filters, output, opts.dbManager, report, paths);
-  report.resources = resources.length;
-  const targetScopes: Array<'user' | 'project'> = cliScope ? [cliScope] : ['user', 'project'];
+  const { config, harnessCovers, resources, duplicateIds } = await loadClientRunInputs(
+    opts,
+    output,
+    report,
+    paths
+  );
 
   // When --output is provided, collect patches and write .patch files
   const patchOutputDir = opts.output;
@@ -4167,292 +3963,259 @@ async function diffCommand(
     await mkdir(patchOutputDir, { recursive: true });
   }
 
-  const seenDirs = new Map<string, string>();
+  for (const target of clientScopeTargets(opts, config, paths, output, DIFF_TARGETS)) {
+    const { clientId, clientConfig, scope, baseDir } = target;
+    const manifestEntries = loadManifestEntries(clientId, scope, opts.dbManager);
+    // With no saved manifest there is no record of a previous export to compare against, so the
+    // comparison falls back to what an export would write right now. Reporting nothing instead
+    // would be indistinguishable from a clean tree, and a manifest is missing far more often
+    // than it looks: an export run without a database writes the files and saves no manifest.
+    const againstWouldBeExport = manifestEntries.size === 0;
 
-  for (const clientId of clientIds) {
-    const clientConfig = resolveClientConfig(clientId, config);
-    if (!clientConfig) {
-      throw usageError(
-        `Unknown client: ${clientId} (available: ${Object.keys(CLIENT_REGISTRY).join(', ')}, all)`
+    output.log(`\n── ${clientId} (${scope}) drift report`);
+    if (againstWouldBeExport) {
+      output.log(
+        `  no manifest is saved for this client — exports run without a database save none, ` +
+          `so this compares the files on disk against what an export would write now`
       );
     }
-    const selection = resolveClientResourceSelection(config, clientId);
-    const ignoreSelection = opts.id != null;
-    if (!ignoreSelection && selection.mode === 'unregistered') {
-      output.log(`\n── ${clientId}: skipped — no registrations in skills-sync.yaml`);
-      continue;
-    }
+    const scopedResources = filterResourcesForScope(resources, target);
 
-    const idCounts = new Map<string, number>();
-    for (const r of resources) {
-      if (r.resourceType === 'prompt') idCounts.set(r.id, (idCounts.get(r.id) ?? 0) + 1);
-    }
-    const duplicateIds = new Set(
-      [...idCounts.entries()].filter(([, c]) => c > 1).map(([id]) => id)
-    );
+    const driftEntries: Array<{
+      type: 'new' | 'source' | 'output' | 'orphan';
+      id: string;
+      files: string[];
+    }> = [];
+    // Per-resource patch collection for --output: { resourceId → { filename → rawPatch } }
+    const patchesByResource = new Map<string, Map<string, string>>();
 
-    for (const scope of targetScopes) {
-      const baseDir = resolveOutputDir(clientConfig, scope, paths);
-      const dirKey = `${baseDir}:${scope}`;
-      const previousClient = seenDirs.get(dirKey);
-      if (previousClient) {
-        output.log(`\n── ${clientId} (${scope}): skipped — same directory as ${previousClient}`);
+    for (const ir of scopedResources) {
+      const key = manifestKey(ir);
+      const entry = manifestEntries.get(key);
+      if (!entry && !againstWouldBeExport) {
+        output.log(`  [NEW] ${ir.id} — not in manifest`);
+        driftEntries.push({ type: 'new', id: ir.id, files: [] });
         continue;
       }
-      seenDirs.set(dirKey, clientId);
 
-      const manifestEntries = loadManifestEntries(clientId, scope, opts.dbManager);
-      // With no saved manifest there is no record of a previous export to compare against, so the
-      // comparison falls back to what an export would write right now. Reporting nothing instead
-      // would be indistinguishable from a clean tree, and a manifest is missing far more often
-      // than it looks: an export run without a database writes the files and saves no manifest.
-      const againstWouldBeExport = manifestEntries.size === 0;
-
-      output.log(`\n── ${clientId} (${scope}) drift report`);
-      if (againstWouldBeExport) {
-        output.log(
-          `  no manifest is saved for this client — exports run without a database save none, ` +
-            `so this compares the files on disk against what an export would write now`
-        );
-      }
-      const scopedResources = filterResourcesForScope(resources, scope, selection, ignoreSelection);
-
-      const driftEntries: Array<{
-        type: 'new' | 'source' | 'output' | 'orphan';
-        id: string;
-        files: string[];
-      }> = [];
-      // Per-resource patch collection for --output: { resourceId → { filename → rawPatch } }
-      const patchesByResource = new Map<string, Map<string, string>>();
-
-      for (const ir of scopedResources) {
-        const key = manifestKey(ir);
-        const entry = manifestEntries.get(key);
-        if (!entry && !againstWouldBeExport) {
-          output.log(`  [NEW] ${ir.id} — not in manifest`);
-          driftEntries.push({ type: 'new', id: ir.id, files: [] });
-          continue;
-        }
-
-        // Source drift: canonical YAML changed. Only the manifest carries the snapshot this
-        // compares against; without one, a source change shows up as output drift instead.
-        if (entry && ir.sourceHash !== entry.sourceHash) {
-          const changedFiles: string[] = [];
-          output.log(`  [SOURCE DRIFT] ${ir.id} — canonical sources changed`);
-          if (entry.sourceSnapshot && ir.sourceContents) {
-            const allFiles = new Set([
-              ...Object.keys(entry.sourceSnapshot),
-              ...Object.keys(ir.sourceContents),
-            ]);
-            for (const filePath of allFiles) {
-              const previousContent = entry.sourceSnapshot[filePath] ?? '';
-              const currentContent = ir.sourceContents[filePath] ?? '';
-              if (previousContent !== currentContent) {
-                changedFiles.push(filePath);
-                const patch = createTwoFilesPatch(
-                  `a/${ir.id}/${filePath}`,
-                  `b/${ir.id}/${filePath}`,
-                  previousContent,
-                  currentContent
-                );
-                output.log(formatPatchForDisplay(patch));
-                if (patchOutputDir) {
-                  if (!patchesByResource.has(ir.id)) patchesByResource.set(ir.id, new Map());
-                  patchesByResource.get(ir.id)!.set(`source/${filePath}`, patch);
-                }
+      // Source drift: canonical YAML changed. Only the manifest carries the snapshot this
+      // compares against; without one, a source change shows up as output drift instead.
+      if (entry && ir.sourceHash !== entry.sourceHash) {
+        const changedFiles: string[] = [];
+        output.log(`  [SOURCE DRIFT] ${ir.id} — canonical sources changed`);
+        if (entry.sourceSnapshot && ir.sourceContents) {
+          const allFiles = new Set([
+            ...Object.keys(entry.sourceSnapshot),
+            ...Object.keys(ir.sourceContents),
+          ]);
+          for (const filePath of allFiles) {
+            const previousContent = entry.sourceSnapshot[filePath] ?? '';
+            const currentContent = ir.sourceContents[filePath] ?? '';
+            if (previousContent !== currentContent) {
+              changedFiles.push(filePath);
+              const patch = createTwoFilesPatch(
+                `a/${ir.id}/${filePath}`,
+                `b/${ir.id}/${filePath}`,
+                previousContent,
+                currentContent
+              );
+              output.log(formatPatchForDisplay(patch));
+              if (patchOutputDir) {
+                if (!patchesByResource.has(ir.id)) patchesByResource.set(ir.id, new Map());
+                patchesByResource.get(ir.id)!.set(`source/${filePath}`, patch);
               }
             }
           }
-          driftEntries.push({ type: 'source', id: ir.id, files: changedFiles });
         }
+        driftEntries.push({ type: 'source', id: ir.id, files: changedFiles });
+      }
 
-        // Output drift: exported files edited locally since last export
-        const resourceKey = manifestKey(ir);
-        const baseDir = resolveOutputDir(clientConfig, scope, paths);
-        let outputFiles = adaptResource(
-          ir,
-          clientConfig,
-          { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
-          duplicateIds,
-          harnessCovers
-        );
-        outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
+      // Output drift: exported files edited locally since last export
+      const resourceKey = manifestKey(ir);
+      const adapted = adaptResourceOrRecord(
+        ir,
+        clientConfig,
+        { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
+        duplicateIds,
+        harnessCovers,
+        output,
+        report
+      );
+      if (adapted === null) continue;
+      let outputFiles = adapted;
+      outputFiles = attachManagedMarkerToSkillFiles(outputFiles, clientId, scope, resourceKey);
 
-        // Without a manifest, "never exported" is a question the output directory answers: no
-        // skill directory means nothing was written for this resource, which is the same finding
-        // the manifest path reports when a resource has no row.
-        if (
-          againstWouldBeExport &&
-          !existsSync(path.join(baseDir, outputSubDir(ir, duplicateIds)))
-        ) {
-          output.log(`  [NEW] ${ir.id} — no skill directory in the output`);
-          driftEntries.push({ type: 'new', id: ir.id, files: [] });
+      // Without a manifest, "never exported" is a question the output directory answers: no
+      // skill directory means nothing was written for this resource, which is the same finding
+      // the manifest path reports when a resource has no row.
+      if (againstWouldBeExport && !existsSync(path.join(baseDir, outputSubDir(ir, duplicateIds)))) {
+        output.log(`  [NEW] ${ir.id} — no skill directory in the output`);
+        driftEntries.push({ type: 'new', id: ir.id, files: [] });
+        continue;
+      }
+
+      const outputPatches: string[] = [];
+      const changedOutputFiles: string[] = [];
+      for (const file of outputFiles) {
+        // Contained against the OUTPUT dir, not the resources root: this writer's destination is
+        // the client's skills directory. `relativePath` is built from resource ids, so a
+        // traversing id would place a skill file outside the directory the operator pointed the
+        // export at.
+        const fullPath = resolveContainedPath(baseDir, file.relativePath);
+        const existing = await readOptionalFile(fullPath);
+        if (!existing) {
+          // A file the export would write that is absent: drift only when the comparison is
+          // against the would-be export. Against a manifest it is not — the manifest names the
+          // files the last export actually produced, and this set may legitimately be wider.
+          if (againstWouldBeExport) changedOutputFiles.push(file.relativePath);
           continue;
         }
-
-        const outputPatches: string[] = [];
-        const changedOutputFiles: string[] = [];
-        for (const file of outputFiles) {
-          // Contained against the OUTPUT dir, not the resources root: this writer's destination is
-          // the client's skills directory. `relativePath` is built from resource ids, so a
-          // traversing id would place a skill file outside the directory the operator pointed the
-          // export at.
-          const fullPath = resolveContainedPath(baseDir, file.relativePath);
-          const existing = await readOptionalFile(fullPath);
-          if (!existing) {
-            // A file the export would write that is absent: drift only when the comparison is
-            // against the would-be export. Against a manifest it is not — the manifest names the
-            // files the last export actually produced, and this set may legitimately be wider.
-            if (againstWouldBeExport) changedOutputFiles.push(file.relativePath);
-            continue;
-          }
-          if (existing !== file.content) {
-            changedOutputFiles.push(file.relativePath);
-            const patch = createTwoFilesPatch(
-              `a/${file.relativePath}`,
-              `b/${file.relativePath}`,
-              existing,
-              file.content
-            );
-            outputPatches.push(patch);
-            if (patchOutputDir) {
-              if (!patchesByResource.has(ir.id)) patchesByResource.set(ir.id, new Map());
-              patchesByResource.get(ir.id)!.set(`output/${file.relativePath}`, patch);
-            }
-          }
-        }
-        if (changedOutputFiles.length > 0) {
-          output.log(`  [OUTPUT DRIFT] ${ir.id} — exported files modified locally`);
-          for (const patch of outputPatches) {
-            output.log(formatPatchForDisplay(patch));
-          }
-          driftEntries.push({ type: 'output', id: ir.id, files: changedOutputFiles });
-        }
-      }
-
-      const resourceKeys = new Set(scopedResources.map((r) => manifestKey(r)));
-      if (againstWouldBeExport) {
-        // Check for orphans (managed on disk but no longer in resources). The marker each
-        // exported SKILL.md carries names the resource it came from, so it answers the same
-        // question the manifest does — which directories this tool wrote for a resource that is
-        // no longer registered — from the output directory alone.
-        for (const [markerKey, dirs] of await collectManagedSkillDirsFromMarkers(
-          baseDir,
-          clientId,
-          scope
-        )) {
-          if (resourceKeys.has(markerKey)) continue;
-          output.log(
-            `  [ORPHAN] ${markerKey} — ${[...dirs].sort().join(', ')}/ is managed but no longer in sources`
+        if (existing !== file.content) {
+          changedOutputFiles.push(file.relativePath);
+          const patch = createTwoFilesPatch(
+            `a/${file.relativePath}`,
+            `b/${file.relativePath}`,
+            existing,
+            file.content
           );
-          driftEntries.push({ type: 'orphan', id: markerKey, files: [] });
-        }
-      } else {
-        // Check for orphans (in manifest but no longer in resources)
-        for (const [key, entry] of manifestEntries) {
-          if (!resourceKeys.has(key)) {
-            output.log(`  [ORPHAN] ${key} (${entry.resourceType}) — no longer in sources`);
-            driftEntries.push({ type: 'orphan', id: key, files: [] });
+          outputPatches.push(patch);
+          if (patchOutputDir) {
+            if (!patchesByResource.has(ir.id)) patchesByResource.set(ir.id, new Map());
+            patchesByResource.get(ir.id)!.set(`output/${file.relativePath}`, patch);
           }
         }
       }
-
-      // Summary
-      if (driftEntries.length === 0) {
-        output.log(`  no drift detected`);
-      } else {
-        output.log('');
-        output.log(`  ${driftEntries.length} drift(s):`);
-        const byType = {
-          new: [] as string[],
-          source: [] as string[],
-          output: [] as string[],
-          orphan: [] as string[],
-        };
-        for (const e of driftEntries) byType[e.type].push(e.id);
-        if (byType.new.length > 0) output.log(`    new      ${byType.new.join(', ')}`);
-        if (byType.source.length > 0) output.log(`    source   ${byType.source.join(', ')}`);
-        if (byType.output.length > 0) output.log(`    output   ${byType.output.join(', ')}`);
-        if (byType.orphan.length > 0) output.log(`    orphan   ${byType.orphan.join(', ')}`);
-      }
-
-      // Write per-resource patch files + drift report when --output is provided
-      if (patchOutputDir && patchesByResource.size > 0) {
-        const clientDir = path.join(patchOutputDir, `${clientId}.${scope}`);
-        await mkdir(clientDir, { recursive: true });
-
-        // Write individual patch files per resource
-        for (const [resourceId, filePatches] of patchesByResource) {
-          const resourceDir = path.join(clientDir, resourceId);
-          await mkdir(resourceDir, { recursive: true });
-          for (const [fileKey, rawPatch] of filePatches) {
-            // fileKey is "source/prompt.yaml" or "output/review/SKILL.md"
-            const patchFileName = fileKey.replace(/\//g, '--') + '.patch';
-            await writeFile(path.join(resourceDir, patchFileName), rawPatch);
-          }
+      if (changedOutputFiles.length > 0) {
+        output.log(`  [OUTPUT DRIFT] ${ir.id} — exported files modified locally`);
+        for (const patch of outputPatches) {
+          output.log(formatPatchForDisplay(patch));
         }
-
-        // Write drift-report.md with formatted inline diffs
-        const reportLines = [
-          `# Drift Report: ${clientId} (${scope})`,
-          '',
-          `Generated: ${new Date().toISOString()}`,
-          '',
-        ];
-        for (const entry of driftEntries) {
-          reportLines.push(`## [${entry.type.toUpperCase()}] ${entry.id}`);
-          reportLines.push('');
-          const filePatches = patchesByResource.get(entry.id);
-          if (filePatches) {
-            // Filter patches to only show those matching this drift type (source/* or output/*)
-            const prefix = entry.type === 'source' ? 'source/' : 'output/';
-            for (const [fileKey, rawPatch] of filePatches) {
-              if (!fileKey.startsWith(prefix)) continue;
-              reportLines.push(`### ${fileKey}`);
-              reportLines.push('```diff');
-              reportLines.push(formatPatchForDisplay(rawPatch, ''));
-              reportLines.push('```');
-              reportLines.push('');
-            }
-          } else if (entry.type === 'new') {
-            reportLines.push('New resource — not yet in manifest.');
-            reportLines.push('');
-          } else if (entry.type === 'orphan') {
-            reportLines.push('Resource removed from sources but still in manifest.');
-            reportLines.push('');
-          }
-        }
-        await writeFile(path.join(clientDir, 'drift-report.md'), reportLines.join('\n'));
-
-        // Write manifest.json for machine consumption
-        const manifest = {
-          client: clientId,
-          scope,
-          generated: new Date().toISOString(),
-          drifts: driftEntries.map((e) => {
-            const prefix = e.type === 'source' ? 'source/' : 'output/';
-            const resourcePatches = patchesByResource.get(e.id);
-            const matchingPatches = resourcePatches
-              ? [...resourcePatches.keys()].filter((k) => k.startsWith(prefix))
-              : [];
-            return { type: e.type, id: e.id, files: e.files, patches: matchingPatches };
-          }),
-        };
-        await writeFile(
-          path.join(clientDir, 'manifest.json'),
-          JSON.stringify(manifest, null, 2) + '\n'
-        );
-
-        output.log(`  output → ${clientDir}/`);
+        driftEntries.push({ type: 'output', id: ir.id, files: changedOutputFiles });
       }
-
-      // One element per client + scope this run examined, empty entries included: under `--json`
-      // "examined and clean" and "never looked at" are different answers, and only a present
-      // element with no entries says the first.
-      // `emptyRunReport` constructs this array for the diff command; the assignment keeps the
-      // push total if a caller ever hands this function a report built for another one.
-      (report.drift ??= []).push({ client: clientId, scope, entries: driftEntries });
     }
+
+    const resourceKeys = new Set(scopedResources.map((r) => manifestKey(r)));
+    if (againstWouldBeExport) {
+      // Check for orphans (managed on disk but no longer in resources). The marker each
+      // exported SKILL.md carries names the resource it came from, so it answers the same
+      // question the manifest does — which directories this tool wrote for a resource that is
+      // no longer registered — from the output directory alone.
+      for (const [markerKey, dirs] of await collectManagedSkillDirsFromMarkers(
+        baseDir,
+        clientId,
+        scope
+      )) {
+        if (resourceKeys.has(markerKey)) continue;
+        output.log(
+          `  [ORPHAN] ${markerKey} — ${[...dirs].sort().join(', ')}/ is managed but no longer in sources`
+        );
+        driftEntries.push({ type: 'orphan', id: markerKey, files: [] });
+      }
+    } else {
+      // Check for orphans (in manifest but no longer in resources)
+      for (const [key, entry] of manifestEntries) {
+        if (!resourceKeys.has(key)) {
+          output.log(`  [ORPHAN] ${key} (${entry.resourceType}) — no longer in sources`);
+          driftEntries.push({ type: 'orphan', id: key, files: [] });
+        }
+      }
+    }
+
+    // Summary
+    if (driftEntries.length === 0) {
+      output.log(`  no drift detected`);
+    } else {
+      output.log('');
+      output.log(`  ${driftEntries.length} drift(s):`);
+      const byType = {
+        new: [] as string[],
+        source: [] as string[],
+        output: [] as string[],
+        orphan: [] as string[],
+      };
+      for (const e of driftEntries) byType[e.type].push(e.id);
+      if (byType.new.length > 0) output.log(`    new      ${byType.new.join(', ')}`);
+      if (byType.source.length > 0) output.log(`    source   ${byType.source.join(', ')}`);
+      if (byType.output.length > 0) output.log(`    output   ${byType.output.join(', ')}`);
+      if (byType.orphan.length > 0) output.log(`    orphan   ${byType.orphan.join(', ')}`);
+    }
+
+    // Write per-resource patch files + drift report when --output is provided
+    if (patchOutputDir && patchesByResource.size > 0) {
+      const clientDir = path.join(patchOutputDir, `${clientId}.${scope}`);
+      await mkdir(clientDir, { recursive: true });
+
+      // Write individual patch files per resource
+      for (const [resourceId, filePatches] of patchesByResource) {
+        const resourceDir = path.join(clientDir, resourceId);
+        await mkdir(resourceDir, { recursive: true });
+        for (const [fileKey, rawPatch] of filePatches) {
+          // fileKey is "source/prompt.yaml" or "output/review/SKILL.md"
+          const patchFileName = fileKey.replace(/\//g, '--') + '.patch';
+          await writeFile(path.join(resourceDir, patchFileName), rawPatch);
+        }
+      }
+
+      // Write drift-report.md with formatted inline diffs
+      const reportLines = [
+        `# Drift Report: ${clientId} (${scope})`,
+        '',
+        `Generated: ${new Date().toISOString()}`,
+        '',
+      ];
+      for (const entry of driftEntries) {
+        reportLines.push(`## [${entry.type.toUpperCase()}] ${entry.id}`);
+        reportLines.push('');
+        const filePatches = patchesByResource.get(entry.id);
+        if (filePatches) {
+          // Filter patches to only show those matching this drift type (source/* or output/*)
+          const prefix = entry.type === 'source' ? 'source/' : 'output/';
+          for (const [fileKey, rawPatch] of filePatches) {
+            if (!fileKey.startsWith(prefix)) continue;
+            reportLines.push(`### ${fileKey}`);
+            reportLines.push('```diff');
+            reportLines.push(formatPatchForDisplay(rawPatch, ''));
+            reportLines.push('```');
+            reportLines.push('');
+          }
+        } else if (entry.type === 'new') {
+          reportLines.push('New resource — not yet in manifest.');
+          reportLines.push('');
+        } else if (entry.type === 'orphan') {
+          reportLines.push('Resource removed from sources but still in manifest.');
+          reportLines.push('');
+        }
+      }
+      await writeFile(path.join(clientDir, 'drift-report.md'), reportLines.join('\n'));
+
+      // Write manifest.json for machine consumption
+      const manifest = {
+        client: clientId,
+        scope,
+        generated: new Date().toISOString(),
+        drifts: driftEntries.map((e) => {
+          const prefix = e.type === 'source' ? 'source/' : 'output/';
+          const resourcePatches = patchesByResource.get(e.id);
+          const matchingPatches = resourcePatches
+            ? [...resourcePatches.keys()].filter((k) => k.startsWith(prefix))
+            : [];
+          return { type: e.type, id: e.id, files: e.files, patches: matchingPatches };
+        }),
+      };
+      await writeFile(
+        path.join(clientDir, 'manifest.json'),
+        JSON.stringify(manifest, null, 2) + '\n'
+      );
+
+      output.log(`  output → ${clientDir}/`);
+    }
+
+    // One element per client + scope this run examined, empty entries included: under `--json`
+    // "examined and clean" and "never looked at" are different answers, and only a present
+    // element with no entries says the first.
+    // `emptyRunReport` constructs this array for the diff command; the assignment keeps the
+    // push total if a caller ever hands this function a report built for another one.
+    (report.drift ??= []).push({ client: clientId, scope, entries: driftEntries });
   }
 }
 
@@ -4479,8 +4242,8 @@ function describeBundledPullRefusal(
 ): string | undefined {
   const bundledRoot = paths.bundledRoots[ir.resourceType];
   const writeRoot = paths.writeRoots[ir.resourceType];
-  const sourcePath = ir.sourcePaths[0];
-  if (sourcePath === undefined || writeRoot === bundledRoot) return undefined;
+  if (writeRoot === bundledRoot) return undefined;
+  const sourcePath = primarySourcePath(ir);
   const relative = path.relative(bundledRoot, sourcePath);
   if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) return undefined;
 
@@ -4511,262 +4274,237 @@ async function pullCommand(
   report: SkillsSyncRunReport,
   paths: SkillsSyncPaths
 ): Promise<void> {
-  const config = await loadSyncConfig(getSkillsSyncConfigPath(paths), paths);
-  const harnessCovers = await resolveHarnessCovers(paths);
-  const cliScope = opts.scope;
-  const clientIds =
-    opts.client === 'all' || !opts.client ? Object.keys(CLIENT_REGISTRY) : [opts.client];
+  const { config, harnessCovers, resources, duplicateIds } = await loadClientRunInputs(
+    opts,
+    output,
+    report,
+    paths
+  );
 
-  const filters: LoadFilters = {};
-  if (opts.resourceType) filters.resourceType = opts.resourceType;
-  if (opts.id) filters.id = opts.id;
-  const resources = await loadAllResources(filters, output, opts.dbManager, report, paths);
-  report.resources = resources.length;
-  const targetScopes: Array<'user' | 'project'> = cliScope ? [cliScope] : ['user', 'project'];
+  for (const target of clientScopeTargets(opts, config, paths, output, PULL_TARGETS)) {
+    const { clientId, clientConfig, scope, baseDir } = target;
+    const scopedResources = filterResourcesForScope(resources, target);
 
-  for (const clientId of clientIds) {
-    const clientConfig = resolveClientConfig(clientId, config);
-    if (!clientConfig) {
-      throw usageError(
-        `Unknown client: ${clientId} (available: ${Object.keys(CLIENT_REGISTRY).join(', ')}, all)`
+    let pullCount = 0;
+    // Set, not a counter: a resource whose name AND description both changed writes the same
+    // prompt.yaml twice in this loop, and the report must match the filesystem, not the call count.
+    const scopeWrittenPaths = new Set<string>();
+
+    for (const ir of scopedResources) {
+      // Only pull the main SKILL.md, not tool files
+      const adapted = adaptResourceOrRecord(
+        ir,
+        clientConfig,
+        { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
+        duplicateIds,
+        harnessCovers,
+        output,
+        report
       );
-    }
-    const selection = resolveClientResourceSelection(config, clientId);
-    const ignoreSelection = opts.id != null;
-    if (!ignoreSelection && selection.mode === 'unregistered') {
-      output.log(`${clientId}: skipped — no registrations in skills-sync.yaml`);
-      continue;
-    }
+      if (adapted === null) continue;
+      const outputFiles = adapted;
+      const skillFile = outputFiles.find((f) => f.relativePath.endsWith('/SKILL.md'));
+      if (!skillFile) {
+        throw new Error(`skills-sync invariant: the ${ir.id} adapter output has no SKILL.md`);
+      }
 
-    const idCounts = new Map<string, number>();
-    for (const r of resources) {
-      if (r.resourceType === 'prompt') idCounts.set(r.id, (idCounts.get(r.id) ?? 0) + 1);
-    }
-    const duplicateIds = new Set(
-      [...idCounts.entries()].filter(([, c]) => c > 1).map(([id]) => id)
-    );
+      const fullPath = path.join(baseDir, skillFile.relativePath);
+      const existing = await readOptionalFile(fullPath);
+      if (!existing || existing === skillFile.content) continue;
 
-    for (const scope of targetScopes) {
-      const baseDir = resolveOutputDir(clientConfig, scope, paths);
-      const scopedResources = filterResourcesForScope(resources, scope, selection, ignoreSelection);
+      // Parse the local (edited) SKILL.md
+      const parsed = parseSkillMd(existing);
 
-      let pullCount = 0;
-      // Set, not a counter: a resource whose name AND description both changed writes the same
-      // prompt.yaml twice in this loop, and the report must match the filesystem, not the call count.
-      const scopeWrittenPaths = new Set<string>();
+      // Forward-compile canonical sections to detect actual edits.
+      // Comparing parsed SKILL.md against expected output (not raw canonical)
+      // prevents false positives from lossy forward compilation (Nunjucks conditionals).
+      const expected = buildExpectedSectionContent(ir);
 
-      for (const ir of scopedResources) {
-        // Only pull the main SKILL.md, not tool files
-        const outputFiles = adaptResource(
-          ir,
-          clientConfig,
-          { baseDir, scope, projectRelativeDir: clientConfig.outputDir.project },
-          duplicateIds,
-          harnessCovers
+      // Compute diffs for each prose section
+      const changes: Array<{
+        section: string;
+        file: string;
+        /** Set when the edit is one field of `file`, not the whole file. */
+        yamlField?: string;
+        oldContent: string;
+        newContent: string;
+      }> = [];
+
+      // Name / description from frontmatter → prompt.yaml
+      if (parsed.name && parsed.name !== ir.name) {
+        changes.push({
+          section: 'name',
+          file: 'prompt.yaml',
+          oldContent: ir.name,
+          newContent: parsed.name,
+        });
+      }
+      if (parsed.description && parsed.description !== ir.description) {
+        changes.push({
+          section: 'description',
+          file: 'prompt.yaml',
+          oldContent: ir.description,
+          newContent: parsed.description,
+        });
+      }
+
+      // System message (## Instructions) → system-message.md
+      if (parsed.systemMessage !== null && ir.systemMessage !== null) {
+        // Skip if section matches expected output (user didn't edit — preserves conditionals)
+        if (parsed.systemMessage.trim() !== expected.systemMessage?.trim()) {
+          const reversed = reverseCompileTemplate(parsed.systemMessage);
+          changes.push({
+            section: 'systemMessage',
+            file: 'system-message.md',
+            oldContent: ir.systemMessage,
+            newContent: reversed,
+          });
+        }
+      }
+
+      // User message (## Usage) → user-message.md
+      if (parsed.userMessage !== null && ir.userMessage !== null) {
+        if (parsed.userMessage.trim() !== expected.userMessage?.trim()) {
+          const reversed = reverseCompileTemplate(parsed.userMessage);
+          changes.push({
+            section: 'userMessage',
+            file: 'user-message.md',
+            oldContent: ir.userMessage,
+            newContent: reversed,
+          });
+        }
+      }
+
+      // Guidance (## Guidance) → wherever this type's loader reads it
+      if (
+        ir.resourceType !== 'prompt' &&
+        parsed.guidanceContent !== null &&
+        ir.guidanceContent !== null &&
+        parsed.guidanceContent.trim() !== expected.guidanceContent?.trim()
+      ) {
+        const definition = await readOptionalFile(primarySourcePath(ir));
+        const location = resolveGuidanceLocation(
+          ir.resourceType,
+          definition ? parseYamlOrThrow<{ guidanceFile?: string }>(definition) : {}
         );
-        const skillFile = outputFiles.find((f) => f.relativePath.endsWith('/SKILL.md'));
-        if (!skillFile) continue;
+        changes.push({
+          section: 'guidanceContent',
+          file: location.file,
+          ...(location.yamlField !== undefined && { yamlField: location.yamlField }),
+          oldContent: ir.guidanceContent,
+          newContent: reverseCompileTemplate(parsed.guidanceContent),
+        });
+      }
 
-        const fullPath = path.join(baseDir, skillFile.relativePath);
-        const existing = await readOptionalFile(fullPath);
-        if (!existing || existing === skillFile.content) continue;
+      if (changes.length === 0) continue;
 
-        // Parse the local (edited) SKILL.md
-        const parsed = parseSkillMd(existing);
+      output.log(`\n  ${ir.id} — ${changes.length} prose change(s):`);
+      for (const change of changes) {
+        output.log(`    [${change.section}] → ${change.file}`);
+      }
 
-        // Build reverse argument mapping for template decompilation
-        const reverseArgs = ir.arguments.map((a, i) => ({ ...a, index: i }));
-        const isClaudeCode = clientConfig.adapter === 'claude-code';
-
-        // Forward-compile canonical sections to detect actual edits.
-        // Comparing parsed SKILL.md against expected output (not raw canonical)
-        // prevents false positives from lossy forward compilation (Nunjucks conditionals).
-        const expected = buildExpectedSectionContent(ir, isClaudeCode);
-
-        // Compute diffs for each prose section
-        const changes: Array<{
-          section: string;
-          file: string;
-          oldContent: string;
-          newContent: string;
-        }> = [];
-
-        // Name / description from frontmatter → prompt.yaml
-        if (parsed.name && parsed.name !== ir.name) {
-          changes.push({
-            section: 'name',
-            file: 'prompt.yaml',
-            oldContent: ir.name,
-            newContent: parsed.name,
-          });
-        }
-        if (parsed.description && parsed.description !== ir.description) {
-          changes.push({
-            section: 'description',
-            file: 'prompt.yaml',
-            oldContent: ir.description,
-            newContent: parsed.description,
-          });
-        }
-
-        // System message (## Instructions) → system-message.md
-        if (parsed.systemMessage !== null && ir.systemMessage !== null) {
-          // Skip if section matches expected output (user didn't edit — preserves conditionals)
-          if (parsed.systemMessage.trim() !== expected.systemMessage?.trim()) {
-            const reversed = isClaudeCode
-              ? reverseCompileTemplate(parsed.systemMessage, reverseArgs)
-              : reverseCompilePlaintext(parsed.systemMessage);
-            changes.push({
-              section: 'systemMessage',
-              file: 'system-message.md',
-              oldContent: ir.systemMessage,
-              newContent: reversed,
-            });
-          }
-        }
-
-        // User message (## Usage) → user-message.md
-        if (parsed.userMessage !== null && ir.userMessage !== null) {
-          if (parsed.userMessage.trim() !== expected.userMessage?.trim()) {
-            const reversed = isClaudeCode
-              ? reverseCompileTemplate(parsed.userMessage, reverseArgs)
-              : reverseCompilePlaintext(parsed.userMessage);
-            changes.push({
-              section: 'userMessage',
-              file: 'user-message.md',
-              oldContent: ir.userMessage,
-              newContent: reversed,
-            });
-          }
-        }
-
-        // Guidance (## Guidance) → guidance.md
-        if (parsed.guidanceContent !== null && ir.guidanceContent !== null) {
-          if (parsed.guidanceContent.trim() !== expected.guidanceContent?.trim()) {
-            const reversed = isClaudeCode
-              ? reverseCompileTemplate(parsed.guidanceContent, reverseArgs)
-              : reverseCompilePlaintext(parsed.guidanceContent);
-            changes.push({
-              section: 'guidanceContent',
-              file: 'guidance.md',
-              oldContent: ir.guidanceContent,
-              newContent: reversed,
-            });
-          }
-        }
-
-        if (changes.length === 0) continue;
-
-        output.log(`\n  ${ir.id} — ${changes.length} prose change(s):`);
+      if (opts.previewDetail === 'diff') {
         for (const change of changes) {
-          output.log(`    [${change.section}] → ${change.file}`);
+          const patch = createTwoFilesPatch(
+            `canonical/${change.file}`,
+            `local/${change.file}`,
+            change.oldContent,
+            change.newContent
+          );
+          output.log(formatPatchForDisplay(patch));
         }
-
-        if (opts.previewDetail === 'diff') {
-          for (const change of changes) {
-            const patch = createTwoFilesPatch(
-              `canonical/${change.file}`,
-              `local/${change.file}`,
-              change.oldContent,
-              change.newContent
-            );
-            output.log(formatPatchForDisplay(patch));
-          }
-          continue;
-        }
-
-        // Every loader records the file it read, so this should not fire; without the check an edit
-        // would resolve its target against the working directory instead of the resource.
-        const sourcePath = ir.sourcePaths[0];
-        if (sourcePath === undefined) {
-          const reason = `Refusing to pull ${ir.resourceType} ${ir.id}: it has no source file to write the edit back to.`;
-          output.warn(reason);
-          report.failures.push({ id: ir.id, reason });
-          continue;
-        }
-        const targetFiles = [
-          ...new Set(
-            changes.map((change) =>
-              change.section === 'name' || change.section === 'description'
-                ? sourcePath
-                : path.join(path.dirname(sourcePath), change.file)
-            )
-          ),
-        ];
-        const refusal = describeBundledPullRefusal(ir, targetFiles, paths);
-        if (refusal !== undefined) {
-          output.warn(refusal);
-          report.failures.push({ id: ir.id, reason: refusal });
-          continue;
-        }
-
-        if (opts.preview) {
-          pullCount++;
-          continue;
-        }
-
-        // Write changes to canonical YAML files
-        const resourceDir = path.dirname(sourcePath);
-
-        // Map section names to canonical IR fields for Nunjucks detection
-        const sectionToCanonical: Record<string, string | null> = {
-          systemMessage: ir.systemMessage,
-          userMessage: ir.userMessage,
-          guidanceContent: ir.guidanceContent,
-        };
-
-        let wroteAny = false;
-        for (const change of changes) {
-          // Check if canonical content has Nunjucks control flow — skip to prevent destruction
-          const canonical = sectionToCanonical[change.section];
-          if (canonical && hasNunjucksControlFlow(canonical)) {
-            const canonicalPath = path.join(resourceDir, change.file);
-            output.warn(
-              `SKIPPED [${change.section}] for ${ir.id} — canonical contains Nunjucks conditionals ({%% if %%})\n` +
-                `  Pull would destroy template logic. Edit the canonical file directly:\n` +
-                `  → ${canonicalPath}`
-            );
-            continue;
-          }
-
-          if (change.section === 'name' || change.section === 'description') {
-            // Update prompt.yaml field
-            const yamlPath = sourcePath;
-            const yamlContent = await readOptionalFile(yamlPath);
-            if (!yamlContent) continue;
-            // Source-preserving, like every other resource writer: a one-field edit rewrites
-            // that field's token only, so the author's comments and flow-style lists survive
-            // (P6.256). A whole-document dump dropped the comments and re-rendered every line.
-            const doc = parseYamlOrThrow<Record<string, unknown>>(yamlContent);
-            doc[change.section] = change.newContent;
-            await writeFile(yamlPath, serializeYamlPreservingSource(doc, yamlContent).content);
-            scopeWrittenPaths.add(yamlPath);
-            output.log(`    wrote ${change.section} → ${yamlPath}`);
-            wroteAny = true;
-          } else {
-            // Write prose file (system-message.md, user-message.md, guidance.md)
-            const filePath = path.join(resourceDir, change.file);
-            await writeFile(filePath, change.newContent);
-            scopeWrittenPaths.add(filePath);
-            output.log(`    wrote ${change.file} → ${filePath}`);
-            wroteAny = true;
-          }
-        }
-        if (wroteAny) pullCount++;
+        continue;
       }
 
-      if (pullCount === 0) {
-        output.log(`${clientId} (${scope}): no prose changes to pull`);
-      } else {
-        output.log(`\n${clientId} (${scope}): pulled ${pullCount} resource(s)`);
+      // Every loader records the file it read; an empty list throws rather than resolving the
+      // edit's target against the working directory instead of the resource.
+      const sourcePath = primarySourcePath(ir);
+      const targetFiles = [
+        ...new Set(
+          changes.map((change) =>
+            change.section === 'name' || change.section === 'description'
+              ? sourcePath
+              : path.join(path.dirname(sourcePath), change.file)
+          )
+        ),
+      ];
+      const refusal = describeBundledPullRefusal(ir, targetFiles, paths);
+      if (refusal !== undefined) {
+        output.warn(refusal);
+        report.failures.push({ id: ir.id, reason: refusal });
+        continue;
       }
 
-      report.written += scopeWrittenPaths.size;
-      if (scopeWrittenPaths.size > 0) {
-        report.writtenByClient = report.writtenByClient ?? {};
-        report.writtenByClient[clientId] =
-          (report.writtenByClient[clientId] ?? 0) + scopeWrittenPaths.size;
+      if (opts.preview) {
+        pullCount++;
+        continue;
       }
+
+      // Write changes to canonical YAML files
+      const resourceDir = path.dirname(sourcePath);
+
+      // Map section names to canonical IR fields for Nunjucks detection
+      const sectionToCanonical: Record<string, string | null> = {
+        systemMessage: ir.systemMessage,
+        userMessage: ir.userMessage,
+        guidanceContent: ir.guidanceContent,
+      };
+
+      let wroteAny = false;
+      for (const change of changes) {
+        // Check if canonical content has Nunjucks control flow — skip to prevent destruction
+        const canonical = sectionToCanonical[change.section];
+        if (canonical && hasNunjucksControlFlow(canonical)) {
+          const canonicalPath = path.join(resourceDir, change.file);
+          output.warn(
+            `SKIPPED [${change.section}] for ${ir.id} — canonical contains Nunjucks conditionals ({%% if %%})\n` +
+              `  Pull would destroy template logic. Edit the canonical file directly:\n` +
+              `  → ${canonicalPath}`
+          );
+          continue;
+        }
+
+        const yamlField =
+          change.section === 'name' || change.section === 'description'
+            ? change.section
+            : change.yamlField;
+        if (yamlField !== undefined) {
+          // Update a field of the resource's own YAML (it is `file` for a field-resident edit)
+          const yamlPath = sourcePath;
+          const yamlContent = await readOptionalFile(yamlPath);
+          if (!yamlContent) continue;
+          // Source-preserving, like every other resource writer: a one-field edit rewrites
+          // that field's token only, so the author's comments and flow-style lists survive
+          // (P6.256). A whole-document dump dropped the comments and re-rendered every line.
+          const doc = parseYamlOrThrow<Record<string, unknown>>(yamlContent);
+          doc[yamlField] = change.newContent;
+          await writeFile(yamlPath, serializeYamlPreservingSource(doc, yamlContent).content);
+          scopeWrittenPaths.add(yamlPath);
+          output.log(`    wrote ${yamlField} → ${yamlPath}`);
+          wroteAny = true;
+        } else {
+          // Write prose file (system-message.md, user-message.md, or the guidance file)
+          const filePath = path.join(resourceDir, change.file);
+          await writeFile(filePath, change.newContent);
+          scopeWrittenPaths.add(filePath);
+          output.log(`    wrote ${change.file} → ${filePath}`);
+          wroteAny = true;
+        }
+      }
+      if (wroteAny) pullCount++;
+    }
+
+    if (pullCount === 0) {
+      output.log(`${clientId} (${scope}): no prose changes to pull`);
+    } else {
+      output.log(`\n${clientId} (${scope}): pulled ${pullCount} resource(s)`);
+    }
+
+    report.written += scopeWrittenPaths.size;
+    if (scopeWrittenPaths.size > 0) {
+      report.writtenByClient = report.writtenByClient ?? {};
+      report.writtenByClient[clientId] =
+        (report.writtenByClient[clientId] ?? 0) + scopeWrittenPaths.size;
     }
   }
 }
@@ -4791,7 +4529,9 @@ async function cloneCommand(
 ): Promise<void> {
   const filePath = opts.file;
   if (!filePath) {
-    throw usageError('clone requires --file <path> to a SKILL.md');
+    throw new Error(
+      'skills-sync invariant: clone reached without --file, which validation refuses'
+    );
   }
 
   const content = await readOptionalFile(filePath);
@@ -4820,27 +4560,18 @@ async function cloneCommand(
     throw usageError(`Target directory exists: ${targetDir}. Use --force to overwrite.`);
   }
 
-  // Reverse-compile templates if arguments were detected
+  // The arguments the SKILL.md declares, as canonical argument entries for the written YAML.
   const reverseArgs = parsed.arguments.map((a) => ({
     name: a.name,
     type: 'string' as const,
     description: a.description,
     required: a.required,
   }));
-  const isClaudeCode = parsed.format === 'claude-code';
-
-  let systemMessage = parsed.systemMessage;
-  let userMessage = parsed.userMessage;
-  if (systemMessage && isClaudeCode) {
-    systemMessage = reverseCompileTemplate(systemMessage, reverseArgs);
-  } else if (systemMessage) {
-    systemMessage = reverseCompilePlaintext(systemMessage);
-  }
-  if (userMessage && isClaudeCode) {
-    userMessage = reverseCompileTemplate(userMessage, reverseArgs);
-  } else if (userMessage) {
-    userMessage = reverseCompilePlaintext(userMessage);
-  }
+  // Both export formats write {argName}; reverse-compile it back to {{argName}}.
+  const systemMessage =
+    parsed.systemMessage !== null ? reverseCompileTemplate(parsed.systemMessage) : null;
+  const userMessage =
+    parsed.userMessage !== null ? reverseCompileTemplate(parsed.userMessage) : null;
 
   if (opts.preview) {
     output.log(`[preview] Would create ${resourceType} "${resourceId}" at ${targetDir}`);
@@ -5016,9 +4747,7 @@ async function cloneCommand(
       }
 
       if (parsed.guidanceContent && (resourceType === 'gate' || resourceType === 'style')) {
-        const guidanceContent = isClaudeCode
-          ? reverseCompileTemplate(parsed.guidanceContent, reverseArgs)
-          : reverseCompilePlaintext(parsed.guidanceContent);
+        const guidanceContent = reverseCompileTemplate(parsed.guidanceContent);
         const guidancePath = path.join(targetDir, 'guidance.md');
         await writeFile(guidancePath, guidanceContent);
         writtenPaths.add(guidancePath);
@@ -5081,11 +4810,6 @@ async function cloneCommand(
         for (const stepEntry of stepDirEntries) {
           const stepId = stepEntry.name;
           const stepTargetDir = path.join(targetDir, stepId);
-          if (existsSync(stepTargetDir) && !opts.force) {
-            output.log(`  skip resource ${stepId} (exists, use --force)`);
-            continue;
-          }
-
           await mkdir(stepTargetDir, { recursive: true });
           const stepYaml = await readOptionalFile(
             path.join(companionResourcesDir, stepId, 'prompt.yaml')
@@ -5175,7 +4899,7 @@ async function cloneCommand(
         )}`
       );
     }
-    throw new Error(transactionResult.error ?? 'Clone failed');
+    throw new Error(transactionResult.error);
   }
 
   report.written += writtenPaths.size;
@@ -5185,42 +4909,51 @@ async function cloneCommand(
 // ─── Section 11: CLI Main ───────────────────────────────────────────────────
 
 export function parseSkillsSyncArgs(argv: string[]): SkillsSyncOptions {
-  const { values, positionals } = parseArgs({
-    args: argv.slice(2),
-    options: {
-      client: { type: 'string' },
-      scope: { type: 'string' },
-      'resource-type': { type: 'string' },
-      id: { type: 'string' },
-      prune: { type: 'boolean' },
-      'no-prune': { type: 'boolean' },
-      output: { type: 'string' },
-      file: { type: 'string' },
-      category: { type: 'string' },
-      preview: { type: 'boolean' },
-      'preview-detail': { type: 'string' },
-      force: { type: 'boolean' },
-      json: { type: 'boolean' },
-    },
-    allowPositionals: true,
-    strict: true,
-  });
+  try {
+    const { values, positionals } = parseArgs({
+      args: argv.slice(2),
+      options: {
+        client: { type: 'string' },
+        scope: { type: 'string' },
+        'resource-type': { type: 'string' },
+        id: { type: 'string' },
+        prune: { type: 'boolean' },
+        'no-prune': { type: 'boolean' },
+        output: { type: 'string' },
+        file: { type: 'string' },
+        category: { type: 'string' },
+        preview: { type: 'boolean' },
+        'preview-detail': { type: 'string' },
+        force: { type: 'boolean' },
+        json: { type: 'boolean' },
+      },
+      allowPositionals: true,
+      strict: true,
+    });
 
-  return {
-    command: positionals[0] ?? 'help',
-    client: values.client,
-    scope: values.scope as 'user' | 'project' | undefined,
-    resourceType: values['resource-type'] as ResourceType | undefined,
-    id: values.id,
-    prune: values['no-prune'] ? false : values.prune,
-    output: values.output,
-    file: values.file,
-    category: values.category,
-    preview: values.preview ?? false,
-    previewDetail: values['preview-detail'] as 'summary' | 'diff' | undefined,
-    force: values.force ?? false,
-    json: values.json ?? false,
-  };
+    return {
+      command: positionals[0] ?? 'help',
+      client: values.client,
+      scope: values.scope as 'user' | 'project' | undefined,
+      resourceType: values['resource-type'] as ResourceType | undefined,
+      id: values.id,
+      prune: values['no-prune'] ? false : values.prune,
+      output: values.output,
+      file: values.file,
+      category: values.category,
+      preview: values.preview ?? false,
+      previewDetail: values['preview-detail'] as 'summary' | 'diff' | undefined,
+      force: values.force ?? false,
+      json: values.json ?? false,
+    };
+  } catch (error) {
+    const code = (error as { code?: unknown } | null)?.code;
+    // Every ERR_PARSE_ARGS_* code (unknown option, missing value, bad value) is the caller's input.
+    if (typeof code === 'string' && code.startsWith('ERR_PARSE_ARGS_')) {
+      throw usageError((error as Error).message);
+    }
+    throw error;
+  }
 }
 
 export function printSkillsSyncHelp(output: SkillsSyncOutput): void {
@@ -5300,7 +5033,10 @@ export async function runSkillsSyncCommand(
       if (!opts.json) printSkillsSyncHelp(commandOutput);
       break;
     default:
-      throw usageError(`Unknown command: ${opts.command}. Run skills-sync help for usage.`);
+      // `validateSkillsSyncOptions` refuses every command outside VALID_COMMANDS before this switch.
+      throw new Error(
+        `skills-sync invariant: command '${opts.command}' passed validation but has no handler`
+      );
   }
 
   if (opts.json) {

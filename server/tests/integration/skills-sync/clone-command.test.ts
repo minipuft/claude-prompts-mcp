@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as yaml from 'js-yaml';
@@ -631,6 +631,483 @@ describe('Clone Command Integration', () => {
       expect(count(validated, path.join(targetDir(), 'prompt.yaml'))).toBe(2);
       expect(count(validated, path.join(targetDir(), 'draft', 'prompt.yaml'))).toBe(2);
     });
+  });
+
+  // ─── Branch coverage tier: typed resources, existing targets, companion files ─────
+
+  const cloneOptions = (overrides: Partial<SkillsSyncOptions>): SkillsSyncOptions =>
+    ({ command: 'clone', ...overrides }) as SkillsSyncOptions;
+  const listTree = (root: string): string[] =>
+    readdirSync(root, { recursive: true }).map(String).sort();
+
+  async function writeSkillFile(dirName: string, content: string): Promise<string> {
+    const skillDir = path.join(tmpDir, 'source', dirName);
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, 'SKILL.md'), content);
+    return path.join(skillDir, 'SKILL.md');
+  }
+
+  const GUIDANCE_SKILL =
+    '---\nname: Thing\ndescription: A thing\n---\n\n## Guidance\n\nAnswer in short lines for {audience}.\n';
+
+  describe('a cloned non-prompt resource lands under its own type root', () => {
+    it('clones a style into resources/styles with its guidance beside it, not into prompts', async () => {
+      const file = await writeSkillFile('terse-style', GUIDANCE_SKILL);
+      const resourcesRoot = path.join(serverRoot, 'resources');
+      const styleDir = path.join(resourcesRoot, 'styles', 'terse-style');
+      // Precondition: no styles root yet, and nothing under prompts to be confused with.
+      expect(existsSync(path.join(resourcesRoot, 'styles'))).toBe(false);
+      const promptsBefore = listTree(path.join(resourcesRoot, 'prompts'));
+
+      const report = await runSkillsSyncCommand(
+        cloneOptions({ file, id: 'terse-style', resourceType: 'style', category: 'ignored' }),
+        silentOutput(),
+        resolveSkillsSyncPaths()
+      );
+
+      const styleDoc = yaml.load(
+        await readFile(path.join(styleDir, 'style.yaml'), 'utf-8')
+      ) as Record<string, unknown>;
+      expect(styleDoc).toEqual({ id: 'terse-style', name: 'Thing', description: 'A thing' });
+      expect(await readFile(path.join(styleDir, 'guidance.md'), 'utf-8')).toBe(
+        'Answer in short lines for {{audience}}.'
+      );
+      // Control: the category is a prompt-only coordinate, and no prompt directory appeared.
+      expect(listTree(path.join(resourcesRoot, 'prompts'))).toEqual(promptsBefore);
+      expect(report.written).toBe(2);
+    });
+
+    it.each([
+      {
+        type: 'gate' as const,
+        verified: 'gates',
+        entry: 'gate.yaml',
+        reason: "type: Gate type must be 'validation' or 'guidance'",
+      },
+      {
+        type: 'framework' as const,
+        verified: 'frameworks',
+        entry: 'framework.yaml',
+        reason: 'version: Invalid input: expected string, received undefined',
+      },
+    ])(
+      'verifies a cloned $type as $verified at its own root, then rolls the directory back',
+      async ({ type, verified, entry, reason }) => {
+        const file = await writeSkillFile(`${type}-skill`, GUIDANCE_SKILL);
+        const typeRoot = path.join(serverRoot, 'resources', `${verified}`);
+        const promptsBefore = listTree(path.join(serverRoot, 'resources', 'prompts'));
+
+        const error = await runSkillsSyncCommand(
+          cloneOptions({ file, id: `my-${type}`, resourceType: type }),
+          silentOutput(),
+          resolveSkillsSyncPaths()
+        ).then(
+          () => undefined,
+          (caught: unknown) => caught as Error
+        );
+
+        // A SKILL.md carries no `type`/`version` for these schemas, so the verifier refuses the
+        // scaffold. What this pins is WHERE the clone wrote and WHICH verifier read it.
+        expect(error).toBeDefined();
+        expect(error?.message).toContain('Clone validation failed');
+        expect(error?.message).toContain(`resourceType: ${verified}`);
+        expect(error?.message).toContain(`filePath: ${path.join(typeRoot, `my-${type}`, entry)}`);
+        expect(error?.message).toContain('rolledBack: true');
+        expect(error?.message).toContain(reason);
+        expect(error?.message).not.toContain('resourceType: prompts');
+        // Rolled back: the type root holds no directory for it, and prompts is untouched.
+        expect(existsSync(path.join(typeRoot, `my-${type}`))).toBe(false);
+        expect(listTree(path.join(serverRoot, 'resources', 'prompts'))).toEqual(promptsBefore);
+      }
+    );
+  });
+
+  describe('--file SKILL.md without --id', () => {
+    it('refuses when the id cannot be inferred from a bare file name', async () => {
+      const bareDir = path.join(tmpDir, 'bare');
+      await mkdir(bareDir, { recursive: true });
+      await writeFile(
+        path.join(bareDir, 'SKILL.md'),
+        buildSkillMd({ name: 'Bare', description: 'd', instructions: 'Work.' })
+      );
+      const originalCwd = process.cwd();
+      process.chdir(bareDir);
+      try {
+        // dirname('SKILL.md') is '.', so there is no directory name to take an id from.
+        await expect(
+          runSkillsSyncCommand(
+            cloneOptions({ file: 'SKILL.md', category: 'testing' }),
+            silentOutput(),
+            resolveSkillsSyncPaths()
+          )
+        ).rejects.toThrow(/Could not infer resource ID\. Use --id <name>/);
+        expect(listTree(path.join(serverRoot, 'resources', 'prompts'))).toEqual([]);
+
+        // Control: the same relative file clones once --id names it.
+        await runSkillsSyncCommand(
+          cloneOptions({ file: 'SKILL.md', id: 'bare-skill', category: 'testing' }),
+          silentOutput(),
+          resolveSkillsSyncPaths()
+        );
+        expect(
+          existsSync(
+            path.join(serverRoot, 'resources', 'prompts', 'testing', 'bare-skill', 'prompt.yaml')
+          )
+        ).toBe(true);
+      } finally {
+        process.chdir(originalCwd);
+      }
+    });
+  });
+
+  describe('a companion gate that already exists', () => {
+    const OLD_GATE_YAML = yaml.dump({
+      id: 'test-quality',
+      name: 'Old Quality Gate',
+      description: 'The gate already installed',
+      type: 'validation',
+      pass_criteria: [{ type: 'inline_guidance', items: ['Old criterion'] }],
+    });
+    const NEW_GATE_YAML = yaml.dump({
+      id: 'test-quality',
+      name: 'New Quality Gate',
+      description: 'The gate the skill ships',
+      type: 'validation',
+      pass_criteria: [{ type: 'inline_guidance', items: ['New criterion'] }],
+    });
+    const gateTarget = () => path.join(serverRoot, 'resources', 'gates', 'test-quality');
+
+    async function seedSkillAndInstalledGate(): Promise<string> {
+      const file = await writeSkillFile(
+        'gated-clone',
+        buildSkillMd({ name: 'Gated Clone', description: 'Ships a gate', instructions: 'Work.' }) +
+          '\n## Quality Gates\n\n### Inline Criteria\n\n- Cite sources\n'
+      );
+      const shipped = path.join(path.dirname(file), 'gates', 'test-quality');
+      await mkdir(shipped, { recursive: true });
+      await writeFile(path.join(shipped, 'gate.yaml'), NEW_GATE_YAML);
+      await writeFile(path.join(shipped, 'guidance.md'), 'New guidance.');
+      await mkdir(gateTarget(), { recursive: true });
+      await writeFile(path.join(gateTarget(), 'gate.yaml'), OLD_GATE_YAML);
+      await writeFile(path.join(gateTarget(), 'guidance.md'), 'Old guidance.');
+      return file;
+    }
+
+    const promptConfig = async () =>
+      (
+        yaml.load(
+          await readFile(
+            path.join(serverRoot, 'resources', 'prompts', 'testing', 'gated-clone', 'prompt.yaml'),
+            'utf-8'
+          )
+        ) as Record<string, Record<string, unknown>>
+      )['gateConfiguration'];
+
+    it('is skipped without --force: the installed gate is kept and still referenced', async () => {
+      const file = await seedSkillAndInstalledGate();
+      expect(await readFile(path.join(gateTarget(), 'guidance.md'), 'utf-8')).toBe('Old guidance.');
+      const out = silentOutput();
+
+      await runSkillsSyncCommand(
+        cloneOptions({ file, id: 'gated-clone', category: 'testing' }),
+        out,
+        resolveSkillsSyncPaths()
+      );
+
+      expect(out.logs).toContain('  skip gate test-quality (exists, use --force)');
+      expect(await readFile(path.join(gateTarget(), 'gate.yaml'), 'utf-8')).toBe(OLD_GATE_YAML);
+      expect(await readFile(path.join(gateTarget(), 'guidance.md'), 'utf-8')).toBe('Old guidance.');
+      expect(await promptConfig()).toEqual({ include: ['test-quality'], inline: ['Cite sources'] });
+    });
+
+    it('is overwritten with --force by the gate the skill ships', async () => {
+      const file = await seedSkillAndInstalledGate();
+      expect(await readFile(path.join(gateTarget(), 'gate.yaml'), 'utf-8')).toBe(OLD_GATE_YAML);
+      const out = silentOutput();
+
+      await runSkillsSyncCommand(
+        cloneOptions({ file, id: 'gated-clone', category: 'testing', force: true }),
+        out,
+        resolveSkillsSyncPaths()
+      );
+
+      expect(out.logs).not.toContain('  skip gate test-quality (exists, use --force)');
+      expect(out.logs).toContain('  wrote gates/test-quality/gate.yaml');
+      expect(await readFile(path.join(gateTarget(), 'gate.yaml'), 'utf-8')).toBe(NEW_GATE_YAML);
+      expect(await readFile(path.join(gateTarget(), 'guidance.md'), 'utf-8')).toBe('New guidance.');
+    });
+  });
+
+  describe('companion step files', () => {
+    const stepYaml = (id: string, name: string) =>
+      yaml.dump({
+        id,
+        name,
+        description: `${name} step`,
+        systemMessageFile: 'system-message.md',
+        userMessageTemplateFile: 'user-message.md',
+      });
+    async function seedStepSkill(): Promise<string> {
+      const file = await writeSkillFile(
+        'chained',
+        buildSkillMd({ name: 'Chained', description: 'Has steps', instructions: 'Run.' })
+      );
+      const stepDir = path.join(path.dirname(file), 'resources', 'analyze');
+      await mkdir(stepDir, { recursive: true });
+      await writeFile(path.join(stepDir, 'prompt.yaml'), stepYaml('analyze', 'Analyze Step'));
+      await writeFile(path.join(stepDir, 'system-message.md'), 'Analyze {{input}} carefully.');
+      await writeFile(path.join(stepDir, 'user-message.md'), 'Report on {{input}}.');
+      return file;
+    }
+    const target = () => path.join(serverRoot, 'resources', 'prompts', 'testing', 'chained');
+
+    it("writes each step's prompt, system and user message under the new prompt and chains it", async () => {
+      const file = await seedStepSkill();
+      expect(existsSync(target())).toBe(false);
+      const out = silentOutput();
+
+      await runSkillsSyncCommand(
+        cloneOptions({ file, id: 'chained', category: 'testing' }),
+        out,
+        resolveSkillsSyncPaths()
+      );
+
+      const stepTarget = path.join(target(), 'analyze');
+      expect(await readFile(path.join(stepTarget, 'prompt.yaml'), 'utf-8')).toBe(
+        stepYaml('analyze', 'Analyze Step')
+      );
+      expect(await readFile(path.join(stepTarget, 'system-message.md'), 'utf-8')).toBe(
+        'Analyze {{input}} carefully.'
+      );
+      expect(await readFile(path.join(stepTarget, 'user-message.md'), 'utf-8')).toBe(
+        'Report on {{input}}.'
+      );
+      expect(out.logs).toEqual(
+        expect.arrayContaining([
+          '  wrote resources/analyze/prompt.yaml',
+          '  wrote resources/analyze/system-message.md',
+          '  wrote resources/analyze/user-message.md',
+          '  updated prompt.yaml with chainSteps',
+        ])
+      );
+      const promptDoc = yaml.load(
+        await readFile(path.join(target(), 'prompt.yaml'), 'utf-8')
+      ) as Record<string, unknown>;
+      expect(promptDoc['chainSteps']).toEqual([
+        { promptId: 'testing/chained/analyze', stepName: 'Analyze Step' },
+      ]);
+    });
+
+    it('refuses a step whose prompt.yaml names neither id nor name, rolling the new prompt back', async () => {
+      const file = await seedStepSkill();
+      const plainDir = path.join(path.dirname(file), 'resources', 'plain');
+      await mkdir(plainDir, { recursive: true });
+      await writeFile(
+        path.join(plainDir, 'prompt.yaml'),
+        yaml.dump({ description: 'Plain step', userMessageTemplate: 'Wrap up.' })
+      );
+
+      const error = await runSkillsSyncCommand(
+        cloneOptions({ file, id: 'chained', category: 'testing' }),
+        silentOutput(),
+        resolveSkillsSyncPaths()
+      ).then(
+        () => undefined,
+        (caught: unknown) => caught as Error
+      );
+
+      expect(error?.message).toContain('Clone validation failed');
+      expect(error?.message).toContain('resourceId: plain');
+      expect(error?.message).toContain('id: Invalid input: expected string, received undefined');
+      expect(error?.message).toContain('name: Invalid input: expected string, received undefined');
+      // The analyze step was valid and written first, yet nothing of the clone remains.
+      expect(existsSync(target())).toBe(false);
+    });
+
+    it('replaces an existing step directory under --force, and refuses before touching it without', async () => {
+      const file = await seedStepSkill();
+      const stepTarget = path.join(target(), 'analyze');
+      await mkdir(stepTarget, { recursive: true });
+      await writeFile(path.join(target(), 'prompt.yaml'), 'id: chained\nname: Old\n');
+      await writeFile(path.join(stepTarget, 'prompt.yaml'), stepYaml('analyze', 'Old Step'));
+      await writeFile(path.join(stepTarget, 'system-message.md'), 'Old step system.');
+      expect(await readFile(path.join(stepTarget, 'system-message.md'), 'utf-8')).toBe(
+        'Old step system.'
+      );
+
+      // Without --force the clone stops at the prompt directory, so the step is never reached.
+      await expect(
+        runSkillsSyncCommand(
+          cloneOptions({ file, id: 'chained', category: 'testing' }),
+          silentOutput(),
+          resolveSkillsSyncPaths()
+        )
+      ).rejects.toThrow(/exists.*force/i);
+      expect(await readFile(path.join(stepTarget, 'system-message.md'), 'utf-8')).toBe(
+        'Old step system.'
+      );
+
+      const out = silentOutput();
+      await runSkillsSyncCommand(
+        cloneOptions({ file, id: 'chained', category: 'testing', force: true }),
+        out,
+        resolveSkillsSyncPaths()
+      );
+
+      expect(out.logs.some((l) => l.includes('skip resource'))).toBe(false);
+      expect(await readFile(path.join(stepTarget, 'system-message.md'), 'utf-8')).toBe(
+        'Analyze {{input}} carefully.'
+      );
+      expect(await readFile(path.join(stepTarget, 'prompt.yaml'), 'utf-8')).toBe(
+        stepYaml('analyze', 'Analyze Step')
+      );
+    });
+  });
+
+  it('infers arguments from an agent-skills SKILL.md and reverse-compiles its placeholders', async () => {
+    const content = buildSkillMd({
+      name: 'Agent Skill',
+      description: 'Authored for an agent-skills client',
+      instructions: 'Process {input} as {mode}.',
+      usage: 'Start with {input}.',
+      arguments: [
+        { name: 'input', required: true, description: 'What to process' },
+        { name: 'mode', required: false, description: 'How to process it' },
+      ],
+      format: 'agent-skills',
+    });
+    // Precondition: this really is the agent-skills shape, not the claude-code one.
+    expect(content).toContain('compatibility:');
+    expect(content).toContain('- **input** (required): What to process');
+    const file = await writeSkillFile('agent-skill', content);
+
+    await runSkillsSyncCommand(
+      cloneOptions({ file, id: 'agent-skill', category: 'testing' }),
+      silentOutput(),
+      resolveSkillsSyncPaths()
+    );
+
+    const targetDir = path.join(serverRoot, 'resources', 'prompts', 'testing', 'agent-skill');
+    const doc = yaml.load(await readFile(path.join(targetDir, 'prompt.yaml'), 'utf-8')) as Record<
+      string,
+      unknown
+    >;
+    expect(doc['arguments']).toEqual([
+      { name: 'input', type: 'string', description: 'What to process', required: true },
+      { name: 'mode', type: 'string', description: 'How to process it' },
+    ]);
+    expect(await readFile(path.join(targetDir, 'system-message.md'), 'utf-8')).toBe(
+      'Process {{input}} as {{mode}}.'
+    );
+    expect(await readFile(path.join(targetDir, 'user-message.md'), 'utf-8')).toBe(
+      'Start with {{input}}.'
+    );
+  });
+
+  it('surfaces a write failure that is not a verification failure, and restores the replaced files', async () => {
+    const file = await writeSkillFile(
+      'unwritable',
+      buildSkillMd({ name: 'Unwritable', description: 'd', instructions: 'Work.' })
+    );
+    // An installed prompt whose system-message.md is a DIRECTORY: --force reaches it after
+    // rewriting prompt.yaml, and writing a file over a directory fails.
+    const targetDir = path.join(serverRoot, 'resources', 'prompts', 'testing', 'unwritable');
+    await mkdir(path.join(targetDir, 'system-message.md'), { recursive: true });
+    await writeFile(path.join(targetDir, 'prompt.yaml'), 'id: unwritable\nname: Old\n');
+    expect(existsSync(path.join(targetDir, 'system-message.md'))).toBe(true);
+
+    const error = await runSkillsSyncCommand(
+      cloneOptions({ file, id: 'unwritable', category: 'testing', force: true }),
+      silentOutput(),
+      resolveSkillsSyncPaths()
+    ).then(
+      () => undefined,
+      (caught: unknown) => caught as Error
+    );
+
+    expect(error?.message).toMatch(/EISDIR/);
+    expect(error?.message).not.toContain('Clone validation failed');
+    // Rolled back: prompt.yaml, rewritten before the failing write, is the installed one again.
+    expect(await readFile(path.join(targetDir, 'prompt.yaml'), 'utf-8')).toBe(
+      'id: unwritable\nname: Old\n'
+    );
+
+    // Control: with the directory gone the same forced clone lands.
+    await rm(path.join(targetDir, 'system-message.md'), { recursive: true });
+    await runSkillsSyncCommand(
+      cloneOptions({ file, id: 'unwritable', category: 'testing', force: true }),
+      silentOutput(),
+      resolveSkillsSyncPaths()
+    );
+    expect(await readFile(path.join(targetDir, 'system-message.md'), 'utf-8')).toBe('Work.');
+  });
+
+  it('names the resource after its id and describes it by its file when the SKILL.md carries neither', async () => {
+    const file = await writeSkillFile('anonymous', '## Instructions\n\nJust do the work.\n');
+    // Precondition: the file has no frontmatter to take a name or description from.
+    expect(await readFile(file, 'utf-8')).not.toContain('---');
+
+    await runSkillsSyncCommand(
+      cloneOptions({ file, id: 'anonymous-prompt', category: 'testing' }),
+      silentOutput(),
+      resolveSkillsSyncPaths()
+    );
+
+    const doc = yaml.load(
+      await readFile(
+        path.join(serverRoot, 'resources', 'prompts', 'testing', 'anonymous-prompt', 'prompt.yaml'),
+        'utf-8'
+      )
+    ) as Record<string, unknown>;
+    expect(doc['name']).toBe('anonymous-prompt');
+    expect(doc['description']).toBe('Imported from SKILL.md');
+  });
+
+  it('copies a companion gate that ships gate.yaml without a guidance file', async () => {
+    const file = await writeSkillFile(
+      'yaml-only-gate',
+      buildSkillMd({ name: 'Yaml Only', description: 'd', instructions: 'Work.' })
+    );
+    const shipped = path.join(path.dirname(file), 'gates', 'bare-gate');
+    await mkdir(shipped, { recursive: true });
+    const gateYaml = yaml.dump({
+      id: 'bare-gate',
+      name: 'Bare Gate',
+      description: 'No guidance file',
+      type: 'validation',
+      pass_criteria: [{ type: 'inline_guidance', items: ['Holds'] }],
+    });
+    await writeFile(path.join(shipped, 'gate.yaml'), gateYaml);
+    expect(existsSync(path.join(shipped, 'guidance.md'))).toBe(false);
+
+    await runSkillsSyncCommand(
+      cloneOptions({ file, id: 'yaml-only-gate', category: 'testing' }),
+      silentOutput(),
+      resolveSkillsSyncPaths()
+    );
+
+    const installed = path.join(serverRoot, 'resources', 'gates', 'bare-gate');
+    expect(await readFile(path.join(installed, 'gate.yaml'), 'utf-8')).toBe(gateYaml);
+    expect(listTree(installed)).toEqual(['gate.yaml']);
+  });
+
+  it('previews a SKILL.md with no arguments without an arguments line', async () => {
+    const file = await writeSkillFile(
+      'plain-preview',
+      buildSkillMd({ name: 'Plain', description: 'd', instructions: 'Work.' })
+    );
+    const out = silentOutput();
+
+    await runSkillsSyncCommand(
+      cloneOptions({ file, id: 'plain-preview', category: 'testing', preview: true }),
+      out,
+      resolveSkillsSyncPaths()
+    );
+
+    expect(out.logs.some((l) => l.includes('[preview] Would create prompt "plain-preview"'))).toBe(
+      true
+    );
+    expect(out.logs.some((l) => l.includes('arguments:'))).toBe(false);
   });
 
   it('fails gracefully when --file is not provided', async () => {

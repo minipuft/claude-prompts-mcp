@@ -167,4 +167,102 @@ describe('ChainSessionStore + ArgumentHistoryTracker (integration)', () => {
 
     await manager.cleanup();
   });
+
+  describe('an ArgumentHistoryTracker that throws', () => {
+    const setup = async (): Promise<{
+      logger: Logger;
+      textReference: StubTextReferenceStore;
+      tracker: ArgumentHistoryTracker;
+      manager: ChainSessionStore;
+    }> => {
+      const logger = createLogger();
+      const textReference = new StubTextReferenceStore();
+      const tracker = new ArgumentHistoryTracker(logger, 10, createInMemoryStore());
+      await tracker.initialize();
+      const manager = new ChainSessionStore(
+        logger,
+        textReference as any,
+        { cleanupIntervalMs: 1000 },
+        tracker
+      );
+      manager.setDatabasePort(createMockDb());
+      return { logger, textReference, tracker, manager };
+    };
+
+    test("getChainContext falls back to the run's original args when the tracker read throws", async () => {
+      const { logger, tracker, manager } = await setup();
+      await manager.createSession('sess-read', 'chain-read', 2, { input: 'alpha' });
+
+      // Positive control: this tracker holds no history for the run, so a read that does NOT
+      // throw yields no arguments at all. The fallback below is therefore the only source of
+      // `alpha`, not a value the tracker would have supplied anyway.
+      const healthy = manager.getChainContext('sess-read');
+      expect(healthy.input).toBeUndefined();
+      expect(healthy.original_args).toEqual({});
+
+      jest.spyOn(tracker, 'buildReviewContext').mockImplementation(() => {
+        throw new Error('tracker read failed');
+      });
+      const context = manager.getChainContext('sess-read');
+
+      expect(context.input).toBe('alpha');
+      expect(context.original_args).toEqual({ input: 'alpha' });
+      expect(context.previous_step_results).toBeUndefined();
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Failed to get arguments from ArgumentHistoryTracker, using session originalArgs: tracker read failed'
+      );
+
+      await manager.cleanup();
+    });
+
+    test('a failing tracker write is logged and the step result is still stored', async () => {
+      const { logger, textReference, tracker, manager } = await setup();
+      await manager.createSession('sess-write', 'chain-write', 2, { input: 'alpha' });
+      const trackSpy = jest
+        .spyOn(tracker, 'trackExecution')
+        .mockRejectedValue(new Error('tracker write failed'));
+
+      const stored = await manager.updateSessionState('sess-write', 'n1', 'REAL-OUTPUT-1');
+
+      expect(stored).toBe(true);
+      expect(trackSpy).toHaveBeenCalledTimes(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        '[ChainSessionStore] Failed to track argument history entry',
+        expect.objectContaining({
+          chainId: 'chain-write',
+          nodeId: 'n1',
+          error: expect.objectContaining({ message: 'tracker write failed' }),
+        })
+      );
+      // The result reached the text store regardless of the tracker...
+      expect(textReference.storeChainStepResult).toHaveBeenCalledWith(
+        'sess-write',
+        'n1',
+        'REAL-OUTPUT-1',
+        expect.objectContaining({ isPlaceholder: false }),
+        1
+      );
+      // ...and is readable from the run's context.
+      expect(manager.getChainContext('sess-write').step_results).toEqual({ n1: 'REAL-OUTPUT-1' });
+
+      await manager.cleanup();
+    });
+
+    test('a placeholder write never reaches the tracker, so a throwing one is not even consulted', async () => {
+      const { logger, tracker, manager } = await setup();
+      await manager.createSession('sess-placeholder', 'chain-placeholder', 2, {});
+      const trackSpy = jest
+        .spyOn(tracker, 'trackExecution')
+        .mockRejectedValue(new Error('tracker write failed'));
+
+      await manager.updateSessionState('sess-placeholder', 'n1', 'TEMPLATE', {
+        isPlaceholder: true,
+      });
+
+      expect(trackSpy).not.toHaveBeenCalled();
+      expect(logger.error).not.toHaveBeenCalled();
+
+      await manager.cleanup();
+    });
+  });
 });

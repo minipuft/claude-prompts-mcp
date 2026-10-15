@@ -189,7 +189,6 @@ describe('P6.185: every awaited mutator persists through persistMutation', () =>
       'setPendingShellVerification',
       'setReview',
       'transitionRunStatus',
-      'transitionStepState',
       'updateSessionState',
     ]);
   });

@@ -1,7 +1,7 @@
 ---
 title: Workflow contract composition implementation notes
 date: 2026-10-14
-status: active
+status: reference
 tags: [workflows, contracts, integration]
 ---
 
@@ -47,3 +47,7 @@ Planner read the drive's results file (`results` per build × transport × behav
 
 - **F-C3-1 (finding, no row)**: resuming an aborted run returns `isError:false` with `Chain run already complete ... Status: cancelled`. A client that reads only `isError` sees success. It is the existing completed-run response, not introduced by this composition; it belongs to the conversation-pause plan's resume surface, which owns run-state responses.
 - **F-C3-2**: gated `prompt_engine` calls over HTTP emit `notifications/chain/step_complete` SSE frames before the response frame; an ad-hoc driver must match by id. `scripts/verify-mcp-surface.mjs` already does.
+
+## 2026-10-15 — C4: main merged, plan retired in #492
+
+#490 and #491 merged first (R-ORDER). Merging main produced five conflicts, none in source: the module catalog (regenerated), both ratchet baselines (re-measured on the merged tree: lint 2321/693 → 2298/690, knip 1059 → 1049, no rule above main), and the remediation plan's Now block and notes (Now rewritten to the post-merge state; notes kept from both sides, empty base). #488 and #489 close as included once #492 merges.

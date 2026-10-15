@@ -1,26 +1,26 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-15T02:52:37.326Z",
+  "generatedAt": "2026-10-15T17:05:41.542Z",
   "eslintTarget": "src,scripts,eslint-rules",
   "totals": {
-    "errors": 2337,
-    "warnings": 692
+    "errors": 2298,
+    "warnings": 690
   },
   "byRule": {
     "@typescript-eslint/strict-boolean-expressions": {
-      "errors": 1582,
+      "errors": 1567,
       "warnings": 0
     },
     "sonarjs/cognitive-complexity": {
       "errors": 0,
-      "warnings": 73
+      "warnings": 71
     },
     "@typescript-eslint/no-non-null-assertion": {
       "errors": 0,
       "warnings": 68
     },
     "@typescript-eslint/no-unnecessary-condition": {
-      "errors": 314,
+      "errors": 293,
       "warnings": 0
     },
     "max-params": {
@@ -28,7 +28,7 @@
       "warnings": 7
     },
     "@typescript-eslint/prefer-nullish-coalescing": {
-      "errors": 128,
+      "errors": 126,
       "warnings": 0
     },
     "import-x/order": {
@@ -44,7 +44,7 @@
       "warnings": 149
     },
     "@typescript-eslint/no-explicit-any": {
-      "errors": 230,
+      "errors": 229,
       "warnings": 0
     },
     "@typescript-eslint/no-unsafe-member-access": {

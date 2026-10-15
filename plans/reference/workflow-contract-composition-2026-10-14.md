@@ -2,7 +2,7 @@
 title: Compose object verdict retirement with scoped workflow controls
 date: 2026-10-14
 type: implementation-plan
-status: active
+status: reference
 initiative_branch: feat/workflow-contract-composition
 worker_cap: 1
 branch_mode: shared-tree
@@ -18,7 +18,7 @@ tags: [workflows, contracts, integration]
 
 Goal: preserve accepted abort/namespaced/custody behavior while retiring the string verdict parameter.
 Slice: isolated composition candidate starts from #489 b5cbc7c2 and merges #488 98b9b161. Actual no-commit merge found7 conflicts:2 handbook/reference,2 ratchets,1 generated contract projection,2 schema snapshots. No handwritten runtime source conflicts occurred; automatic merge is not acceptance.
-Next: C1, C2, C2.5, C3 accepted. C4 PR boundary runs after the 0C3 and 0C2 PRs merge (R-ORDER); its PR supersedes #488 and #489. Pause stays held until this branch is on main.
+Done: C1–C4 ✓; the composition lands as #492, superseding #488 and #489. The conversation-pause plan resumes from main after it merges.
 Constraint: root owns HEAD/index and merge; workers never stage. Preserve abort/current unknown verbs, complete namespaced identities, object-only parameter custody, independent text channels and honest FAIL admission. No installed/foreign/CloudySky/release mutation.
 
 ## Task rows
@@ -34,7 +34,7 @@ Constraint: root owns HEAD/index and merge; workers never stage. Preserve abort/
 | ID   | Status                                                                                                                                                                                                 | Owner                                                                                                                    | Change and verification                                                                                                                                                                                                                               |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | C2.5 | ✓ (2026-10-14; validate:module-catalog OK 35 boundaries · validate:plan-row-tracking 114 ☐ stamped/0 grandfathered · plans:retire:check OK; engine-gates instability 0.55→0.56 the only catalog delta) | docs/reference/module-catalog.md only;≤100 canonical generated changed lines; worker-low/low, stale generated projection | Canonical producer/check, attribute changed entries to composed source only. Root fixes its two plan frontmatter/stamp fields. Recheck validate:module-catalog, validate:plan-row-tracking and plans:retire:check; no runtime edits or broad85replay. |
-| C4   | ☐ (as of 2026-10-14 · flips when the combined PR merges on green CI)                                                                                                                                   | none (planner): pre-push gates + validate:all on one snapshot, pr:check, push, PR superseding #488/#489                  | Push feat/workflow-contract-composition, open the PR, merge on CLEAN; close #488 and #489 as included. No release (#473 stays uncut).                                                                                                                 |
+| C4   | ✓ (2026-10-15; #492 — main merged after #490/#491, catalog regenerated, lint 2321/693 → 2298/690 and knip 1059 → 1049 re-measured with no rule above main; supersedes #488 and #489)                   | none (planner): pre-push gates + validate:all on one snapshot, pr:check, push, PR superseding #488/#489                  | Push feat/workflow-contract-composition, open the PR, merge on CLEAN; close #488 and #489 as included. No release (#473 stays uncut).                                                                                                                 |
 
 ## Accepted inputs
 
