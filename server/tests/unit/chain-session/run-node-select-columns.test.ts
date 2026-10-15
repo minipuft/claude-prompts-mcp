@@ -17,6 +17,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { inlineTemplateConstants } from '../../../scripts/validate-no-phantom-columns.js';
+
 const REGISTRY = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../../src/modules/chains/run-registry.ts'
@@ -28,17 +30,9 @@ const columnsOf = (list: string): string[] =>
     .map((column) => column.trim().replace(/^n\./, ''))
     .filter((column) => column.length > 0);
 
-/** `source` with each `${NAME}` naming a template-literal const in `source` replaced by its text. */
-function inlineConstants(source: string): string {
-  const constants = new Map(
-    [...source.matchAll(/const (\w+) = `([^`$]*)`/g)].map((m) => [m[1] ?? '', m[2] ?? ''])
-  );
-  return source.replace(/\$\{(\w+)\}/g, (held, name: string) => constants.get(name) ?? held);
-}
-
 /** The INSERT's column list and every node-rebuilding SELECT's, from `raw`. */
 function nodeColumnLists(raw: string): { written: string[]; reads: string[][] } {
-  const source = inlineConstants(raw);
+  const source = inlineTemplateConstants(raw);
   const insert = /INSERT INTO chain_run_nodes \(([\s\S]*?)\)\s*VALUES/.exec(source);
   const reads = [
     ...source.matchAll(/query<ChainRunNodeRow>\(\s*['`]SELECT([\s\S]*?)FROM chain_run_nodes/g),
