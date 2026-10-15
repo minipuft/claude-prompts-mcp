@@ -16,12 +16,14 @@ import { ResourceTemplate } from '@modelcontextprotocol/server';
 import { ResourceNotFoundError, RESOURCE_URI_PATTERNS } from '../types.js';
 
 import type {
+  SessionPauseFacts,
   SessionResourceMetadata,
   ResourceDependencies,
   SessionReviewFacts,
 } from '../types.js';
 import type { McpServer, ReadResourceResult } from '@modelcontextprotocol/server';
 
+import { isConversationPaused } from '#shared/types/chain-session.js';
 import { isChainId } from '#shared/utils/chain-id-codec.js';
 import { currentOrdinal, totalOf } from '#shared/utils/node-order.js';
 
@@ -86,6 +88,40 @@ export function registerObservabilityResources(
 }
 
 /**
+ * The conversation-pause facts a session resource reports, picked field by field so nothing else
+ * on the session (the handoff token) can reach the JSON. Empty unless the run is paused. PURE.
+ */
+function pauseProjection(
+  session: SessionPauseFacts & { sessionId: string; state: { currentNodeId: string | null } }
+): Pick<
+  SessionResourceMetadata,
+  'conversationPause' | 'runId' | 'continuityScopeId' | 'currentNodeId'
+> {
+  const { conversationPause, runStatus = 'working' } = session;
+  if (conversationPause === undefined || !isConversationPaused({ conversationPause, runStatus })) {
+    return {};
+  }
+  const { kind, nodeId, pausedAt } = conversationPause;
+  return {
+    conversationPause: { kind, nodeId, pausedAt },
+    runId: session.sessionId,
+    ...(session.continuityScopeId !== undefined && {
+      continuityScopeId: session.continuityScopeId,
+    }),
+    currentNodeId: session.state.currentNodeId,
+  };
+}
+
+/** A list row's pause: read off the run its summary names, never promoting it. */
+function listedPause(
+  store: NonNullable<ResourceDependencies['chainSessionStore']>,
+  summary: { sessionId: string; chainId: string }
+): ReturnType<typeof pauseProjection> {
+  const run = store.getSessionByChainIdentifier(summary.chainId, { promoteDormant: false });
+  return run?.sessionId === summary.sessionId ? pauseProjection(run) : {};
+}
+
+/**
  * Register session-related resources
  */
 function registerSessionResources(server: McpServer, dependencies: ResourceDependencies): void {
@@ -115,6 +151,7 @@ function registerSessionResources(server: McpServer, dependencies: ResourceDepen
           totalSteps: s.totalSteps,
           pendingReview: s.pendingReview,
           lastActivity: s.lastActivity,
+          ...listedPause(chainSessionStore, s),
         }));
 
         return { resources };
@@ -138,6 +175,7 @@ function registerSessionResources(server: McpServer, dependencies: ResourceDepen
         totalSteps: s.totalSteps,
         pendingReview: s.pendingReview,
         lastActivity: s.lastActivity,
+        ...listedPause(chainSessionStore, s),
       }));
 
       return {
@@ -179,7 +217,9 @@ function registerSessionResources(server: McpServer, dependencies: ResourceDepen
       }
 
       // Use chainId lookup (user-facing identifier like chain-quick_decision#1)
-      const session = chainSessionStore.getSessionByChainIdentifier(chainId);
+      const session = chainSessionStore.getSessionByChainIdentifier(chainId, {
+        promoteDormant: false,
+      });
 
       if (session === undefined) {
         throw new ResourceNotFoundError('Session', chainId);
@@ -263,19 +303,21 @@ function registerMetricsResources(server: McpServer, dependencies: ResourceDepen
 /**
  * Build formatted session content as JSON
  */
-function buildSessionContent(session: {
-  sessionId: string;
-  chainId: string;
-  state: {
-    currentNodeId: string | null;
-    nodes: Array<{ id: string }>;
-    stepStates?: Map<string, unknown>;
-  };
-  startTime: number;
-  lastActivity: number;
-  originalArgs: Record<string, unknown>;
-  reviews?: Readonly<Record<string, SessionReviewFacts>>;
-}): string {
+function buildSessionContent(
+  session: {
+    sessionId: string;
+    chainId: string;
+    state: {
+      currentNodeId: string | null;
+      nodes: Array<{ id: string }>;
+      stepStates?: Map<string, unknown>;
+    };
+    startTime: number;
+    lastActivity: number;
+    originalArgs: Record<string, unknown>;
+    reviews?: Readonly<Record<string, SessionReviewFacts>>;
+  } & SessionPauseFacts
+): string {
   const currentStep = currentOrdinal(session.state.nodes, session.state.currentNodeId);
   const totalSteps = totalOf(session.state.nodes);
 
@@ -303,6 +345,7 @@ function buildSessionContent(session: {
       startTimeISO: new Date(session.startTime).toISOString(),
       lastActivityISO: new Date(session.lastActivity).toISOString(),
     },
+    ...pauseProjection(session),
     originalArgs: session.originalArgs,
     stepStates: Object.keys(stepStates).length > 0 ? stepStates : undefined,
     hasPendingReview: Object.keys(session.reviews ?? {}).length > 0,

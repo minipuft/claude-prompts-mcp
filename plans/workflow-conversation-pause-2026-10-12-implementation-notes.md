@@ -178,3 +178,11 @@ Router views and system_control session list/inspect render the pause through on
 - **DEV-T2-2 (T2.5):** edited two files outside its row — exported `describePausedRun` from the shared module (the brief demanded reuse and omitted the file that must export it: the planner's omission), and mocked `getSessionByChainIdentifier` in `session-action.test.ts` whose fake broke on the new lookup. It also ran `git stash -- <its handler>` to measure ESLint before its change; scoped to its own file, popped, sha verified, the other worker untouched — but stash in a shared tree is forbidden in future briefs.
 - **T2.4a (new row):** both lists inherit `listActiveSessions`' dormant exclusion, so a dormant paused run is invisible.
 - **Findings (no rows):** the archive-run-id fallback in the router and `getSession` for inspect still touch an UNPAUSED run as before; `peekRun` (executor) and the router's `peekSession` are the same expression.
+
+### T2.6 accepted (2026-10-15)
+
+Session list and item resources carry `conversationPause`, `runId`, `continuityScopeId` and `currentNodeId` for a paused run only, through a field-by-field projection (the token cannot reach the JSON) and non-promoting lookups; a list row attaches the pause only when the looked-up run's sessionId matches.
+
+- **DEV-T2-3:** 193 changed lines against 130 authored — src 98 (within), test 95. The planner's bound did not price a list + item + no-leak + no-mutation test surface. Accepted.
+- **T2.6a (new row):** `runtime/resource-registration.ts` wraps the store and drops `options`, so `promoteDormant:false` does not reach it.
+- **Findings (no rows):** `ChainSessionSummary` carries no pause/scope fields, so list enrichment costs one non-promoting lookup per row; `manager.getSession` is not a pure read for unpaused runs (pre-existing).

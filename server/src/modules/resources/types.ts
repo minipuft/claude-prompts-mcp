@@ -7,6 +7,7 @@
  */
 
 import type { GateTierSource } from '#engine/gates/core/gate-tier.js';
+import type { ChainSession } from '#shared/types/chain-session.js';
 import type { Logger } from '#shared/types/index.js';
 import type { McpServer } from '@modelcontextprotocol/server';
 
@@ -91,7 +92,18 @@ export interface SessionResourceMetadata extends ResourceListItem {
   totalSteps: number;
   pendingReview: boolean;
   lastActivity: number;
+  /** Present only while the run holds a conversation pause; `runId` is the run's UUID. */
+  conversationPause?: ChainSession['conversationPause'];
+  runId?: string;
+  continuityScopeId?: string;
+  currentNodeId?: string | null;
 }
+
+/** The session fields a resource reads to report a conversation pause; never the handoff token. */
+export type SessionPauseFacts = Pick<
+  Partial<ChainSession>,
+  'conversationPause' | 'continuityScopeId' | 'runStatus'
+>;
 
 /**
  * Dependencies required by resource handlers.
@@ -191,7 +203,7 @@ export interface ResourceDependencies {
       promptId?: string;
     }>;
     getSession(sessionId: string):
-      | {
+      | ({
           sessionId: string;
           chainId: string;
           state: {
@@ -203,11 +215,14 @@ export interface ResourceDependencies {
           lastActivity: number;
           originalArgs: Record<string, unknown>;
           reviews?: Readonly<Record<string, SessionReviewFacts>>;
-        }
+        } & SessionPauseFacts)
       | undefined;
-    /** Lookup by user-facing chainId (e.g., chain-quick_decision#1) */
-    getSessionByChainIdentifier(chainId: string):
-      | {
+    /** Lookup by user-facing chainId (e.g., chain-quick_decision#1); resources never promote. */
+    getSessionByChainIdentifier(
+      chainId: string,
+      options?: { promoteDormant?: boolean }
+    ):
+      | ({
           sessionId: string;
           chainId: string;
           state: {
@@ -219,7 +234,7 @@ export interface ResourceDependencies {
           lastActivity: number;
           originalArgs: Record<string, unknown>;
           reviews?: Readonly<Record<string, SessionReviewFacts>>;
-        }
+        } & SessionPauseFacts)
       | undefined;
     getSessionStats(): {
       totalSessions: number;
