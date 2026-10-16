@@ -107,7 +107,8 @@ const toHsl = (c: string): [number, number, number] => {
   const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
   return [(h * 60 + 360) % 360, s, l];
 };
-const fromHsl = (h: number, s: number, l: number): string => {
+/** A #rrggbb colour from hue in degrees, saturation and lightness (both 0..1). */
+export const fromHsl = (h: number, s: number, l: number): string => {
   const k = (n: number) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
   const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
   return '#' + [f(0), f(8), f(4)].map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('');

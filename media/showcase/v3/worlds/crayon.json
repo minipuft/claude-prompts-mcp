@@ -20,6 +20,15 @@
       "yellow": "#f0b341"
     }
   },
+  "light": {
+    "lift": 1,
+    "paper": {
+      "saturation": 1,
+      "lightness": 0.8
+    },
+    "warmth": 0.6,
+    "falloff": 1
+  },
   "boil": {
     "variants": 3,
     "rate": 6

@@ -39,6 +39,16 @@ export type WorldContract = {
   paper?: {tooth: number};
   /** Directional wax: strokes hatch along `angle` degrees (screen, y down); the human takes `figureStrength` of the world's stroke so it stays cleaner than the world. */
   stroke?: {angle: number; figureStrength: number; palette?: {blue: string; sky: string; red: string; yellow: string}};
+  /**
+   * The crayon world's light is a lit patch, not a glow (a glow drawn as additive wax reads as a darker halo on bright paper, so no luminance peak sat on the emitter, rubric C29).
+   * Inside the emitter's radius `r` the paper lightens, fewer strokes are drawn and the remaining scribbled strokes warm toward `radiance.colour`; outside it nothing changes.
+   * Every term follows one profile, `(1 - d / r) ** falloff` at distance `d` from the emitter (1 at the emitter, 0 at `r`; 1 is linear, 2 reaches the edge with no step).
+   * `paper` is the lit paper's saturation and lightness, taken at the hue of the emitter's own colour (so the light reads in the beat's hue, C24/C30): saturated and brighter than the field, and far enough
+   * from it (and from the cream the human is drawn in) that the light is not mistaken for the paper (C29 masks the fixed fills, the field included). `lift` (0..1): the share of the way from the field to the lit paper the paper takes at the emitter, the share of the extra hatch knock-out there (strokes thin toward
+   * the centre) and, at half strength, the strokes' own lift toward the lit paper; 0 leaves the world as it was, with its glow. `warmth` (0..1): the share of the way the scribbled strokes (arch, gates,
+   * floor) take toward the radiance hue at the emitter. Props and figures keep their pigments (C1, C2): they only thin. All scaled by the emitter's intensity and the scene's strength (1 - reduce).
+   */
+  light?: {lift: number; warmth: number; falloff: number; paper: {saturation: number; lightness: number}};
   radiance: {on: boolean; colour?: string};
   provisional: boolean;
   /** Composition cards (board-06 §8) the world borrows from. */
