@@ -115,7 +115,7 @@ const TEMPLATE_OUTPUT_PATH = path.join(
  * drifting out of step with `server/package.json`'s released major (its comment owns the window
  * rule, not this one).
  */
-const CONFIG_SCHEMA_MAJOR = 5;
+const CONFIG_SCHEMA_MAJOR = 6;
 
 /**
  * The schema's canonical, resolvable address — what `$id` in the generated schema carries, and

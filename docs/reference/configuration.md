@@ -76,7 +76,7 @@ A freshly written `config.jsonc` carries a `$schema` line pointing at a fetchabl
 
 ```jsonc
 {
-  "$schema": "https://cdn.jsdelivr.net/npm/claude-prompts@5/config.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/claude-prompts@6/config.schema.json",
   "version": 5,
   // ...
 }

@@ -385,7 +385,7 @@ Exit codes: `0` success, `1` error or validation failure.
 ```jsonc
 {
 //   — JSON Schema reference for IDE validation.
-  "$schema": "https://cdn.jsdelivr.net/npm/claude-prompts@5/config.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/claude-prompts@6/config.schema.json",
 
 //   — Which shape this config file is written in. `5` is the current format...
   "version": 5,
