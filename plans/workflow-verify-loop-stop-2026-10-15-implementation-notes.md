@@ -21,3 +21,10 @@ Worktree-only `npm ci --ignore-scripts` (claude-prompts 4.0.1 installed; package
 
 - **Accepted deviation:** keep-over-re-resolve, pinned by a test.
 - **Findings (no rows):** with two live scopes on one chain id, ralph-stop takes its no-identity path and blocks with the chain-continue reason, not the T3.5 attribution diagnostic — fails closed, no command, no borrow; if the server dies after the identity was recorded, the unpaused run is not live and its workflow row is not enforced (db_reader keeps a dead owner's row only when paused).
+
+## 2026-10-15 — V2 first native run: a defect no fixture saw
+
+Headless `claude -p` (2.1.299, Haiku, `--restricted` so only the branch hooks ran), branch server, `>>quick_decision … :: verify:"false" loop:true max:3`, never paused. The post hook recorded `run_identity` {organization_id: null, workspace_id: "cwd", continuity_scope_id: "cwd"}; the server filed `workflow-run-<uuid>` with scope {organizationId: "cwd", …}. ralph-stop found the row by key and refused it ("its scope is not the run's scope"), so `false` never ran at Stop; the session was held by the attribution fallback, whose reason (only the internal key) led the model to give up. Control run (no verify): no verify-state.db; held by the chain's gate-review reason. V1's fixture tests passed because they built both sides with matching scopes.
+
+- **R-V3 (ruled):** fix at the writer — stage 17 recorded the request scope (organizationId falls back to the workspace id, request-identity-resolver ~732) while run-registry stores `scope?.organizationId ?? null`; one run has one scope, so the verify row records the run's stored scope. The hook's strict comparison stays.
+- **Lesson:** the live probe is the check that matters for a cross-process join; the fixtures encoded the planner's assumption that both writers agree.
