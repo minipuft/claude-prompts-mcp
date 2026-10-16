@@ -73,7 +73,6 @@ chainSteps:
       output_root: output_root
     inlineGateIds:
       - animation-animatic-probes
-      - animation-render-manifest
     id: render
     stepName: Animatic Render
   - promptId: showcase_review

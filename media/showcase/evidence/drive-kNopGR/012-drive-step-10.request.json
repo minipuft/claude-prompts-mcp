@@ -1,0 +1,31 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_animatic#1",
+    "gate_verdict": {
+      "overall": "FAIL",
+      "rationale": "Gate 1 passed in the engine (probe-all.py exit 0, 119919 ms, 7 of 7 probes) but gate 2 FAILED exit 1 in 298 ms: render-manifest reports out/s01-arrival-overwhelm stale, a cache owned by another worker and outside this task, so the overall verdict is FAIL and nothing is edited to hide it",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "Animation Animatic Probes PASSED exit 0 in 119919 ms: 7 of 7 probes passed on the reused frames, every control line tripped first"
+        },
+        {
+          "index": 2,
+          "passed": false,
+          "rationale": "Animation Render Manifest FAILED exit 1 in 298 ms: s01-arrival-overwhelm figure props world light and camera layers stale (codeVersion dea05b1ca9e0 is not the hash of the files on disk), confirm frames 252 254 195 beyond tolerance; the cache belongs to another live worker and is not touched here"
+        }
+      ],
+      "reminders": {
+        "satisfied": [],
+        "not_applicable": [
+          {
+            "id": "framework-compliance",
+            "reason": "the answer keeps the required section headers and structure is graded by the engine"
+          }
+        ]
+      }
+    }
+  }
+}

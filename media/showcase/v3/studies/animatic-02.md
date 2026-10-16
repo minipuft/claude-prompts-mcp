@@ -115,3 +115,26 @@ Controls: the five probes that flipped from scaffold 01 beat their own controls 
 | `probe-all.txt` | 0d735fa84b55 |
 | `determinism-sample-60.txt`, `determinism-full-new-vs-old.txt` | 52d2ea782528, 83d18b6bfe0c |
 | `render-times.txt` | 2d767d169951 |
+
+## Split-form drive (2026-10-16)
+
+The first drive of this chain (`evidence/drive-qmh04w`, mailbox `mailbox/animatic-trail`) sent every reply as one call carrying both the answer and the verdict, and the server accepts that form without grading it, so steps 2 to 6 ran no shell check. This drive (`evidence/drive-kNopGR`, mailbox `mailbox/animatic-trail-split`) sent each answer alone and each verdict alone once the review rendered. Contracts and frames are the earlier run's (nothing re-rendered); whether two sessions render the same frames is still open (plan row 4.1).
+
+| Step | Shell block rendered | Command | Exit | Engine time | Verdict sent |
+| --- | --- | --- | --- | --- | --- |
+| 1 timeline | yes, on the first render and again after the answer | `probe-timeline.py v3/timeline.json` | 0 | 365 ms, 488 ms | PASS |
+| 2 blocking, planted copy (`arrival.json` without `clawd.x`) | yes | `probe-blocking.py v3/timeline.json v3/blocking` | 1 | 325 ms | FAIL |
+| 2 blocking, after the FAIL verdict (attempt 2 of 2) | yes | same | 1 | 327 ms | (held at the same step) |
+| 2 blocking, file restored, answer re-sent | yes | same | 0 | 251 ms | PASS |
+| 3 light | yes | `probe-colour.py --contract v3/light.json --timeline v3/timeline.json` | 0 | 316 ms | PASS |
+| 4 animatic, attempt 1 | yes | `probe-all.py out/animatic-seq ...` / `probe-render-manifest.py --all out` | 0 / 1 | 119919 ms / 298 ms | FAIL (gate 2) |
+| 4 animatic, attempt 2 | yes | same | 0 / 1 | 169655 ms / 391 ms | FAIL (gate 2) |
+| 4 animatic, retry limit | yes (a third run) | same | 0 / 1 | 130404 ms / 324 ms | `gate_action: "skip"` |
+| 5 rubric review | no (reminder only) | none | n/a | n/a | PASS, reminder attested not applicable |
+| 6 filing, attempts 1 and 2 | yes, but the engine refused to run it (`MCP_SHELL_VERIFY_ALLOWLIST` does not list the node command) | `node .../handoff-artifacts/check-artifacts.js` | -1 | 0 ms | FAIL twice, then `gate_action: "skip"` |
+
+The planted refusal: with `clawd.x` removed, the engine ran the gate itself after the plain answer (`FAILED`, exit 1, `FAIL actors positioned and scaled: beat 'arrival': actor 'clawd' has no position (x, y)`), rendered the review with the failing line, and held the chain on the same step when the honest FAIL verdict arrived (attempt 2 of 2, `Gates you marked FAIL`). The file was restored (`cmp` against `~/.cache/animatic-split/before/arrival.json`: identical), the answer re-sent, the gate re-run by the engine (exit 0, 251 ms) and the chain advanced. A PASS verdict sent over the failing run was not tried.
+
+Gate 2 of step 4 (`probe-render-manifest.py --all out`) failed on `out/s01-arrival-overwhelm`: five layers stale against the renderer source (`codeVersion dea05b1ca9e0`) and confirm frames 252, 254 and 195 over tolerance. That cache belongs to the live s01 render, so it was not touched; after two attempts the engine showed `Retry Limit Reached`, naming `animation-animatic-probes` and `framework-compliance` as well as the manifest gate although both passed, and the drive continued with `gate_action: "skip"`.
+
+Step 6's check was therefore never run by the engine; run by hand on the reply it printed `ok` for all five paths (exit 0) and exited 1 on empty input. The chain ended `Chain complete (6/6)` after two skips (steps 4 and 6). Drive: 19 mailbox steps; receipts `evidence/drive-kNopGR`; mailbox `mailbox/animatic-trail-split`.
