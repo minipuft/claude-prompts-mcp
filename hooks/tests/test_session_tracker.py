@@ -213,3 +213,17 @@ class TestVerdictParameterGuidance:
         assert "Use FAIL" in message
         assert "returned server template for per_gate, reminders and semantic evaluation" in message
         assert "GATE_REVIEW" not in message
+
+    @pytest.mark.parametrize("mode", ["full", "inline"])
+    def test_pause_replaces_the_verdict_request_and_resume_restores_it(self, mode):
+        from session_state import format_chain_reminder, format_pause_directive
+
+        identity = {"run_id": "r", "chain_id": "chain-demo#1", "organization_id": None, "workspace_id": None}
+        resumed = {"chain_id": "chain-demo#1", "current_step": 1, "total_steps": 2, "pending_gate": "code-quality"}
+        paused = {**resumed, "run_identity": {**identity, "continuity_scope_id": "w"}, "pause_custody": "owned"}
+        paused["conversation_pause"] = {"kind": "conversation", "node_id": "n1", "paused_at": 1}
+        message = format_chain_reminder(paused, mode)
+        assert message == format_pause_directive(paused)
+        assert 'gate_action:"resume"' in message and "gate_verdict" not in message
+        assert format_pause_directive(resumed) is None
+        assert "gate_verdict=" in format_chain_reminder(resumed, mode)

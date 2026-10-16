@@ -174,6 +174,27 @@ def pause_recovery_guidance(state: ChainState | None) -> str | None:
     return None
 
 
+def format_pause_directive(state: ChainState | None) -> str | None:
+    """The one instruction every hook renders while this conversation's run is paused, or None.
+
+    An owned exact pause gets discussion plus the explicit resume/abort calls; any other tracked
+    pause gets the recovery guidance. Either way it replaces the continue, fix and verdict
+    instructions, which a paused run refuses until an explicit resume.
+    """
+    if not state or "conversation_pause" not in state:
+        return None
+    identity = exact_run_identity(state.get("run_identity"))
+    chain_id = identity["chain_id"] if identity else state.get("chain_id", "")
+    step, total = state.get("current_step", 0), state.get("total_steps", 0)
+    head = f"Workflow paused for conversation{f' at step {step} of {total}' if step and total else ''}: `{chain_id}`."
+    if not holds_pause_exemption(state, identity):
+        return f"{head} {PAUSE_RECOVERY_GUIDANCE}"
+    return (
+        f"{head} Discuss with the user; resume explicitly with "
+        f'prompt_engine(chain_id:"{chain_id}", gate_action:"resume") or end it with gate_action:"abort".'
+    )
+
+
 def _fallback_interrupt_exits() -> list[str]:
     """Parameter-level exits for an interrupt whose verb list was not captured.
 
@@ -412,6 +433,9 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
         state: Chain state to format
         mode: "full" for compact-recovery (multi-line), "inline" for prompt-suggest (two-line)
     """
+    paused = format_pause_directive(state)
+    if paused:
+        return paused
     chain_id = state.get("chain_id", "")
     step = state["current_step"]
     total = state["total_steps"]
@@ -467,6 +491,9 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
 
 def format_gate_directive(state: ChainState) -> str:
     """Render the pending hold's instruction without offering a gate verdict for an interrupt."""
+    paused = format_pause_directive(state)
+    if paused:
+        return paused
     chain_id = state.get("chain_id", "")
     gate = state.get("pending_gate")
     if gate == UNKNOWN_INTERRUPT_LABEL:

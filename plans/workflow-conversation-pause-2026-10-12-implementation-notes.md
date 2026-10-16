@@ -278,3 +278,12 @@ The owner ruled on 2026-10-15 to fix, before 6.0.0, the three post-prompt-engine
 
 - **Defect → C2:** `exact_run_identity` (session_state.py ~124-130) validates the two scope keys with `raw.get(key, "")` and then builds with `raw[key]`, so a stored identity missing them raises KeyError and crashes gate-enforce/delegation-enforce instead of failing closed. Reachable only through legacy or hand-written rows; fixed in C2 (session_state.py is T3.4's file until it lands).
 - **To check at the P3 boundary:** a teardown error in `test_verify_state_schema_parity.py::test_session_id_is_the_primary_key_on_both_sides` during a full run while two workers ran pytest; passes alone.
+
+### T3.4 accepted (2026-10-15)
+
+`format_pause_directive(state)` in session_state.py; `format_chain_reminder` and `format_gate_directive` return it whenever a pause is tracked, so no renderer can bring back a continue/fix/verdict CTA. The wording keeps the run identity (`Workflow paused for conversation at step N of M: <chain>.`) to stay compatible with two existing assertions.
+
+- **R-T3.4-TURN (ruled):** once per user turn stays; once per pause would make prompt-suggest write state.
+- **R-T3.4-UNCONFIRMED (ruled, overrides the row's fail-closed reading):** failing closed means no exemption, not hiding the call — unconfirmed guidance shows the resume/abort calls (the server validates them); retained guidance keeps the claim instructions. → C2.
+- **Defect → C2:** the post-prompt-engine text path saves a freshly parsed state with no pause check, so an unrelated gated prompt run during the discussion erases `conversation_pause` and `run_identity`.
+- **DEV-T3-1 (planner):** the T3.3/T3.4 briefs did not announce C1 as a concurrent server writer; the tree-state guard's teardown error in both full-suite runs was C1's edits, not a defect.

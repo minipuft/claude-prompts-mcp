@@ -30,6 +30,7 @@ from session_state import (
     UNKNOWN_INTERRUPT_LABEL,
     ChainState,
     exact_run_identity,
+    format_pause_directive,
     holds_pause_exemption,
     interrupt_exits,
     is_subagent_payload,
@@ -51,14 +52,7 @@ def paused_instruction(state: ChainState | None, chain_id: str) -> str | None:
     identity = exact_run_identity(state.get("run_identity")) if state else None
     if not state or identity is None or identity["chain_id"] != chain_id or not holds_pause_exemption(state, identity):
         return None
-    step, total = state.get("current_step", 0), state.get("total_steps", 0)
-    at = f" at step {step} of {total}" if step and total else ""
-    return (
-        f"Workflow paused for conversation{at}: `{chain_id}`. This call would change the run, so it "
-        "was not sent. Discuss with the user; when ready, resume explicitly with "
-        f'prompt_engine(chain_id:"{chain_id}", gate_action:"resume") and follow the action it returns '
-        'in a separate call, or end the run with gate_action:"abort".'
-    )
+    return format_pause_directive(state)
 
 
 def parse_hook_input() -> dict:

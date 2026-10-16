@@ -38,7 +38,13 @@ from cache_manager import (
 from config_loader import is_expanded_output
 from db_reader import load_recoverable_chain_state
 from operators import annotate_prompt_references, detect_operator, has_chain_delimiter
-from session_state import UNKNOWN_INTERRUPT_LABEL, ChainState, format_chain_reminder, format_gate_directive
+from session_state import (
+    UNKNOWN_INTERRUPT_LABEL,
+    ChainState,
+    format_chain_reminder,
+    format_gate_directive,
+    format_pause_directive,
+)
 
 
 def format_arguments(prompt_id: str) -> dict[str, str]:
@@ -693,6 +699,12 @@ def main():
     # Session-scoped: only the chain this conversation recorded is enforced;
     # an unscoped state.db read here injected other clients' chains.
     session_state: ChainState | None = load_recoverable_chain_state(session_id)  # type: ignore[assignment]
+    paused = format_pause_directive(session_state)
+    if paused:
+        # A paused run refuses work until an explicit resume, so this turn carries the pause
+        # directive once and no continue/fix/verdict instruction.
+        emit_hook_response(paused, native_context=paused)
+        sys.exit(0)
     if session_state:
         chain_id = session_state.get("chain_id", "")
         step = session_state.get("current_step", 0)
