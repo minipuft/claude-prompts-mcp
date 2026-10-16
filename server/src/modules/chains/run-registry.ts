@@ -33,7 +33,7 @@ import type {
 } from '#shared/types/chain-session.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 
-import { isTerminalRunStatus } from '#shared/types/chain-session.js';
+import { isConversationPaused, isTerminalRunStatus } from '#shared/types/chain-session.js';
 import { stripRunNumber } from '#shared/utils/chain-id-codec.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
@@ -278,18 +278,22 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     const organizationId = scope?.organizationId ?? null;
     const workspaceId = scope?.workspaceId ?? null;
 
-    const retained = this.protectedPauseIds(runOwnerPid);
-    for (const session of sessions)
-      if (session.conversationPause === undefined || isTerminalRunStatus(session.runStatus))
-        retained.delete(session.sessionId);
-    const removable = `run_owner_pid = ? AND session_id NOT IN (SELECT value FROM json_each(?))`;
-    const selection = [runOwnerPid, JSON.stringify([...retained])];
-    this.db.run(
-      `DELETE FROM chain_run_nodes
-        WHERE session_id IN (SELECT session_id FROM chain_runs WHERE ${removable})`,
-      selection
+    // A stored paused run survives unless memory holds it unpaused or terminal. The DELETE decides
+    // that itself, so the transaction's first statement is a write: reading the protected ids
+    // first would make this DEFERRED persist read-then-write (transaction-lock-mode test).
+    const released = sessions.filter((session) => !isConversationPaused(session));
+    this.deleteUnprotectedRuns(
+      runOwnerPid,
+      released.map((session) => session.sessionId)
     );
-    this.db.run(`DELETE FROM chain_runs WHERE ${removable}`, selection);
+    // Whatever this owner still has after the DELETE is a retained paused run: keep it as stored.
+    const retained = new Set(
+      this.db
+        .query<{
+          session_id: string;
+        }>('SELECT session_id FROM chain_runs WHERE run_owner_pid = ?', [runOwnerPid])
+        .map((row) => row.session_id)
+    );
 
     // A run another owner has claimed (2A) still sits in this process's memory until the next
     // persist — which is now. Its row survived the owner-scoped DELETE above because the claim
@@ -542,35 +546,48 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     );
   }
 
-  private protectedPauseIds(ownerPid: string): Set<string> {
-    const rows = this.db.query<{ session_id: string; state: string; run_status: ChainRunStatus }>(
-      'SELECT session_id, state, run_status FROM chain_runs WHERE run_owner_pid = ?',
-      [ownerPid]
+  /**
+   * Delete `ownerPid`'s runs except a nonterminal paused one, unless its id is in `released`.
+   *
+   * Protection is decided in SQL, not by a SELECT beforehand, so a caller inside a DEFERRED
+   * transaction issues a write first. `json_type` is non-NULL for any present key, JSON `null`
+   * included, matching `parseResidual(state).conversationPause !== undefined`; the `json_valid`
+   * guard reads an undecodable document as unpaused, as `parseResidual` does.
+   */
+  private deleteUnprotectedRuns(ownerPid: string, released: readonly string[]): void {
+    const removable = `run_owner_pid = ? AND (session_id IN (SELECT value FROM json_each(?))
+      OR NOT (run_status NOT IN (SELECT value FROM json_each(?))
+        AND CASE WHEN json_valid(state) THEN json_type(state, '$.conversationPause') END
+          IS NOT NULL))`;
+    const selection = [ownerPid, JSON.stringify(released), TERMINAL_RUN_STATUS_JSON];
+    this.db.run(
+      `DELETE FROM chain_run_nodes
+        WHERE session_id IN (SELECT session_id FROM chain_runs WHERE ${removable})`,
+      selection
     );
-    return new Set(
-      rows
-        .filter(
-          (row) =>
-            parseResidual(row.state).conversationPause !== undefined &&
-            !isTerminalRunStatus(row.run_status)
-        )
-        .map((row) => row.session_id)
-    );
+    this.db.run(`DELETE FROM chain_runs WHERE ${removable}`, selection);
   }
 
   deleteRunsForOwners(ownerPids: readonly string[]): void {
-    for (const pid of ownerPids) {
-      const removable = `run_owner_pid = ? AND session_id NOT IN (SELECT value FROM json_each(?))`;
-      const selection = [pid, JSON.stringify([...this.protectedPauseIds(pid)])];
-      this.db.run(
-        `DELETE FROM chain_run_nodes
-          WHERE session_id IN (SELECT session_id FROM chain_runs WHERE ${removable})`,
-        selection
-      );
-      this.db.run(`DELETE FROM chain_runs WHERE ${removable}`, selection);
-    }
+    for (const pid of ownerPids) this.deleteUnprotectedRuns(pid, []);
   }
 }
+
+/**
+ * Every run status, so the terminal set can be bound into SQL. A `Record` keyed by the union makes
+ * a status added to `ChainRunStatus` a compile error here; which ones are terminal stays
+ * `isTerminalRunStatus`'s answer.
+ */
+const RUN_STATUSES: Record<ChainRunStatus, true> = {
+  working: true,
+  input_required: true,
+  completed: true,
+  failed: true,
+  cancelled: true,
+};
+const TERMINAL_RUN_STATUS_JSON = JSON.stringify(
+  (Object.keys(RUN_STATUSES) as ChainRunStatus[]).filter(isTerminalRunStatus)
+);
 
 type RunRowNamespace = {
   runOwnerPid: string;

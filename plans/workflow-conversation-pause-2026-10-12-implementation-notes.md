@@ -221,3 +221,7 @@ Two derivations of request scope existed: launch-aware `resolveRequestIdentityCo
 - **R-T1.3-NOSCOPE verdict:** its premise held for claim (already launch-aware); the paused mint did not hold it and now does.
 - **R-T2.8-ABORT (accepted, behavior change):** a scopeless abort previously passed `undefined` scope and skipped the mutation scope check, so any workspace could abort any run in the shared state.db; it now resolves the launch scope and a foreign run is refused. Named in the PR body.
 - **Findings (no rows):** an in-process call with absent/non-object `sdkExtra` still resolves to no scope (F20 pins that for claim) while stage 03 resolves the launch scope — MCP always passes an object; `serving-unit-scope.ts:80` is a third claims-only derivation with its own launch fallback (not pause work, R192); a second pause after resume returns the same token, which is the plan's "pause preserves an existing credential".
+
+### B2 — #493 CI failure (2026-10-15)
+
+CI on #493: 1 of 1869 failed on both Node versions — `tests/integration/database/transaction-lock-mode` expects deferred step persists to write first; T1.2's `protectedPauseIds()` SELECT ran first. Fixed in the DELETE's own predicate (a nonterminal row whose state carries `conversationPause`, guarded by `json_valid`), shared with `deleteRunsForOwners`. No pause row's own check covered `tests/integration/database`; and a full `tests/integration` run after a src edit needs a fresh `npm run build`, or `structured-gate-verdict-flow` refuses 24 cases as stale dist.
