@@ -1,0 +1,50 @@
+{
+  "kind": "read-only source audit; no test execution or live-client validation",
+  "source_root": "/home/minipuft/Applications/cloudySky",
+  "files": [
+    {
+      "path": "src/features/color/PaletteCoordinator.ts",
+      "sha256": "75895b4f74776fbb01ee16f70cf87311b0df4160afa6826feaa0887ed67d5ade"
+    },
+    {
+      "path": "src/features/color/ColorMaster.ts",
+      "sha256": "1e6e912f081ef9e1e72180b7993d9c733004c34c2eca4b9213f69fe097348ccf"
+    },
+    {
+      "path": "src/features/color/utils/colorOdt.ts",
+      "sha256": "f28aa47ff85579643ae1439a0d89a0b6b393e8f0159761264d06316954d40f57"
+    },
+    {
+      "path": "src/features/color/utils/gradientColors.ts",
+      "sha256": "ec56a5ba7f347f045f16a2dbaabfcb41bac4f36282ea306a3ca31ab167bb7271"
+    },
+    {
+      "path": "src/features/visual/effects/HDRRenderPipeline.ts",
+      "sha256": "7e46e3bfa78beec300daa51e52ad8817a4812bf9a240367a9f14e85780e19734"
+    },
+    {
+      "path": "src/features/visual/transitions/conductor.ts",
+      "sha256": "0e56e447e27212852b8b98d80c8443948eaf6f0fc89c12f3412810b763503f8b"
+    },
+    {
+      "path": "src/features/visual/tuning/tunables.ts",
+      "sha256": "faa5a80b00a92e348bce1faf326f8feeefd090fbf1aa1a5a3aff81d348b10c8c"
+    },
+    {
+      "path": "src/shaders/composeOperatorGlsl.ts",
+      "sha256": "2cecd249a0fdf1d0ef7f98220c952e3cd7c287d90e7afb014d7360e540e6b2ab"
+    },
+    {
+      "path": "tools/cdp/color.mjs",
+      "sha256": "da0524e9f7fca1488d7e2aea0240b2000c94bdf832593c25385cb4a400f4b942"
+    },
+    {
+      "path": "docs/DESIGN_BIBLE.md",
+      "sha256": "6cdb43d8ef8237d7c1968cd0068e39cb48661803d3c52ba06478c2d10e2442cc"
+    },
+    {
+      "path": "tests/unit/features/color/colorOdt.test.ts",
+      "sha256": "29550b00fccb268f94cfaca48f9ea53e94eff7a8fbcd2c52da4e11b621bbaead"
+    }
+  ]
+}
