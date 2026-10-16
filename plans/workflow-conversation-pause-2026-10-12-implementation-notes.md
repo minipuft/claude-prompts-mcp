@@ -222,6 +222,14 @@ Two derivations of request scope existed: launch-aware `resolveRequestIdentityCo
 - **R-T2.8-ABORT (accepted, behavior change):** a scopeless abort previously passed `undefined` scope and skipped the mutation scope check, so any workspace could abort any run in the shared state.db; it now resolves the launch scope and a foreign run is refused. Named in the PR body.
 - **Findings (no rows):** an in-process call with absent/non-object `sdkExtra` still resolves to no scope (F20 pins that for claim) while stage 03 resolves the launch scope — MCP always passes an object; `serving-unit-scope.ts:80` is a third claims-only derivation with its own launch fallback (not pause work, R192); a second pause after resume returns the same token, which is the plan's "pause preserves an existing credential".
 
-### B2 — #493 CI failure (2026-10-15)
+### P3 opens (2026-10-15)
 
-CI on #493: 1 of 1869 failed on both Node versions — `tests/integration/database/transaction-lock-mode` expects deferred step persists to write first; T1.2's `protectedPauseIds()` SELECT ran first. Fixed in the DELETE's own predicate (a nonterminal row whose state carries `conversationPause`, guarded by `json_valid`), shared with `deleteRunsForOwners`. No pause row's own check covered `tests/integration/database`; and a full `tests/integration` run after a src edit needs a fresh `npm run build`, or `structured-gate-verdict-flow` refuses 24 cases as stale dist.
+- **R-P3-STACK:** P3 runs on `feat/conversation-pause-hooks`, stacked on #493's branch, while #493 is in CI. After #493 squash-merges, the P3 commits are cherry-picked onto main (as P1 was): P3 touches hooks plus one server projection, none of it in files #493 changes after its head.
+- **T3.0 (new row):** the consequence trace lists `collectActiveSessionRows` among the pause publishers, but no row covered it — `chain_sessions.state` carries step, review and shell verification, and no pause or obligation. Every T3 row reads that projection, so T3.0 precedes T3.1.
+
+### T3.0 accepted (2026-10-15)
+
+`projectPauseForHooks` appends `conversationPause` {kind, nodeId, pausedAt} and `owed` [{kind, nodeId, step, review?{kind, phase}}] (from `deriveObligations`, now exported) to `chain_sessions.state` only for a paused run. The brief's premise that dormant paused runs were already projected was false — `collectActiveSessionRows` skipped every non-canonical run before reaching `isSessionActiveForHooks`; the filter now admits a dormant run only when paused (R-T3.0-DORMANT, consistent with T1.2 and T2.4a).
+
+- **T3.0a (new row):** a paused claim skips `persistMutation`, so the claimer's projection is absent until a later write.
+- **For T3.1:** a dead owner's paused `chain_sessions` row is deleted by the next server's `cleanupStalePidRows` (no paused exception) while its `chain_runs` row is retained; no live process re-projects it until a claim. `v_execution_status` json-extracts a fixed key list without the pause, so hooks read `cs.state` directly (no DDL). Hook tolerance of the extra keys is inferred from `.get()` access, not measured — T3.1's fixtures use a branch-written projection.

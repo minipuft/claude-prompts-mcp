@@ -61,6 +61,7 @@ import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.
 // Single owner of unknowns-ledger transition rules. Imported rather than restated here so
 // the rules cannot drift between the capture seam that validates and the store that persists.
 import { computeUnknownLedger } from '#engine/execution/capture/unknown-observation-processor.js';
+import { deriveObligations } from '#engine/execution/formatting/conversation-control-response.js';
 import { resolveShownReview } from '#engine/execution/pipeline/decisions/gates/review-target.js';
 import { PHASE_GUARD_GATE_ID } from '#engine/execution/pipeline/decisions/gates/structural-review-composition.js';
 import { investigatedUnknownIds } from '#engine/execution/pipeline/decisions/mutation/mutation-policy.js';
@@ -1065,7 +1066,7 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
-   * Collect active canonical sessions that need hook visibility.
+   * Collect active canonical sessions, and paused dormant ones, that need hook visibility.
    * A session is "active" while its run is not complete (`isSessionActiveForHooks`).
    */
   private collectActiveSessionRows(): Array<{
@@ -1085,7 +1086,9 @@ export class ChainSessionStore implements ChainSessionService {
       runCompletedAt: number | null;
     }> = [];
     for (const session of this.activeSessions.values()) {
-      if (session.lifecycle !== 'canonical') continue;
+      // A paused run is projected whatever its lifecycle: a dormant one (loaded at startup,
+      // claimed, or paused before promotion) is waiting on the person, and a hook must see that.
+      if (session.lifecycle !== 'canonical' && !isConversationPaused(session)) continue;
       if (!this.isSessionActiveForHooks(session)) continue;
       const runStatus = session.runStatus;
       const shownNodeId = resolveShownReview(session);
@@ -1113,6 +1116,7 @@ export class ChainSessionStore implements ChainSessionService {
           pendingShellVerification: session.pendingShellVerification ?? null,
           runStatus,
           runCompletedAt: session.runCompletedAt ?? null,
+          ...projectPauseForHooks(session),
         }),
       });
     }
@@ -3527,6 +3531,26 @@ type ConversationControlValue =
 
 function createHandoffToken(): string {
   return `hnd_${randomBytes(20).toString('base64url')}`;
+}
+
+/**
+ * The hook projection's pause keys: `conversationPause` and `owed` (what the reply packet's
+ * `deriveObligations` says the run owes), present only while the run is conversation-paused, so
+ * an unpaused row's document keeps its exact key set. Every field is picked by name, never spread
+ * off the session, which carries the recovery credential. PURE.
+ */
+function projectPauseForHooks(session: ChainSession): Record<string, unknown> {
+  const pause = session.conversationPause;
+  if (pause === undefined || !isConversationPaused(session)) return {};
+  return {
+    conversationPause: { kind: pause.kind, nodeId: pause.nodeId, pausedAt: pause.pausedAt },
+    owed: deriveObligations(session).map(({ kind, nodeId, step, review }) => ({
+      kind,
+      nodeId,
+      step,
+      ...(review === undefined ? {} : { review: { kind: review.kind, phase: review.phase } }),
+    })),
+  };
 }
 
 type ConversationControlMutationResult<T> =

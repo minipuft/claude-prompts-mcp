@@ -91,9 +91,10 @@ function obligationOfReview(review: GateReview): ConversationObligation['kind'] 
 /**
  * Every obligation the snapshot holds: open reviews, a pending shell verification, unreported
  * detached nodes (`unreportedDetachedNodeIds`, the one derivation), and the current step itself
- * when nothing else is held on it. PURE.
+ * when nothing else is held on it. The reply packet and the `chain_sessions` hook projection both
+ * read it, so a hook and a reply cannot disagree about what a paused run owes. PURE.
  */
-function deriveObligations(session: ControlRunSnapshot): ConversationObligation[] {
+export function deriveObligations(session: ControlRunSnapshot): ConversationObligation[] {
   const { nodes, currentNodeId, stepStates } = session.state;
   const at = (kind: ConversationObligation['kind'], nodeId: string): ConversationObligation => ({
     kind,

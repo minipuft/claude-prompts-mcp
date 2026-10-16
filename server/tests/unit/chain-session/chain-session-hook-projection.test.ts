@@ -11,7 +11,11 @@
  * the fixture, not that the pipeline's own sessions still project the same way.
  */
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
+import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
@@ -490,6 +494,96 @@ describe('chain session store — DatabasePort at construction', () => {
     expect(registry).toBeDefined();
     expect(internals(store).runRegistry).toBe(registry);
     expect(loadSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * A conversation pause in the projection (T3.0), read back from a real `chain_sessions` table:
+ * the pause and its obligations appear only while paused, and no credential appears at all.
+ */
+describe('chain_sessions hook projection — conversation pause', () => {
+  const SCOPE = 'scope-hook-pause';
+  const HOOK_KEYS = 'chainId currentStep currentStepReview lastActivity pendingShellVerification'
+    .concat(' runCompletedAt runStatus sessionId totalSteps')
+    .split(' ');
+  let tmpRoot: string;
+  let engine: SqliteEngine;
+  let store: ChainSessionStore;
+
+  const control = () => store.getConversationControlScope(SCOPE);
+  const held = (id: string): ChainSession => (store as any).activeSessions.get(id);
+  const hookRow = (id: string): string | undefined =>
+    engine.queryOne<{ state: string }>(
+      `SELECT state FROM chain_sessions WHERE json_extract(state, '$.sessionId') = ?`,
+      [id]
+    )?.state;
+  const seed = async (id: string): Promise<void> => {
+    await store.createSession(id, `chain-${id}`, 3, {}, { continuityScopeId: SCOPE });
+    await store.setReview(id, { nodeId: 'n1', kind: 'gate', phase: 'awaiting-verdict' } as any);
+  };
+
+  beforeEach(async () => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-pause-'));
+    const dbPath = path.join(tmpRoot, 'runtime-state', 'state.db');
+    engine = await SqliteEngine.getInstance(createLogger() as any, { dbPath });
+    await engine.initialize();
+    jest
+      .spyOn(ChainSessionStore.prototype as any, 'startCleanupScheduler')
+      .mockReturnValue(undefined);
+    const options = { cleanupIntervalMs: 1000, defaultScope: { continuityScopeId: 'hook-pause' } };
+    store = new ChainSessionStore(
+      createLogger(),
+      new StubTextReferenceStore() as any,
+      options,
+      engine
+    );
+    await (store as any).initPromise;
+  });
+
+  afterEach(async () => {
+    await store.cleanup();
+    await engine.shutdown();
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+    jest.restoreAllMocks();
+  });
+
+  test('a paused row carries the pause and what it owes, never the credential; resume restores it', async () => {
+    await seed('p');
+    const before = hookRow('p')!;
+    expect(Object.keys(JSON.parse(before)).sort()).toEqual(HOOK_KEYS);
+    const paused = await store.pauseConversation('p', control());
+    if (paused.outcome !== 'paused') throw new Error(`expected paused, got ${paused.outcome}`);
+
+    const wholeTable = JSON.stringify(engine.query('SELECT * FROM chain_sessions'));
+    expect(wholeTable).not.toContain(paused.token);
+    expect(wholeTable).not.toContain('handoffToken');
+    const state = JSON.parse(hookRow('p')!) as Record<string, unknown>;
+    expect(Object.keys(state).sort()).toEqual([...HOOK_KEYS, 'conversationPause', 'owed'].sort());
+    const { pausedAt } = held('p').conversationPause!;
+    expect(state['conversationPause']).toEqual({ kind: 'conversation', nodeId: 'n1', pausedAt });
+    expect(state['owed']).toEqual([
+      {
+        kind: 'review',
+        nodeId: 'n1',
+        step: 1,
+        review: { kind: 'gate', phase: 'awaiting-verdict' },
+      },
+    ]);
+
+    expect((await store.resumeConversation('p', control())).outcome).toBe('resumed');
+    expect(hookRow('p')).toBe(before);
+  });
+
+  test('a dormant paused run is projected; a dormant unpaused run stays out', async () => {
+    await seed('dormant-paused');
+    await seed('dormant-plain');
+    held('dormant-paused').lifecycle = 'dormant';
+    held('dormant-plain').lifecycle = 'dormant';
+    await store.pauseConversation('dormant-paused', control());
+
+    expect(JSON.parse(hookRow('dormant-paused')!)).toHaveProperty('conversationPause.nodeId', 'n1');
+    expect(hookRow('dormant-plain')).toBeUndefined();
+    expect(held('dormant-paused').lifecycle).toBe('dormant');
   });
 });
 
