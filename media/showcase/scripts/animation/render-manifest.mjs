@@ -9,8 +9,11 @@
 //   world   the title lockup (the beat's contracts and the mark)
 //   light   the lamp's core and the grain over the picture (chart, light contract, staging)
 //   camera  the pose of every frame (layout, chart span); it is baked into the drawings of every layer under it, so it is part of each drawing's id and has no drawings of its own
+//           (resampling a drawing made at the identity camera does not match the browser's own raster at any zoom but 1: scripts/animation/README.md "Render cache", Camera)
 // A drawing's id is the hash of its projection: two frames whose projection is the same JSON draw the same pixels. A layer's `inputsHash` is the hash of the files it reads (a
 // path, or `path#a.b` for one subtree of a JSON file) and of the renderer's source closure; scripts/animation/probe-render-manifest.py recomputes it from the files on disk.
+// A layer's `cacheKey` is the hash of the inputs a DRAWING reads at draw time, the layer's inputs less its `projectionOnly` ones: a file that only shapes the projection (the key and pose sheets
+// of the figure) is already in the drawing's id through the joints it produced, so editing it names the layer stale but redraws only the drawings whose projection changed.
 // This module only computes: `render-cached.mjs` renders what the cache lacks and writes the manifest with the output hashes.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -48,6 +51,8 @@ const SHOTS = {
     codeEntries: ['src/scenes/ShotS01.tsx', 'src/scenes/shotS01Passes.ts'],
     layers: (shot) => ({
       figure: {
+        // the film's draw reads the parts, the mesh and the skeleton; the pose sheet and the key sheet only produce the joints in the projection, and the key plates (plates.json, K<n>.png) are the sheet's own pictures, which no composition here loads
+        projectionOnly: [`v3/poses/${shot}.json`, `v3/keys/${shot}.json`, `assets/human/keys/${shot}/plates.json`, ...walk(path.join(root, `assets/human/keys/${shot}`)).filter((f) => f.endsWith('.png')).map(rel)],
         files: ['assets/human/mesh.json', 'assets/human/skeleton.json', `v3/poses/${shot}.json`, `v3/keys/${shot}.json`, `assets/human/keys/${shot}/plates.json`, ...walk(path.join(root, `assets/human/keys/${shot}`)).filter((f) => f.endsWith('.png')).map(rel), ...walk(path.join(root, 'assets/human/families/home/parts')).map(rel), ...walk(path.join(root, 'public/assets/human/families/home/parts')).map(rel), `${'v3/layouts'}/${shot}.json#staging.human`],
       },
       // the back (props, field and the light under them) is one drawing, so `props` reads what those three read; `light` is the lamp's core and the grain over the picture; `world` the title lockup and the beat's contracts
@@ -77,7 +82,7 @@ export const computeManifest = async (shot) => {
   const cfg = SHOTS[shot];
   if (!cfg) throw new Error(`render-manifest: no renderer wiring for shot ${shot} (known: ${Object.keys(SHOTS).join(', ')})`);
   const mod = await loadTs(cfg.passes);
-  const {PASSES, PASS_LAYER, projectFrame, SHOT_FRAMES} = mod;
+  const {PASSES, PASS_LAYER, projectFrame, SHOT_FRAMES, magnifiedChangeOf} = mod;
   const [first, last] = SHOT_FRAMES;
   const closure = await sourceClosure(cfg.codeEntries);
   const declared = cfg.layers(shot);
@@ -90,13 +95,17 @@ export const computeManifest = async (shot) => {
   const layers = {};
   for (const [name, spec] of Object.entries(declared)) {
     const inputs = {...Object.fromEntries([...new Set(spec.files)].sort().map((f) => [f, inputHash(f)])), [`code:${codeVersion.slice(0, 16)}`]: codeVersion};
-    layers[name] = {inputs, inputsHash: hashInputs(inputs), drawings: [], projections: {}, outputHash: null, status: null};
+    const projectionOnly = [...new Set(spec.projectionOnly ?? [])].filter((f) => f in inputs).sort();
+    const drawingInputs = Object.fromEntries(Object.entries(inputs).filter(([k]) => !projectionOnly.includes(k)));
+    layers[name] = {inputs, inputsHash: hashInputs(inputs), projectionOnly, cacheKey: hashInputs(drawingInputs), drawings: [], projections: {}, outputHash: null, status: null};
   }
   const byId = new Map();
   const frames = [];
+  let previous = null;
   for (let frame = first; frame < last; frame++) {
     const {passes, params} = projectFrame(frame);
-    const row = {frame, layers: {figure: [], props: [], world: [], light: [], camera: []}, camera: camOf(passes.figure.camera), params};
+    const row = {frame, layers: {figure: [], props: [], world: [], light: [], camera: []}, camera: camOf(passes.figure.camera), magnification: Math.round(magnifiedChangeOf(previous, passes) * 1e4) / 1e4, params};
+    previous = passes;
     for (const pass of PASSES) {
       const p = passes[pass];
       if (!p) continue;
@@ -120,7 +129,7 @@ export const computeManifest = async (shot) => {
 /** The manifest as written: layers without their projections (the renderer's input, not part of the record) and without the wiring. */
 export const manifestDocument = (m, extra = {}) => ({
   shot: m.shot, fps: m.fps, range: m.range, codeVersion: m.codeVersion, codeFiles: m.codeFiles,
-  layers: Object.fromEntries(Object.entries(m.layers).map(([k, l]) => [k, {inputs: l.inputs, inputsHash: l.inputsHash, drawings: l.drawings, outputHash: l.outputHash, status: l.status, ...(l.counts ? {counts: l.counts} : {})}])),
+  layers: Object.fromEntries(Object.entries(m.layers).map(([k, l]) => [k, {inputs: l.inputs, inputsHash: l.inputsHash, projectionOnly: l.projectionOnly, cacheKey: l.cacheKey, drawings: l.drawings, outputHash: l.outputHash, status: l.status, ...(l.counts ? {counts: l.counts} : {})}])),
   frames: m.frames, ...extra,
 });
 

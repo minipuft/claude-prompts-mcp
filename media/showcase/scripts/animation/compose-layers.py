@@ -34,7 +34,7 @@ def ingest_one(it):
     else:
         y0, x0 = nz.min(axis=0); y1, x1 = nz.max(axis=0) + 1
         crop, box = img.crop((int(x0), int(y0), int(x1), int(y1))), (int(x0), int(y0), int(x1 - x0), int(y1 - y0))
-    tmp = it["dst"] + ".part"; crop.save(tmp, format="PNG", compress_level=6); os.replace(tmp, it["dst"])
+    tmp = it["dst"] + ".part"; crop.save(tmp, format="PNG", compress_level=3); os.replace(tmp, it["dst"])
     return it["id"], {"x": box[0], "y": box[1], "w": box[2], "h": box[3], "sha256": sha_file(it["dst"])}
 
 
@@ -80,7 +80,7 @@ def compose_frame(job, row):
 
 def write_png(path, arr):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".part"; Image.fromarray(arr).save(tmp, format="PNG", compress_level=6); os.replace(tmp, path)
+    tmp = path + ".part"; Image.fromarray(arr).save(tmp, format="PNG", compress_level=1); os.replace(tmp, path)
     return sha_file(path)
 
 
@@ -100,7 +100,8 @@ def compose_rows(args):
 
 def cmd_compose(job):
     rows = job["rows"]; n = job.get("workers", 8)
-    chunks = [(job, rows[i::n]) for i in range(n)]
+    size = -(-len(rows) // n)                    # contiguous runs: consecutive frames hold the same drawings, which a worker keeps in its cache
+    chunks = [(job, rows[i * size:(i + 1) * size]) for i in range(n)]
     with ProcessPoolExecutor(max_workers=n) as ex:
         results = [r for part in ex.map(compose_rows, chunks) for r in part]
     return {"frames": results}

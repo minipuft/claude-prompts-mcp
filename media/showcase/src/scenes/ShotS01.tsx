@@ -13,7 +13,7 @@ import {Sprite} from '../library/Sprite';
 import {identity, roleVars, s01Turrell, settled} from '../library/tokens';
 import {FlatFigure} from '../library/worlds/parts';
 import {PIECE_SIZE, SIZE, chart, layout, stagedBlocking, stateAt, toScreen, type PieceDraw} from './shotS01Plan';
-import {projectState, type BehindP, type CoreP, type FigureP, type FrontP, type GrainP, type Pass, type PassProjection, type BackP, type UnderP} from './shotS01Passes';
+import {STALK0_SCALE, projectState, type BehindP, type CoreP, type FigureP, type FrontP, type GrainP, type Pass, type PassProjection, type BackP, type UnderP} from './shotS01Passes';
 
 /**
  * Shot s01, the film's intro (D53, D64, D74): beats arrival (0-180) and everything-at-once (180-420) in the home world, one camera move (the widen, 150-210)
@@ -69,8 +69,12 @@ const ScreenFlood: React.FC<{p: UnderP; camera: CameraPose}> = ({p, camera}) => 
   return <div style={{position: 'absolute', left: x - R, top: y - R, width: 2 * R, height: 2 * R, opacity: f * 0.9, background: 'radial-gradient(circle closest-side, rgba(10,81,251,0.95) 0%, rgba(10,81,251,0.62) 34%, rgba(10,60,200,0.28) 62%, rgba(7,12,60,0) 100%)'}} />;
 };
 
-/** Seeded motes drifting up through the flood, stepped on twos (the light's grain is boil, not shimmer). */
-const Motes: React.FC<{frame: number; flood: number}> = ({frame, flood}) => {
+/**
+ * Seeded motes drifting up through the flood, stepped on twos (the light's grain is boil, not shimmer). `invisible` keeps the element, an opacity below 1 and its extent and paints nothing: the front pass carries it
+ * (see `FrontP.motes`), because a sibling under the front with an opacity below 1 changes how the browser rasterises the front: the front is drawn soft in the whole frame and sharp without it
+ * (measured on frame 252: 16 905 pixels beyond 2 levels, the invisible element brings it to 0).
+ */
+const Motes: React.FC<{frame: number; flood: number; invisible?: boolean}> = ({frame, flood, invisible = false}) => {
   if (flood < 0.2) return null;
   const r = rng(31), f = frame;
   const dots = Array.from({length: 46}, () => ({x: -800 + r() * 2900, y0: -950 + r() * 1650, r: 1.6 + r() * 2.6, speed: 0.12 + r() * 0.22, ph: r() * 6.28}));
@@ -78,7 +82,7 @@ const Motes: React.FC<{frame: number; flood: number}> = ({frame, flood}) => {
     <svg width={1} height={1} style={{position: 'absolute', left: 0, top: 0, overflow: 'visible', opacity: Math.min(1, flood)}}>
       {dots.map((d, i) => {
         const y = ((d.y0 - f * d.speed * 4 + 1700) % 1650) - 950;
-        return <circle key={i} cx={d.x + Math.sin(f / 40 + d.ph) * 8} cy={y} r={d.r} fill={i % 7 === 0 ? s01Turrell.accent : '#cfe0ff'} opacity={0.55} />;
+        return <circle key={i} cx={d.x + Math.sin(f / 40 + d.ph) * 8} cy={y} r={d.r} fill={i % 7 === 0 ? s01Turrell.accent : '#cfe0ff'} opacity={invisible ? 0 : 0.55} />;
       })}
     </svg>
   );
@@ -187,7 +191,7 @@ const FrontBody: React.FC<{p: FrontP}> = ({p}) => {
       </div>
       <Pieces pieces={p.pieces} boil={p.boil} />
       {p.stalk0 > 0.01 && (
-        <div style={{...kitVars, ...placed(g.funnel[0], g.funnel[1], -24, 2.7)}}>
+        <div style={{...kitVars, ...placed(g.funnel[0], g.funnel[1], -24, STALK0_SCALE)}}>
           <StalkPiece grow={p.stalk0} variant={p.boil} />
         </div>
       )}
@@ -279,7 +283,7 @@ export const ShotS01Layer: React.FC<{jobs: LayerJob[]}> = ({jobs}) => {
     }
     case 'front': {
       const p = job.p as FrontP;
-      return <AbsoluteFill key={frame}><CameraView pose={p.camera} size={SIZE}><FigureCanvasShim /><FrontBody p={p} /></CameraView></AbsoluteFill>;
+      return <AbsoluteFill key={frame}><CameraView pose={p.camera} size={SIZE}>{p.motes && <Motes frame={0} flood={0.5} invisible />}<FigureCanvasShim /><FrontBody p={p} /></CameraView></AbsoluteFill>;
     }
     case 'figure': {
       const p = job.p as FigureP;
