@@ -1,0 +1,42 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "animation-render-manifest",
+    "name": "Animation Render Manifest",
+    "description": "Check-tier gate on the render step (D87, D81): a frame set is current only when its render manifest still matches the contracts on disk. Every layer's inputs (files and JSON subtrees) are hashed again, a stale layer is named, a layer missing from the manifest, a composed frame missing or changed, or a confirm frame (drawn whole by the browser and compared with the composed one) beyond the determinism tolerance is refused. A contract edited after the render fails the gate until the shot is rendered again.",
+    "type": "validation",
+    "gate_type": "custom",
+    "severity": "high",
+    "subject": "animation-render-manifest",
+    "enforcement_mode": "blocking",
+    "guidance": "Ground truth by exit code (D81). The probe runs `python3 scripts/animation/probe-render-manifest.py --all out` in the renderer root: for every out/<shot>/render-manifest.json it recomputes each layer's inputs hash from the files on disk (figure, props, world, light, camera), checks every composed frame exists with the hash the render recorded, and reads the confirm frames the browser drew whole against the composed ones (2 levels on at most 0.01 % of the pixels). Its first line is its control (a clean fixture passes; a contract edited after the render, a layer removed, a layer whose hash is not its inputs' hash, a missing frame and a confirm frame over tolerance are each named) and it refuses to report if a control does not trip. On FAIL quote the probe's line naming the stale layer and the input that changed, then run `npm run render -- <shot>` and quote the manifest's hit/miss table; never edit the manifest, the probe or a frame to make it pass, and never `--force` a render to hide a confirm refusal. Control: a camera value edited after the render is named as the stale camera layer.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-render-manifest.py",
+          "--all",
+          "out"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ],
+    "activation": {
+      "prompt_categories": [
+        "animation",
+        "development"
+      ],
+      "explicit_request": true
+    },
+    "retry_config": {
+      "max_attempts": 2,
+      "improvement_hints": true
+    }
+  }
+}

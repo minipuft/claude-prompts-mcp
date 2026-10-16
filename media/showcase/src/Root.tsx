@@ -15,7 +15,7 @@ import {LayoutSheet, type LayoutContract} from './scenes/LayoutSheet';
 import {WorldCrossingMeasure, WorldCrossingProof, WorldReel, WorldSheet} from './scenes/WorldSheet';
 import {Animatic, CameraReelHome} from './scenes/Animatic';
 import {PoseSheet} from './scenes/PoseSheet';
-import {ShotS01} from './scenes/ShotS01';
+import {ShotS01, ShotS01Layer, type LayerJob} from './scenes/ShotS01';
 import {PoseSheetS01, type PlateInfo} from './scenes/PoseSheetS01';
 import s01Keys from '../v3/keys/s01-arrival-overwhelm.json';
 import s01Plates from '../assets/human/keys/s01-arrival-overwhelm/plates.json';
@@ -49,6 +49,7 @@ export const RemotionRoot = () => <>
   <Composition id="KeyFilmS01" component={KeyFilmS01} width={KEY_FILM.size[0]} height={KEY_FILM.size[1]} fps={30} durationInFrames={9}/>
   <Composition id="ShotS01" component={ShotS01} width={1280} height={720} fps={30} durationInFrames={420}/>
   <Composition id="ShotS01Figure" component={ShotS01} width={1280} height={720} fps={30} durationInFrames={420} defaultProps={{layers: 'figure' as const}}/>
+  <Composition id="ShotS01Layer" component={ShotS01Layer} width={1280} height={720} fps={30} durationInFrames={1} defaultProps={{jobs: [] as LayerJob[]}} calculateMetadata={({props}) => ({durationInFrames: Math.max(1, props.jobs.length)})}/>
   <Composition id="XSheetPage" component={XSheetPage} width={1280} height={720} fps={30} durationInFrames={1} defaultProps={{from: 800, count: 40}}/>
   <Composition id="CameraReelHome" component={CameraReelHome} width={1280} height={720} fps={30} durationInFrames={REEL_FRAMES}/>
   <Composition id="ModelSheetHuman" component={ModelSheet} width={1280} height={720} fps={30} durationInFrames={1} defaultProps={{model: humanModel}}/>

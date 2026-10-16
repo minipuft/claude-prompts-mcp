@@ -93,6 +93,7 @@ chainSteps:
     inlineGateIds:
       - animation-inbetween-probes
       - showcase-asset-muse
+      - animation-render-manifest
     id: render
     stepName: Render Study
   - promptId: showcase_review
