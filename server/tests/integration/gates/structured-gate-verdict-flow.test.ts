@@ -28,6 +28,7 @@ import {
 
 import { buildServerEnv as buildFreshServerEnv } from '../../e2e/helpers/child-env.js';
 
+import type { ConversationControlPacket } from '../../../src/engine/execution/formatting/conversation-control-response.js';
 import type { GateReview, GateVerdictSummary } from '../../../src/shared/types/chain-execution.js';
 import type { SemanticEvaluationReport } from '../../../src/shared/types/gate-evaluation.js';
 
@@ -80,6 +81,7 @@ function observedContexts(tracePath: string, chainId: string): ContextObservatio
 interface ToolReply {
   text: string;
   isError: boolean;
+  structured?: Record<string, unknown>;
 }
 class RpcRefusal extends Error {
   constructor(
@@ -97,11 +99,25 @@ function chainIdOf(reply: ToolReply): string {
 }
 function toolReply(value: unknown): ToolReply {
   if (typeof value !== 'object' || value === null) throw new Error('No MCP tool result');
-  const result = value as { content?: Array<{ text?: string }>; isError?: boolean };
+  const result = value as {
+    content?: Array<{ text?: string }>;
+    isError?: boolean;
+    structuredContent?: Record<string, unknown>;
+  };
   return {
     text: (result.content ?? []).map((part) => part.text ?? '').join('\n'),
     isError: result.isError === true,
+    ...(result.structuredContent === undefined ? {} : { structured: result.structuredContent }),
   };
+}
+/** Signal 0 probes a pid without touching it; ESRCH means it exited and was reaped. */
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
 }
 
 /** Real newline-delimited JSON-RPC, including the initialize/initialized exchange. */
@@ -302,12 +318,25 @@ afterAll(() => {
 });
 
 type Call = (name: string, args: Record<string, unknown>) => Promise<ToolReply>;
+/** A launch with no `--workspace-id` and no `CLAUDE_PROJECT_DIR`: the scope derives from cwd. */
+const CWD_SCOPE = 'derived-from-cwd';
+interface Host {
+  call: Call;
+  close: () => Promise<void>;
+  pid: number;
+  /** This fixture's earlier server pids still alive when this one was spawned. */
+  liveAtLaunch: number[];
+}
 describe.each(['stdio', 'http'] as const)(
   'registered %s: separate source custody and built semantic acceptance',
   (transport) => {
     const cleanup: Array<() => void | Promise<void>> = [];
+    const launched: number[] = [];
     afterEach(async () => {
       for (const dispose of cleanup.splice(0).reverse()) await dispose();
+    });
+    afterAll(() => {
+      expect(launched.filter(isAlive)).toEqual([]);
     });
 
     async function fixture(
@@ -319,6 +348,8 @@ describe.each(['stdio', 'http'] as const)(
         disabled?: boolean;
         /** Start the built workflow node without its gate (a call that requests no gate). */
         ungated?: boolean;
+        /** Launch workspace: a `launchDefaults.workspaceId` config, or {@link CWD_SCOPE}. */
+        scope?: string;
       } = {}
     ): Promise<{
       call: Call;
@@ -327,6 +358,14 @@ describe.each(['stdio', 'http'] as const)(
       runtimeRoot: string;
       contextTrace: string;
       rollingHandoff: (token: string) => Promise<{ oldPid: number; newPid: number }>;
+      /** Stop the owner, then spawn its replacement on the same roots; `live` keeps the old one. */
+      replace: (options?: { live?: boolean; scope?: string }) => Promise<{
+        oldPid: number;
+        newPid: number;
+        liveAtLaunch: number[];
+        stopOld: () => Promise<void>;
+      }>;
+      pids: number[];
     }> {
       const roots = createHermeticRoots(`registered-custody-${transport}`);
       const workspace = path.join(roots.root, 'workspace');
@@ -344,11 +383,32 @@ describe.each(['stdio', 'http'] as const)(
         writeFileSync(config, JSON.stringify({ version: 5, gates: { enabled: false } }));
         Object.assign(overrides, { MCP_CONFIG_PATH: config });
       }
-      const env =
-        options.built === true ? buildFreshServerEnv(overrides) : buildServerEnv(overrides);
-      async function connect(): Promise<{ call: Call; close: () => Promise<void>; pid: number }> {
+      const scopeEnv = (scope: string | undefined): Record<string, string> => {
+        if (scope === undefined) return {};
+        if (scope === CWD_SCOPE) return { CLAUDE_PROJECT_DIR: '' };
+        const config = path.join(roots.root, `scope-${scope}.json`);
+        writeFileSync(
+          config,
+          JSON.stringify({ version: 5, identity: { launchDefaults: { workspaceId: scope } } })
+        );
+        return { CLAUDE_PROJECT_DIR: '', MCP_CONFIG_PATH: config };
+      };
+      Object.assign(overrides, scopeEnv(options.scope));
+      const pids: number[] = [];
+      async function connect(launchEnv = overrides): Promise<Host> {
+        const liveAtLaunch = pids.filter(isAlive);
+        const host = await spawnHost(launchEnv);
+        pids.push(host.pid);
+        launched.push(host.pid);
+        return { ...host, liveAtLaunch };
+      }
+      async function spawnHost(
+        launchEnv: Record<string, string>
+      ): Promise<{ call: Call; close: () => Promise<void>; pid: number }> {
         let call: Call;
         if (transport === 'stdio') {
+          const env =
+            options.built === true ? buildFreshServerEnv(launchEnv) : buildServerEnv(launchEnv);
           const client = new SourceStdioClient(env, options.built === true);
           cleanup.push(() => client.close());
           await client.initialize();
@@ -367,7 +427,7 @@ describe.each(['stdio', 'http'] as const)(
           const baseUrl = `http://127.0.0.1:${port}`;
           const proc = startServerWithHttp(port, {
             source: options.built !== true,
-            env: overrides,
+            env: launchEnv,
           });
           cleanup.push(() => killServer(proc));
           await waitForHealth(baseUrl, { timeout: 30000 });
@@ -506,6 +566,23 @@ describe.each(['stdio', 'http'] as const)(
           expect((await call('prompt_engine', { claim_token: token })).isError).toBe(false);
           return { oldPid, newPid: host.pid };
         },
+        replace: async ({ live = false, scope } = {}) => {
+          const old = host;
+          if (!live) await old.close();
+          host = await connect(
+            scope === undefined ? overrides : { ...overrides, ...scopeEnv(scope) }
+          );
+          expect(
+            (await call('system_control', { action: 'framework', operation: 'disable' })).isError
+          ).toBe(false);
+          return {
+            oldPid: old.pid,
+            newPid: host.pid,
+            liveAtLaunch: host.liveAtLaunch,
+            stopOld: () => old.close(),
+          };
+        },
+        pids,
       };
     }
     function captured(runtimeRoot: string, chainId: string): GateVerdictSummary[] {
@@ -1220,5 +1297,208 @@ describe.each(['stdio', 'http'] as const)(
       });
       expect(entries[0]).not.toHaveProperty('evaluation');
     }, 90000);
+
+    // ── Conversation pause recovery over real server processes (T4.1) ──────────────────────────
+    // Every snapshot below is read from the state.db the spawned processes wrote; no fixture
+    // hydrates a session in this process, so a restart here is a process restart.
+    const RECOVERY_TOKEN = /Recovery token: `(hnd_[^`]+)`/;
+    const NOT_CARRIED = 'no run carries this token';
+    function tokenOf(reply: ToolReply): string {
+      const token = RECOVERY_TOKEN.exec(reply.text)?.[1];
+      if (token === undefined) throw new Error(`No recovery token: ${reply.text}`);
+      return token;
+    }
+    /**
+     * The `conversation_control` packet; neither packet ever carries a credential. The token's one
+     * structured carrier is `message`, the reply text mirrored for clients that read only JSON.
+     */
+    function controlPacket(reply: ToolReply): ConversationControlPacket | undefined {
+      const { conversation_control: packet, run_control: run, message } = reply.structured ?? {};
+      expect(JSON.stringify([packet ?? null, run ?? null])).not.toMatch(/hnd_/);
+      if (message !== undefined) expect(message).toBe(reply.text);
+      return packet as ConversationControlPacket | undefined;
+    }
+    /** The whole durable run: owner and credential apart from every domain fact the run holds. */
+    function runSnapshot(runtimeRoot: string, chainId: string) {
+      const db = new DatabaseSync(path.join(runtimeRoot, 'runtime-state/state.db'), {
+        readOnly: true,
+      });
+      try {
+        const row = db
+          .prepare(
+            'SELECT session_id, current_node_id, run_status, run_owner_pid, handoff_token, state FROM chain_runs WHERE chain_id = ?'
+          )
+          .get(chainId) as {
+          session_id: string;
+          current_node_id: string | null;
+          run_status: string;
+          run_owner_pid: string;
+          handoff_token: string | null;
+          state: string;
+        };
+        const nodes = db
+          .prepare(
+            'SELECT node_id, position, milestone, rendered_at, responded_at, completed_at FROM chain_run_nodes WHERE session_id = ? ORDER BY position'
+          )
+          .all(row.session_id);
+        return {
+          owner: row.run_owner_pid,
+          token: row.handoff_token,
+          facts: {
+            runId: row.session_id,
+            currentNode: row.current_node_id,
+            status: row.run_status,
+            state: JSON.parse(row.state) as {
+              conversationPause?: unknown;
+              reviews?: Record<string, GateReview>;
+            },
+            nodes,
+          },
+        };
+      } finally {
+        db.close();
+      }
+    }
+    function traceRecovery(label: string, pids: number[]): void {
+      if (process.env['SEMANTIC_WIRE_TRACE'] !== undefined)
+        appendFileSync(
+          process.env['SEMANTIC_WIRE_TRACE'],
+          JSON.stringify({ transport, recovery: label, pids }) + '\n'
+        );
+    }
+    /** A built single-node run with its semantic review owed, then paused (tokenless before). */
+    async function pausedReview(scope: string) {
+      const fx = await fixture({ built: true, scope });
+      const engine = (args: Record<string, unknown>) =>
+        fx.call('prompt_engine', { chain_id: fx.chainId, ...args });
+      expect((await engine({ user_response: OUTPUT })).isError).toBe(false);
+      const owed = runSnapshot(fx.runtimeRoot, fx.chainId);
+      expect(owed.token).toBeNull();
+      const paused = await engine({ gate_action: 'pause' });
+      expect(paused.isError).toBe(false);
+      const packet = controlPacket(paused)!;
+      expect(packet.outcome).toBe('paused');
+      expect(packet.run?.obligations).toEqual([
+        expect.objectContaining({ kind: 'review', nodeId: 'reviewed-node', step: 1 }),
+      ]);
+      const snapshot = runSnapshot(fx.runtimeRoot, fx.chainId);
+      expect(snapshot.facts.state.conversationPause).toMatchObject({ kind: 'conversation' });
+      expect(snapshot.facts).toEqual({
+        ...owed.facts,
+        state: { ...owed.facts.state, conversationPause: packet.run?.pause },
+      });
+      // Pause is not terminal: no run_control outcome, the run status unchanged.
+      expect(paused.structured).not.toHaveProperty('run_control');
+      expect(snapshot.facts.status).toBe(owed.facts.status);
+      expect(['completed', 'failed', 'cancelled']).not.toContain(snapshot.facts.status);
+      expect(snapshot.token).toBe(tokenOf(paused));
+      expect(snapshot.owner).toBe(owed.owner);
+      return { fx, engine, owed, snapshot, packet, token: tokenOf(paused) };
+    }
+    /** A paused claim acknowledges custody only: same packet, run held here, a fresh successor. */
+    async function claimPaused(
+      context: Awaited<ReturnType<typeof pausedReview>>,
+      token: string,
+      ownerPid: number
+    ): Promise<string> {
+      const { fx, snapshot, packet } = context;
+      const claimed = await fx.call('prompt_engine', { claim_token: token });
+      expect(runSnapshot(fx.runtimeRoot, fx.chainId).facts).toEqual(snapshot.facts);
+      expect(claimed.isError).toBe(false);
+      expect(claimed.text).toContain('Paused Run Claimed');
+      expect(controlPacket(claimed)).toEqual({ ...packet, outcome: 'claimed' });
+      const successor = tokenOf(claimed);
+      expect(successor).not.toBe(token);
+      expect(runSnapshot(fx.runtimeRoot, fx.chainId)).toEqual({
+        owner: String(ownerPid),
+        token: successor,
+        facts: snapshot.facts,
+      });
+      expect(captured(fx.runtimeRoot, fx.chainId)).toEqual([]);
+      return successor;
+    }
+
+    test('conversation pause, stop-old-first cold load: two recoveries, replay and foreign scope refused, resume returns the owed review unchanged', async () => {
+      const context = await pausedReview('pause-proof-a');
+      const { fx, engine, owed, snapshot, packet, token } = context;
+      const first = await fx.replace();
+      expect(first.liveAtLaunch).toEqual([]); // the owner was dead before its replacement spawned
+      expect(isAlive(first.oldPid)).toBe(false);
+      expect(runSnapshot(fx.runtimeRoot, fx.chainId)).toEqual(snapshot); // survived startup prune
+      const successor = await claimPaused(context, token, first.newPid);
+      const replay = await fx.call('prompt_engine', { claim_token: token });
+      expect(replay.isError).toBe(true);
+      expect(replay.text).toContain(NOT_CARRIED);
+      const held = runSnapshot(fx.runtimeRoot, fx.chainId);
+      expect(held.token).toBe(successor);
+
+      const foreign = await fx.replace({ scope: 'pause-proof-b' });
+      expect(foreign.liveAtLaunch).toEqual([]);
+      const refused = await fx.call('prompt_engine', { claim_token: successor });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain(NOT_CARRIED);
+      expect(runSnapshot(fx.runtimeRoot, fx.chainId)).toEqual(held);
+
+      const second = await fx.replace({ scope: 'pause-proof-a' });
+      expect(second.liveAtLaunch).toEqual([]);
+      await claimPaused(context, successor, second.newPid);
+
+      const resumed = await engine({ gate_action: 'resume' });
+      expect(resumed.isError).toBe(false);
+      const resumedPacket = controlPacket(resumed)!;
+      expect(resumedPacket.outcome).toBe('resumed');
+      expect(resumedPacket.run?.pause).toBeNull();
+      expect(resumedPacket.run?.obligations).toEqual(packet.run?.obligations);
+      expect(runSnapshot(fx.runtimeRoot, fx.chainId).facts).toEqual(owed.facts);
+      expect(captured(fx.runtimeRoot, fx.chainId)).toEqual([]);
+
+      const review = Object.values(owed.facts.state.reviews ?? {})[0]!;
+      const verdict = await engine({ gate_verdict: submitted(issuedReport(review)) });
+      expect(verdict.isError).toBe(false);
+      controlPacket(verdict);
+      expect(issuedState(fx.runtimeRoot, fx.chainId).status).toBe('completed');
+      expect(captured(fx.runtimeRoot, fx.chainId).at(-1)).toMatchObject({ verdict: 'PASS' });
+      traceRecovery('stop-old-first cold load', fx.pids);
+    }, 180000);
+
+    test('conversation pause, default launch (scope from cwd), stop-old-first: custody acknowledged, still paused, successor returned', async () => {
+      const context = await pausedReview(CWD_SCOPE);
+      const { fx, snapshot, packet, token } = context;
+      expect(packet.run?.scope.workspaceId).toBe(path.basename(SERVER_ROOT));
+      const next = await fx.replace();
+      expect(next.liveAtLaunch).toEqual([]);
+      expect(runSnapshot(fx.runtimeRoot, fx.chainId)).toEqual(snapshot);
+      await claimPaused(context, token, next.newPid);
+      traceRecovery('default launch stop-old-first', fx.pids);
+    }, 120000);
+
+    test('conversation pause, live handoff (old owner still running): custody moves, then abort ends the paused run', async () => {
+      const context = await pausedReview('pause-proof-a');
+      const { fx, engine, snapshot, token } = context;
+      const live = await fx.replace({ live: true });
+      expect(live.liveAtLaunch).toEqual([live.oldPid]);
+      await claimPaused(context, token, live.newPid);
+      await live.stopOld();
+      const aborted = await engine({ gate_action: 'abort' });
+      expect(aborted.structured).toMatchObject({
+        run_control: {
+          action: 'abort',
+          outcome: 'cancelled',
+          chainId: fx.chainId,
+          runId: snapshot.facts.runId,
+        },
+      });
+      controlPacket(aborted);
+      // Ordinary terminal guards win: resume and claim reach no pause record on a cancelled run.
+      const cancelled = runSnapshot(fx.runtimeRoot, fx.chainId);
+      expect(cancelled.facts.status).toBe('cancelled');
+      const after = await engine({ gate_action: 'resume' });
+      expect(after.text).toContain('Status: cancelled');
+      expect(controlPacket(after)).toBeUndefined();
+      const reclaim = await fx.call('prompt_engine', { claim_token: cancelled.token });
+      expect(reclaim.isError).toBe(true);
+      expect(runSnapshot(fx.runtimeRoot, fx.chainId)).toEqual(cancelled);
+      traceRecovery('live handoff', fx.pids);
+    }, 120000);
   }
 );

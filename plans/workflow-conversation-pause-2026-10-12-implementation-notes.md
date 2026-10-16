@@ -314,3 +314,11 @@ post-prompt-engine reads text through `read_tool_response` (no `str(list)`); `su
 ### T3.5a accepted (2026-10-15)
 
 `clear_verify_active_state` deleted (only the round-trip test called it); `load_verify_active_state` kept because it is imported downstream, with a None/empty session id now returning None instead of any row. **Contract note:** `hooks/lib/*` module API is in the Public API Contract; this narrows a call that returned an arbitrary row. `gemini-prompts/hooks/ralph-context-tracker.py:46` calls it with no argument and would silently stop tracking after it syncs this library — named in the P3 PR body; the downstream change is an external-repo action awaiting the owner (no autonomous submission). `make_verify_state` nests `sessionId` under `state` while the tracker reads it top-level (finding, no runtime mismatch measured).
+
+### T4.1 accepted (2026-10-15)
+
+The integration driver gained `isAlive`, `liveAtLaunch` (earlier PIDs still alive at the next spawn), a `scope` fixture option (named via `identity.launchDefaults.workspaceId` config, or cwd-derived) and `replace({live?, scope?})`. Measured on both transports with real processes: paused rows survive the dead-owner startup prune; stop-old-first recovery twice; replay and foreign workspace refused; resume returns the identical owed review; a default launch derives `workspaceId` from cwd; live handoff then abort. Every snapshot is read from the database the spawned processes wrote.
+
+- **R-T4.1-TERMINAL → T4.1a:** a conversation resume on a cancelled run returns the ordinary completed-run reply with isError false; the contract's "refuse truthfully" means an error refusal.
+- **For T4.3:** the token appears in `structuredContent.message` by design (the reply text mirror Claude Code shows the model), never inside `conversation_control` or `run_control`; docs must say "never in the packet", not "never in structured content".
+- **Findings (no rows):** a cancelled row keeps its pause record and a non-null token (inert: a claim is refused); the plan row's "in-process" label and "mock persistence" plant were not in the brief (every snapshot here is process-written).
