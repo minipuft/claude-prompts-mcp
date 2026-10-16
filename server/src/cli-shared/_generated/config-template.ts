@@ -13,7 +13,7 @@
  * (`src/cli-shared/config-operations.ts`) reads this constant rather than restating the address,
  * so a config document written anywhere in the codebase points at one address by construction.
  */
-export const CONFIG_SCHEMA_URL = 'https://cdn.jsdelivr.net/npm/claude-prompts@5/config.schema.json';
+export const CONFIG_SCHEMA_URL = 'https://cdn.jsdelivr.net/npm/claude-prompts@6/config.schema.json';
 
 /**
  * A ready-to-edit `config.jsonc`: `$schema` and `version` live, every setting beneath them
@@ -36,7 +36,7 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 
 {
 //   — JSON Schema reference for IDE validation.
-  "$schema": "https://cdn.jsdelivr.net/npm/claude-prompts@5/config.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/claude-prompts@6/config.schema.json",
 
 //   — Which shape this config file is written in. \`5\` is the current format, described by every
 //     setting below. A file with no \`version\` at all is read as an older (4.x) file: the server

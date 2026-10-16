@@ -609,11 +609,13 @@ const SELF_TEST_CASES: readonly SelfTestCase[] = [
   },
   {
     // A fixture `files` list, never the real package.json — dropping the entry there would break
-    // every published install, which is exactly what this case proves gets caught first.
+    // every published install, which is exactly what this case proves gets caught first. The
+    // fixture's version is derived from the live URL's major so the window check passes and the
+    // `files` refusal is the only failure left to observe, across every future major bump.
     name: 'SCHEMA URL POSITIVE CONTROL — a package.json missing config.schema.json from "files" is rejected',
     run: async () => {
       const fixturePackageJson: PackageJsonLike = {
-        version: '4.0.1',
+        version: `${schemaUrlMajor(CONFIG_SCHEMA_URL)}.0.0`,
         files: ['dist/index.js', 'dist/cpm.js'],
       };
       const result = checkSchemaUrlAddress(CONFIG_SCHEMA_URL, fixturePackageJson);
