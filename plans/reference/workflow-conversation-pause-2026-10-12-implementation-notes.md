@@ -1,7 +1,7 @@
 ---
 title: Conversation pause implementation notes
 date: 2026-10-12
-status: active
+status: reference
 tags: [hooks, workflows, execution]
 ---
 

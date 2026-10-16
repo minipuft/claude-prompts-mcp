@@ -2,7 +2,7 @@
 title: Resumable conversation pause and matching hook behavior
 date: 2026-10-12
 type: implementation-plan
-status: active
+status: reference
 initiative_branch: feat/conversation-pause
 worker_cap: 2
 planner_session: claude-takeover-2026-10-15
@@ -17,11 +17,8 @@ tags: [hooks, workflows, contracts, execution]
 
 ## Now (2026-10-15)
 
-Goal: durable conversation pause with exact run/scope recovery and truthful hook guidance, landed before the 6.0.0 release is cut (owner, 2026-10-15).
-Slice: worktree `claude-prompts-mcp-pause`, branch `feat/conversation-pause` = main 5e703819 (#492) + the five accepted pause commits cherry-picked (fbba5bca, e865411e, 409f7ed0, 080c9211, 1ee922ab). The Claude session took this plan over from the Codex planner (out of tokens 2026-10-14); accepted receipts carry over (R-TAKEOVER-P).
-Shipped: #493 (P1+P2 — pause reachable from prompt_engine) and #495 (P3 — hooks honor the pause; hook clearing that never ran under Claude Code now runs; abort reports run_control). Now: P4 on `feat/conversation-pause-proof` (T4.1 process restart proof → T4.2 conformance → T4.3 docs); open owner questions: workflow verify-loop Stop enforcement, gemini-prompts tracker follow-up. 6.0.0 is cut only after P4 and the owner's word.
-Constraint: one source writer at a time on overlapping files; workers never stage; planner commits. No installed, CloudySky, shared runtime or release mutation. Preserve every abort, unknown, review, namespace and custody contract.
-Boundary: process restart, STDIO/HTTP and native event delivery each need their own evidence; source fixtures prove none of them.
+Done: a workflow run can be paused for conversation and resumed where it stopped. Shipped in #493 (store, executor, replies, views, scoped verification), #495 (hooks honor the pause; hook clearing that never ran under Claude Code now runs; abort reports `run_control`) and #496 (real STDIO/HTTP restart proof, conformance cases, terminal and unheld-run refusals, docs). The Claude session took this plan over from the Codex planner on 2026-10-15.
+Open outside this plan: Stop-time enforcement of ordinary workflow shell-verification loops (never worked natively; owner question), and the gemini-prompts tracker's `load_verify_active_state()` call (external repository, owner approval). 6.0.0 is cut only on the owner's word.
 
 ## Intent and references
 
@@ -30,7 +27,7 @@ Boundary: process restart, STDIO/HTTP and native event delivery each need their 
 **Scope:** existing run store/types/serialization, prompt_engine actions and projections, shared hook state/admission/reminders/Stop, owning tests and docs.
 **Problem:** abort is terminal; waiting between MCP calls does not establish a durable conversational pause respected by hooks. The model needs to yield to the user while the same workflow and step remain recoverable.
 
-Owner request 2026-10-12: update the plan alongside hooks so enforcement/reminders appear appropriately. The [parent plan](workflow-client-evaluation-2026-10-09.md) owns custody, validation cadence, native budget and publication limits. The [abort/removal subplan](workflow-run-abort-removal-2026-10-12.md) remains required: abort ends the run; cancel is removed completely. This separate child plan keeps the newly requested resumable capability bounded without inflating parent rows or introducing another workflow authority.
+Owner request 2026-10-12: update the plan alongside hooks so enforcement/reminders appear appropriately. The [parent plan](../workflow-client-evaluation-2026-10-09.md) owns custody, validation cadence, native budget and publication limits. The [abort/removal subplan](../workflow-run-abort-removal-2026-10-12.md) remains required: abort ends the run; cancel is removed completely. This separate child plan keeps the newly requested resumable capability bounded without inflating parent rows or introducing another workflow authority.
 
 Source references: ChainSessionStore owns durable run mutation; run-registry.ts explicitly serializes and reconstructs residual session state; collectActiveSessionRows writes the hook projection. resolveUnknownInterrupt handles only the synthetic blocking-unknown review; it is not a generic pause. ralph-stop.py currently blocks when a recoverable chain exists, and shared reminders urge continuation/review. These are source observations, not installed-client proof.
 
