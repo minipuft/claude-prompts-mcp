@@ -233,3 +233,11 @@ Two derivations of request scope existed: launch-aware `resolveRequestIdentityCo
 
 - **T3.0a (new row):** a paused claim skips `persistMutation`, so the claimer's projection is absent until a later write.
 - **For T3.1:** a dead owner's paused `chain_sessions` row is deleted by the next server's `cleanupStalePidRows` (no paused exception) while its `chain_runs` row is retained; no live process re-projects it until a claim. `v_execution_status` json-extracts a fixed key list without the pause, so hooks read `cs.state` directly (no DDL). Hook tolerance of the extra keys is inferred from `.get()` access, not measured — T3.1's fixtures use a branch-written projection.
+
+### T3.1 accepted (2026-10-15)
+
+`exact_run_identity`, `pause_fields` and `holds_pause_exemption(state, bound)` in session_state.py; db_reader's view route joins `chain_sessions cs ON cs.id = v.row_id` (the view lacks `continuity_scope_id`) and filters on exact identity, the table route filters the same way through `json_extract`; one `_select_row` prefers a live owner and returns a dead owner's row only when exact and paused, marked `retained`. A missing row, an unreadable DB or no DB keeps the tracked pause but downgrades custody to `unconfirmed`.
+
+- **R-T3.1-CUSTODY (ruled):** only `owned` custody with an exact host binding grants a pause exemption; `retained` and `unconfirmed` give recovery guidance only (fail closed). T3.5 inherits this for Stop.
+- **For T3.2 (binding):** T3.1 has no writer for `run_identity`. T3.2 stores `exact_run_identity(packet.run)`, `pause_fields(run.pause, run.obligations)` and `pause_custody="owned"` from a successful `structuredContent.conversation_control`, and never stores `structuredContent.message`. Abort by another client removes the row, so this client shows an `unconfirmed` pause until T3.2 clears tracking on terminal evidence.
+- **Findings (no rows):** `TestChainLoaderColumns.NOT_READ` still lists `workspace_id`, which the identity path now reads (docstring only); `pyrefly.toml` excludes `hooks/tests/**`, so test type errors are unchecked anywhere; `load_active_chain_state` has callers in tests only.

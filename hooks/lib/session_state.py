@@ -59,6 +59,29 @@ def _load_patterns() -> dict[str, str]:
 _PATTERNS = _load_patterns()
 
 
+class RunIdentity(TypedDict):
+    """The exact run: UUID (`sessionId`), chain id and scope; two scopes can each hold `chain-x#1`."""
+
+    run_id: str
+    chain_id: str
+    organization_id: str | None
+    workspace_id: str | None
+    continuity_scope_id: str
+
+
+class ConversationPauseState(TypedDict):
+    kind: str
+    node_id: str | None
+    paused_at: int
+
+
+class OwedObligation(TypedDict, total=False):
+    kind: str
+    node_id: str
+    step: int
+    review: dict[str, str]
+
+
 class ChainState(TypedDict, total=False):
     chain_id: str
     current_step: int
@@ -78,6 +101,77 @@ class ChainState(TypedDict, total=False):
     delegation_model_hint: str
     # "blocking" | "detached" — read off the server's rendered handoff (run_in_background value)
     delegation_mode: str
+    # Conversation pause. `run_identity` comes only from an exact source: a control packet naming
+    # the run, or a state.db row matched on every identity field. `pause_custody` is "owned" (a
+    # live server holds the pause), "retained" (its server stopped; the run waits for an explicit
+    # claim) or "unconfirmed" (tracked, but no refresh could confirm it).
+    run_identity: RunIdentity
+    conversation_pause: ConversationPauseState
+    owed: list[OwedObligation]
+    pause_custody: str
+
+
+PAUSE_RECOVERY_GUIDANCE = (
+    "The server holding this paused workflow is not confirmed live. Claim it with the handoff token "
+    "you were given, or abort it; it does not resume on its own."
+)
+
+
+def exact_run_identity(raw: object) -> RunIdentity | None:
+    """`raw` as a complete RunIdentity, or None when any field is missing or mistyped."""
+    if not isinstance(raw, dict):
+        return None
+    texts = [raw.get(key) for key in ("run_id", "chain_id", "continuity_scope_id")]
+    scopes = [raw.get(key, "") for key in ("organization_id", "workspace_id")]
+    if not all(isinstance(value, str) and value for value in texts):
+        return None
+    if not all(value is None or isinstance(value, str) for value in scopes):
+        return None
+    return cast(RunIdentity, {key: raw[key] for key in RunIdentity.__annotations__})
+
+
+def pause_fields(pause: object, owed: object) -> ChainState:
+    """Hook-state pause keys from the server's camelCase shapes (the reply packet's
+    `run.pause`/`run.obligations` and the projection's `conversationPause`/`owed` agree).
+    An absent or malformed pause yields no keys: absence is "not known paused", never "resumed"."""
+    if not isinstance(pause, dict) or pause.get("kind") != "conversation":
+        return {}
+    node_id, paused_at = pause.get("nodeId"), pause.get("pausedAt")
+    if not (node_id is None or isinstance(node_id, str)) or type(paused_at) is not int:
+        return {}
+    obligations: list[OwedObligation] = []
+    for item in owed if isinstance(owed, list) else []:
+        if isinstance(item, dict) and isinstance(item.get("kind"), str) and type(item.get("step")) is int:
+            entry: OwedObligation = {"kind": item["kind"], "node_id": str(item.get("nodeId", "")), "step": item["step"]}
+            if isinstance(item.get("review"), dict):
+                entry["review"] = {key: str(item["review"].get(key, "")) for key in ("kind", "phase")}
+            obligations.append(entry)
+    return {
+        "conversation_pause": {"kind": "conversation", "node_id": node_id, "paused_at": paused_at},
+        "owed": obligations,
+    }
+
+
+def holds_pause_exemption(state: ChainState | None, bound: RunIdentity | None) -> bool:
+    """Whether `state` lets a hook relax workflow pressure for the run the host binding names.
+
+    Only a pause a live server holds, on a run whose exact identity equals `bound`. Missing,
+    legacy, partial or different identity, and a retained or unconfirmed pause, grant nothing.
+    """
+    if not state or exact_run_identity(bound) is None:
+        return False
+    return (
+        state.get("pause_custody") == "owned"
+        and "conversation_pause" in state
+        and exact_run_identity(state.get("run_identity")) == bound
+    )
+
+
+def pause_recovery_guidance(state: ChainState | None) -> str | None:
+    """Recovery guidance for a pause no live server is confirmed to hold; never an adoption."""
+    if state and "conversation_pause" in state and state.get("pause_custody") != "owned":
+        return PAUSE_RECOVERY_GUIDANCE
+    return None
 
 
 def _fallback_interrupt_exits() -> list[str]:

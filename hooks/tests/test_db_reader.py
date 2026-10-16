@@ -25,6 +25,8 @@ CRITERIA UNDER TEST (enumerated — a behaviour not listed here is not covered)
                           renamed or added run columns (run_number, workspace_id, accepted_at_step)
   E. cross-client scope : recovery is keyed by the session's own recorded chain; the unscoped
                           newest-chain-of-any-live-PID scan (the 2026-08 leakage defect) is dead
+  F. conversation pause : an exact run identity selects one row on each route, and only it carries
+                          a pause; absence never clears a tracked pause
 """
 
 import json
@@ -38,6 +40,13 @@ from typing import ClassVar
 
 import db_reader
 import pytest
+from session_state import (
+    PAUSE_RECOVERY_GUIDANCE,
+    holds_pause_exemption,
+    pause_fields,
+    pause_recovery_guidance,
+    save_session_state,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SQLITE_ENGINE_TS = REPO_ROOT / "server" / "src" / "infra" / "database" / "sqlite-engine.ts"
@@ -621,9 +630,10 @@ class TestChainLoaderColumns:
                 "current_step_review",
                 "pending_shell_verification",
                 "updated_at",
+                "row_id",
             )
         }
-    )
+    ) | {("chain_sessions", "id"), ("chain_sessions", "state")}
     SESSION_TABLE_READS = frozenset(
         {("chain_sessions", column) for column in ("run_owner_pid", "chain_id", "state", "updated_at")}
     )
@@ -654,7 +664,7 @@ class TestChainLoaderColumns:
         assert {column for _table, column in reads} & cls.NOT_READ == set()
         assert reads == expected
 
-    def test_the_view_path_names_only_its_eight_columns_and_the_sort_key(self, state_db, monkeypatch):
+    def test_the_view_path_names_only_its_columns_its_join_and_the_sort_key(self, state_db, monkeypatch):
         _insert_session(state_db, str(LIVE_PID), _chain_session_state(current=2, total=5))
 
         state, reads = self._load_recording_reads(monkeypatch)
@@ -866,6 +876,104 @@ class TestLoaderReturnedShape:
         self._insert_held_run(state_db, read_path)
 
         assert db_reader.load_recoverable_chain_state(self.SESSION) == self.EXPECTED
+
+
+# ── F. Conversation pause by exact run identity (T3.1) ──────────────────────
+
+
+def _insert_run(conn, pid, run_id, scope, *, step=1, updated="2026-10-15 12:00:00", paused=True) -> None:
+    """A row as `projectToHookView` writes it; the pause keys are the T3.0 test's asserted shape."""
+    review = {"nodeId": "n1", "kind": "gate", "phase": "awaiting-verdict", "gateIds": ["g"]}
+    doc = json.loads(_chain_session_state(session_id=run_id, current=step, current_step_review=review))
+    doc["lastActivity"] = int(updated[-2:]) + 1000
+    if paused:
+        doc["conversationPause"] = {"kind": "conversation", "nodeId": "n1", "pausedAt": 1760000000000}
+        doc["owed"] = [{"kind": "review", "nodeId": "n1", "step": 1, "review": {"kind": "gate", "phase": "x"}}]
+    conn.execute(
+        "INSERT INTO chain_sessions (run_owner_pid, workspace_id, continuity_scope_id, chain_id, state, updated_at) "
+        "VALUES (?, 'ws', ?, 'chain-demo', ?, ?)",
+        (str(pid), scope, json.dumps(doc), updated),
+    )
+    conn.commit()
+
+
+class TestConversationPauseIdentity:
+    SESSION = "sess-pause"
+    A: ClassVar[dict] = {"run_id": "run-a", "chain_id": "chain-demo", "continuity_scope_id": "scope-a"}
+    A |= {"organization_id": None, "workspace_id": "ws"}
+    B: ClassVar[dict] = {**A, "run_id": "run-b", "continuity_scope_id": "scope-b"}
+
+    @pytest.fixture(params=["view", "session_table"])
+    def routed_db(self, state_db, request):
+        if request.param == "session_table":
+            state_db.execute("DROP VIEW v_execution_status")
+            state_db.commit()
+        return state_db
+
+    def _track(self, identity: dict | None, **extra) -> dict | None:
+        tracked = {"chain_id": "chain-demo", "current_step": 1, "total_steps": 3, **extra}
+        save_session_state(self.SESSION, {**tracked, "run_identity": identity} if identity else tracked)
+        return db_reader.load_recoverable_chain_state(self.SESSION)
+
+    def test_one_chain_id_in_two_scopes_selects_only_the_tracked_run(self, routed_db):
+        _insert_run(routed_db, LIVE_PID, "run-a", "scope-a")
+        _insert_run(routed_db, LIVE_PID, "run-b", "scope-b", step=2, updated="2026-10-15 12:00:09")
+
+        state = self._track(self.A)
+
+        assert (state["current_step"], state["run_identity"], state["pause_custody"]) == (1, self.A, "owned")
+        assert state["conversation_pause"] == {"kind": "conversation", "node_id": "n1", "paused_at": 1760000000000}
+        assert state["owed"] == [
+            {"kind": "review", "node_id": "n1", "step": 1, "review": {"kind": "gate", "phase": "x"}}
+        ]
+        assert holds_pause_exemption(state, self.A) and not holds_pause_exemption(state, self.B)
+
+    def test_ambiguous_identity_borrows_no_pause(self, routed_db):
+        """No tracked identity: the chain id alone matches both scopes, so no pause is attached."""
+        _insert_run(routed_db, LIVE_PID, "run-a", "scope-a")
+        _insert_run(routed_db, LIVE_PID, "run-b", "scope-b", step=2, updated="2026-10-15 12:00:09")
+
+        state = self._track(None)
+
+        assert state is not None and state["current_step"] == 2
+        assert {"run_identity", "conversation_pause", "pause_custody"} & state.keys() == set()
+        assert not holds_pause_exemption(state, self.B)
+
+    def test_a_dead_owners_retained_pause_guides_without_adoption(self, routed_db):
+        _insert_run(routed_db, _dead_pid(), "run-a", "scope-a")
+
+        state = self._track(self.A)
+
+        assert state["pause_custody"] == "retained" and state["run_identity"] == self.A
+        assert pause_recovery_guidance(state) == PAUSE_RECOVERY_GUIDANCE
+        assert not holds_pause_exemption(state, self.A)
+
+    @pytest.mark.parametrize("alive", [True, False])
+    def test_a_legacy_row_without_the_pause_keys_is_unpaused_and_a_dead_one_expires(self, routed_db, alive):
+        _insert_run(routed_db, LIVE_PID if alive else _dead_pid(), "run-a", "scope-a", paused=False)
+
+        state = self._track(self.A)
+
+        assert (state is not None) is alive
+        assert not alive or (state["run_identity"] == self.A and "conversation_pause" not in state)
+        assert not holds_pause_exemption(state, self.A)
+
+    @pytest.mark.parametrize("break_db", ["absent_row", "unreadable", "no_db"])
+    def test_a_tracked_pause_survives_an_absent_or_failed_refresh(self, state_db, break_db, monkeypatch):
+        """Retention: the next server deletes a dead owner's row while the run is retained."""
+        _insert_run(state_db, LIVE_PID, "run-b", "scope-b")
+        if break_db == "unreadable":
+            state_db.execute("DROP VIEW v_execution_status")
+            state_db.execute("ALTER TABLE chain_sessions RENAME TO chain_sessions_gone")
+            state_db.commit()
+        if break_db == "no_db":
+            monkeypatch.setattr(db_reader, "_connect_readonly", lambda: None)
+        pause = pause_fields({"kind": "conversation", "nodeId": "n1", "pausedAt": 5}, [])
+
+        state = self._track(self.A, pause_custody="owned", **pause)
+
+        assert state["conversation_pause"]["paused_at"] == 5 and state["run_identity"] == self.A
+        assert state["pause_custody"] == "unconfirmed" and not holds_pause_exemption(state, self.A)
 
 
 # ── E. Cross-client scoping ───────────────────────────────────────────────────
