@@ -19,6 +19,7 @@ import type { DeferredAdvance } from '../../gates/services/gate-verdict-processo
 import type { ExecutionContext, SessionContext } from '../context/index.js';
 import type { ChainStepPrompt } from '../operators/types.js';
 
+import { isConversationPaused, RunOperationRefusedError } from '#shared/types/chain-session.js';
 import {
   currentOrdinal,
   nodeIdAt,
@@ -38,6 +39,16 @@ const PLACEHOLDER_SOURCE = 'StepResponseCaptureStage';
 export interface StepTarget {
   readonly ordinal: number;
   readonly nodeId: string;
+}
+
+/**
+ * Refuse a capture-path write on a conversation-paused run before anything is written. The store
+ * refuses its own mutators, but the execution-record appends below write past it, so every public
+ * capture entry checks here first.
+ */
+function refusePausedCapture(session: ChainSession): void {
+  if (isConversationPaused(session))
+    throw new RunOperationRefusedError(session.sessionId, 'conversation-paused');
 }
 
 /** Supplied response intent addresses the current step, including a defined canonical empty body. */
@@ -146,6 +157,7 @@ export class StepCaptureService {
     currentStepAtStart: number,
     input: StepCaptureInput
   ): Promise<DeferredAdvance | undefined> {
+    refusePausedCapture(session);
     const captureResponse =
       input.userResponse !== undefined && input.userResponse.length > 0
         ? input.userResponse
@@ -233,6 +245,7 @@ export class StepCaptureService {
       readonly keepRecordedOutput?: boolean;
     } = {}
   ): Promise<void> {
+    refusePausedCapture(session);
     if (options.keepRecordedOutput !== true) {
       await this.capturePlaceholder(
         sessionId,
@@ -263,6 +276,7 @@ export class StepCaptureService {
     target: StepTarget,
     reply: string
   ): Promise<void> {
+    refusePausedCapture(session);
     const review = this.reviewForCapture(context, sessionId, target.nodeId, reply);
     const recorded = await this.chainSessionStore.updateSessionState(
       sessionId,
@@ -521,6 +535,7 @@ export class StepCaptureService {
     sessionId: string,
     session: ChainSession
   ): void {
+    refusePausedCapture(session);
     const receipt = context.state.gates.reviewActionDetection;
     if (receipt === undefined || this.executionRecordStore === null) return;
     const ordinal = ordinalOf(session.state.nodes, receipt.nodeId);
@@ -585,6 +600,7 @@ export class StepCaptureService {
     sessionId: string,
     session: ChainSession
   ): void {
+    refusePausedCapture(session);
     if (this.executionRecordStore === null) return;
 
     const detection = context.state.gates.verdictDetection;

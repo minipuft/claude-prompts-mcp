@@ -136,6 +136,7 @@ describe('ChainSessionRouter tenant scoping', () => {
 
     expect(manager.getSessionByChainIdentifier).toHaveBeenCalledWith('chain-tenant#1', {
       includeDormant: true,
+      promoteDormant: false,
       continuityScopeId: 'tenant-acme',
     });
     expect(manager.getChainContext).toHaveBeenCalledWith('sess-tenant', {
@@ -164,6 +165,7 @@ describe('ChainSessionRouter tenant scoping', () => {
 
     expect(manager.getSessionByChainIdentifier).toHaveBeenCalledWith('chain-tenant#2', {
       includeDormant: true,
+      promoteDormant: false,
       continuityScopeId: 'tenant-acme',
     });
     expect(manager.getInlineGateIds).toHaveBeenCalledWith('sess-tenant', {
@@ -221,6 +223,7 @@ describe('ChainSessionRouter tenant scoping', () => {
 
     expect(manager.getSessionByChainIdentifier).toHaveBeenCalledWith('chain-shared#1', {
       includeDormant: true,
+      promoteDormant: false,
       continuityScopeId: 'tenant-b',
     });
     expect(manager.getSession).toHaveBeenCalledWith('chain-shared#1', {
@@ -228,5 +231,69 @@ describe('ChainSessionRouter tenant scoping', () => {
     });
     expect(response?.isError).toBe(true);
     expect(getText(response)).toContain('not found');
+  });
+});
+
+describe('ChainSessionRouter conversation pause (row T2.4)', () => {
+  const pausedRun = () =>
+    createChainSession({
+      chainId: 'chain-paused#1',
+      lastActivity: 1,
+      lifecycle: 'dormant',
+      handoffToken: 'secret-recovery-token',
+      conversationPause: { kind: 'conversation', nodeId: 'n2', pausedAt: 5 },
+    });
+  // The store's promoting read: a dormant run found without `promoteDormant: false` is touched.
+  const promotingManager = (run: ChainSession) => {
+    const manager = createSessionManager();
+    manager.getSessionByChainIdentifier.mockImplementation((_id, options: any) => {
+      if (options?.promoteDormant !== false) {
+        Object.assign(run, { lifecycle: 'canonical', lastActivity: 99 });
+      }
+      return run;
+    });
+    manager.listActiveSessions.mockReturnValue([
+      {
+        sessionId: 'sess-1',
+        chainId: run.chainId,
+        currentStep: 1,
+        totalSteps: 3,
+        pendingReview: false,
+        lastActivity: 1,
+        startTime: 1,
+      },
+    ]);
+    return manager;
+  };
+
+  test.each([
+    'list chains',
+    'validate chain chain-paused#1',
+    'status chain chain-paused#1',
+    'gates chain chain-paused#1',
+  ])('%s shows the pause and its actions, touches nothing, prints no token', async (command) => {
+    const run = pausedRun();
+    const { service } = createService([], promotingManager(run).service);
+    const before = JSON.stringify([run.lastActivity, run.lifecycle, run.conversationPause]);
+
+    const text = getText(await service.tryHandleCommand(command, {}));
+
+    expect(text).toContain('Paused for conversation');
+    expect(text).toContain('step 1 of 3');
+    expect(text).toContain('gate_action:"resume"');
+    expect(text).toContain('gate_action:"abort"');
+    expect(text).toContain('chain_id:"chain-paused#1"');
+    expect(text).not.toContain('secret-recovery-token');
+    expect(JSON.stringify([run.lastActivity, run.lifecycle, run.conversationPause])).toBe(before);
+  });
+
+  test('an unpaused run is shown without any pause wording', async () => {
+    const manager = createSessionManager();
+    manager.getSessionByChainIdentifier.mockReturnValue(createChainSession());
+    const { service } = createService([], manager.service);
+
+    const text = getText(await service.tryHandleCommand('validate chain chain-research#1', {}));
+
+    expect(text).not.toContain('Paused');
   });
 });

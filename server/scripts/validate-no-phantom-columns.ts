@@ -57,6 +57,10 @@
  *   - the column appears in the parenthesised column list of an INSERT into its table, or
  *   - it appears as an assignment target in an `UPDATE <table> SET ...`
  *   in the table's declared owner, or in any declared `acceptedForeignWriters` entry.
+ *   A column list held in a template constant (`INSERT INTO t (${COLUMNS})`) is read as the text
+ *   of `const COLUMNS = \`...\`` in the same file. A `${...}` left in a column list after that is
+ *   an error naming the file and placeholder: skipping it would report every column it holds as
+ *   unwritten (28 on 2026-10-15, when run-registry.ts moved its lists into constants).
  *
  * WHAT IS EXEMPT, and why
  *   - columns with a DDL `DEFAULT` — SQLite populates them; a writer naming them is optional
@@ -77,6 +81,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 import { TABLE_CONTRACTS, type TableContract } from '../src/infra/database/table-contracts.js';
 import {
@@ -108,17 +113,44 @@ function readIfPresent(relativePath: string): string {
   return fs.existsSync(absolute) ? fs.readFileSync(absolute, 'utf8') : '';
 }
 
-function phantomColumnsFor(contract: TableContract, ddl: DdlTable): Finding[] {
+/** `source` with each `${NAME}` naming a template-literal const in `source` replaced by its text. */
+export function inlineTemplateConstants(source: string): string {
+  const constants = new Map(
+    [...source.matchAll(/const (\w+) = `([^`$]*)`/g)].map((m) => [m[1] ?? '', m[2] ?? ''])
+  );
+  return source.replace(/\$\{(\w+)\}/g, (held, name: string) => constants.get(name) ?? held);
+}
+
+/** Every `${...}` still standing in the column list of an INSERT into `table`. */
+function unresolvedColumnPlaceholders(source: string, table: string): string[] {
+  const insert = new RegExp(
+    `INSERT\\s+(?:OR\\s+\\w+\\s+)?INTO\\s+["'\`]?${table}["'\`]?\\s*\\(([^)]*)\\)`,
+    'gi'
+  );
+  return [...source.matchAll(insert)].flatMap((m) => (m[1] ?? '').match(/\$\{[^}]*\}?/g) ?? []);
+}
+
+function phantomColumnsFor(
+  contract: TableContract,
+  ddl: DdlTable
+): { findings: Finding[]; unresolved: string[] } {
   const written = new Set<string>();
+  const unresolved: string[] = [];
   for (const writerPath of writerPathsFor(contract)) {
-    for (const column of collectWrittenColumns(readIfPresent(writerPath), contract.table)) {
-      written.add(column);
+    const source = inlineTemplateConstants(readIfPresent(writerPath));
+    for (const placeholder of unresolvedColumnPlaceholders(source, contract.table)) {
+      unresolved.push(
+        `${writerPath}: an INSERT INTO ${contract.table} column list holds ${placeholder}, ` +
+          'which names no template-literal const in that file, so its columns cannot be read.'
+      );
     }
+    for (const column of collectWrittenColumns(source, contract.table)) written.add(column);
   }
 
-  return ddl.columns
+  const findings = ddl.columns
     .filter((column) => !column.hasDefault && !column.isAutoIncrement && !written.has(column.name))
     .map((column) => ({ table: contract.table, column: column.name }));
+  return { findings, unresolved };
 }
 
 function runSelfTest(): void {
@@ -168,6 +200,17 @@ function runSelfTest(): void {
     if (phantoms.includes('tenant_id')) failures.push('a DEFAULTed column was flagged');
     if (phantoms.includes('touched_at')) failures.push('a datetime-defaulted column was flagged');
     if (phantoms.includes('id')) failures.push('an AUTOINCREMENT column was flagged');
+
+    const held = inlineTemplateConstants(
+      'const COLS = `label, never_written`;\nINSERT INTO gadget (${COLS}) VALUES (?)'
+    );
+    if (!collectWrittenColumns(held, 'gadget').has('never_written')) {
+      failures.push('a column list held in a template constant was not read through it');
+    }
+    const lost = inlineTemplateConstants('INSERT INTO gadget (${COLZ}) VALUES (?)');
+    if (unresolvedColumnPlaceholders(lost, 'gadget').join() !== '${COLZ}') {
+      failures.push('a column-list placeholder naming no constant was not reported');
+    }
   }
 
   if (failures.length > 0) {
@@ -179,7 +222,8 @@ function runSelfTest(): void {
 
   console.log(
     'validate:no-phantom-columns self-test OK — flags a declared column with no writer, ' +
-      'collects INSERT lists and UPDATE SET targets, exempts DEFAULT and AUTOINCREMENT columns, ' +
+      'collects INSERT lists (including ones held in template constants) and UPDATE SET targets, ' +
+      'reports a column-list placeholder naming no constant, exempts DEFAULT and AUTOINCREMENT columns, ' +
       'and is not fooled by the same column name written on another table.'
   );
 }
@@ -194,13 +238,16 @@ function main(): void {
   const findings: Finding[] = [];
   const acknowledged: string[] = [];
   const exceptionProblems: string[] = [];
+  const unresolved: string[] = [];
 
   for (const contract of TABLE_CONTRACTS) {
     const table = ddl.get(contract.table);
     if (!table) continue; // set-equality is validate:table-contracts' job, not this gate's
 
+    const scan = phantomColumnsFor(contract, table);
+    unresolved.push(...scan.unresolved);
     const stillPhantom = new Set<string>();
-    for (const finding of phantomColumnsFor(contract, table)) {
+    for (const finding of scan.findings) {
       const accepted = contract.acceptedPhantomColumns?.find(
         (exception) => exception.subject === finding.column
       );
@@ -235,6 +282,14 @@ function main(): void {
     );
   }
 
+  // First: an unread column list makes every column it holds look unwritten.
+  if (unresolved.length > 0) {
+    console.error(`${LABEL} FAIL: ${unresolved.length} column list(s) could not be read.`);
+    for (const problem of unresolved) console.error(`  - ${problem}`);
+    process.exitCode = 1;
+    return;
+  }
+
   if (exceptionProblems.length > 0) {
     console.error(`${LABEL} FAIL: ${exceptionProblems.length} stale accepted exception(s).`);
     for (const problem of exceptionProblems) console.error(`  - ${problem}`);
@@ -262,4 +317,5 @@ function main(): void {
   console.log(`${LABEL} OK: every declared column has a writer or a declared exception.`);
 }
 
-main();
+// Guarded: the resolver is exported to a test, and importing must not run the gate.
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

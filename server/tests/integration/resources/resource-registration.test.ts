@@ -890,7 +890,11 @@ describe('MCP Resources Registration Integration', () => {
             });
           }
           expect(bodyList.map((entry) => entry.chainId)).toEqual(chainIds);
-          expect(lookup.mock.calls).toEqual([[chainId], [chainId], [chainId]]);
+          // Three item reads and two list rows look this run up; every lookup is non-promoting.
+          expect(lookup.mock.calls.every(([, options]) => options?.promoteDormant === false)).toBe(
+            true
+          );
+          expect(lookup.mock.calls.filter(([id]) => id === chainId)).toHaveLength(5);
           expect(getSession).not.toHaveBeenCalled();
           expect(sessions).toEqual(before);
         }
@@ -919,11 +923,98 @@ describe('MCP Resources Registration Integration', () => {
           const variables = item.template.uriTemplate.match(uri.toString());
           expect(variables).toEqual({ chainId: component });
           await expect(item.readHandler(uri, variables!)).rejects.toThrow();
-          expect(lookup.mock.calls).toEqual(expectedLookup === undefined ? [] : [[expectedLookup]]);
+          expect(lookup.mock.calls).toEqual(
+            expectedLookup === undefined ? [] : [[expectedLookup, { promoteDormant: false }]]
+          );
           expect(getSession).not.toHaveBeenCalled();
           expect(sessions).toEqual(before);
         }
       );
+    });
+  });
+
+  describe('Conversation pause in session resources', () => {
+    const run = (chainId: string, pause?: object, runStatus = 'working') => ({
+      sessionId: `uuid-${chainId}`,
+      chainId,
+      state: { currentNodeId: 'n2', nodes: [{ id: 'n1' }, { id: 'n2' }] },
+      startTime: 1000,
+      lastActivity: 2000,
+      originalArgs: {},
+      continuityScopeId: 'ws-1',
+      runStatus,
+      handoffToken: 'tok-SECRET',
+      ...(pause !== undefined && { conversationPause: pause }),
+    });
+    const pause = { kind: 'conversation', nodeId: 'n2', pausedAt: 1234 };
+    const runs = [
+      run('chain-paused', pause),
+      run('chain-plain'),
+      run('chain-ended', pause, 'cancelled'),
+    ];
+    const facts = ['conversationPause', 'runId', 'continuityScopeId', 'currentNodeId'];
+    let before: typeof runs;
+    let lookups: Array<unknown[]>;
+
+    const read = async (name: string, uri: string, variables: Record<string, string> = {}) => {
+      const result = (await registeredResources
+        .get(name)!
+        .readHandler(new URL(uri), variables)) as {
+        contents: Array<{ text: string }>;
+      };
+      return result.contents[0].text;
+    };
+
+    beforeEach(() => {
+      before = structuredClone(runs);
+      lookups = [];
+      registerResources(
+        mockMcpServer as never,
+        {
+          logger: mockLogger,
+          chainSessionStore: {
+            listActiveSessions: () =>
+              runs.map((r) => ({ ...r, currentStep: 2, totalSteps: 2, pendingReview: false })),
+            getSession: () => undefined,
+            getSessionByChainIdentifier: (chainId: string, ...rest: unknown[]) => {
+              lookups.push([chainId, ...rest]);
+              return runs.find((r) => r.chainId === chainId);
+            },
+            getSessionStats: () => ({
+              totalSessions: 0,
+              totalChains: 0,
+              averageStepsPerChain: 0,
+              oldestSessionAge: 0,
+            }),
+          },
+        } as never
+      );
+    });
+
+    test("list and item carry a paused run's pause, only its, and never the credential", async () => {
+      const listText = await read('sessions', 'resource://session/');
+      const itemText = await read('session', 'resource://session/chain-paused', {
+        chainId: 'chain-paused',
+      });
+      const plainText = await read('session', 'resource://session/chain-plain', {
+        chainId: 'chain-plain',
+      });
+      const rows = JSON.parse(listText) as Array<Record<string, unknown>>;
+      const expected = {
+        conversationPause: pause,
+        runId: 'uuid-chain-paused',
+        continuityScopeId: 'ws-1',
+        currentNodeId: 'n2',
+      };
+      expect(rows[0]).toMatchObject(expected);
+      expect(JSON.parse(itemText)).toMatchObject({ sessionId: 'uuid-chain-paused', ...expected });
+      for (const unpaused of [rows[1], rows[2], JSON.parse(plainText)]) {
+        for (const fact of facts) expect(unpaused).not.toHaveProperty(fact);
+      }
+      for (const text of [listText, itemText, plainText]) expect(text).not.toContain('tok-SECRET');
+      // Reading touches no run and every lookup is non-promoting.
+      expect(runs).toEqual(before);
+      for (const [, options] of lookups) expect(options).toEqual({ promoteDormant: false });
     });
   });
 
@@ -953,5 +1044,59 @@ describe('MCP Resources Registration Integration', () => {
       expect(RESOURCE_URI_PATTERNS.SESSION_ITEM).toBe('resource://session/{chainId}');
       expect(RESOURCE_URI_PATTERNS.METRICS_PIPELINE).toBe('resource://metrics/pipeline');
     });
+  });
+});
+
+describe('registerMcpResources session lookup forwarding', () => {
+  test('a session resource read reaches the wrapped store with promoteDormant:false', async () => {
+    const { registerMcpResources } = await import('../../../src/runtime/resource-registration.js');
+    const handlers = new Map<
+      string,
+      (uri: URL, vars: Record<string, string>) => Promise<unknown>
+    >();
+    const target = {
+      registerResource: (name: string, _t: unknown, _o: unknown, handler: unknown) => {
+        handlers.set(name, handler as (uri: URL, vars: Record<string, string>) => Promise<unknown>);
+      },
+      sendResourceListChanged: () => undefined,
+    };
+    const lookup = jest.fn(
+      (_chainId: string, _options?: { promoteDormant?: boolean }) => undefined
+    );
+    const store = {
+      listActiveSessions: () => [],
+      getSession: () => undefined,
+      getSessionByChainIdentifier: lookup,
+      getSessionStats: () => ({}),
+    };
+    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
+    const deps = {
+      logger,
+      configManager: {
+        getResourcesConfig: () => ({
+          registerWithMcp: true,
+          prompts: { enabled: false },
+          gates: { enabled: false },
+          frameworks: { enabled: false },
+          observability: { enabled: true, sessions: true, metrics: true },
+          logs: { enabled: false },
+        }),
+      },
+      frameworkStateStore: { getFrameworkManager: () => undefined },
+      mcpToolsManager: {
+        getChainSessionStore: () => store,
+        getMetricsCollector: () => ({ getAnalyticsSummary: () => ({}) }),
+      },
+      getConvertedPrompts: () => [],
+    };
+
+    registerMcpResources(target as never, deps as never);
+    const read = handlers.get('session');
+    expect(read).toBeDefined();
+    await expect(
+      read!(new URL('session://chain-demo%231'), { chainId: encodeURIComponent('chain-demo#1') })
+    ).rejects.toThrow();
+
+    expect(lookup).toHaveBeenCalledWith('chain-demo#1', { promoteDormant: false });
   });
 });

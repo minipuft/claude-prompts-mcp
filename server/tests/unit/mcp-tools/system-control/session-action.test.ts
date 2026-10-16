@@ -18,6 +18,7 @@ const createSessionStore = () => {
   const clearSession = jest.fn().mockResolvedValue(false);
   const clearSessionsForChain = jest.fn().mockResolvedValue(undefined);
   const getSession = jest.fn();
+  const getSessionByChainIdentifier = jest.fn();
   const getChainContext = jest.fn().mockReturnValue({});
 
   return {
@@ -26,6 +27,7 @@ const createSessionStore = () => {
       clearSession,
       clearSessionsForChain,
       getSession,
+      getSessionByChainIdentifier,
       getChainContext,
     } as unknown as ChainSessionService,
     listActiveSessions,

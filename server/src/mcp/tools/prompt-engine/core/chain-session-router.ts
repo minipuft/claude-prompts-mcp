@@ -10,7 +10,9 @@ import type {
   StateStoreOptions,
 } from '#shared/types/index.js';
 
+import { describePausedRun } from '#engine/execution/formatting/conversation-control-response.js';
 import { LightweightGateSystem } from '#engine/gates/core/index.js';
+import { isConversationPaused } from '#shared/types/chain-session.js';
 import { ToolResponse } from '#shared/types/index.js';
 import { currentOrdinal, totalOf } from '#shared/utils/node-order.js';
 
@@ -58,6 +60,10 @@ export function detectChainManagementCommand(command: string): ChainManagementCo
 
   return null;
 }
+
+/** The paused-run reader wording for a conversation-paused run (never its token), else undefined. */
+const pausedSection = (session: ChainSession): string | undefined =>
+  isConversationPaused(session) ? describePausedRun(session) : undefined;
 
 /**
  * Chain management handler that surfaces session-aware data.
@@ -152,9 +158,7 @@ export class ChainSessionRouter implements ChainSessionRouterPort {
       });
     }
 
-    const session =
-      this.sessionManager.getSessionByChainIdentifier(target, { includeDormant: true, ...scope }) ??
-      (target ? this.sessionManager.getSession(target, scope) : undefined);
+    const session = this.findSession(target, scope);
     if (session) {
       const context = this.sessionManager.getChainContext(session.sessionId, scope);
       const metadata = context['chain_metadata'] as Record<string, any> | undefined;
@@ -172,6 +176,8 @@ export class ChainSessionRouter implements ChainSessionRouterPort {
       if (gates && Array.isArray(gates) && gates.length > 0) {
         lines.push(`**Gate IDs**: ${gates.join(', ')}`);
       }
+      const paused = pausedSection(session);
+      if (paused !== undefined) lines.push(`\n${paused}`);
 
       return this.responseFormatter.formatPromptEngineResponse(lines.join('\n'), undefined, {
         metadata: {
@@ -213,6 +219,9 @@ export class ChainSessionRouter implements ChainSessionRouterPort {
           ` — Step ${summary.currentStep}/${summary.totalSteps}` +
           `${summary.pendingReview ? ' — pending gate review' : ''}`
       );
+      const run = this.peekSession(summary.chainId, scope);
+      const paused = run === undefined ? undefined : pausedSection(run);
+      if (paused !== undefined) lines.push(`\n${paused}\n`);
     });
 
     return this.responseFormatter.formatPromptEngineResponse(lines.join('\n'), undefined, {
@@ -226,9 +235,7 @@ export class ChainSessionRouter implements ChainSessionRouterPort {
     scope?: StateStoreOptions
   ): Promise<ToolResponse> {
     const prompt = this.findPrompt(target);
-    const session =
-      this.sessionManager.getSessionByChainIdentifier(target, { includeDormant: true, ...scope }) ??
-      (target ? this.sessionManager.getSession(target, scope) : undefined);
+    const session = this.findSession(target, scope);
 
     if (!prompt && !session) {
       return this.responseFormatter.formatErrorResponse(
@@ -247,6 +254,8 @@ export class ChainSessionRouter implements ChainSessionRouterPort {
       sections.push(`### Chain Run: ${session.chainId}`);
       sections.push(`Resume with \`chain_id=${session.chainId}\``);
       sections.push(this.buildSessionGateSummary(session, scope));
+      const paused = pausedSection(session);
+      if (paused !== undefined) sections.push(paused);
     }
 
     return this.responseFormatter.formatPromptEngineResponse(sections.join('\n\n'), undefined, {
@@ -257,6 +266,22 @@ export class ChainSessionRouter implements ChainSessionRouterPort {
         archivalRunId: session?.sessionId,
       },
     });
+  }
+
+  /** The run `target` names, read as it stands: inspecting never promotes a dormant run. */
+  private peekSession(target: string, scope?: StateStoreOptions): ChainSession | undefined {
+    return this.sessionManager.getSessionByChainIdentifier(target, {
+      includeDormant: true,
+      promoteDormant: false,
+      ...scope,
+    });
+  }
+
+  private findSession(target: string, scope?: StateStoreOptions): ChainSession | undefined {
+    return (
+      this.peekSession(target, scope) ??
+      (target ? this.sessionManager.getSession(target, scope) : undefined)
+    );
   }
 
   private findPrompt(identifier: string): ConvertedPrompt | undefined {

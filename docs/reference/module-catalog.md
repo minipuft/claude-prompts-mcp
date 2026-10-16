@@ -35,13 +35,13 @@ exports; near 1, it is a leaf that is cheap to change.
 | `mcp-http` | `src/mcp/http` | protocol | canonical | 0.92 | Implements the Streamable HTTP MCP transport boundary. | — | — | engine-execution<br>mcp-tools<br>prompts<br>shared-types<br>shared-utils | runtime |
 | `mcp-metadata` | `src/mcp/metadata` | protocol | canonical | 0.50 | Builds MCP server and capability metadata. | `server/src/mcp/metadata/README.md` | — | mcp-contracts<br>shared-types<br>shared-utils | mcp-contracts<br>mcp-tools |
 | `mcp-tools` | `src/mcp/tools` | protocol | canonical | 0.97 | Registers and routes the three public MCP tools. | — | `index.ts` | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>mcp-contracts<br>mcp-metadata<br>prompts<br>resources<br>shared-core<br>shared-types<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir | mcp-http<br>runtime |
-| `application-modules` | `src/modules` | layer | canonical | 0.56 | Feature modules that own prompt, chain, resource, and authoring behavior. | — | — | — | — |
+| `application-modules` | `src/modules` | layer | canonical | 0.57 | Feature modules that own prompt, chain, resource, and authoring behavior. | — | — | — | — |
 | `automation` | `src/modules/automation` | domain | canonical | 0.67 | Owns automation-oriented resource and workflow behavior. | — | — | engine-execution<br>hot-reload<br>shared-types<br>shared-utils | mcp-tools<br>prompts<br>resources<br>runtime |
 | `chains` | `src/modules/chains` | domain | canonical | 0.68 | Owns chain sessions, execution records, mutation, and persistence behavior. | — | — | engine-execution<br>shared-types<br>shared-utils<br>text-references | engine-execution<br>mcp-tools |
 | `formatting` | `src/modules/formatting` | domain | canonical | 0.47 | Owns response styles and output formatting behavior. | — | `index.ts` | shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>resources<br>runtime |
 | `hot-reload` | `src/modules/hot-reload` | domain | canonical | 0.50 | Coordinates file observation and registry refresh behavior. | — | — | shared-types<br>shared-utils | automation<br>prompts<br>runtime |
 | `prompts` | `src/modules/prompts` | domain | canonical | 0.61 | Owns prompt discovery, schema, registry, and lifecycle behavior. | — | `index.ts` | automation<br>engine-execution<br>engine-gates<br>hot-reload<br>shared-types<br>shared-utils<br>text-references<br>workflow-ir | cli-shared<br>mcp-http<br>mcp-tools<br>resources<br>runtime<br>versioning |
-| `resources` | `src/modules/resources` | domain | canonical | 0.62 | Owns resource verification and mutation transactions. | — | `index.ts` | automation<br>engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime<br>skills-sync<br>versioning |
+| `resources` | `src/modules/resources` | domain | canonical | 0.64 | Owns resource verification and mutation transactions. | — | `index.ts` | automation<br>engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime<br>skills-sync<br>versioning |
 | `skills-sync` | `src/modules/skills-sync` | domain | canonical | 0.82 | Exports and synchronizes skills across supported clients. | — | — | cli-shared<br>engine-gates<br>resources<br>shared-types<br>shared-utils | mcp-tools<br>runtime |
 | `text-references` | `src/modules/text-refs` | domain | canonical | 0.29 | Tracks and resolves reusable text argument references. | — | `index.ts` | shared-types<br>shared-utils | chains<br>mcp-tools<br>prompts<br>runtime |
 | `versioning` | `src/modules/versioning` | domain | canonical | 0.40 | Owns version history, comparison, rollback, and resource snapshots. | — | `index.ts` | cli-shared<br>engine-gates<br>prompts<br>resources<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime<br>shared-utils |
@@ -50,7 +50,7 @@ exports; near 1, it is a leaf that is cheap to change.
 | `shared` | `src/shared` | layer | canonical | 0.06 | Foundation types and pure utilities available to every source layer. | — | — | — | — |
 | `shared-core` | `src/shared/core` | shared | canonical | 0.33 | Core abstractions shared without importing upper layers. | — | — | shared-types<br>shared-utils | engine-frameworks<br>engine-gates<br>mcp-tools<br>runtime |
 | `shared-types` | `src/shared/types` | shared | canonical | 0.00 | Cross-layer TypeScript contracts and data shapes. | — | `index.ts` | workflow-ir | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>shared-core<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir |
-| `shared-utils` | `src/shared/utils` | shared | canonical | 0.14 | Pure cross-layer utility functions. | — | `index.ts` | shared-types<br>versioning | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>server-source<br>shared-core<br>skills-sync<br>text-references<br>versioning<br>workflow-ir |
+| `shared-utils` | `src/shared/utils` | shared | canonical | 0.13 | Pure cross-layer utility functions. | — | `index.ts` | shared-types<br>versioning | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>server-source<br>shared-core<br>skills-sync<br>text-references<br>versioning<br>workflow-ir |
 
 ## Domain ownership
 
@@ -260,7 +260,7 @@ flowchart LR
   module_resources --> module_engine_gates
   module_resources --> module_formatting
   module_resources --> module_prompts
-  module_resources -. type .-> module_shared_types
+  module_resources --> module_shared_types
   module_resources --> module_shared_utils
   module_runtime --> module_automation
   module_runtime -. type .-> module_engine_execution

@@ -119,8 +119,9 @@ export interface McpToolRequest {
   readonly gate_verdict?: GateVerdictSubmission;
 
   /**
-   * Run-level `abort` ends the existing run named by `chain_id` in any nonterminal state.
-   * The executor consumes it before command, review, node or report handling.
+   * Run-level `abort` ends the existing run named by `chain_id` in any nonterminal state; `pause`
+   * holds it for conversation until an explicit `resume`. The executor consumes both before
+   * command, review, node or report handling.
    *
    * Exhausted reviews accept `retry` (reset attempts) and `skip` (operational bypass).
    * A blocking-unknown interrupt accepts `resume` (issue its investigation step) or
@@ -129,7 +130,7 @@ export interface McpToolRequest {
    *
    * @since 2.1.0
    */
-  readonly gate_action?: 'retry' | 'skip' | 'abort' | 'resume' | 'accept_alternative';
+  readonly gate_action?: 'retry' | 'skip' | 'abort' | 'pause' | 'resume' | 'accept_alternative';
 
   /** User response to previous chain step for advancing execution */
   readonly user_response?: string;

@@ -725,6 +725,12 @@ describe('ChainSessionStore handoff verbs', () => {
       save: jest.fn(async () => evictOnSave),
       claimRunByToken: jest.fn(() => claim),
       deleteRunsForOwners: jest.fn(),
+      readOwnedControlRun: jest.fn(() => {
+        throw new Error('fakeRegistry does not model selected-control custody');
+      }),
+      saveSelectedControlRun: jest.fn(() => {
+        throw new Error('fakeRegistry does not model selected-control custody');
+      }),
     };
   }
 
@@ -937,7 +943,8 @@ describe('ChainSessionStore handoff refusals over a shared database', () => {
     expect(transfer).toHaveBeenCalledWith(
       'hnd_never-minted',
       { continuityScopeId: 'pid-claimer-unknown', workspaceId: 'ws-a' },
-      undefined
+      undefined,
+      expect.any(Function)
     );
     expect((claimer as any).activeSessions.size).toBe(0);
     transfer.mockRestore();
@@ -962,5 +969,164 @@ describe('ChainSessionStore handoff refusals over a shared database', () => {
     const minted = await store.mintHandoffToken('s-mint-scope', { continuityScopeId: 'scope-a' });
     expect(minted?.token).toMatch(/^hnd_/);
     expect(rowOf('s-mint-scope')?.handoff_token).toBe(minted?.token);
+  });
+
+  describe('paused custody (R-T1.3-CUSTODY)', () => {
+    const PAUSE = { kind: 'conversation' as const, nodeId: 'n1', pausedAt: 5 };
+    const P = { continuityScopeId: 'scope-p' };
+    const raw = (id: string) => ({
+      run: engine.queryOne<Record<string, unknown>>(
+        'SELECT * FROM chain_runs WHERE session_id = ?',
+        [id]
+      ),
+      nodes: engine.query('SELECT * FROM chain_run_nodes WHERE session_id = ? ORDER BY position', [
+        id,
+      ]),
+    });
+    /** A donor-owned paused row carrying a review, a node milestone and its own credential. */
+    async function seedPaused(id: string, edit?: (s: ChainSession) => void): Promise<string> {
+      const session = { ...makeSession(id, `hnd_${id}`), chainId: `chain-${id}#1`, ...P };
+      session.conversationPause = PAUSE;
+      session.state.stepStates!.set('n1', {
+        state: 'working',
+        isPlaceholder: false,
+        renderedAt: 3,
+      });
+      session.reviews = {
+        n1: {
+          nodeId: 'n1',
+          kind: 'gate',
+          phase: 'awaiting-verdict',
+          combinedPrompt: '',
+          gateIds: ['quality'],
+          prompts: [],
+          createdAt: 4,
+          attemptCount: 1,
+          maxAttempts: 2,
+        },
+      };
+      edit?.(session);
+      await donor.save([session], DONOR);
+      return `hnd_${id}`;
+    }
+
+    test('two successive claims each return a fresh successor and change only owner + credential', async () => {
+      const token = await seedPaused('p-twice');
+      const original = raw('p-twice');
+      const [first, second] = [await makeClaimer('pid-first'), await makeClaimer('pid-second')];
+      const one = await first.claimHandoff(token, P);
+      const successor1 = (one.status === 'claimed' && one.session.handoffToken) || '';
+      expect(successor1).toMatch(/^hnd_/);
+      expect(successor1).not.toBe(token);
+      expect(raw('p-twice')).toEqual({
+        run: { ...original.run, run_owner_pid: 'pid-first', handoff_token: successor1 },
+        nodes: original.nodes,
+      });
+      expect(first.getSession('p-twice')).toMatchObject({
+        handoffToken: successor1,
+        conversationPause: PAUSE,
+      });
+      expect(await second.claimHandoff(token, P)).toEqual({ status: 'unknown-token' });
+
+      const two = await second.claimHandoff(successor1, P);
+      const successor2 = (two.status === 'claimed' && two.session.handoffToken) || '';
+      expect(successor2).toMatch(/^hnd_/);
+      expect([token, successor1]).not.toContain(successor2);
+      const claimed = raw('p-twice');
+      expect(claimed).toEqual({
+        run: { ...original.run, run_owner_pid: 'pid-second', handoff_token: successor2 },
+        nodes: original.nodes,
+      });
+      expect(await first.claimHandoff(successor1, P)).toEqual({ status: 'unknown-token' });
+
+      // The displaced owner can neither control nor bulk-overwrite the claimed row.
+      expect(
+        await first.resumeConversation('p-twice', first.getConversationControlScope('scope-p'))
+      ).toMatchObject({ outcome: 'refused', reason: 'ownership-lost' });
+      expect(first.hasActiveSession('p-twice')).toBe(false);
+      expect(await donor.save([makeSession('p-twice', token)], DONOR)).toEqual(['p-twice']);
+      expect(raw('p-twice')).toEqual(claimed);
+    });
+
+    test.each([
+      ['foreign continuity', { continuityScopeId: 'scope-other' }],
+      ['default continuity', undefined],
+    ] as const)('%s refuses as unknown-token without consuming', async (label, request) => {
+      const id = `p-${label.replace(/ /g, '-')}`;
+      const token = await seedPaused(id);
+      const before = raw(id);
+      const claimer = await makeClaimer(`pid-${id}`);
+      expect(await claimer.claimHandoff(token, request)).toEqual({ status: 'unknown-token' });
+      expect(raw(id)).toEqual(before);
+      expect(claimer.hasActiveSession(id)).toBe(false);
+    });
+
+    test('exact namespace only: no NULL-as-unknown, no factory throws, then the exact claim lands', async () => {
+      const token = await seedPaused('p-namespace');
+      const before = raw('p-namespace');
+      const registry = new DirectChainRunRegistry(engine);
+      const mint = () => 'hnd_successor';
+      for (const scope of [
+        { continuityScopeId: 'pid-x' },
+        { continuityScopeId: 'pid-x', workspaceId: 'ws-b' },
+        { continuityScopeId: 'pid-x', workspaceId: 'ws-a', organizationId: 'org' },
+      ])
+        expect(registry.claimRunByToken(token, scope, 'scope-p', mint)).toEqual({
+          status: 'unknown-token',
+        });
+      const exact = { continuityScopeId: 'pid-x', workspaceId: 'ws-a' };
+      expect(() => registry.claimRunByToken(token, exact, 'scope-p')).toThrow('factory');
+      expect(raw('p-namespace')).toEqual(before);
+      expect(registry.claimRunByToken(token, exact, 'scope-p', mint).status).toBe('claimed');
+    });
+
+    test('no-blueprint and terminal paused rows refuse with owner and token unchanged', async () => {
+      const bare = await seedPaused('p-bare', (s) => delete s.blueprint);
+      const ended = await seedPaused('p-ended', (s) => (s.runStatus = 'cancelled'));
+      const before = [raw('p-bare'), raw('p-ended')];
+      const claimer = await makeClaimer('pid-refuse');
+      expect(await claimer.claimHandoff(bare, P)).toEqual({
+        status: 'no-blueprint',
+        chainId: 'chain-p-bare#1',
+      });
+      expect(await claimer.claimHandoff(ended, P)).toEqual({ status: 'unknown-token' });
+      expect([raw('p-bare'), raw('p-ended')]).toEqual(before);
+    });
+
+    test('standalone handoff while paused rotates through the selected commit and keeps the pause', async () => {
+      const store = await makeClaimer('pid-paused-minter');
+      await store.createSession(
+        'p-mint',
+        'chain-p-mint#1',
+        2,
+        {},
+        { continuityScopeId: 'scope-m' }
+      );
+      const paused = await store.pauseConversation(
+        'p-mint',
+        store.getConversationControlScope('scope-m')
+      );
+      const before = raw('p-mint');
+      const clockless = (nodes: unknown[]) =>
+        nodes.map((node) => ({ ...(node as object), updated_at: 0 }));
+      expect(await store.mintHandoffToken('p-mint', { continuityScopeId: 'x' })).toBeUndefined();
+      expect(raw('p-mint')).toEqual(before);
+
+      const minted = await store.mintHandoffToken('p-mint', { continuityScopeId: 'scope-m' });
+      expect(minted?.token).toMatch(/^hnd_/);
+      expect(minted?.token).not.toBe(paused.outcome === 'paused' && paused.token);
+      const after = raw('p-mint');
+      expect(after.run).toEqual({ ...before.run, handoff_token: minted?.token });
+      expect(clockless(after.nodes)).toEqual(clockless(before.nodes));
+      expect(store.getSession('p-mint')?.conversationPause).toMatchObject({ kind: 'conversation' });
+
+      // Malformed paused-without-token refuses and mints nothing.
+      engine.run('UPDATE chain_runs SET handoff_token = NULL WHERE session_id = ?', ['p-mint']);
+      delete store.getSession('p-mint')!.handoffToken;
+      expect(await store.mintHandoffToken('p-mint', { continuityScopeId: 'scope-m' })).toBe(
+        undefined
+      );
+      expect(raw('p-mint').run?.['handoff_token']).toBeNull();
+    });
   });
 });

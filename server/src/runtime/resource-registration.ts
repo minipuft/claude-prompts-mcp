@@ -78,8 +78,10 @@ export function registerMcpResources(target: McpServer, deps: ResourceRegistrati
         ? {
             listActiveSessions: (limit?: number) => csm.listActiveSessions(limit),
             getSession: (sessionId: string) => csm.getSession(sessionId),
-            getSessionByChainIdentifier: (chainId: string) =>
-              csm.getSessionByChainIdentifier(chainId),
+            getSessionByChainIdentifier: (
+              chainId: string,
+              options?: { promoteDormant?: boolean }
+            ) => csm.getSessionByChainIdentifier(chainId, options),
             getSessionStats: () => csm.getSessionStats(),
           }
         : undefined,

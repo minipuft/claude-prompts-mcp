@@ -19,6 +19,7 @@ import { describeUndeclaredParameterRefusal } from '../../shared/undeclared-para
 import type { GateService } from '#engine/gates/services/gate-service-interface.js';
 import type { GateSystemSettings } from '#shared/types/index.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
+import type { RequestIdentityResolverOptions } from '#shared/utils/request-identity-resolver.js';
 import type { PipelineDependencies } from './pipeline-dependencies.js';
 
 import { RemainderProcessor } from '#engine/execution/capture/remainder-processor.js';
@@ -88,6 +89,26 @@ import { DEFAULT_WORKFLOW_CAPS } from '#modules/workflow-ir/node-schema.js';
 import { validateWorkflowIR } from '#modules/workflow-ir/validator.js';
 
 /**
+ * The identity policy every request scope resolves under: stage 03 for run creation, and
+ * `PromptExecutor` for the calls it answers before the pipeline (control, claim, mint, abort).
+ * No "is identity configured?" guard: the loader resolves the whole section (row 6.2 / R57), and
+ * the guard that stood here discarded the derived launch workspace for every ordinary launch.
+ */
+export function identityResolverOptions(
+  configManager: PipelineDependencies['configManager']
+): RequestIdentityResolverOptions {
+  const identityConfig = configManager.getConfig().identity;
+  return {
+    mode: identityConfig.mode,
+    allowPerRequestOverride: identityConfig.allowPerRequestOverride,
+    launchDefaults: identityConfig.launchDefaults,
+    // Not `getConfig().transport` — `Config` carries no such member (transport is
+    // launch-time-only, Ruling R30). `getTransportMode()` is the launch-option-aware read.
+    transportMode: configManager.getTransportMode(),
+  };
+}
+
+/**
  * Factory that constructs and wires the PromptExecutionPipeline.
  *
  * Receives a typed PipelineDependencies bag and produces a fully-wired
@@ -127,23 +148,10 @@ export class PipelineBuilder {
 
     const lifecycleStage = new ExecutionLifecycleStage(temporaryGateRegistry, deps.logger);
 
-    const identityResolutionStage = new IdentityResolutionStage(() => {
-      // No "did the operator configure identity?" guard any more: the loader resolves the whole
-      // section (row 6.2 / R57), so `mode` is always set and the guard that used to stand here
-      // could only ever be false. It was not inert — a config with launch defaults but no
-      // explicit `identity.mode` (what `applyRuntimeIdentityOverrides` produces for every
-      // ordinary launch) took the `null` branch, and the stage then resolved identity with NO
-      // launch defaults and NO transport, discarding the derived workspace id.
-      const identityConfig = deps.configManager.getConfig().identity;
-      return {
-        mode: identityConfig.mode,
-        allowPerRequestOverride: identityConfig.allowPerRequestOverride,
-        launchDefaults: identityConfig.launchDefaults,
-        // Not `getConfig().transport` — `Config` carries no such member (transport is
-        // launch-time-only, Ruling R30). `getTransportMode()` is the launch-option-aware read.
-        transportMode: deps.configManager.getTransportMode(),
-      };
-    }, deps.logger);
+    const identityResolutionStage = new IdentityResolutionStage(
+      () => identityResolverOptions(deps.configManager),
+      deps.logger
+    );
 
     // ── Stages 04-09: Parsing, Planning, Scripts ──
 

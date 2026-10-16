@@ -292,7 +292,79 @@ export interface SessionBlueprint {
   gateInstructions?: string;
 }
 
+/** SQL storage namespace and resolved caller continuity are separate, exact identity axes. */
+export interface ExactControlScope {
+  readonly organizationId: string | null;
+  readonly workspaceId: string | null;
+  readonly continuityScopeId: string;
+}
+
+/** Detached durable view; inspecting it neither repairs nor promotes the held local session. */
+export interface ConversationControlInspection {
+  readonly ownerPid: string;
+  readonly scope: ExactControlScope;
+  readonly session: Readonly<Omit<ChainSession, 'handoffToken'>>;
+}
+
+export interface ConversationPause {
+  readonly kind: 'conversation';
+  readonly nodeId: string | null;
+  readonly pausedAt: number;
+}
+
+export type ConversationControlReadDecision<T> = { kind: 'write' } | { kind: 'read'; value: T };
+
+export type ConversationControlResult =
+  | {
+      outcome: 'paused' | 'already-paused';
+      inspection: ConversationControlInspection;
+      token: string;
+    }
+  | { outcome: 'resumed'; inspection: ConversationControlInspection }
+  | {
+      outcome: 'refused';
+      sessionId: string;
+      chainId: string | null;
+      scope: ExactControlScope;
+      /** `busy`: work on the run had not settled when the control arrived; retry, nothing changed. */
+      reason:
+        | 'unknown-session'
+        | 'scope-mismatch'
+        | 'ownership-lost'
+        | 'run-terminal'
+        | 'recovery-credential-missing'
+        | 'busy';
+      inspection: ConversationControlInspection | null;
+    };
+
+/** Why the store's operation admission refused a workflow mutation before it changed anything. */
+export type RunOperationRefusalReason = 'conversation-paused' | 'control-in-progress';
+
+/**
+ * A workflow mutation the store refused before mutating (T1.4). `conversation-paused` waits for an
+ * explicit resume or abort; `control-in-progress` is retryable once the pause, resume or paused
+ * mint holding the run settles. Abort is never refused this way.
+ */
+export class RunOperationRefusedError extends Error {
+  readonly sessionId: string;
+  readonly reason: RunOperationRefusalReason;
+  readonly retryable: boolean;
+
+  constructor(sessionId: string, reason: RunOperationRefusalReason) {
+    super(
+      reason === 'conversation-paused'
+        ? `Run ${sessionId} is paused for conversation: resume it explicitly or abort it before any workflow change.`
+        : `Run ${sessionId} has a workflow control in progress: retry once it settles.`
+    );
+    this.name = 'RunOperationRefusedError';
+    this.sessionId = sessionId;
+    this.reason = reason;
+    this.retryable = reason === 'control-in-progress';
+  }
+}
+
 export interface ChainSession {
+  conversationPause?: ConversationPause;
   sessionId: string;
   chainId: string;
   state: ChainState;
@@ -363,6 +435,13 @@ const TERMINAL_RUN_STATUSES: readonly ChainRunStatus[] = [
 
 export const isTerminalRunStatus = (status: ChainRunStatus): boolean =>
   (TERMINAL_RUN_STATUSES as readonly string[]).includes(status);
+
+/** True while a nonterminal run holds a conversation pause: only an explicit resume or abort ends it. */
+export function isConversationPaused(
+  session: Pick<ChainSession, 'conversationPause' | 'runStatus'> | undefined
+): boolean {
+  return session?.conversationPause !== undefined && !isTerminalRunStatus(session.runStatus);
+}
 
 /**
  * True when a run has finished: its status is terminal, or it has advanced past its last node
@@ -527,6 +606,11 @@ export interface ChainSessionSummary {
 
 export interface ChainSessionLookupOptions extends StateStoreOptions {
   includeDormant?: boolean;
+  /**
+   * Default true: a dormant run found is promoted to canonical, as an explicit resume. False
+   * reads it as it stands, for a control that names a run without resuming it.
+   */
+  promoteDormant?: boolean;
 }
 
 /**
@@ -559,6 +643,11 @@ export interface RunTerminalFact {
 
 export type RunEndedCallback = (sessionId: string, terminal?: RunTerminalFact) => void;
 
+/**
+ * Every workflow mutator below throws {@link RunOperationRefusedError} before changing a run that is
+ * conversation-paused or held by an in-flight control; `cancelChain` (abort) is never refused, and
+ * `completeHeldRun` reads a pause as a hold.
+ */
 export interface ChainSessionService {
   /**
    * Create a run.

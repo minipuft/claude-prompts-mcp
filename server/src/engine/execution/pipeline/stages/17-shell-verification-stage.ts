@@ -39,6 +39,7 @@ import type {
   DeferredAdvance,
   GateVerdictProcessor,
 } from '../../../gates/services/gate-verdict-processor.js';
+import type { WorkflowVerifyIdentity } from '../../../gates/shell/types.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 import { formatAttempt } from '#shared/utils/attempt-number.js';
@@ -123,8 +124,7 @@ export class ShellVerificationStage extends BasePipelineStage {
 
     // LOOP MODE: Write verify-state.db for Stop hook integration
     if (shellVerify.loop === true) {
-      const stateKey = this.resolveVerifyStateKey(context);
-      await this.stateManager.writeState(stateKey, pending, context.getSessionId());
+      await this.stateManager.writeWorkflowState(workflowIdentity(context), pending);
     }
 
     // Execute verification via ShellVerifyExecutor. The caller's workspace decides whether the
@@ -158,8 +158,7 @@ export class ShellVerificationStage extends BasePipelineStage {
     pending: PendingShellVerification
   ): Promise<void> {
     if (pending.shellVerify.loop === true) {
-      const stateKey = this.resolveVerifyStateKey(context);
-      await this.stateManager.writeState(stateKey, pending, context.getSessionId());
+      await this.stateManager.writeWorkflowState(workflowIdentity(context), pending);
     }
     await this.saveToSession(context, pending);
   }
@@ -182,7 +181,7 @@ export class ShellVerificationStage extends BasePipelineStage {
 
     // LOOP MODE: Clear verify-state.db, unless the check stands again for the next step
     if (shellVerify.loop === true && !rearmed) {
-      await this.stateManager.clearState(this.resolveVerifyStateKey(context));
+      await this.releaseLoopState(context);
     }
 
     // Signal which gates' shell criteria passed (for GateReviewStage auto-pass)
@@ -216,7 +215,7 @@ export class ShellVerificationStage extends BasePipelineStage {
     // Max attempts: clear verify-state.db (the Stop hook shouldn't keep trying). The session
     // keeps the check — `retry` needs it; skip or the next pass clears it.
     if (pending.attemptCount >= pending.maxAttempts && shellVerify.loop === true) {
-      await this.stateManager.clearState(this.resolveVerifyStateKey(context));
+      await this.releaseLoopState(context);
     }
 
     this.renderFeedback(context, result, pending);
@@ -298,17 +297,13 @@ export class ShellVerificationStage extends BasePipelineStage {
     });
   }
 
-  /**
-   * Resolve verify-state.db key: prefer chain ID (human-readable, Stop hook uses it),
-   * fall back to session ID (guaranteed unique) to avoid 'unknown' key collisions.
-   */
-  private resolveVerifyStateKey(context: ExecutionContext): string {
-    return (
-      context.getRequestedChainId() ??
-      context.state.session.resumeChainId ??
-      context.getSessionId() ??
-      'unknown'
-    );
+  /** Release this run's loop row under the identity abort cleanup uses; a row it cannot claim fails. */
+  private async releaseLoopState(context: ExecutionContext): Promise<void> {
+    const { runSessionId, chainId } = workflowIdentity(context);
+    const outcome = await this.stateManager.releaseRunState(chainId, runSessionId);
+    if (outcome === 'foreign' || outcome === 'unbound') {
+      throw new Error(`Failed to clear verify-loop state for run ${runSessionId}: ${outcome}`);
+    }
   }
 
   /**
@@ -460,8 +455,7 @@ export class ShellVerificationStage extends BasePipelineStage {
     const rearmed: PendingShellVerification = { ...pending, attemptCount: 0, previousResults: [] };
     await this.writeSnapshot(context, rearmed, undefined);
     if (rearmed.shellVerify.loop === true) {
-      const stateKey = this.resolveVerifyStateKey(context);
-      await this.stateManager.writeState(stateKey, rearmed, context.getSessionId());
+      await this.stateManager.writeWorkflowState(workflowIdentity(context), rearmed);
     }
     context.diagnostics.info(this.name, 'Shell verification armed for the next step', {
       gateId: rearmed.gateId,
@@ -542,7 +536,8 @@ export class ShellVerificationStage extends BasePipelineStage {
         context.state.gates.pendingShellVerification = undefined;
         await this.clearFromSession(context);
         const release = await this.releaseHeldStep(context, heldNodeId, 'gate-skip');
-        await this.rearmForNextStep(context, pending, heldNodeId, release);
+        const rearmed = await this.rearmForNextStep(context, pending, heldNodeId, release);
+        if (pending.shellVerify.loop === true && !rearmed) await this.releaseLoopState(context);
         context.diagnostics.warn(this.name, 'User chose to skip shell verification', {
           gateId: pending.gateId,
         });
@@ -560,6 +555,16 @@ export class ShellVerificationStage extends BasePipelineStage {
 function runSessionId(context: ExecutionContext): string | undefined {
   const sessionId = context.getSessionId();
   return sessionId === undefined || sessionId.length === 0 ? undefined : sessionId;
+}
+
+/** Every loop write, rearm and release keys by the run UUID with its exact scope; no run, refused. */
+function workflowIdentity(context: ExecutionContext): WorkflowVerifyIdentity {
+  const sessionId = runSessionId(context);
+  if (sessionId === undefined) {
+    throw new Error('Verify loop refused: this call has no workflow run identity');
+  }
+  const chainId = context.getRequestedChainId() ?? context.state.session.resumeChainId;
+  return { runSessionId: sessionId, chainId, scope: { ...context.getScopeOptions() } };
 }
 
 /**

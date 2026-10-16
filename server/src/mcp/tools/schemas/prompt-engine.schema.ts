@@ -408,7 +408,7 @@ const PARAM_DEFAULTS = {
   gate_verdict:
     'Gate review result when resuming, as a structured object: {overall:"PASS"|"FAIL", rationale:"...", per_gate:[{index:1, passed:true, rationale:"..."}], reminders:{satisfied:["id"], not_applicable:[{id:"id", reason:"..."}]}}. per_gate carries only check-tier gates; reminders attests the rest in one field. Rationales are single-line. Keep user_response for actual step output.',
   gate_action:
-    'Run action. "abort" stops the existing run named by chain_id in any nonterminal state, including active runs, blocking-unknown pauses, ordinary reviews and detached holds. No command, review, retry exhaustion, node selection, trailer or report is required; it starts no work and consumes no report. State and artifacts are retained; repeated abort succeeds. Completed, failed, missing or out-of-scope runs receive a non-applied refusal. AFTER A FAILED GATE exhausts its retry limit: "retry" resets attempts, "skip" bypasses the gate. ON A BLOCKING-UNKNOWN INTERRUPT (only with budget.pauseOnBlocking): "resume" clears the pause and issues the investigation step as written, "accept_alternative" replaces the remaining run with remainder on the SAME call (refused without one).',
+    'Run action. "abort" stops the existing run named by chain_id in any nonterminal state, including active runs, blocking-unknown pauses, ordinary reviews and detached holds. No command, review, retry exhaustion, node selection, trailer or report is required; it starts no work and consumes no report. State and artifacts are retained; repeated abort succeeds. Completed, failed, missing or out-of-scope runs receive a non-applied refusal. "pause" persists a conversation pause on the run named by chain_id so you can discuss the step with the user; "resume" clears it explicitly; abort still ends the run. Send pause or resume with chain_id only. AFTER A FAILED GATE exhausts its retry limit: "retry" resets attempts, "skip" bypasses the gate. ON A BLOCKING-UNKNOWN INTERRUPT (only with budget.pauseOnBlocking): "resume" clears the pause and issues the investigation step as written, "accept_alternative" replaces the remaining run with remainder on the SAME call (refused without one).',
   user_response:
     'Your Step output to capture before advancing. Supply the same text you would reply with during manual execution.',
   gates:
@@ -459,12 +459,13 @@ function buildCoreFields(resolve: DescriptionResolver) {
       // Core even when gates are disabled: `retry`/`skip` then receive a named refusal
       // from the admission owner; blocking-unknown actions remain reachable. `resume`/
       // `accept_alternative` answer a run paused on the reserved `__unknown_interrupt__`
-      // review; `abort` exits any existing nonterminal run before pipeline dispatch. Review-only
+      // review; `abort` exits any existing nonterminal run before pipeline dispatch, and `pause`
+      // holds one for a conversation with the user, gates on or off. Review-only
       // actions used against the wrong pending state are refused
       // BY NAME at the verdict processor rather than being narrowed out of the enum here —
       // narrowing is what silently strips a value (P6-F6), and a caller who sent `resume` to a
       // gate review deserves to be told so.
-      .enum(['retry', 'skip', 'abort', 'resume', 'accept_alternative'])
+      .enum(['retry', 'skip', 'abort', 'pause', 'resume', 'accept_alternative'])
       .optional()
       .describe(resolve('gate_action', PARAM_DEFAULTS.gate_action)),
 
@@ -587,10 +588,66 @@ export function buildPromptEngineSchema(surface: ToolSurfaceResolver = {}) {
   // Absent state means "widest", matching `isGateSystemEnabled()`, which
   // defaults to enabled when no gate state store is wired.
   if (surface.state?.gateSystemEnabled === false) {
-    return withSourceExclusivity(z.object(buildCoreFields(resolve)).passthrough());
+    return withControlExclusivity(
+      withSourceExclusivity(z.object(buildCoreFields(resolve)).passthrough())
+    );
   }
 
-  return withSourceExclusivity(buildWidestSchema(resolve).passthrough());
+  return withControlExclusivity(withSourceExclusivity(buildWidestSchema(resolve).passthrough()));
+}
+
+/**
+ * Parameters a pause or resume control call may not carry: step output, a review, a rewrite,
+ * unknowns, new work, a handoff mint/claim, or prompt arguments and gates, which without a
+ * command nothing reads. Each one means work the call would perform or silently drop. The
+ * executor reads the same list for in-process callers that skip the schema.
+ */
+export const CONTROL_EXCLUSIVE_PARAMETERS = [
+  'user_response',
+  'gate_verdict',
+  'remainder',
+  'observations',
+  'command',
+  'workflow',
+  'force_restart',
+  'handoff',
+  'claim_token',
+  'inputs',
+  'options',
+  'gates',
+] as const;
+
+/** The two control actions that carry nothing but the run they name. */
+const EXCLUSIVE_CONTROL_ACTIONS: ReadonlySet<unknown> = new Set(['pause', 'resume']);
+
+/**
+ * Refuse a `pause` or `resume` sent together with any {@link CONTROL_EXCLUSIVE_PARAMETERS} key.
+ *
+ * Decided by PRESENCE, never truthiness: `handoff:false` or `observations:[]` were still sent.
+ * `undefined` is "not sent", as in `sentKeys` (`shared/undeclared-parameters`): JSON cannot carry
+ * it. `resume` is refused the same way whichever hold it answers — the schema cannot see run
+ * state, and the bare blocking-unknown resume is unchanged.
+ */
+function withControlExclusivity<
+  T extends z.ZodType<
+    { gate_action?: unknown } & {
+      [K in (typeof CONTROL_EXCLUSIVE_PARAMETERS)[number]]?: unknown;
+    }
+  >,
+>(schema: T): T {
+  return schema.superRefine((value, ctx) => {
+    if (!EXCLUSIVE_CONTROL_ACTIONS.has(value.gate_action)) return;
+    const supplied = CONTROL_EXCLUSIVE_PARAMETERS.filter((name) => value[name] !== undefined);
+    if (supplied.length === 0) return;
+    ctx.addIssue({
+      code: 'custom',
+      path: ['gate_action'],
+      message:
+        `gate_action:"${String(value.gate_action)}" is a control call: send it with chain_id ` +
+        `only. Remove ${supplied.map((name) => `'${name}'`).join(', ')} and send ` +
+        `${supplied.length === 1 ? 'it' : 'them'} in a separate call. Nothing was changed.`,
+    });
+  });
 }
 
 /** The four command sources, in the order the rejection message names them. */

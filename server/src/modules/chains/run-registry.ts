@@ -27,18 +27,44 @@ import type {
   ChainHandoffClaimResult,
   ChainSession,
   ChainSessionLifecycle,
+  ExactControlScope,
   SessionBlueprint,
   UnknownLedgerEntry,
 } from '#shared/types/chain-session.js';
 import type { DatabasePort, StateStoreOptions } from '#shared/types/persistence.js';
 
-import { isTerminalRunStatus } from '#shared/types/chain-session.js';
+import { isConversationPaused, isTerminalRunStatus } from '#shared/types/chain-session.js';
 import { stripRunNumber } from '#shared/utils/chain-id-codec.js';
+import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
+
+type OwnedControlRunResult =
+  | { status: 'owned'; run: { ownerPid: string; scope: ExactControlScope; session: ChainSession } }
+  | { status: 'refused'; reason: 'unknown-session' | 'ownership-lost' | 'scope-mismatch' };
+
+type SelectedControlRunResult =
+  | { status: 'saved'; run: Extract<OwnedControlRunResult, { status: 'owned' }>['run'] }
+  | Extract<OwnedControlRunResult, { status: 'refused' }>;
+
+const RUN_COLUMNS = `session_id, chain_id, base_chain_id, run_owner_pid, organization_id, workspace_id,
+  run_status, current_node_id, state, created_at, last_activity, run_completed_at, handoff_token`;
+const NODE_COLUMNS = `session_id, node_id, position, prompt_id, step_name, milestone,
+  is_placeholder, rendered_at, responded_at, completed_at, origin, origin_unknown_id,
+  accepted_at_step, declared_sections_json, delegated, args_json, inline_gate_ids, spawned_at, updated_at`;
 
 export interface ChainRunRegistry {
   ensureInitialized(): Promise<void>;
   /** Every run owned by the scope's run owner, with its nodes in position order. */
   load(scope?: StateStoreOptions): Promise<ChainSession[]>;
+  readOwnedControlRun(
+    sessionId: string,
+    ownerScope: StateStoreOptions,
+    scope: ExactControlScope
+  ): OwnedControlRunResult;
+  saveSelectedControlRun(
+    session: ChainSession,
+    ownerScope: StateStoreOptions,
+    scope: ExactControlScope
+  ): SelectedControlRunResult;
   /** Replace the scope owner's runs wholesale. Must run inside the caller's transaction. */
   /**
    * Replace this owner's runs with `sessions`. Returns the session ids that were NOT written
@@ -49,19 +75,23 @@ export interface ChainRunRegistry {
   /**
    * Transfer the run carrying `token` to the owner/scope in `scope`, nulling the token in the
    * same statement so it cannot be claimed twice (2A). Refuses a row whose workspace differs
-   * from the claimant's when both are known.
+   * from the claimant's when both are known. A conversation-paused run instead needs an exact
+   * namespace and continuity match and receives `mintSuccessor()` in place of the token, so it
+   * stays recoverable; a paused claim without that factory throws and rolls back.
    */
   claimRunByToken(
     token: string,
     scope?: StateStoreOptions,
-    requestContinuityFilter?: string
+    requestContinuityFilter?: string,
+    mintSuccessor?: () => string
   ): ClaimRunResult;
-  /** Drop every run owned by a process that is no longer alive. */
+  /** Drop unprotected runs owned by a process that is no longer alive. */
   deleteRunsForOwners(ownerPids: readonly string[]): void;
 }
 
 /** The document-shaped remainder of a session, everything the columns do not carry. */
 interface ResidualRunState {
+  conversationPause?: ChainSession['conversationPause'];
   executionOrder?: string[];
   originalArgs?: Record<string, unknown>;
   continuityScopeId?: string;
@@ -90,6 +120,8 @@ interface ChainRunRow {
   run_completed_at: number | null;
   handoff_token: string | null;
 }
+
+type ClaimRow = ChainRunRow & { workspace_id: string | null; organization_id: string | null };
 
 /** What a registry claim hands back: the run, or the reason it was refused at the row level. */
 export type ClaimRunResult = ChainHandoffClaimResult;
@@ -147,6 +179,54 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     // Tables created by SqliteEngine.applySchema() during db.initialize()
   }
 
+  /** Pure exact read: namespace/owner checks precede residual continuity and node hydration. */
+  readOwnedControlRun(
+    sessionId: string,
+    ownerScope: StateStoreOptions,
+    scope: ExactControlScope
+  ): OwnedControlRunResult {
+    const row = this.db.queryOne<
+      ChainRunRow & {
+        run_owner_pid: string;
+        organization_id: string | null;
+        workspace_id: string | null;
+      }
+    >('SELECT * FROM chain_runs WHERE session_id = ?', [sessionId]);
+    if (row === null) return { status: 'refused', reason: 'unknown-session' };
+    if (row.run_owner_pid !== resolveRunOwnerPid(ownerScope)) {
+      return { status: 'refused', reason: 'ownership-lost' };
+    }
+    if (
+      row.organization_id !== (ownerScope.organizationId ?? null) ||
+      row.workspace_id !== (ownerScope.workspaceId ?? null) ||
+      row.organization_id !== scope.organizationId ||
+      row.workspace_id !== scope.workspaceId
+    )
+      return { status: 'refused', reason: 'scope-mismatch' };
+    const continuityScopeId = resolveContinuityScopeId({
+      continuityScopeId: parseResidual(row.state).continuityScopeId,
+    });
+    if (continuityScopeId !== scope.continuityScopeId) {
+      return { status: 'refused', reason: 'scope-mismatch' };
+    }
+    const nodeRows = this.db.query<ChainRunNodeRow>(
+      'SELECT * FROM chain_run_nodes WHERE session_id = ? ORDER BY position',
+      [sessionId]
+    );
+    return {
+      status: 'owned',
+      run: {
+        ownerPid: row.run_owner_pid,
+        scope: {
+          organizationId: row.organization_id,
+          workspaceId: row.workspace_id,
+          continuityScopeId,
+        },
+        session: reconstructSession(row, nodeRows),
+      },
+    };
+  }
+
   async load(scope?: StateStoreOptions): Promise<ChainSession[]> {
     const runOwnerPid = resolveRunOwnerPid(scope);
 
@@ -198,12 +278,22 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     const organizationId = scope?.organizationId ?? null;
     const workspaceId = scope?.workspaceId ?? null;
 
-    this.db.run(
-      `DELETE FROM chain_run_nodes
-        WHERE session_id IN (SELECT session_id FROM chain_runs WHERE run_owner_pid = ?)`,
-      [runOwnerPid]
+    // A stored paused run survives unless memory holds it unpaused or terminal. The DELETE decides
+    // that itself, so the transaction's first statement is a write: reading the protected ids
+    // first would make this DEFERRED persist read-then-write (transaction-lock-mode test).
+    const released = sessions.filter((session) => !isConversationPaused(session));
+    this.deleteUnprotectedRuns(
+      runOwnerPid,
+      released.map((session) => session.sessionId)
     );
-    this.db.run('DELETE FROM chain_runs WHERE run_owner_pid = ?', [runOwnerPid]);
+    // Whatever this owner still has after the DELETE is a retained paused run: keep it as stored.
+    const retained = new Set(
+      this.db
+        .query<{
+          session_id: string;
+        }>('SELECT session_id FROM chain_runs WHERE run_owner_pid = ?', [runOwnerPid])
+        .map((row) => row.session_id)
+    );
 
     // A run another owner has claimed (2A) still sits in this process's memory until the next
     // persist — which is now. Its row survived the owner-scoped DELETE above because the claim
@@ -215,79 +305,96 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     );
 
     const updatedAt = Date.now();
+    const namespace = { runOwnerPid, organizationId, workspaceId };
     for (const session of sessions) {
-      if (claimedElsewhere.has(session.sessionId)) continue;
-      this.db.run(
-        `INSERT INTO chain_runs (
-           session_id, chain_id, base_chain_id, run_owner_pid, organization_id, workspace_id,
-           run_status, current_node_id, state, created_at, last_activity, run_completed_at,
-           handoff_token
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          session.sessionId,
-          session.chainId,
-          stripRunNumber(session.chainId),
-          runOwnerPid,
-          organizationId,
-          workspaceId,
-          session.runStatus,
-          session.state.currentNodeId,
-          JSON.stringify(toResidual(session)),
-          session.startTime,
-          session.lastActivity,
-          session.runCompletedAt ?? null,
-          session.handoffToken ?? null,
-        ]
-      );
-
-      const stepStates = session.state.stepStates;
-      session.state.nodes.forEach((node, index) => {
-        const metadata = stepStates?.get(node.id);
-        this.db.run(
-          `INSERT INTO chain_run_nodes (
-             session_id, node_id, position, prompt_id, step_name, milestone,
-             is_placeholder, rendered_at, responded_at, completed_at,
-             origin, origin_unknown_id, accepted_at_step, declared_sections_json, delegated,
-             args_json, inline_gate_ids, spawned_at, updated_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            session.sessionId,
-            node.id,
-            index + 1,
-            node.promptId,
-            node.stepName,
-            metadata?.state ?? null,
-            metadata === undefined ? null : metadata.isPlaceholder ? 1 : 0,
-            metadata?.renderedAt ?? null,
-            metadata?.respondedAt ?? null,
-            metadata?.completedAt ?? null,
-            // The column is NOT NULL with no DDL default, so this bind is the only source of
-            // the value — a real 'planned'/'inserted' string on every row, never a NULL that a
-            // default would paper over.
-            node.origin ?? 'planned',
-            node.originUnknownId ?? null,
-            // P6.253: a remainder's acceptance stamp. NULL on every planned and inserted node.
-            node.acceptedAtStep ?? null,
-            // Serialised only when the render recorded one. A step that declared nothing and a
-            // step whose declaration was never recorded are the same row here, and both mean the
-            // verification stage has no declared header to block on.
-            metadata?.declaredSections === undefined
-              ? null
-              : JSON.stringify(metadata.declaredSections),
-            // A.5: the node's own declaration. NULL rather than 0/'{}' when absent, so "declared
-            // nothing" and "declared not delegated" stay distinguishable on the row.
-            node.delegated === undefined ? null : node.delegated ? 1 : 0,
-            node.args === undefined ? null : JSON.stringify(node.args),
-            // P6.101: a contributed node's step gates. NULL when it carries none.
-            node.inlineGateIds === undefined ? null : JSON.stringify(node.inlineGateIds),
-            // Tier 4: the detached lifecycle's way in. NULL for every node never spawned.
-            metadata?.spawnedAt ?? null,
-            updatedAt,
-          ]
-        );
-      });
+      if (claimedElsewhere.has(session.sessionId) || retained.has(session.sessionId)) continue;
+      this.writeSession(serializeSessionRows(session, namespace, updatedAt));
     }
     return [...claimedElsewhere];
+  }
+
+  private writeSession(rows: ReturnType<typeof serializeSessionRows>): void {
+    this.db.run(
+      `INSERT INTO chain_runs (${RUN_COLUMNS}) VALUES (${rows.run.map(() => '?').join(', ')})`,
+      rows.run
+    );
+    for (const node of rows.nodes)
+      this.db.run(
+        `INSERT INTO chain_run_nodes (${NODE_COLUMNS}) VALUES (${node.map(() => '?').join(', ')})`,
+        node
+      );
+  }
+
+  /** Caller owns the immediate transaction; both write and witness use one canonical payload. */
+  saveSelectedControlRun(
+    session: ChainSession,
+    ownerScope: StateStoreOptions,
+    scope: ExactControlScope
+  ): SelectedControlRunResult {
+    const owned = this.readOwnedControlRun(session.sessionId, ownerScope, scope);
+    if (owned.status === 'refused') return owned;
+    if (
+      owned.run.session.chainId !== session.chainId ||
+      resolveContinuityScopeId({ continuityScopeId: session.continuityScopeId }) !==
+        scope.continuityScopeId
+    )
+      return { status: 'refused', reason: 'scope-mismatch' };
+    const namespace = {
+      runOwnerPid: owned.run.ownerPid,
+      organizationId: owned.run.scope.organizationId,
+      workspaceId: owned.run.scope.workspaceId,
+    };
+    const identity = [
+      session.sessionId,
+      namespace.runOwnerPid,
+      namespace.organizationId,
+      namespace.workspaceId,
+    ];
+    const before = this.db.queryOne<{ state: string }>(
+      `SELECT state FROM chain_runs WHERE session_id = ? AND run_owner_pid = ?
+        AND organization_id IS ? AND workspace_id IS ?`,
+      identity
+    );
+    if (before === null) return { status: 'refused', reason: 'ownership-lost' };
+    if (
+      resolveContinuityScopeId({
+        continuityScopeId: parseResidual(before.state).continuityScopeId,
+      }) !== scope.continuityScopeId
+    ) {
+      return { status: 'refused', reason: 'scope-mismatch' };
+    }
+    const rows = serializeSessionRows(session, namespace, Date.now());
+    const winner = this.db.queryOne<{ session_id: string }>(
+      `DELETE FROM chain_runs WHERE session_id = ? AND run_owner_pid = ?
+        AND organization_id IS ? AND workspace_id IS ? AND state = ? RETURNING session_id`,
+      [...identity, before.state]
+    );
+    if (winner === null) return { status: 'refused', reason: 'ownership-lost' };
+    this.db.run('DELETE FROM chain_run_nodes WHERE session_id = ?', [session.sessionId]);
+    this.writeSession(rows);
+    this.assertSelectedRows(session.sessionId, rows);
+    const after = this.readOwnedControlRun(session.sessionId, ownerScope, scope);
+    if (after.status === 'refused') throw new Error('Selected control durable identity changed');
+    return { status: 'saved', run: after.run };
+  }
+
+  private assertSelectedRows(
+    sessionId: string,
+    expected: ReturnType<typeof serializeSessionRows>
+  ): void {
+    const run = this.db.queryOne<Record<string, unknown>>(
+      `SELECT ${RUN_COLUMNS} FROM chain_runs WHERE session_id = ?`,
+      [sessionId]
+    );
+    const nodes = this.db.query<Record<string, unknown>>(
+      `SELECT ${NODE_COLUMNS} FROM chain_run_nodes WHERE session_id = ? ORDER BY position`,
+      [sessionId]
+    );
+    if (
+      JSON.stringify(run === null ? null : Object.values(run)) !== JSON.stringify(expected.run) ||
+      JSON.stringify(nodes.map((node) => Object.values(node))) !== JSON.stringify(expected.nodes)
+    )
+      throw new Error('Selected control durable row or node mismatch');
   }
 
   /** Session ids among `sessionIds` whose row is currently owned by someone other than `ownerPid`. */
@@ -307,11 +414,12 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
   claimRunByToken(
     token: string,
     scope?: StateStoreOptions,
-    requestContinuityFilter?: string
+    requestContinuityFilter?: string,
+    mintSuccessor?: () => string
   ): ClaimRunResult {
     this.db.beginTransaction('immediate');
     try {
-      const result = this.claimSelectedRun(token, scope, requestContinuityFilter);
+      const result = this.claimSelectedRun(token, scope, requestContinuityFilter, mintSuccessor);
       this.db.commit();
       return result;
     } catch (error) {
@@ -323,21 +431,26 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
   private claimSelectedRun(
     token: string,
     scope?: StateStoreOptions,
-    requestContinuityFilter?: string
+    requestContinuityFilter?: string,
+    mintSuccessor?: () => string
   ): ClaimRunResult {
     const claimantPid = resolveRunOwnerPid(scope);
     const claimantWorkspace = scope?.workspaceId ?? null;
     const claimantOrganization = scope?.organizationId ?? null;
 
-    const row = this.db.queryOne<ChainRunRow & { workspace_id: string | null }>(
+    const row = this.db.queryOne<ClaimRow>(
       `SELECT session_id, chain_id, run_status, current_node_id, state,
-              created_at, last_activity, run_completed_at, handoff_token, workspace_id
+              created_at, last_activity, run_completed_at, handoff_token, workspace_id,
+              organization_id
          FROM chain_runs
         WHERE handoff_token = ?`,
       [token]
     );
     if (row === null || isTerminalRunStatus(row.run_status as ChainRunStatus)) {
       return { status: 'unknown-token' };
+    }
+    if (parseResidual(row.state).conversationPause !== undefined) {
+      return this.claimPausedRun(row, token, scope, requestContinuityFilter, mintSuccessor);
     }
 
     // OQ-3: a claim never rewrites workspace scope. Known-and-different is refused; an unknown
@@ -368,17 +481,7 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
       return { status: 'no-blueprint', chainId: row.chain_id };
     }
 
-    const nodeRows = this.db.query<ChainRunNodeRow>(
-      `SELECT session_id, node_id, position, prompt_id, step_name, milestone,
-              is_placeholder, rendered_at, responded_at, completed_at,
-              declared_sections_json, origin, origin_unknown_id, accepted_at_step, delegated,
-              args_json, inline_gate_ids, spawned_at
-         FROM chain_run_nodes
-        WHERE session_id = ?
-        ORDER BY position`,
-      [row.session_id]
-    );
-    const session = reconstructSession({ ...row, handoff_token: null }, nodeRows);
+    const session = reconstructSession({ ...row, handoff_token: null }, this.claimNodeRows(row));
     const transferred = this.db.queryOne<{ session_id: string }>(
       `UPDATE chain_runs
           SET run_owner_pid = ?, organization_id = COALESCE(?, organization_id),
@@ -389,16 +492,166 @@ export class DirectChainRunRegistry implements ChainRunRegistry {
     return transferred === null ? { status: 'unknown-token' } : { status: 'claimed', session };
   }
 
-  deleteRunsForOwners(ownerPids: readonly string[]): void {
-    for (const pid of ownerPids) {
-      this.db.run(
-        `DELETE FROM chain_run_nodes
-          WHERE session_id IN (SELECT session_id FROM chain_runs WHERE run_owner_pid = ?)`,
-        [pid]
-      );
-      this.db.run('DELETE FROM chain_runs WHERE run_owner_pid = ?', [pid]);
+  /**
+   * Paused recovery: exact storage namespace and normalized continuity, no NULL-as-unknown and no
+   * namespace restamping. A mismatch answers `unknown-token` so no foreign metadata leaks; every
+   * refusal precedes the conditional update, which swaps owner and credential and nothing else.
+   */
+  private claimPausedRun(
+    row: ClaimRow,
+    token: string,
+    scope: StateStoreOptions | undefined,
+    requestContinuityFilter: string | undefined,
+    mintSuccessor: (() => string) | undefined
+  ): ClaimRunResult {
+    const residual = parseResidual(row.state);
+    if (
+      row.organization_id !== (scope?.organizationId ?? null) ||
+      row.workspace_id !== (scope?.workspaceId ?? null) ||
+      resolveContinuityScopeId({ continuityScopeId: residual.continuityScopeId }) !==
+        resolveContinuityScopeId({ continuityScopeId: requestContinuityFilter })
+    )
+      return { status: 'unknown-token' };
+    if (!isCompatibleBlueprint(residual.blueprint)) {
+      return { status: 'no-blueprint', chainId: row.chain_id };
     }
+    if (mintSuccessor === undefined)
+      throw new Error('Paused handoff claim requires a successor credential factory');
+    const successor = mintSuccessor();
+    if (successor.length === 0 || successor === token)
+      throw new Error('Paused handoff claim produced an unusable successor credential');
+    const nodeRows = this.claimNodeRows(row);
+    const transferred = this.db.queryOne<{ session_id: string }>(
+      `UPDATE chain_runs SET run_owner_pid = ?, handoff_token = ?
+        WHERE session_id = ? AND handoff_token = ? RETURNING session_id`,
+      [resolveRunOwnerPid(scope), successor, row.session_id, token]
+    );
+    if (transferred === null) return { status: 'unknown-token' };
+    return {
+      status: 'claimed',
+      session: reconstructSession({ ...row, handoff_token: successor }, nodeRows),
+    };
   }
+
+  private claimNodeRows(row: ClaimRow): ChainRunNodeRow[] {
+    return this.db.query<ChainRunNodeRow>(
+      `SELECT session_id, node_id, position, prompt_id, step_name, milestone,
+              is_placeholder, rendered_at, responded_at, completed_at,
+              declared_sections_json, origin, origin_unknown_id, accepted_at_step, delegated,
+              args_json, inline_gate_ids, spawned_at
+         FROM chain_run_nodes
+        WHERE session_id = ?
+        ORDER BY position`,
+      [row.session_id]
+    );
+  }
+
+  /**
+   * Delete `ownerPid`'s runs except a nonterminal paused one, unless its id is in `released`.
+   *
+   * Protection is decided in SQL, not by a SELECT beforehand, so a caller inside a DEFERRED
+   * transaction issues a write first. `json_type` is non-NULL for any present key, JSON `null`
+   * included, matching `parseResidual(state).conversationPause !== undefined`; the `json_valid`
+   * guard reads an undecodable document as unpaused, as `parseResidual` does.
+   */
+  private deleteUnprotectedRuns(ownerPid: string, released: readonly string[]): void {
+    const removable = `run_owner_pid = ? AND (session_id IN (SELECT value FROM json_each(?))
+      OR NOT (run_status NOT IN (SELECT value FROM json_each(?))
+        AND CASE WHEN json_valid(state) THEN json_type(state, '$.conversationPause') END
+          IS NOT NULL))`;
+    const selection = [ownerPid, JSON.stringify(released), TERMINAL_RUN_STATUS_JSON];
+    this.db.run(
+      `DELETE FROM chain_run_nodes
+        WHERE session_id IN (SELECT session_id FROM chain_runs WHERE ${removable})`,
+      selection
+    );
+    this.db.run(`DELETE FROM chain_runs WHERE ${removable}`, selection);
+  }
+
+  deleteRunsForOwners(ownerPids: readonly string[]): void {
+    for (const pid of ownerPids) this.deleteUnprotectedRuns(pid, []);
+  }
+}
+
+/**
+ * Every run status, so the terminal set can be bound into SQL. A `Record` keyed by the union makes
+ * a status added to `ChainRunStatus` a compile error here; which ones are terminal stays
+ * `isTerminalRunStatus`'s answer.
+ */
+const RUN_STATUSES: Record<ChainRunStatus, true> = {
+  working: true,
+  input_required: true,
+  completed: true,
+  failed: true,
+  cancelled: true,
+};
+const TERMINAL_RUN_STATUS_JSON = JSON.stringify(
+  (Object.keys(RUN_STATUSES) as ChainRunStatus[]).filter(isTerminalRunStatus)
+);
+
+type RunRowNamespace = {
+  runOwnerPid: string;
+  organizationId: string | null;
+  workspaceId: string | null;
+};
+
+function serializeSessionRows(
+  session: ChainSession,
+  namespace: RunRowNamespace,
+  updatedAt: number
+): { run: unknown[]; nodes: unknown[][] } {
+  return {
+    run: [
+      session.sessionId,
+      session.chainId,
+      stripRunNumber(session.chainId),
+      namespace.runOwnerPid,
+      namespace.organizationId,
+      namespace.workspaceId,
+      session.runStatus,
+      session.state.currentNodeId,
+      JSON.stringify(toResidual(session)),
+      session.startTime,
+      session.lastActivity,
+      session.runCompletedAt ?? null,
+      session.handoffToken ?? null,
+    ],
+    nodes: session.state.nodes.map((node, index) => {
+      const metadata = session.state.stepStates?.get(node.id);
+      return [
+        session.sessionId,
+        node.id,
+        index + 1,
+        node.promptId,
+        node.stepName,
+        metadata?.state ?? null,
+        metadata === undefined ? null : metadata.isPlaceholder ? 1 : 0,
+        metadata?.renderedAt ?? null,
+        metadata?.respondedAt ?? null,
+        metadata?.completedAt ?? null,
+        // The column is NOT NULL with no DDL default, so this bind is the only source of
+        // the value — a real 'planned'/'inserted' string on every row, never a NULL that a
+        // default would paper over.
+        node.origin ?? 'planned',
+        node.originUnknownId ?? null,
+        // P6.253: a remainder's acceptance stamp. NULL on every planned and inserted node.
+        node.acceptedAtStep ?? null,
+        // Serialised only when the render recorded one. A step that declared nothing and a
+        // step whose declaration was never recorded are the same row here, and both mean the
+        // verification stage has no declared header to block on.
+        metadata?.declaredSections === undefined ? null : JSON.stringify(metadata.declaredSections),
+        // A.5: the node's own declaration. NULL rather than 0/'{}' when absent, so "declared
+        // nothing" and "declared not delegated" stay distinguishable on the row.
+        node.delegated === undefined ? null : node.delegated ? 1 : 0,
+        node.args === undefined ? null : JSON.stringify(node.args),
+        // P6.101: a contributed node's step gates. NULL when it carries none.
+        node.inlineGateIds === undefined ? null : JSON.stringify(node.inlineGateIds),
+        // Tier 4: the detached lifecycle's way in. NULL for every node never spawned.
+        metadata?.spawnedAt ?? null,
+        updatedAt,
+      ];
+    }),
+  };
 }
 
 /**
@@ -429,6 +682,8 @@ function toResidual(session: ChainSession): ResidualRunState {
   if (session.pendingShellVerification !== undefined) {
     residual.pendingShellVerification = session.pendingShellVerification;
   }
+  if (session.conversationPause !== undefined)
+    residual.conversationPause = session.conversationPause;
   if (session.gateRemap !== undefined) residual.gateRemap = session.gateRemap;
   if (session.blueprint !== undefined) residual.blueprint = session.blueprint;
   if (session.unknownsLedger !== undefined) residual.unknownsLedger = session.unknownsLedger;
@@ -590,6 +845,7 @@ function toStepStates(nodeRows: readonly ChainRunNodeRow[]): Map<string, StepMet
 function applyResidual(session: ChainSession, residual: ResidualRunState): void {
   const optional: Array<[keyof ResidualRunState, keyof ChainSession]> = [
     ['continuityScopeId', 'continuityScopeId'],
+    ['conversationPause', 'conversationPause'],
     ['pendingShellVerification', 'pendingShellVerification'],
     ['gateRemap', 'gateRemap'],
     ['blueprint', 'blueprint'],

@@ -10,8 +10,20 @@
  * store's `loadSessions()` a genuine reconstruction from rows rather than a memory hand-off.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, jest, test } from '@jest/globals';
+import {
+  afterEach,
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  jest,
+  test,
+} from '@jest/globals';
 
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -85,6 +97,977 @@ describe('chain run storage (chain_runs + chain_run_nodes)', () => {
     engine.run('DELETE FROM chain_runs');
     engine.run('DELETE FROM chain_sessions');
     engine.run('DELETE FROM execution_records');
+  });
+
+  describe('conversation pause retention', () => {
+    const stores: ChainSessionStore[] = [];
+    const scope = { continuityScopeId: 'caller' };
+    const raw = (id: string) => ({
+      runs: engine.query('SELECT * FROM chain_runs WHERE session_id = ?', [id]),
+      nodes: engine.query('SELECT * FROM chain_run_nodes WHERE session_id = ? ORDER BY position', [
+        id,
+      ]),
+    });
+    const storeForTest = () => {
+      const store = newStore();
+      stores.push(store);
+      return store;
+    };
+    const produce = async (store: ChainSessionStore, id: string, chainId = `chain-${id}#1`) =>
+      store.createSession(
+        id,
+        chainId,
+        1,
+        { evidence: id },
+        { ...scope, nodes: nodes(['n1', 'p', 'One']) }
+      );
+    const pause = async (store: ChainSessionStore, id: string) => {
+      expect(
+        await store.pauseConversation(id, store.getConversationControlScope('caller'))
+      ).toMatchObject({ outcome: 'paused', token: expect.stringMatching(/^hnd_/) });
+    };
+    afterEach(async () => {
+      for (const store of stores) await store.cleanup();
+      stores.length = 0;
+    });
+
+    test('dead-owner fixture retains rows, nodes and credential before replacement initialization', async () => {
+      const store = storeForTest();
+      await produce(store, 'paused');
+      await store.setReview('paused', {
+        nodeId: 'n1',
+        kind: 'gate',
+        phase: 'awaiting-verdict',
+        combinedPrompt: 'frozen',
+        prompts: [],
+        gateIds: ['quality'],
+        createdAt: 1,
+        attemptCount: 1,
+        maxAttempts: 3,
+        reviewedOutput: 'captured evidence',
+      });
+      await pause(store, 'paused');
+      await produce(store, 'ordinary');
+      await produce(store, 'terminal');
+      await pause(store, 'terminal');
+      expect(await store.cancelChain('terminal', scope)).toBe(true);
+      await produce(store, 'unrelated');
+      await store.cleanup();
+      const child = spawnSync(process.execPath, ['-e', '']);
+      expect(child.status).toBe(0);
+      expect(() => process.kill(child.pid, 0)).toThrow();
+      engine.run("UPDATE chain_runs SET run_owner_pid = ? WHERE session_id != 'unrelated'", [
+        String(child.pid),
+      ]);
+      engine.run(
+        "UPDATE chain_runs SET run_owner_pid = 'retained-foreign' WHERE session_id = 'unrelated'"
+      );
+      const before = raw('paused'),
+        unrelated = raw('unrelated');
+      const registry = new DirectChainRunRegistry(engine);
+      registry.deleteRunsForOwners([String(child.pid)]);
+      expect(raw('paused')).toEqual(before);
+      expect(before.runs[0]).toMatchObject({
+        handoff_token: expect.stringMatching(/^hnd_/),
+        organization_id: null,
+        workspace_id: 'ws-storage',
+      });
+      for (const id of ['ordinary', 'terminal']) expect(raw(id)).toEqual({ runs: [], nodes: [] });
+      const replacement = storeForTest();
+      await replacement['initPromise'];
+      expect(replacement.getSession('paused', scope)).toBeUndefined();
+      expect(replacement.getSession('unrelated', scope)).toBeUndefined();
+      await replacement.cleanup();
+      expect(raw('paused')).toEqual(before);
+      expect(raw('unrelated')).toEqual(unrelated);
+    });
+
+    test('ten-plus protected history does not consume the ordinary ten-run cap', async () => {
+      const store = storeForTest();
+      for (let i = 0; i < 12; i++) {
+        await produce(store, `protected-${i}`, `chain-history#${i + 1}`);
+        await pause(store, `protected-${i}`);
+      }
+      const held = Array.from({ length: 12 }, (_, i) => raw(`protected-${i}`));
+      for (let i = 0; i < 12; i++) await produce(store, `ordinary-${i}`, `chain-history#${i + 13}`);
+      expect(store.getRunHistory('chain-history')).toHaveLength(22);
+      expect(Array.from({ length: 12 }, (_, i) => raw(`protected-${i}`))).toEqual(held);
+      for (let i = 0; i < 12; i++) expect(raw(`ordinary-${i}`).runs).toHaveLength(i < 2 ? 0 : 1);
+      await store.cleanup();
+      expect(Array.from({ length: 12 }, (_, i) => raw(`protected-${i}`))).toEqual(held);
+    });
+
+    test('expiry skips only paused nonterminal runs', async () => {
+      const store = storeForTest();
+      const statuses: ChainSession['runStatus'][] = ['working', 'completed', 'failed', 'cancelled'];
+      for (const status of statuses) {
+        const held = await produce(store, status);
+        await pause(store, status);
+        held.runStatus = status;
+        held.lastActivity = 1;
+      }
+      const ordinary = await produce(store, 'ordinary');
+      ordinary.lastActivity = 1;
+      await store['saveSessions']();
+      const before = raw('working');
+      expect(await store.cleanupStaleSessions()).toBe(4);
+      expect(raw('working')).toEqual(before);
+      for (const id of ['ordinary', 'completed', 'failed', 'cancelled'])
+        expect(raw(id)).toEqual({ runs: [], nodes: [] });
+    });
+
+    test('owned dormant lookup is visible and leaves complete memory and raw rows exact', async () => {
+      const store = storeForTest();
+      await produce(store, 'dormant');
+      await pause(store, 'dormant');
+      await store.cleanup();
+      const reader = storeForTest();
+      await reader['initPromise'];
+      const held = reader['activeSessions'].get('dormant');
+      expect(held).toBeDefined();
+      if (!held) throw new Error('missing owned fixture');
+      held.state.currentNodeId = 'invalid-pointer';
+      const memory = structuredClone(held),
+        before = raw('dormant');
+      expect(reader.getSession('dormant', scope)).toBe(held);
+      expect(reader.getSessionByChainIdentifier(held.chainId, scope)).toBe(held);
+      expect(reader.getSession('dormant', { continuityScopeId: 'other' })).toBeUndefined();
+      const exact = reader.getConversationControlScope('caller');
+      expect(reader.inspectConversationControl('dormant', exact)?.scope).toEqual(exact);
+      expect(
+        reader.inspectConversationControl('dormant', { ...exact, organizationId: 'other' })
+      ).toBeUndefined();
+      await reader['persistQueue'];
+      expect(held).toEqual(memory);
+      expect(held.lifecycle).toBe('dormant');
+      expect(raw('dormant')).toEqual(before);
+      await reader.cleanup();
+      await reader.cleanup();
+      expect(raw('dormant')).toEqual(before);
+    });
+
+    test('scoped bulk clear preflights every run, then exact abort permits ordinary clear', async () => {
+      const store = storeForTest();
+      await produce(store, 'peer', 'chain-clear#1');
+      const held = await produce(store, 'paused', 'chain-clear#2');
+      await pause(store, 'paused');
+      await store.createSession('other', 'chain-clear#3', 1, {}, { continuityScopeId: 'other' });
+      expect(
+        await store.pauseConversation('other', store.getConversationControlScope('other'))
+      ).toMatchObject({ outcome: 'paused' });
+      const memory = structuredClone([...store['activeSessions']]),
+        before = ['peer', 'paused', 'other'].map(raw);
+      const ended = jest.fn(),
+        cleared = jest.fn<() => void>();
+      store.onRunEnded(ended);
+      store.onSessionCleared(cleared);
+      const cache = jest.spyOn(store['textReferenceStore'], 'clearChainStepResults');
+      await expect(store.clearSessionsForChain('chain-clear', scope)).rejects.toThrow(
+        'Abort paused run'
+      );
+      expect([...store['activeSessions']]).toEqual(memory);
+      expect(['peer', 'paused', 'other'].map(raw)).toEqual(before);
+      expect(ended).not.toHaveBeenCalled();
+      expect(cleared).not.toHaveBeenCalled();
+      expect(cache).not.toHaveBeenCalled();
+      expect(await store.cancelChain('paused', { continuityScopeId: 'other' })).toBe(false);
+      expect(raw('paused')).toEqual(before[1]);
+      expect(await store.cancelChain('paused', scope)).toBe(true);
+      expect(raw('paused').runs[0]).toMatchObject({
+        run_status: 'cancelled',
+        handoff_token: held.handoffToken,
+      });
+      await store.clearSessionsForChain('chain-clear', scope);
+      for (const id of ['peer', 'paused']) expect(raw(id)).toEqual({ runs: [], nodes: [] });
+      expect(store.getSession('other', { continuityScopeId: 'other' })).toBeDefined();
+      expect(raw('other')).toEqual(before[2]);
+      expect(cache).toHaveBeenCalledWith('peer');
+      expect(cache).toHaveBeenCalledWith('paused');
+      expect(cache).not.toHaveBeenCalledWith('other');
+    });
+  });
+
+  test('conversation canonical serialization preserves every stored run and node column', async () => {
+    const session: ChainSession = {
+      sessionId: 'canonical',
+      chainId: 'chain-canonical#3',
+      continuityScopeId: 'caller',
+      startTime: 10,
+      lastActivity: 20,
+      lifecycle: 'dormant',
+      runStatus: 'input_required',
+      originalArgs: { target: 'retained output' },
+      executionOrder: ['n1'],
+      handoffToken: 'hnd_canonical_fixture',
+      gateRemap: { original: 'physical' },
+      gatesFiredCount: 3,
+      gateRetriesCount: 2,
+      state: {
+        currentNodeId: 'n2',
+        lastUpdated: 30,
+        nodes: [
+          { id: 'n1', promptId: 'p1', stepName: 'Capture' },
+          {
+            id: 'n2',
+            promptId: 'p2',
+            stepName: 'Detached',
+            origin: 'remainder',
+            originUnknownId: 'u',
+            acceptedAtStep: 1,
+            delegated: true,
+            args: { note: 'declared' },
+            inlineGateIds: ['quality'],
+          },
+          { id: 'n3', promptId: 'p3', stepName: 'Pending', delegated: false },
+        ],
+        stepStates: new Map([
+          [
+            'n1',
+            {
+              state: 'completed',
+              isPlaceholder: false,
+              renderedAt: 11,
+              respondedAt: 12,
+              completedAt: 13,
+              declaredSections: ['Evidence'],
+            },
+          ],
+          ['n2', { state: 'working', isPlaceholder: true, renderedAt: 21, spawnedAt: 22 }],
+        ]),
+      },
+      reviews: {
+        n1: {
+          nodeId: 'n1',
+          kind: 'detached',
+          phase: 'awaiting-verdict',
+          combinedPrompt: 'Review',
+          gateIds: ['quality'],
+          prompts: [],
+          createdAt: 31,
+          attemptCount: 1,
+          maxAttempts: 3,
+          reviewedOutput: 'captured report',
+          history: [{ timestamp: 32, status: 'fail', reasoning: 'retain retry' }],
+        },
+      },
+      pendingShellVerification: {
+        gateId: 'shell',
+        nodeId: 'n2',
+        shellVerify: { command: 'fixture check', loop: true },
+        attemptCount: 1,
+        maxAttempts: 2,
+        previousResults: [],
+        originalGoal: 'retained shell goal',
+      },
+      unknownsLedger: [
+        {
+          id: 'u',
+          statement: 'unknown',
+          state: 'active',
+          blocking: true,
+          discoveredAtStep: 1,
+          targetStepId: 'n2',
+        },
+      ],
+      blueprint: {
+        parsedCommand: { promptId: 'p1', promptArgs: { goal: 'retained' } },
+        executionPlan: {
+          strategy: 'chain',
+          gates: ['quality'],
+          requiresFramework: false,
+          requiresSession: true,
+        },
+      },
+    };
+    await engine.transaction(() =>
+      new DirectChainRunRegistry(engine).save([session], {
+        continuityScopeId: 'canonical-owner',
+        organizationId: 'canonical-org',
+        workspaceId: 'canonical-ws',
+      })
+    );
+    // Pin all canonical columns; the node SQL write clock is not domain progress.
+    const packet = {
+      run: engine.query('SELECT * FROM chain_runs ORDER BY session_id'),
+      nodes: engine
+        .query<Record<string, unknown>>('SELECT * FROM chain_run_nodes ORDER BY position')
+        .map(({ updated_at: _writeClock, ...domain }) => domain),
+    };
+    expect(createHash('sha256').update(JSON.stringify(packet)).digest('hex')).toBe(
+      'be425405cefa6c332dd99de240505663517a262cccc7547f4589906e65c855bf'
+    );
+  });
+
+  describe('selected conversation control persistence', () => {
+    const fixture = async () => {
+      const refs = new StubTextReferenceStore();
+      const store = new ChainSessionStore(
+        logger,
+        refs as never,
+        { cleanupIntervalMs: 60_000, defaultScope: { workspaceId: 'ws-storage' } },
+        engine
+      );
+      const held = await store.createSession(
+        'selected',
+        'chain-selected#1',
+        2,
+        { target: 'old' },
+        { continuityScopeId: 'caller', nodes: nodes(['n1', 'p1', 'One'], ['n2', 'p2', 'Detached']) }
+      );
+      await store.markNodeSpawned('selected', 'n2');
+      await store.mintHandoffToken('selected');
+      for (const id of ['history', 'foreign', 'peer'])
+        await store.createSession(id, `chain-${id}#1`, 1);
+      engine.run(
+        "UPDATE chain_runs SET workspace_id = 'other-namespace' WHERE session_id = 'history'"
+      );
+      engine.run(
+        "UPDATE chain_runs SET run_owner_pid = 'foreign-owner' WHERE session_id = 'foreign'"
+      );
+      for (const id of ['history', 'foreign']) store['activeSessions'].delete(id);
+      store.setStepState('selected', 'n1', 'rendered', false, ['Evidence']);
+      return { store, refs, held, scope: store.getConversationControlScope('caller') };
+    };
+    const change = (session: ChainSession) => {
+      session.originalArgs = { target: 'new' };
+      return 'changed';
+    };
+    const commit = (f: Awaited<ReturnType<typeof fixture>>, mutation = change) =>
+      f.store['runConversationControlMutation']('selected', f.scope, mutation);
+    const raw = (other = false) => ({
+      runs: engine.query(
+        `SELECT * FROM chain_runs ${other ? "WHERE session_id != 'selected'" : ''} ORDER BY session_id`
+      ),
+      nodes: engine.query(
+        `SELECT * FROM chain_run_nodes ${other ? "WHERE session_id != 'selected'" : ''} ORDER BY session_id, position`
+      ),
+    });
+
+    test('canonical issued metadata commits and unrelated namespaces/history/foreign rows stay exact', async () => {
+      const f = await fixture();
+      const other = raw(true);
+      expect(other.runs).toHaveLength(3);
+      expect(
+        engine.queryOne<{ rendered_at: number | null }>(
+          "SELECT rendered_at FROM chain_run_nodes WHERE session_id = 'selected' AND node_id = 'n1'"
+        )?.rendered_at
+      ).toBeNull();
+      const result = await commit(f);
+      expect(result.status).toBe('committed');
+      if (result.status !== 'committed') throw new Error('positive selected commit missing');
+      expect(result.inspection.session.state.stepStates).toEqual(f.held.state.stepStates);
+      expect(result.inspection.session.originalArgs).toEqual({ target: 'new' });
+      expect(result.inspection.session).not.toHaveProperty('handoffToken');
+      expect(
+        engine.queryOne<{ declared_sections_json: string }>(
+          "SELECT declared_sections_json FROM chain_run_nodes WHERE session_id = 'selected' AND node_id = 'n1'"
+        )?.declared_sections_json
+      ).toBe('["Evidence"]');
+      expect(raw(true)).toEqual(other);
+      await f.store.cleanup();
+    });
+
+    test('physical second-connection BUSY rejects before mutation and permits a retry', async () => {
+      const f = await fixture();
+      const before = raw();
+      const local = structuredClone(f.held);
+      const timeout = engine.queryOne<{ timeout: number }>('PRAGMA busy_timeout');
+      if (timeout === null) throw new Error('busy timeout missing');
+      const blocker = new DatabaseSync(path.join(tmpDir, 'runtime-state', 'state.db'));
+      engine.run('PRAGMA busy_timeout = 1');
+      blocker.exec('BEGIN IMMEDIATE');
+      try {
+        await expect(commit(f)).rejects.toThrow(/locked|busy/i);
+        expect(f.held).toEqual(local);
+        expect(raw()).toEqual(before);
+      } finally {
+        blocker.exec('ROLLBACK');
+        blocker.close();
+        engine.run(`PRAGMA busy_timeout = ${timeout.timeout}`);
+      }
+      expect((await commit(f)).status).toBe('committed');
+      await f.store.cleanup();
+    });
+
+    test.each([
+      [
+        'SQL rejection',
+        "BEFORE INSERT ON chain_run_nodes WHEN NEW.session_id = 'selected' BEGIN SELECT RAISE(ABORT, 'fixture SQL failure'); END",
+      ],
+      [
+        'run domain alteration',
+        "AFTER INSERT ON chain_runs WHEN NEW.session_id = 'selected' BEGIN UPDATE chain_runs SET current_node_id = 'n2' WHERE session_id = 'selected'; END",
+      ],
+      [
+        'node domain alteration',
+        "AFTER INSERT ON chain_run_nodes WHEN NEW.session_id = 'selected' AND NEW.node_id = 'n1' BEGIN UPDATE chain_run_nodes SET declared_sections_json = NULL WHERE session_id = 'selected' AND node_id = 'n1'; END",
+      ],
+      [
+        'credential alteration',
+        "AFTER INSERT ON chain_runs WHEN NEW.session_id = 'selected' BEGIN UPDATE chain_runs SET handoff_token = 'altered-credential' WHERE session_id = 'selected'; END",
+      ],
+    ])('%s rolls back canonical rows and tentative memory, then retries', async (_name, body) => {
+      const f = await fixture();
+      const before = raw();
+      const local = structuredClone(f.held);
+      engine.run(`CREATE TRIGGER selected_fault ${body}`);
+      try {
+        await expect(commit(f)).rejects.toThrow(
+          _name === 'SQL rejection' ? 'fixture SQL failure' : 'durable row or node mismatch'
+        );
+        expect(raw()).toEqual(before);
+        expect(f.held).toEqual(local);
+      } finally {
+        engine.run('DROP TRIGGER selected_fault');
+      }
+      expect((await commit(f)).status).toBe('committed');
+      await f.store.cleanup();
+    });
+
+    test.each(['owner', 'namespace', 'zero winner'])(
+      '%s refuses without foreign writes and releases only lost local custody',
+      async (cause) => {
+        const f = await fixture();
+        if (cause === 'owner')
+          engine.run(
+            "UPDATE chain_runs SET run_owner_pid = 'claimed-owner' WHERE session_id = 'selected'"
+          );
+        if (cause === 'namespace')
+          engine.run(
+            "UPDATE chain_runs SET workspace_id = 'legacy-mismatch' WHERE session_id = 'selected'"
+          );
+        if (cause === 'zero winner')
+          engine.run(
+            "CREATE TRIGGER selected_zero BEFORE DELETE ON chain_runs WHEN OLD.session_id = 'selected' BEGIN SELECT RAISE(IGNORE); END"
+          );
+        const before = raw();
+        const local = structuredClone(f.held);
+        const mutation = jest.fn(change);
+        const result = await commit(f, mutation);
+        expect(result).toEqual({
+          status: 'refused',
+          reason: cause === 'namespace' ? 'scope-mismatch' : 'ownership-lost',
+          inspection: null,
+        });
+        expect(raw()).toEqual(before);
+        expect(f.held).toEqual(local);
+        expect(mutation).toHaveBeenCalledTimes(cause === 'zero winner' ? 1 : 0);
+        expect(f.store.hasActiveSession('selected')).toBe(cause === 'namespace');
+        expect(f.store.hasActiveSession('peer')).toBe(true);
+        expect(f.refs.clearChainStepResults.mock.calls).toEqual(
+          cause === 'namespace' ? [] : [['selected']]
+        );
+        if (cause === 'zero winner') engine.run('DROP TRIGGER selected_zero');
+        await f.store.cleanup();
+      }
+    );
+
+    test('shared queue reserves whole jobs and observes custody lost before a delayed control starts', async () => {
+      const f = await fixture();
+      const before = raw();
+      const order: number[] = [];
+      let release!: () => void;
+      f.store['persistQueue'] = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const first = commit(f, (session) => {
+        order.push(1);
+        return change(session);
+      });
+      const second = commit(f, (session) => {
+        order.push(2);
+        return change(session);
+      });
+      await Promise.resolve();
+      expect(order).toEqual([]);
+      expect(raw()).toEqual(before);
+      release();
+      expect((await first).status).toBe('committed');
+      expect((await second).status).toBe('committed');
+      expect(order).toEqual([1, 2]);
+      f.store['persistQueue'] = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const mutation = jest.fn(change);
+      const delayed = commit(f, mutation);
+      await Promise.resolve();
+      engine.run("UPDATE chain_runs SET run_owner_pid = 'new-owner' WHERE session_id = 'selected'");
+      const foreign = raw();
+      release();
+      expect((await delayed).status).toBe('refused');
+      expect(mutation).not.toHaveBeenCalled();
+      expect(raw()).toEqual(foreign);
+      expect(f.refs.clearChainStepResults.mock.calls).toEqual([['selected']]);
+      await f.store.cleanup();
+    });
+
+    test('failed BEGIN leaves another caller transaction intact', async () => {
+      const f = await fixture();
+      const before = raw();
+      engine.beginTransaction('immediate');
+      engine.run("UPDATE chain_runs SET last_activity = 99 WHERE session_id = 'peer'");
+      try {
+        await expect(commit(f)).rejects.toThrow(/within a transaction|transaction already/i);
+        expect(
+          engine.queryOne<{ last_activity: number }>(
+            "SELECT last_activity FROM chain_runs WHERE session_id = 'peer'"
+          )?.last_activity
+        ).toBe(99);
+      } finally {
+        engine.rollback();
+      }
+      expect(raw()).toEqual(before);
+      expect((await commit(f)).status).toBe('committed');
+      await f.store.cleanup();
+    });
+
+    test('terminal state and invalid held pointer cannot enter a control mutation', async () => {
+      const f = await fixture();
+      const mutation = jest.fn(change);
+      const before = raw();
+      f.held.state.currentNodeId = 'invalid-local';
+      const local = structuredClone(f.held);
+      await expect(commit(f, mutation)).rejects.toThrow('invalid held node pointer');
+      expect(f.held).toEqual(local);
+      expect(raw()).toEqual(before);
+      await expect(f.store.pauseConversation(f.held.sessionId, f.scope)).rejects.toThrow(
+        'invalid held node pointer'
+      );
+      expect(f.held).toEqual(local);
+      expect(raw()).toEqual(before);
+      f.held.runStatus = 'cancelled';
+      expect((await commit(f, mutation)).status).toBe('refused');
+      expect(mutation).not.toHaveBeenCalled();
+      await f.store.cleanup();
+    });
+  });
+
+  describe('conversation pause', () => {
+    const fixture = async (hold = 'ordinary', count = 2) => {
+      const refs = new StubTextReferenceStore();
+      const store = new ChainSessionStore(
+        logger,
+        refs as never,
+        { cleanupIntervalMs: 60_000, defaultScope: { workspaceId: 'ws-storage' } },
+        engine
+      );
+      const held = await store.createSession(
+        'conversation',
+        'chain-conversation#1',
+        count,
+        { target: 'frozen' },
+        {
+          continuityScopeId: 'caller',
+          nodes: count === 0 ? [] : nodes(['n1', 'p1', 'Capture'], ['n2', 'p2', 'Detached']),
+        }
+      );
+      if (count > 0) {
+        await store.updateSessionState(held.sessionId, 'n1', 'captured target');
+        if (hold === 'unknown')
+          await store.applyUnknownObservations(held.sessionId, 'n1', [
+            { type: 'unknown_discovered', id: 'u', statement: 'plan shape', blocking: true },
+          ]);
+        if (hold === 'detached') await store.markNodeSpawned(held.sessionId, 'n2');
+        const nodeId = hold === 'detached' ? 'n2' : 'n1';
+        await store.setReview(held.sessionId, {
+          nodeId,
+          kind: hold === 'unknown' ? 'structural' : hold === 'detached' ? 'detached' : 'gate',
+          phase: 'awaiting-verdict',
+          combinedPrompt: 'retained review',
+          prompts: [],
+          createdAt: 1,
+          gateIds: [hold === 'unknown' ? '__unknown_interrupt__' : 'quality'],
+          attemptCount: 2,
+          maxAttempts: 3,
+          reviewedOutput: 'captured target',
+          semanticContext: {
+            nodeId,
+            attemptId: 'frozen-attempt',
+            definitions: {},
+            target: {
+              kind: 'step_output',
+              content: 'captured target',
+              digest: 'sha256:' + createHash('sha256').update('captured target').digest('hex'),
+            },
+          },
+        });
+        if (hold === 'shell')
+          await store.setPendingShellVerification(held.sessionId, {
+            gateId: 'shell',
+            nodeId: 'n1',
+            shellVerify: { command: 'fixture check' },
+            attemptCount: 1,
+            maxAttempts: 3,
+            previousResults: [],
+            originalGoal: 'frozen goal',
+          });
+      }
+      return { store, held, refs, scope: store.getConversationControlScope('caller') };
+    };
+    const raw = () => ({
+      runs: engine.query('SELECT * FROM chain_runs ORDER BY session_id'),
+      nodes: engine.query('SELECT * FROM chain_run_nodes ORDER BY session_id, position'),
+    });
+    const domain = (session: ChainSession) => {
+      const {
+        conversationPause: _pause,
+        handoffToken: _credential,
+        ...rest
+      } = structuredClone(session);
+      return rest;
+    };
+    const forbidWrites = () => {
+      for (const table of ['chain_runs', 'chain_run_nodes', 'chain_sessions'])
+        for (const operation of ['INSERT', 'UPDATE', 'DELETE'])
+          engine.run(
+            `CREATE TRIGGER forbid_${table}_${operation} BEFORE ${operation} ON ${table} BEGIN SELECT RAISE(ABORT, 'unexpected control write'); END`
+          );
+      return () => {
+        for (const table of ['chain_runs', 'chain_run_nodes', 'chain_sessions'])
+          for (const operation of ['INSERT', 'UPDATE', 'DELETE'])
+            engine.run(`DROP TRIGGER forbid_${table}_${operation}`);
+      };
+    };
+
+    test.each(['ordinary', 'unknown', 'shell', 'detached'])(
+      '%s hold survives pause, readonly repeat, cold hydration and explicit resume without advance',
+      async (hold) => {
+        const f = await fixture(hold);
+        const before = domain(f.held);
+        const captures = f.refs.storeChainStepResult.mock.calls.length;
+        const paused = await f.store.pauseConversation(f.held.sessionId, f.scope);
+        expect(paused.outcome).toBe('paused');
+        if (paused.outcome !== 'paused') throw new Error('positive pause missing');
+        expect(f.held.handoffToken).toBe(paused.token);
+        expect(domain(f.held)).toEqual(before);
+        expect(paused.inspection.session).not.toHaveProperty('handoffToken');
+        const pausedRaw = raw();
+        const fullHeld = structuredClone(f.held);
+        const remove = forbidWrites();
+        try {
+          expect(await f.store.pauseConversation(f.held.sessionId, f.scope)).toEqual({
+            ...paused,
+            outcome: 'already-paused',
+          });
+          expect(raw()).toEqual(pausedRaw);
+          expect(f.held).toEqual(fullHeld);
+        } finally {
+          remove();
+        }
+        await f.store.cleanup();
+        const reader = newStore();
+        await reader['initPromise'];
+        const restored = reader['activeSessions'].get(f.held.sessionId);
+        if (restored === undefined) throw new Error('current-owner cold session missing');
+        expect(restored.conversationPause).toEqual(fullHeld.conversationPause);
+        expect(restored.handoffToken).toBe(paused.token);
+        expect(domain(restored)).toEqual({ ...before, lifecycle: 'dormant' });
+        const resumed = await reader.resumeConversation(restored.sessionId, f.scope);
+        expect(resumed.outcome).toBe('resumed');
+        expect(resumed).not.toHaveProperty('token');
+        expect(restored.conversationPause).toBeUndefined();
+        expect(restored.handoffToken).toBe(paused.token);
+        expect(restored.reviews).toEqual(before.reviews);
+        expect(domain(restored)).toEqual({ ...before, lifecycle: 'dormant' });
+        expect(f.refs.storeChainStepResult.mock.calls).toHaveLength(captures);
+        expect(reader['textReferenceStore'].storeChainStepResult).not.toHaveBeenCalled();
+        const resumedRaw = raw();
+        const resumedHeld = structuredClone(restored);
+        const undo = forbidWrites();
+        try {
+          expect((await reader.resumeConversation(restored.sessionId, f.scope)).outcome).toBe(
+            'resumed'
+          );
+          expect(raw()).toEqual(resumedRaw);
+          expect(restored).toEqual(resumedHeld);
+        } finally {
+          undo();
+        }
+        await reader.cleanup();
+      }
+    );
+
+    test('legacy absence survives current-owner cold load and absent resume performs no write', async () => {
+      const f = await fixture();
+      await f.store.cleanup();
+      const reader = newStore();
+      await reader['initPromise'];
+      const held = reader['activeSessions'].get(f.held.sessionId);
+      if (held === undefined) throw new Error('legacy cold session missing');
+      expect(held.conversationPause).toBeUndefined();
+      const before = raw();
+      const local = structuredClone(held);
+      const remove = forbidWrites();
+      try {
+        expect((await reader.resumeConversation(held.sessionId, f.scope)).outcome).toBe('resumed');
+        expect(raw()).toEqual(before);
+        expect(held).toEqual(local);
+      } finally {
+        remove();
+      }
+      await reader.cleanup();
+    });
+
+    test('existing credential is preserved and legacy absence/nullable pointer remain readable', async () => {
+      const f = await fixture('ordinary', 0);
+      const minted = await f.store.mintHandoffToken(f.held.sessionId);
+      if (minted === undefined) throw new Error('positive credential missing');
+      expect(f.held.conversationPause).toBeUndefined();
+      const paused = await f.store.pauseConversation(f.held.sessionId, f.scope);
+      expect(paused.outcome).toBe('paused');
+      expect(paused).toHaveProperty('token', minted.token);
+      expect(f.held.conversationPause).toMatchObject({ kind: 'conversation', nodeId: null });
+      await f.store.cleanup();
+    });
+
+    test.each(['pause', 'resume'])(
+      '%s strict BUSY and SQL failure roll back record/credential and permit retry',
+      async (action) => {
+        const f = await fixture();
+        if (action === 'resume') await f.store.pauseConversation(f.held.sessionId, f.scope);
+        const operation = () =>
+          action === 'pause'
+            ? f.store.pauseConversation(f.held.sessionId, f.scope)
+            : f.store.resumeConversation(f.held.sessionId, f.scope);
+        const before = raw();
+        const local = structuredClone(f.held);
+        const timeout = engine.queryOne<{ timeout: number }>('PRAGMA busy_timeout');
+        if (timeout === null) throw new Error('timeout missing');
+        const blocker = new DatabaseSync(path.join(tmpDir, 'runtime-state', 'state.db'));
+        engine.run('PRAGMA busy_timeout = 1');
+        blocker.exec('BEGIN IMMEDIATE');
+        try {
+          await expect(operation()).rejects.toThrow(/locked|busy/i);
+          expect(raw()).toEqual(before);
+          expect(f.held).toEqual(local);
+        } finally {
+          blocker.exec('ROLLBACK');
+          blocker.close();
+          engine.run(`PRAGMA busy_timeout = ${timeout.timeout}`);
+        }
+        engine.run(
+          "CREATE TRIGGER control_failure BEFORE INSERT ON chain_runs BEGIN SELECT RAISE(ABORT, 'control SQL failure'); END"
+        );
+        try {
+          await expect(operation()).rejects.toThrow('control SQL failure');
+          expect(raw()).toEqual(before);
+          expect(f.held).toEqual(local);
+        } finally {
+          engine.run('DROP TRIGGER control_failure');
+        }
+        expect((await operation()).outcome).toBe(action === 'pause' ? 'paused' : 'resumed');
+        await f.store.cleanup();
+      }
+    );
+
+    test.each(['pause record', 'credential'])(
+      '%s held/durable disagreement throws without adoption or writes',
+      async (fact) => {
+        const f = await fixture();
+        await f.store.pauseConversation(f.held.sessionId, f.scope);
+        if (fact === 'pause record')
+          f.held.conversationPause = { kind: 'conversation', nodeId: 'n2', pausedAt: 0 };
+        else f.held.handoffToken = 'different-held-credential';
+        const before = raw();
+        const local = structuredClone(f.held);
+        await expect(f.store.pauseConversation(f.held.sessionId, f.scope)).rejects.toThrow(
+          'differs from durable'
+        );
+        await expect(f.store.resumeConversation(f.held.sessionId, f.scope)).rejects.toThrow(
+          'differs from durable'
+        );
+        expect(raw()).toEqual(before);
+        expect(f.held).toEqual(local);
+        await f.store.cleanup();
+      }
+    );
+
+    test('missing recovery credential refuses and terminal priority cannot acknowledge an existing pause', async () => {
+      const f = await fixture();
+      const record = { kind: 'conversation' as const, nodeId: 'n1', pausedAt: 1 };
+      f.held.conversationPause = record;
+      engine.run(
+        "UPDATE chain_runs SET state = json_set(state, '$.conversationPause', json(?)) WHERE session_id = ?",
+        [JSON.stringify(record), f.held.sessionId]
+      );
+      const before = raw();
+      const local = structuredClone(f.held);
+      const remove = forbidWrites();
+      try {
+        for (const action of ['pauseConversation', 'resumeConversation'] as const) {
+          const result = await f.store[action](f.held.sessionId, f.scope);
+          expect(result).toMatchObject({
+            outcome: 'refused',
+            reason: 'recovery-credential-missing',
+          });
+          expect(result).not.toHaveProperty('token');
+          expect(raw()).toEqual(before);
+          expect(f.held).toEqual(local);
+        }
+      } finally {
+        remove();
+      }
+      await f.store.cancelChain(f.held.sessionId);
+      const terminal = await f.store.pauseConversation(f.held.sessionId, f.scope);
+      expect(terminal).toMatchObject({
+        outcome: 'refused',
+        reason: 'run-terminal',
+        chainId: f.held.chainId,
+      });
+      expect(terminal.inspection?.session).not.toHaveProperty('handoffToken');
+      await f.store.cleanup();
+    });
+
+    test('no-write decisions still refuse foreign custody and exact scope mismatch', async () => {
+      const f = await fixture();
+      await f.store.pauseConversation(f.held.sessionId, f.scope);
+      const before = raw();
+      const wrong = { ...f.scope, continuityScopeId: 'other' };
+      expect(await f.store.pauseConversation(f.held.sessionId, wrong)).toMatchObject({
+        outcome: 'refused',
+        reason: 'scope-mismatch',
+      });
+      expect(raw()).toEqual(before);
+      engine.run("UPDATE chain_runs SET run_owner_pid = 'new-owner' WHERE session_id = ?", [
+        f.held.sessionId,
+      ]);
+      const foreign = raw();
+      const result = await f.store.pauseConversation(f.held.sessionId, f.scope);
+      expect(result).toMatchObject({
+        outcome: 'refused',
+        reason: 'ownership-lost',
+        inspection: null,
+      });
+      expect(result).not.toHaveProperty('token');
+      expect(raw()).toEqual(foreign);
+      await f.store.cleanup();
+    });
+  });
+
+  describe('conversation control identity', () => {
+    const create = (store: ChainSessionStore, id: string, continuityScopeId: string) =>
+      store.createSession(
+        id,
+        'chain-inspect#1',
+        2,
+        { target: id },
+        {
+          continuityScopeId,
+          nodes: nodes(['n1', 'p1', 'One'], ['n2', 'p2', 'Two']),
+        }
+      );
+    const rows = () => engine.query('SELECT * FROM chain_runs ORDER BY session_id');
+
+    test('exact UUID and caller continuity return a detached durable view without credentials or local repairs', async () => {
+      const store = newStore();
+      const held = await create(store, 'identity-a', 'caller-a');
+      const other = await create(store, 'identity-b', 'caller-b');
+      expect(other.chainId).toBe(held.chainId);
+      const credential = await store.mintHandoffToken(held.sessionId);
+      expect(credential?.token).toEqual(expect.any(String));
+      if (credential === undefined) throw new Error('positive credential missing');
+      held.lifecycle = 'dormant';
+      held.state.currentNodeId = 'malformed-local-pointer';
+      const localBefore = structuredClone(held);
+      const durableBefore = rows();
+      const scope = store.getConversationControlScope('caller-a');
+      expect(scope.workspaceId).toBe('ws-storage');
+      const view = store.inspectConversationControl(held.sessionId, scope);
+      expect(view?.session).toMatchObject({ sessionId: held.sessionId, chainId: held.chainId });
+      expect(view?.scope).toEqual(scope);
+      expect(view?.session.state.currentNodeId).toBe('n1');
+      expect(view?.session.lifecycle).toBe('canonical');
+      expect(view?.session).not.toHaveProperty('handoffToken');
+      expect(JSON.stringify(view)).not.toContain(credential.token);
+      expect(store.inspectConversationControl(other.sessionId, scope)).toBeUndefined();
+      expect(store.inspectConversationControl('unknown-uuid', scope)).toBeUndefined();
+      if (view === undefined) throw new Error('positive inspection missing');
+      view.session.state.currentNodeId = 'mutated-inspection';
+      expect(
+        store.inspectConversationControl(held.sessionId, scope)?.session.state.currentNodeId
+      ).toBe('n1');
+      expect(held).toEqual(localBefore);
+      expect(rows()).toEqual(durableBefore);
+      await store.cleanup();
+    });
+
+    test.each([{}, { workspaceId: 'storage' }, { workspaceId: 'storage', organizationId: 'org' }])(
+      'nullable namespace is exact, authoritative and read-only: %j',
+      async (defaultScope) => {
+        const store = new ChainSessionStore(
+          logger,
+          new StubTextReferenceStore() as never,
+          { cleanupIntervalMs: 60_000, defaultScope },
+          engine
+        );
+        const held = await create(store, 'namespace', 'request-continuity');
+        const scope = store.getConversationControlScope('request-continuity');
+        expect(store.inspectConversationControl(held.sessionId, scope)?.scope).toEqual(scope);
+        const localBefore = structuredClone(held);
+        for (const column of ['organization_id', 'workspace_id']) {
+          const original = rows()[0];
+          if (original === undefined) throw new Error('positive namespace row missing');
+          const replacement = original[column] === null ? 'foreign-namespace' : null;
+          engine.run(`UPDATE chain_runs SET ${column} = ? WHERE session_id = ?`, [
+            replacement,
+            held.sessionId,
+          ]);
+          const durableBefore = rows();
+          expect(store.inspectConversationControl(held.sessionId, scope)).toBeUndefined();
+          expect(rows()).toEqual(durableBefore);
+          engine.run(`UPDATE chain_runs SET ${column} = ? WHERE session_id = ?`, [
+            original[column],
+            held.sessionId,
+          ]);
+        }
+        expect(
+          store.inspectConversationControl(held.sessionId, { ...scope, workspaceId: 'client-hint' })
+        ).toBeUndefined();
+        expect(held).toEqual(localBefore);
+        await store.cleanup();
+      }
+    );
+
+    test('canonical default is exact and legacy residual absence uses the existing default normalization', async () => {
+      const store = newStore();
+      const legacy = await create(store, 'legacy-default', 'default');
+      const foreign = await create(store, 'foreign-continuity', 'other');
+      engine.run(
+        "UPDATE chain_runs SET state = json_remove(state, '$.continuityScopeId') WHERE session_id = ?",
+        [legacy.sessionId]
+      );
+      const scope = store.getConversationControlScope('default');
+      const owner = { continuityScopeId: String(process.pid), workspaceId: 'ws-storage' };
+      const registry = new DirectChainRunRegistry(engine);
+      const before = rows();
+      expect(
+        store.inspectConversationControl(legacy.sessionId, scope)?.scope.continuityScopeId
+      ).toBe('default');
+      expect(store.inspectConversationControl(foreign.sessionId, scope)).toBeUndefined();
+      expect(registry.readOwnedControlRun(foreign.sessionId, owner, scope)).toEqual({
+        status: 'refused',
+        reason: 'scope-mismatch',
+      });
+      expect(rows()).toEqual(before);
+      await store.cleanup();
+    });
+
+    test('a foreign durable owner refuses without local adoption or credential mutation', async () => {
+      const store = newStore();
+      const held = await create(store, 'foreign-owner', 'caller');
+      await store.mintHandoffToken(held.sessionId);
+      engine.run('UPDATE chain_runs SET run_owner_pid = ? WHERE session_id = ?', [
+        'foreign',
+        held.sessionId,
+      ]);
+      const before = rows();
+      const localBefore = structuredClone(held);
+      const scope = store.getConversationControlScope('caller');
+      expect(store.inspectConversationControl(held.sessionId, scope)).toBeUndefined();
+      expect(held).toEqual(localBefore);
+      expect(rows()).toEqual(before);
+      await store.cleanup();
+    });
   });
 
   describe('exact raw run identity (R7)', () => {

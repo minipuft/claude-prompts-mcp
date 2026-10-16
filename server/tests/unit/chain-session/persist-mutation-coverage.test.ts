@@ -159,6 +159,59 @@ function auditEffectOrder(source: string): string[] {
   return violations.sort();
 }
 
+/**
+ * T1.4a. A persisting method calls `this.admitWork` before its `persistMutation` with no `await`
+ * between, or a pause arriving at the await slips in. Methods that do not admit are named here.
+ */
+const ADMISSION_EXEMPT: Record<string, string> = {
+  cancelChain: 'abort is whole-run control, never refused by admission; its persist counts as work',
+  claimHandoff: 'a claim loads a run minted elsewhere; a paused claim is stored as held, unedited',
+  clearSession: 'removing a run must succeed whether or not it is paused',
+  clearSessionsForChain: 'removing a run must succeed whether or not it is paused',
+  createSession: 'creates a run that no pause or control can hold yet',
+};
+
+/** Whether an `await` other than the persist's own starts between `from` and `to` in `node`. */
+function awaitBetween(node: ts.Node, from: number, to: number): boolean {
+  let found = false;
+  const visit = (child: ts.Node): void => {
+    const own =
+      ts.isAwaitExpression(child) && child.expression.getText().includes('persistMutation(');
+    if (ts.isAwaitExpression(child) && !own && child.getStart() > from && child.getStart() < to) {
+      found = true;
+    }
+    ts.forEachChild(child, visit);
+  };
+  visit(node);
+  return found;
+}
+
+/** Every persisting method that admits no work, or lets an `await` stand between admit and persist. */
+function auditAdmission(source: string): string[] {
+  const file = ts.createSourceFile('manager.ts', source, ts.ScriptTarget.Latest, true);
+  const violations: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isClassDeclaration(node) && node.name?.text === 'ChainSessionStore') {
+      for (const member of node.members) {
+        if (!ts.isMethodDeclaration(member) || member.body === undefined) continue;
+        const name = member.name.getText(file);
+        const calls = thisCalls(member.body);
+        const persist = calls.find((call) => call.name === 'persistMutation');
+        if (persist === undefined || name in ADMISSION_EXEMPT) continue;
+        const admit = calls.find((call) => call.name === 'admitWork');
+        if (admit === undefined || admit.pos > persist.pos) {
+          violations.push(`${name}: persists with no admitWork before it`);
+        } else if (awaitBetween(member.body, admit.pos, persist.pos)) {
+          violations.push(`${name}: an await stands between admitWork and persistMutation`);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return violations.sort();
+}
+
 const source = readFileSync(MANAGER, 'utf8');
 
 describe('P6.185: every awaited mutator persists through persistMutation', () => {
@@ -243,6 +296,33 @@ describe('P6.190: nothing a snapshot cannot undo runs before the persist', () =>
     );
     expect(auditEffectOrder(planted)).toEqual([
       'plantedIndirect: plantedHelper runs before the persist',
+    ]);
+  });
+});
+
+describe('T1.4a: work is admitted in the same synchronous step as its persist', () => {
+  const plant = (method: string): string =>
+    source.replace(/export class ChainSessionStore[^{]*\{/, (open) => `${open}\n  ${method}\n`);
+
+  test('every persisting method admits before it persists, with no await between', () => {
+    expect(auditAdmission(source)).toEqual([]);
+    const mutators = auditPersists(source).mutators;
+    expect(Object.keys(ADMISSION_EXEMPT).filter((name) => !mutators.includes(name))).toEqual([]);
+  });
+
+  test('planted control: a mutator persisting with no admission is reported', () => {
+    const planted = plant(
+      'async plantedOpen(): Promise<void> { const snap = this.snapshotRunMembership(); await this.persistMutation(snap); }'
+    );
+    expect(auditAdmission(planted)).toEqual(['plantedOpen: persists with no admitWork before it']);
+  });
+
+  test('planted control: an await between admit and persist is reported', () => {
+    const planted = plant(
+      'async plantedGap(s: any): Promise<void> { this.admitWork(s); await Promise.resolve(); const snap = this.snapshotRunMembership(); await this.persistMutation(snap); }'
+    );
+    expect(auditAdmission(planted)).toEqual([
+      'plantedGap: an await stands between admitWork and persistMutation',
     ]);
   });
 });
