@@ -25,12 +25,13 @@ hook_mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(hook_mod)
 
 
-def run_hook(monkeypatch, capsys, tool_input):
+def run_hook(monkeypatch, capsys, tool_input, **extra):
     payload = {
         "session_id": "gate-verdict-test",
         "hook_event_name": "PreToolUse",
         "tool_name": "mcp__claude_prompts_mcp__prompt_engine",
         "tool_input": tool_input,
+        **extra,
     }
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
     with pytest.raises(SystemExit) as excinfo:
@@ -187,3 +188,53 @@ class TestMalformedVerdict:
         assert code == 0
         assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert out["hookSpecificOutput"]["permissionDecisionReason"].startswith("gate_verdict requires an object")
+
+
+IDENTITY = {"run_id": "r", "chain_id": "chain-demo#1", "organization_id": None, "workspace_id": "w"}
+IDENTITY["continuity_scope_id"] = "w"
+PAUSED = {"chain_id": "chain-demo#1", "current_step": 2, "total_steps": 3, "pending_gate": "blocking unknown interrupt"}
+PAUSED |= {"run_identity": IDENTITY, "conversation_pause": {"kind": "conversation"}, "pause_custody": "owned"}
+FREE = {**PAUSED, "pending_gate": None}
+CALL = {"chain_id": "chain-demo#1", "user_response": "x"}
+VERDICT, REMAINDER = {"overall": "PASS", "rationale": "ok"}, {"mode": "append", "nodes": []}
+
+
+class TestConversationPause:
+    def run_paused(self, monkeypatch, capsys, tool_input, state=PAUSED, **extra):
+        monkeypatch.setattr(hook_mod, "load_session_state", lambda _sid: dict(state))
+        return run_hook(monkeypatch, capsys, tool_input, **extra)
+
+    # PAUSED also holds a pending gate, so handoff and claim pass check 2 as well as check 3.
+    @pytest.mark.parametrize("control", [{"gate_action": "pause"}, {"gate_action": "resume"}, {"gate_action": "abort"}])
+    def test_controls_are_admitted(self, monkeypatch, capsys, control):
+        assert self.run_paused(monkeypatch, capsys, {"chain_id": "chain-demo#1", **control}) == (0, {})
+        assert self.run_paused(monkeypatch, capsys, {"chain_id": "chain-demo#1", "handoff": True}) == (0, {})
+        assert self.run_paused(monkeypatch, capsys, {"claim_token": "tok"}) == (0, {})
+
+    @pytest.mark.parametrize(
+        "extra",
+        [{}, {"gate_verdict": VERDICT}, {"remainder": REMAINDER}, {"gate_action": "retry"}, {"gate_action": "skip"}],
+        ids=["bare", "verdict", "remainder", "retry", "skip"],
+    )
+    def test_paused_mutation_gets_resume_or_abort(self, monkeypatch, capsys, extra):
+        _, out = self.run_paused(monkeypatch, capsys, {**CALL, **extra})
+        decision = out["hookSpecificOutput"]
+        reason = decision["permissionDecisionReason"]
+        assert decision["permissionDecision"] == "deny"
+        assert reason.startswith("Workflow paused for conversation at step 2 of 3: `chain-demo#1`")
+        assert 'gate_action:"resume"' in reason and 'gate_action:"abort"' in reason
+        assert "gate_verdict" not in reason and "Chain paused" not in reason
+
+    @pytest.mark.parametrize(
+        ("tool_input", "state", "extra"),
+        [
+            ({**CALL, "chain_id": "chain-other#1"}, FREE, {}),
+            ({}, PAUSED, {"tool_name": "Edit"}),
+            (CALL, PAUSED, {"agent_id": "worker-1"}),
+            (CALL, {**FREE, "pause_custody": "retained"}, {}),
+            (CALL, {**FREE, "run_identity": {**IDENTITY, "chain_id": "chain-x#1"}}, {}),
+        ],
+        ids=["other-run", "unrelated-tool", "subagent", "retained-custody", "mismatched-identity"],
+    )
+    def test_pause_does_not_reach_beyond_the_owned_exact_run(self, monkeypatch, capsys, tool_input, state, extra):
+        assert self.run_paused(monkeypatch, capsys, tool_input, state=state, **extra) == (0, {})

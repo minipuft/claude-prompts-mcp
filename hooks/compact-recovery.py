@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from db_reader import load_recoverable_chain_state
-from session_state import ChainState, format_chain_reminder
+from session_state import ChainState, format_chain_reminder, format_pause_directive
 
 
 def parse_hook_input() -> dict:
@@ -42,6 +42,12 @@ def main():
     state: ChainState | None = load_recoverable_chain_state(session_id)  # type: ignore[assignment]
 
     if not state:
+        sys.exit(0)
+
+    # A paused run is restored as paused: the concise directive, never a continue instruction.
+    paused = format_pause_directive(state)
+    if paused:
+        print(f"## Paused Workflow (recovered after compaction)\n\n{paused}")
         sys.exit(0)
 
     # Only inject if there's active chain/gate/verify state

@@ -110,8 +110,8 @@ class TestPostPromptEngineSubagentWritesNothing:
     @pytest.mark.parametrize(
         ("content", "tool_input"),
         [
-            ("Chain complete (3/3) chain-worker#1", {"chain_id": "chain-worker#1"}),
-            ("🛑 **Chain Cancelled**: `chain-worker#1`", {"chain_id": "chain-worker#1", "gate_action": "abort"}),
+            ("Chain complete (3/3) chain-parent#1", {"chain_id": "chain-parent#1"}),
+            ("🛑 **Chain Cancelled**: `chain-parent#1`", {"chain_id": "chain-parent#1", "gate_action": "abort"}),
         ],
         ids=["completion-marker", "abort"],
     )
@@ -120,10 +120,12 @@ class TestPostPromptEngineSubagentWritesNothing:
     ):
         sid = "p642-sub-clear"
         before = _arm_parent(monkeypatch, capsys, sid)
+        payload = _post(sid, content, tool_input, agent_id=WORKER_AGENT_ID)
+        if tool_input.get("gate_action") == "abort":  # natively: the JSON string of its run_control packet
+            packet = {"action": "abort", "outcome": "cancelled", "chainId": "chain-parent#1"}
+            payload["tool_response"] = json.dumps({"run_control": packet})
 
-        code, out = _run(
-            post_prompt_engine, monkeypatch, capsys, _post(sid, content, tool_input, agent_id=WORKER_AGENT_ID)
-        )
+        code, out = _run(post_prompt_engine, monkeypatch, capsys, payload)
 
         assert (code, out) == (0, "")
         assert load_session_state(sid) == before
@@ -140,12 +142,11 @@ class TestPostPromptEngineSubagentWritesNothing:
         """Positive control for the absence above: the same reply on the parent's call clears."""
         sid = "p642-parent-clear"
         _arm_parent(monkeypatch, capsys, sid)
-        _run(
-            post_prompt_engine,
-            monkeypatch,
-            capsys,
-            _post(sid, content, tool_input, agent_id=None),
-        )
+        payload = _post(sid, content, tool_input, agent_id=None)
+        if tool_input.get("gate_action") == "abort":  # natively: the JSON string of its run_control packet
+            packet = {"action": "abort", "outcome": "cancelled", "chainId": "chain-parent#1"}
+            payload["tool_response"] = json.dumps({"run_control": packet})
+        _run(post_prompt_engine, monkeypatch, capsys, payload)
         assert load_session_state(sid) is None
 
 

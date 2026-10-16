@@ -230,9 +230,10 @@ class TestMainDecisions:
         exit_code, output = self._run_hook({"stop_hook_active": True})
         assert exit_code == 0
 
-    def test_no_verify_state_allows(self):
+    def test_no_verify_state_allows(self, patch_workspace):
         exit_code, output = self._run_hook({}, verify_state=None)
         assert exit_code == 0
+        assert output is None
 
     def test_max_iterations_reached_allows(self):
         verify_state = {
@@ -377,3 +378,230 @@ class TestStopWaitsOnEveryVisibleRun:
         assert "Use FAIL" in output["reason"]
         assert "returned server template for per_gate, reminders and semantic evaluation" in output["reason"]
         assert "GATE_REVIEW" not in output["reason"]
+
+
+class TestStopReadsRowsByExactIdentity:
+    """T3.5: the host's own row by its session id, a workflow's rows by the exact run it is bound to.
+
+    Real verify-state.db under a tmp workspace; the run binding comes from the loader, the command
+    from a spy. An owned exact pause parks only its run's rows: they stay byte-identical and no
+    command runs for them, while every other obligation enforces as before.
+    """
+
+    CHAIN = "chain-x#1"
+    HOST = "sess-1"
+
+    @pytest.fixture(autouse=True)
+    def _store(self, patch_workspace, monkeypatch):
+        monkeypatch.setenv("RALPH_SESSION_ID", "unchanged")
+        import verify_active_store
+
+        self.store = verify_active_store
+
+    def identity(self, run, scope):
+        return {
+            "run_id": run,
+            "chain_id": self.CHAIN,
+            "organization_id": None,
+            "workspace_id": scope,
+            "continuity_scope_id": scope,
+        }
+
+    def chain(self, run="run-a", scope="ws-a", paused=False, custody="owned"):
+        state = {"chain_id": self.CHAIN, "current_step": 2, "total_steps": 3, "pending_gate": None}
+        state["run_identity"] = self.identity(run, scope)
+        if paused:
+            state["conversation_pause"] = {"kind": "conversation", "node_id": "n2", "paused_at": 1}
+            state["pause_custody"] = custody
+        return state
+
+    @staticmethod
+    def loop(command, started_hours_ago=0.0, **identity):
+        from datetime import datetime, timedelta, timezone
+
+        started = datetime.now(timezone.utc) - timedelta(hours=started_hours_ago)
+        return {
+            **identity,
+            "config": {"command": command, "timeout": 30000, "maxIterations": 10},
+            "state": {"iteration": 1, "lastResult": None, "startedAt": started.isoformat()},
+        }
+
+    def workflow(self, run, scope, command, started_hours_ago=0.0, key=None):
+        row = self.loop(
+            command,
+            started_hours_ago,
+            sessionId=f"workflow-run-{run}",
+            runSessionId=run,
+            chainId=self.CHAIN,
+            scope={"continuityScopeId": scope, "workspaceId": scope},
+        )
+        self.store.save_verify_active_state(row, key or f"workflow-run-{run}")
+
+    def rows(self):
+        import sqlite3
+
+        db = self.store.get_verify_state_db_path()
+        if not db.exists():
+            return {}
+        conn = sqlite3.connect(str(db))
+        try:
+            return {key: (raw, at) for key, raw, at in conn.execute("SELECT * FROM verify_active_state")}
+        finally:
+            conn.close()
+
+    def stop(self, chain_state, session_id=HOST, passed=False):
+        import contextlib
+        import io
+
+        commands = []
+
+        def spy(command, timeout, working_dir=None):
+            commands.append(command)
+            return {"passed": passed, "exitCode": 0 if passed else 1, "stdout": "", "stderr": "FAIL", "timedOut": False}
+
+        captured = io.StringIO()
+        payload = {"session_id": session_id} if session_id else {}
+        with patch("sys.stdin", io.StringIO(json.dumps(payload))):
+            with patch.object(hook_mod, "load_recoverable_chain_state", autospec=True, return_value=chain_state):
+                with patch.object(hook_mod, "run_verification", side_effect=spy):
+                    with patch.object(hook_mod, "load_context_isolation_config", return_value={"enabled": False}):
+                        with contextlib.redirect_stdout(captured):
+                            with pytest.raises(SystemExit):
+                                hook_mod.main()
+        output = captured.getvalue().strip()
+        return (json.loads(output) if output else None), commands
+
+    def test_an_owned_exact_pause_parks_its_row_and_permits_stop(self):
+        self.workflow("run-a", "ws-a", "cmd-a")
+        before = self.rows()
+
+        output, commands = self.stop(self.chain(paused=True))
+
+        assert output is None
+        assert commands == []
+        assert self.rows() == before
+
+    def test_an_independent_host_row_still_enforces_while_the_run_is_parked(self):
+        self.workflow("run-a", "ws-a", "cmd-a")
+        self.store.save_verify_active_state(self.loop("host-cmd"), self.HOST)
+        before = self.rows()
+
+        output, commands = self.stop(self.chain(paused=True))
+
+        assert commands == ["host-cmd"]
+        assert output is not None and output["decision"] == "block"
+        after = self.rows()
+        assert after.keys() == before.keys()
+        assert after["workflow-run-run-a"] == before["workflow-run-run-a"]
+        assert json.loads(after[self.HOST][0])["state"]["lastResult"]["exitCode"] == 1
+
+    def test_two_scopes_with_one_public_chain_id_run_only_the_bound_runs_check(self):
+        self.workflow("run-a", "ws-a", "cmd-a")
+        self.workflow("run-b", "ws-b", "cmd-b")
+        self.workflow("run-b", "ws-b", "legacy-b", key=self.CHAIN)
+        before = self.rows()
+
+        output, commands = self.stop(self.chain())
+
+        assert commands == ["cmd-a"]
+        assert output is not None and output["decision"] == "block"
+        after = self.rows()
+        assert after.keys() == before.keys()
+        assert after["workflow-run-run-b"] == before["workflow-run-run-b"]
+        assert after[self.CHAIN] == before[self.CHAIN]
+        assert json.loads(after["workflow-run-run-a"][0])["state"]["lastResult"]["exitCode"] == 1
+
+    def test_a_retained_pause_grants_no_exemption(self):
+        self.workflow("run-a", "ws-a", "cmd-a")
+
+        output, commands = self.stop(self.chain(paused=True, custody="retained"))
+
+        assert commands == ["cmd-a"]
+        assert output is not None and output["decision"] == "block"
+
+    @pytest.mark.parametrize(
+        ("row_run", "row_scope", "why"),
+        [("run-b", "ws-a", "names another run"), ("run-a", "ws-b", "scope is not the run's scope")],
+    )
+    def test_a_row_at_the_runs_key_that_is_not_exactly_it_fails_closed(self, row_run, row_scope, why):
+        self.workflow(row_run, row_scope, "foreign-cmd", key="workflow-run-run-a")
+        before = self.rows()
+
+        output, commands = self.stop(self.chain(paused=True))
+
+        assert commands == []
+        assert output is not None and output["decision"] == "block"
+        assert "could not be attributed" in output["reason"] and why in output["reason"]
+        assert self.rows() == before
+
+    def test_an_unreadable_row_at_the_runs_key_fails_closed(self):
+        import sqlite3
+
+        self.workflow("run-a", "ws-a", "cmd-a")
+        conn = sqlite3.connect(str(self.store.get_verify_state_db_path()))
+        conn.execute("UPDATE verify_active_state SET state_json = '{not json'")
+        conn.commit()
+        conn.close()
+
+        output, commands = self.stop(self.chain(paused=True))
+
+        assert commands == []
+        assert output is not None and "is unreadable" in output["reason"]
+
+    def test_a_stop_with_no_session_id_runs_no_row_and_fails_closed(self):
+        self.workflow("run-a", "ws-a", "cmd-a")
+        before = self.rows()
+
+        output, commands = self.stop(None, session_id="")
+
+        assert commands == []
+        assert output is not None and output["decision"] == "block"
+        assert "no session id" in output["reason"]
+        assert self.rows() == before
+
+    def test_control_no_session_id_and_no_rows_allows(self):
+        output, commands = self.stop(None, session_id="")
+
+        assert (output, commands) == (None, [])
+
+    def test_a_long_pause_then_resume_keeps_the_workflow_obligation(self):
+        self.workflow("run-a", "ws-a", "cmd-a", started_hours_ago=3)
+        before = self.rows()
+
+        paused_output, paused_commands = self.stop(self.chain(paused=True))
+        assert (paused_output, paused_commands) == (None, [])
+        assert self.rows() == before
+
+        output, commands = self.stop(self.chain())
+
+        assert commands == ["cmd-a"]
+        assert output is not None and output["decision"] == "block"
+        assert set(self.rows()) == {"workflow-run-run-a"}
+
+    def test_control_a_host_row_past_the_hour_still_expires(self):
+        self.store.save_verify_active_state(self.loop("host-cmd", started_hours_ago=3), self.HOST)
+
+        output, commands = self.stop(None)
+
+        assert (output, commands) == (None, [])
+        assert self.rows() == {}
+
+    def test_after_abort_a_passing_host_row_clears_only_itself(self):
+        # Abort released run-a's row (absent) and the run is gone; another scope's row stays.
+        self.workflow("run-b", "ws-b", "cmd-b")
+        self.store.save_verify_active_state(self.loop("host-cmd"), self.HOST)
+        before = self.rows()
+
+        output, commands = self.stop(None, passed=True)
+
+        assert commands == ["host-cmd"]
+        assert output is not None and output["decision"] is None
+        assert self.rows() == {"workflow-run-run-b": before["workflow-run-run-b"]}
+
+    def test_no_clear_or_save_accepts_an_empty_key(self):
+        with pytest.raises(ValueError):
+            hook_mod.clear_verify_state("")
+        with pytest.raises(ValueError):
+            hook_mod.save_verify_state({}, "")
+        with pytest.raises(ValueError):
+            self.store.delete_verify_row("")

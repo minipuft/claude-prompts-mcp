@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from lesson_extractor import summarize_error
+from session_state import read_tool_response
 from session_tracker import get_session_tracker
 from verify_active_store import load_verify_active_state
 
@@ -32,13 +33,15 @@ def parse_hook_input() -> dict:
         return {}
 
 
-def get_active_ralph_session(hook_session_id: str | None = None) -> str | None:
+def get_active_ralph_session(hook_session_id: str) -> str | None:
     """
-    Get the currently active Ralph session ID.
+    Get the host session's active Ralph session ID.
 
-    Checks verify-state.db (source of truth for Ralph sessions).
-    When hook_session_id is provided, scopes lookup to that client's state.
+    Reads the one verify-state.db row keyed by the host session id (the source of
+    truth for Ralph sessions). A hook with no session id has no row to read.
     """
+    if not hook_session_id:
+        return None
     state = load_verify_active_state(hook_session_id)
     if not state:
         return None
@@ -94,25 +97,14 @@ def main():
         sys.exit(0)
 
     # Only track during active Ralph sessions (scoped to this client)
-    ralph_session = get_active_ralph_session(session_id or None)
+    ralph_session = get_active_ralph_session(session_id)
     if not ralph_session:
         # No active Ralph session, no tracking needed
         sys.exit(0)
 
     tool_input = hook_input.get("tool_input", {})
-    tool_response = hook_input.get("tool_response", "")
-
-    # Convert response to string if needed
-    if isinstance(tool_response, dict):
-        content = tool_response.get("content", "")
-        if isinstance(content, list):
-            tool_response = " ".join(
-                block.get("text", "") if isinstance(block, dict) else str(block) for block in content
-            )
-        else:
-            tool_response = str(content)
-    else:
-        tool_response = str(tool_response)
+    # Bash's {stdout, stderr} dict and every MCP shape read through the one tool_response reader.
+    tool_response, _, _ = read_tool_response(hook_input.get("tool_response", ""))
 
     # Get session tracker
     tracker = get_session_tracker(ralph_session)

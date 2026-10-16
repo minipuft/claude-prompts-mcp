@@ -222,6 +222,95 @@ Two derivations of request scope existed: launch-aware `resolveRequestIdentityCo
 - **R-T2.8-ABORT (accepted, behavior change):** a scopeless abort previously passed `undefined` scope and skipped the mutation scope check, so any workspace could abort any run in the shared state.db; it now resolves the launch scope and a foreign run is refused. Named in the PR body.
 - **Findings (no rows):** an in-process call with absent/non-object `sdkExtra` still resolves to no scope (F20 pins that for claim) while stage 03 resolves the launch scope — MCP always passes an object; `serving-unit-scope.ts:80` is a third claims-only derivation with its own launch fallback (not pause work, R192); a second pause after resume returns the same token, which is the plan's "pause preserves an existing credential".
 
+### P3 opens (2026-10-15)
+
+- **R-P3-STACK:** P3 runs on `feat/conversation-pause-hooks`, stacked on #493's branch, while #493 is in CI. After #493 squash-merges, the P3 commits are cherry-picked onto main (as P1 was): P3 touches hooks plus one server projection, none of it in files #493 changes after its head.
+- **T3.0 (new row):** the consequence trace lists `collectActiveSessionRows` among the pause publishers, but no row covered it — `chain_sessions.state` carries step, review and shell verification, and no pause or obligation. Every T3 row reads that projection, so T3.0 precedes T3.1.
+
+### T3.0 accepted (2026-10-15)
+
+`projectPauseForHooks` appends `conversationPause` {kind, nodeId, pausedAt} and `owed` [{kind, nodeId, step, review?{kind, phase}}] (from `deriveObligations`, now exported) to `chain_sessions.state` only for a paused run. The brief's premise that dormant paused runs were already projected was false — `collectActiveSessionRows` skipped every non-canonical run before reaching `isSessionActiveForHooks`; the filter now admits a dormant run only when paused (R-T3.0-DORMANT, consistent with T1.2 and T2.4a).
+
+- **T3.0a (new row):** a paused claim skips `persistMutation`, so the claimer's projection is absent until a later write.
+- **For T3.1:** a dead owner's paused `chain_sessions` row is deleted by the next server's `cleanupStalePidRows` (no paused exception) while its `chain_runs` row is retained; no live process re-projects it until a claim. `v_execution_status` json-extracts a fixed key list without the pause, so hooks read `cs.state` directly (no DDL). Hook tolerance of the extra keys is inferred from `.get()` access, not measured — T3.1's fixtures use a branch-written projection.
+
+### T3.1 accepted (2026-10-15)
+
+`exact_run_identity`, `pause_fields` and `holds_pause_exemption(state, bound)` in session_state.py; db_reader's view route joins `chain_sessions cs ON cs.id = v.row_id` (the view lacks `continuity_scope_id`) and filters on exact identity, the table route filters the same way through `json_extract`; one `_select_row` prefers a live owner and returns a dead owner's row only when exact and paused, marked `retained`. A missing row, an unreadable DB or no DB keeps the tracked pause but downgrades custody to `unconfirmed`.
+
+- **R-T3.1-CUSTODY (ruled):** only `owned` custody with an exact host binding grants a pause exemption; `retained` and `unconfirmed` give recovery guidance only (fail closed). T3.5 inherits this for Stop.
+- **For T3.2 (binding):** T3.1 has no writer for `run_identity`. T3.2 stores `exact_run_identity(packet.run)`, `pause_fields(run.pause, run.obligations)` and `pause_custody="owned"` from a successful `structuredContent.conversation_control`, and never stores `structuredContent.message`. Abort by another client removes the row, so this client shows an `unconfirmed` pause until T3.2 clears tracking on terminal evidence.
+- **Findings (no rows):** `TestChainLoaderColumns.NOT_READ` still lists `workspace_id`, which the identity path now reads (docstring only); `pyrefly.toml` excludes `hooks/tests/**`, so test type errors are unchecked anywhere; `load_active_chain_state` has callers in tests only.
+
+### T3.2 accepted; #493 merged (2026-10-15)
+
+gate-enforce denies paused mutations for an owned exact pause with resume-or-abort text and admits pause/resume/abort by name plus handoff (check 2 now admits handoff too); post-prompt-engine decides any response carrying `structuredContent.conversation_control` by the packet alone, applied only when `isError is False`, and ignores refusals, foreign or mismatched packets. #493 merged as dd555535 with B2.
+
+- **Unverified premise → T3.2p:** whether Claude Code's PostToolUse `tool_response` for an MCP tool carries `structuredContent`. Fails closed if not (nothing tracked), but the pause tracking would not work natively.
+- **Findings (no rows):** the text path's `save_session_state` overwrites the whole row, so the first ordinary step after a resume drops `run_identity` — harmless, since the next pause arrives with its own packet; check 2 denies a call to any chain id while a pending gate is tracked (pre-existing); `RUN_CONTROLS` is hand-written because the generated verb file carries parameter names, not enum values; the paused deny text lives in gate-enforce and T3.4's shared directive may absorb it.
+
 ### B2 — #493 CI failure (2026-10-15)
 
 CI on #493: 1 of 1869 failed on both Node versions — `tests/integration/database/transaction-lock-mode` expects deferred step persists to write first; T1.2's `protectedPauseIds()` SELECT ran first. Fixed in the DELETE's own predicate (a nonterminal row whose state carries `conversationPause`, guarded by `json_valid`), shared with `deleteRunsForOwners`. No pause row's own check covered `tests/integration/database`; and a full `tests/integration` run after a src edit needs a fresh `npm run build`, or `structured-gate-verdict-flow` refuses 24 cases as stale dist.
+
+### T3.2p — native PostToolUse payload measured (2026-10-15)
+
+Headless `claude -p` (2.1.299, Haiku) with a capture hook and the branch-built server. Bash positive control fired (dict tool_response). For `mcp__…__prompt_engine`: an ordinary step arrived as a content-block list; pause and resume arrived as a **JSON string of the structuredContent object** (`{"conversation_control": {...}, "message": "..."}`) — no `structuredContent` key, no `content`, no `isError`. The model's tool_result is the same string. T3.2's parser (dict with `structuredContent`) and its `isError is False` gate therefore never fire under Claude Code; the pause would never be tracked natively. Row T3.2a fixes the reader. The pre-existing `succeeded` gate in post-prompt-engine (`isError is False` on a dict) can never be true for any MCP response from this host — reported to the owner with what it gates.
+
+### T3.2a accepted (2026-10-15)
+
+`read_tool_response` in session_state.py returns (text, structured, is_error|None) for the three shapes; post-prompt-engine reads the packet from it and applies by outcome alone (`APPLIED_OUTCOMES` = paused, already-paused, claimed, resumed; every refusal carries `refused`). On the captured native payloads a pause and resume were untouched before and are tracked after.
+
+- **Owner question raised (pre-existing on main, outside this plan's objective):** the non-packet path's `succeeded` (`isError is False` on a dict) is never true natively, and the text it matches is `str(list)` — so clearing on abort, on a completed verdict and on chain completion have never run under Claude Code; tracked rows leave only by the 24-hour sweep or overwrite. Reviving abort-clearing needs a way to tell a failed abort from a successful one (same leading text, no isError natively): the second line, or a structured packet on the abort reply.
+- **Findings (no rows):** `chain_interrupt` replies also arrive as JSON strings and the non-packet path parses the raw JSON text; `ralph-context-tracker.py:103-115` has its own dict-only extraction (→ T3.5 brief); the legacy refused fixture carries `pause: None` and cannot catch an outcome-gate defect — only a pause-carrying refusal can.
+
+### Owner ruling: fix the never-run hook clearing now (2026-10-15)
+
+The owner ruled on 2026-10-15 to fix, before 6.0.0, the three post-prompt-engine clearing behaviors T3.2a found had never run under Claude Code (abort, completed verdict, chain completion).
+
+- **R-CLEAR-SLICE:** they land in the P3 hooks PR as rows C1 (server abort outcome) and C2 (hooks), not a separate PR off main: the shared `read_tool_response` exists only on this branch and C2 edits `post-prompt-engine.py`, which P3 already changes; a separate PR would duplicate the reader or conflict with it.
+- **R-CLEAR-ABORT:** the abort reply gains `structuredContent.run_control` because a failed abort ("Verify-loop release incomplete") and an applied one share their leading text and natively neither carries isError; the second line of text is not a contract.
+- **Class closure:** C2 moves every hook that reads `tool_response` onto the helper and adds a test that fails on a direct read elsewhere — the shape (`tool_response.get(...)` on a dict the host never sends) already exists at two sites.
+
+### T3.3 accepted (2026-10-15)
+
+`paused_for_conversation(state)` binds the tracked `run_identity` only when its chain equals the delegating chain, then asks `holds_pause_exemption`; under an owned pause the hook exits after the pending-delegation check with no demand, no spawn-pin check and no clear. **R-T3.3-PIN (ruled):** the spawn-pin check is delegation pressure (its deny is the step-must-run demand) and is suspended too. The brief's "independent capability check" does not exist in this hook (every deny derives from `pending_delegation`) — the planner's error.
+
+- **Defect → C2:** `exact_run_identity` (session_state.py ~124-130) validates the two scope keys with `raw.get(key, "")` and then builds with `raw[key]`, so a stored identity missing them raises KeyError and crashes gate-enforce/delegation-enforce instead of failing closed. Reachable only through legacy or hand-written rows; fixed in C2 (session_state.py is T3.4's file until it lands).
+- **To check at the P3 boundary:** a teardown error in `test_verify_state_schema_parity.py::test_session_id_is_the_primary_key_on_both_sides` during a full run while two workers ran pytest; passes alone.
+
+### T3.4 accepted (2026-10-15)
+
+`format_pause_directive(state)` in session_state.py; `format_chain_reminder` and `format_gate_directive` return it whenever a pause is tracked, so no renderer can bring back a continue/fix/verdict CTA. The wording keeps the run identity (`Workflow paused for conversation at step N of M: <chain>.`) to stay compatible with two existing assertions.
+
+- **R-T3.4-TURN (ruled):** once per user turn stays; once per pause would make prompt-suggest write state.
+- **R-T3.4-UNCONFIRMED (ruled, overrides the row's fail-closed reading):** failing closed means no exemption, not hiding the call — unconfirmed guidance shows the resume/abort calls (the server validates them); retained guidance keeps the claim instructions. → C2.
+- **Defect → C2:** the post-prompt-engine text path saves a freshly parsed state with no pause check, so an unrelated gated prompt run during the discussion erases `conversation_pause` and `run_identity`.
+- **DEV-T3-1 (planner):** the T3.3/T3.4 briefs did not announce C1 as a concurrent server writer; the tree-state guard's teardown error in both full-suite runs was C1's edits, not a defect.
+
+### C1 accepted (2026-10-15)
+
+`abortRunControl` (pure, in conversation-control-response.ts beside the conversation_control packet) builds `structuredContent.run_control` = {action:'abort', outcome, chainId, runId?}. `cancelled` = applied or already cancelled (`cancelChain` true, the only "run is cancelled" outcome); `release-incomplete` = cancelled but the verify-loop release failed (isError); `not-applied` = no chain_id, or `cancelChain` false (completed, failed, missing or out-of-scope — one boolean branch). **For C2:** clear tracking on `cancelled` only. **For T4.3:** neither `conversation_control` nor `run_control` is documented under docs/.
+
+### C2 handoff (2026-10-15)
+
+post-prompt-engine reads text through `read_tool_response` (no `str(list)`); `succeeded` deleted (an `is_error is True` reply exits early, so no error signal is success); abort decides by `run_control` alone — clears only on `cancelled` for the tracked chain and, when both exist, the tracked run id; the text path keeps a row holding a `conversation_pause` when the parsed chain differs or is empty. `read_tool_response` also reads Bash's `{stdout, stderr}` dict, so it is the single reader; ralph-context-tracker uses it. `exact_run_identity` returns None for a partial identity; unconfirmed guidance shows the resume/abort calls. New `test_tool_response_reads.py` fails on a direct `tool_response` read outside the helper (positive control plants 5 shapes).
+
+**Native regex audit (old repr vs real text):** never matched natively — the abort text regex (removed: the native abort reply has no text), `COMPLETION_MARKER`, `interruptVerbs`, the `GATE_VERDICTS` fallback, the legacy `###` gate name; matched with a wrong capture — `gatesList` (stored the rest of the repr as `pending_gate`), `Shell verification:`, legacy criteria; `chainId` failed when the id ended a line. All match correctly on joined text.
+
+- **R-C2-GUARD (accepted):** the overwrite guard keys on a tracked pause (with its identity), not on identity alone — a resumed row keeps its identity, and guarding on it would leave a later chain in the session untracked.
+- **DEV-T3-2:** 259 changed lines in the bounded files plus a 116-line class-gate file (≈375 vs 260); the gate is the class closure the row asked for. Three fixtures outside the bound pinned the old behavior (two text-only abort fixtures, one unconfirmed-guidance assertion R-T3.4-UNCONFIRMED overrides); the worker is authorized to update exactly those.
+- **Findings (no rows):** natively an abort with an older server that sends no `run_control` no longer clears (waits for the 24-hour sweep), per R-CLEAR-ABORT; ralph-context-tracker's `output_summary` is computed and discarded (surplus); the class gate is name-keyed (an alias escapes it, documented in its docstring); `parse_prompt_engine_response` keeps an unreachable dict branch.
+
+### T3.5 accepted (2026-10-15)
+
+`workflow_verify_state_key`, `load_verify_rows(keys)` (exact keys, raw text), `has_verify_rows()`, `delete_verify_row(key)` (refuses empty) in verify_active_store.py; ralph-stop reads the host row by host session id only and workflow rows by the bound run's key (or a legacy chain-id row whose JSON names this run) with exact scope, parks an owned exact pause before anything runs, exempts workflow rows from the host TTL, and blocks with a diagnostic when identity cannot be resolved.
+
+- **R-T3.5-NOSESSION (accepted):** no session id with verify rows present blocks Stop once (stop_hook_active ends the loop); Claude Code always sends a session id.
+- **DEV-T3-3 (planner):** the T3.5 brief named the concurrent writer as server-only while C2 edited hooks files; the three failures T3.5 saw were C2's fixtures in flight.
+- **T3.5a (new row):** the None-to-all store paths remain for two callers outside T3.5's files.
+- **Owner question raised:** workflow shell-verification loops have never been enforced at Stop natively — the hook read `WHERE session_id = <client session id>`, which never matched a server key — and after this row they are enforced only for a run this session paused, because only pause/resume packets record `run_identity` and the next ordinary step drops it.
+
+### T3.5a accepted (2026-10-15)
+
+`clear_verify_active_state` deleted (only the round-trip test called it); `load_verify_active_state` kept because it is imported downstream, with a None/empty session id now returning None instead of any row. **Contract note:** `hooks/lib/*` module API is in the Public API Contract; this narrows a call that returned an arbitrary row. `gemini-prompts/hooks/ralph-context-tracker.py:46` calls it with no argument and would silently stop tracking after it syncs this library — named in the P3 PR body; the downstream change is an external-repo action awaiting the owner (no autonomous submission). `make_verify_state` nests `sessionId` under `state` while the tracker reads it top-level (finding, no runtime mismatch measured).

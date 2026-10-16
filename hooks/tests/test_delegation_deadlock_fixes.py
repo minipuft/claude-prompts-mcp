@@ -348,13 +348,104 @@ class TestQualifiedRunBinding:
             if terminal == "abort"
             else f"Chain complete (3/3)\nChain: `{response}`\n"
         )
-        code, _ = run_post_prompt_engine(
-            monkeypatch,
-            capsys,
-            session_id=sid,
-            content=content,
-            tool_input={"chain_id": request, **({"gate_action": "abort"} if terminal == "abort" else {})},
-            is_error=binding == "refusal",
-        )
+        if terminal == "abort":
+            # Natively an abort reply is the JSON string of its run_control packet, with no isError;
+            # a refused release says so in its outcome.
+            outcome = "release-incomplete" if binding == "refusal" else "cancelled"
+            packet = {"action": "abort", "outcome": outcome, "chainId": response}
+            payload = {"session_id": sid, "tool_name": "mcp__claude-prompts__prompt_engine"}
+            payload["tool_input"] = {"chain_id": request, "gate_action": "abort"}
+            payload["tool_response"] = json.dumps({"run_control": packet})
+            monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+            with pytest.raises(SystemExit) as excinfo:
+                post_prompt_engine.main()
+            code = excinfo.value.code
+        else:
+            code, _ = run_post_prompt_engine(
+                monkeypatch,
+                capsys,
+                session_id=sid,
+                content=content,
+                tool_input={"chain_id": request},
+                is_error=binding == "refusal",
+            )
         assert code == 0
         assert load_session_state(sid) == (None if binding == "exact" else tracked)
+
+
+# ── T3.3: an owned exact pause suspends only the delegation demand ─────────
+
+PAUSE_RUN = {"runId": "r", "chainId": "chain-demo#1", "step": {"current": 1, "total": 3}, "obligations": []}
+PAUSE_RUN["scope"] = {"organizationId": None, "workspaceId": "w", "continuityScopeId": "w"}
+# Unpinned Task/Agent spawns are denied while delegation is pending; a pinned Agent would clear it.
+DEMAND_CALLS = [("Edit", {}), ("Write", {}), ("Bash", {"command": "ls"}), ("Task", {}), ("Agent", {})]
+DEMAND_CALLS.append(("Agent", {"run_in_background": False}))
+FOREIGN = {"run_id": "r", "organization_id": None, "workspace_id": "w", "continuity_scope_id": "w"}
+
+
+def run_control(monkeypatch, capsys, session_id, action, outcome, pause=None):
+    """A pause/resume reply in the shape Claude Code delivers: a JSON string of structuredContent."""
+    packet = {"kind": "conversation_control", "outcome": outcome, "run": {**PAUSE_RUN, "pause": pause}}
+    payload = {"session_id": session_id, "tool_name": "mcp__claude-prompts__prompt_engine"}
+    payload["tool_input"] = {"chain_id": "chain-demo#1", "gate_action": action}
+    payload["tool_response"] = json.dumps({"conversation_control": packet, "message": f"{outcome}."})
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+    with pytest.raises(SystemExit):
+        post_prompt_engine.main()
+    capsys.readouterr()
+
+
+class TestConversationPauseSuspendsDelegationDemand:
+    def _paused(self, monkeypatch, capsys, sid: str) -> dict:
+        TestDefect3ClearCondition()._arm(sid)
+        run_control(monkeypatch, capsys, sid, "pause", "paused", {"kind": "conversation", "pausedAt": 1})
+        state = load_session_state(sid)
+        assert (state["pause_custody"], state["pending_delegation"]) == ("owned", True)
+        return state
+
+    @pytest.mark.parametrize(("tool", "tool_input"), DEMAND_CALLS)
+    def test_owned_exact_pause_suspends_the_demand_and_keeps_the_delegation(
+        self, patch_workspace, monkeypatch, capsys, tool, tool_input
+    ):
+        sid = f"t33-paused-{tool}-{len(tool_input)}"
+        before = json.dumps(load_session_state(sid), sort_keys=True) if self._paused(monkeypatch, capsys, sid) else None
+        code, out = run_delegation_enforce(monkeypatch, capsys, session_id=sid, tool_name=tool, tool_input=tool_input)
+        assert (code, out) == (0, {})
+        assert json.dumps(load_session_state(sid), sort_keys=True) == before
+
+    @pytest.mark.parametrize(
+        "override",
+        [
+            {"pause_custody": "retained"},
+            {"pause_custody": "unconfirmed"},
+            {"run_identity": {**FOREIGN, "chain_id": "chain-other#1"}},
+            {"run_identity": None},
+        ],
+        ids=["retained", "unconfirmed", "foreign-run", "no-identity"],
+    )
+    def test_a_pause_this_conversation_does_not_own_keeps_the_demand(
+        self, patch_workspace, monkeypatch, capsys, override
+    ):
+        sid = f"t33-not-owned-{sorted(override)[0]}-{override.get('pause_custody')}"
+        save_session_state(sid, {**self._paused(monkeypatch, capsys, sid), **override})
+        for tool in ("Bash", "Agent"):
+            _, out = run_delegation_enforce(monkeypatch, capsys, session_id=sid, tool_name=tool)
+            assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert load_session_state(sid)["pending_delegation"] is True
+
+    def test_resume_restores_the_demand(self, patch_workspace, monkeypatch, capsys):
+        sid = "t33-resumed"
+        self._paused(monkeypatch, capsys, sid)
+        run_control(monkeypatch, capsys, sid, "resume", "resumed")
+        assert "conversation_pause" not in load_session_state(sid)
+        _, out = run_delegation_enforce(monkeypatch, capsys, session_id=sid, tool_name="Bash")
+        assert out["hookSpecificOutput"]["permissionDecisionReason"].startswith("Delegation pending")
+        _, out = run_delegation_enforce(monkeypatch, capsys, session_id=sid, tool_name="Agent")
+        assert "must run in the foreground" in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+    def test_the_subagent_boundary_still_holds_under_pause(self, patch_workspace, monkeypatch, capsys):
+        sid = "t33-subagent"
+        before = json.dumps(load_session_state(sid), sort_keys=True) if self._paused(monkeypatch, capsys, sid) else None
+        payload = real_payload(sid, "Agent", {"run_in_background": False}, agent_id="acce70004ef9a4142")
+        assert TestSubagentPayloadIsNotTheDelegator()._run(monkeypatch, capsys, payload) == (0, {})
+        assert json.dumps(load_session_state(sid), sort_keys=True) == before

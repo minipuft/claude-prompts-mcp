@@ -59,6 +59,29 @@ def _load_patterns() -> dict[str, str]:
 _PATTERNS = _load_patterns()
 
 
+class RunIdentity(TypedDict):
+    """The exact run: UUID (`sessionId`), chain id and scope; two scopes can each hold `chain-x#1`."""
+
+    run_id: str
+    chain_id: str
+    organization_id: str | None
+    workspace_id: str | None
+    continuity_scope_id: str
+
+
+class ConversationPauseState(TypedDict):
+    kind: str
+    node_id: str | None
+    paused_at: int
+
+
+class OwedObligation(TypedDict, total=False):
+    kind: str
+    node_id: str
+    step: int
+    review: dict[str, str]
+
+
 class ChainState(TypedDict, total=False):
     chain_id: str
     current_step: int
@@ -78,6 +101,116 @@ class ChainState(TypedDict, total=False):
     delegation_model_hint: str
     # "blocking" | "detached" — read off the server's rendered handoff (run_in_background value)
     delegation_mode: str
+    # Conversation pause. `run_identity` comes only from an exact source: a control packet naming
+    # the run, or a state.db row matched on every identity field. `pause_custody` is "owned" (a
+    # live server holds the pause), "retained" (its server stopped; the run waits for an explicit
+    # claim) or "unconfirmed" (tracked, but no refresh could confirm it).
+    run_identity: RunIdentity
+    conversation_pause: ConversationPauseState
+    owed: list[OwedObligation]
+    pause_custody: str
+
+
+PAUSE_RECOVERY_GUIDANCE = (
+    "The server holding this paused workflow is not confirmed live. Claim it with the handoff token "
+    "you were given, or abort it; it does not resume on its own."
+)
+
+
+def exact_run_identity(raw: object) -> RunIdentity | None:
+    """`raw` as a complete RunIdentity, or None when any field is missing or mistyped."""
+    if not isinstance(raw, dict) or not all(key in raw for key in RunIdentity.__annotations__):
+        return None
+    texts = [raw.get(key) for key in ("run_id", "chain_id", "continuity_scope_id")]
+    scopes = [raw.get(key) for key in ("organization_id", "workspace_id")]
+    if not all(isinstance(value, str) and value for value in texts):
+        return None
+    if not all(value is None or isinstance(value, str) for value in scopes):
+        return None
+    return cast(RunIdentity, {key: raw[key] for key in RunIdentity.__annotations__})
+
+
+def pause_fields(pause: object, owed: object) -> ChainState:
+    """Hook-state pause keys from the server's camelCase shapes (the reply packet's
+    `run.pause`/`run.obligations` and the projection's `conversationPause`/`owed` agree).
+    An absent or malformed pause yields no keys: absence is "not known paused", never "resumed"."""
+    if not isinstance(pause, dict) or pause.get("kind") != "conversation":
+        return {}
+    node_id, paused_at = pause.get("nodeId"), pause.get("pausedAt")
+    if not (node_id is None or isinstance(node_id, str)) or type(paused_at) is not int:
+        return {}
+    obligations: list[OwedObligation] = []
+    for item in owed if isinstance(owed, list) else []:
+        if isinstance(item, dict) and isinstance(item.get("kind"), str) and type(item.get("step")) is int:
+            entry: OwedObligation = {"kind": item["kind"], "node_id": str(item.get("nodeId", "")), "step": item["step"]}
+            if isinstance(item.get("review"), dict):
+                entry["review"] = {key: str(item["review"].get(key, "")) for key in ("kind", "phase")}
+            obligations.append(entry)
+    return {
+        "conversation_pause": {"kind": "conversation", "node_id": node_id, "paused_at": paused_at},
+        "owed": obligations,
+    }
+
+
+def holds_pause_exemption(state: ChainState | None, bound: RunIdentity | None) -> bool:
+    """Whether `state` lets a hook relax workflow pressure for the run the host binding names.
+
+    Only a pause a live server holds, on a run whose exact identity equals `bound`. Missing,
+    legacy, partial or different identity, and a retained or unconfirmed pause, grant nothing.
+    """
+    if not state or exact_run_identity(bound) is None:
+        return False
+    return (
+        state.get("pause_custody") == "owned"
+        and "conversation_pause" in state
+        and exact_run_identity(state.get("run_identity")) == bound
+    )
+
+
+def _paused_chain_id(state: ChainState) -> str:
+    identity = exact_run_identity(state.get("run_identity"))
+    return identity["chain_id"] if identity else state.get("chain_id", "")
+
+
+def pause_recovery_guidance(state: ChainState | None) -> str | None:
+    """Recovery guidance for a tracked pause that grants no exemption; never an adoption.
+
+    A retained pause (its server stopped) is claimed with the handoff token. Any other unowned or
+    unbound pause is unconfirmed, not refused: the explicit resume and abort calls are shown, and
+    the server decides whether either applies.
+    """
+    if not state or "conversation_pause" not in state:
+        return None
+    if holds_pause_exemption(state, exact_run_identity(state.get("run_identity"))):
+        return None
+    if state.get("pause_custody") == "retained":
+        return PAUSE_RECOVERY_GUIDANCE
+    return (
+        "The server holding this paused workflow is not confirmed live. Resume it explicitly with "
+        f'prompt_engine(chain_id:"{_paused_chain_id(state)}", gate_action:"resume") or end it with '
+        'gate_action:"abort"; the server checks either call. It does not resume on its own.'
+    )
+
+
+def format_pause_directive(state: ChainState | None) -> str | None:
+    """The one instruction every hook renders while this conversation's run is paused, or None.
+
+    An owned exact pause gets discussion plus the explicit resume/abort calls; any other tracked
+    pause gets `pause_recovery_guidance`. Either way it replaces the continue, fix and verdict
+    instructions, which a paused run refuses until an explicit resume.
+    """
+    if not state or "conversation_pause" not in state:
+        return None
+    chain_id = _paused_chain_id(state)
+    step, total = state.get("current_step", 0), state.get("total_steps", 0)
+    head = f"Workflow paused for conversation{f' at step {step} of {total}' if step and total else ''}: `{chain_id}`."
+    recovery = pause_recovery_guidance(state)
+    if recovery is not None:
+        return f"{head} {recovery}"
+    return (
+        f"{head} Discuss with the user; resume explicitly with "
+        f'prompt_engine(chain_id:"{chain_id}", gate_action:"resume") or end it with gate_action:"abort".'
+    )
 
 
 def _fallback_interrupt_exits() -> list[str]:
@@ -121,6 +254,44 @@ def is_subagent_payload(hook_input: dict) -> bool:
     2026-09-13 on SubagentStop). `agent_type` cannot either: `--agent` sets it too.
     """
     return bool(hook_input.get("agent_id"))
+
+
+def _block_text(content: object) -> str:
+    if isinstance(content, list):
+        return " ".join(block.get("text", "") if isinstance(block, dict) else str(block) for block in content)
+    return content if isinstance(content, str) else str(content)
+
+
+def read_tool_response(tool_response: object) -> tuple[str, dict | None, bool | None]:
+    """A PostToolUse `tool_response` as `(text, structured, is_error)`, whatever shape the host sent.
+
+    Claude Code (measured on 2.1.299) hands an MCP result over as a LIST of `{type, text}` blocks
+    when it has no structuredContent, and as a JSON STRING of the structuredContent object itself
+    when it has one -- no wrapper, no `content`, no `isError`; that shape's text is the object's
+    `message`. Built-in tools send their own dict (Bash: `{stdout, stderr, interrupted, ...}`, whose
+    text is stdout then stderr); other hosts and tests send a dict `{content, isError, structuredContent}`.
+    `is_error` is None when the host gives no signal, which no MCP payload under Claude Code does.
+    This is the one reader of `tool_response` (test_tool_response_reads.py enforces it).
+    """
+    if isinstance(tool_response, dict):
+        structured, flag = tool_response.get("structuredContent"), tool_response.get("isError")
+        streams = [tool_response.get(key) for key in ("stdout", "stderr")]
+        if "content" not in tool_response and any(isinstance(stream, str) for stream in streams):
+            return "\n".join(stream for stream in streams if isinstance(stream, str) and stream), None, None
+        text = _block_text(tool_response.get("content", ""))
+        return text, structured if isinstance(structured, dict) else None, flag if isinstance(flag, bool) else None
+    if isinstance(tool_response, list):
+        return _block_text(tool_response), None, None
+    if not isinstance(tool_response, str):
+        return ("" if tool_response is None else str(tool_response)), None, None
+    try:
+        parsed = json.loads(tool_response)
+    except ValueError:
+        return tool_response, None, None
+    if not isinstance(parsed, dict):
+        return tool_response, None, None
+    message = parsed.get("message")
+    return (message if isinstance(message, str) else tool_response), parsed, None
 
 
 def load_session_state(session_id: str) -> ChainState | None:
@@ -285,6 +456,9 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
         state: Chain state to format
         mode: "full" for compact-recovery (multi-line), "inline" for prompt-suggest (two-line)
     """
+    paused = format_pause_directive(state)
+    if paused:
+        return paused
     chain_id = state.get("chain_id", "")
     step = state["current_step"]
     total = state["total_steps"]
@@ -340,6 +514,9 @@ def format_chain_reminder(state: ChainState, mode: str = "full") -> str:
 
 def format_gate_directive(state: ChainState) -> str:
     """Render the pending hold's instruction without offering a gate verdict for an interrupt."""
+    paused = format_pause_directive(state)
+    if paused:
+        return paused
     chain_id = state.get("chain_id", "")
     gate = state.get("pending_gate")
     if gate == UNKNOWN_INTERRUPT_LABEL:

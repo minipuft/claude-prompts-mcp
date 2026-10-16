@@ -10,7 +10,7 @@ import json
 import os
 import sqlite3
 
-from session_state import label_gate_ids
+from session_state import RunIdentity, exact_run_identity, label_gate_ids, pause_fields
 from workspace import get_state_db_path
 
 
@@ -218,6 +218,11 @@ def load_recoverable_chain_state(session_id: str | None) -> dict | None:
         serve here replayed a finished run as a stale step (P6.31).
       - no state.db reachable                    → the session snapshot as-is
         (the pre-existing fallback for hosts without a readable server db)
+
+    A recorded exact `run_identity` refreshes by that identity alone, and only such a refresh
+    carries a pause. Absence never clears a tracked pause: no matching row (the next server's
+    cleanup deletes a dead owner's row; its run is retained), no state.db or a failed refresh
+    returns the tracked state with `pause_custody: "unconfirmed"`.
     """
     if not session_id:
         return None
@@ -230,18 +235,25 @@ def load_recoverable_chain_state(session_id: str | None) -> dict | None:
     if not chain_id:
         return None
 
+    identity = exact_run_identity(session.get("run_identity"))
+    if identity is not None and identity["chain_id"] != chain_id:
+        identity = None
+    paused = identity is not None and "conversation_pause" in session
     conn = _connect_readonly()
     if not conn:
-        return dict(session)
+        return {**session, "pause_custody": "unconfirmed"} if paused else dict(session)
+    result = None
     try:
-        result = _load_from_execution_view(conn, chain_id)
-        if result is not None:
-            return result
-        return _load_from_session_table(conn, chain_id)
+        result = _load_from_execution_view(conn, chain_id, identity)
+        if result is None:
+            result = _load_from_session_table(conn, chain_id, identity)
     except (sqlite3.Error, json.JSONDecodeError, KeyError, TypeError):
-        return None
+        result = None
     finally:
         conn.close()
+    if result is None and paused:
+        return {**session, "pause_custody": "unconfirmed"}
+    return result
 
 
 def load_active_chain_state(chain_id: str | None = None) -> dict | None:
@@ -292,45 +304,74 @@ def load_active_chain_state(chain_id: str | None = None) -> dict | None:
         conn.close()
 
 
-def _load_from_execution_view(conn: sqlite3.Connection, chain_id: str) -> dict | None:
+def _identity_params(identity: RunIdentity) -> list[object]:
+    """Bind values for the identity clause both routes append, in clause order."""
+    keys = ("run_id", "continuity_scope_id", "organization_id", "workspace_id")
+    return [identity[key] for key in keys]
+
+
+def _select_row(rows: list[sqlite3.Row], identity: RunIdentity | None, convert) -> dict | None:
+    """The first row a live server owns; else, for an exact identity (already filtered in SQL), a
+    pause a dead owner retained: guidance for an explicit claim, never adoption."""
+    retained = None
+    for row in rows:
+        try:
+            alive = _is_pid_alive(int(row["run_owner_pid"]))
+        except (ValueError, TypeError):
+            continue
+        if not alive and identity is None:
+            continue
+        hook_state, document = convert(row)
+        if hook_state is None:
+            continue
+        if identity is not None:
+            fields = pause_fields(document.get("conversationPause"), document.get("owed"))
+            if not alive and not fields:
+                continue
+            hook_state["run_identity"] = identity
+            if fields:
+                hook_state.update(fields)
+                hook_state["pause_custody"] = "owned" if alive else "retained"
+        if alive:
+            return hook_state
+        retained = retained or hook_state
+    return retained
+
+
+def _load_from_execution_view(
+    conn: sqlite3.Connection, chain_id: str, identity: RunIdentity | None = None
+) -> dict | None:
     """Query v_execution_status — Tier 1 cross-language SSOT view.
 
     Boundary check uses run_status (Tier 2): rows with run_status in
     {completed, failed, cancelled} are excluded so the hook never reports a
     terminal chain as active. The column is NOT NULL, so every row carries a
     status and there is no unset phase to admit.
+
+    The view projects neither the pause nor the continuity scope, so it joins its own row
+    (`row_id`); an exact identity selects only that run UUID in that exact scope.
     """
+    sql = (
+        "SELECT v.run_owner_pid, v.chain_id, v.run_status, v.current_step, v.total_steps, "
+        "v.last_activity, v.current_step_review, v.pending_shell_verification, cs.state "
+        "FROM v_execution_status v JOIN chain_sessions cs ON cs.id = v.row_id "
+        "WHERE v.chain_id = ? "
+        "AND v.run_status NOT IN ('completed', 'failed', 'cancelled') "
+    )
+    params: list[object] = [chain_id]
+    if identity is not None:
+        sql += "AND v.session_id = ? AND cs.continuity_scope_id = ? AND v.organization_id IS ? AND v.workspace_id IS ? "
+        params += _identity_params(identity)
     try:
-        cursor = conn.execute(
-            "SELECT run_owner_pid, chain_id, run_status, current_step, total_steps, "
-            "last_activity, current_step_review, pending_shell_verification "
-            "FROM v_execution_status "
-            "WHERE chain_id = ? "
-            "AND run_status NOT IN ('completed', 'failed', 'cancelled') "
-            "ORDER BY last_activity DESC, updated_at DESC",
-            (chain_id,),
-        )
-        rows = cursor.fetchall()
+        rows = conn.execute(sql + "ORDER BY v.last_activity DESC, v.updated_at DESC", params).fetchall()
     except sqlite3.OperationalError:
         return None
 
-    if not rows:
-        return None
+    def convert(row: sqlite3.Row) -> tuple[dict | None, dict]:
+        document = _parse_json_field(row["state"])
+        return _view_row_to_hook_state(row), document if isinstance(document, dict) else {}
 
-    for row in rows:
-        pid_str = row["run_owner_pid"]
-        try:
-            pid = int(pid_str)
-        except (ValueError, TypeError):
-            continue
-        if not _is_pid_alive(pid):
-            continue
-
-        hook_state = _view_row_to_hook_state(row)
-        if hook_state is not None:
-            return hook_state
-
-    return None
+    return _select_row(rows, identity, convert)
 
 
 def _view_row_to_hook_state(row: sqlite3.Row) -> dict | None:
@@ -385,37 +426,30 @@ def _parse_json_field(raw: object) -> object:
         return None
 
 
-def _load_from_session_table(conn: sqlite3.Connection, chain_id: str) -> dict | None:
-    """Query chain_sessions per-row table. Returns session for a live PID, or None."""
-    try:
-        cursor = conn.execute(
-            "SELECT run_owner_pid, chain_id, state FROM chain_sessions WHERE chain_id = ? ORDER BY updated_at DESC",
-            (chain_id,),
+def _load_from_session_table(
+    conn: sqlite3.Connection, chain_id: str, identity: RunIdentity | None = None
+) -> dict | None:
+    """Query chain_sessions per-row table: the view route's equivalent, identity clause included."""
+    sql = "SELECT run_owner_pid, chain_id, state FROM chain_sessions WHERE chain_id = ? "
+    params: list[object] = [chain_id]
+    if identity is not None:
+        sql += (
+            "AND json_extract(state, '$.sessionId') = ? AND continuity_scope_id = ? "
+            "AND organization_id IS ? AND workspace_id IS ? "
         )
-        rows = cursor.fetchall()
+        params += _identity_params(identity)
+    try:
+        rows = conn.execute(sql + "ORDER BY updated_at DESC", params).fetchall()
     except sqlite3.OperationalError:
         return None
 
-    if not rows:
-        return None
+    def convert(row: sqlite3.Row) -> tuple[dict | None, dict]:
+        if not row["state"]:
+            return None, {}
+        session = json.loads(row["state"])
+        return _session_to_hook_state(session), session
 
-    for row in rows:
-        pid_str = row["run_owner_pid"]
-        try:
-            pid = int(pid_str)
-        except (ValueError, TypeError):
-            continue
-        if not _is_pid_alive(pid):
-            continue
-
-        state_json = row["state"]
-        if not state_json:
-            continue
-
-        session = json.loads(state_json)
-        return _session_to_hook_state(session)
-
-    return None
+    return _select_row(rows, identity, convert)
 
 
 # Run statuses that mean the run is over. Kept next to the reader that enforces them so the

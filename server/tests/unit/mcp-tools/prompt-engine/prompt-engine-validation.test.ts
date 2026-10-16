@@ -426,6 +426,9 @@ describe('PromptEngine Validation', () => {
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('gate_action:"abort"');
         expect(result.content[0].text).toContain('requires `chain_id`');
+        expect(result.structuredContent).toEqual({
+          run_control: { action: 'abort', outcome: 'not-applied', chainId: null },
+        });
         expect(cancelChain).not.toHaveBeenCalled();
         expect(pipeline).not.toHaveBeenCalled();
         expect(mockTextReferenceStore.clearChainStepResults).not.toHaveBeenCalled();
@@ -453,9 +456,19 @@ describe('PromptEngine Validation', () => {
       });
       expect(cancelChain).toHaveBeenCalledWith('review-demo-1786998494932', undefined);
       expect(result.isError).toBe(false);
-      expect(result.content[0].text).toContain('Chain Cancelled');
-      // The public action retains the store's cancelled outcome and inspection guidance.
-      expect(result.content[0].text).toContain('retained');
+      expect(result.content[0].text).toBe(
+        '🛑 **Chain Cancelled**: ` chain-demo#1 `\n\n' +
+          'Further progression is blocked. Session state and artifacts are retained — remove ' +
+          'them with `system_control(action:"session", operation:"clear")`.'
+      );
+      expect(result.structuredContent).toEqual({
+        run_control: {
+          action: 'abort',
+          outcome: 'cancelled',
+          chainId: 'chain-demo#1',
+          runId: 'review-demo-1786998494932',
+        },
+      });
     });
 
     test('reports a run the store could not abort rather than claiming success', async () => {
@@ -470,7 +483,64 @@ describe('PromptEngine Validation', () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Abort Not Applied');
       expect(result.content[0].text).not.toContain('Chain Cancelled');
+      expect(result.structuredContent).toEqual({
+        run_control: { action: 'abort', outcome: 'not-applied', chainId: 'chain-demo#9' },
+      });
       expect(mockTextReferenceStore.clearChainStepResults).not.toHaveBeenCalled();
+    });
+
+    test.each(['completed', 'failed', 'missing'] as const)(
+      'a %s run reports not-applied in run_control, never cancelled',
+      async (state) => {
+        const store = engine.getChainSessionStore();
+        if (state !== 'missing') {
+          await seedAbortRun('chain-demo#1');
+          await store.transitionRunStatus('chain-demo#1', state);
+        }
+
+        const result = await engine.executePromptCommand(
+          { gate_action: 'abort', chain_id: 'chain-demo#1' },
+          {}
+        );
+
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toContain('Abort Not Applied');
+        expect(result.structuredContent?.['run_control']).toMatchObject({
+          action: 'abort',
+          outcome: 'not-applied',
+          chainId: 'chain-demo#1',
+        });
+      }
+    );
+
+    test('a failed verify-loop release is release-incomplete, not cancelled, and keeps its text', async () => {
+      // The host hands a PostToolUse hook the structuredContent and never `isError`, and this
+      // reply's text header is the applied one's: run_control is the only way to tell them apart.
+      await seedAbortRun('chain-demo#1');
+      const target = engine as unknown as { getVerifyActiveStateStore: () => unknown };
+      jest.spyOn(target, 'getVerifyActiveStateStore').mockReturnValue({
+        releaseRunState: jest.fn(async () => 'foreign'),
+      });
+
+      const result = await engine.executePromptCommand(
+        { gate_action: 'abort', chain_id: 'chain-demo#1' },
+        {}
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toBe(
+        '🛑 **Chain Cancelled**: `chain-demo#1`\n\n' +
+          'Verify-loop release incomplete. Cancellation and artifacts are retained; ' +
+          'retry `gate_action:"abort"` with the same `chain_id` to retry release.'
+      );
+      expect(result.structuredContent).toEqual({
+        run_control: {
+          action: 'abort',
+          outcome: 'release-incomplete',
+          chainId: 'chain-demo#1',
+          runId: 'chain-demo#1',
+        },
+      });
     });
 
     test('short-circuits before companion parsing, handoff, claim and report consumption', async () => {
@@ -534,6 +604,7 @@ describe('PromptEngine Validation', () => {
       expect(first.isError).toBe(false);
       expect(repeated.isError).toBe(false);
       expect(repeated.content[0].text).toContain('Chain Cancelled');
+      expect(repeated.structuredContent?.['run_control']).toMatchObject({ outcome: 'cancelled' });
     });
   });
 
@@ -905,8 +976,12 @@ describe('PromptEngine Validation', () => {
 
     test('abort ends a paused run, after which ordinary terminal guards answer', async () => {
       await pausedRun();
+      const token = store().getSession(RUN)!.handoffToken!;
       const abort = await control('abort');
       expect(abort.content[0]!.text).toContain('Chain Cancelled');
+      expect(abort.structuredContent?.['run_control']).toMatchObject({ outcome: 'cancelled' });
+      expect(token.length).toBeGreaterThan(0);
+      expect(JSON.stringify(abort.structuredContent)).not.toContain(token);
       expect(store().getSession(RUN)?.runStatus).toBe('cancelled');
       const execute = stubPipeline();
       await engine.executePromptCommand({ chain_id: CHAIN, user_response: 'late' }, {});

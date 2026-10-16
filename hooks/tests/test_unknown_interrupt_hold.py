@@ -32,6 +32,7 @@ from session_state import (
     UNKNOWN_INTERRUPT_LABEL,
     _fallback_interrupt_exits,
     format_chain_reminder,
+    format_gate_directive,
     interrupt_exits,
     label_gate_ids,
     load_session_state,
@@ -307,3 +308,110 @@ def test_post_ordinary_review_keeps_exact_directive(patch_workspace, monkeypatch
     assert out["hookSpecificOutput"]["additionalContext"] == (
         '<GATE-REVIEW>chain_id="chain-demo#1" gates="review" → Submit gate_verdict</GATE-REVIEW>'
     )
+
+
+# ── Conversation pause: one shared directive across every hook that renders the run ──────────
+IDENTITY = {"run_id": "r", "chain_id": "chain-demo#1", "organization_id": None, "workspace_id": "w"}
+IDENTITY["continuity_scope_id"] = "w"
+OWNED = {**TestInterruptHoldMatrix.PENDING, "current_step": 2, "run_identity": IDENTITY, "pause_custody": "owned"}
+OWNED |= {"conversation_pause": {"kind": "conversation", "node_id": "n2", "paused_at": 1}, "owed": []}
+PAUSE_KEYS = ("conversation_pause", "owed", "pause_custody")
+DIRECTIVE = (
+    "Workflow paused for conversation at step 2 of 3: `chain-demo#1`. Discuss with the user; resume explicitly "
+    'with prompt_engine(chain_id:"chain-demo#1", gate_action:"resume") or end it with gate_action:"abort".'
+)
+# Instructions a paused run refuses: continue, verdict, fix/accept, shell verification.
+MANDATORY_CTAS = ("<CALL-TOOL>", "REQUIRED", "gate_verdict", "<GATE-REVIEW>", "<INTERRUPT>", "accept_alternative")
+compact_spec = importlib.util.spec_from_file_location("compact_recovery", HOOKS_DIR / "compact-recovery.py")
+compact_mod = importlib.util.module_from_spec(compact_spec)
+compact_spec.loader.exec_module(compact_mod)
+
+
+def run_stdout_hook(module, monkeypatch, capsys, state, payload=None):
+    monkeypatch.setattr(module, "load_recoverable_chain_state", lambda _sid: None if state is None else dict(state))
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload or {"session_id": "s", "prompt": "why?"})))
+    with pytest.raises(SystemExit) as excinfo:
+        module.main()
+    return excinfo.value.code, capsys.readouterr().out
+
+
+class TestConversationPauseDirective:
+    @pytest.fixture
+    def suggest(self, monkeypatch):
+        from test_prompt_suggest_thread_visibility import prompt_suggest
+
+        monkeypatch.setattr(prompt_suggest, "load_prompts_cache", lambda: True)
+        monkeypatch.setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
+        return prompt_suggest
+
+    @pytest.mark.parametrize(
+        "phase",
+        [{}, {"pending_gate": "code-quality"}, {"pending_gate": None}, {"pending_shell_verify": "npm test"}],
+        ids=["unknown", "review", "free-step", "shell-verify"],
+    )
+    def test_every_surface_renders_the_one_directive_once(self, suggest, monkeypatch, capsys, phase):
+        state = {**OWNED, **phase}
+        _, out = run_stdout_hook(suggest, monkeypatch, capsys, state)
+        rendered = json.loads(out)
+        assert rendered["systemMessage"] == DIRECTIVE
+        assert rendered["hookSpecificOutput"]["additionalContext"] == DIRECTIVE
+        _, recovered = run_stdout_hook(compact_mod, monkeypatch, capsys, state)
+        assert recovered == f"## Paused Workflow (recovered after compaction)\n\n{DIRECTIVE}\n"
+        for cta in MANDATORY_CTAS:
+            assert cta not in out and cta not in recovered
+
+    def test_gate_enforce_paused_deny_is_the_shared_directive(self, monkeypatch, capsys):
+        monkeypatch.setattr(hook_mod, "load_session_state", lambda _sid: dict(OWNED))
+        _, out = run_hook(monkeypatch, capsys, {"chain_id": "chain-demo#1", "user_response": "x"})
+        assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+        assert out["hookSpecificOutput"]["permissionDecisionReason"] == DIRECTIVE
+
+    def test_retained_custody_renders_the_claim_guidance(self, suggest, monkeypatch, capsys):
+        from session_state import PAUSE_RECOVERY_GUIDANCE
+
+        _, out = run_stdout_hook(suggest, monkeypatch, capsys, {**OWNED, "pause_custody": "retained"})
+        context = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        assert context == f"Workflow paused for conversation at step 2 of 3: `chain-demo#1`. {PAUSE_RECOVERY_GUIDANCE}"
+        assert 'gate_action:"resume"' not in context and "<INTERRUPT>" not in context
+
+    def test_unconfirmed_custody_shows_the_explicit_calls(self, suggest, monkeypatch, capsys):
+        _, out = run_stdout_hook(suggest, monkeypatch, capsys, {**OWNED, "pause_custody": "unconfirmed"})
+        context = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        assert context.startswith("Workflow paused for conversation at step 2 of 3: `chain-demo#1`.")
+        assert "not confirmed live" in context and 'gate_action:"abort"' in context
+        assert 'prompt_engine(chain_id:"chain-demo#1", gate_action:"resume")' in context
+        assert "<INTERRUPT>" not in context
+
+    def test_unknown_only_path_is_unchanged(self, suggest, monkeypatch, capsys):
+        state = {key: value for key, value in OWNED.items() if key not in (*PAUSE_KEYS, "run_identity")}
+        _, out = run_stdout_hook(suggest, monkeypatch, capsys, state)
+        assert json.loads(out)["hookSpecificOutput"]["additionalContext"] == format_gate_directive(state)
+        assert "<INTERRUPT>" in out and "Workflow paused" not in out
+
+    def test_resume_reinstates_the_phase_directive_and_compaction_never_resumes(
+        self, suggest, tmp_path, monkeypatch, capsys
+    ):
+        from test_post_prompt_engine_clearing import HOOK, _call, _control, _load_row, _pause, _run_hook
+
+        monkeypatch.delenv("CLAUDE_PLUGIN_DATA", raising=False)
+        workspace = tmp_path / "ws"
+        (workspace / "server" / "runtime-state").mkdir(parents=True)
+        paused = _pause(workspace)
+        compact = {"session_id": "sess-clear", "source": "compact"}
+        recovered = _run_hook(compact, workspace, HOOK.parent / "compact-recovery.py").stdout
+        # No server db here, so the restored pause is unconfirmed: guidance, still paused, no CTA.
+        assert "Workflow paused for conversation at step 2 of 3" in recovered and "not confirmed live" in recovered
+        assert "<CALL-TOOL>" not in recovered and _load_row(workspace, "sess-clear") == paused
+        # An unrelated tool result or an unrelated prompt call adds nothing and changes nothing.
+        assert _run_hook({**compact, "tool_name": "Edit", "tool_response": "ok"}, workspace).stdout == ""
+        other = {**compact, "tool_name": "mcp__x__prompt_engine", "tool_input": {"command": ">>other_prompt"}}
+        assert _run_hook(other, workspace, HOOK.parent / "gate-enforce.py").stdout == ""
+        own = {**other, "tool_input": {"chain_id": "chain-demo#1"}}  # positive control: the runner sees output
+        assert _run_hook(own, workspace, HOOK.parent / "gate-enforce.py").stdout != ""
+        assert _load_row(workspace, "sess-clear") == paused
+        _run_hook(_call("resume", _control("resumed")), workspace)
+        resumed = _load_row(workspace, "sess-clear")
+        assert resumed is not None and not any(key in resumed for key in PAUSE_KEYS)
+        _, out = run_stdout_hook(suggest, monkeypatch, capsys, resumed)
+        assert json.loads(out)["hookSpecificOutput"]["additionalContext"] == format_gate_directive(resumed)
+        assert "<INTERRUPT>" in out and "Workflow paused" not in out

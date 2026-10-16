@@ -20,6 +20,7 @@ import { ToolDescriptionLoader } from '../../tool-description-loader.js';
 import { ResponseFormatter } from '../processors/response-formatter.js';
 import { renderPromptEngineGuide } from '../utils/guide.js';
 
+import type { RunControlPacket } from '#engine/execution/formatting/conversation-control-response.js';
 import type { ParsingSystem } from '#engine/execution/parsers/index.js';
 import type { PromptExecutionPipeline } from '#engine/execution/pipeline/index.js';
 import type { RoutedToolCall } from '#engine/execution/pipeline/routing/tool-routing.js';
@@ -37,6 +38,7 @@ import type {
 import type { GateSpecification, McpToolRequest } from '#shared/types/execution.js';
 import type { DatabasePort, StateStore, StateStoreOptions } from '#shared/types/persistence.js';
 
+import { abortRunControl } from '#engine/execution/formatting/conversation-control-response.js';
 import { ResponseAssembler } from '#engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '#engine/execution/operators/chain-operator-executor.js';
 import {
@@ -756,6 +758,7 @@ export class PromptExecutor {
           },
         ],
         isError: true,
+        structuredContent: abortRunControl('not-applied', null),
       };
     }
 
@@ -776,6 +779,8 @@ export class PromptExecutor {
       session?.sessionId ?? trimmed,
       scope
     );
+    const control = (outcome: RunControlPacket['outcome']): ToolResponse['structuredContent'] =>
+      abortRunControl(outcome, session?.chainId ?? trimmed, session?.sessionId);
 
     if (!cancelled) {
       return {
@@ -790,6 +795,7 @@ export class PromptExecutor {
           },
         ],
         isError: true,
+        structuredContent: control('not-applied'),
       };
     }
 
@@ -815,6 +821,7 @@ export class PromptExecutor {
           },
         ],
         isError: true,
+        structuredContent: control('release-incomplete'),
       };
     }
 
@@ -829,6 +836,7 @@ export class PromptExecutor {
         },
       ],
       isError: false,
+      structuredContent: control('cancelled'),
     };
   }
 
