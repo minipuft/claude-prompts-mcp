@@ -988,6 +988,51 @@ describe('PromptEngine Validation', () => {
       expect(execute).toHaveBeenCalledTimes(1);
     });
 
+    test.each(
+      (['pause', 'resume'] as const).flatMap((action) =>
+        (['completed', 'failed', 'cancelled'] as const).map((status) => [action, status] as const)
+      )
+    )(
+      '%s on a %s run is refused as a control, not answered as a finished run',
+      async (action, status) => {
+        await store().createSession(RUN, CHAIN, 2);
+        expect(await store().transitionRunStatus(RUN, status)).toBe(true);
+        const execute = stubPipeline();
+        // Durable row as storage holds it, serialized: `snapshot()`'s clone defeats `toEqual` on a
+        // terminal run, and `getSession` itself stamps `lastActivity` on the held copy.
+        const frozen = () => {
+          const { runStatus, conversationPause, handoffToken } = store().getSession(RUN)!;
+          return JSON.stringify({
+            durable: store().inspectConversationControl(RUN, controlScope()),
+            held: { runStatus, conversationPause, handoffToken },
+          });
+        };
+        const before = frozen();
+        const result = await control(action);
+        expect(result.isError).toBe(true);
+        expect(result.content[0]!.text).toContain('Control Not Applied');
+        expect(result.content[0]!.text).not.toContain('already complete');
+        expect(result.structuredContent?.['conversation_control']).toMatchObject({
+          outcome: 'refused',
+          refusal: { reason: 'run-terminal', retryable: false },
+          run: { runId: RUN },
+        });
+        expect(execute).not.toHaveBeenCalled();
+        expect(frozen()).toBe(before);
+        expect(store().getSession(RUN)).toMatchObject({ runStatus: status });
+        expect(store().getSession(RUN)?.conversationPause).toBeUndefined();
+      }
+    );
+
+    test('resume of a live run that is not paused still reaches the pipeline', async () => {
+      await store().createSession(RUN, CHAIN, 2);
+      const execute = stubPipeline();
+      const resume = jest.spyOn(store(), 'resumeConversation');
+      await control('resume');
+      expect(execute).toHaveBeenCalledWith(expect.objectContaining({ gate_action: 'resume' }));
+      expect(resume).not.toHaveBeenCalled();
+    });
+
     test('a claimed paused run stops at custody: nothing resumes, renders or advances', async () => {
       await pausedRun();
       const execute = stubPipeline();
