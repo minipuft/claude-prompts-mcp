@@ -1,0 +1,31 @@
+id: showcase_shotlist
+name: Showcase Shot List
+description: "Break the six-beat script into shots: one row per shot with beat,
+  frame range, locked camera, actors, the one emitter, the join, the board cards
+  cited and the objects it needs; emits v3/shots.json and the object inventory
+  that sets the muse budget."
+category: development
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: brief
+    type: string
+    description: Audience, product goal and desired silent showcase outcome.
+    required: true
+  - name: context
+    type: string
+    description: Prior step output; read shared chain history for earlier evidence
+      and decisions.
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory.
+    required: false
+    defaultValue: media/showcase
+  - name: constraints
+    type: string
+    description: Duration, dimensions, renderer and evidence limits.
+    required: false
+artifacts:
+  produces:
+    - docs
+    - plan

@@ -1,0 +1,36 @@
+id: animation_poses
+name: Animation Poses
+description: "Per shot, after the timing chart and before the key sheet (D83):
+  write the pose sheet poses/<shot>.json, the keys of the whole shot as curves
+  the solver can build (line of action class and bow, weight foot, lead side,
+  silhouette, plate family), with breakdowns that are poses (passing position,
+  anticipation, overshoot, settle), secondaries that lag, and moving holds; the
+  gate measures the key sheet against it."
+category: animation
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: episode_root
+    type: string
+    description: Episode directory holding the contracts (charts/, keys/, poses/,
+      layouts/, blocking/, timeline.json), rubric.md and studies/.
+    required: false
+    defaultValue: media/showcase/v3
+  - name: shot
+    type: string
+    description: Shot id (v3/shots.json, v3/charts/<shot>.json).
+    required: true
+  - name: renderer
+    type: string
+    description: "The rendering project root: where src/library/animation/pose.ts,
+      scripts/animation/ and the model sheets live."
+    required: false
+    defaultValue: media/showcase
+  - name: context
+    type: string
+    description: The previous step's result (the timing chart's key list) or owner notes.
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory for studies and receipts.
+    required: false
+    defaultValue: media/showcase

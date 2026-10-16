@@ -1,0 +1,37 @@
+id: animation-animatic-probes
+name: Animation Animatic Probes
+type: validation
+description: "Check-tier gate on the animatic render step: the rendered frame
+  sequence passes every episode-tier probe (C26–C30 and C12): twos/ones split,
+  hold band, screen time per beat, eye trace, loop closure in line phases,
+  colour pair per beat, byte-identical double render."
+guidanceFile: guidance.md
+pass_criteria:
+  - type: shell_verify
+    shell_command:
+      - python3
+      - scripts/animation/probe-all.py
+      - out/animatic-seq
+      - --timeline
+      - v3/timeline.json
+      - --xsheet
+      - v3/xsheet.json
+      - --second-frames
+      - out/animatic-seq-b
+      - --subset
+    shell_timeout: 600000
+    shell_working_dir: ../media/showcase
+    shell_max_attempts: 1
+    shell_preset: full
+activation:
+  prompt_categories:
+    - animation
+  explicit_request: true
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+subject: animation-animatic-probes
+severity: high
+enforcementMode: blocking
+gate_type: custom

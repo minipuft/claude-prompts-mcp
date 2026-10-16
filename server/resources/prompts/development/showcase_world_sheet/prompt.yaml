@@ -1,0 +1,29 @@
+id: showcase_world_sheet
+name: Showcase World Sheet
+description: "Once per world (D78): generate the world sheet through the
+  imagegen tool (the human, the companions, one piece of architecture and one
+  lit join in that world's language, plus the join reduced to lines and a swatch
+  row) from the model sheet, the official companion plates and the owner's
+  cards; measure field, contour, fill language and identity pigments; write
+  v3/worlds/<world>.json as the world's style contract and render the code
+  renderer's WorldSheet still beside the plate so the gap names the next
+  renderer change."
+category: development
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: world
+    type: string
+    description: "World id: home, crayon, line, shaded (v3/worlds/<world>.json)."
+    required: true
+  - name: context
+    type: string
+    description: Card ids, the owner's wishes for this world, or the beat it serves;
+      default reads the ledger and the board.
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory.
+    required: false
+    defaultValue: media/showcase
+tools:
+  - imagegen

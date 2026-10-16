@@ -1,0 +1,7 @@
+Episode root: {{episode_root}}
+Renderer: {{renderer}}
+Production root: {{output_root}}
+Notes:
+{{context | default("none")}}
+
+Read `timeline.json`, `blocking/`, `keys/` (named poses per shot; missing shots use the placeholder chart and are listed), `light.json`, `worlds/*.json`. In the renderer run `npm run xsheet` (writes `xsheet.html` and `xsheet.json`: one row per frame with beat, world, key or hold, breakdown, camera, emitter, crossing phase), then `npm run animatic` twice into `out/animatic-01.mp4` and `out/animatic-01b.mp4`, and `npx remotion render … Animatic65 out/animatic-seq --sequence --image-format=png` for the frames the probes read, then the same render again into `out/animatic-seq-b` (every 10th frame suffices: `--frames` list) for the determinism probe. Run `python3 scripts/animation/probe-all.py out/animatic-seq --timeline <episode_root>/timeline.json --xsheet <episode_root>/xsheet.json --second-frames out/animatic-seq-b --subset` (determinism runs inside it on the second render); every probe prints its control line first. Compose a strip of one frame per beat plus every crossing's mid-frame. Write `<output_root>/v3/studies/animatic-<NN>.md` in reader voice: what the viewer sees per beat (one line each), the probe table (claim · command · control → measured), what is placeholder (keys, blocking), wall time, and the TASTE questions for the owner, each with a default. The gate runs the same `probe-all.py`; quote its lines. Reply: Watched (mp4 path, strip), Probes (table), Placeholders, Owner (questions with defaults), Changed, Receipt.

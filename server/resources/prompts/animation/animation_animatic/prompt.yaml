@@ -1,0 +1,97 @@
+id: animation_animatic
+name: Animation Animatic (per episode)
+description: "Per episode, between pre-production and the per-shot chain (D80):
+  timeline → blocking → light script → animatic render → rubric grade →
+  evidence. Each step carries a check-tier gate that runs a probe with a
+  positive control (D81); the grade step is the one advisory gate and says so.
+  Inputs: episode_root, renderer, output_root."
+category: animation
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: episode_root
+    type: string
+    description: Episode directory holding the beat ledger (beats-v2.json or
+      beats.json), contracts (timeline.json, blocking/, keys/, light.json,
+      worlds/), rubric.md and studies/ (e.g. media/showcase/v3).
+    required: true
+  - name: renderer
+    type: string
+    description: "The rendering project root (Remotion here): where `npm run
+      animatic`, `npm run xsheet` and scripts/animation/ live."
+    required: false
+    defaultValue: media/showcase
+  - name: context
+    type: string
+    description: Owner notes, rulings or the previous step's result.
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory for studies and receipts.
+    required: false
+    defaultValue: media/showcase
+  - name: brief
+    type: string
+    description: "One paragraph: what this animatic must answer for the owner
+      (pacing, a world, a crossing)."
+    required: false
+chainSteps:
+  - promptId: animation_timeline
+    inputMapping:
+      episode_root: episode_root
+      renderer: renderer
+      context: brief
+      output_root: output_root
+    inlineGateIds:
+      - animation-timeline-contract
+    id: timeline
+    stepName: Timeline
+  - promptId: animation_blocking
+    inputMapping:
+      episode_root: episode_root
+      renderer: renderer
+      context: previous_step_result
+      output_root: output_root
+    inlineGateIds:
+      - animation-blocking-contract
+    id: blocking
+    stepName: Blocking
+  - promptId: animation_light_script
+    inputMapping:
+      episode_root: episode_root
+      renderer: renderer
+      context: previous_step_result
+      output_root: output_root
+    inlineGateIds:
+      - animation-colour-script
+    id: light
+    stepName: Light and Colour Script
+  - promptId: animation_animatic_render
+    inputMapping:
+      episode_root: episode_root
+      renderer: renderer
+      context: previous_step_result
+      output_root: output_root
+    inlineGateIds:
+      - animation-animatic-probes
+    id: render
+    stepName: Animatic Render
+  - promptId: showcase_review
+    inputMapping:
+      brief: brief
+      constraints: episode_root
+      context: previous_step_result
+      output_root: output_root
+    inlineGateIds:
+      - animation-review
+    id: grade
+    stepName: Rubric Grade
+  - promptId: showcase_evidence
+    inputMapping:
+      brief: brief
+      shot: episode_root
+      context: previous_step_result
+      output_root: output_root
+    inlineGateIds:
+      - handoff-artifacts
+    id: evidence
+    stepName: File and Feed Back

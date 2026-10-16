@@ -1,0 +1,30 @@
+id: animation_timeline
+name: Animation Timeline
+description: "Step 1 of the animatic chain (D80): compile the episode's beat
+  ledger into timeline.json (beats as frame ranges, world per beat, crossing
+  windows, state flips) and report pacing against the measured hold band; the
+  one file every composition reads."
+category: animation
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: episode_root
+    type: string
+    description: Episode directory holding the beat ledger (beats-v2.json or
+      beats.json), contracts (timeline.json, blocking/, keys/, light.json,
+      worlds/), rubric.md and studies/ (e.g. media/showcase/v3).
+    required: true
+  - name: renderer
+    type: string
+    description: "The rendering project root (Remotion here): where `npm run
+      animatic`, `npm run xsheet` and scripts/animation/ live."
+    required: false
+    defaultValue: media/showcase
+  - name: context
+    type: string
+    description: Owner notes, rulings or the previous step's result.
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory for studies and receipts.
+    required: false
+    defaultValue: media/showcase

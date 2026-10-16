@@ -1,0 +1,7 @@
+Asset: {{asset}}
+Muse directions:
+{{context | default("Run design_muse first; report missing handoff.")}}
+
+Read `v3/creative-spec.md` (D65–D68: drawings come from the image model, never from coordinates; the plate must cut into movable layers), `v3/script.md` (the asset's job) and `v3/rubric.md` (C1–C19). For each muse direction (3 or more) generate one sheet through the `imagegen` tool (`tool:imagegen`), never by hand: `references` are the absolute paths of the board cards the direction cites (`v3/references/board.json` → file under `v3/references/`), the `prompt` names which reference supplies which property, asks for a pure black field, five flat colors, pale contour one step lighter, identity pigments by hex, and a parts layout (full figure plus separated head, torso, hands, hair on the same sheet) so the cutout step can rig it; `out` is `media/showcase/out/<asset>-gen-<NN>-<direction>.png`. Lay the generations into the `AssetSheet` composition as images with their labels (borrows by card id, between by cast property) and render one still at frame 0 under {{files}}. Keep every generation's receipt (prompt, referenced_image_paths, source, sha256) in the step output. Do not pick; the owner picks from the still. A generation that is not cuttable into layers (merged parts, gradients across parts, text) is marked REJECTED on the sheet and regenerated once.
+
+Return: Variants (id, title, borrows, between, generation receipt); Sheet Path; What Was Held Constant; Rejected Generations; Concerns.
