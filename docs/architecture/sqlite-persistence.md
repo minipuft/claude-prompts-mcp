@@ -182,17 +182,30 @@ under the old key. `chain_sessions` is `derived`, and `chain_runs` is `ephemeral
 
 ## Live Run Ownership and Fresh-Process Handoff
 
-**Run persistence supports ownership handoff, not recovery after a dead-owner restart.**
+**An ordinary run does not survive its owner's death; a run paused for conversation does.**
 At startup, [ChainSessionStore](../../server/src/modules/chains/manager.ts) calls
 `cleanupStalePidRows()` before `loadSessions()`, including when the database port is
 late-bound. It removes dead owners' `chain_sessions` projections and delegates removal
 of their `chain_runs` and `chain_run_nodes` to
 [DirectChainRunRegistry.deleteRunsForOwners](../../server/src/modules/chains/run-registry.ts).
-The handoff token lives on the deleted run row, so it is removed too. This bounds
-operational storage by live owners and prevents stale hook projections; saving a run
-to SQLite does not make its token or pending review survive that startup cleanup.
+For an unpaused run the handoff token lives on the deleted run row, so it is removed too.
+This bounds operational storage by live owners and prevents stale hook projections; saving
+an unpaused run to SQLite does not make its token or pending review survive that startup
+cleanup.
 
-The supported rolling handoff uses compatible processes sharing the same database:
+`deleteRunsForOwners` keeps every nonterminal run whose `state` carries `conversationPause`: the
+user parked it on purpose and holds its recovery token, and pruning it would destroy the only thing
+the token can claim. The DELETE's own predicate decides (`json_type(state, '$.conversationPause')`,
+guarded by `json_valid`), so a caller in a DEFERRED transaction still writes first. The inactivity
+sweep (`cleanupStaleSessions`) and run-history pruning (`pruneExcessRuns`) keep it too, and a
+clear refuses it until it is aborted. Only the dead owner's `chain_sessions` projection goes.
+Startup does not take the run over: `claimRunByToken()` routes a paused row to `claimPausedRun`,
+which requires the exact organization, workspace and continuity scope (NULL and `'default'`
+included), answers a mismatch as `unknown-token`, and writes only the owner and a successor token,
+so the next restart is recoverable the same way. A cancelled row keeps an inert pause and token.
+
+For an unpaused run, the supported rolling handoff uses compatible processes sharing the
+same database:
 
 1. While the original owner is alive, persist the run and mint its handoff token.
 2. Start and initialize the replacement process while the original owner is still alive,
@@ -205,10 +218,19 @@ The [registered transport control](../../server/tests/integration/gates/structur
 (`built rolling cold hydration retains frozen authority after private catalog changes`)
 uses this chronology on STDIO and Streamable HTTP. It checks that the fresh process
 owns the run and retains the pending review's frozen semantic context after the live
-gate definition changes. It does not establish stop-old-first restart continuity:
-initializing the replacement after the original owner dies prunes the run before a
-claim can hydrate it. The optional evaluation archive below preserves separate
-evidence; it does not restore an operational run or its token.
+gate definition changes. For an unpaused run it does not establish stop-old-first restart
+continuity: initializing the replacement after the original owner dies prunes the run before
+a claim can hydrate it. The same file's `conversation pause, …` tests measure the paused path
+with real processes on both transports (two stop-old-first recoveries, replay and foreign
+workspace refused, a default launch, live handoff then abort). The optional evaluation archive below
+preserves separate evidence; it does not restore an operational run or its token.
+
+While a run is paused, its `chain_sessions.state` document carries two more keys for hooks:
+`conversationPause` (`{kind, nodeId, pausedAt}`) and `owed` (`[{kind, nodeId, step,
+review?: {kind, phase}}]`, from the same `deriveObligations` the reply packet uses, so a hook
+and a reply cannot disagree about what the run owes). An unpaused row keeps its exact key set,
+and neither key carries the token. A dormant run is projected only while paused.
+`v_execution_status` does not extract them; hooks read `chain_sessions.state` directly.
 
 ## Gate History and Calibration Evidence
 
@@ -752,6 +774,13 @@ There are also two other database files: `hooks-state.db` (Python) and `verify-s
 shell verification stage writes in `loop:true` mode and the Python Stop hook reads. It lives beside
 `state.db` in the runtime state directory — `ConfigManager.getRuntimeStateDirectory()`, never the
 package directory — and the hook finds it from the `state.db` it locates.
+
+A workflow's loop row in `verify-state.db` is keyed `workflow-run-<run UUID>`, never by the
+public chain id, which repeats across scopes. Its JSON carries `runSessionId`, `chainId` (for
+display) and the run's exact `scope`, and the row lives as long as the run: the server releases
+it on pass, escalation, skip and abort, and the Stop hook exempts it from the one-hour expiry
+that applies to a row keyed by the client's own session id. The Stop hook skips the row of a run
+this conversation holds paused and still enforces every other row.
 
 **Every `SqliteEngine.getInstance` call names its `dbPath`.** The path is required and has no
 package-relative default; the composition root resolves it once through

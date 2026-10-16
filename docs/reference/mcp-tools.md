@@ -351,7 +351,7 @@ prompt_engine(command:"%judge analysis_report")
 | `chain_id`      | string  | Resume token for continuing chains                                                                                                                                                                                                                                                             |
 | `user_response` | string  | Your output from previous step (for chain resume)                                                                                                                                                                                                                                              |
 | `gate_verdict`  | object  | Structured review object; a string is refused. Required semantic criteria use `per_gate[].evaluation` with server-issued binding and captured evidence. See [Gate Verdict Formats](#gate-verdict-formats). Rationale required.                                                                 |
-| `gate_action`   | enum    | Core run control: `abort` stops any nonterminal run; `resume` and `accept_alternative` resolve a blocking-unknown pause. `retry` and `skip` resolve exhausted reviews and are unavailable while the runtime gate switch is off. See [Blocking-unknown interrupt](#blocking-unknown-interrupt). |
+| `gate_action`   | enum    | Core run control: `abort` stops any nonterminal run; `pause` and `resume` hold it for [conversation](#pausing-a-chain-for-conversation); `resume`/`accept_alternative` also resolve a blocking-unknown hold. `retry`/`skip` resolve exhausted reviews and are unavailable while gates are off. |
 | `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                                                                                         |
 | `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                                                                                      |
 | `inputs`        | object  | Typed prompt arguments. Nested objects and arrays stay structured; explicit inline arguments win on key conflicts.                                                                                                                                                                             |
@@ -428,6 +428,54 @@ Notes:
   the whole run before review admission, including before retry exhaustion.
 
 ````
+
+### Pausing a Chain for Conversation
+
+To discuss a step with the user before answering it, pause the run. Both calls carry `chain_id`
+and nothing else; any other parameter beside them is refused before anything changes.
+
+```bash
+prompt_engine(chain_id:"chain-research#2", gate_action:"pause")
+prompt_engine(chain_id:"chain-research#2", gate_action:"resume")
+```
+
+While paused, every other workflow call on the run is refused; `abort` still ends it, and reads
+show the pause without touching the run. `resume` returns the step or review the run already owed,
+unchanged; answer it in a separate call. The pause reply's text carries a single-use recovery
+token: after the server stops, `prompt_engine(claim_token:"hnd_…")` from the same scope holds the
+run, still paused, and returns a successor token. This is not the
+[blocking-unknown interrupt](#blocking-unknown-interrupt) pause that `budget.pauseOnBlocking`
+raises. Behavior, recovery and limits:
+[Pausing a Run for Conversation](../concepts/chains-lifecycle.md#pausing-a-run-for-conversation).
+
+A pause, a resume, a call refused because the run is paused, and a paused claim each carry
+`structuredContent.conversation_control`, so a client or hook can act without parsing text:
+
+```text
+{kind:"conversation_control", outcome, refusal?:{reason, retryable},
+ run?:{runId, chainId, scope:{organizationId, workspaceId, continuityScopeId}, currentNodeId,
+       step:{current, total}, pause:{kind:"conversation", nodeId, pausedAt} | null,
+       obligations:[{kind, nodeId, step, review?:{kind, phase}}]}}
+```
+
+| `outcome`        | Meaning                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| `paused`         | The pause was recorded.                                                             |
+| `already-paused` | The run was already paused; the original pause is kept.                             |
+| `resumed`        | The pause was cleared; `obligations` is what the run owes now.                      |
+| `claimed`        | A paused run was claimed by this server and is still paused.                        |
+| `refused`        | Nothing changed. `refusal: {reason, retryable}` says why; only `busy` is retryable. |
+
+`refusal.reason` is `conversation-paused` (a workflow call on a paused run), `unknown-session`,
+`scope-mismatch`, `ownership-lost`, `run-terminal` (the run completed, failed or was cancelled),
+`recovery-credential-missing` or `busy` (a request on the run was still in flight). `run` is absent
+when the run could not be identified. An obligation's `kind` is `step`, `review`,
+`blocking-unknown`, `exhausted-retry`, `shell-verification` or `detached-report`; the list may be
+empty for a run past its last step with nothing held.
+
+**The recovery token is never inside the packet.** It is in the reply text of a pause or a paused
+claim, and therefore in `structuredContent.message`, the text mirror some clients hand the model.
+Anything that stores structured content should store the packet, not `message`.
 
 ### Gates: Four Ways to Validate
 
@@ -1059,9 +1107,9 @@ the rule the router enforces are one list. `action:"preview"` reads what its `pr
 
 `prompt_engine` publishes a **union** of its reachable input shapes. `gates` and `gate_verdict`
 are runtime-feature-gated. `gate_action` is a core field with its full enum: `retry`, `skip`,
-`abort`, `resume`, `accept_alternative`. With the runtime gate switch off, `abort`, `resume` and
-`accept_alternative` remain available; `retry` and `skip` receive a named unavailable-action
-refusal before execution. A withdrawn parameter receives a declared-but-unavailable message:
+`abort`, `pause`, `resume`, `accept_alternative`. With the runtime gate switch off, `abort`,
+`pause`, `resume` and `accept_alternative` remain available; `retry` and `skip` receive a named
+unavailable-action refusal before execution. A withdrawn parameter receives a declared-but-unavailable message:
 
 ```
 'gate_verdict' is a parameter of prompt_engine, but not one this server is advertising right now:
@@ -1644,12 +1692,29 @@ someone adds a verb.
 Handoff claims apply the configured request identity policy before using the token. A
 meaningful request continuity mismatch retains the token and owner for a matching claim;
 launch defaults, locked mode and disabled overrides apply as on ordinary requests. The
-launch storage namespace and process ownership remain separate checks.
+launch storage namespace and process ownership remain separate checks. Claiming a run paused for
+conversation does not resume it: the run stays paused, the reply carries a successor token, and a
+claim from any other scope is answered as an unknown token.
 
 Abort applies to active runs, blocking-unknown pauses, ordinary reviews and detached holds.
 Send only `chain_id` and `gate_action:"abort"`: no node, trailer, report, retry exhaustion or
 command is required. The existing scoped cancellation transition persists `cancelled`, retaining
 state and artifacts across reloads; later progression is refused. Clear removes them during cleanup.
+A run paused for conversation is aborted the same way; a clear refuses a paused run until it is
+aborted.
+
+An abort reply carries `structuredContent.run_control`:
+`{action:"abort", outcome, chainId, runId?}`. A failed and an applied abort can share their
+leading text, and some clients hand a hook the structured content without `isError`, so the
+outcome is the signal:
+
+| `outcome`            | Meaning                                                                                  |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| `cancelled`          | The run is cancelled and released, by this call or an earlier one.                       |
+| `release-incomplete` | The run is cancelled, but releasing its shell-verification loop failed; retry the abort. |
+| `not-applied`        | Nothing changed: no `chain_id`, a completed or failed run, or no such run in this scope. |
+
+`chainId` is `null` when the call named none; `runId` is present when the run was found. No token.
 
 The public `cancel` property is removed. Calls carrying `cancel:true`, `cancel:false`, or a mixed
 cancel/abort request are refused by the existing undeclared-parameter check before execution,

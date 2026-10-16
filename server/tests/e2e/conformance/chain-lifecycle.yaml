@@ -70,7 +70,7 @@ scenarios:
       - tool: prompt_engine
         args:
           chain_id: '${cid}'
-          user_response: |-
+          user_response: &phase_guard_answer |-
             Options: PostgreSQL, SQLite, DuckDB.
 
             ## Context
@@ -270,3 +270,105 @@ scenarios:
     # Names the refusal itself, so the row cannot be satisfied by an unrelated failure on the
     # same input — the wrong-reason class that made `rejects: true` unusable.
     expect: { error_contains: 'gate_verdict takes the structured object, not a string' }
+
+  # ── Conversation pause (plan row T4.2) ─────────────────────────────────────
+  #
+  # Every row below parks `quick_decision` on its pending gate review: the phase-guard-passing
+  # answer of `chain-gate-verdict-structured` (aliased, so the two cannot drift) is sent WITHOUT a
+  # verdict, which opens the review and holds step 1. Restart, custody and durable snapshots are
+  # owned by the real-process integration test, not by this HTTP corpus.
+  # Each row asserts the REASON text its own refusal or reply produces; a bare "it errored" would
+  # pass on any unrelated failure over the same input.
+  - id: conversation-pause-names-the-paused-step-and-the-resume-and-abort-calls
+    claim_source: >-
+      prompt_engine gate_action parameter — "'pause' persists a conversation pause on the scoped
+      run so you can discuss the step with the user; 'resume' clears it explicitly; 'abort' still
+      ends the run."
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>quick_decision topic:"pick a database"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', user_response: *phase_guard_answer }
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', gate_action: 'pause' }
+    expect:
+      text_contains: "at step 1 of 3. Discuss the step with the user; nothing advances until you resume.\n\nResume it with `prompt_engine(chain_id:\"${cid}\", gate_action:\"resume\")`, or end it with `gate_action:\"abort\"`."
+      text_not_contains: 'Progress 2/3'
+
+  - id: conversation-pause-refuses-a-bare-user-response-with-the-paused-reason
+    claim_source: >-
+      prompt_engine gate_action parameter — "Nothing implicitly resumes a conversation pause." A
+      workflow call naming a paused run is refused before any change.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>quick_decision topic:"pick a database"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', user_response: *phase_guard_answer }
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', gate_action: 'pause' }
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', user_response: 'Options: PostgreSQL, SQLite, DuckDB.' }
+    expect:
+      error_contains: '`${cid}` is paused for conversation at step 1 of 3. This call was refused and nothing changed.'
+
+  - id: conversation-pause-resume-names-the-owed-review-and-advances-nothing
+    claim_source: >-
+      prompt_engine gate_action parameter — "'resume' clears it explicitly"; the reply names what
+      the run still owes and captures, grades and advances nothing.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>quick_decision topic:"pick a database"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', user_response: *phase_guard_answer }
+      # The owed review's node id is minted by the server, so the pause reply is where it is read.
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', gate_action: 'pause' }
+        capture:
+          review_node: 'review of step 1 \(node `([^`]+)`\)'
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', gate_action: 'resume' }
+    expect:
+      text_contains: "Nothing was captured, graded or advanced.\n\nOwed now, in a separate call:\n- the gate review of step 1 (node `${review_node}`) awaits a `gate_verdict`"
+      text_not_contains: 'Progress 2/3'
+
+  - id: conversation-pause-abort-ends-a-paused-run
+    claim_source: >-
+      prompt_engine gate_action parameter — "'abort' still ends the run" while a conversation
+      pause is held; run-level abort applies in every nonterminal state.
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>quick_decision topic:"pick a database"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', user_response: *phase_guard_answer }
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', gate_action: 'pause' }
+      - tool: prompt_engine
+        args: { chain_id: '${cid}', gate_action: 'abort' }
+    # The driver reads response text only, so the cancelled outcome is asserted through the header
+    # the same abort packet's `run_control.outcome: cancelled` is rendered beside.
+    expect: { is_error: false, text_contains: '🛑 **Chain Cancelled**: `${cid}`' }
+
+  - id: conversation-pause-sent-with-user-response-is-refused-as-a-control-call
+    claim_source: >-
+      prompt_engine gate_action parameter — "'pause' and 'resume' are control calls. Sent with
+      user_response ... they are refused before anything changes."
+    requests:
+      - tool: prompt_engine
+        args: { command: '>>quick_decision topic:"pick a database"' }
+        capture:
+          cid: 'chain_id="(chain-[A-Za-z0-9_#-]+)"'
+      - tool: prompt_engine
+        args:
+          chain_id: '${cid}'
+          gate_action: 'pause'
+          user_response: 'Options: PostgreSQL, SQLite, DuckDB.'
+    expect:
+      error_contains: 'gate_action:"pause" is a control call: send it with chain_id only. Remove ''user_response'''

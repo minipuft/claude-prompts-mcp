@@ -29,7 +29,7 @@ Boundary: source-wire355RPC/28stages BOTH protocols retained; changed lint-sourc
 **Scope:** prompt_engine's run-stop contract, existing server routing/review/render owners, generated vocabulary, maintained callers, hooks, paired tests and current docs.
 **Problem:** ordinary abort stops the run, while detached reviews reject it and prescribe cancel, despite semantic instructions advertising abort. Desired behavior is one run-level abort action across all nonterminal states.
 
-Owner ruling 2026-10-12: “By deprecate it means complete removal to ensure no dead code remains.” This overrides the earlier alias recommendation. The parent [workflow/client plan](workflow-client-evaluation-2026-10-09.md) owns initiative custody, publication scope and source-versus-native evidence rules. Conversational pause/resume is defined in the separate [pause subplan](workflow-conversation-pause-2026-10-12.md); abort remains terminal even while conversation-paused. This child plan exists because the former three-file renderer repair cannot close a cross-layer API removal; it adds no source subsystem.
+Owner ruling 2026-10-12: “By deprecate it means complete removal to ensure no dead code remains.” This overrides the earlier alias recommendation. The parent [workflow/client plan](workflow-client-evaluation-2026-10-09.md) owns initiative custody, publication scope and source-versus-native evidence rules. Conversational pause/resume is defined in the separate [pause subplan](./reference/workflow-conversation-pause-2026-10-12.md); abort remains terminal even while conversation-paused. This child plan exists because the former three-file renderer repair cannot close a cross-layer API removal; it adds no source subsystem.
 
 ## Fixed interaction contract
 

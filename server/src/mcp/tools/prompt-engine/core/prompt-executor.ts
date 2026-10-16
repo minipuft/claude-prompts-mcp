@@ -86,7 +86,11 @@ import {
 } from '#modules/formatting/index.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 import { TextReferenceStore, ArgumentHistoryTracker } from '#modules/text-refs/index.js';
-import { isConversationPaused, RunOperationRefusedError } from '#shared/types/chain-session.js';
+import {
+  isConversationPaused,
+  isTerminalRunStatus,
+  RunOperationRefusedError,
+} from '#shared/types/chain-session.js';
 import {
   type Logger,
   type MetricsCollector,
@@ -643,8 +647,9 @@ export class PromptExecutor {
 
   /**
    * Refuse `pause`/`resume` carrying work — the in-process twin of the schema's control rule, as
-   * stage 04's `collectSourceConflicts` is of source exclusivity — then answer `pause`. A lone
-   * `resume` falls through to {@link answerPausedTarget}, else to its blocking-unknown meaning.
+   * stage 04's `collectSourceConflicts` is of source exclusivity — then answer `pause`, and a
+   * `resume` naming a terminal or unheld run. Any other lone `resume` falls through to
+   * {@link answerPausedTarget}, else to its blocking-unknown meaning.
    */
   private async answerConversationControl(
     args: PromptCommandArgs,
@@ -660,16 +665,21 @@ export class PromptExecutor {
           `${supplied.length === 1 ? 'it' : 'them'} in a separate call. Nothing was changed.`
       );
     }
-    if (action === 'resume') return undefined;
     const chainId = args.chain_id?.trim() ?? '';
-    if (chainId.length === 0)
+    if (action === 'pause' && chainId.length === 0)
       return this.textError('❌ `gate_action:"pause"` requires `chain_id`: the run to pause.');
-    const scope = this.resolveRequestScope(sdkExtra);
-    const session = this.peekRun(chainId, sdkExtra);
-    const result = await this.chainSessionStoreInstance.pauseConversation(
-      session?.sessionId ?? chainId,
-      this.controlScope(scope)
-    );
+    const session = this.peekRun(chainId.length > 0 ? chainId : undefined, sdkExtra);
+    // A lone `resume` of a live run is not answered here. A terminal run, or one this process does
+    // not hold (unknown id, or a finished run no longer in memory), is: the store refuses it as it
+    // refuses `pause`, rather than the ordinary completed-run reply (isError false).
+    const livePeeked = session !== undefined && !isTerminalRunStatus(session.runStatus);
+    if (action === 'resume' && (chainId.length === 0 || livePeeked)) return undefined;
+    const exact = this.controlScope(this.resolveRequestScope(sdkExtra));
+    const target = session?.sessionId ?? chainId;
+    const result =
+      action === 'pause'
+        ? await this.chainSessionStoreInstance.pauseConversation(target, exact)
+        : await this.chainSessionStoreInstance.resumeConversation(target, exact);
     return this.responseAssembler.formatConversationControl(chainId, result);
   }
 

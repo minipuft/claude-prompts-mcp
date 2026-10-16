@@ -39,6 +39,7 @@ contract.
 | Skips gate review                | `post-prompt-engine.py` | Prompts an object `gate_verdict`       |
 | Malformed verdict parameter      | `gate-enforce.py`       | Names the required object shape        |
 | Chain lost after compaction      | `compact-recovery.py`   | Re-injects chain state post-compaction |
+| Step paused to talk it through   | every hook              | One pause directive, no continue CTA   |
 
 ## Hooks Reference
 
@@ -75,10 +76,32 @@ recovered holds with no issued step. Ordinary reviews retain their gate-verdict 
   Use FAIL for unmet criteria; follow the returned server template for applicable report fields.
 ```
 
-The tracker clears its saved run only after a successful terminal response for that run. A
-`gate_action: "abort"` request alone does not clear it; the response must report
-`**Chain Cancelled**` for the tracked `chain_id`. Error and refusal responses retain the state
-for recovery. Agent subcalls do not change the parent's tracker.
+The tracker clears its saved run only on terminal evidence for that run. An abort clears it only
+when the reply's `structuredContent.run_control` says `cancelled` for the tracked chain (and the
+tracked run id, when both are known); `release-incomplete` and `not-applied` keep it, because the
+reply text of a failed abort can read like an applied one. Error and refusal responses retain the
+state for recovery. Agent subcalls do not change the parent's tracker.
+
+**How Claude Code hands this hook an MCP result.** Measured with Claude Code 2.1.299 (headless):
+an ordinary step arrived as a list of content blocks, and a pause or resume as a JSON string of
+the `structuredContent` object, with no `structuredContent` key, no `content` and no `isError`.
+Every hook reads `tool_response` through `lib/session_state.read_tool_response`, which accepts
+those shapes (plus a dict and Bash's `{stdout, stderr}`), and `tests/test_tool_response_reads.py`
+fails on a direct read anywhere else. Other hosts' payloads are not claimed here.
+
+**Conversation pause.** The tracker records a pause only from a `conversation_control` packet
+whose outcome is `paused`, `already-paused`, `claimed` or `resumed`, and stores the run's exact
+identity (run UUID, chain id, organization, workspace, continuity scope), the pause and what the
+run owes. A `refused` packet changes nothing. It never stores the reply text or the structured
+`message`, which carry the recovery token. A reply for a different chain does not overwrite a
+tracked pause. While a pause is tracked, every hook renders one directive (`Workflow paused for
+conversation at step N of M: <chain>. Discuss with the user; resume explicitly …`, from
+`format_pause_directive`) in place of the continue, fix and verdict instructions.
+
+Only an **owned** pause (a live server holds it and the identity matches exactly) grants any
+exemption. A **retained** pause (its server stopped; the run waits in `state.db`) gets the claim
+guidance instead; an **unconfirmed** one (no refresh could confirm it) gets the resume and abort
+calls, which the server checks. Neither is adopted or resumed by a hook.
 
 ### `gate-enforce.py` (PreToolUse)
 
@@ -89,9 +112,14 @@ Blocks `prompt_engine` calls that violate gate discipline:
 | Invalid verdict   | Non-object `gate_verdict`, invalid overall or missing rationale                                | "gate_verdict requires an object with overall PASS or FAIL and a non-empty rationale."                                                    |
 | Pending gate      | `chain_id` carrying NO resolution parameter while a gate is open                               | "Gate review required: ... submit gate_verdict. If the gate cannot be satisfied, these parameters also resolve it: {exits}."              |
 | Paused on unknown | `chain_id` carrying NO resolution parameter while the run is hard-paused on a blocking unknown | "Chain paused: blocking unknown interrupt. The run issued no step and no gate_verdict clears this hold. Resolve it with one of: {verbs}." |
+| Paused for talk   | Any workflow call on a run this conversation holds paused (owned pause, exact identity)        | The pause directive above: discuss, then resume or abort explicitly.                                                                      |
+
+Run controls always reach the server, which decides them: `gate_action` `pause`, `resume` or
+`abort`, `handoff:true` and `claim_token`. `retry`, `skip` and `accept_alternative` work the run,
+so a paused run denies them. The paused check runs before the pending-gate check.
 
 The pending-run check accepts every **resolution parameter** the server accepts — `gate_verdict`
-and `gate_action` (retry/skip/abort/resume/accept_alternative) — read from
+and `gate_action` (retry/skip/abort/pause/resume/accept_alternative) — read from
 `lib/_generated/resolution_verbs.py`, which `server npm run generate:contracts` emits from
 parameters flagged `resolvesPendingRun` in `tooling/contracts/prompt-engine.json`. Never hardcode
 the verb list in the hook: a hardcoded model can deny `gate_action: "abort"` and trap a pending
@@ -129,9 +157,19 @@ echo '{"tool_name": "prompt_engine", "tool_input": {"gate_verdict": {"overall":"
 echo $?  # Output: 0
 ```
 
+### `delegation-enforce.py` (PreToolUse) and `ralph-stop.py` (Stop)
+
+While this conversation owns an exact pause of a delegated run, `delegation-enforce.py` makes no
+delegation demand and leaves its state untouched, so the demand returns on resume. `ralph-stop.py`
+lets the turn end for that one paused run and leaves its shell-verification rows byte-identical;
+every other check still runs: the client's own verification row, other runs' rows, and a row it
+cannot attribute, which blocks with a diagnostic. It reads a workflow's row by the bound run's
+`workflow-run-<run UUID>` key and exact scope, never another conversation's row. This was
+measured with hook fixtures and the PostToolUse payload above, not with a native Stop event.
+
 ### `compact-recovery.py` (SessionStart, matcher: "compact")
 
-Re-injects active chain state after compaction. Recovery is scoped to the chain THIS conversation recorded (via the PostToolUse chain tracker in `hooks-state.db`); the server's `state.db` refreshes that specific chain and never substitutes another client's chain, since several clients' MCP servers can share one `state.db`. Outputs a continuation directive to stdout, which Claude Code adds to post-compaction context. Replaces the former `pre-compact.py` (PreCompact), which was a side-effects-only event that could not inject context.
+Re-injects active chain state after compaction. Recovery is scoped to the chain THIS conversation recorded (via the PostToolUse chain tracker in `hooks-state.db`); the server's `state.db` refreshes that specific chain and never substitutes another client's chain, since several clients' MCP servers can share one `state.db`. Outputs a continuation directive to stdout, which Claude Code adds to post-compaction context. Replaces the former `pre-compact.py` (PreCompact), which was a side-effects-only event that could not inject context. A paused run is restored as paused, with the pause directive and never a continue instruction.
 
 ## Configuration
 
@@ -218,6 +256,8 @@ hooks/
 ├── post-prompt-engine.py   # PostToolUse - chain/gate tracking
 ├── gate-enforce.py         # PreToolUse - gate verdict enforcement
 ├── compact-recovery.py     # SessionStart("compact") - chain state recovery
+├── delegation-enforce.py   # PreToolUse - delegated-step demand
+├── ralph-stop.py           # Stop - shell-verification loop enforcement
 └── lib/
     ├── cache_manager.py    # Prompt/gate metadata queries (via SQLite resource_index)
     ├── db_reader.py        # Read-only SQLite access to state.db

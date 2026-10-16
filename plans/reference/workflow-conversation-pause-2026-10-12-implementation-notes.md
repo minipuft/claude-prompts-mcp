@@ -1,7 +1,7 @@
 ---
 title: Conversation pause implementation notes
 date: 2026-10-12
-status: active
+status: reference
 tags: [hooks, workflows, execution]
 ---
 
@@ -314,3 +314,26 @@ post-prompt-engine reads text through `read_tool_response` (no `str(list)`); `su
 ### T3.5a accepted (2026-10-15)
 
 `clear_verify_active_state` deleted (only the round-trip test called it); `load_verify_active_state` kept because it is imported downstream, with a None/empty session id now returning None instead of any row. **Contract note:** `hooks/lib/*` module API is in the Public API Contract; this narrows a call that returned an arbitrary row. `gemini-prompts/hooks/ralph-context-tracker.py:46` calls it with no argument and would silently stop tracking after it syncs this library — named in the P3 PR body; the downstream change is an external-repo action awaiting the owner (no autonomous submission). `make_verify_state` nests `sessionId` under `state` while the tracker reads it top-level (finding, no runtime mismatch measured).
+
+### T4.1 accepted (2026-10-15)
+
+The integration driver gained `isAlive`, `liveAtLaunch` (earlier PIDs still alive at the next spawn), a `scope` fixture option (named via `identity.launchDefaults.workspaceId` config, or cwd-derived) and `replace({live?, scope?})`. Measured on both transports with real processes: paused rows survive the dead-owner startup prune; stop-old-first recovery twice; replay and foreign workspace refused; resume returns the identical owed review; a default launch derives `workspaceId` from cwd; live handoff then abort. Every snapshot is read from the database the spawned processes wrote.
+
+- **R-T4.1-TERMINAL → T4.1a:** a conversation resume on a cancelled run returns the ordinary completed-run reply with isError false; the contract's "refuse truthfully" means an error refusal.
+- **For T4.3:** the token appears in `structuredContent.message` by design (the reply text mirror Claude Code shows the model), never inside `conversation_control` or `run_control`; docs must say "never in the packet", not "never in structured content".
+- **Findings (no rows):** a cancelled row keeps its pause record and a non-null token (inert: a claim is refused); the plan row's "in-process" label and "mock persistence" plant were not in the brief (every snapshot here is process-written).
+
+### T4.2 accepted (2026-10-15)
+
+Runner `server/tests/e2e/claims-conformance.test.ts`; the phase-guard answer is anchored once and aliased. The YAML driver reads text only, so abort asserts the cancelled text, not `run_control` (T4.1 covers the packet). Finding: the paused-run guard is also what makes resume mean "clear the pause" — without it a resume falls into the pipeline and advances. **DEV-T4-1 (planner):** T4.3 is dispatched directly rather than through `>>documentation_change`, because the accepted rows fix every fact the docs state; the brief carries the docs standards.
+
+### T4.1a and T4.1b accepted (2026-10-15)
+
+`answerConversationControl` answers a pause/resume control by the store unless the call is a resume with an empty chain_id or one that peeks a live run: terminal runs refuse `run-terminal`, unheld ids refuse `unknown-session`, both with isError and a refused packet. A completed run's row is pruned at the replacement's startup, so after a restart it is absent from storage, not just memory.
+
+- **DEV-T4-2 (planner):** T4.1a's brief checked only the unit suite, and its change left T4.1's live-handoff integration case red (it still expected the ordinary "already complete" reply); T4.1b found it and fixed the assertion inside its own bound. A row changing a reply that an integration case pins needs that integration file in its own check.
+- **Accepted:** a resume carrying a chain_id this process does not hold is refused even if another live process owns it — recovery across processes goes through `claim_token`.
+
+### T4.3 accepted (2026-10-15)
+
+Pause sections added to chains-lifecycle.md and mcp-tools.md (both packets, outcome tables, "never inside the packet" with the `message` mirror stated), sqlite-persistence.md's "Live Run Ownership" rewritten so an ordinary run does not survive its owner's death and a paused one does, hooks/README.md updated for native payload shapes, custody, Stop and delegation. **Blind spots (accepted, no gate added):** no check catches a reintroduced "recovery requires the original live owner" sentence or a claim of native Stop proof (the row's fault lines expected comparisons that do not exist); `validate:documented-tool-actions` excludes `gate_action` values by design, so documented gate_action values are unchecked against the contract enum. Finding: a dead owner's `chain_sessions` row is deleted at the next server's startup, so hooks fall from `retained` to `unconfirmed` guidance then, while only a claim recovers the run.
