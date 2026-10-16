@@ -14,7 +14,7 @@
  */
 
 import { ChainSessionRouter } from './chain-session-router.js';
-import { PipelineBuilder } from './pipeline-builder.js';
+import { identityResolverOptions, PipelineBuilder } from './pipeline-builder.js';
 import { CONTROL_EXCLUSIVE_PARAMETERS } from '../../schemas/prompt-engine.schema.js';
 import { ToolDescriptionLoader } from '../../tool-description-loader.js';
 import { ResponseFormatter } from '../processors/response-formatter.js';
@@ -95,10 +95,7 @@ import {
   ChainSessionService,
 } from '#shared/types/index.js';
 import { isChainId } from '#shared/utils/chain-id-codec.js';
-import {
-  resolveRequestIdentity,
-  resolveRequestIdentityContext,
-} from '#shared/utils/request-identity-resolver.js';
+import { resolveRequestIdentityContext } from '#shared/utils/request-identity-resolver.js';
 import {
   buildIdentityScope,
   resolveContinuityScopeId,
@@ -903,21 +900,7 @@ export class PromptExecutor {
   ): Promise<
     { chainId: string; response?: undefined } | { chainId?: undefined; response: ToolResponse }
   > {
-    let requestScope: StateStoreOptions | undefined;
-    if (sdkExtra !== null && typeof sdkExtra === 'object') {
-      const identityConfig = this.configManager.getConfig().identity;
-      const context = resolveRequestIdentityContext(sdkExtra, {
-        mode: identityConfig.mode,
-        allowPerRequestOverride: identityConfig.allowPerRequestOverride,
-        launchDefaults: identityConfig.launchDefaults,
-        transportMode: this.configManager.getTransportMode(),
-      });
-      requestScope = buildIdentityScope({
-        continuityScopeId: context.continuityScopeId,
-        workspaceId: context.workspaceId,
-        organizationId: context.organizationId,
-      });
-    }
+    const requestScope = this.resolveRequestScope(sdkExtra);
     const result = await this.chainSessionStore.claimHandoff(token, requestScope);
     switch (result.status) {
       case 'claimed':
@@ -983,25 +966,25 @@ export class PromptExecutor {
   }
 
   /**
-   * Request-scoped workspace identity, or `undefined` when the request carries none.
-   *
-   * `undefined` rather than a substituted default, mirroring the `system_control` handler this
-   * verb moved from: `getSessionForMutation` SKIPS the scope check when it receives `undefined`
-   * and enforces it when it receives a value. Falling back to the process workspace scope here
-   * looks more careful and is strictly worse — a session created without a `continuityScopeId`
-   * then compares unequal to the substituted one and every abort returns "not applied". That is
-   * exactly what happened before this comment existed, and only a live drive showed it: the unit
-   * tests pass a mock store whose `cancelChain` resolves `true` regardless of scope.
+   * The request's scope as run creation resolves it: stage 03's resolver under the same
+   * {@link identityResolverOptions}, so a claimless request (STDIO, or HTTP without headers) lands
+   * on the launch workspace. Pause, resume, the paused-run guard, claim, mint and abort all read
+   * scope here; a claims-only reading put a scopeless STDIO call in `'default'` while its run
+   * carried the launch workspace, so pause refused its own run. `undefined` for the all-default
+   * scope and for an absent or non-object `sdkExtra` (F20 pins that dimension for claim).
    */
   private resolveRequestScope(sdkExtra: unknown): StateStoreOptions | undefined {
     if (sdkExtra === null || typeof sdkExtra !== 'object') {
       return undefined;
     }
-    const identity = resolveRequestIdentity(sdkExtra);
+    const context = resolveRequestIdentityContext(
+      sdkExtra,
+      identityResolverOptions(this.configManager)
+    );
     return buildIdentityScope({
-      continuityScopeId: resolveContinuityScopeId(identity),
-      workspaceId: identity.workspaceId,
-      organizationId: identity.organizationId,
+      continuityScopeId: context.continuityScopeId,
+      workspaceId: context.workspaceId,
+      organizationId: context.organizationId,
     });
   }
 

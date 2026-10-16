@@ -58,7 +58,15 @@ describe('gate_action:"abort" terminates the run', () => {
   const extras = { _sdkExtra: { http: { authInfo: { extra: scope } } } };
   const newExecutor = async () => {
     const config = {
-      getConfig: () => ({ identity: { launchDefaults: { workspaceId: scope.workspaceId } } }),
+      // Abort reads request scope under the same identity policy stage 03 resolves runs with.
+      getConfig: () => ({
+        identity: {
+          mode: 'permissive',
+          allowPerRequestOverride: true,
+          launchDefaults: { workspaceId: scope.workspaceId },
+        },
+      }),
+      getTransportMode: () => 'streamable-http',
       getChainSessionConfig: () => undefined,
       getRuntimeStateDirectory: () => path.join(tmpDir, 'runtime-state'),
     };

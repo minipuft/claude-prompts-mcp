@@ -206,3 +206,18 @@ Typecheck and the test-type ratchet green; module catalog regenerated (ae0a0968)
 The four ratchet increases were five new sites, all in `session-action-handler.ts` (strict-boolean 10→14, non-null 3→4), partly offset by one fewer in `chain-session-router.ts`; each is now an explicit `!== undefined` or a narrowed local. `deriveObligations`, `ConversationObligation`, `ConversationControlRun` and `workflowVerifyStateKey` are un-exported (single-file use; no hook reads `workflow-run-`), superseding the T2.7 note's "exported `workflowVerifyStateKey`". `writeState` is deleted; gate-abort writes through `writeWorkflowState` and re-files the row under the chain id by SQL, so abort still has to release a legacy-keyed row (plant: release skips legacy keys → 2 red). With the new sites fixed, the branch's one removed violation left strict-boolean at 1566 < 1567; the baseline is lowered to the measurement, no rule above main's.
 
 **Root cause of DEV-T2-4:** a per-file `git show origin/main:<f> | eslint --stdin` comparison cannot see type-aware rule changes — imports resolve against the HEAD tree, so old and new code mix and every file compared equal. Locating sites needs a full `origin/main` tree copy linted beside HEAD.
+
+### Boundary green, then a defect from the capture → T2.8 (2026-10-15)
+
+After B1 (d2816949) typecheck, lint ratchet, test-type ratchet and validate:all were all green. The PR-body capture then drove the built server over STDIO and found the pause unusable on a default launch: with no `--workspace-id`, a run is created under the launch workspace's continuity (`server`, from cwd) while `answerConversationControl` / `answerPausedTarget` resolve the control scope from request claims only (`default`), so `heldInControlScope` refuses and the next bare answer runs as ordinary work. Every unit test supplied scope directly, so none could see it; the plan reserved process-level proof for T4.1, which would have caught it — one slice later than the PR it breaks.
+
+- **R-T1.3-NOSCOPE is suspect:** it assumed a scopeless claim resolves to the process launch scope. If the claim path also builds scope from claims only, its premise was false; T2.8 answers it.
+- **Lesson:** a feature keyed on scope gets one default-launch process drive at its first PR, not at the end of the plan.
+
+### T2.8 accepted (2026-10-15)
+
+Two derivations of request scope existed: launch-aware `resolveRequestIdentityContext` (stage 03, where every run gets its scope; also `handleClaim`, with hand-built options) and claims-only `resolveRequestIdentity` (the executor's `resolveRequestScope`, feeding pause, resume, the paused guard, `peekRun`, abort and mint). `identityResolverOptions(configManager)` is now exported from pipeline-builder and used by stage 03 and the executor; `handleClaim` calls `resolveRequestScope`. Exact-scope checks unchanged.
+
+- **R-T1.3-NOSCOPE verdict:** its premise held for claim (already launch-aware); the paused mint did not hold it and now does.
+- **R-T2.8-ABORT (accepted, behavior change):** a scopeless abort previously passed `undefined` scope and skipped the mutation scope check, so any workspace could abort any run in the shared state.db; it now resolves the launch scope and a foreign run is refused. Named in the PR body.
+- **Findings (no rows):** an in-process call with absent/non-object `sdkExtra` still resolves to no scope (F20 pins that for claim) while stage 03 resolves the launch scope — MCP always passes an object; `serving-unit-scope.ts:80` is a third claims-only derivation with its own launch fallback (not pause work, R192); a second pause after resume returns the same token, which is the plan's "pause preserves an existing credential".

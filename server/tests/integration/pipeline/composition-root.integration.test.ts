@@ -588,6 +588,104 @@ describe('composition-root request-continuity handoff', () => {
   });
 });
 
+describe('conversation control resolves a scopeless request to the launch workspace', () => {
+  let identity: IdentityConfig;
+  let transport: ReturnType<ConfigLoader['getTransportMode']>;
+
+  beforeEach(() => {
+    const config = foundation.configManager.getConfig();
+    identity = config.identity;
+    transport = foundation.configManager.getTransportMode();
+    // A default launch: the workspace derived at startup, no `--workspace-id`, STDIO.
+    config.identity = {
+      mode: 'permissive',
+      allowPerRequestOverride: true,
+      launchDefaults: { workspaceId: 'composition-root' },
+    };
+    (foundation.configManager as ConfigLoader).setTransportMode('stdio');
+  });
+  afterEach(() => {
+    foundation.configManager.getConfig().identity = identity;
+    (foundation.configManager as ConfigLoader).setTransportMode(transport);
+  });
+
+  const foreign: McpRequestExtra = {
+    http: { req: { headers: { 'x-workspace-id': 'scope-foreign-control' } } },
+  };
+  const held = (chainId: string) => {
+    const session = modules.mcpToolsManager
+      .getChainSessionStore()
+      ?.getSessionByChainIdentifier(chainId, { includeDormant: true });
+    if (session === undefined) throw new Error(`no session for ${chainId}`);
+    return session;
+  };
+  const start = async () => {
+    const started = await promptEngine({
+      workflow: {
+        version: 1,
+        nodes: [
+          { id: 'one', promptId: 'cr_a' },
+          { id: 'two', promptId: 'cr_b' },
+        ],
+      },
+    });
+    expect(started.isError).toBe(false);
+    const chainId = /chain-[A-Za-z0-9_/-]+#\d+/.exec(started.text)?.[0];
+    if (chainId === undefined) throw new Error(`no returned run token in:\n${started.text}`);
+    expect(held(chainId).continuityScopeId).toBe('composition-root');
+    return chainId;
+  };
+
+  test('pause, the paused-run guard and resume apply to a run created by the same request shape', async () => {
+    const chainId = await start();
+    const paused = await promptEngine({ chain_id: chainId, gate_action: 'pause' });
+    expect(paused.text).not.toContain('Control Not Applied');
+    expect(paused.isError).toBe(false);
+    expect(held(chainId).conversationPause).toBeDefined();
+
+    const work = await promptEngine({ chain_id: chainId, user_response: 'ordinary work' });
+    expect(work.isError).toBe(true);
+    expect(work.text).toContain('This call was refused and nothing changed');
+
+    const resumed = await promptEngine({ chain_id: chainId, gate_action: 'resume' });
+    expect(resumed.isError).toBe(false);
+    expect(resumed.text).toContain('Workflow Resumed');
+    expect(resumed.text).toContain('Owed now, in a separate call');
+    expect(held(chainId).conversationPause).toBeUndefined();
+  });
+
+  test('a paused run mints and is claimed from the launch scope, and a foreign workspace is refused', async () => {
+    const chainId = await start();
+    // HTTP admits request claims, so a foreign workspace header names a different scope.
+    (foundation.configManager as ConfigLoader).setTransportMode('streamable-http');
+    const foreignPause = await promptEngine({ chain_id: chainId, gate_action: 'pause' }, foreign);
+    expect(foreignPause.isError).toBe(true);
+    expect(held(chainId).conversationPause).toBeUndefined();
+
+    const paused = await promptEngine({ chain_id: chainId, gate_action: 'pause' });
+    expect(paused.isError).toBe(false);
+    const foreignResume = await promptEngine({ chain_id: chainId, gate_action: 'resume' }, foreign);
+    expect(foreignResume.isError).toBe(true);
+    expect(held(chainId).conversationPause).toBeDefined();
+
+    (foundation.configManager as ConfigLoader).setTransportMode('stdio');
+    const minted = await promptEngine({ chain_id: chainId, handoff: true });
+    expect(minted.isError).toBe(false);
+    const token = /hnd_[A-Za-z0-9_-]+/.exec(minted.text)?.[0];
+    if (token === undefined) throw new Error(`no handoff token in:\n${minted.text}`);
+
+    (foundation.configManager as ConfigLoader).setTransportMode('streamable-http');
+    const foreignClaim = await promptEngine({ claim_token: token }, foreign);
+    expect(foreignClaim.isError).toBe(true);
+    expect(foreignClaim.text).toContain('Claim Refused');
+
+    (foundation.configManager as ConfigLoader).setTransportMode('stdio');
+    const claimed = await promptEngine({ claim_token: token });
+    expect(claimed.isError).toBe(false);
+    expect(claimed.text).toContain('Paused Run Claimed');
+  });
+});
+
 describe('composition-root blocking-unknown capture and resume', () => {
   const store = () => {
     const value = modules.mcpToolsManager.getChainSessionStore();
