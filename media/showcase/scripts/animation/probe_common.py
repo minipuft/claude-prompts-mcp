@@ -20,6 +20,11 @@ HUE_TOLERANCE = 15.0                    # C24
 # "changes" with the camera moving were 2500-8000 px per frame at the exact 24 threshold and 0 px blurred; the real key changes stayed at 6600-20500 px.
 MOVING_BLUR_STAGE_PX = 10
 MOVING_THRESHOLD = 96
+# A vector figure re-rasterised under a camera that is easing to a stop leaves a sub-pixel edge outline the blurred comparison does not fully absorb: on the s01 shot it measured 0-1 px on
+# 29 of 30 odd frames with the camera moving and 37 px on frame 209 (camera dy -1.2 px, zoom -0.001; out/s01-arrival-overwhelm-figure-seq), the outline of the whole figure and no drawing.
+# A drawing changes thousands of pixels (the smallest in that shot: 1697), so on an odd frame where the xsheet camera moved a change counts only above this floor.
+MOVING_ODD_FLOOR = 64
+
 
 
 # ---------- report ----------
@@ -238,6 +243,13 @@ def change_series(frames, xs, crop_arg, thresh):
     return out
 
 
+def damp_camera_noise(series, xs, floor=MOVING_ODD_FLOOR):
+    """`series` (frame -> (figure change, rest)) with the figure change zeroed on every frame where the xsheet camera moved between it and the previous frame and the change is no more than `floor` pixels:
+    the sub-pixel outline of a figure re-rasterised under a moving camera, not a drawing (see MOVING_ODD_FLOOR)."""
+    if not xs: return series
+    return {f: (0 if fig <= floor and not same_camera(camera_of(xs, f), camera_of(xs, f - 1)) else fig, rest) for f, (fig, rest) in series.items()}
+
+
 # ---------- colour ----------
 def hex_rgb(h):
     h = h.lstrip("#")
@@ -277,19 +289,164 @@ def hue_array(a):
     return h
 
 
-def identity_mask(a, radius=IDENTITY_RADIUS):
-    m = np.zeros(a.shape[:2], bool)
-    for hx in IDENTITY_PIGMENTS.values():
-        m |= np.sqrt(((a.astype(np.int32) - np.array(hex_rgb(hx))) ** 2).sum(axis=2)) <= radius
+ROLES_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "v3", "roles.json")
+_LUTS = {}
+
+
+def fixed_role_hexes(path=None, sheets=False, plates=True):
+    """The fixed colours the frame probes mask: the identity pigments, the human's roles, the kit's and the gadget's, and each world's texture colours (v3/roles.json, written by compile-roles.mjs from
+    tokens.ts). These do not grade per beat (C1, C2), so they are neither light (C29) nor a hue the beat's pair must hold (C24, C30). Falls back to the two identity pigments
+    when the file is absent, and the caller says so (`roles_source`)."""
+    path = path or ROLES_FILE
+    if not os.path.exists(path): return list(IDENTITY_PIGMENTS.values())
+    d = read_json(path, "roles")
+    out = [h for grp in d.get("identity", {}).values() for h in grp] + list(d.get("human", [])) + list(d.get("kit", [])) + list(d.get("gadget", [])) + [h for grp in d.get("worlds", {}).values() for h in grp]
+    root = os.path.dirname(os.path.dirname(path))                              # the project root: roles.json lives in <root>/v3
+    if plates: out += [h for png in d.get("plates", []) for h in plate_palette(png, root)]
+    if sheets: out += [h for png in d.get("sheets", []) for h in plate_palette(png, root, SHEET_MIN_SHARE)]       # a world sheet holds lit pale colours too: only the saturated-pixel check may mask them
+    return sorted(set(h.lower() for h in out))
+
+
+PLATE_BIN, PLATE_MIN_SHARE, SHEET_MIN_SHARE = 16, 0.001, 0.0002          # a sheet carries many small things (a ring's lit core is 0.03 % of it), a plate one figure
+
+
+def plate_palette(png, root, min_share=None):
+    """The colours a drawn plate is made of: its opaque pixels binned to PLATE_BIN levels per channel (bin centres), every bin holding at least PLATE_MIN_SHARE of them. The human's cutout
+    carries a pale contour and shading that are not its five role colours (the contour reads (222, 198, 198) in a frame, no role within 28), and it is the figure a light must not be mistaken for."""
+    im = np.array(Image.open(os.path.join(root, png)).convert("RGBA")); px = im[im[..., 3] > 200][:, :3].astype(np.int32)
+    bins = (px // PLATE_BIN) * PLATE_BIN + PLATE_BIN // 2
+    key = bins[:, 0] * 65536 + bins[:, 1] * 256 + bins[:, 2]
+    vals, counts = np.unique(key, return_counts=True)
+    return ["#%02x%02x%02x" % (v >> 16, (v >> 8) & 255, v & 255) for v, n in zip(vals, counts) if n >= (PLATE_MIN_SHARE if min_share is None else min_share) * len(px)]
+
+
+def roles_source(path=None): return os.path.relpath(path or ROLES_FILE) if os.path.exists(path or ROLES_FILE) else "the two identity pigments (no v3/roles.json: run `npm run roles`)"
+
+
+def _lut(hexes, radius):
+    """A 256^3 boolean table: True where a colour is within `radius` (Euclidean RGB) of any of `hexes`. Built once per set; a frame is masked by one lookup."""
+    key = (tuple(hexes), radius)
+    if key not in _LUTS:
+        lut = np.zeros((256, 256, 256), bool); r = int(radius)
+        for hx in hexes:
+            c = np.array(hex_rgb(hx))
+            lo, hi = np.maximum(c - r, 0), np.minimum(c + r + 1, 256)
+            g = np.mgrid[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]]
+            near = ((g[0] - c[0]) ** 2 + (g[1] - c[1]) ** 2 + (g[2] - c[2]) ** 2) <= radius ** 2
+            lut[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]] |= near
+        _LUTS[key] = lut
+    return _LUTS[key]
+
+
+def fixed_fill_hexes(path=None):
+    """The colours the fixed fills are DRAWN in, for the blend mask below: the role maps and the worlds' texture and emissive colours (not the cutout's palette, which is already a sample of what the
+    human is drawn in)."""
+    path = path or ROLES_FILE
+    if not os.path.exists(path): return list(IDENTITY_PIGMENTS.values())
+    d = read_json(path, "roles")
+    out = [h for grp in d.get("identity", {}).values() for h in grp] + list(d.get("human", [])) + list(d.get("kit", [])) + list(d.get("gadget", [])) + [h for grp in d.get("worlds", {}).values() for h in grp] + list(d.get("emissive", []))
+    return sorted(set(h.lower() for h in out))
+
+
+_BLEND_LUTS = {}
+BLEND_RADIUS = 16
+BLEND_STEP = 4
+
+
+def _blend_lut(hexes, radius):
+    """A 256^3 table: True within `radius` of a point on a segment from any colour of `hexes` to black, to white or brightened to three times itself (an additive bloom, clipped at 255), or between any two of them: what the anti-aliased edge of a fixed fill,
+    its stipple and its bloom are made of (a fill meeting the dark field, a lit edge, one fill meeting another). The glow of a light is a colour on its own ray, not between these fills."""
+    import itertools
+    from scipy import ndimage as ndi
+    key = (tuple(hexes), radius)
+    if key not in _BLEND_LUTS:
+        cols = [np.array(hex_rgb(h)) for h in hexes]; pts = []
+        def seg(a, b):
+            n = max(2, int(np.linalg.norm(a - b) / BLEND_STEP) + 1)
+            pts.extend(np.round(a + (b - a) * t).astype(int) for t in np.linspace(0, 1, n))
+        for c in cols: seg(c, np.array([0, 0, 0])); seg(c, np.array([255, 255, 255])); seg(c, np.minimum(c * 3, 255))      # to black, to white, and brightened past itself (additive bloom clips at 255)
+        for a, b in itertools.combinations(cols, 2): seg(a, b)
+        grid = np.zeros((256, 256, 256), bool); P = np.clip(np.array(pts), 0, 255); grid[P[:, 0], P[:, 1], P[:, 2]] = True
+        _BLEND_LUTS[key] = ndi.distance_transform_edt(~grid) <= radius
+    return _BLEND_LUTS[key]
+
+
+def fixed_fill_mask(a, hexes, radius=IDENTITY_RADIUS, blend=None):
+    """Pixels of `a` that are a fixed fill (within `radius` of a colour of `hexes`) or a blend of fixed fills: `blend` is the list the fills are drawn in (`fixed_fill_hexes`), else no blend mask."""
+    m = role_mask(a, hexes, radius)
+    if blend:
+        lut = _blend_lut(tuple(sorted(blend)), BLEND_RADIUS); q = np.clip(a, 0, 255).astype(np.uint8)
+        m = m | lut[q[..., 0], q[..., 1], q[..., 2]]
     return m
 
 
-def check_path_monotone(hues, slack=5.0):
-    """Hue samples along a crossing: returns (ok, reason). The path runs on the shortest arc from the first to the last sample, in one
-    direction, never behind the start or past the end by more than `slack` degrees (a detour through a third hue shows as either)."""
+def role_mask(a, hexes, radius=IDENTITY_RADIUS):
+    """Pixels of `a` (H x W x 3) within `radius` of any colour in `hexes`."""
+    lut = _lut(tuple(sorted(hexes)), radius)
+    q = np.clip(a, 0, 255).astype(np.uint8)
+    return lut[q[..., 0], q[..., 1], q[..., 2]]
+
+
+BLUR_STAGE_PX = 8
+
+
+def brightest_region(img, hexes=None, share=0.005, blur=BLUR_STAGE_PX, masked=None):
+    """Mask of the brightest `share` of the pixels outside the fixed fills `hexes` (None: nothing masked), ranked by luminance box-blurred over `blur` stage pixels (0: unblurred); masked pixels
+    count as black in the blur and are never members. The region, not the pixel: the anti-aliased edge where a fill meets its neighbour is a bright speck a light is not. Used by the eye
+    trace (where the light is) and the colour probe (what colour it is)."""
+    from scipy import ndimage as ndi
+    a = img.astype(np.float32)
+    lum = 0.2126 * a[..., 0] + 0.7152 * a[..., 1] + 0.0722 * a[..., 2]
+    keep = ~masked if masked is not None else ~role_mask(img, hexes) if hexes else np.ones(lum.shape, bool)
+    k = max(1, int(round(blur * img.shape[1] / STAGE[0]))) | 1 if blur > 0 else 1
+    if k > 1: lum = np.where(keep, ndi.uniform_filter(np.where(keep, lum, 0.0), size=k), 0.0)
+    vals = lum[keep]
+    if vals.size == 0: return None
+    thr = np.sort(vals)[-max(1, int(np.ceil(vals.size * share)))]
+    return keep & (lum >= thr)
+
+
+def plate_hexes(path=None):
+    """Only the colours the human's cutout is drawn in (`plates` of v3/roles.json), for `cast_mask`."""
+    path = path or ROLES_FILE
+    if not os.path.exists(path): return []
+    d = read_json(path, "roles"); root = os.path.dirname(os.path.dirname(path))
+    return sorted(set(h.lower() for png in d.get("plates", []) for h in plate_palette(png, root)))
+
+
+def cast_mask(img, cam, hexes, plate, box=FIGURE_BOX):
+    """The fixed fills a pale light must not be confused with: the role colours (`hexes`: identity, human, kit, gadget, worlds) everywhere, and the human's cutout palette (`plate`) only inside the
+    human's own crop (`box`, stage pixels, projected through the camera as the bounding box of its corners). The cutout carries pale contour and shading colours a pale emitter's glow passes
+    through; masked everywhere they would take the glow's core with them, so they are masked where the human is."""
+    m = role_mask(img, hexes) if hexes else np.zeros(img.shape[:2], bool)
+    if plate:
+        H, W = img.shape[:2]; sc = W / STAGE[0]; x, y, w, h = box
+        pts = [project(cam, px, py) for px, py in ((x, y), (x + w, y), (x, y + h), (x + w, y + h))]
+        x0, x1 = int(max(0, min(p[0] for p in pts) * sc)), int(min(W, max(p[0] for p in pts) * sc + 1)); y0, y1 = int(max(0, min(p[1] for p in pts) * sc)), int(min(H, max(p[1] for p in pts) * sc + 1))
+        if x1 > x0 and y1 > y0: m[y0:y1, x0:x1] |= role_mask(img[y0:y1, x0:x1], plate)
+    return m
+
+
+def identity_mask(a, radius=IDENTITY_RADIUS, hexes=None):
+    """The mask of the identity pigments, or of `hexes` (the fixed roles) when given."""
+    return role_mask(a, list(IDENTITY_PIGMENTS.values()) if hexes is None else hexes, radius)
+
+
+def path_direction(hues):
+    """+1 or -1: the way a hue path travels, from the sum of its consecutive signed steps (not from its two ends, which cannot say when the arc is near 180 degrees)."""
+    return 1 if sum(signed_hue_diff(a, b) for a, b in zip(hues, hues[1:])) >= 0 else -1
+
+
+def check_path_monotone(hues, slack=5.0, direction=None):
+    """Hue samples along a crossing: returns (ok, reason). The path runs on the shortest arc from the first to the last sample, in one direction, never behind the start or past the end by more than
+    `slack` degrees (a detour through a third hue shows as either). `direction` (+1 or -1) fixes the way the path is meant to travel, as the light contract's own path says (`path_direction`):
+    the two ends alone cannot, when the arc between them is near 180 degrees and a few degrees of measurement decide which way round is shorter."""
     if len(hues) < 2: return True, "fewer than two samples"
-    total = signed_hue_diff(hues[0], hues[-1]); d = 1 if total >= 0 else -1
-    p = [d * signed_hue_diff(hues[0], h) for h in hues]
+    if direction:
+        d = direction; p = [((h - hues[0]) * d) % 360 for h in hues]; p = [v - 360 if v > 180 else v for v in p]; total = p[-1]
+    else:
+        total = signed_hue_diff(hues[0], hues[-1]); d = 1 if total >= 0 else -1
+        p = [d * signed_hue_diff(hues[0], h) for h in hues]
     for i, v in enumerate(p):
         if v < -slack: return False, f"sample {i} ({hues[i]:.0f} deg) sits {-v:.0f} deg behind the start"
         if v > abs(total) + slack: return False, f"sample {i} ({hues[i]:.0f} deg) overshoots the end by {v - abs(total):.0f} deg"
@@ -302,7 +459,49 @@ def add_common(ap, frames=True, xsheet=True):
     ap.add_argument("--timeline", default="v3/timeline.json")
     if xsheet: ap.add_argument("--xsheet", default=None, help="v3/xsheet.json (rows with frame, beat, world, key, camera, emitter, phase)")
     ap.add_argument("--json", default=None, help="write the result as JSON")
+    ap.add_argument("--shot", default=None, help="measure one shot's slice of the timeline (a shot id of v3/shots.json, or the `shot` of v3/blocking/<beat>.json): its beats' frames only")
     return ap
+
+
+# ---------- shots: a slice of the timeline ----------
+def shot_beat_ids(timeline_path, shot_id):
+    """The beats of a shot: `beat` of its v3/shots.json entry, plus every beat whose v3/blocking/<beat>.json names it as its `shot`."""
+    base = os.path.dirname(os.path.abspath(timeline_path)); ids = []
+    sp = os.path.join(base, "shots.json")
+    if os.path.exists(sp):
+        for sh in read_json(sp, "shots").get("shots", []):
+            if sh.get("id") == shot_id: ids += list(sh.get("beat", []))
+    bd = os.path.join(base, "blocking")
+    if os.path.isdir(bd):
+        for fn in sorted(os.listdir(bd)):
+            if fn.endswith(".json"):
+                b = read_json(os.path.join(bd, fn), "blocking")
+                if b.get("shot") == shot_id and b.get("id", fn[:-5]) not in ids: ids.append(b.get("id", fn[:-5]))
+    return ids
+
+
+def slice_timeline(tl, beat_ids):
+    """The timeline restricted to `beat_ids`: those beats, the crossing windows that touch them (a window the slice ends inside is kept and marked `partial`: its other beat is outside),
+    and `duration` of the slice's last frame. Returns (timeline, (first frame, last frame + 1))."""
+    keep = [b for b in tl["beats"] if b["id"] in beat_ids]
+    if not keep: die(f"none of the beats {sorted(beat_ids)} are on the timeline")
+    lo, hi = min(b["start"] for b in keep), max(b["end"] for b in keep)
+    ids = {b["id"] for b in keep}
+    wins = [{**w, "partial": not (w["from"] in ids and w["to"] in ids)} for w in tl["windows"] if w["a"] < hi and w["b"] > lo and (w["from"] in ids or w["to"] in ids)]
+    return {**tl, "beats": keep, "windows": wins, "duration": hi, "slice": (lo, hi)}, (lo, hi)
+
+
+def apply_shot(args, tl, xs=None, frames=None):
+    """With --shot: (timeline slice, xsheet rows and frames inside it, note); without: the inputs and None."""
+    shot = getattr(args, "shot", None)
+    if not shot: return tl, xs, frames, None
+    ids = shot_beat_ids(args.timeline, shot)
+    if not ids: die(f"--shot {shot}: no beat of {args.timeline} belongs to it (v3/shots.json `beat`, or `shot` in v3/blocking/<beat>.json)")
+    sl, (lo, hi) = slice_timeline(tl, set(ids))
+    xs2 = {f: r for f, r in xs.items() if lo <= f < hi} if xs else xs
+    fr2 = {f: p for f, p in frames.items() if lo <= f < hi} if frames is not None else frames
+    if frames is not None and not fr2: die(f"--shot {shot}: no rendered frame in {lo}..{hi - 1}")
+    return sl, xs2, fr2, f"shot {shot}: beats {ids}, frames {lo}..{hi - 1}"
 
 
 def default_xsheet(args):

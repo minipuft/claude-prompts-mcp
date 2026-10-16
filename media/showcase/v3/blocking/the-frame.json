@@ -3,9 +3,9 @@
   "provisional": true,
   "derivedFrom": "v3/layouts/s02-cant-build-frame.json emitter.endXY (0.6, 0.481) of the frame -> join and the two blocks that touch at it; every other field is the test scene's: the layout's figure heights are not used (startHeightPct 63.4 measures the human bent in the reach, endHeightPct is null); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
   "figure": {
-    "scale": 0.68,
-    "x": 420,
-    "y": 40
+    "scale": 0.58,
+    "x": 452,
+    "y": 85
   },
   "codex": {
     "x": 60,

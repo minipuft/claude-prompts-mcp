@@ -95,9 +95,9 @@ def pose_ids(change_frames, n=N):
     return [sum(1 for c in change_frames if c <= f) for f in range(n)]
 
 
-def twos_sequence(bad=False):
-    """Pose changes on even frames only (bad: plus one on frame 7); the camera pans every frame."""
-    ids = pose_ids({4, 10, 16, 22, 28, 34, 40} | ({7} if bad else set()))
+def twos_sequence(bad=False, jump_frame=None):
+    """Pose changes on even frames only (bad: plus one on frame 7; jump_frame: plus one on that frame, e.g. an odd frame inside a crossing window); the camera pans every frame."""
+    ids = pose_ids({4, 10, 16, 22, 28, 34, 40} | ({7} if bad else set()) | ({jump_frame} if jump_frame is not None else set()))
     cam = lambda f: {"x": 640 + 4 * f, "y": 360, "zoom": 1, "rot": 0}
     frames = [scene(ids[f], 640 + 4 * f) for f in range(N)]
     return frames, xsheet_rows(N, camera=cam)
@@ -112,8 +112,11 @@ def holds_ids(kind):
 
 def holds_sequence(kind):
     declared = kind == "hold40-declared"
-    ids = holds_ids("hold40" if declared else kind)
+    jump = kind in ("crossing-jump", "crossing-keyed")
+    ids = holds_ids("hold40" if declared else "good" if jump else kind)
+    if jump: ids = ids[:28] + [i + 20 for i in ids[28:]]                  # a pose jump on frame 28, inside the crossing window 24-39
     keys = {f: f"P{ids[f]}" for f in range(1, len(ids)) if ids[f] != ids[f - 1]}     # every change is a key row: the probe reads boil as any change without one
+    if kind == "crossing-jump": keys.pop(28)                              # ...except the planted jump: nothing on the sheet accounts for it
     if declared: keys[0] = {"id": "K1", "hold": 40}
     return [scene(i) for i in ids], xsheet_rows(N, keys=keys)
 
@@ -132,6 +135,7 @@ def eye_frame(f, offset_pct=0.0, with_identity=True):
     a = np.clip(a, 0, 255).astype(np.uint8)
     if with_identity:
         a[10:34, 10:34] = CODEX; a[150:174, 280:304] = CLAWD
+        a[10:34, 250:274] = (0xe7, 0xe4, 0xda); a[60:84, 10:34] = (0xd9, 0xe5, 0xe3)       # the human's cream (settled.human.light) and the kit's pale (settled.kit.light)
     return a
 
 
@@ -227,12 +231,23 @@ def colour_frame(f, patch=False, path="direct"):
     a[40:140, 60:200] = [int(col[i:i + 2], 16) for i in (1, 3, 5)]
     if acc: a[40:60, 210:250] = [int(acc[i:i + 2], 16) for i in (1, 3, 5)]
     a[150:174, 280:304] = CLAWD
+    a[60:84, 260:284] = (0xc8, 0x32, 0x3a); a[100:124, 10:34] = (0x2f, 0x45, 0xa8)          # the kit's accent and the human's main1: saturated, off both pairs, fixed per palette
     if patch: a[100:124, 260:284] = hsv(300, 1, 1)
     return a
 
 
 def colour_sequence(patch_frames=(), path="direct"):
     return [colour_frame(f, f in patch_frames, path) for f in range(N)], colour_timeline(), colour_shots()
+
+
+def glow_frame(hexc, with_blob=True):
+    """The field with a soft glow of colour `hexc` centred on the emitter (stage 640, 360 = frame 160, 90; peak 0.9 of the colour, sigma 14 px), the way an additive light lays on a dark ground:
+    a pale tint keeps its hue at low chroma, which the saturated-pixel check cannot see and `radiance_hue` reads."""
+    a = np.empty((H, W, 3), np.float32); a[:] = FIELD
+    if with_blob:
+        yy, xx = np.mgrid[0:H, 0:W]; g = 0.9 * np.exp(-((xx - 160) ** 2 + (yy - 90) ** 2) / (2 * 14 ** 2))
+        a += g[..., None] * np.array(hex_rgb_(hexc), np.float32)
+    return np.clip(a, 0, 255).astype(np.uint8)
 
 
 # ---------- light contract (probe-colour --contract) ----------
@@ -319,13 +334,14 @@ def pose_fixture(kind):
     """(pose sheet, key sheet, chart) of two keys 40 frames apart for probe-poses.py. `clean`: a C then an S, arms not mirrored, weight where it is declared,
     a move of four drawings (anticipation, passing, overshoot, settle) that leave the chord, a secondary and moving holds. The others plant one fault each: `straight-s`
     (key A declared S on a straight spine), `twin` (mirrored limbs, no twinned.why), `favour-only` (a long move whose breakdowns have only a favour), `ten-drawings` (a move of ten
-    drawings), `early-passing` (a passing drawing at 0.10 of the way), `lead-lag` (the lead wrist declared as a secondary with no side). The clean sheet's right hand names side R: B leads with the right arm, so it does not lag there."""
+    drawings), `early-passing` (a passing drawing at 0.10 of the way), `lead-lag` (the lead wrist declared as a secondary with no side), `wrong-sign` (key A's spine mirrored to the other side
+    of its chord while the sheet still declares sign -1), `mirrored-declared` (the same mirrored spine declared sign +1: accepted). The clean sheet's right hand names side R: B leads with the right arm, so it does not lag there."""
     c_offs, s_offs = (-0.075, -0.05, -0.03), (-0.02, -0.05, -0.04)
-    a_offs = (0.0, 0.0, 0.0) if kind == "straight-s" else c_offs
+    a_offs = (0.0, 0.0, 0.0) if kind == "straight-s" else tuple(-v for v in c_offs) if kind in ("wrong-sign", "mirrored-declared") else c_offs
     ja = pose_joints(300, a_offs, arms="twin" if kind == "twin" else "asym", foot="R", over=0.7)
     jb = pose_joints(380, s_offs, lean=20, foot="L", over=0.6, arm_shift=(120, -330))
     cls_a = "S" if kind == "straight-s" else "C"
-    pa = _pkey("A", 0, 20, cls_a, 0.08, -1, "R", 0.7, "Weight on the right foot, hands low, the gather before the lift.", inflection=0.5 if cls_a == "S" else None)
+    pa = _pkey("A", 0, 20, cls_a, 0.08, 1 if kind == "mirrored-declared" else -1, "R", 0.7, "Weight on the right foot, hands low, the gather before the lift.", inflection=0.5 if cls_a == "S" else None)
     pb = _pkey("B", 40, 20, "S", 0.15, 1, "L", 0.6, "The reach: weight crosses to the left foot and the right hand goes up.", lead=("R", "R"), inflection=0.5)
     arc = {"joint": "wristR", "offsetPx": 0 if kind == "favour-only" else 40}
     sheet = {"shot": f"fixture-{kind}", "actor": "human", "heightPx": POSE_H, "source": {"chart": "c", "keys": "k", "layout": "l"}, "keys": [pa, pb],

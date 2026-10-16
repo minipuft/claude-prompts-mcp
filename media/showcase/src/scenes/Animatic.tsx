@@ -8,6 +8,8 @@ import {frameState, reelCamera, reelChart, SIZE, timeline} from './animaticPlan'
 import {hueOf} from './lightPlan';
 import {jointParents} from '../library/cast/humanPose';
 import {poseAt} from '../library/motion';
+import {FlatFigure, reducedLine} from '../library/worlds/parts';
+import {contracts} from '../library/worlds/contracts';
 
 const worldId = (id: string): WorldId => {
   if (!(id in worlds)) throw new Error(`animatic: "${id}" is not a world`);
@@ -20,10 +22,34 @@ const worldId = (id: string): WorldId => {
  * shot's hue. A caption strip names the world, the beat and the frame; it is review chrome over the picture, not part of the film, so the probe
  * renders turn it off (`--props='{"captions":false}'`): it covers the figure's boots, which the loop-closure probe needs to see.
  * Everything is read from `animaticPlan`, the module the exposure sheet reads.
+ *
+ * `layers="figure"` draws only the human, flat and filled, at the beat's blocking under the camera, on the field colour, in every frame including a crossing's: the drawing's pose
+ * and nothing else (no world, no props, no light, no fill morph, no caption). The twos and hold probes measure the drawn layer on this pass (`Animatic65Figure`), so a crossing needs no
+ * exemption for the figure: only the world's fills change there, and they are not in this layer. `layers="figure-line"` is the same with the figure as the line world draws it (contour only,
+ * `reducedLine` of the line contract at full reduction, the figure of `LineScene` without its arch, gates, floor and props): the loop probe measures closure and clipping on it, because the
+ * line world's floor grid runs through the figure and into the crop's border and merges with its outline in the full frame.
  */
-export const Animatic: React.FC<{captions?: boolean}> = ({captions = true}) => {
+export const Animatic: React.FC<{captions?: boolean; layers?: 'all' | 'figure' | 'figure-line'}> = ({captions = true, layers = 'all'}) => {
   const frame = useCurrentFrame();
   const s = frameState(frame);
+  if (layers === 'figure-line') {
+    return (
+      <AbsoluteFill style={{background: contracts.line.field}}>
+        <CameraView pose={s.camera} size={SIZE}>
+          <FlatFigure pose={s.pose} fill={0} line={reducedLine(contracts.line, contracts.line, 1, s.blocking)} blocking={s.blocking} />
+        </CameraView>
+      </AbsoluteFill>
+    );
+  }
+  if (layers === 'figure') {
+    return (
+      <AbsoluteFill style={{background: settled.field}}>
+        <CameraView pose={s.camera} size={SIZE}>
+          <FlatFigure pose={s.pose} fill={1} line={null} blocking={s.blocking} />
+        </CameraView>
+      </AbsoluteFill>
+    );
+  }
   const hue = hueOf(s.beat.id);
   const scene = s.crossing ? (
     <Crossing from={worldId(s.crossing.fromWorld)} to={worldId(s.crossing.toWorld)} frame={frame} start={s.crossing.start} length={s.crossing.length} chart={s.heldChart} lead={[56, 0]} blocking={s.blocking} emitter={s.emitter} />

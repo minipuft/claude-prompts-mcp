@@ -30,9 +30,12 @@ export const cameraTransform = (pose: CameraPose, size: FrameSize): string =>
 /** A pose that shows the whole picture unmoved. */
 export const cameraIsLocked = (pose: CameraPose, size: FrameSize): boolean => pose.x === size.width / 2 && pose.y === size.height / 2 && pose.zoom === 1 && pose.rotation === 0;
 
-/** Wraps a scene in the camera's view. A locked camera sets no transform at all: an identity matrix still makes the wrapper a transformed layer, and the browser picks the raster of such a layer by a race (row 4.1). The wrapper is the frame; the scene inside is drawn at full size and moved. */
+/**
+ * Wraps a scene in the camera's view. The composition's own frame clips what the camera moves out of view, so the wrapper sets no `overflow: hidden`: measured (row 4.1)
+ * on frame 1250 of the animatic rendered alone, 8 runs with the clip differed from each other in 631 anti-aliased pixels on 5 of 8 and 0 of 8 without it. A locked camera
+ * sets no transform either (an identity matrix still makes the wrapper a transformed layer). The wrapper is the frame; the scene inside is drawn at full size and moved. */
 export const CameraView = ({pose, size, children}: {pose: CameraPose; size: FrameSize; children: ReactNode}) => {
-  const outer: CSSProperties = {position: 'absolute', left: 0, top: 0, width: size.width, height: size.height, overflow: 'hidden'};
+  const outer: CSSProperties = {position: 'absolute', left: 0, top: 0, width: size.width, height: size.height};
   const inner: CSSProperties = {position: 'absolute', left: 0, top: 0, width: size.width, height: size.height, transformOrigin: '0 0', transform: cameraIsLocked(pose, size) ? undefined : cameraTransform(pose, size)};
   return createElement('div', {style: outer}, createElement('div', {style: inner}, children));
 };

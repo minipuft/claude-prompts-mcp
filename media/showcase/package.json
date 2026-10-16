@@ -15,6 +15,7 @@
     "check:animation-boundary": "node scripts/animation/check-boundary.mjs",
     "timeline": "node scripts/animation/compile-timeline.mjs",
     "light": "node scripts/animation/compile-light.mjs",
+    "roles": "node scripts/animation/compile-roles.mjs",
     "animatic": "remotion render src/index.ts Animatic65 out/animatic-01.mp4 --codec=h264 --scale=0.5 --concurrency=4",
     "xsheet": "node scripts/animation/xsheet.mjs",
     "joints": "node scripts/animation/joints.mjs",

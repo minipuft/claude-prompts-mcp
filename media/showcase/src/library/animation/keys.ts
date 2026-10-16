@@ -76,3 +76,25 @@ export const listBreakdowns = (sheet: KeySheet): {between: [string, string]; fra
   });
   return out;
 };
+
+/**
+ * What a holds-only animatic draws on `frame` (shot-local, on twos): each key is on screen for exactly the hold it declares, then the next key is drawn from that frame on (the move
+ * between two keys is not drawn: no inbetweens). A key that declares no hold stays until the next key's own frame. So `rest` with `hold: 24` is 24 frames, not the 36 until the
+ * key after it, and the exposure sheet and the hold-band probe read the same duration. The pop frames are even (twos); a declared hold is never longer than the gap to the next key.
+ */
+export const heldDrawing = (sheet: KeySheet, frame: number): {key: NamedKey; next: NamedKey | null; start: number; info: FrameInfo} => {
+  const keys = [...sheet.keys].sort((p, q) => p.frame - q.frame);
+  const shownFrom: number[] = [];
+  keys.forEach((k, i) => {
+    if (i === 0) return void shownFrom.push(k.frame);
+    const prev = keys[i - 1]!;
+    shownFrom.push(prev.hold === undefined ? k.frame : Math.min(k.frame, quantise(shownFrom[i - 1]! + prev.hold, 2)));
+  });
+  const f = quantise(frame, 2);
+  let index = 0;
+  shownFrom.forEach((from, i) => {
+    if (from <= f) index = i;
+  });
+  const key = keys[index]!, next = keys[index + 1] ?? null, start = shownFrom[index]!;
+  return {key, next, start, info: {phase: f === start ? 'key' : 'hold', from: key.name, to: next?.name ?? null, favour: null}};
+};

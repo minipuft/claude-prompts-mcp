@@ -128,13 +128,15 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("timeline"); ap.add_argument("blocking_dir"); ap.add_argument("--ledger", default=None)
     ap.add_argument("--exempt", default="world", help="comma-separated pseudo-actors that need no position"); ap.add_argument("--json", default=None)
+    ap.add_argument("--shot", default=None, help="check one shot's beats only")
     a = ap.parse_args(); exempt = set(filter(None, a.exempt.split(",")))
     pr = Probe("blocking-contract", a.json)
     tl0, ledger0, block0, cases = planted()
     clean = [c for c in check_blocking(tl0, ledger0, block0, exempt)[0] if not c[1]]
     tripped = {n: [c for c in check_blocking(tl0, ledger0, b, exempt)[0] if not c[1]] for n, b in cases.items()}
     pr.control(not clean and all(tripped.values()), "; ".join(f"{n} -> {'FAIL (' + v[0][0] + ')' if v else 'NOT REFUSED'}" for n, v in tripped.items()) + f"; clean fixture -> pass ({len(clean)} failures)")
-    tl = load_timeline(a.timeline); raw = tl["source"]
+    tl, _, _, shot_note = apply_shot(a, load_timeline(a.timeline)); raw = tl["source"]
+    if shot_note: pr.note(shot_note)
     lp = a.ledger or raw.get("ledger") or next((b.get("ledgerPath") for b in tl["beats"] if b.get("ledgerPath")), None) or os.path.join(os.path.dirname(os.path.abspath(a.timeline)), "beats-v2.json")
     ledger = read_json(lp, "ledger")
     blocks = load_blocks(a.blocking_dir)

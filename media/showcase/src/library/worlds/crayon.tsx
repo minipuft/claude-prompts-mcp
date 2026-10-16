@@ -124,6 +124,8 @@ const FULL: Box = {x: 0, y: 0, width: W, height: H};
  */
 const baked = new Map<string, string>();
 const BAKED_LIMIT = 48;
+/** The decoded images behind the bitmaps (see `rasterise`), released with them. */
+const kept = new Map<string, HTMLImageElement>();
 
 const rasterise = (uri: string): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -133,7 +135,15 @@ const rasterise = (uri: string): Promise<string> =>
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
       canvas.getContext('2d')!.drawImage(img, 0, 0);
-      canvas.toBlob((blob) => (blob ? resolve(URL.createObjectURL(blob)) : reject(new Error('crayon noise: toBlob gave no bitmap'))), 'image/png');
+      canvas.toBlob((blob) => {
+        if (!blob) return reject(new Error('crayon noise: toBlob gave no bitmap'));
+        const url = URL.createObjectURL(blob);
+        // The filter's feImage fetches the blob URL itself, after this draw is committed, and fires no load event. Loading and decoding it here first puts it in the
+        // browser's image cache, so the frame is not captured before the filter has its picture (a late picture was a partly drawn hatch on the first frame of a tab).
+        const warm = new Image();
+        warm.src = url;
+        warm.decode().then(() => (kept.set(url, warm), resolve(url)), reject);
+      }, 'image/png');
     };
     img.onerror = () => reject(new Error('crayon noise: the SVG image did not load'));
     img.src = uri;
@@ -154,6 +164,7 @@ const remember = (uri: string, bitmap: string, keep: Set<string>): void => {
     if (baked.size <= BAKED_LIMIT) break;
     if (keep.has(old)) continue;
     baked.delete(old);
+    kept.delete(url);
     URL.revokeObjectURL(url);
   }
 };

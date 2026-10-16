@@ -43,6 +43,8 @@ export const RemotionRoot = () => <>
   <Composition id="LayoutSheetS01" component={LayoutSheet} width={1280} height={720} fps={30} durationInFrames={1} defaultProps={{layout: s01Layout as unknown as LayoutContract}}/>
   <Composition id="PoseSheetS02" component={PoseSheet} width={1280} height={720} fps={30} durationInFrames={1} defaultProps={{sheet: parseKeySheet(s02Keys)}}/>
   <Composition id="Animatic65" component={Animatic} width={1280} height={720} fps={timeline.fps} durationInFrames={timeline.durationInFrames}/>
+  <Composition id="Animatic65Figure" component={Animatic} width={1280} height={720} fps={timeline.fps} durationInFrames={timeline.durationInFrames} defaultProps={{layers: 'figure' as const}}/>
+  <Composition id="Animatic65FigureLine" component={Animatic} width={1280} height={720} fps={timeline.fps} durationInFrames={timeline.durationInFrames} defaultProps={{layers: 'figure-line' as const}}/>
   <Composition id="PoseSheetS01" component={PoseSheetS01} width={2400} height={1190} fps={30} durationInFrames={1} defaultProps={{sheet: parseKeySheet(s01Keys), plates: s01Plates.map((k): PlateInfo => ({key: k.key, name: k.name, plate: k.plate, family: k.family, cropPx: [k.cropPx[0]!, k.cropPx[1]!], baselineInCrop: k.baselineInCrop, scale: k.scale, originMask: [k.originMask[0]!, k.originMask[1]!]}))}}/>
   <Composition id="KeyFilmS01" component={KeyFilmS01} width={KEY_FILM.size[0]} height={KEY_FILM.size[1]} fps={30} durationInFrames={9}/>
   <Composition id="ShotS01" component={ShotS01} width={1280} height={720} fps={30} durationInFrames={420}/>

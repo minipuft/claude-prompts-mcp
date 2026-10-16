@@ -17,16 +17,18 @@ import lightFile from '../../v3/light.json';
 import timelineFile from '../../v3/timeline.json';
 import {blockingAt, blockingTrack, emitterPointAt, parseBlocking, type Blocking} from '../library/animation/blocking';
 import {cameraAt, cameraFromLayout, lockedCamera, type Camera, type CameraPose} from '../library/animation/camera';
-import {describeFrame, parseKeySheet, type FrameInfo, type KeySheet} from '../library/animation/keys';
+import {heldDrawing, parseKeySheet, type FrameInfo, type KeySheet} from '../library/animation/keys';
 import {coversTimeline, emitterIntensityAt, lightAt, lightTrack, lightTrackFromContract, parseLightContract} from '../library/animation/light';
 import {beatAt, crossingAt, type CrossingWindow, type Timeline, type TimelineBeat} from '../library/animation/timeline';
-import {quantise, sample, type Key, type Track} from '../library/animation/track';
-import {crossingPhase, type XState} from '../library/animation/xsheet';
+import type {Key} from '../library/animation/track';
+import {crossingPhase, emitterStrength, type XState} from '../library/animation/xsheet';
 import {liftChart, liftPose} from '../library/cast/humanPose';
 import type {Joints, PoseChart} from '../library/motion';
 import {hueOf} from './lightPlan';
 
 export const SIZE = {width: 1280, height: 720};
+/** The emitter's glow radius in stage pixels. The eye trace (C29) ranks the brightest 0.5 % of the frame's pixels; a glow smaller than that share, with the props drawn over half of it, leaves the rest of the ranking to whatever else is lit and the centroid wanders (row 4.2: 65 % off at the start of the shaded beat at 170). */
+const EMITTER_RADIUS = 260;
 export const timeline = timelineFile as unknown as Timeline;
 
 const blockingByBeat: Record<string, Blocking> = Object.fromEntries(
@@ -94,16 +96,25 @@ const buildCamera = (): Camera => {
     }
     let j = i;
     while (timeline.beats[j + 1] && blockingByBeat[timeline.beats[j + 1]!.id]?.shot === shot) j++;
-    cameraFromLayout(layout, SIZE, {span: [beat.start, timeline.beats[j]!.end]}).keys.forEach(push);
+    // The move ends where the next crossing begins and the camera is locked again by the line phase of that crossing (its middle third): the line world is read as a closed outline
+    // (C23), and a camera still panning there put the figure's boots below the frame (row 4.4: on 23 of 142 line-phase frames, all in the crossing out of s02).
     const next = timeline.beats[j + 1];
-    if (next) push({frame: next.crossingIn?.[1] ?? next.start, value: locked, ease: 'smooth'});
+    const crossing = next?.crossingIn;
+    // The camera leads the light, so it starts to move where the light does: the first beat of the shot whose blocking emitter travels. A light that sits still (s02's dial lost on the floor) keeps
+    // the camera still, and a move that began with the shot panned the dial out of the bottom of the frame before the beat ended (row 4.2: it left the frame at about 540 of cant-build's 420-630).
+    const travelling = timeline.beats.slice(i, j + 1).find((b) => {
+      const e = blockingByBeat[b.id]?.emitter;
+      return e && (e.start[0] !== e.end[0] || e.start[1] !== e.end[1]);
+    });
+    const moveStart = travelling?.start ?? beat.start;
+    if (moveStart > beat.start) push({frame: beat.start, value: locked, ease: 'smooth'});
+    cameraFromLayout(layout, SIZE, {span: [moveStart, Math.min(timeline.beats[j]!.end, crossing?.[0] ?? Infinity)]}).keys.forEach(push);
+    if (next) push({frame: crossing ? Math.round(crossing[0] + (crossing[1] - crossing[0]) / 3) : next.start, value: locked, ease: 'smooth'});
     i = j + 1;
   }
   return {keys};
 };
 const camera = buildCamera();
-
-const poseTrack = (sheet: KeySheet): Track<{name: string; joints: Joints}> => ({keys: sheet.keys.map((k) => ({frame: k.frame, value: {name: k.name, joints: k.joints}}))});
 
 export type FrameState = {
   frame: number;
@@ -116,10 +127,12 @@ export type FrameState = {
   emitter: {x: number; y: number; radius: number; color: string; intensity: number};
   /** The beat-local frame the key sheet is read at. */
   local: number;
-  /** The pose held on this frame (animatic: holds only) and the single-key chart that holds it. */
+  /** The pose held on this frame (animatic: holds only, each key for exactly the hold it declares) and the single-key chart that holds it. */
   pose: Joints;
   heldChart: PoseChart;
   drawing: string;
+  /** The beat-local frame the drawing on this frame came on (a key's pop frame). */
+  drawnFrom: number;
   chart: FrameInfo;
   sheet: KeySheet;
 };
@@ -130,8 +143,9 @@ export const frameState = (frame: number): FrameState => {
   const own = shot ? keySheets[shot] : undefined;
   const sheet = own ?? placeholderSheet;
   const local = frame - (own ? shotStart(beat) : beat.start);
-  const held = sample(poseTrack(sheet), local, {quantise: 'twos'});
-  const blocking = blockingAt(blockingOnTimeline, frame);
+  const held = heldDrawing(sheet, local);
+  // The figure's placement (scale, x, y) is part of its drawing: it steps at a cut with the pose and never eases like a prop does, so the drawn layer changes only where the exposure sheet has a key.
+  const blocking = {...blockingAt(blockingOnTimeline, frame), figure: blockingByBeat[beat.id]!.figure};
   const colour = lightAt(light, frame);
   const spot = contract ? emitterPointAt(blockingByBeat[beat.id]!, beat, frame) : null;
   return {
@@ -143,15 +157,16 @@ export const frameState = (frame: number): FrameState => {
     emitter: {
       x: spot?.x ?? blocking.join.x,
       y: spot?.y ?? blocking.join.y,
-      radius: 170,
+      radius: EMITTER_RADIUS,
       color: colour,
       intensity: contract ? emitterIntensityAt(contract, beat.id, frame) : 0.9,
     },
     local,
-    pose: held.joints,
-    heldChart: {keys: [{frame: 0, joints: held.joints}]},
-    drawing: held.name,
-    chart: describeFrame(sheet, Math.max(0, quantise(local, 2))),
+    pose: held.key.joints,
+    heldChart: {keys: [{frame: 0, joints: held.key.joints}]},
+    drawing: held.key.name,
+    drawnFrom: held.start,
+    chart: held.info,
     sheet,
   };
 };
@@ -159,7 +174,7 @@ export const frameState = (frame: number): FrameState => {
 /** The state of a frame as the exposure sheet reads it. */
 export const xstateOf = (frame: number): XState => {
   const s = frameState(frame);
-  const key = s.chart.phase === 'key' && s.sheet.keys.some((k) => k.name === s.chart.from && k.frame === s.local) ? s.chart.from : null;
+  const key = s.local === s.drawnFrom ? s.chart.from : null;
   return {
     frame,
     beat: s.beat.id,
@@ -168,7 +183,7 @@ export const xstateOf = (frame: number): XState => {
     drawing: s.drawing,
     chart: {phase: s.chart.phase, favour: s.chart.favour, to: s.chart.to},
     camera: s.camera,
-    emitter: s.emitter.intensity > 0 ? {x: s.emitter.x, y: s.emitter.y, hex: s.emitter.color} : null,
+    emitter: s.emitter.intensity > 0 ? {x: s.emitter.x, y: s.emitter.y, hex: s.emitter.color, strength: emitterStrength(frame, s.crossing ?? null)} : null,
     key,
     hold: key ? (s.sheet.keys.find((k) => k.name === key)?.hold ?? null) : null,
   };

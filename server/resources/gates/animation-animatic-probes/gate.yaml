@@ -19,6 +19,10 @@ pass_criteria:
       - --second-frames
       - out/animatic-seq-b
       - --subset
+      - --figure-frames
+      - out/animatic-fig-seq
+      - --figure-line-frames
+      - out/animatic-figline-seq
     shell_timeout: 600000
     shell_working_dir: ../media/showcase
     shell_max_attempts: 1

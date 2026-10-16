@@ -40,6 +40,21 @@ const lift = ([x, y]: [number, number]): [number, number] => [W / 2 + (x - W / 2
 const FLOOR_Z = {far: -1100, near: 950, step: 150, half: 2400, spacing: 160};
 /** Brightness of the three gate rings: the ring the human made last (nearest the figure, the third) is the brightest. */
 const GATE_LIGHT = [0.38, 0.62, 1];
+/** How far (stage px) the light reaches on a gate before it falls to nothing: a little over half the gap between two gates (85-90), so only the ring the light is at, or nearly at, is lit. */
+const GATE_REACH = 60;
+/** Share of its resting brightness a gate keeps when the light is not at it. */
+const GATE_DIM = 0.25;
+/**
+ * The ring's brightness. With no light given (the world sheet, a stand-alone scene) it is the resting `GATE_LIGHT`. With the beat's emitter given, a gate is at its resting brightness only
+ * where the light is: `GATE_DIM` of it with the emitter a reach or more away, rising to all of it under the emitter. The light the human made last is the brightest only when it is the one lit;
+ * otherwise the third ring (resting brightness 1, white-hot with its bloom) outshines the light that is walking toward it, and the eye (C29) goes to the ring and not to the emitter.
+ */
+const gateLight = (i: number, gateX: number, emitterX: number | undefined): number => {
+  const rest = GATE_LIGHT[i] ?? 1;
+  if (emitterX === undefined) return rest;
+  const near = Math.max(0, 1 - Math.abs(emitterX - gateX) / GATE_REACH);
+  return rest * (GATE_DIM + (1 - GATE_DIM) * near);
+};
 
 const toonGradient = (steps: number): DataTexture => {
   const data = Uint8Array.from({length: steps}, (_, i) => Math.round(255 * (0.3 + (0.7 * i) / Math.max(1, steps - 1))));
@@ -184,7 +199,7 @@ const ShadedFigure: React.FC<{pose: Joints; fill: number; line: ReturnType<typeo
   );
 };
 
-const Architecture: React.FC<{fill: number; reduce: number; edge: string; lineHex: string; lw: number; gradient: DataTexture; bloom?: Bloom; parts: PropsPart[]; blocking: Blocking}> = ({fill, reduce, edge, lineHex, lw, gradient, bloom, parts, blocking}) => {
+const Architecture: React.FC<{fill: number; reduce: number; edge: string; lineHex: string; lw: number; gradient: DataTexture; bloom?: Bloom; parts: PropsPart[]; blocking: Blocking; lightX?: number}> = ({lightX, fill, reduce, edge, lineHex, lw, gradient, bloom, parts, blocking}) => {
   const {x, y, width: w, height: h} = blocking.frame;
   const ring = useMemo(() => {
     const r = frameRings(w, h);
@@ -226,7 +241,7 @@ const Architecture: React.FC<{fill: number; reduce: number; edge: string; lineHe
         </group>
       )}
       {parts.includes('gates') &&
-        blocking.gates.map((g, i) => <Gate key={i} g={g} light={GATE_LIGHT[i] ?? 1} fill={fill} reduce={reduce} edge={edge} lineHex={lineHex} lw={lw} gradient={gradient} bloom={bloom} />)}
+        blocking.gates.map((g, i) => <Gate key={i} g={g} light={gateLight(i, g.x, lightX)} fill={fill} reduce={reduce} edge={edge} lineHex={lineHex} lw={lw} gradient={gradient} bloom={bloom} />)}
     </>
   );
 };
@@ -256,7 +271,7 @@ export const ShadedScene: React.FC<SceneProps> = ({frame, pose, emitter, reduce 
         <Lights />
         {parts.includes('floor') && <Floor strength={1 - r} floorY={blocking.floor.y} colour={edge} lw={lw} />}
         <ShadedFigure pose={pose} fill={1 - r} line={line} steps={steps} turn={TURN.figure * (1 - r)} bloom={bloom} light={light} figure={blocking.figure} />
-        <Architecture fill={1 - r} reduce={r} edge={edge} lineHex={lineColour(contracts.line)} lw={lw} gradient={gradient} bloom={bloom} parts={parts} blocking={blocking} />
+        <Architecture fill={1 - r} reduce={r} edge={edge} lineHex={lineColour(contracts.line)} lw={lw} gradient={gradient} bloom={bloom} parts={parts} blocking={blocking} lightX={emitter?.x} />
       </ThreeCanvas>
       <PropsStack contract={c} lineWorld={contracts.line} reduce={r} native={native} frame={frame} parts={['companions']} blocking={blocking} />
     </Stage>

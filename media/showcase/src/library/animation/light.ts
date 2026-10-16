@@ -131,6 +131,26 @@ export const hslPath = (a: string, b: string, n = 5): string[] => {
   });
 };
 
+/** Rec. 709 luma of a #rrggbb on 0-255 in sRGB, the ranking `probe-eyetrace.py` ranks pixels by (C29). */
+export const lumaOf = (c: string): number => {
+  const [r, g, b] = hex(c);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+
+/** `c` lightened at its own hue and HSL saturation to the least lightness whose luma reaches `target` (white if none does). The hue is the pair's, so C24 still holds; only the lightness moves. */
+export const liftToLuma = (c: string, target: number): string => {
+  if (lumaOf(c) >= target) return c;
+  const [h, sat, l] = toHsl(c);
+  if (lumaOf(fromHsl(h, sat, 1)) < target) return '#ffffff';
+  let lo = l, hi = 1;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (lumaOf(fromHsl(h, sat, mid)) >= target) hi = mid;
+    else lo = mid;
+  }
+  return fromHsl(h, sat, hi);
+};
+
 export type LightInputs = {
   beats: TimelineBeat[];
   crossings: {from: string; to: string; start: number; end: number}[];
@@ -145,6 +165,12 @@ export type LightInputs = {
   hueTolerance?: number;
   /** Frames between one beat's emitter going off and the next one's coming on (C18: 2-4). Default 2. */
   handoff?: number;
+  /**
+   * The least luma (0-255) an emitter's core draws at: its colour times its intensity. The light is the subject (C6, D44) and the eye trace (C29) finds the brightest region outside the
+   * fixed role fills, so a Turrell blue (luma 78) or a steel (33) that the garment, the frame's contour or a crayon speck outshines is not read as the light. A colour below
+   * `floor / intensity` is lifted at its own hue (`liftToLuma`); an intensity too low for even white to reach the floor is raised to the least that can (never above 1). Default 0: no floor.
+   */
+  luminanceFloor?: number;
 };
 
 const round4 = (v: number): number => Math.round(v * 10000) / 10000;
@@ -169,19 +195,23 @@ export const compileLight = (input: LightInputs): LightContract => {
       const namesAccent = /accent/i.test(b.effects.radiance ?? '');
       const stand = world.colour && hueDistance(hueOfHex(world.colour), hueOfHex(pair.accent)) <= tol ? world.colour : pair.accent;
       const next = beats[i + 1];
+      const floor = input.luminanceFloor ?? 0;
+      const intensity = Math.max(/\btiny\b/i.test(b.effects.emitter ?? '') ? 0.5 : 0.9, floor > 0 ? Math.min(1, (floor / 255) * 1.05) : 0);
+      const colour = floor > 0 ? liftToLuma(namesAccent ? stand : pair.radiance, floor / intensity) : namesAccent ? stand : pair.radiance;
       entry.emitter = {
         anchor: path.anchor,
         start: [round4(path.start[0] / size.width), round4(path.start[1] / size.height)],
         end: [round4(path.end[0] / size.width), round4(path.end[1] / size.height)],
-        intensity: /\btiny\b/i.test(b.effects.emitter ?? '') ? 0.5 : 0.9,
-        colour: namesAccent ? stand : pair.radiance,
+        intensity: Math.round(intensity * 1000) / 1000,
+        colour,
         on: b.start,
         off: next && hasEmitter(next) ? b.end - handoff : b.end,
       };
     }
     out.beats[b.id] = entry;
   });
-  const colourOf = (id: string): string => out.beats[id]!.emitter?.colour ?? out.beats[id]!.pair.radiance;
+  // a beat with no emitter still has a colour for the crossings around it: its pair's radiance, lifted to the floor like the lit beats' so a crossing never walks from a lifted colour to an unlifted one
+  const colourOf = (id: string): string => out.beats[id]!.emitter?.colour ?? ((input.luminanceFloor ?? 0) > 0 ? liftToLuma(out.beats[id]!.pair.radiance, input.luminanceFloor! / 0.9) : out.beats[id]!.pair.radiance);
   for (const x of input.crossings) out.crossings.push({from: x.from, to: x.to, frames: [x.start, x.end], path: hslPath(colourOf(x.from), colourOf(x.to))});
   return out;
 };

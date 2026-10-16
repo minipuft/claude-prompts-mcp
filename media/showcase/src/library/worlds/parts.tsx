@@ -30,7 +30,7 @@ export const Stage: React.FC<{field: string; shift?: [number, number]; children:
  * caller's (the animatic reads it from the beat's blocking emitter path, start to end across the beat) or, when none is given, the touch point;
  * the mask is centred on whichever it is, so a light that moves with the blocking is never clipped away from where it sits.
  */
-const glowMask = (light: Emitter) => ({x: light.x - 100, y: light.y - 80, width: 200, height: 160});
+const glowMask = (light: Emitter) => ({x: light.x - 0.6 * light.radius, y: light.y - 0.5 * light.radius, width: 1.2 * light.radius, height: light.radius}); // 200 x 160 at the radius of 170 the contracts use
 export const JoinGlow: React.FC<{contract: WorldContract; emitter?: Emitter; opacity?: number; blocking?: Blocking}> = ({contract, emitter, opacity = 1, blocking = STAGE}) => {
   if (!contract.radiance.on || opacity <= 0) return null;
   const light = joinEmitter(contract, emitter, blocking);

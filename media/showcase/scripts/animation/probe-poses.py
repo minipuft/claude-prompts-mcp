@@ -9,7 +9,9 @@ Directory mode: for every v3/charts/<shot>.json with a rig actor, v3/poses/<shot
 Per shot, each failing item is its own line naming the key or breakdown; a category with nothing wrong prints one ok line. H = the pose sheet's heightPx.
   keys           every chart key has a pose entry with the same name and frame (and the key sheet has it on that frame); every pose key has a `moment`.
   line of action the key sheet's joints, measured by the spine fit (probe_common.spine_curve, the formula of spineCurve in src/library/animation/pose.ts),
-                 read as the declared class. Measured bow at least 0.06 unless the key declares class I and its moment says why (words: because, so that,
+                 read as the declared class, and on the declared SIDE: `sign` is +1 when the spine bows toward the left-hand normal of the root-to-head chord (for an S, the side
+                 of its first lobe from the root), -1 on the other; a measured sign opposite the declared one is its own line, named `<key>/sign` (a key declared class I is not
+                 judged on side: a straight spine has none). Measured bow at least 0.06 unless the key declares class I and its moment says why (words: because, so that,
                  deliberate, stiff, rigid, frozen, locked).
   twinning       twinning score at most 0.7 unless the key carries twinned.why.
   weight         a weight foot is declared, and the root's x sits between the ankles, within 25 percent of the stance width of where `over` puts it
@@ -24,7 +26,8 @@ Per shot, each failing item is its own line naming the key or breakdown; a categ
                  drawings (C28); at most one `anticipation` (a drawing before the from-key along the chord, -0.15 to -0.05; the sheet stores its favour positive and the drawing sits
                  at -0.25 x favour, so favour 0.2-0.6), at most one `overshoot` (1.05-1.15, favour 0.2-0.6 the same way) and at most one `settle` (0.9 or more); `passing` drawings
                  at 0.25-0.75 and rising; by frame anticipation < passing < overshoot < settle; no breakdown inside the hold; no two drawings on one frame. `parsePoseSheet` refuses the same.
-Control first (synthetic sheets, fixtures/make.py pose_fixture): a straight spine declared S is refused on line of action; mirrored limbs with no twinned.why are
+Control first (synthetic sheets, fixtures/make.py pose_fixture): a straight spine declared S is refused on line of action; a spine mirrored to the other side of its chord and still
+declared the original sign is refused on line of action (by name, `A/sign`), the same mirrored spine declared the other sign is accepted; mirrored limbs with no twinned.why are
 refused on twinning; a long move whose only breakdown is a favour is refused on breakdowns; a 10-drawing move and a passing drawing at 0.10 are refused on timing shape;
 a clean sheet (a move of anticipation, passing, overshoot, settle) is accepted on every check.
 Exit 0 pass, 1 fail, 2 input error or a control that did not trip.
@@ -85,6 +88,9 @@ def check_shot(poses, keys, chart, joints="keys"):
         res["line of action"].append((name, bool(got["class"] == loa["class"]),
                                       f'key "{name}": declared line of action {loa["class"]}, the key sheet draws {got["class"]} (bow {got["bow"]:.3f} of the figure, sign {got["sign"]:+d}'
                                       f'{", crosses at %.2f" % got["inflection"] if "inflection" in got else ""})'))
+        side_ok = loa["class"] == "I" or got["class"] == "I" or got["sign"] == loa.get("sign")
+        res["line of action"].append((name + "/sign", side_ok, f'key "{name}": the spine bows to side {got["sign"]:+d} (class {got["class"]}, bow {got["bow"]:.3f}) and the key declares side {loa.get("sign", 0):+d}: a bow on the wrong side of the chord' if not side_ok
+                                      else f'key "{name}": side {got["sign"]:+d} as declared' if loa["class"] != "I" else f'key "{name}": declared straight, no side to judge'))
         stiff = loa["class"] == "I" and bool(WHY.search(p.get("moment", "")))
         res["line of action"].append((name + "/bow", got["bow"] >= BOW_MIN or stiff,
                                       f'key "{name}": the spine bows {got["bow"]:.3f} of the figure, under {BOW_MIN}' + (" (declared straight, and the moment says why)" if stiff else " and the key does not declare a stiff line with a reason") if got["bow"] < BOW_MIN else f'key "{name}": bow {got["bow"]:.3f}'))
@@ -195,15 +201,18 @@ def family_control():
 
 
 def control(pr, joints="keys"):
-    out = {k: check_shot(*make.pose_fixture(k)) for k in ("clean", "straight-s", "twin", "favour-only", "ten-drawings", "early-passing", "lead-lag")}
+    out = {k: check_shot(*make.pose_fixture(k)) for k in ("clean", "straight-s", "twin", "favour-only", "ten-drawings", "early-passing", "lead-lag", "wrong-sign", "mirrored-declared")}
+    sign_text = next((t for i, ok, t in out["wrong-sign"]["line of action"] if not ok), None)
     sok, stext = solved_control() if joints == "solved" else (True, "")
     fok, ftext = family_control()
-    only = {"straight-s": "line of action", "twin": "twinning", "favour-only": "breakdowns", "ten-drawings": "timing shape", "early-passing": "timing shape", "lead-lag": "lead arm"}
-    ok = fok and sok and not failed(out["clean"]) and all(failed(out[k]) == {c} for k, c in only.items())
+    only = {"straight-s": "line of action", "twin": "twinning", "favour-only": "breakdowns", "ten-drawings": "timing shape", "early-passing": "timing shape", "lead-lag": "lead arm", "wrong-sign": "line of action"}
+    ok = fok and sok and not failed(out["clean"]) and not failed(out["mirrored-declared"]) and all(failed(out[k]) == {c} for k, c in only.items()) \
+        and sign_text is not None and "/sign" not in sign_text and "wrong side" in sign_text and [i for i, ok_, t in out["wrong-sign"]["line of action"] if not ok_] == ["A/sign"]
     clean = out["clean"]["timing shape"][0][2]
     pr.control(ok, f"a straight spine declared S -> FAIL ({sorted(failed(out['straight-s']))}); mirrored limbs with no twinned.why -> FAIL ({sorted(failed(out['twin']))}); "
                    f"a long move with only a favour -> FAIL ({sorted(failed(out['favour-only']))}); a 10-drawing move -> FAIL ({sorted(failed(out['ten-drawings']))}: {out['ten-drawings']['timing shape'][0][2].split('; ', 1)[-1]}); "
                    f"a passing drawing at 0.10 -> FAIL ({sorted(failed(out['early-passing']))}: {out['early-passing']['timing shape'][0][2].split('; ', 1)[-1]}); "
+                   f"a spine mirrored to the other side of its chord, declared the original side -> FAIL ({sorted(failed(out['wrong-sign']))}: {sign_text}); the same mirrored spine declared the other side -> pass; "
                    f"a lead-arm joint declared as a lagging secondary -> FAIL ({sorted(failed(out['lead-lag']))}: {out['lead-lag']['lead arm'][0][2]}); "
                    f"a clean sheet -> pass on {len(out['clean'])} checks ({clean})" + (f"; {stext}" if stext else "") + f"; {ftext}")
 
