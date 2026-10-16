@@ -326,3 +326,10 @@ The integration driver gained `isAlive`, `liveAtLaunch` (earlier PIDs still aliv
 ### T4.2 accepted (2026-10-15)
 
 Runner `server/tests/e2e/claims-conformance.test.ts`; the phase-guard answer is anchored once and aliased. The YAML driver reads text only, so abort asserts the cancelled text, not `run_control` (T4.1 covers the packet). Finding: the paused-run guard is also what makes resume mean "clear the pause" — without it a resume falls into the pipeline and advances. **DEV-T4-1 (planner):** T4.3 is dispatched directly rather than through `>>documentation_change`, because the accepted rows fix every fact the docs state; the brief carries the docs standards.
+
+### T4.1a and T4.1b accepted (2026-10-15)
+
+`answerConversationControl` answers a pause/resume control by the store unless the call is a resume with an empty chain_id or one that peeks a live run: terminal runs refuse `run-terminal`, unheld ids refuse `unknown-session`, both with isError and a refused packet. A completed run's row is pruned at the replacement's startup, so after a restart it is absent from storage, not just memory.
+
+- **DEV-T4-2 (planner):** T4.1a's brief checked only the unit suite, and its change left T4.1's live-handoff integration case red (it still expected the ordinary "already complete" reply); T4.1b found it and fixed the assertion inside its own bound. A row changing a reply that an integration case pins needs that integration file in its own check.
+- **Accepted:** a resume carrying a chain_id this process does not hold is refused even if another live process owns it — recovery across processes goes through `claim_token`.

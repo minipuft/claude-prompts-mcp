@@ -1024,6 +1024,30 @@ describe('PromptEngine Validation', () => {
       }
     );
 
+    test.each(['pause', 'resume'] as const)(
+      '%s of a chain id no run holds is refused as unknown-session, never answered by the pipeline',
+      async (action) => {
+        const execute = stubPipeline();
+        const result = await control(action);
+        expect(result.isError).toBe(true);
+        expect(result.content[0]!.text).toContain('Control Not Applied');
+        expect(result.content[0]!.text).not.toContain('already complete');
+        expect(result.structuredContent?.['conversation_control']).toMatchObject({
+          outcome: 'refused',
+          refusal: { reason: 'unknown-session' },
+        });
+        expect(execute).not.toHaveBeenCalled();
+      }
+    );
+
+    test('a bare resume with no chain id still reaches the pipeline', async () => {
+      const execute = stubPipeline();
+      const resume = jest.spyOn(store(), 'resumeConversation');
+      await engine.executePromptCommand({ gate_action: 'resume' }, {});
+      expect(execute).toHaveBeenCalledWith(expect.objectContaining({ gate_action: 'resume' }));
+      expect(resume).not.toHaveBeenCalled();
+    });
+
     test('resume of a live run that is not paused still reaches the pipeline', async () => {
       await store().createSession(RUN, CHAIN, 2);
       const execute = stubPipeline();

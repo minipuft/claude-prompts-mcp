@@ -648,7 +648,7 @@ export class PromptExecutor {
   /**
    * Refuse `pause`/`resume` carrying work — the in-process twin of the schema's control rule, as
    * stage 04's `collectSourceConflicts` is of source exclusivity — then answer `pause`, and a
-   * `resume` naming a terminal run. Any other lone `resume` falls through to
+   * `resume` naming a terminal or unheld run. Any other lone `resume` falls through to
    * {@link answerPausedTarget}, else to its blocking-unknown meaning.
    */
   private async answerConversationControl(
@@ -669,10 +669,11 @@ export class PromptExecutor {
     if (action === 'pause' && chainId.length === 0)
       return this.textError('❌ `gate_action:"pause"` requires `chain_id`: the run to pause.');
     const session = this.peekRun(chainId.length > 0 ? chainId : undefined, sdkExtra);
-    // A lone `resume` of a live run is not answered here; only a terminal run is, so the store
-    // refuses it as it refuses `pause`, rather than the ordinary completed-run reply (isError false).
-    if (action === 'resume' && (session === undefined || !isTerminalRunStatus(session.runStatus)))
-      return undefined;
+    // A lone `resume` of a live run is not answered here. A terminal run, or one this process does
+    // not hold (unknown id, or a finished run no longer in memory), is: the store refuses it as it
+    // refuses `pause`, rather than the ordinary completed-run reply (isError false).
+    const livePeeked = session !== undefined && !isTerminalRunStatus(session.runStatus);
+    if (action === 'resume' && (chainId.length === 0 || livePeeked)) return undefined;
     const exact = this.controlScope(this.resolveRequestScope(sdkExtra));
     const target = session?.sessionId ?? chainId;
     const result =

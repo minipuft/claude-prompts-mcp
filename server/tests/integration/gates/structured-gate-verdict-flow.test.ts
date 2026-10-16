@@ -1461,6 +1461,30 @@ describe.each(['stdio', 'http'] as const)(
       traceRecovery('stop-old-first cold load', fx.pids);
     }, 180000);
 
+    test('a completed run, after the process restarts, refuses pause and resume as a control instead of answering "complete"', async () => {
+      const { fx, engine, owed } = await pausedReview('pause-proof-a');
+      expect((await engine({ gate_action: 'resume' })).isError).toBe(false);
+      const review = Object.values(owed.facts.state.reviews ?? {})[0]!;
+      expect((await engine({ gate_verdict: submitted(issuedReport(review)) })).isError).toBe(false);
+      expect(issuedState(fx.runtimeRoot, fx.chainId).status).toBe('completed');
+      const replaced = await fx.replace();
+      expect(replaced.liveAtLaunch).toEqual([]);
+      for (const gate_action of ['resume', 'pause'] as const) {
+        const reply = await engine({ gate_action });
+        if (process.env['PAUSE_PROOF_RECORD'] !== undefined)
+          appendFileSync(
+            process.env['PAUSE_PROOF_RECORD'],
+            JSON.stringify({ transport, gate_action, isError: reply.isError, text: reply.text }) +
+              '\n'
+          );
+        expect(reply.isError).toBe(true);
+        expect(reply.text).toContain('Control Not Applied');
+        expect(reply.text).not.toContain('already complete');
+        expect(controlPacket(reply)?.outcome).toBe('refused');
+      }
+      traceRecovery('completed run after restart', fx.pids);
+    }, 180000);
+
     test('conversation pause, default launch (scope from cwd), stop-old-first: custody acknowledged, still paused, successor returned', async () => {
       const context = await pausedReview(CWD_SCOPE);
       const { fx, snapshot, packet, token } = context;
@@ -1489,12 +1513,13 @@ describe.each(['stdio', 'http'] as const)(
         },
       });
       controlPacket(aborted);
-      // Ordinary terminal guards win: resume and claim reach no pause record on a cancelled run.
+      // A terminal run is refused as a control (`run-terminal`): resume and claim reach no pause record.
       const cancelled = runSnapshot(fx.runtimeRoot, fx.chainId);
       expect(cancelled.facts.status).toBe('cancelled');
       const after = await engine({ gate_action: 'resume' });
-      expect(after.text).toContain('Status: cancelled');
-      expect(controlPacket(after)).toBeUndefined();
+      expect(after.isError).toBe(true);
+      expect(after.text).toContain('Control Not Applied');
+      expect(controlPacket(after)?.refusal?.reason).toBe('run-terminal');
       const reclaim = await fx.call('prompt_engine', { claim_token: cancelled.token });
       expect(reclaim.isError).toBe(true);
       expect(runSnapshot(fx.runtimeRoot, fx.chainId)).toEqual(cancelled);
