@@ -5,16 +5,19 @@
  *
  * Pure in (chart, frame). Nothing here imports the cast, the worlds or the props (scripts/animation/check-boundary.mjs).
  */
-import {applyEase, sample, type Breakdown, type Ease, type Track} from './track';
+import {applyEase, quantise, sample, type Breakdown, type Ease, type Track} from './track';
 
 export type ChartKey = {name: string; frame: number; hold?: number; pose: string; lineOfAction: string; changes: string};
 /** A rig actor: its keys live in a key sheet (v3/keys/<shot>.json, the joints); this lists what each key IS so the two can be compared. */
 export type RigActor = {kind: 'rig'; keySheet: string; keys: ChartKey[]; breakdowns: Breakdown[]; note?: string};
 export type ScalarKey = {frame: number; value: number; hold?: number; ease?: 'linear' | 'in' | 'out' | 'smooth'; why?: string};
-/** A scalar track: one number per frame (`param`: what it drives), stepped on twos unless `quantise` says ones. */
+/**
+ * A scalar track: one number per frame (`param`: what it drives), stepped on twos unless `quantise` says ones. A drawn prop (a lid, a bubble, a lean) is the drawn layer and steps on twos
+ * (D51, rubric C16/C27): `quantise: 'ones'` is for the light (`light.*`, which follows the drawn layer on ones) and, on anything else, needs a `why` (`parseChart` refuses it without).
+ */
 export type PathPoint = {x: number; y: number; scale: number};
 /** `path`: when the value is a position along waypoints (0 at the first, 1 at the second ...), the waypoints; `pathAt` reads a position and a scale off it. */
-export type ScalarActor = {kind: 'scalar'; param: string; quantise?: 'ones' | 'twos'; keys: ScalarKey[]; note?: string; path?: PathPoint[]};
+export type ScalarActor = {kind: 'scalar'; param: string; quantise?: 'ones' | 'twos'; /** Why a drawn prop steps on ones (a light track needs none). */ why?: string; keys: ScalarKey[]; note?: string; path?: PathPoint[]};
 export type ChartActor = RigActor | ScalarActor;
 
 /**
@@ -42,6 +45,8 @@ export type Chart = {
 };
 
 export const STAGGER_BAND: [number, number] = [3, 5];
+/** The actors whose tracks are light, not drawing: they may step on ones without saying why. */
+export const LIGHT_ACTOR = /^light\./;
 
 /** A chart read from JSON, or an error naming the first thing wrong. */
 export const parseChart = (json: unknown): Chart => {
@@ -55,6 +60,7 @@ export const parseChart = (json: unknown): Chart => {
       for (const b of actor.breakdowns) if (!(b.favour > 0 && b.favour < 1) || b.favour === 0.5) throw new Error(`chart: actor "${name}" breakdown on ${b.frame} favours ${b.favour}; it must be between 0 and 1 and never one half`);
     } else if (actor.kind === 'scalar') {
       if (!actor.keys.length) throw new Error(`chart: scalar actor "${name}" has no keys`);
+      if (actor.quantise === 'ones' && !LIGHT_ACTOR.test(name) && !actor.why?.trim()) throw new Error(`chart: drawn prop "${name}" steps on ones; the drawn layer moves on twos (D51, C16), so take quantise: "ones" off or give the track a "why"`);
       const frames = actor.keys.map((k) => k.frame);
       if (frames.some((f, i) => i && f <= frames[i - 1]!)) throw new Error(`chart: actor "${name}" keys must be in increasing frame order`);
     } else throw new Error(`chart: actor "${name}" has an unknown kind`);
@@ -92,7 +98,7 @@ export const pathAt = (actor: ScalarActor, v: number): PathPoint => {
  */
 export type PiecePose = {x: number; y: number; scale: number; rot: number; t: number; landed: boolean};
 export const pieceAt = (p: ChartPiece, frame: number, funnel: [number, number]): PiecePose | null => {
-  const f = Math.floor(frame / 2) * 2;
+  const f = quantise(frame, 2);
   if (f < p.start) return null;
   const t = Math.min(1, (f - p.start) / p.flight);
   const e = applyEase('smooth', t);
