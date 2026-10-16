@@ -28,3 +28,7 @@ Headless `claude -p` (2.1.299, Haiku, `--restricted` so only the branch hooks ra
 
 - **R-V3 (ruled):** fix at the writer — stage 17 recorded the request scope (organizationId falls back to the workspace id, request-identity-resolver ~732) while run-registry stores `scope?.organizationId ?? null`; one run has one scope, so the verify row records the run's stored scope. The hook's strict comparison stays.
 - **Lesson:** the live probe is the check that matters for a cross-process join; the fixtures encoded the planner's assumption that both writers agree.
+
+## 2026-10-15 — V3 accepted
+
+Root cause: the run's stored scope already had one owner, `ChainSessionStore.getConversationControlScope` (pause, resume, inspect, the conversation-control packet); stage 17's verify row was the one run-identity writer that bypassed it with the request scope, whose organization falls back to the workspace while stores built with `defaultScope: {workspaceId}` persist none. `workflowIdentity(context, chainSessionService)` now uses it at render arm, loop re-run and rearm; release uses `workflowRunKey` (key only). `ChainSessionService` declares the method (the 5th file). Finding (no row): a claimed run's `chain_runs` keeps the original org/workspace via COALESCE while the projection writes the claimant store's namespace; the row matches the projection, which is what the hook reads.

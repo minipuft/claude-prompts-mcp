@@ -668,6 +668,8 @@ export interface ChainSessionService {
     options?: StateStoreOptions & { blueprint?: SessionBlueprint; nodes?: ChainNode[] }
   ): Promise<ChainSession>;
   getSession(sessionId: string, scope?: StateStoreOptions): ChainSession | undefined;
+  /** A run's stored scope: this store's storage namespace plus the resolved continuity. */
+  getConversationControlScope(resolvedCallerContinuity: string): ExactControlScope;
   hasActiveSession(sessionId: string): boolean;
   getSessionByChainIdentifier(
     chainId: string,

@@ -532,6 +532,7 @@ class TestStopReadsRowsByExactIdentity:
         assert commands == []
         assert output is not None and output["decision"] == "block"
         assert "could not be attributed" in output["reason"] and why in output["reason"]
+        assert f"Workflow `{self.CHAIN}`, step 2/3" in output["reason"]
         assert self.rows() == before
 
     def test_an_unreadable_row_at_the_runs_key_fails_closed(self):
@@ -724,6 +725,35 @@ class TestStopEnforcesAnUnpausedWorkflowRun:
         self.project("run-y", "ws-a", chain="chain-y#1")
         again = self.step("Step 2 of 2 chain-y#1", {"chain_id": "chain-y#1"})
         assert again["run_identity"]["run_id"] == "run-y"
+
+    @pytest.mark.parametrize(
+        ("row_scope", "enforced"),
+        [
+            # The run's stored scope, as the server writes the row now: no organization.
+            ({"continuityScopeId": "cwd", "workspaceId": "cwd"}, True),
+            # The request scope an earlier writer recorded, its organization falling back to the
+            # workspace: not the run's scope, so it stays refused exactly like a foreign row.
+            ({"continuityScopeId": "cwd", "workspaceId": "cwd", "organizationId": "cwd"}, False),
+        ],
+    )
+    def test_the_loop_is_enforced_only_under_the_runs_stored_scope(self, row_scope, enforced):
+        self.project("run-a", "cwd")  # organization_id NULL, as the run registry stores it
+        row = TestStopReadsRowsByExactIdentity.loop(
+            "false", sessionId="workflow-run-run-a", runSessionId="run-a", chainId=self.CHAIN, scope=row_scope
+        )
+        self.store.save_verify_active_state(row, "workflow-run-run-a")
+        tracked = self.step(f"Step 1 of 3 {self.CHAIN}", {"command": ">>x"})
+        assert tracked is not None and tracked.get("run_identity") == self.identity("run-a", "cwd")
+
+        decision, commands = self.stop()
+
+        assert decision is not None and decision["decision"] == "block"
+        if enforced:
+            assert commands == ["false"] and "Shell Verification FAILED" in decision["reason"]
+        else:
+            assert commands == [] and "scope is not the run's scope" in decision["reason"]
+            assert f"Workflow `{self.CHAIN}`, step 1/3" in decision["reason"]
+            assert f'prompt_engine(chain_id="{self.CHAIN}")' in decision["reason"]
 
     def test_two_scopes_with_one_chain_id_bind_nothing_and_stop_runs_neither_loop(self):
         self.project("run-a", "ws-a")

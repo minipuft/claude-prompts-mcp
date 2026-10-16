@@ -43,6 +43,10 @@ import type { WorkflowVerifyIdentity } from '../../../gates/shell/types.js';
 import type { ExecutionContext } from '../../context/index.js';
 
 import { formatAttempt } from '#shared/utils/attempt-number.js';
+import {
+  buildIdentityScope,
+  resolveContinuityScopeId,
+} from '#shared/utils/request-identity-scope.js';
 
 /**
  * Shell Verification Stage - thin orchestration layer.
@@ -124,7 +128,10 @@ export class ShellVerificationStage extends BasePipelineStage {
 
     // LOOP MODE: Write verify-state.db for Stop hook integration
     if (shellVerify.loop === true) {
-      await this.stateManager.writeWorkflowState(workflowIdentity(context), pending);
+      await this.stateManager.writeWorkflowState(
+        workflowIdentity(context, this.chainSessionService),
+        pending
+      );
     }
 
     // Execute verification via ShellVerifyExecutor. The caller's workspace decides whether the
@@ -158,7 +165,10 @@ export class ShellVerificationStage extends BasePipelineStage {
     pending: PendingShellVerification
   ): Promise<void> {
     if (pending.shellVerify.loop === true) {
-      await this.stateManager.writeWorkflowState(workflowIdentity(context), pending);
+      await this.stateManager.writeWorkflowState(
+        workflowIdentity(context, this.chainSessionService),
+        pending
+      );
     }
     await this.saveToSession(context, pending);
   }
@@ -299,7 +309,7 @@ export class ShellVerificationStage extends BasePipelineStage {
 
   /** Release this run's loop row under the identity abort cleanup uses; a row it cannot claim fails. */
   private async releaseLoopState(context: ExecutionContext): Promise<void> {
-    const { runSessionId, chainId } = workflowIdentity(context);
+    const { runSessionId, chainId } = workflowRunKey(context);
     const outcome = await this.stateManager.releaseRunState(chainId, runSessionId);
     if (outcome === 'foreign' || outcome === 'unbound') {
       throw new Error(`Failed to clear verify-loop state for run ${runSessionId}: ${outcome}`);
@@ -455,7 +465,10 @@ export class ShellVerificationStage extends BasePipelineStage {
     const rearmed: PendingShellVerification = { ...pending, attemptCount: 0, previousResults: [] };
     await this.writeSnapshot(context, rearmed, undefined);
     if (rearmed.shellVerify.loop === true) {
-      await this.stateManager.writeWorkflowState(workflowIdentity(context), rearmed);
+      await this.stateManager.writeWorkflowState(
+        workflowIdentity(context, this.chainSessionService),
+        rearmed
+      );
     }
     context.diagnostics.info(this.name, 'Shell verification armed for the next step', {
       gateId: rearmed.gateId,
@@ -557,14 +570,31 @@ function runSessionId(context: ExecutionContext): string | undefined {
   return sessionId === undefined || sessionId.length === 0 ? undefined : sessionId;
 }
 
-/** Every loop write, rearm and release keys by the run UUID with its exact scope; no run, refused. */
-function workflowIdentity(context: ExecutionContext): WorkflowVerifyIdentity {
+/** Every loop write, rearm and release keys by the run UUID; no run, refused. */
+function workflowRunKey(context: ExecutionContext): Omit<WorkflowVerifyIdentity, 'scope'> {
   const sessionId = runSessionId(context);
   if (sessionId === undefined) {
     throw new Error('Verify loop refused: this call has no workflow run identity');
   }
   const chainId = context.getRequestedChainId() ?? context.state.session.resumeChainId;
-  return { runSessionId: sessionId, chainId, scope: { ...context.getScopeOptions() } };
+  return { runSessionId: sessionId, chainId };
+}
+
+/**
+ * The loop row records the run's own stored scope, the one `chain_runs` and the `chain_sessions`
+ * projection hold: the store's storage namespace plus the run's continuity. A run is visible to
+ * this call only when its continuity is the caller's (`getSession`), so the caller's resolved
+ * continuity is the run's. The request scope is not used: its organization falls back to the
+ * workspace while the run's is stored as given, and the Stop hook compares scopes exactly.
+ */
+function workflowIdentity(
+  context: ExecutionContext,
+  sessions: ChainSessionService
+): WorkflowVerifyIdentity {
+  const stored = sessions.getConversationControlScope(
+    resolveContinuityScopeId(context.getScopeOptions())
+  );
+  return { ...workflowRunKey(context), scope: { ...buildIdentityScope(stored) } };
 }
 
 /**

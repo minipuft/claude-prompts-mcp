@@ -191,14 +191,20 @@ def load_workflow_rows(identity: RunIdentity) -> tuple[list[tuple[str, dict]], l
     return exact, unresolved
 
 
-def unresolved_reason(problems: list[str]) -> str:
-    """The fail-closed diagnostic: no command ran for these rows and no pause exemption applies."""
+def unresolved_reason(problems: list[str], chain_state: ChainState | None = None) -> str:
+    """The fail-closed diagnostic: no command ran for these rows and no pause exemption applies.
+    A tracked run is named by chain id and step, so the model can resume or abort that run."""
     lines = "\n".join(f"- {problem}" for problem in problems)
+    run, target = "", "the workflow through prompt_engine"
+    if chain_state and (chain_id := chain_state.get("chain_id")):
+        step, total = chain_state.get("current_step", 0), chain_state.get("total_steps", 0)
+        run = f"Workflow `{chain_id}`, step {step}/{total}.\n\n"
+        target = f'workflow `{chain_id}` through prompt_engine(chain_id="{chain_id}")'
     return (
         "## Shell verification could not be attributed\n\n"
-        f"{lines}\n\n"
+        f"{run}{lines}\n\n"
         "No verification command ran for these rows and no pause exemption applies to them. "
-        "Resume or abort the workflow through prompt_engine so the server re-files or releases its loop."
+        f"Resume or abort {target} so the server re-files or releases its loop."
     )
 
 
@@ -510,13 +516,13 @@ def main():
         outcome = enforce_obligation(key, verify_state, workflow)
         if outcome.get("decision") == "block":
             if unresolved:
-                outcome["reason"] += "\n\n" + unresolved_reason(unresolved)
+                outcome["reason"] += "\n\n" + unresolved_reason(unresolved, chain_state)
             emit(outcome)
         if outcome:
             allowed.append(outcome)
 
     if unresolved:
-        emit({"decision": "block", "reason": unresolved_reason(unresolved)})
+        emit({"decision": "block", "reason": unresolved_reason(unresolved, chain_state)})
 
     # R30: the loader returns only runs the server still projects, i.e. runs that are not
     # complete, so a state coming back IS the block — unless that run is the parked one.
