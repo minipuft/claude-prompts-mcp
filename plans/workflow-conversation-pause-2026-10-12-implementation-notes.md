@@ -291,3 +291,22 @@ The owner ruled on 2026-10-15 to fix, before 6.0.0, the three post-prompt-engine
 ### C1 accepted (2026-10-15)
 
 `abortRunControl` (pure, in conversation-control-response.ts beside the conversation_control packet) builds `structuredContent.run_control` = {action:'abort', outcome, chainId, runId?}. `cancelled` = applied or already cancelled (`cancelChain` true, the only "run is cancelled" outcome); `release-incomplete` = cancelled but the verify-loop release failed (isError); `not-applied` = no chain_id, or `cancelChain` false (completed, failed, missing or out-of-scope — one boolean branch). **For C2:** clear tracking on `cancelled` only. **For T4.3:** neither `conversation_control` nor `run_control` is documented under docs/.
+
+### C2 handoff (2026-10-15)
+
+post-prompt-engine reads text through `read_tool_response` (no `str(list)`); `succeeded` deleted (an `is_error is True` reply exits early, so no error signal is success); abort decides by `run_control` alone — clears only on `cancelled` for the tracked chain and, when both exist, the tracked run id; the text path keeps a row holding a `conversation_pause` when the parsed chain differs or is empty. `read_tool_response` also reads Bash's `{stdout, stderr}` dict, so it is the single reader; ralph-context-tracker uses it. `exact_run_identity` returns None for a partial identity; unconfirmed guidance shows the resume/abort calls. New `test_tool_response_reads.py` fails on a direct `tool_response` read outside the helper (positive control plants 5 shapes).
+
+**Native regex audit (old repr vs real text):** never matched natively — the abort text regex (removed: the native abort reply has no text), `COMPLETION_MARKER`, `interruptVerbs`, the `GATE_VERDICTS` fallback, the legacy `###` gate name; matched with a wrong capture — `gatesList` (stored the rest of the repr as `pending_gate`), `Shell verification:`, legacy criteria; `chainId` failed when the id ended a line. All match correctly on joined text.
+
+- **R-C2-GUARD (accepted):** the overwrite guard keys on a tracked pause (with its identity), not on identity alone — a resumed row keeps its identity, and guarding on it would leave a later chain in the session untracked.
+- **DEV-T3-2:** 259 changed lines in the bounded files plus a 116-line class-gate file (≈375 vs 260); the gate is the class closure the row asked for. Three fixtures outside the bound pinned the old behavior (two text-only abort fixtures, one unconfirmed-guidance assertion R-T3.4-UNCONFIRMED overrides); the worker is authorized to update exactly those.
+- **Findings (no rows):** natively an abort with an older server that sends no `run_control` no longer clears (waits for the 24-hour sweep), per R-CLEAR-ABORT; ralph-context-tracker's `output_summary` is computed and discarded (surplus); the class gate is name-keyed (an alias escapes it, documented in its docstring); `parse_prompt_engine_response` keeps an unreachable dict branch.
+
+### T3.5 accepted (2026-10-15)
+
+`workflow_verify_state_key`, `load_verify_rows(keys)` (exact keys, raw text), `has_verify_rows()`, `delete_verify_row(key)` (refuses empty) in verify_active_store.py; ralph-stop reads the host row by host session id only and workflow rows by the bound run's key (or a legacy chain-id row whose JSON names this run) with exact scope, parks an owned exact pause before anything runs, exempts workflow rows from the host TTL, and blocks with a diagnostic when identity cannot be resolved.
+
+- **R-T3.5-NOSESSION (accepted):** no session id with verify rows present blocks Stop once (stop_hook_active ends the loop); Claude Code always sends a session id.
+- **DEV-T3-3 (planner):** the T3.5 brief named the concurrent writer as server-only while C2 edited hooks files; the three failures T3.5 saw were C2's fixtures in flight.
+- **T3.5a (new row):** the None-to-all store paths remain for two callers outside T3.5's files.
+- **Owner question raised:** workflow shell-verification loops have never been enforced at Stop natively — the hook read `WHERE session_id = <client session id>`, which never matched a server key — and after this row they are enforced only for a run this session paused, because only pause/resume packets record `run_identity` and the next ordinary step drops it.

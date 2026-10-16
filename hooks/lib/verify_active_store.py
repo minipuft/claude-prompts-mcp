@@ -126,6 +126,62 @@ def load_verify_active_state(session_id: str | None = None) -> dict[str, Any] | 
         return None
 
 
+def workflow_verify_state_key(run_id: str) -> str:
+    """The key the server files a run's loop row under (`workflowVerifyStateKey`,
+    verify-active-state-store.ts): the run UUID alone, since a public chain id repeats across scopes."""
+    return f"workflow-run-{run_id}"
+
+
+def load_verify_rows(keys: list[str]) -> dict[str, str]:
+    """The raw `state_json` of the rows stored under exactly these keys; an empty key is never read.
+
+    Raw text, so a caller that decides not to act on a row can leave it byte-identical.
+    """
+    wanted = list(dict.fromkeys(key for key in keys if key))
+    db_path = get_verify_state_db_path()
+    if not wanted or not db_path.exists():
+        return {}
+    conn = _connect()
+    try:
+        _ensure_schema(conn)
+        placeholders = ", ".join("?" for _ in wanted)
+        rows = conn.execute(
+            f"SELECT session_id, state_json FROM verify_active_state WHERE session_id IN ({placeholders})",
+            wanted,
+        ).fetchall()
+    finally:
+        conn.close()
+    return {row["session_id"]: row["state_json"] for row in rows if isinstance(row["state_json"], str)}
+
+
+def has_verify_rows() -> bool:
+    """Whether any verify row exists, for a caller that cannot tell which one is its own."""
+    db_path = get_verify_state_db_path()
+    if not db_path.exists():
+        return False
+    conn = _connect()
+    try:
+        _ensure_schema(conn)
+        return conn.execute("SELECT 1 FROM verify_active_state LIMIT 1").fetchone() is not None
+    finally:
+        conn.close()
+
+
+def delete_verify_row(key: str) -> None:
+    """Delete the one row stored under `key`. An empty key is refused, so no call clears every row."""
+    if not key:
+        raise ValueError("A verify row is deleted by its exact key; an empty key would name no row")
+    _acquire_lock()
+    try:
+        conn = _connect()
+        _ensure_schema(conn)
+        conn.execute("DELETE FROM verify_active_state WHERE session_id = ?", (key,))
+        conn.commit()
+        conn.close()
+    finally:
+        _release_lock()
+
+
 def save_verify_active_state(state: dict[str, Any], session_id: str = "") -> None:
     """Persist verify-active state to SQLite.
 

@@ -22,18 +22,27 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 # Add hooks lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from config_loader import load_config
 from db_reader import load_recoverable_chain_state
-from session_state import GATE_VERDICT_GUIDANCE
+from session_state import (
+    GATE_VERDICT_GUIDANCE,
+    ChainState,
+    RunIdentity,
+    exact_run_identity,
+    format_pause_directive,
+    holds_pause_exemption,
+)
 from verify_active_store import (
-    clear_verify_active_state,
-    load_verify_active_state,
+    delete_verify_row,
+    has_verify_rows,
+    load_verify_rows,
     save_verify_active_state,
+    workflow_verify_state_key,
 )
 from workspace import get_runtime_state_dir
 
@@ -106,19 +115,91 @@ def load_context_isolation_config() -> dict:
     }
 
 
-def load_verify_state(session_id: str | None = None) -> dict | None:
-    """Load verification state from SQLite verify-state.db."""
-    return load_verify_active_state(session_id)
+def _parse_row(raw: str | None) -> object:
+    """A row's JSON, or None when it is absent or unreadable."""
+    if not raw or not raw.strip():
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
 
 
-def save_verify_state(state: dict, session_id: str = "") -> None:
-    """Save updated verification state to SQLite verify-state.db."""
+def load_verify_state(session_id: str) -> dict | None:
+    """The host's own row: the one stored under this client session id. No id reads no row."""
+    row = _parse_row(load_verify_rows([session_id]).get(session_id))
+    return row if isinstance(row, dict) else None
+
+
+def save_verify_state(state: dict, session_id: str) -> None:
+    """Save a row back under the key it was read from; an empty key is refused."""
+    if not session_id:
+        raise ValueError("A verify row is saved under its own key; an empty key names no row")
     save_verify_active_state(state, session_id)
 
 
-def clear_verify_state(session_id: str | None = None) -> None:
-    """Clear verification state from SQLite verify-state.db."""
-    clear_verify_active_state(session_id)
+def clear_verify_state(session_id: str) -> None:
+    """Clear exactly the row under this key (never every row)."""
+    delete_verify_row(session_id)
+
+
+SCOPE_KEYS = (
+    ("continuityScopeId", "continuity_scope_id"),
+    ("workspaceId", "workspace_id"),
+    ("organizationId", "organization_id"),
+)
+
+
+def _scope_value(value: object) -> object:
+    """The server's `buildIdentityScope` drops empty and `'default'` values; compare on the rest."""
+    return None if value in (None, "", "default") else value
+
+
+def workflow_row_mismatch(row: object, identity: RunIdentity) -> str | None:
+    """Why a workflow row is not exactly this run's (UUID and scope), or None when it is."""
+    if not isinstance(row, dict) or not isinstance(row.get("config"), dict):
+        return "it is unreadable"
+    if row.get("runSessionId") != identity["run_id"]:
+        return "it names another run"
+    scope = row.get("scope")
+    if not isinstance(scope, dict):
+        return "it records no scope"
+    if any(_scope_value(scope.get(field)) != _scope_value(identity[key]) for field, key in SCOPE_KEYS):
+        return "its scope is not the run's scope"
+    return None
+
+
+def load_workflow_rows(identity: RunIdentity) -> tuple[list[tuple[str, dict]], list[str]]:
+    """This run's loop rows: the one under its derived key, and a row an earlier build filed under the
+    public chain id when its JSON names this run. A chain-id row naming another run (another scope can
+    hold the same chain id) is not this conversation's and is not read further.
+
+    Returns (exact rows, a diagnostic per row that names this run but cannot be confirmed as it).
+    """
+    key = workflow_verify_state_key(identity["run_id"])
+    exact: list[tuple[str, dict]] = []
+    unresolved: list[str] = []
+    for row_key, raw in load_verify_rows([key, identity["chain_id"]]).items():
+        row = _parse_row(raw)
+        if row_key != key and not (isinstance(row, dict) and row.get("runSessionId") == identity["run_id"]):
+            continue
+        why = workflow_row_mismatch(row, identity)
+        if why is None and isinstance(row, dict):
+            exact.append((row_key, row))
+        else:
+            unresolved.append(f"`{row_key}`: {why}")
+    return exact, unresolved
+
+
+def unresolved_reason(problems: list[str]) -> str:
+    """The fail-closed diagnostic: no command ran for these rows and no pause exemption applies."""
+    lines = "\n".join(f"- {problem}" for problem in problems)
+    return (
+        "## Shell verification could not be attributed\n\n"
+        f"{lines}\n\n"
+        "No verification command ran for these rows and no pause exemption applies to them. "
+        "Resume or abort the workflow through prompt_engine so the server re-files or releases its loop."
+    )
 
 
 def run_verification(command: str, timeout: int, working_dir: str | None = None) -> dict:
@@ -355,7 +436,7 @@ def spawn_isolated_iteration(verify_state: dict, last_result: dict, isolation_co
         }
 
 
-def chain_block_reason(chain_state: dict) -> str:
+def chain_block_reason(chain_state: ChainState) -> str:
     """The Stop reason for a visible run, picked from the hold the state carries."""
     chain_id = chain_state.get("chain_id", "")
     step = chain_state.get("current_step", 0)
@@ -383,6 +464,14 @@ def chain_block_reason(chain_state: dict) -> str:
     )
 
 
+def emit(payload: dict | None) -> NoReturn:
+    """Print the hook's decision (nothing allows Stop silently) and exit."""
+    if payload:
+        print(json.dumps(payload))
+        sys.stdout.flush()
+    sys.exit(0)
+
+
 def main():
     # Read hook input from stdin (Claude Code passes context here)
     try:
@@ -395,41 +484,70 @@ def main():
     if hook_input.get("stop_hook_active"):
         sys.exit(0)
 
-    # Session scoping: use session_id from hook_input to isolate clients
+    # Session scoping: the host's own rows are keyed by its session id; a workflow's rows by the run
+    # this session is bound to. Neither falls back to another conversation's row.
     hook_session_id = hook_input.get("session_id", "") or ""
+    chain_state = cast("ChainState | None", load_recoverable_chain_state(hook_session_id or None))
+    identity = exact_run_identity(chain_state.get("run_identity")) if chain_state else None
+    # An owned, exact conversation pause parks its run: decided before any command, counter or
+    # stale cleanup, so its rows stay byte-identical. Nothing else is exempted by it.
+    parked = holds_pause_exemption(chain_state, identity)
 
-    # Load verification state from MCP server's runtime-state (scoped to this client)
-    verify_state = load_verify_state(hook_session_id or None)
+    obligations: list[tuple[str, dict, bool]] = []
+    host_state = load_verify_state(hook_session_id)
+    if host_state:
+        obligations.append((hook_session_id, host_state, False))
+    unresolved: list[str] = []
+    if identity is not None:
+        workflow_rows, unresolved = load_workflow_rows(identity)
+        if not parked:
+            obligations.extend((key, row, True) for key, row in workflow_rows)
+    elif not hook_session_id and not obligations and has_verify_rows():
+        unresolved.append("this Stop event carries no session id, so no verify row can be attributed to it")
 
-    if not verify_state:
-        # No active verification — check for active chain before allowing stop.
-        # Session-scoped: an unscoped read here let another client's chain
-        # block THIS session's Stop event (cross-client leakage fix).
-        chain_state = load_recoverable_chain_state(hook_session_id or None)
-        # R30: the loader returns only runs the server still projects, i.e. runs that are not
-        # complete, so a state coming back IS the block. No ordinal re-derivation here: that
-        # missed a run held past its last node (step = total + 1) by a check or an owed report.
-        if chain_state:
-            print(json.dumps({"decision": "block", "reason": chain_block_reason(chain_state)}))
-            sys.stdout.flush()
-            sys.exit(0)
+    allowed: list[dict] = []
+    for key, verify_state, workflow in obligations:
+        outcome = enforce_obligation(key, verify_state, workflow)
+        if outcome.get("decision") == "block":
+            if unresolved:
+                outcome["reason"] += "\n\n" + unresolved_reason(unresolved)
+            emit(outcome)
+        if outcome:
+            allowed.append(outcome)
 
-        # No active chain or verification — allow stop
-        sys.exit(0)
+    if unresolved:
+        emit({"decision": "block", "reason": unresolved_reason(unresolved)})
 
+    # R30: the loader returns only runs the server still projects, i.e. runs that are not
+    # complete, so a state coming back IS the block — unless that run is the parked one.
+    if not obligations and chain_state and not parked:
+        reason = format_pause_directive(chain_state) or chain_block_reason(chain_state)
+        emit({"decision": "block", "reason": reason})
+
+    if len(allowed) > 1:
+        emit({"decision": None, "systemMessage": "\n\n".join(o.get("systemMessage", "") for o in allowed)})
+    emit(allowed[0] if allowed else None)
+
+
+def enforce_obligation(key: str, verify_state: dict, workflow: bool) -> dict:
+    """Run one verify row's loop. Every write and clear names `key`, the row it was read from.
+
+    Returns the block, an allow with a message, or `{}` for a silent allow. A workflow row lives as
+    long as its run (the server releases it); only a host row expires after an hour.
+    """
     config = verify_state.get("config", {})
     state = verify_state.get("state", {})
 
-    # Staleness check: if state is older than 1 hour, discard and allow stop
+    # Staleness check: a host row older than 1 hour is discarded and Stop allowed
     from datetime import datetime, timedelta, timezone
 
     started_at = state.get("startedAt", "")
-    if started_at:
+    if started_at and not workflow:
         try:
             start_time = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
             if datetime.now(timezone.utc) - start_time > timedelta(hours=1):
-                clear_verify_state(hook_session_id or None)
-                sys.exit(0)
+                clear_verify_state(key)
+                return {}
         except (ValueError, TypeError):
             pass  # Malformed timestamp — proceed normally
 
@@ -444,17 +562,11 @@ def main():
     # Check iteration limit (>= because iteration is already incremented by MCP server)
     if iteration >= max_iterations:
         # Max iterations reached - clear state and allow stop
-        clear_verify_state(hook_session_id or None)
-        print(
-            json.dumps(
-                {
-                    "decision": None,  # Allow stop
-                    "systemMessage": f"[Verify] Max iterations ({max_iterations}) reached. Stopping.",
-                }
-            )
-        )
-        sys.stdout.flush()
-        sys.exit(0)
+        clear_verify_state(key)
+        return {
+            "decision": None,  # Allow stop
+            "systemMessage": f"[Verify] Max iterations ({max_iterations}) reached. Stopping.",
+        }
 
     # Load context isolation config
     isolation_config = load_context_isolation_config()
@@ -471,11 +583,11 @@ def main():
     state["iteration"] = iteration
     state["lastResult"] = result
     verify_state["state"] = state
-    save_verify_state(verify_state, hook_session_id)
+    save_verify_state(verify_state, key)
 
     if result["passed"]:
         # Verification passed - clear state and allow stop
-        clear_verify_state(hook_session_id or None)
+        clear_verify_state(key)
 
         # Opportunistic cleanup of stale state across all stores
         try:
@@ -489,26 +601,17 @@ def main():
         except Exception:
             pass  # Non-critical — don't fail verification success
 
-        print(
-            json.dumps(
-                {
-                    "decision": None,  # Allow stop
-                    "systemMessage": f"[Verify] PASSED on iteration {iteration}!",
-                }
-            )
-        )
-        sys.stdout.flush()
-        sys.exit(0)
+        return {
+            "decision": None,  # Allow stop
+            "systemMessage": f"[Verify] PASSED on iteration {iteration}!",
+        }
 
     # Verification failed - check if we should spawn isolated instance
     if isolation_config.get("enabled", True) and iteration > in_context_threshold:
         # Check if we're already in a spawned instance (avoid infinite recursion)
         if os.environ.get("RALPH_SPAWNED"):
             # Already spawned - continue in-context
-            reason = format_error_feedback(result, verify_state)
-            print(json.dumps({"decision": "block", "reason": reason}))
-            sys.stdout.flush()
-            sys.exit(0)
+            return {"decision": "block", "reason": format_error_feedback(result, verify_state)}
 
         # Spawn isolated instance
         try:
@@ -516,7 +619,7 @@ def main():
 
             if spawn_result["passed"]:
                 # Spawned instance succeeded
-                clear_verify_state(hook_session_id or None)
+                clear_verify_state(key)
 
                 # Format stats for display
                 stats = spawn_result.get("stats", {})
@@ -544,28 +647,22 @@ def main():
 ### Result
 {spawn_result["output"][:800]}"""
 
-                print(
-                    json.dumps(
-                        {
-                            "decision": None,
-                            "systemMessage": message,
-                            "metadata": {
-                                "type": "ralph_verification",
-                                "passed": True,
-                                "iteration": iteration,
-                                "method": "isolated",
-                                "stats": stats,
-                            },
-                        }
-                    )
-                )
-                sys.stdout.flush()
-                sys.exit(0)
+                return {
+                    "decision": None,
+                    "systemMessage": message,
+                    "metadata": {
+                        "type": "ralph_verification",
+                        "passed": True,
+                        "iteration": iteration,
+                        "method": "isolated",
+                        "stats": stats,
+                    },
+                }
             else:
                 # Spawned instance failed - update state and bounce back
                 state["iteration"] = iteration + 1  # Count the spawn as an iteration
                 verify_state["state"] = state
-                save_verify_state(verify_state, hook_session_id)
+                save_verify_state(verify_state, key)
 
                 # Format stats even on failure
                 stats = spawn_result.get("stats", {})
@@ -585,47 +682,31 @@ The context-isolated Claude instance could not fix the issue.{stats_line}
 
 Please review the isolated attempt and try a different approach."""
 
-                print(
-                    json.dumps(
-                        {
-                            "decision": "block",
-                            "reason": reason,
-                            "metadata": {
-                                "type": "ralph_verification",
-                                "passed": False,
-                                "iteration": iteration,
-                                "max_iterations": max_iterations,
-                                "method": "isolated",
-                                "stats": stats,
-                            },
-                        }
-                    )
-                )
-                sys.stdout.flush()
-                sys.exit(0)
+                return {
+                    "decision": "block",
+                    "reason": reason,
+                    "metadata": {
+                        "type": "ralph_verification",
+                        "passed": False,
+                        "iteration": iteration,
+                        "max_iterations": max_iterations,
+                        "method": "isolated",
+                        "stats": stats,
+                    },
+                }
 
         except ImportError as e:
             # Libraries not available - fall back to in-context
             print(f"[Verify] Isolation libraries unavailable: {e}", file=sys.stderr)
-            reason = format_error_feedback(result, verify_state)
-            print(json.dumps({"decision": "block", "reason": reason}))
-            sys.stdout.flush()
-            sys.exit(0)
+            return {"decision": "block", "reason": format_error_feedback(result, verify_state)}
 
         except Exception as e:
             # Spawn failed - fall back to in-context
             print(f"[Verify] Isolation spawn failed: {e}", file=sys.stderr)
-            reason = format_error_feedback(result, verify_state)
-            print(json.dumps({"decision": "block", "reason": reason}))
-            sys.stdout.flush()
-            sys.exit(0)
+            return {"decision": "block", "reason": format_error_feedback(result, verify_state)}
 
     # In-context mode - block stop and feed error back
-    reason = format_error_feedback(result, verify_state)
-
-    print(json.dumps({"decision": "block", "reason": reason}))
-    sys.stdout.flush()
-    sys.exit(0)
+    return {"decision": "block", "reason": format_error_feedback(result, verify_state)}
 
 
 if __name__ == "__main__":
