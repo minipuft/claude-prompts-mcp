@@ -12,6 +12,9 @@ Blocks:
    The accepted resolution parameters (gate_verdict, gate_action) are generated
    from the server contract into lib/_generated/resolution_verbs.py — never hardcoded
    here, so the hook cannot deny an exit the server supports.
+3. Workflow mutations on a run this conversation holds paused (owned, exact identity): denied
+   with resume-or-abort. Controls (gate_action pause/resume/abort by name, handoff, claim_token)
+   always reach the server, which decides them; retry/skip/accept_alternative are mutations.
 
 Allows Claude to self-correct before the tool executes.
 """
@@ -25,10 +28,37 @@ sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from session_state import (
     UNKNOWN_INTERRUPT_LABEL,
+    ChainState,
+    exact_run_identity,
+    holds_pause_exemption,
     interrupt_exits,
     is_subagent_payload,
     load_session_state,
 )
+
+# The gate_action values that control a run rather than work it (contract enum, prompt-engine.json).
+RUN_CONTROLS = frozenset({"pause", "resume", "abort"})
+
+
+def is_run_control(tool_input: dict) -> bool:
+    """A pause/resume/abort or custody call: the server decides it, so no hold may block it."""
+    claim = tool_input.get("claim_token")
+    return tool_input.get("gate_action") in RUN_CONTROLS or tool_input.get("handoff") is True or isinstance(claim, str)
+
+
+def paused_instruction(state: ChainState | None, chain_id: str) -> str | None:
+    """The resume-or-abort instruction when this conversation owns an exact pause of `chain_id`."""
+    identity = exact_run_identity(state.get("run_identity")) if state else None
+    if not state or identity is None or identity["chain_id"] != chain_id or not holds_pause_exemption(state, identity):
+        return None
+    step, total = state.get("current_step", 0), state.get("total_steps", 0)
+    at = f" at step {step} of {total}" if step and total else ""
+    return (
+        f"Workflow paused for conversation{at}: `{chain_id}`. This call would change the run, so it "
+        "was not sent. Discuss with the user; when ready, resume explicitly with "
+        f'prompt_engine(chain_id:"{chain_id}", gate_action:"resume") and follow the action it returns '
+        'in a separate call, or end the run with gate_action:"abort".'
+    )
 
 
 def parse_hook_input() -> dict:
@@ -106,7 +136,17 @@ def main():
     # Any contract-flagged resolution verb (gate_verdict, gate_action) passes:
     # they are all server-supported responses to a pending gate, and denying them is how a
     # gate blocks its own abort.
-    if chain_id:
+    session_id = hook_input.get("session_id", "")
+    state = load_session_state(session_id) if chain_id and session_id else None
+    paused = None if is_run_control(tool_input) else paused_instruction(state, chain_id)
+    if paused:
+        # Check 3 precedes check 2: while paused, every hold waits behind the explicit resume.
+        output = {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": paused}
+        print(json.dumps({"hookSpecificOutput": output}))
+        sys.exit(0)
+
+    # Check 2 admits pause/resume/abort through the generated verb set; handoff is custody, not a verb.
+    if chain_id and tool_input.get("handoff") is not True:
         resolution_params = load_resolution_params()
         if resolution_params is None:
             # Fail open: without the generated verb set this hook cannot tell a valid
@@ -114,10 +154,6 @@ def main():
             sys.exit(0)
 
         if not any(tool_input.get(name) for name in resolution_params):
-            # Load session state to check if gate was pending
-            session_id = hook_input.get("session_id", "")
-            state = load_session_state(session_id) if session_id else None
-
             if state and state.get("pending_gate"):
                 gate = state["pending_gate"]
                 if gate == UNKNOWN_INTERRUPT_LABEL:

@@ -8,6 +8,8 @@ Parses the response to:
 1. Track current chain step
 2. Detect pending gates
 3. Inject reminders for gate reviews
+4. Track a conversation pause from a successful `structuredContent.conversation_control` only;
+   reply text (and `structuredContent.message`, which carries the recovery token) is never stored.
 """
 
 import json
@@ -19,15 +21,73 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from session_state import (
+    UNKNOWN_INTERRUPT_LABEL,
+    ChainState,
+    RunIdentity,
     clear_session_state,
+    exact_run_identity,
     format_gate_directive,
     is_subagent_payload,
     load_session_state,
     parse_prompt_engine_response,
+    pause_fields,
     save_session_state,
 )
 
 COMPLETION_MARKER = re.compile(r"(?m)^(?:[✓✅][ \t]*)?(?:Chain complete\b|Execution complete\.)")
+PAUSE_OUTCOMES = frozenset({"paused", "already-paused", "claimed"})
+# What a resumed run's owed obligation restores when the tracker lost the hold (e.g. a claim).
+OBLIGATION_HOLDS = {"blocking-unknown": UNKNOWN_INTERRUPT_LABEL, "review": "review", "exhausted-retry": "review"}
+
+
+def _control_packet(tool_response: object) -> dict | None:
+    """`structuredContent.conversation_control`, or None when the response carries none."""
+    structured = tool_response.get("structuredContent") if isinstance(tool_response, dict) else None
+    packet = structured.get("conversation_control") if isinstance(structured, dict) else None
+    return packet if isinstance(packet, dict) and packet.get("kind") == "conversation_control" else None
+
+
+def _packet_identity(run: object) -> RunIdentity | None:
+    """The packet run's exact identity in hook-state keys, or None when any field is missing."""
+    run = run if isinstance(run, dict) else {}
+    scope = run.get("scope") if isinstance(run.get("scope"), dict) else {}
+    raw = {"run_id": run.get("runId"), "chain_id": run.get("chainId"), "organization_id": scope.get("organizationId")}
+    raw |= {"workspace_id": scope.get("workspaceId"), "continuity_scope_id": scope.get("continuityScopeId")}
+    return exact_run_identity(raw)
+
+
+def _apply_control_packet(session_id: str, request_id: str, packet: dict) -> None:
+    """Record a pause, claim or resume of this conversation's exact run; anything else is a no-op."""
+    run = packet.get("run")
+    identity = _packet_identity(run)
+    outcome = packet.get("outcome")
+    if not isinstance(run, dict) or identity is None or outcome not in PAUSE_OUTCOMES | {"resumed"}:
+        return
+    if request_id and request_id != identity["chain_id"]:
+        return
+    tracked = load_session_state(session_id) or {}
+    same_run = tracked.get("chain_id") == identity["chain_id"]
+    if same_run and exact_run_identity(tracked.get("run_identity")) not in (None, identity):
+        return  # same chain id, another run or scope
+    # The same run keeps every hold detail (unknown verbs, delegation, shell verification).
+    state: ChainState = {**tracked} if same_run else {"pending_gate": None}
+    if outcome == "resumed":
+        for key in ("conversation_pause", "owed", "pause_custody"):
+            state.pop(key, None)
+        owed = [item for item in run.get("obligations") or [] if isinstance(item, dict)]
+        holds = [OBLIGATION_HOLDS[item["kind"]] for item in owed if item.get("kind") in OBLIGATION_HOLDS]
+        if holds and not state.get("pending_gate"):
+            state["pending_gate"] = holds[0]
+    else:
+        fields = pause_fields(run.get("pause"), run.get("obligations"))
+        if not fields:
+            return
+        state.update(fields)
+        state["pause_custody"] = "owned"
+    step = run.get("step") if isinstance(run.get("step"), dict) else {}
+    state.update({"chain_id": identity["chain_id"], "run_identity": identity})
+    state["current_step"], state["total_steps"] = int(step.get("current") or 0), int(step.get("total") or 0)
+    save_session_state(session_id, state)
 
 
 def _matches_tracked_run(session_id: str, request_id: str, response_id: str, *, require_named: bool = False) -> bool:
@@ -80,6 +140,15 @@ def main():
     succeeded = isinstance(tool_response, dict) and tool_response.get("isError") is False
     request_id = tool_input.get("chain_id", "") if isinstance(tool_input, dict) else ""
     request_id = request_id if isinstance(request_id, str) else ""
+
+    # A control reply decides by its packet alone: its text never pauses, resumes or saves.
+    packet = _control_packet(tool_response)
+    if packet is not None:
+        if succeeded:
+            _apply_control_packet(session_id, request_id, packet)
+        sys.exit(0)
+    if isinstance(tool_input, dict) and tool_input.get("gate_action") in ("pause", "resume"):
+        sys.exit(0)  # a pause or resume reply without its packet proves neither
 
     # Parse response for chain/gate state
     if isinstance(tool_response, dict):

@@ -14,13 +14,13 @@ HOOKS_LIB = Path(__file__).parent.parent / "lib"
 GATE_REVIEW_RESPONSE = "**Review Required**\n\n**Gates**: code-quality\n\nSubmit gate_verdict via prompt_engine."
 
 
-def _run_hook(payload: dict, workspace: Path) -> subprocess.CompletedProcess:
+def _run_hook(payload: dict, workspace: Path, hook: Path = HOOK) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["MCP_WORKSPACE"] = str(workspace)
     for leaked in ("CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT", "GEMINI_EXTENSION_PATH", "extensionPath", "MCP_RUNTIME_ROOT"):
         env.pop(leaked, None)
     return subprocess.run(
-        [sys.executable, str(HOOK)],
+        [sys.executable, str(hook)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
@@ -60,12 +60,14 @@ def _payload(
     session_id: str = "sess-clear",
     *,
     is_error: bool | None = False,
+    structured: dict | None = None,
 ) -> dict:
+    response = {"content": content, **({"isError": is_error} if is_error is not None else {})}
     return {
         "tool_name": "mcp__claude-prompts__prompt_engine",
         "session_id": session_id,
         "tool_input": tool_input or {},
-        "tool_response": {"content": content, **({"isError": is_error} if is_error is not None else {})},
+        "tool_response": {**response, **({"structuredContent": structured} if structured else {})},
     }
 
 
@@ -265,3 +267,87 @@ class TestQualifiedTerminalBinding:
             assert after is None
         else:
             assert after == before
+
+
+TOKEN = "tok-SECRET-1"
+INTERRUPT = "Step 2 of 3 chain-demo#1\n\n**Chain Paused** Resolve with `chain_id=chain-demo#1` plus one of:\n\n- gate_action:resume\n"
+PAUSE = {"kind": "conversation", "nodeId": "n2", "pausedAt": 1}
+
+
+def _control(outcome: str, *, pause: dict | None = None, workspace: str = "w", chain: str = "chain-demo#1") -> dict:
+    run = {"runId": "r", "chainId": chain, "step": {"current": 2, "total": 3}, "pause": pause}
+    run["scope"] = {"organizationId": None, "workspaceId": workspace, "continuityScopeId": "w"}
+    run["obligations"] = [{"kind": "blocking-unknown", "nodeId": "n2", "step": 2}]
+    packet = {"kind": "conversation_control", "outcome": outcome, "run": run}
+    return {"conversation_control": packet, "message": f"Recovery token: `{TOKEN}`"}
+
+
+def _call(action: str, structured: dict | None, *, is_error: bool | None = False) -> dict:
+    tool_input = {"chain_id": "chain-demo#1", "gate_action": action}
+    return _payload(f"⏸️ step 2 of 3. Recovery token: `{TOKEN}`", tool_input, is_error=is_error, structured=structured)
+
+
+def _pause(workspace: Path) -> dict:
+    _run_hook(_payload(INTERRUPT, {"command": ">>demo"}), workspace)
+    _run_hook(_call("pause", _control("paused", pause=PAUSE)), workspace)
+    return _load_row(workspace, "sess-clear")
+
+
+def _gate_reason(workspace: Path) -> str:
+    call = _payload("", {"chain_id": "chain-demo#1", "user_response": "x"})
+    gate = _run_hook(call, workspace, HOOK.parent / "gate-enforce.py")
+    return json.loads(gate.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+class TestConversationControlPacket:
+    def test_pause_records_identity_pause_and_custody_never_the_token(self, workspace):
+        row = _pause(workspace)
+        identity = {"run_id": "r", "chain_id": "chain-demo#1", "organization_id": None, "workspace_id": "w"}
+        assert row["run_identity"] == {**identity, "continuity_scope_id": "w"}
+        assert row["conversation_pause"] == {"kind": "conversation", "node_id": "n2", "paused_at": 1}
+        assert row["owed"] == [{"kind": "blocking-unknown", "node_id": "n2", "step": 2}]
+        assert row["pause_custody"] == "owned" and "message" not in row
+        stored = [path.read_bytes() for path in workspace.rglob("hooks-state.db*")]
+        assert stored and not any(TOKEN.encode() in data for data in stored)
+        assert _gate_reason(workspace).startswith("Workflow paused for conversation at step 2 of 3")
+
+    def test_resume_clears_only_the_pause_and_the_held_unknown_is_required_again(self, workspace):
+        before = _pause(workspace)
+        assert before["run_identity"]["run_id"] == "r" and before["pause_custody"] == "owned"
+        _run_hook(_call("resume", _control("resumed")), workspace)
+        paused_keys = ("conversation_pause", "owed", "pause_custody")
+        assert _load_row(workspace, "sess-clear") == {key: v for key, v in before.items() if key not in paused_keys}
+        assert _gate_reason(workspace).startswith("Chain paused: blocking unknown interrupt")
+
+    def test_a_claimed_pause_restores_its_owed_hold_after_resume(self, workspace):
+        _run_hook(_payload(f"`{TOKEN}`", {"claim_token": "t"}, structured=_control("claimed", pause=PAUSE)), workspace)
+        assert _load_row(workspace, "sess-clear")["pause_custody"] == "owned"
+        _run_hook(_call("resume", _control("resumed")), workspace)
+        row = _load_row(workspace, "sess-clear")
+        assert (row["pending_gate"], "conversation_pause" in row) == ("blocking unknown interrupt", False)
+
+    @pytest.mark.parametrize(
+        ("structured", "is_error"),
+        [
+            (_control("resumed"), True),
+            (_control("resumed"), None),
+            ({"conversation_control": {**_control("resumed")["conversation_control"], "outcome": "refused"}}, False),
+            (None, False),
+            ({"conversation_control": {"kind": "conversation_control", "outcome": "resumed"}}, False),
+            (_control("resumed", workspace="other"), False),
+            (_control("resumed", chain="chain-other#1"), False),
+        ],
+        ids=["is-error", "status-unreported", "refused", "missing-packet", "no-run", "wrong-scope", "foreign-chain"],
+    )
+    def test_unproven_control_reply_leaves_the_pause_tracked(self, workspace, structured, is_error):
+        before = _pause(workspace)
+        _run_hook(_call("resume", structured, is_error=is_error), workspace)
+        assert _load_row(workspace, "sess-clear") == before
+
+    def test_applied_abort_clears_a_paused_run_and_a_subagent_packet_writes_nothing(self, workspace):
+        before = _pause(workspace)
+        _run_hook({**_call("resume", _control("resumed")), "agent_id": "w1"}, workspace)
+        assert _load_row(workspace, "sess-clear") == before
+        abort = {"chain_id": "chain-demo#1", "gate_action": "abort"}
+        _run_hook(_payload("🛑 **Chain Cancelled**: `chain-demo#1`", abort), workspace)
+        assert _load_row(workspace, "sess-clear") is None

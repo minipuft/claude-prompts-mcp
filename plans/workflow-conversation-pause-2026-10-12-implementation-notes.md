@@ -241,3 +241,10 @@ Two derivations of request scope existed: launch-aware `resolveRequestIdentityCo
 - **R-T3.1-CUSTODY (ruled):** only `owned` custody with an exact host binding grants a pause exemption; `retained` and `unconfirmed` give recovery guidance only (fail closed). T3.5 inherits this for Stop.
 - **For T3.2 (binding):** T3.1 has no writer for `run_identity`. T3.2 stores `exact_run_identity(packet.run)`, `pause_fields(run.pause, run.obligations)` and `pause_custody="owned"` from a successful `structuredContent.conversation_control`, and never stores `structuredContent.message`. Abort by another client removes the row, so this client shows an `unconfirmed` pause until T3.2 clears tracking on terminal evidence.
 - **Findings (no rows):** `TestChainLoaderColumns.NOT_READ` still lists `workspace_id`, which the identity path now reads (docstring only); `pyrefly.toml` excludes `hooks/tests/**`, so test type errors are unchecked anywhere; `load_active_chain_state` has callers in tests only.
+
+### T3.2 accepted; #493 merged (2026-10-15)
+
+gate-enforce denies paused mutations for an owned exact pause with resume-or-abort text and admits pause/resume/abort by name plus handoff (check 2 now admits handoff too); post-prompt-engine decides any response carrying `structuredContent.conversation_control` by the packet alone, applied only when `isError is False`, and ignores refusals, foreign or mismatched packets. #493 merged as dd555535 with B2.
+
+- **Unverified premise → T3.2p:** whether Claude Code's PostToolUse `tool_response` for an MCP tool carries `structuredContent`. Fails closed if not (nothing tracked), but the pause tracking would not work natively.
+- **Findings (no rows):** the text path's `save_session_state` overwrites the whole row, so the first ordinary step after a resume drops `run_identity` — harmless, since the next pause arrives with its own packet; check 2 denies a call to any chain id while a pending gate is tracked (pre-existing); `RUN_CONTROLS` is hand-written because the generated verb file carries parameter names, not enum values; the paused deny text lives in gate-enforce and T3.4's shared directive may absorb it.
