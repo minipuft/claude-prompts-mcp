@@ -32,3 +32,7 @@ Headless `claude -p` (2.1.299, Haiku, `--restricted` so only the branch hooks ra
 ## 2026-10-15 — V3 accepted
 
 Root cause: the run's stored scope already had one owner, `ChainSessionStore.getConversationControlScope` (pause, resume, inspect, the conversation-control packet); stage 17's verify row was the one run-identity writer that bypassed it with the request scope, whose organization falls back to the workspace while stores built with `defaultScope: {workspaceId}` persist none. `workflowIdentity(context, chainSessionService)` now uses it at render arm, loop re-run and rearm; release uses `workflowRunKey` (key only). `ChainSessionService` declares the method (the 5th file). Finding (no row): a claimed run's `chain_runs` keeps the original org/workspace via COALESCE while the projection writes the claimant store's namespace; the row matches the projection, which is what the hook reads.
+
+## 2026-10-15 — V2 passes natively; V4 cut
+
+Re-run on 317b12f0: the Stop hook ran `false` itself (it replaced `lastResult` after the server's write) and blocked with "Shell Verification FAILED"; Stop #2 was released by the host's `stop_hook_active`. The model read the reason correctly this time. **V4:** the reason names only the command, and it printed "Iteration 2/3" while the row stored 1 (`format_error_feedback` prints stored + 1, and for a workflow row the server owns the count). Finding (no row): the hook writes a workflow row's iteration back unchanged, so the `maxIterations` cap advances only when the client calls the server again — the server owns the loop.
