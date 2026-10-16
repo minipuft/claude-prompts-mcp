@@ -1,0 +1,7 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_preproduction#1",
+    "user_response": "SMOKE: recorded validation fixture. SMOKE_BOARD_HANDOFF_7D3A\nNo creative work was performed. This is a literal result-propagation probe, not a worker execution receipt.\n\nHANDOFF RESULT\nnode: board"
+  }
+}

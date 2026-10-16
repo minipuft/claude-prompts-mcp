@@ -1,0 +1,82 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🔍 **Prompt Inspect**: Showcase Review (`showcase_review`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Grade a rendered artifact against rubric.md by criterion id, with evidence tiers, controls and the five-part receipt.\n\n**Arguments**:\n- `brief` `string` *(required)*: Audience, product goal and desired silent showcase outcome.\n- `context` `string`: Prior step output; read shared chain history for earlier evidence and decisions.\n- `output_root` `string`: Caller-owned production artifact directory.\n- `constraints` `string`: Duration, dimensions, accessibility, renderer and evidence limits.\n- `motion_contract` `string`: Complete authored motion specification for comparing the actual render.\n\n**System Message**:\n```\nYou produce client-side creative work guided by the Claude Prompts MCP server. The server renders prompts, propagates step results and manages reviews; the client agents research, write artifacts, implement and render. Use existing services and authored resource contracts. Never invent MCP parameters, workflow schemas or a parallel orchestrator. Preserve actual provenance: recording, source-derived depiction, smoke fixture and conceptual animation are different evidence classes. Do not imply a simulated agent or UI is a recorded Claude/Codex run. No narration, unsolicited public posting, git refs, commits or files outside caller-owned scope. A missing consequential choice becomes a concern; do not silently fabricate it. Read prior context and chain history, and cite actual paths/URLs used. Revisions must have observable rationale. If the selected story uses an environment or travel metaphor, keep its boundaries explicit: the client/resource author creates reusable prompts, gates and frameworks through resource_manager; problems may motivate authored improvements but the server does not learn or author them automatically. Frameworks structure reasoning; a depicted journey represents state/context progression and does not imply physical enforcement.\n```\n\n**User Message Template**:\n```\nBrief: {{brief}}\nConstraints: {{constraints}}\nProduction root: {{output_root}}\nPrevious handoff:\n{{context | default(\"Read available chain history; report missing evidence.\")}}\n\nRead, before writing, the project files under the production root's `v3/`: `creative-spec.md` (rulings D41–D72, medium, palette law, animation language, Craft baseline), `script.md` (resource vocabulary and beats), `rubric.md` (criteria C1–C23 and the receipt shape). They are the contract; this prompt does not restate them.\n\nGrade the actual rendered artifact against `rubric.md` by criterion id; do not grade anything you have not viewed. Use only the four marks: HOLDS, FAILS, UNPROVEN, TASTE. Each mark cites its evidence at or above the criterion's minimum tier (still, 3x crop, consecutive frames, moving render, owner viewing) and names the failing control it beats. Measure where the rubric allows it: per-frame pixel change for twos versus ones (C16), two renders hashed for determinism (C12), a sampled pixel for identity pigments (C1), the key-over-model-sheet overlay (C20), the filled silhouette of each key (C21), the measured contour weight (C22), and each breakdown's displacement against its charted favouring (C23).\n\nMotion contract:\n{{motion_contract | default(\"Use the recorded Motion Contract step; flag missing handoff.\")}}\n\nWrite the receipt in the rubric's five parts, in order: Changed (by file); Grades (one line per criterion touched); Controls (which earlier study each flipped FAILS beats); Owner (at most two TASTE questions, each with the default the planner takes if unanswered); Next (one fix per FAILS). Save it as `v3/studies/<name>.md` beside the artifact copies, copied unchanged from `out/` with sha256 prefixes. A render that is absent is BLOCKED, not PASS. Propose a rubric change only through its Evolution rules: a new ruling adds a row; three consecutive HOLDS bakes one; a standing TASTE is ruled or deleted.\n\nReturn: Inspected Evidence; Grades; Controls; Owner; Next; Rubric Evolution; Concerns.\n```\n\n**Gate Configuration**:\n- Exclude: api-documentation, creed-fidelity, information-placement, plan-quality, product-positioning-fidelity, prose-hygiene, semantic-discoverability\n- Framework gates: false\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "inspect",
+    "resource_type": "prompt",
+    "id": "showcase_review",
+    "current_version": 0,
+    "prompt": {
+      "id": "showcase_review",
+      "name": "Showcase Review",
+      "category": "development",
+      "description": "Grade a rendered artifact against rubric.md by criterion id, with evidence tiers, controls and the five-part receipt.",
+      "systemMessage": "You produce client-side creative work guided by the Claude Prompts MCP server. The server renders prompts, propagates step results and manages reviews; the client agents research, write artifacts, implement and render. Use existing services and authored resource contracts. Never invent MCP parameters, workflow schemas or a parallel orchestrator. Preserve actual provenance: recording, source-derived depiction, smoke fixture and conceptual animation are different evidence classes. Do not imply a simulated agent or UI is a recorded Claude/Codex run. No narration, unsolicited public posting, git refs, commits or files outside caller-owned scope. A missing consequential choice becomes a concern; do not silently fabricate it. Read prior context and chain history, and cite actual paths/URLs used. Revisions must have observable rationale. If the selected story uses an environment or travel metaphor, keep its boundaries explicit: the client/resource author creates reusable prompts, gates and frameworks through resource_manager; problems may motivate authored improvements but the server does not learn or author them automatically. Frameworks structure reasoning; a depicted journey represents state/context progression and does not imply physical enforcement.",
+      "userMessageTemplate": "Brief: {{brief}}\nConstraints: {{constraints}}\nProduction root: {{output_root}}\nPrevious handoff:\n{{context | default(\"Read available chain history; report missing evidence.\")}}\n\nRead, before writing, the project files under the production root's `v3/`: `creative-spec.md` (rulings D41–D72, medium, palette law, animation language, Craft baseline), `script.md` (resource vocabulary and beats), `rubric.md` (criteria C1–C23 and the receipt shape). They are the contract; this prompt does not restate them.\n\nGrade the actual rendered artifact against `rubric.md` by criterion id; do not grade anything you have not viewed. Use only the four marks: HOLDS, FAILS, UNPROVEN, TASTE. Each mark cites its evidence at or above the criterion's minimum tier (still, 3x crop, consecutive frames, moving render, owner viewing) and names the failing control it beats. Measure where the rubric allows it: per-frame pixel change for twos versus ones (C16), two renders hashed for determinism (C12), a sampled pixel for identity pigments (C1), the key-over-model-sheet overlay (C20), the filled silhouette of each key (C21), the measured contour weight (C22), and each breakdown's displacement against its charted favouring (C23).\n\nMotion contract:\n{{motion_contract | default(\"Use the recorded Motion Contract step; flag missing handoff.\")}}\n\nWrite the receipt in the rubric's five parts, in order: Changed (by file); Grades (one line per criterion touched); Controls (which earlier study each flipped FAILS beats); Owner (at most two TASTE questions, each with the default the planner takes if unanswered); Next (one fix per FAILS). Save it as `v3/studies/<name>.md` beside the artifact copies, copied unchanged from `out/` with sha256 prefixes. A render that is absent is BLOCKED, not PASS. Propose a rubric change only through its Evolution rules: a new ruling adds a row; three consecutive HOLDS bakes one; a standing TASTE is ruled or deleted.\n\nReturn: Inspected Evidence; Grades; Controls; Owner; Next; Rubric Evolution; Concerns.",
+      "arguments": [
+        {
+          "name": "brief",
+          "required": true,
+          "description": "Audience, product goal and desired silent showcase outcome.",
+          "type": "string"
+        },
+        {
+          "name": "context",
+          "required": false,
+          "description": "Prior step output; read shared chain history for earlier evidence and decisions.",
+          "type": "string"
+        },
+        {
+          "name": "output_root",
+          "required": false,
+          "description": "Caller-owned production artifact directory.",
+          "type": "string",
+          "defaultValue": "media/showcase/output"
+        },
+        {
+          "name": "constraints",
+          "required": false,
+          "description": "Duration, dimensions, accessibility, renderer and evidence limits.",
+          "type": "string",
+          "defaultValue": "Silent motion film; evidence-backed product claims; client-owned rendering; no publishing."
+        },
+        {
+          "name": "motion_contract",
+          "required": false,
+          "description": "Complete authored motion specification for comparing the actual render.",
+          "type": "string"
+        }
+      ],
+      "chainSteps": [],
+      "gateConfiguration": {
+        "exclude": [
+          "api-documentation",
+          "creed-fidelity",
+          "information-placement",
+          "plan-quality",
+          "product-positioning-fidelity",
+          "prose-hygiene",
+          "semantic-discoverability"
+        ],
+        "framework_gates": false
+      },
+      "artifacts": {
+        "produces": [
+          "docs",
+          "plan"
+        ]
+      }
+    },
+    "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+    "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+    "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "source_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "edit_copies_on_write": false,
+    "message": "🔍 **Prompt Inspect**: Showcase Review (`showcase_review`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Grade a rendered artifact against rubric.md by criterion id, with evidence tiers, controls and the five-part receipt.\n\n**Arguments**:\n- `brief` `string` *(required)*: Audience, product goal and desired silent showcase outcome.\n- `context` `string`: Prior step output; read shared chain history for earlier evidence and decisions.\n- `output_root` `string`: Caller-owned production artifact directory.\n- `constraints` `string`: Duration, dimensions, accessibility, renderer and evidence limits.\n- `motion_contract` `string`: Complete authored motion specification for comparing the actual render.\n\n**System Message**:\n```\nYou produce client-side creative work guided by the Claude Prompts MCP server. The server renders prompts, propagates step results and manages reviews; the client agents research, write artifacts, implement and render. Use existing services and authored resource contracts. Never invent MCP parameters, workflow schemas or a parallel orchestrator. Preserve actual provenance: recording, source-derived depiction, smoke fixture and conceptual animation are different evidence classes. Do not imply a simulated agent or UI is a recorded Claude/Codex run. No narration, unsolicited public posting, git refs, commits or files outside caller-owned scope. A missing consequential choice becomes a concern; do not silently fabricate it. Read prior context and chain history, and cite actual paths/URLs used. Revisions must have observable rationale. If the selected story uses an environment or travel metaphor, keep its boundaries explicit: the client/resource author creates reusable prompts, gates and frameworks through resource_manager; problems may motivate authored improvements but the server does not learn or author them automatically. Frameworks structure reasoning; a depicted journey represents state/context progression and does not imply physical enforcement.\n```\n\n**User Message Template**:\n```\nBrief: {{brief}}\nConstraints: {{constraints}}\nProduction root: {{output_root}}\nPrevious handoff:\n{{context | default(\"Read available chain history; report missing evidence.\")}}\n\nRead, before writing, the project files under the production root's `v3/`: `creative-spec.md` (rulings D41–D72, medium, palette law, animation language, Craft baseline), `script.md` (resource vocabulary and beats), `rubric.md` (criteria C1–C23 and the receipt shape). They are the contract; this prompt does not restate them.\n\nGrade the actual rendered artifact against `rubric.md` by criterion id; do not grade anything you have not viewed. Use only the four marks: HOLDS, FAILS, UNPROVEN, TASTE. Each mark cites its evidence at or above the criterion's minimum tier (still, 3x crop, consecutive frames, moving render, owner viewing) and names the failing control it beats. Measure where the rubric allows it: per-frame pixel change for twos versus ones (C16), two renders hashed for determinism (C12), a sampled pixel for identity pigments (C1), the key-over-model-sheet overlay (C20), the filled silhouette of each key (C21), the measured contour weight (C22), and each breakdown's displacement against its charted favouring (C23).\n\nMotion contract:\n{{motion_contract | default(\"Use the recorded Motion Contract step; flag missing handoff.\")}}\n\nWrite the receipt in the rubric's five parts, in order: Changed (by file); Grades (one line per criterion touched); Controls (which earlier study each flipped FAILS beats); Owner (at most two TASTE questions, each with the default the planner takes if unanswered); Next (one fix per FAILS). Save it as `v3/studies/<name>.md` beside the artifact copies, copied unchanged from `out/` with sha256 prefixes. A render that is absent is BLOCKED, not PASS. Propose a rubric change only through its Evolution rules: a new ruling adds a row; three consecutive HOLDS bakes one; a standing TASTE is ruled or deleted.\n\nReturn: Inspected Evidence; Grades; Controls; Owner; Next; Rubric Evolution; Concerns.\n```\n\n**Gate Configuration**:\n- Exclude: api-documentation, creed-fidelity, information-placement, plan-quality, product-positioning-fidelity, prose-hygiene, semantic-discoverability\n- Framework gates: false\n"
+  },
+  "isError": false
+}

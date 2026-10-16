@@ -275,16 +275,16 @@ class WorkflowClient {
   }
 
   async smoke() {
-    const sentinel = "SMOKE_REFERENCE_HANDOFF_7D3A";
+    const sentinel = "SMOKE_BOARD_HANDOFF_7D3A";
+    const brief =
+      "SMOKE: recorded validation fixture for silent showcase mapping; do not produce creative work.";
     const start = await this.call("smoke-start", "prompt_engine", {
-      command: "%clean >>showcase_pipeline",
+      command: "%clean >>showcase_preproduction",
       inputs: {
-        brief:
-          "SMOKE: recorded validation fixture for silent showcase mapping; do not produce creative work.",
+        brief,
         constraints:
           "SMOKE fixture only. No creative evaluation, no filesystem changes, no executable check or publication.",
         output_root: "media/showcase/output",
-        files: "",
       },
     });
     const text = textOf(start);
@@ -292,22 +292,23 @@ class WorkflowClient {
       text,
     )?.[1];
     if (!chainId) throw new Error("Smoke start returned no chain id: " + text);
+    const fixtureOutput = (node, resultSentinel) =>
+      "SMOKE: recorded validation fixture. " +
+      resultSentinel +
+      "\nNo creative work was performed. This is a literal result-propagation probe, not a worker execution receipt.\n\nHANDOFF RESULT\nnode: " +
+      node;
     let summary;
+    let sessionAfter;
+    let baselineResponse;
+    let cancelledText = "";
     try {
       const baseline = await this.call(
         "smoke-session-before",
         "system_control",
         { action: "session", operation: "list" },
       );
-      const handoff = [
-        "SMOKE: recorded validation fixture. " + sentinel,
-        "## Context\nThis is a labeled mapping probe, not a completed inspiration or creative task. The only goal is to prove an upstream result reaches the story step.",
-        "## Analysis\nReference URLs, observations and the preferred direction remain unverified. This fixture exercises state capture and propagation, not design quality.",
-        "## Goals\nThe next rendered specialist must include this sentinel and the invocation brief. No actor may interpret the fixture as production evidence.",
-        "## Execution\nRecord this text as the upstream handoff and inspect the rendered story brief. Do not write creative artifacts or submit an invented gate verdict.",
-        "## Evaluation\nSuccess is observed literal propagation and a pending/cancelled run. Product results, rendering and gate quality remain unverified.",
-        "## Refinement\nAfter the mapping probe, cancel the incomplete chain. A real production run needs researched direction, reviewed specialist output and explicit file ownership.",
-      ].join("\n\n");
+      baselineResponse = baseline;
+      const handoff = fixtureOutput("board", sentinel);
       const next = await this.call("smoke-handoff", "prompt_engine", {
         chain_id: chainId,
         user_response: handoff,
@@ -318,38 +319,16 @@ class WorkflowClient {
         {
           node: "story",
           sentinel: "SMOKE_STORY_RESULT_7D3A",
-          next: "Showcase Treatment",
+          next: "Write `v3/shots.json`",
         },
         {
-          node: "treatment",
-          sentinel: "SMOKE_TREATMENT_RESULT_7D3A",
-          next: "Showcase Motion",
-        },
-        {
-          node: "motion",
-          sentinel: "SMOKE_MOTION_RESULT_7D3A",
-          next: "Technology Recommendation",
-        },
-        {
-          node: "technique",
-          sentinel: "SMOKE_RENDERER_DECISION_7D3A",
-          next: "Strategic Worker",
-        },
-        {
-          node: "implementation",
-          sentinel: "SMOKE_IMPLEMENTATION_RESULT_7D3A",
-          next: "Showcase Review",
+          node: "shots",
+          sentinel: "SMOKE_SHOTS_RESULT_7D3A",
+          next: "Return: Inspected Evidence; Grades",
         },
       ];
       for (const fixture of fixtures) {
-        const output =
-          "SMOKE: recorded validation fixture. " +
-          fixture.sentinel +
-          "\nNo creative or implementation work was performed. This is a literal result-propagation probe, not a worker execution receipt.";
-        const reply =
-          fixture.node === "technique"
-            ? output
-            : output + "\n\nHANDOFF RESULT\nnode: " + fixture.node;
+        const reply = fixtureOutput(fixture.node, fixture.sentinel);
         const response = await this.call(
           "smoke-" + fixture.node + "-result",
           "prompt_engine",
@@ -361,26 +340,8 @@ class WorkflowClient {
           expectedNext: fixture.next,
           outputSentinelPresent: body.includes(fixture.sentinel),
           nextPromptPresent: body.includes(fixture.next),
+          previousHandoffInContext: body.includes("Previous handoff:\n" + reply),
         };
-        if (fixture.node === "technique") {
-          check.rendererDecisionInTask = body.includes(
-            "showcase-render — " + output,
-          );
-          check.motionContractInHistory = body.includes(
-            "SMOKE_MOTION_RESULT_7D3A",
-          );
-        }
-        if (fixture.node === "implementation") {
-          check.implementationInContext = body.includes(
-            "Previous handoff:\n" + output,
-          );
-          check.motionContractAliasCorrect = body.includes(
-            "Motion contract:\nSMOKE: recorded validation fixture. SMOKE_MOTION_RESULT_7D3A",
-          );
-          check.rendererDoesNotReplaceMotion = !body.includes(
-            "Motion contract:\nSMOKE: recorded validation fixture. SMOKE_RENDERER_DECISION_7D3A",
-          );
-        }
         handoffChecks.push(check);
         if (Object.values(check).some((value) => value === false)) {
           await writeFile(
@@ -396,40 +357,37 @@ class WorkflowClient {
       }
       summary = {
         evidenceClass: "explicitly labeled smoke fixture",
+        chain: "showcase_preproduction",
         chainId,
         handoffSentinel: sentinel,
         sentinelPresent: rendered.includes(sentinel),
         storyTemplatePresent:
-          rendered.includes("silent story") ||
+          rendered.includes("Write or revise the silent script") ||
           rendered.includes("showcase_story"),
-        referenceChallengeMapped: text.includes(
-          "## Challenge\n\nSMOKE: recorded validation fixture for silent showcase mapping",
-        ),
-        referenceOutputInStoryContext: rendered.includes(
+        briefMapped: text.includes(brief),
+        boardOutputInStoryContext: rendered.includes(
           "Previous handoff:\n" + handoff,
         ),
-        briefPresent: rendered.includes(
-          "recorded validation fixture for silent showcase mapping",
-        ),
+        briefPresent: rendered.includes(brief),
         gateVerdictSubmitted: false,
         creativeProductionExecuted: false,
         modifier:
           "%clean: protocol/mapping probe only; production gate reviews not exercised",
         handoffChecks,
-        allSevenStepsRendered: true,
+        stepsRendered: ["board", "story", "shots", "grade"],
         beforeSessionResponseRecorded: Boolean(baseline),
       };
-      await writeFile(
-        path.join(this.evidenceDirectory, "smoke-summary.json"),
-        JSON.stringify(summary, null, 2) + "\n",
-      );
       if (
         !summary.sentinelPresent ||
         !summary.storyTemplatePresent ||
         !summary.briefPresent ||
-        !summary.referenceChallengeMapped ||
-        !summary.referenceOutputInStoryContext
+        !summary.briefMapped ||
+        !summary.boardOutputInStoryContext
       ) {
+        await writeFile(
+          path.join(this.evidenceDirectory, "smoke-summary.json"),
+          JSON.stringify(summary, null, 2) + "\n",
+        );
         throw new Error(
           "Next-step mapping not proved. See saved responses; no verdict fabricated.",
         );
@@ -439,11 +397,34 @@ class WorkflowClient {
         chain_id: chainId,
         cancel: true,
       });
+      cancelledText = textOf(cancelled);
       await writeFile(
         path.join(this.evidenceDirectory, "smoke-cancellation.txt"),
-        textOf(cancelled) + "\n",
+        cancelledText + "\n",
       );
+      sessionAfter = await this.call("smoke-session-after", "system_control", {
+        action: "session",
+        operation: "list",
+      });
     }
+    const progressOf = (response) =>
+      /\*\*Progress\*\*: Step (\d+\/\d+)/.exec(textOf(response))?.[1];
+    summary.chainCancelledNotice = cancelledText.includes("Chain Cancelled");
+    summary.sessionProgressBefore = progressOf(baselineResponse);
+    summary.sessionProgressAfter = progressOf(sessionAfter);
+    if (
+      !summary.chainCancelledNotice ||
+      summary.sessionProgressBefore !== "1/4" ||
+      summary.sessionProgressAfter !== "4/4"
+    )
+      throw new Error(
+        "Session listing did not show 1/4 before and 4/4 after, or the cancel notice is missing: " +
+          JSON.stringify(summary),
+      );
+    await writeFile(
+      path.join(this.evidenceDirectory, "smoke-summary.json"),
+      JSON.stringify(summary, null, 2) + "\n",
+    );
     return summary;
   }
 }
