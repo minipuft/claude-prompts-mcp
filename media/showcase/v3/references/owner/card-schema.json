@@ -1,0 +1,5 @@
+{
+  "note": "Reference cards for the showcase film. Facet vocabularies and the required set per section come from the inspiration skill (eagle_board.py FACET_VOCAB / DEFAULT_REQUIRED); this file overrides them for the project. A pick cited by a contract (blocking card, pose sheet, layout, light script) must have its section's facets filled, and every use is recorded with `eagle_board.py apply <ID> --to <contract>#<key> --note ... --receipt ...` so `ledger` can say which reference led to which change.",
+  "required": {},
+  "vocab": {}
+}

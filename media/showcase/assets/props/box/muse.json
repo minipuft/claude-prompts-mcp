@@ -1,0 +1,139 @@
+{
+  "asset": "box",
+  "covers": [
+    "box"
+  ],
+  "status": "proposed",
+  "picked": null,
+  "job": "the box: a plain package, flat and ordinary, whose lid lifts on a back hinge to let a bubble swell out; hand-coded today in Box.tsx",
+  "prompt": {
+    "chain": ">>showcase_asset_muse",
+    "payload": "workflow-payloads/70-muse-box.json",
+    "tool": "imagegen (showcase_asset_sheet tools/imagegen/script.py, codex exec)",
+    "common": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.",
+    "variant_prompts": {
+      "muse-01": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the box: a plain package, flat and ordinary, whose lid lifts on a back hinge to let a bubble swell out; hand-coded today in Box.tsx.\nLAYOUT: Show the SAME box twice side by side on one baseline: left lid closed with one hairline light seam, right lid lifted about 100 degrees on its back edge with the light spilling. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: the Clawd companion: take only its stubby blocky body, flat plates and small dark slit marks as the cast property.\nImage 2: Dr. Seuss Midnight Painting: swooping organic lobes, curling stalks with flag leaves and pale thin contour on black.\nImage 3: owner card MTR8RSMQ452E8: one hard blue flame lights the form on black, the rest unlit.\nImage 4: owner card MFJFTELGH6FD8: a single radiant core behind a flat silhouette, the shape never whites out.\nVARIANT muse-01 'Block box': A stout box built of two stacked soft blocks with a lobed cap for a lid and one small curled flag-leaf latch; its only light is one hard seam as emitter. The design sits between clawd (stubby blocky body and flat plates) and the Seuss paintings.",
+      "muse-02": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the box: a plain package, flat and ordinary, whose lid lifts on a back hinge to let a bubble swell out; hand-coded today in Box.tsx.\nLAYOUT: Show the SAME box twice side by side on one baseline: left lid closed with one hairline light seam, right lid lifted about 100 degrees on its back edge with the light spilling. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: the human's model sheet: take only its long swooping neck-and-hair line, tapered tips and thin pale contour as the cast property.\nImage 2: Dr. Seuss Midnight Painting: swooping organic lobes, curling stalks with flag leaves and pale thin contour on black.\nImage 3: owner card MFI6SELJHX04J: height by a single vertical and a flat pattern.\nImage 4: owner card MFJFTELGH6FD8: a single radiant core behind a flat silhouette, the shape never whites out.\nVARIANT muse-02 'Swoop crate': A tall crate whose sides swoop in like a Seuss tower, a curling stalk as the handle, the lid a long pointed cap lifting on the back edge. The design sits between human (long swooping line and tapered tips) and the Seuss paintings.",
+      "muse-03": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the box: a plain package, flat and ordinary, whose lid lifts on a back hinge to let a bubble swell out; hand-coded today in Box.tsx.\nLAYOUT: Show the SAME box twice side by side on one baseline: left lid closed with one hairline light seam, right lid lifted about 100 degrees on its back edge with the light spilling. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: the Codex companion: take only its rounded soft cloud-and-prompt silhouette and its screen-glyph window as the cast property.\nImage 2: Dr. Seuss Midnight Painting: receding hand-drawn frames, each slightly turned.\nImage 3: owner card MFI6QTUOYA66U: windows framing characters inside architecture.\nImage 4: owner card MFI6SELJDBV13: one emitter lighting an otherwise dark space.\nVARIANT muse-03 'Nested lid': A low rounded box whose lid is a slightly turned frame, itself holding a smaller frame: lifting the lid opens a window into the box. The design sits between codex (rounded soft silhouette and screen window) and the Seuss paintings."
+    },
+    "chain_receipt": "evidence/drive-JURm1O",
+    "mailbox": "mailbox/muse-box"
+  },
+  "variants": [
+    {
+      "id": "muse-01",
+      "title": "Block box",
+      "image": "assets/props/box/muse-01.png",
+      "sha256": "0155b6eb9f96b2830eb976cbff8a54bf82bb5d918e2fea126e4dcf43382d0057",
+      "design": "A stout box built of two stacked soft blocks with a lobed cap for a lid and one small curled flag-leaf latch; its only light is one hard seam as emitter.",
+      "borrows": [
+        {
+          "card": "MTR8RSMQ452E8",
+          "facet": "light.contrast",
+          "value": "hard",
+          "property": "one hard emitter lights the form on black, the rest unlit"
+        },
+        {
+          "card": "MFJFTELGH6FD8",
+          "facet": "light.source",
+          "value": "single-emitter",
+          "property": "a single radiant seam behind a flat silhouette that never whites out"
+        }
+      ],
+      "cast_property": {
+        "cast": "clawd",
+        "property": "stubby blocky body and flat plates"
+      },
+      "board_cards": [
+        "clawd-official",
+        "seuss-no-one-youer"
+      ],
+      "reference_images": [
+        "assets/props/_refs/clawd-official.png",
+        "assets/props/_refs/seuss-no-one-youer.png",
+        "assets/props/_refs/MTR8RSMQ452E8.png",
+        "assets/props/_refs/MFJFTELGH6FD8.png"
+      ],
+      "generation_receipt": "assets/props/box/muse-01.receipt.json",
+      "request": "assets/props/box/muse-01.request.json",
+      "observed": "reads as a box with a back-hinged lid; the light burst on the right is spiky and soft-edged, so the glow needs flattening to bands before a cut"
+    },
+    {
+      "id": "muse-02",
+      "title": "Swoop crate",
+      "image": "assets/props/box/muse-02.png",
+      "sha256": "045788064f9f6b26cd3467069fab98f78cab7296feb0e9c8c5dc5c51b0081dbe",
+      "design": "A tall crate whose sides swoop in like a Seuss tower, a curling stalk as the handle, the lid a long pointed cap lifting on the back edge.",
+      "borrows": [
+        {
+          "card": "MFI6SELJHX04J",
+          "facet": "composition.framing",
+          "value": "tower",
+          "property": "height told by one vertical and a flat pattern"
+        },
+        {
+          "card": "MFJFTELGH6FD8",
+          "facet": "composition.scale",
+          "value": "figure-small",
+          "property": "the box stays a small silhouette against the radiant core"
+        }
+      ],
+      "cast_property": {
+        "cast": "human",
+        "property": "long swooping line and tapered tips"
+      },
+      "board_cards": [
+        "human-model",
+        "seuss-no-one-youer"
+      ],
+      "reference_images": [
+        "assets/props/_refs/human-model.png",
+        "assets/props/_refs/seuss-no-one-youer.png",
+        "assets/props/_refs/MFI6SELJHX04J.png",
+        "assets/props/_refs/MFJFTELGH6FD8.png"
+      ],
+      "generation_receipt": "assets/props/box/muse-02.receipt.json",
+      "request": "assets/props/box/muse-02.request.json",
+      "observed": "drifted: reads as a tall faceted lantern with a curling stalk lid, not a package; the closed and open states agree in scale; the weakest candidate as a box"
+    },
+    {
+      "id": "muse-03",
+      "title": "Nested lid",
+      "image": "assets/props/box/muse-03.png",
+      "sha256": "38ca3a67e362c4fb4a2c0b716ef8a0502dea4aa6c23375532f75d75a2b56e104",
+      "design": "A low rounded box whose lid is a slightly turned frame, itself holding a smaller frame: lifting the lid opens a window into the box.",
+      "borrows": [
+        {
+          "card": "MFI6QTUOYA66U",
+          "facet": "composition.framing",
+          "value": "window",
+          "property": "a window framing what is inside the architecture"
+        },
+        {
+          "card": "MFI6SELJDBV13",
+          "facet": "light.source",
+          "value": "single-emitter",
+          "property": "one emitter inside an otherwise dark space"
+        }
+      ],
+      "cast_property": {
+        "cast": "codex",
+        "property": "rounded soft silhouette and screen window"
+      },
+      "board_cards": [
+        "codex-official",
+        "seuss-nested-frames"
+      ],
+      "reference_images": [
+        "assets/props/_refs/codex-official.png",
+        "assets/props/_refs/seuss-nested-frames.png",
+        "assets/props/_refs/MFI6QTUOYA66U.png",
+        "assets/props/_refs/MFI6SELJDBV13.png"
+      ],
+      "generation_receipt": "assets/props/box/muse-03.receipt.json",
+      "request": "assets/props/box/muse-03.request.json",
+      "observed": "reads as a low rounded box whose lid is a nested turned frame; the opening shows a window into the box; its light is a flat yellow ring, not a seam"
+    }
+  ],
+  "grade": "assets/props/box/grade.md"
+}

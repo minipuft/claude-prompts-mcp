@@ -1,0 +1,82 @@
+[
+ {
+  "key": "K1",
+  "cropPx": [
+   300,
+   465
+  ],
+  "baselineInCrop": 461,
+  "scale": 0.5114,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K1.png"
+ },
+ {
+  "key": "K2",
+  "cropPx": [
+   682,
+   1128
+  ],
+  "baselineInCrop": 1124,
+  "scale": 1.245,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K2.png"
+ },
+ {
+  "key": "K3",
+  "cropPx": [
+   808,
+   1156
+  ],
+  "baselineInCrop": 1152,
+  "scale": 1.245,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K3.png"
+ },
+ {
+  "key": "K4",
+  "cropPx": [
+   749,
+   1147
+  ],
+  "baselineInCrop": 1143,
+  "scale": 1.245,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K4.png"
+ },
+ {
+  "key": "K5",
+  "cropPx": [
+   630,
+   1109
+  ],
+  "baselineInCrop": 1105,
+  "scale": 1.245,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K5.png"
+ },
+ {
+  "key": "K6",
+  "cropPx": [
+   787,
+   1122
+  ],
+  "baselineInCrop": 1118,
+  "scale": 1.245,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K6.png"
+ },
+ {
+  "key": "K7",
+  "cropPx": [
+   397,
+   492
+  ],
+  "baselineInCrop": 488,
+  "scale": 0.5114,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K7.png"
+ },
+ {
+  "key": "K8",
+  "cropPx": [
+   226,
+   279
+  ],
+  "baselineInCrop": 275,
+  "scale": 0.5114,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K8.png"
+ }
+]

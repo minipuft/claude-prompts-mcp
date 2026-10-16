@@ -1,0 +1,12 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "update",
+    "id": "showcase_treatment",
+    "name": "Showcase Treatment",
+    "category": "development",
+    "description": "Specify the five-role palette states and the per-asset contract (roles, shadow shapes, boil variants, reference) for the settled style.",
+    "user_message_template": "Brief: {{brief}}\nConstraints: {{constraints}}\nProduction root: {{output_root}}\nPrevious handoff:\n{{context | default(\"Read available chain history; report missing evidence.\")}}\n\nRead, before writing, the project files under the production root's `v3/`: `creative-spec.md` (rulings D41–D53, medium, palette law, animation language), `script.md` (resource vocabulary and beats), `rubric.md` (criteria C1–C18 and the receipt shape). They are the contract; this prompt does not restate them.\n\nTranslate the script into the asset and palette contract, not a mood. The style is settled (D44, D48, D50): flat five-role assets on a black field, Seuss contour architecture, Midnight Gospel stipple shadows, radiance as the only light. Do not propose a new look; specify what each beat needs in it.\n\nDeliver under the production root: (1) `tokens` values for the three states (settled, overwhelm, scaffold) as role maps per asset family, sampled from the filed references in `v3/references/` and named by source; identity pigments (Codex blue/cyan, Clawd coral/dark) are listed once and never graded; (2) an asset list, one row per object the script names, with its five role slots, its form-shadow and cast-shadow shapes, its boil variants (2–3), and the reference whose contour language it borrows; (3) the frames the planner must inspect, by beat, and what each must show. Hex values appear only in the tokens file; an asset that carries a hex literal fails C2.\n\nReturn: Palette States; Asset Contract; Shadow Law per Asset; Inspection Frames; Artifact Handoff; Concerns."
+  }
+}

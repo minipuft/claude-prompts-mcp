@@ -1,0 +1,232 @@
+{
+  "beats": {
+    "arrival": {
+      "pair": {
+        "radiance": "#0a51fb",
+        "accent": "#fad204"
+      },
+      "radiance": "settled",
+      "grain": "low",
+      "emitter": {
+        "anchor": "box seam",
+        "start": [
+          0.7813,
+          0.55
+        ],
+        "end": [
+          0.7891,
+          0.5333
+        ],
+        "intensity": 0.5,
+        "colour": "#0a51fb",
+        "on": 0,
+        "off": 178
+      }
+    },
+    "everything-at-once": {
+      "pair": {
+        "radiance": "#0a51fb",
+        "accent": "#fad204"
+      },
+      "radiance": "floods, Turrell blue (D74 s01)",
+      "grain": "rising",
+      "emitter": {
+        "anchor": "gadget dial",
+        "start": [
+          0.7891,
+          0.5333
+        ],
+        "end": [
+          0.8125,
+          0.4583
+        ],
+        "intensity": 0.9,
+        "colour": "#0a51fb",
+        "on": 180,
+        "off": 418
+      }
+    },
+    "cant-build": {
+      "pair": {
+        "radiance": "#17263a",
+        "accent": "#457ca4"
+      },
+      "radiance": "Styx steel (D74 s02), noisy",
+      "grain": "high",
+      "emitter": {
+        "anchor": "gadget dial, lost on the floor (the join)",
+        "start": [
+          0.345,
+          0.886
+        ],
+        "end": [
+          0.345,
+          0.886
+        ],
+        "intensity": 0.9,
+        "colour": "#17263a",
+        "on": 420,
+        "off": 628
+      }
+    },
+    "the-frame": {
+      "pair": {
+        "radiance": "#17263a",
+        "accent": "#457ca4"
+      },
+      "radiance": "narrows to the frame",
+      "grain": "falling",
+      "emitter": {
+        "anchor": "frame interior",
+        "start": [
+          0.7813,
+          0.1944
+        ],
+        "end": [
+          0.8281,
+          0.2778
+        ],
+        "intensity": 0.9,
+        "colour": "#17263a",
+        "on": 630,
+        "off": 808
+      }
+    },
+    "art-world": {
+      "pair": {
+        "radiance": "#e1750c",
+        "accent": "#fad204"
+      },
+      "radiance": "warm, s03 amber (D74) on a paper-coloured field, not black",
+      "grain": "paper tooth",
+      "emitter": {
+        "anchor": "join (the drawn piece as it fills)",
+        "start": [
+          0.7813,
+          0.5417
+        ],
+        "end": [
+          0.8438,
+          0.5417
+        ],
+        "intensity": 0.9,
+        "colour": "#e1750c",
+        "on": 810,
+        "off": 1170
+      }
+    },
+    "crossing": {
+      "pair": {
+        "radiance": "#e1750c",
+        "accent": "#fad204"
+      },
+      "radiance": "off",
+      "grain": "none"
+    },
+    "programming-world": {
+      "pair": {
+        "radiance": "#17263a",
+        "accent": "#457ca4"
+      },
+      "radiance": "cold cyan on black, s02 accent as the world's hue",
+      "grain": "none",
+      "emitter": {
+        "anchor": "gates, first to last",
+        "start": [
+          0.1172,
+          0.5389
+        ],
+        "end": [
+          0.2539,
+          0.5222
+        ],
+        "intensity": 0.9,
+        "colour": "#56b0d4",
+        "on": 1290,
+        "off": 1648
+      }
+    },
+    "home-settle": {
+      "pair": {
+        "radiance": "#a63a2e",
+        "accent": "#f8c496"
+      },
+      "radiance": "Soup! coral (D74 s04)",
+      "grain": "low",
+      "emitter": {
+        "anchor": "gadget, rimming the structure",
+        "start": [
+          0.7813,
+          0.4722
+        ],
+        "end": [
+          0.8438,
+          0.4722
+        ],
+        "intensity": 0.9,
+        "colour": "#a63a2e",
+        "on": 1650,
+        "off": 1950
+      }
+    }
+  },
+  "crossings": [
+    {
+      "from": "the-frame",
+      "to": "art-world",
+      "frames": [
+        775,
+        845
+      ],
+      "path": [
+        "#17263a",
+        "#2f1b5d",
+        "#841b81",
+        "#b0163a",
+        "#e1750c"
+      ]
+    },
+    {
+      "from": "art-world",
+      "to": "crossing",
+      "frames": [
+        1135,
+        1205
+      ],
+      "path": [
+        "#e1750c",
+        "#e1750c"
+      ]
+    },
+    {
+      "from": "crossing",
+      "to": "programming-world",
+      "frames": [
+        1255,
+        1325
+      ],
+      "path": [
+        "#e1750c",
+        "#bee616",
+        "#3fe02b",
+        "#41da9b",
+        "#56b0d4"
+      ]
+    },
+    {
+      "from": "programming-world",
+      "to": "home-settle",
+      "frames": [
+        1615,
+        1685
+      ],
+      "path": [
+        "#56b0d4",
+        "#4647cf",
+        "#9c36c9",
+        "#b83283",
+        "#a63a2e"
+      ]
+    }
+  ]
+}

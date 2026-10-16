@@ -1,0 +1,20 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "update",
+    "id": "showcase_motion",
+    "gate_configuration": {
+      "framework_gates": false,
+      "exclude": [
+        "api-documentation",
+        "creed-fidelity",
+        "information-placement",
+        "plan-quality",
+        "product-positioning-fidelity",
+        "prose-hygiene",
+        "semantic-discoverability"
+      ]
+    }
+  }
+}

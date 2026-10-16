@@ -1,0 +1,18 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "❌ **Prompt draft invalid** — nothing written, no version recorded.\n\n- A prompt with ID 'showcase_story' already exists; 'showcase_story' normalizes to 'showcase_story'."
+    }
+  ],
+  "structuredContent": {
+    "action": "validate",
+    "valid": false,
+    "errors": [
+      "A prompt with ID 'showcase_story' already exists; 'showcase_story' normalizes to 'showcase_story'."
+    ],
+    "mutated": false,
+    "message": "❌ **Prompt draft invalid** — nothing written, no version recorded.\n\n- A prompt with ID 'showcase_story' already exists; 'showcase_story' normalizes to 'showcase_story'."
+  },
+  "isError": true
+}

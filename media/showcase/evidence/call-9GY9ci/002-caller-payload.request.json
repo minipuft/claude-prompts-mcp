@@ -1,0 +1,19 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "update",
+    "id": "showcase_evidence",
+    "gate_configuration": {
+      "exclude": [
+        "api-documentation",
+        "creed-fidelity",
+        "information-placement",
+        "plan-quality",
+        "product-positioning-fidelity",
+        "prose-hygiene",
+        "semantic-discoverability"
+      ]
+    }
+  }
+}

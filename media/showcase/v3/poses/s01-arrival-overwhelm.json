@@ -1,0 +1,2747 @@
+{
+  "shot": "s01-arrival-overwhelm",
+  "actor": "human",
+  "provisional": true,
+  "note": "Run 3 (2026-10-15): the keys are built from `solved` through the plate family's mesh (`npm run plates`); the declarations below are run 2's. Every key borrows its curve class, weight kind and lead from a named reference card of v3/references/owner/picks.json (`cards`, recorded with `eagle_board.py apply`; the card gives the class and kind, the bow, sign, lean and `over` are authored here) and names the plate family it is cut from (`plateFamily`: keys share a family only when one inbetweens to the other without a limb crossing the torso or the figure turning). `solved` is `solvePose` of the declaration (`npm run solve-poses`). Derived from the chart's eight keys and their prose (lineOfAction strings -> class/bow/sign, pose strings -> weight/lead/silhouette); bows, offsets and drifts are a first reading to be corrected on the plates, not measurements. heightPx is the rest figure's 922 px mask height: the keys' joints are the solved joints and the plates are the home mesh posed to them (D85, `npm run plates`), so the key space is the home mask space at scale 1. Bows are fractions of heightPx; the root-to-head chord is about a third of the height, so 0.06 is already a sagitta of 18 percent of the chord. Breakdowns are authored to the timing shape (TIMING_SHAPE in src/library/animation/pose.ts), not searched: every move is 3-6 drawings, one drawing per 4 frames from the end of the key's hold (the hold probe reads a longer run as a hold); passing drawings rise through 0.25-0.75 and are placed so the steps ease in and out (0.25 then 0.65 on a 3-drawing move); a settle at 0.95 lands on the chord (offset 0); awe -> brace opens with one anticipation (the left wrist drawn back before the brace). The arc offset sits on the root where the body travels (it carries head and arms) and on the lead wrist where it does not; its side follows the lead wrist's own bow and its size comes from the chord (0.2 of the root chord, at least what clears the arc reach on the least aligned joint; 0.15 of the wrist chord). One overshoot, on brace -> joy-a, where the chart's prose bursts (\"the burst after the pop\"): 1.15 along the chord (the top of the band) with half the passing arc, then the settle. Secondaries lag 2 drawings on twos (4 frames), one drawing of this shot's fours, so a trailing part changes on the body's own frames instead of between them. Each hand names its side: it does not lag on the moves its side leads, so the lead wrist is authored motion and the arc probe reads it as such. The brace moving hold drifts over its whole 24-frame hold (the probe measured 0.35 stage px over 16).",
+  "heightPx": 922,
+  "source": {
+    "chart": "v3/charts/s01-arrival-overwhelm.json",
+    "keys": "v3/keys/s01-arrival-overwhelm.json",
+    "layout": "v3/layouts/s01-arrival-overwhelm.json"
+  },
+  "keys": [
+    {
+      "name": "rest-on-lid",
+      "frame": 0,
+      "hold": 26,
+      "moment": "Upright behind the box, weight even, forearms resting on the lid's near edge, chin down, eyes on the lid.",
+      "lineOfAction": {
+        "class": "C",
+        "bow": 0.06,
+        "sign": -1,
+        "lean": 12
+      },
+      "weight": {
+        "foot": "both",
+        "over": 0.5
+      },
+      "lead": {
+        "arm": "none",
+        "leg": "none"
+      },
+      "silhouette": "closed",
+      "twinned": {
+        "why": "the poster pose: even weight and both forearms resting the same way on the lid is the point of the first frame"
+      },
+      "solved": {
+        "root": [
+          333.5,
+          486.47
+        ],
+        "head": [
+          389.17,
+          199.52
+        ],
+        "torso": [
+          361.82,
+          226
+        ],
+        "neck": [
+          374.69,
+          212.8
+        ],
+        "shoulderL": [
+          304.5,
+          225.93
+        ],
+        "hipL": [
+          306.61,
+          499.77
+        ],
+        "shoulderR": [
+          370.37,
+          287.26
+        ],
+        "hipR": [
+          357.7,
+          474.5
+        ],
+        "ponchoPoint": [
+          340.46,
+          482.21
+        ],
+        "ankleL": [
+          241,
+          838
+        ],
+        "kneeL": [
+          337.81,
+          681.07
+        ],
+        "ankleR": [
+          425.3,
+          834.27
+        ],
+        "kneeR": [
+          381.31,
+          644.42
+        ],
+        "wristL": [
+          282.93,
+          288.2
+        ],
+        "elbowL": [
+          402.48,
+          293.53
+        ],
+        "wristR": [
+          336.92,
+          338.46
+        ],
+        "elbowR": [
+          248.84,
+          272.79
+        ]
+      },
+      "solvedAt": "2026-10-15",
+      "plateFamily": "lid",
+      "cards": [
+        "eagle://item/MFJFS03XZOP7E"
+      ]
+    },
+    {
+      "name": "grip",
+      "frame": 42,
+      "hold": 16,
+      "moment": "Shoulders drop and round, elbows bend, fingertips curl under the lid's near edge: the gather before the lift.",
+      "lineOfAction": {
+        "class": "C",
+        "bow": 0.1,
+        "sign": -1,
+        "lean": 18
+      },
+      "weight": {
+        "foot": "R",
+        "over": 0.6
+      },
+      "lead": {
+        "arm": "R",
+        "leg": "none"
+      },
+      "silhouette": "fold",
+      "solved": {
+        "root": [
+          352,
+          483.6
+        ],
+        "head": [
+          422.6,
+          207.92
+        ],
+        "torso": [
+          388.13,
+          224.1
+        ],
+        "neck": [
+          404.65,
+          215.91
+        ],
+        "shoulderL": [
+          334.22,
+          204.65
+        ],
+        "hipL": [
+          328.64,
+          502.42
+        ],
+        "shoulderR": [
+          375.46,
+          284.64
+        ],
+        "hipR": [
+          373.02,
+          466.66
+        ],
+        "ponchoPoint": [
+          359.38,
+          479.58
+        ],
+        "ankleL": [
+          241,
+          838
+        ],
+        "kneeL": [
+          344.9,
+          685.67
+        ],
+        "ankleR": [
+          424.72,
+          829.05
+        ],
+        "kneeR": [
+          389.13,
+          637.45
+        ],
+        "wristL": [
+          336.55,
+          294.69
+        ],
+        "elbowL": [
+          445.85,
+          245.96
+        ],
+        "wristR": [
+          311.2,
+          245.52
+        ],
+        "elbowR": [
+          383.14,
+          162.49
+        ]
+      },
+      "solvedAt": "2026-10-15",
+      "plateFamily": "lid",
+      "cards": [
+        "eagle://item/MFJG10AXINU2X"
+      ],
+      "twinned": {
+        "why": "both hands take the lid's near edge together: the gather is a matched grip, and the asymmetry starts on the lift, where the right arm leads"
+      }
+    },
+    {
+      "name": "lift",
+      "frame": 66,
+      "hold": 26,
+      "moment": "Arms rise to chest height pulling the lid, torso straightens and leans a little back, chin lifts.",
+      "lineOfAction": {
+        "class": "C",
+        "bow": 0.06,
+        "sign": 1,
+        "lean": -8
+      },
+      "weight": {
+        "foot": "R",
+        "over": 0.7
+      },
+      "lead": {
+        "arm": "R",
+        "leg": "L"
+      },
+      "silhouette": "open",
+      "solved": {
+        "root": [
+          359.4,
+          482.73
+        ],
+        "head": [
+          324.68,
+          192.22
+        ],
+        "torso": [
+          349.55,
+          220.91
+        ],
+        "neck": [
+          338.65,
+          206.04
+        ],
+        "shoulderL": [
+          333.59,
+          275.96
+        ],
+        "hipL": [
+          333.85,
+          498.46
+        ],
+        "shoulderR": [
+          410.78,
+          229.67
+        ],
+        "hipR": [
+          382.39,
+          468.57
+        ],
+        "ponchoPoint": [
+          364.68,
+          477.56
+        ],
+        "ankleL": [
+          204,
+          810.34
+        ],
+        "kneeL": [
+          336.79,
+          682.4
+        ],
+        "ankleR": [
+          425.3,
+          832.11
+        ],
+        "kneeR": [
+          394.36,
+          639.7
+        ],
+        "wristL": [
+          208.69,
+          479.1
+        ],
+        "elbowL": [
+          275.85,
+          380.06
+        ],
+        "wristR": [
+          603.52,
+          155.7
+        ],
+        "elbowR": [
+          532.75,
+          239.73
+        ]
+      },
+      "solvedAt": "2026-10-15",
+      "plateFamily": "lid",
+      "cards": [
+        "eagle://item/MFJG10AXINU2X"
+      ]
+    },
+    {
+      "name": "awe",
+      "frame": 104,
+      "hold": 26,
+      "moment": "One step back, arms drop open and low, palms out, head tipped back to follow the rising bubble.",
+      "lineOfAction": {
+        "class": "S",
+        "bow": 0.1,
+        "sign": -1,
+        "lean": -6,
+        "inflection": 0.5
+      },
+      "weight": {
+        "foot": "L",
+        "over": 0.6
+      },
+      "lead": {
+        "arm": "R",
+        "leg": "R"
+      },
+      "silhouette": "open",
+      "solved": {
+        "root": [
+          329.8,
+          485.82
+        ],
+        "head": [
+          375.29,
+          206.95
+        ],
+        "torso": [
+          400.44,
+          233.52
+        ],
+        "neck": [
+          392.14,
+          217.05
+        ],
+        "shoulderL": [
+          346.95,
+          254.11
+        ],
+        "hipL": [
+          327.5,
+          515.73
+        ],
+        "shoulderR": [
+          430.5,
+          287.57
+        ],
+        "hipR": [
+          331.87,
+          458.9
+        ],
+        "ponchoPoint": [
+          334.75,
+          482.08
+        ],
+        "ankleL": [
+          241,
+          838
+        ],
+        "kneeL": [
+          359.66,
+          696.86
+        ],
+        "ankleR": [
+          459.84,
+          801.86
+        ],
+        "kneeR": [
+          384.11,
+          622.3
+        ],
+        "wristL": [
+          109.74,
+          278.54
+        ],
+        "elbowL": [
+          229.21,
+          271.6
+        ],
+        "wristR": [
+          606.32,
+          396.58
+        ],
+        "elbowR": [
+          496.62,
+          390.55
+        ]
+      },
+      "solvedAt": "2026-10-15",
+      "plateFamily": "open",
+      "cards": [
+        "eagle://item/MFJFS03X49AQO"
+      ]
+    },
+    {
+      "name": "brace",
+      "frame": 154,
+      "hold": 24,
+      "moment": "Hands drawn in to the chest, shoulders up, weight leaning back on the heels, eyes fixed on the swelling bubble.",
+      "lineOfAction": {
+        "class": "C",
+        "bow": 0.08,
+        "sign": 1,
+        "lean": -14
+      },
+      "weight": {
+        "foot": "L",
+        "over": 0.55
+      },
+      "lead": {
+        "arm": "L",
+        "leg": "R"
+      },
+      "silhouette": "closed",
+      "solved": {
+        "root": [
+          340.9,
+          487.9
+        ],
+        "head": [
+          283.7,
+          204.96
+        ],
+        "torso": [
+          314.46,
+          227.23
+        ],
+        "neck": [
+          300.42,
+          215.28
+        ],
+        "shoulderL": [
+          311.53,
+          284.47
+        ],
+        "hipL": [
+          317.31,
+          506.44
+        ],
+        "shoulderR": [
+          376.07,
+          221.75
+        ],
+        "hipR": [
+          362.13,
+          471.22
+        ],
+        "ponchoPoint": [
+          345.61,
+          482.44
+        ],
+        "ankleL": [
+          241,
+          838
+        ],
+        "kneeL": [
+          348,
+          687.83
+        ],
+        "ankleR": [
+          463,
+          810.34
+        ],
+        "kneeR": [
+          363.53,
+          642.76
+        ],
+        "wristL": [
+          311.57,
+          344.83
+        ],
+        "elbowL": [
+          427.02,
+          313.32
+        ],
+        "wristR": [
+          364.46,
+          293.43
+        ],
+        "elbowR": [
+          259.81,
+          260
+        ]
+      },
+      "solvedAt": "2026-10-15",
+      "plateFamily": "guard",
+      "cards": [
+        "eagle://item/MFJG10AX4YB91"
+      ],
+      "twinned": {
+        "why": "both hands are drawn in to the chest at once: the held breath is a closed, matched guard, and the asymmetry is the weight on the left foot and the left hand leading"
+      }
+    },
+    {
+      "name": "joy-a",
+      "frame": 190,
+      "hold": 22,
+      "moment": "Arms flung up and out, back arched, hips pushed to the left, face up: the burst after the pop.",
+      "lineOfAction": {
+        "class": "C",
+        "bow": 0.12,
+        "sign": -1,
+        "lean": -18
+      },
+      "weight": {
+        "foot": "R",
+        "over": 0.8
+      },
+      "lead": {
+        "arm": "L",
+        "leg": "L"
+      },
+      "silhouette": "star",
+      "solved": {
+        "root": [
+          381.6,
+          481.05
+        ],
+        "head": [
+          271.08,
+          222.31
+        ],
+        "torso": [
+          250.38,
+          254.27
+        ],
+        "neck": [
+          260.19,
+          238.66
+        ],
+        "shoulderL": [
+          194.16,
+          265.42
+        ],
+        "hipL": [
+          377.71,
+          510.79
+        ],
+        "shoulderR": [
+          270.76,
+          312.66
+        ],
+        "hipR": [
+          385.1,
+          454.27
+        ],
+        "ponchoPoint": [
+          385.05,
+          473.28
+        ],
+        "ankleL": [
+          204,
+          810.34
+        ],
+        "kneeL": [
+          345.31,
+          691.88
+        ],
+        "ankleR": [
+          423.9,
+          818.27
+        ],
+        "kneeR": [
+          395.13,
+          625.53
+        ],
+        "wristL": [
+          179.99,
+          27.37
+        ],
+        "elbowL": [
+          181.77,
+          147.03
+        ],
+        "wristR": [
+          473.3,
+          293.08
+        ],
+        "elbowR": [
+          384.52,
+          357.79
+        ]
+      },
+      "solvedAt": "2026-10-15",
+      "plateFamily": "burst-a",
+      "cards": [
+        "eagle://item/MFJFTELH7A9UQ",
+        "eagle://item/MFJFRODX2CIQ5"
+      ]
+    },
+    {
+      "name": "joy-b",
+      "frame": 228,
+      "hold": 20,
+      "moment": "The same joy turned the other way: hips to the right, arms swapped, the hair swoop swinging across (the turn).",
+      "lineOfAction": {
+        "class": "S",
+        "bow": 0.12,
+        "sign": 1,
+        "lean": 18,
+        "inflection": 0.45
+      },
+      "weight": {
+        "foot": "L",
+        "over": 0.8
+      },
+      "lead": {
+        "arm": "R",
+        "leg": "L"
+      },
+      "silhouette": "star",
+      "solved": {
+        "root": [
+          248.4,
+          481.05
+        ],
+        "head": [
+          242.25,
+          197.99
+        ],
+        "torso": [
+          214.75,
+          221.21
+        ],
+        "neck": [
+          223.99,
+          205.26
+        ],
+        "shoulderL": [
+          175.34,
+          262.84
+        ],
+        "hipL": [
+          252.54,
+          451.33
+        ],
+        "shoulderR": [
+          265.16,
+          257.04
+        ],
+        "hipR": [
+          244.67,
+          507.79
+        ],
+        "ponchoPoint": [
+          255.17,
+          475.11
+        ],
+        "ankleL": [
+          204,
+          810.34
+        ],
+        "kneeL": [
+          261.34,
+          635.09
+        ],
+        "ankleR": [
+          420.87,
+          828.66
+        ],
+        "kneeR": [
+          319.98,
+          661.92
+        ],
+        "wristL": [
+          -43.85,
+          168.91
+        ],
+        "elbowL": [
+          63.94,
+          220.9
+        ],
+        "wristR": [
+          290.28,
+          75.31
+        ],
+        "elbowR": [
+          349.17,
+          168.05
+        ]
+      },
+      "solvedAt": "2026-10-15",
+      "plateFamily": "burst-b",
+      "cards": [
+        "eagle://item/MFI6SYYWK85H4"
+      ]
+    },
+    {
+      "name": "shrink",
+      "frame": 272,
+      "hold": 148,
+      "moment": "Knees bent, back rounded, chin to chest, forearms crossed over the head: small and covering, joy overrun by the field.",
+      "lineOfAction": {
+        "class": "C",
+        "bow": 0.14,
+        "sign": -1,
+        "lean": 4
+      },
+      "weight": {
+        "foot": "both",
+        "over": 0.5
+      },
+      "lead": {
+        "arm": "none",
+        "leg": "none"
+      },
+      "silhouette": "fold",
+      "twinned": {
+        "why": "the figure folds in on itself with forearms crossed over the head; a symmetric closed shape is what covering looks like"
+      },
+      "solved": {
+        "root": [
+          333.5,
+          486.47
+        ],
+        "head": [
+          321.64,
+          208.05
+        ],
+        "torso": [
+          289.34,
+          228.22
+        ],
+        "neck": [
+          304.92,
+          218.36
+        ],
+        "shoulderL": [
+          233.93,
+          213.57
+        ],
+        "hipL": [
+          321.5,
+          513.96
+        ],
+        "shoulderR": [
+          282.04,
+          289.63
+        ],
+        "hipR": [
+          344.3,
+          461.73
+        ],
+        "ponchoPoint": [
+          339.53,
+          480.37
+        ],
+        "ankleL": [
+          241,
+          838
+        ],
+        "kneeL": [
+          356.81,
+          694.51
+        ],
+        "ankleR": [
+          421.97,
+          819.45
+        ],
+        "kneeR": [
+          372.67,
+          630.91
+        ],
+        "wristL": [
+          230.11,
+          306.75
+        ],
+        "elbowL": [
+          341.82,
+          263.85
+        ],
+        "wristR": [
+          200.53,
+          260
+        ],
+        "elbowR": [
+          261.94,
+          168.91
+        ]
+      },
+      "solvedAt": "2026-10-15",
+      "plateFamily": "fold",
+      "cards": [
+        "eagle://item/MFJG10AV4V3U5"
+      ]
+    }
+  ],
+  "breakdowns": [
+    {
+      "between": [
+        "rest-on-lid",
+        "grip"
+      ],
+      "frame": 26,
+      "favour": 0.25,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 8
+      }
+    },
+    {
+      "between": [
+        "rest-on-lid",
+        "grip"
+      ],
+      "frame": 30,
+      "favour": 0.65,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 30
+      }
+    },
+    {
+      "between": [
+        "rest-on-lid",
+        "grip"
+      ],
+      "frame": 34,
+      "favour": 0.75,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 20
+      }
+    },
+    {
+      "between": [
+        "rest-on-lid",
+        "grip"
+      ],
+      "frame": 38,
+      "favour": 0.98,
+      "kind": "settle",
+      "arc": {
+        "joint": "wristR",
+        "offsetPx": 0
+      }
+    },
+    {
+      "between": [
+        "grip",
+        "lift"
+      ],
+      "frame": 58,
+      "favour": 0.25,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 34
+      },
+      "joints": {
+        "root": [
+          356.66,
+          507.26
+        ],
+        "head": [
+          400.93,
+          227.87
+        ],
+        "torso": [
+          381.29,
+          247.18
+        ],
+        "neck": [
+          390.96,
+          237.32
+        ],
+        "shoulderL": [
+          336.87,
+          246.35
+        ],
+        "hipL": [
+          332.75,
+          525.31
+        ],
+        "shoulderR": [
+          387.1,
+          294.77
+        ],
+        "hipR": [
+          378.17,
+          491.01
+        ],
+        "ponchoPoint": [
+          363.51,
+          502.95
+        ],
+        "ankleL": [
+          234.56,
+          854.96
+        ],
+        "kneeL": [
+          345.68,
+          708.73
+        ],
+        "ankleR": [
+          427.67,
+          853.69
+        ],
+        "kneeR": [
+          393.24,
+          661.89
+        ],
+        "wristL": [
+          307.39,
+          364.67
+        ],
+        "elbowL": [
+          406.16,
+          303.36
+        ],
+        "wristR": [
+          396.43,
+          277.36
+        ],
+        "elbowR": [
+          428.02,
+          220.89
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "05877221788aae423ea22f70e52a0f023af00a1a79e575451a755a2d93b6fe4a"
+    },
+    {
+      "between": [
+        "grip",
+        "lift"
+      ],
+      "frame": 62,
+      "favour": 0.65,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 34
+      },
+      "joints": {
+        "root": [
+          360.35,
+          513.12
+        ],
+        "head": [
+          362.49,
+          227.8
+        ],
+        "torso": [
+          366.59,
+          252.11
+        ],
+        "neck": [
+          365.29,
+          239.58
+        ],
+        "shoulderL": [
+          337.35,
+          281.09
+        ],
+        "hipL": [
+          335.56,
+          529.93
+        ],
+        "shoulderR": [
+          401.96,
+          279
+        ],
+        "hipR": [
+          382.65,
+          497.99
+        ],
+        "ponchoPoint": [
+          366.36,
+          508.35
+        ],
+        "ankleL": [
+          220.49,
+          850.11
+        ],
+        "kneeL": [
+          343.17,
+          713.63
+        ],
+        "ankleR": [
+          428.63,
+          861.13
+        ],
+        "kneeR": [
+          396.07,
+          669
+        ],
+        "wristL": [
+          256.98,
+          444.64
+        ],
+        "elbowL": [
+          338.89,
+          363.21
+        ],
+        "wristR": [
+          516.52,
+          255.55
+        ],
+        "elbowR": [
+          489.81,
+          261.95
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "05877221788aae423ea22f70e52a0f023af00a1a79e575451a755a2d93b6fe4a"
+    },
+    {
+      "between": [
+        "grip",
+        "lift"
+      ],
+      "frame": 64,
+      "favour": 0.98,
+      "kind": "settle",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 0
+      },
+      "joints": {
+        "root": [
+          359.5,
+          484.87
+        ],
+        "head": [
+          326.89,
+          194.65
+        ],
+        "torso": [
+          350.57,
+          223.09
+        ],
+        "neck": [
+          340.22,
+          208.36
+        ],
+        "shoulderL": [
+          333.85,
+          276.65
+        ],
+        "hipL": [
+          334,
+          500.66
+        ],
+        "shoulderR": [
+          410.32,
+          232.89
+        ],
+        "hipR": [
+          382.45,
+          470.65
+        ],
+        "ponchoPoint": [
+          364.82,
+          479.72
+        ],
+        "ankleL": [
+          204.99,
+          813.01
+        ],
+        "kneeL": [
+          337.2,
+          684.59
+        ],
+        "ankleR": [
+          425.54,
+          834.17
+        ],
+        "kneeR": [
+          394.5,
+          641.78
+        ],
+        "wristL": [
+          211.5,
+          477.53
+        ],
+        "elbowL": [
+          279.5,
+          379.5
+        ],
+        "wristR": [
+          598.75,
+          162.32
+        ],
+        "elbowR": [
+          530.42,
+          241.66
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "05877221788aae423ea22f70e52a0f023af00a1a79e575451a755a2d93b6fe4a"
+    },
+    {
+      "between": [
+        "lift",
+        "awe"
+      ],
+      "frame": 92,
+      "favour": 0.25,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": -26
+      }
+    },
+    {
+      "between": [
+        "lift",
+        "awe"
+      ],
+      "frame": 96,
+      "favour": 0.65,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": -32
+      }
+    },
+    {
+      "between": [
+        "lift",
+        "awe"
+      ],
+      "frame": 100,
+      "favour": 0.98,
+      "kind": "settle",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 0
+      }
+    },
+    {
+      "between": [
+        "awe",
+        "brace"
+      ],
+      "frame": 130,
+      "favour": 0.4,
+      "kind": "anticipation",
+      "arc": {
+        "joint": "wristL",
+        "offsetPx": 30
+      },
+      "joints": {
+        "root": [
+          326.76,
+          495.93
+        ],
+        "head": [
+          382.52,
+          217.47
+        ],
+        "torso": [
+          407.1,
+          244.47
+        ],
+        "neck": [
+          399.38,
+          227.55
+        ],
+        "shoulderL": [
+          348.56,
+          261.39
+        ],
+        "hipL": [
+          326.59,
+          526.98
+        ],
+        "shoulderR": [
+          434.01,
+          304.47
+        ],
+        "hipR": [
+          326.91,
+          467.99
+        ],
+        "ponchoPoint": [
+          331.73,
+          492.36
+        ],
+        "ankleL": [
+          239.07,
+          848.32
+        ],
+        "kneeL": [
+          358.89,
+          708.08
+        ],
+        "ankleR": [
+          457.59,
+          811.33
+        ],
+        "kneeR": [
+          384.23,
+          630.57
+        ],
+        "wristL": [
+          81.07,
+          302.18
+        ],
+        "elbowL": [
+          204.22,
+          287.72
+        ],
+        "wristR": [
+          628.57,
+          417.22
+        ],
+        "elbowR": [
+          518.37,
+          413.93
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "1f6d065bea5abe381f873a1f9ddd7b9f721f86229e039096314bb908572dca93"
+    },
+    {
+      "between": [
+        "awe",
+        "brace"
+      ],
+      "frame": 134,
+      "favour": 0.25,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 30
+      },
+      "joints": {
+        "root": [
+          328.67,
+          507.19
+        ],
+        "head": [
+          348.49,
+          227.3
+        ],
+        "torso": [
+          375.04,
+          252.8
+        ],
+        "neck": [
+          365.3,
+          237.46
+        ],
+        "shoulderL": [
+          334.19,
+          282.55
+        ],
+        "hipL": [
+          321.05,
+          534.26
+        ],
+        "shoulderR": [
+          412.99,
+          291.97
+        ],
+        "hipR": [
+          335.53,
+          482.83
+        ],
+        "ponchoPoint": [
+          333.56,
+          503.02
+        ],
+        "ankleL": [
+          237.09,
+          858.85
+        ],
+        "kneeL": [
+          352.84,
+          715.45
+        ],
+        "ankleR": [
+          456.72,
+          824.83
+        ],
+        "kneeR": [
+          375.06,
+          648.27
+        ],
+        "wristL": [
+          143.05,
+          356.27
+        ],
+        "elbowL": [
+          268.14,
+          323.03
+        ],
+        "wristR": [
+          541.95,
+          391.64
+        ],
+        "elbowR": [
+          433.51,
+          378.76
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "1f6d065bea5abe381f873a1f9ddd7b9f721f86229e039096314bb908572dca93"
+    },
+    {
+      "between": [
+        "awe",
+        "brace"
+      ],
+      "frame": 138,
+      "favour": 0.45,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 30
+      },
+      "joints": {
+        "root": [
+          329.34,
+          515.88
+        ],
+        "head": [
+          328.62,
+          235.18
+        ],
+        "torso": [
+          356.29,
+          259.81
+        ],
+        "neck": [
+          345.41,
+          245.38
+        ],
+        "shoulderL": [
+          325.55,
+          296.9
+        ],
+        "hipL": [
+          317.46,
+          540.67
+        ],
+        "shoulderR": [
+          400.55,
+          287.07
+        ],
+        "hipR": [
+          340.03,
+          493.57
+        ],
+        "ponchoPoint": [
+          334.18,
+          511.37
+        ],
+        "ankleL": [
+          235.54,
+          867.12
+        ],
+        "kneeL": [
+          348.96,
+          721.92
+        ],
+        "ankleR": [
+          455.8,
+          834.8
+        ],
+        "kneeR": [
+          369.39,
+          660.63
+        ],
+        "wristL": [
+          176.61,
+          393.8
+        ],
+        "elbowL": [
+          303.52,
+          347.65
+        ],
+        "wristR": [
+          492.03,
+          379.29
+        ],
+        "elbowR": [
+          384.6,
+          360.93
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "1f6d065bea5abe381f873a1f9ddd7b9f721f86229e039096314bb908572dca93"
+    },
+    {
+      "between": [
+        "awe",
+        "brace"
+      ],
+      "frame": 142,
+      "favour": 0.6,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 30
+      },
+      "joints": {
+        "root": [
+          331.2,
+          515.11
+        ],
+        "head": [
+          315.08,
+          233.8
+        ],
+        "torso": [
+          343.6,
+          257.79
+        ],
+        "neck": [
+          331.85,
+          244.03
+        ],
+        "shoulderL": [
+          320.44,
+          300.37
+        ],
+        "hipL": [
+          316.13,
+          538.2
+        ],
+        "shoulderR": [
+          392.59,
+          276.12
+        ],
+        "hipR": [
+          344.77,
+          494.34
+        ],
+        "ponchoPoint": [
+          336.01,
+          510.34
+        ],
+        "ankleL": [
+          235.74,
+          866.04
+        ],
+        "kneeL": [
+          347.41,
+          719.49
+        ],
+        "ankleR": [
+          456.48,
+          834.99
+        ],
+        "kneeR": [
+          366.51,
+          662.62
+        ],
+        "wristL": [
+          207.78,
+          400.57
+        ],
+        "elbowL": [
+          333.74,
+          351.78
+        ],
+        "wristR": [
+          455.95,
+          362.73
+        ],
+        "elbowR": [
+          349.28,
+          340.26
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "1f6d065bea5abe381f873a1f9ddd7b9f721f86229e039096314bb908572dca93"
+    },
+    {
+      "between": [
+        "awe",
+        "brace"
+      ],
+      "frame": 146,
+      "favour": 0.75,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 30
+      },
+      "joints": {
+        "root": [
+          334.22,
+          508.23
+        ],
+        "head": [
+          302.69,
+          226.31
+        ],
+        "torso": [
+          332.05,
+          249.65
+        ],
+        "neck": [
+          319.44,
+          236.57
+        ],
+        "shoulderL": [
+          316.48,
+          297.73
+        ],
+        "hipL": [
+          315.95,
+          529.61
+        ],
+        "shoulderR": [
+          385.77,
+          259.06
+        ],
+        "hipR": [
+          350.66,
+          488.99
+        ],
+        "ponchoPoint": [
+          338.99,
+          503.2
+        ],
+        "ankleL": [
+          237.09,
+          858.85
+        ],
+        "kneeL": [
+          347.01,
+          710.94
+        ],
+        "ankleR": [
+          458.3,
+          829.07
+        ],
+        "kneeR": [
+          364.77,
+          658.5
+        ],
+        "wristL": [
+          243.97,
+          389.42
+        ],
+        "elbowL": [
+          367.04,
+          343.89
+        ],
+        "wristR": [
+          421.02,
+          340.07
+        ],
+        "elbowR": [
+          315.11,
+          313.49
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "1f6d065bea5abe381f873a1f9ddd7b9f721f86229e039096314bb908572dca93"
+    },
+    {
+      "between": [
+        "awe",
+        "brace"
+      ],
+      "frame": 150,
+      "favour": 0.98,
+      "kind": "settle",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 0
+      },
+      "joints": {
+        "root": [
+          340.33,
+          489.71
+        ],
+        "head": [
+          285.18,
+          206.85
+        ],
+        "torso": [
+          315.83,
+          229.21
+        ],
+        "neck": [
+          301.91,
+          217.17
+        ],
+        "shoulderL": [
+          311.89,
+          285.71
+        ],
+        "hipL": [
+          317.17,
+          508.48
+        ],
+        "shoulderR": [
+          376.81,
+          224.92
+        ],
+        "hipR": [
+          361.18,
+          472.83
+        ],
+        "ponchoPoint": [
+          345.05,
+          484.28
+        ],
+        "ankleL": [
+          240.65,
+          839.85
+        ],
+        "kneeL": [
+          347.89,
+          689.86
+        ],
+        "ankleR": [
+          462.59,
+          812.02
+        ],
+        "kneeR": [
+          363.59,
+          644.2
+        ],
+        "wristL": [
+          306.01,
+          348.94
+        ],
+        "elbowL": [
+          422.13,
+          316.13
+        ],
+        "wristR": [
+          368.95,
+          297.34
+        ],
+        "elbowR": [
+          264.2,
+          264.46
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "1f6d065bea5abe381f873a1f9ddd7b9f721f86229e039096314bb908572dca93"
+    },
+    {
+      "between": [
+        "brace",
+        "joy-a"
+      ],
+      "frame": 178,
+      "favour": 0.25,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 55
+      },
+      "joints": {
+        "root": [
+          357.53,
+          524.54
+        ],
+        "head": [
+          287,
+          247.65
+        ],
+        "torso": [
+          304.89,
+          272.34
+        ],
+        "neck": [
+          296.82,
+          259.48
+        ],
+        "shoulderL": [
+          288.64,
+          318.06
+        ],
+        "hipL": [
+          338.86,
+          545.88
+        ],
+        "shoulderR": [
+          356.2,
+          282.83
+        ],
+        "hipR": [
+          374.33,
+          505.33
+        ],
+        "ponchoPoint": [
+          361.92,
+          518.5
+        ],
+        "ankleL": [
+          238.2,
+          869.44
+        ],
+        "kneeL": [
+          353.78,
+          727.19
+        ],
+        "ankleR": [
+          459.68,
+          850.67
+        ],
+        "kneeR": [
+          377.88,
+          676.8
+        ],
+        "wristL": [
+          321.06,
+          288.93
+        ],
+        "elbowL": [
+          390.13,
+          302.65
+        ],
+        "wristR": [
+          398.12,
+          331.69
+        ],
+        "elbowR": [
+          297.44,
+          322.8
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "2350bc59caaebcc47550a425b9a0809536f4ed3750bb77540d963077981acb7a"
+    },
+    {
+      "between": [
+        "brace",
+        "joy-a"
+      ],
+      "frame": 182,
+      "favour": 0.58,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 55
+      },
+      "joints": {
+        "root": [
+          373.35,
+          536.46
+        ],
+        "head": [
+          285.22,
+          267.56
+        ],
+        "torso": [
+          286.14,
+          295.45
+        ],
+        "neck": [
+          285.93,
+          281.37
+        ],
+        "shoulderL": [
+          252.3,
+          325.95
+        ],
+        "hipL": [
+          361.18,
+          561.5
+        ],
+        "shoulderR": [
+          323.83,
+          327.01
+        ],
+        "hipR": [
+          384.29,
+          513.92
+        ],
+        "ponchoPoint": [
+          377.33,
+          529.66
+        ],
+        "ankleL": [
+          228.38,
+          874.49
+        ],
+        "kneeL": [
+          355.28,
+          742.71
+        ],
+        "ankleR": [
+          449.16,
+          867.47
+        ],
+        "kneeR": [
+          390.7,
+          685.3
+        ],
+        "wristL": [
+          293.31,
+          192.84
+        ],
+        "elbowL": [
+          318.22,
+          259.21
+        ],
+        "wristR": [
+          436.43,
+          345.76
+        ],
+        "elbowR": [
+          340.98,
+          369.25
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "2350bc59caaebcc47550a425b9a0809536f4ed3750bb77540d963077981acb7a"
+    },
+    {
+      "between": [
+        "brace",
+        "joy-a"
+      ],
+      "frame": 186,
+      "favour": 0.74,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 55
+      },
+      "joints": {
+        "root": [
+          377.67,
+          522.37
+        ],
+        "head": [
+          281.02,
+          257.34
+        ],
+        "torso": [
+          273.7,
+          286.78
+        ],
+        "neck": [
+          277.3,
+          272.12
+        ],
+        "shoulderL": [
+          231.33,
+          309.91
+        ],
+        "hipL": [
+          368.66,
+          549.2
+        ],
+        "shoulderR": [
+          304.79,
+          328.56
+        ],
+        "hipR": [
+          385.78,
+          498.21
+        ],
+        "ponchoPoint": [
+          381.45,
+          515.2
+        ],
+        "ankleL": [
+          220.27,
+          857.07
+        ],
+        "kneeL": [
+          352.66,
+          730.36
+        ],
+        "ankleR": [
+          440.72,
+          855.75
+        ],
+        "kneeR": [
+          393.57,
+          669.55
+        ],
+        "wristL": [
+          257.89,
+          134.1
+        ],
+        "elbowL": [
+          270.71,
+          222.13
+        ],
+        "wristR": [
+          451.66,
+          332.71
+        ],
+        "elbowR": [
+          358.75,
+          371.9
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "2350bc59caaebcc47550a425b9a0809536f4ed3750bb77540d963077981acb7a"
+    },
+    {
+      "between": [
+        "brace",
+        "joy-a"
+      ],
+      "frame": 188,
+      "favour": 0.98,
+      "kind": "settle",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 0
+      },
+      "joints": {
+        "root": [
+          381.36,
+          484.59
+        ],
+        "head": [
+          271.91,
+          225.37
+        ],
+        "torso": [
+          252.23,
+          257.13
+        ],
+        "neck": [
+          261.57,
+          241.6
+        ],
+        "shoulderL": [
+          197.08,
+          269.21
+        ],
+        "hipL": [
+          377.08,
+          514.11
+        ],
+        "shoulderR": [
+          273.44,
+          314.25
+        ],
+        "hipR": [
+          385.21,
+          458.01
+        ],
+        "ponchoPoint": [
+          384.83,
+          476.87
+        ],
+        "ankleL": [
+          205.31,
+          814.3
+        ],
+        "kneeL": [
+          345.94,
+          695.2
+        ],
+        "ankleR": [
+          425.26,
+          821.52
+        ],
+        "kneeR": [
+          395.07,
+          629.28
+        ],
+        "wristL": [
+          186.39,
+          35.8
+        ],
+        "elbowL": [
+          188.84,
+          153.1
+        ],
+        "wristR": [
+          471.7,
+          296.49
+        ],
+        "elbowR": [
+          382.6,
+          359.24
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "2350bc59caaebcc47550a425b9a0809536f4ed3750bb77540d963077981acb7a"
+    },
+    {
+      "between": [
+        "joy-a",
+        "joy-b"
+      ],
+      "frame": 216,
+      "favour": 0.25,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 24
+      },
+      "joints": {
+        "root": [
+          348.3,
+          464.08
+        ],
+        "head": [
+          263.87,
+          199.26
+        ],
+        "torso": [
+          241.47,
+          229.03
+        ],
+        "neck": [
+          251.14,
+          213.34
+        ],
+        "shoulderL": [
+          189.46,
+          247.8
+        ],
+        "hipL": [
+          346.42,
+          478.95
+        ],
+        "shoulderR": [
+          269.36,
+          281.78
+        ],
+        "hipR": [
+          349.99,
+          450.68
+        ],
+        "ponchoPoint": [
+          352.58,
+          456.77
+        ],
+        "ankleL": [
+          204,
+          793.37
+        ],
+        "kneeL": [
+          324.32,
+          660.71
+        ],
+        "ankleR": [
+          423.14,
+          803.9
+        ],
+        "kneeR": [
+          376.34,
+          617.66
+        ],
+        "wristL": [
+          124.03,
+          45.78
+        ],
+        "elbowL": [
+          152.31,
+          148.53
+        ],
+        "wristR": [
+          454.61,
+          198.92
+        ],
+        "elbowR": [
+          389.22,
+          282.01
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "8697af09a13fe22c4bde621f1c062816760a9e977e7d5842edfe813e7a73aff1"
+    },
+    {
+      "between": [
+        "joy-a",
+        "joy-b"
+      ],
+      "frame": 220,
+      "favour": 0.65,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 24
+      },
+      "joints": {
+        "root": [
+          295.02,
+          459.67
+        ],
+        "head": [
+          252.34,
+          185.12
+        ],
+        "torso": [
+          227.22,
+          211.4
+        ],
+        "neck": [
+          236.66,
+          195.57
+        ],
+        "shoulderL": [
+          181.93,
+          242.36
+        ],
+        "hipL": [
+          296.35,
+          450.76
+        ],
+        "shoulderR": [
+          267.12,
+          255.12
+        ],
+        "hipR": [
+          293.82,
+          467.67
+        ],
+        "ponchoPoint": [
+          300.63,
+          453.09
+        ],
+        "ankleL": [
+          204,
+          788.96
+        ],
+        "kneeL": [
+          290.73,
+          633.58
+        ],
+        "ankleR": [
+          421.93,
+          803.64
+        ],
+        "kneeR": [
+          346.28,
+          627.8
+        ],
+        "wristL": [
+          34.49,
+          97.99
+        ],
+        "elbowL": [
+          105.18,
+          173.66
+        ],
+        "wristR": [
+          388.44,
+          101.48
+        ],
+        "elbowR": [
+          378.6,
+          198.74
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "8697af09a13fe22c4bde621f1c062816760a9e977e7d5842edfe813e7a73aff1"
+    },
+    {
+      "between": [
+        "joy-a",
+        "joy-b"
+      ],
+      "frame": 224,
+      "favour": 0.99,
+      "kind": "settle",
+      "arc": {
+        "joint": "wristR",
+        "offsetPx": 0
+      },
+      "joints": {
+        "root": [
+          249.73,
+          480.3
+        ],
+        "head": [
+          242.54,
+          197.48
+        ],
+        "torso": [
+          215.11,
+          220.79
+        ],
+        "neck": [
+          224.35,
+          204.84
+        ],
+        "shoulderL": [
+          175.53,
+          262.11
+        ],
+        "hipL": [
+          253.79,
+          451.17
+        ],
+        "shoulderR": [
+          265.22,
+          256.84
+        ],
+        "hipR": [
+          246.07,
+          506.5
+        ],
+        "ponchoPoint": [
+          256.47,
+          474.34
+        ],
+        "ankleL": [
+          204,
+          809.59
+        ],
+        "kneeL": [
+          262.18,
+          634.9
+        ],
+        "ankleR": [
+          420.9,
+          827.8
+        ],
+        "kneeR": [
+          320.73,
+          660.8
+        ],
+        "wristL": [
+          -41.61,
+          166.74
+        ],
+        "elbowL": [
+          65.12,
+          219.41
+        ],
+        "wristR": [
+          293.31,
+          75.72
+        ],
+        "elbowR": [
+          350.12,
+          168.69
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "8697af09a13fe22c4bde621f1c062816760a9e977e7d5842edfe813e7a73aff1"
+    },
+    {
+      "between": [
+        "joy-b",
+        "shrink"
+      ],
+      "frame": 254,
+      "favour": 0.25,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": -25
+      },
+      "joints": {
+        "root": [
+          270.8,
+          464.76
+        ],
+        "head": [
+          263.22,
+          182.86
+        ],
+        "torso": [
+          234.52,
+          205.32
+        ],
+        "neck": [
+          245.35,
+          190.89
+        ],
+        "shoulderL": [
+          191.11,
+          232.88
+        ],
+        "hipL": [
+          270.9,
+          449.35
+        ],
+        "shoulderR": [
+          270.5,
+          247.55
+        ],
+        "hipR": [
+          270.7,
+          478.63
+        ],
+        "ponchoPoint": [
+          277.38,
+          458.78
+        ],
+        "ankleL": [
+          214.37,
+          799.61
+        ],
+        "kneeL": [
+          286.33,
+          632.3
+        ],
+        "ankleR": [
+          422.27,
+          808.72
+        ],
+        "kneeR": [
+          334.28,
+          636.53
+        ],
+        "wristL": [
+          40.07,
+          157.3
+        ],
+        "elbowL": [
+          141.68,
+          199.78
+        ],
+        "wristR": [
+          268.97,
+          103.84
+        ],
+        "elbowR": [
+          328.49,
+          150.62
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "5393e6fc77a07e380133b3766bdce385344357c22296715544b1f37d4c33b330"
+    },
+    {
+      "between": [
+        "joy-b",
+        "shrink"
+      ],
+      "frame": 258,
+      "favour": 0.55,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": -25
+      },
+      "joints": {
+        "root": [
+          296.77,
+          459.39
+        ],
+        "head": [
+          287.48,
+          178.88
+        ],
+        "torso": [
+          257.34,
+          200.42
+        ],
+        "neck": [
+          270.07,
+          187.82
+        ],
+        "shoulderL": [
+          209.13,
+          211.1
+        ],
+        "hipL": [
+          292.04,
+          461.13
+        ],
+        "shoulderR": [
+          276.01,
+          250.32
+        ],
+        "hipR": [
+          301.04,
+          457.81
+        ],
+        "ponchoPoint": [
+          303.14,
+          453.36
+        ],
+        "ankleL": [
+          225.92,
+          800.91
+        ],
+        "kneeL": [
+          315.42,
+          643.13
+        ],
+        "ankleR": [
+          423.04,
+          798.95
+        ],
+        "kneeR": [
+          350.53,
+          620.22
+        ],
+        "wristL": [
+          128.37,
+          180.38
+        ],
+        "elbowL": [
+          228.33,
+          200.03
+        ],
+        "wristR": [
+          242.49,
+          152.25
+        ],
+        "elbowR": [
+          302.76,
+          143.88
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "5393e6fc77a07e380133b3766bdce385344357c22296715544b1f37d4c33b330"
+    },
+    {
+      "between": [
+        "joy-b",
+        "shrink"
+      ],
+      "frame": 262,
+      "favour": 0.65,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": -25
+      },
+      "joints": {
+        "root": [
+          305.13,
+          462.34
+        ],
+        "head": [
+          295.27,
+          182.3
+        ],
+        "torso": [
+          264.65,
+          203.54
+        ],
+        "neck": [
+          278.01,
+          191.54
+        ],
+        "shoulderL": [
+          214.84,
+          208.58
+        ],
+        "hipL": [
+          298.78,
+          469.81
+        ],
+        "shoulderR": [
+          277.55,
+          255.99
+        ],
+        "hipR": [
+          310.85,
+          455.62
+        ],
+        "ponchoPoint": [
+          311.42,
+          456.3
+        ],
+        "ankleL": [
+          229.47,
+          806.09
+        ],
+        "kneeL": [
+          324.81,
+          651.48
+        ],
+        "ankleR": [
+          423,
+          800.44
+        ],
+        "kneeR": [
+          355.64,
+          619.53
+        ],
+        "wristL": [
+          153.66,
+          200.46
+        ],
+        "elbowL": [
+          254.99,
+          208.68
+        ],
+        "wristR": [
+          233.36,
+          173.13
+        ],
+        "elbowR": [
+          293.89,
+          146.38
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "5393e6fc77a07e380133b3766bdce385344357c22296715544b1f37d4c33b330"
+    },
+    {
+      "between": [
+        "joy-b",
+        "shrink"
+      ],
+      "frame": 266,
+      "favour": 0.75,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": -25
+      },
+      "joints": {
+        "root": [
+          313.35,
+          467.47
+        ],
+        "head": [
+          302.92,
+          187.89
+        ],
+        "torso": [
+          271.82,
+          208.83
+        ],
+        "neck": [
+          285.81,
+          197.44
+        ],
+        "shoulderL": [
+          220.41,
+          208.25
+        ],
+        "hipL": [
+          305.38,
+          480.66
+        ],
+        "shoulderR": [
+          278.94,
+          263.84
+        ],
+        "hipR": [
+          320.52,
+          455.6
+        ],
+        "ponchoPoint": [
+          319.56,
+          461.41
+        ],
+        "ankleL": [
+          232.87,
+          813.44
+        ],
+        "kneeL": [
+          334.07,
+          662.01
+        ],
+        "ankleR": [
+          422.82,
+          804.11
+        ],
+        "kneeR": [
+          360.62,
+          621.02
+        ],
+        "wristL": [
+          177.05,
+          226.22
+        ],
+        "elbowL": [
+          280.62,
+          221.26
+        ],
+        "wristR": [
+          224.09,
+          196.19
+        ],
+        "elbowR": [
+          284.87,
+          151.05
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "5393e6fc77a07e380133b3766bdce385344357c22296715544b1f37d4c33b330"
+    },
+    {
+      "between": [
+        "joy-b",
+        "shrink"
+      ],
+      "frame": 268,
+      "favour": 0.98,
+      "kind": "settle",
+      "arc": {
+        "joint": "wristR",
+        "offsetPx": 0
+      },
+      "joints": {
+        "root": [
+          331.9,
+          484.8
+        ],
+        "head": [
+          320.15,
+          206.28
+        ],
+        "torso": [
+          287.95,
+          226.51
+        ],
+        "neck": [
+          303.4,
+          216.53
+        ],
+        "shoulderL": [
+          232.86,
+          212.99
+        ],
+        "hipL": [
+          320.22,
+          511.14
+        ],
+        "shoulderR": [
+          281.8,
+          287.41
+        ],
+        "hipR": [
+          342.41,
+          461.08
+        ],
+        "ponchoPoint": [
+          337.94,
+          478.7
+        ],
+        "ankleL": [
+          240.36,
+          835.88
+        ],
+        "kneeL": [
+          355,
+          691.76
+        ],
+        "ankleR": [
+          422.05,
+          818.07
+        ],
+        "kneeR": [
+          371.72,
+          629.96
+        ],
+        "wristL": [
+          226,
+          299.9
+        ],
+        "elbowL": [
+          337,
+          260.16
+        ],
+        "wristR": [
+          202.42,
+          254.74
+        ],
+        "elbowR": [
+          263.78,
+          167.33
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "5393e6fc77a07e380133b3766bdce385344357c22296715544b1f37d4c33b330"
+    }
+  ],
+  "secondaries": [
+    {
+      "name": "poncho",
+      "joints": [
+        "ponchoPoint"
+      ],
+      "lagDrawings": 2,
+      "stretch": 1
+    },
+    {
+      "name": "handL",
+      "joints": [
+        "elbowL",
+        "wristL"
+      ],
+      "lagDrawings": 2,
+      "side": "L",
+      "stretch": 0
+    },
+    {
+      "name": "handR",
+      "joints": [
+        "elbowR",
+        "wristR"
+      ],
+      "lagDrawings": 2,
+      "side": "R",
+      "stretch": 0.5
+    }
+  ],
+  "movingHolds": [
+    {
+      "key": "rest-on-lid",
+      "driftPx": 5,
+      "over": 16
+    },
+    {
+      "key": "grip",
+      "driftPx": 4,
+      "over": 16
+    },
+    {
+      "key": "lift",
+      "driftPx": 4,
+      "over": 16
+    },
+    {
+      "key": "awe",
+      "driftPx": 4,
+      "over": 16
+    },
+    {
+      "key": "brace",
+      "driftPx": 4,
+      "over": 24
+    },
+    {
+      "key": "joy-a",
+      "driftPx": 4,
+      "over": 16
+    },
+    {
+      "key": "joy-b",
+      "driftPx": 6,
+      "over": 16
+    },
+    {
+      "key": "shrink",
+      "driftPx": 5,
+      "over": 60
+    }
+  ]
+}

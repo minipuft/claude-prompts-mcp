@@ -1,0 +1,47 @@
+{
+  "exit": 1,
+  "probes": [
+    {
+      "probe": "twos-ones",
+      "status": "FAIL",
+      "code": 1,
+      "control": "change on frame 7 -> FAIL (odd-frame figure changes at [7]); changes on even frames only with the camera moving every frame -> pass (0 odd-frame changes, 7 even-frame changes, camera moved on 24 odd frames)"
+    },
+    {
+      "probe": "hold-band",
+      "status": "FAIL",
+      "code": 1,
+      "control": "40-frame hold -> FAIL (hold of 40 frames at 0-39 is over 27 and no key declares it); 16-frame hold, 4-drawing move -> pass (2 holds, move of 4); 40-frame hold declared by key 'K1' -> pass and listed; 1-drawing move -> FAIL"
+    },
+    {
+      "probe": "screen-time",
+      "status": "pass",
+      "code": 0,
+      "control": "beat 'b' shifted 3 frames against the same xsheet -> FAIL (beat 'a' ends at frame 30 in the xsheet, 33 in the timeline); unshifted -> pass (0 problems)"
+    },
+    {
+      "probe": "eye-trace",
+      "status": "FAIL",
+      "code": 1,
+      "control": "bright blob 10 % of the width off the emitter -> FAIL (offset 10.0 % > 3 %); blob on the emitter -> pass (0.0 %); identity patch brighter than the blob is ignored (read as bright it would put the offset at 54 %)"
+    },
+    {
+      "probe": "loop-closure",
+      "status": "FAIL",
+      "code": 1,
+      "control": "synthetic closed outline closed=True (height 1.000, share 1.000); 4 px band erased across the shins (row 127) closed=False (height 0.744, share 0.588) flips"
+    },
+    {
+      "probe": "colour-continuity",
+      "status": "FAIL",
+      "code": 1,
+      "control": "magenta patch off both pairs -> FAIL (frame 5: 576 of 15376 saturated pixels outside); hue detour through green across a crossing -> FAIL (crossing 14-34 detours: sample 1 (205 deg) sits 16 deg behind the start); clean sequence with an identity-pigment patch -> pass"
+    },
+    {
+      "probe": "determinism",
+      "status": "FAIL",
+      "code": 1,
+      "control": "one altered pixel -> FAIL (frame [0] differs); two writes of the same frame -> pass (1 frame, 0 differ)"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+{"name":"resource_manager","arguments":{"resource_type":"prompt","action":"update","id":"showcase_pipeline","chain_step_operation":"update","chain_step_index":6,"chain_step_data":{"promptId":"showcase_review","stepName":"Rubric Review","inlineGateIds":["showcase-review"]}}}

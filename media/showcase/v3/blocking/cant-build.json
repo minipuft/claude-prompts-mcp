@@ -1,0 +1,103 @@
+{
+  "id": "cant-build",
+  "provisional": true,
+  "derivedFrom": "v3/layouts/s02-cant-build-frame.json emitter.startXY (0.345, 0.886) of the frame -> join and the two blocks that touch at it; every other field is the test scene's: the layout's figure heights are not used (startHeightPct 63.4 measures the human bent in the reach, endHeightPct is null); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
+  "figure": {
+    "scale": 0.68,
+    "x": 420,
+    "y": 40
+  },
+  "codex": {
+    "x": 60,
+    "y": 440,
+    "scale": 1.8
+  },
+  "clawd": {
+    "x": 940,
+    "y": 470,
+    "scale": 1.5
+  },
+  "frame": {
+    "x": 910,
+    "y": 70,
+    "width": 280,
+    "height": 230
+  },
+  "blocks": [
+    {
+      "x": 361.6,
+      "y": 607.9,
+      "width": 80,
+      "height": 60,
+      "role": "main1"
+    },
+    {
+      "x": 441.6,
+      "y": 607.9,
+      "width": 80,
+      "height": 60,
+      "role": "main2"
+    }
+  ],
+  "join": {
+    "x": 441.6,
+    "y": 637.9
+  },
+  "arch": {
+    "x": 30,
+    "y": 40,
+    "width": 340,
+    "height": 430,
+    "opening": 0.6,
+    "top": 70
+  },
+  "gates": [
+    {
+      "x": 150,
+      "y": 388,
+      "r": 22
+    },
+    {
+      "x": 235,
+      "y": 382,
+      "r": 28
+    },
+    {
+      "x": 325,
+      "y": 376,
+      "r": 34
+    }
+  ],
+  "floor": {
+    "y": 480
+  },
+  "figureCrop": {
+    "x": 380,
+    "y": 0,
+    "width": 500,
+    "height": 720
+  },
+  "beat": "cant-build",
+  "shot": "s02-cant-build-frame",
+  "actors": {
+    "stalk": {
+      "x": 900,
+      "y": 440,
+      "scale": 1.0,
+      "facing": "right"
+    }
+  },
+  "emitter": {
+    "start": [
+      441.6,
+      637.9
+    ],
+    "end": [
+      441.6,
+      637.9
+    ],
+    "anchor": "gadget dial, lost on the floor (the join)"
+  },
+  "card": "eagle-lxu2uuohr9v2c",
+  "cardNote": "provisional: board §8 \"Corner of a cold room\" for the low, lost light; not yet chosen against the layout sheet"
+}

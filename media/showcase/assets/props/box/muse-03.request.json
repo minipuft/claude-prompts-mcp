@@ -1,0 +1,12 @@
+{
+ "prompt": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the box: a plain package, flat and ordinary, whose lid lifts on a back hinge to let a bubble swell out; hand-coded today in Box.tsx.\nLAYOUT: Show the SAME box twice side by side on one baseline: left lid closed with one hairline light seam, right lid lifted about 100 degrees on its back edge with the light spilling. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: the Codex companion: take only its rounded soft cloud-and-prompt silhouette and its screen-glyph window as the cast property.\nImage 2: Dr. Seuss Midnight Painting: receding hand-drawn frames, each slightly turned.\nImage 3: owner card MFI6QTUOYA66U: windows framing characters inside architecture.\nImage 4: owner card MFI6SELJDBV13: one emitter lighting an otherwise dark space.\nVARIANT muse-03 'Nested lid': A low rounded box whose lid is a slightly turned frame, itself holding a smaller frame: lifting the lid opens a window into the box. The design sits between codex (rounded soft silhouette and screen window) and the Seuss paintings.",
+ "references": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/codex-official.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-nested-frames.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFI6QTUOYA66U.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFI6SELJDBV13.png"
+ ],
+ "out": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/box/muse-03.png",
+ "workdir": "/home/minipuft/.cache/muse-work/cwd",
+ "timeout": 280
+}

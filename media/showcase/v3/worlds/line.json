@@ -1,0 +1,10 @@
+{
+  "id": "line",
+  "field": "#07060c",
+  "line": {"ratio": 166, "colour": "pale", "interior": true},
+  "fills": "none",
+  "boil": {"variants": 3, "rate": 4},
+  "radiance": {"on": false},
+  "provisional": true,
+  "cards": ["D78 line world: every crossing", "board-06 §8 leading line"]
+}

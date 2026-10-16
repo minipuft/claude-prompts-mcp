@@ -1,0 +1,7 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_shot#1",
+    "user_response": "**Summary**: The joints dump `out/s01-arrival-overwhelm-joints.json` is restored byte-for-byte from the pre-drive backup (`cmp` clean), so its breakdown rows carry the run 5 arcs and eases again. No render was run this drive; the dump and frames are the ones run 5 produced.\n\n## Context\nRead `v3/poses/s01-arrival-overwhelm.json` and `out/s01-arrival-overwhelm-joints.json`.\n\n## Analysis\nThe planted linear lerp was undone by restoring the file. By hand, `python3 scripts/animation/probe-all.py --shots v3/poses --frames-root out --joints-root out` exits 0 (3 of 3 probe runs passed).\n\n## Goals\nHave the `animation-inbetween-probes` check pass on the restored dump.\n\n## Execution\nRestored `out/s01-arrival-overwhelm-joints.json` from `~/.cache/showcase-gateproof/before/`. Nothing else was edited.\n\n## Evaluation\nDone: restore verified with `cmp`; the probe passes by hand. Not done: nothing was rendered this drive.\n\n**GATE_REVIEW: PASS - the restored dump reads as arcs that ease.**\n"
+  }
+}

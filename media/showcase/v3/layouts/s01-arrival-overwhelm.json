@@ -1,0 +1,251 @@
+{
+  "shot": "s01-arrival-overwhelm",
+  "sheet": "assets/layouts/s01-layout-02.png",
+  "sheetSha256": "66445f7fac6cf5a42bc4ca9784e014f1f5c6744a0f7cb6ca0edd823339f3f19f",
+  "camera": {
+    "start": "locked medium-wide: the human upright behind a hip-high box, hands on its lid, Codex and Clawd small either side, a hairline of blue light at the lid seam",
+    "end": "the full field: the trio small at the bottom centre, the gadget towering above with its dial as the one emitter, pieces filling the frame",
+    "move": "widen (pull back and up, no cut)",
+    "ledBy": "the bubble swelling out of the box (f150-180), then the first stalk's curl projecting up and right (f180-210)"
+  },
+  "hue": {
+    "radiance": "#0a51fb",
+    "accent": "#fad204"
+  },
+  "emitter": {
+    "start": "the box's lid seam",
+    "end": "the gadget's dial, high above the trio",
+    "startXY": [
+      0.52,
+      0.777
+    ],
+    "endXY": [
+      0.545,
+      0.311
+    ]
+  },
+  "figure": {
+    "actor": "human",
+    "startHeightPct": 78.1,
+    "endHeightPct": 33.2,
+    "heads": 8.0,
+    "note": "Face-derived (scripts/s01_layout_measure.py): the sheet's green face is 47 px (panel 1) and 20 px (panel 2) of a 472 px panel, times the model sheet's figure-over-face ratio 7.84. The ratio of the two (0.426) is the widen's zoom and is the number the camera uses. The absolute 78 % over-reads: the sheet draws the human bent over the box with a head larger than the model's 1/8, so an upright figure of that face size would stand below the sheet's own floor line. The render stands the human at 48.6 % of frame height (350 px, feet hidden behind the box); that choice, not the 78 %, is what C25 is measured against (see `staging`)."
+  },
+  "cameraPose": {
+    "span": [
+      150,
+      210
+    ],
+    "start": {
+      "x": 640,
+      "y": 360,
+      "zoom": 1
+    },
+    "end": {
+      "x": 604,
+      "y": 103,
+      "zoom": 0.6
+    },
+    "note": "Run 2 (owner default recorded in plans/animation-scaffold-2026-10-14.md, Tier 5 'Owner calls from the run'): the widen ends at zoom 0.6, not 0.425, so the human stays about 210 px tall (350 x 0.6) and the face stays readable; pieces leave the frame instead of fitting it. y 103 keeps the trio's feet (stage y 650) at 688 px of the 720 px frame, as the 0.425 pose did (703 px bottom edge); the dial (699, -124) lands at (697, 224) of the frame and the funnel mouth just inside the top edge. Panel 2 of the sheet still draws the 0.425 framing; the numbers here supersede it."
+  },
+  "staging": {
+    "note": "Stage pixels at 1280x720, camera at rest (frame 0). Read from panel 1 of the sheet; the human's height is a choice, see figure.note. Proposed as a blocking diff for arrival.json (the blocking files are another worker's).",
+    "floorY": 690,
+    "human": {
+      "standingHeightPx": 350,
+      "standingHeightPct": 48.6,
+      "feetY": 650,
+      "centreX": 610,
+      "scale": 0.3553,
+      "x": 485.6,
+      "y": 293.0
+    },
+    "box": {
+      "scale": 1.9,
+      "x": 469.5,
+      "y": 386,
+      "frontTopY": 538,
+      "frontCentreX": 650,
+      "leftX": 526.5,
+      "rightX": 850.5
+    },
+    "codex": {
+      "scale": 1.25,
+      "x": 255,
+      "y": 523,
+      "feetY": 686
+    },
+    "clawd": {
+      "scale": 1.45,
+      "x": 864,
+      "y": 544,
+      "feetY": 686
+    },
+    "gadgetEnd": {
+      "dialXY": [
+        699,
+        -124
+      ],
+      "scale": 2.9
+    },
+    "seamXY": [
+      650,
+      538
+    ],
+    "sheetFractions": {
+      "box": {
+        "x": [
+          0.37,
+          0.665
+        ],
+        "top": 0.752,
+        "floor": 0.958
+      },
+      "codexFeet": 0.953,
+      "clawdFeet": 0.953,
+      "humanHairTop": 0.43
+    },
+    "funnelFromDial": "dial + (104 s, -126 s) at gadget scale s (Gadget.tsx: dial (88,170), funnel mouth (192,44), viewBox origin -20)"
+  },
+  "panels": [
+    {
+      "n": 1,
+      "what": "frame 0, the poster (and frame 150)"
+    },
+    {
+      "n": 2,
+      "what": "frame 210, the widen's end"
+    },
+    {
+      "n": 3,
+      "what": "staging plan: camera wedge, leading line, two suns"
+    },
+    {
+      "n": 4,
+      "what": "scale strip: human at two sizes, swatches"
+    }
+  ],
+  "cards": [
+    "eagle-lyio3is7tokub",
+    "eagle-mf83t1h77o7bm",
+    "eagle-m92nkizilu1cb",
+    "eagle-mram46lymigko"
+  ],
+  "receipt": "evidence/s01/imagegen-layout-s01-02.json",
+  "measured": {
+    "sheet": "out/s01-layout-02.png",
+    "panels": [
+      {
+        "n": 1,
+        "box": [
+          29,
+          30,
+          730,
+          501
+        ],
+        "inner_h": 472,
+        "inner_w": 702,
+        "face_h_px": 47,
+        "figure_h_est_px": 368.5,
+        "figure_h_est_pct": 78.1,
+        "face_xy_frac": [
+          0.552,
+          0.494
+        ],
+        "seam_frac": {
+          "x": 0.52,
+          "y": 0.777,
+          "pixels": 714
+        },
+        "box_frac": {
+          "x": [
+            0.37,
+            0.665
+          ],
+          "top": 0.407,
+          "floor": 0.958
+        }
+      },
+      {
+        "n": 2,
+        "box": [
+          735,
+          30,
+          1644,
+          501
+        ],
+        "inner_h": 472,
+        "inner_w": 910,
+        "face_h_px": 20,
+        "figure_h_est_px": 156.8,
+        "figure_h_est_pct": 33.2,
+        "face_xy_frac": [
+          0.502,
+          0.783
+        ],
+        "dial_frac": {
+          "x": 0.532,
+          "y": 0.512,
+          "pixels": 639,
+          "radius_frac_of_width": 0.0157
+        }
+      },
+      {
+        "n": 3,
+        "box": [
+          29,
+          505,
+          730,
+          861
+        ],
+        "inner_h": 357,
+        "inner_w": 702
+      },
+      {
+        "n": 4,
+        "box": [
+          735,
+          505,
+          1644,
+          861
+        ],
+        "inner_h": 357,
+        "inner_w": 910,
+        "strip_runs": [
+          [
+            125,
+            890
+          ]
+        ],
+        "strip_people": [
+          {
+            "cols": [
+              125,
+              890
+            ],
+            "rows": [
+              6,
+              356
+            ],
+            "height_pct": 98.3,
+            "face_h_px": 44,
+            "est_from_face_pct": 96.6
+          }
+        ]
+      }
+    ],
+    "model": {
+      "face_h_px": 63,
+      "figure_h_px": 494,
+      "figure_over_face": 7.841
+    }
+  },
+  "rejected": [
+    {
+      "sheet": "out/s01-layout-01.png",
+      "sha256": "978f97eaebf12d9d4d6fe062d4f200f7551d5f5d162d878a53a7e3d0a3f1a751",
+      "why": "the human drawn at about 95 % of the panel height in panel 1 against the 50 % asked (more than 10 points); regenerated once with the failing property named"
+    }
+  ],
+  "provisional": true
+}

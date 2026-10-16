@@ -1,0 +1,11 @@
+Execution complete.
+
+
+
+✅ Chain execution complete. You may now respond to the user.
+
+---
+Re-run: `>>showcase_asset_muse asset:"human: resource_manager: the hands that place and lift pieces" constraints:"Cite board cards seuss-cat-stairway, lin-fosters, seuss-no-one-youer, seuss-archbishop-katz, chetas, codex-official, clawd-official (v3/references/board.json). Five-role flat SVG on a black field; skin green #67b479 with mauve #c885c2 shadow step (D54, identity, never grades); garment from the Archbishop Katz mauve/blue/cream family; Seuss contour language with a pale contour one step behind; Midnight Gospel two-scale stipple shadows; drawn on twos with 2–3 boil variants. Clean slate (D56): the earlier human sheet and first draw are not candidates and not inspiration; the frozen compact face is retired unless a variant earns it back. Each variant sits between the companions' morphing constructions (D63) and the Seuss stalk figures; silhouette must read at 64 px before any fill."`
+
+Chain: chain-showcase_asset_muse#1
+✓ Chain complete (3/3)

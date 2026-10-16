@@ -1,0 +1,125 @@
+### Original Request Intent
+
+This step was given the following request. Your work must satisfy this intent:
+
+- **brief**: A silent ~40 s showcase film for Claude Prompts MCP: a box arrives with a radiant gadget (raw capability) that overwhelms; a companion holds up a frame whose interior is someplace else; through it the...
+- **constraints**: ~40 s at 30 fps, 1280x720, silent, poster at frame 0; swangle renderer here, final render on the Windows host; drawn on twos, light on ones; one locked camera and one emitter per shot; no asset accept...
+- **output_root**: media/showcase
+
+---
+
+## 🎯 C.A.G.E.E.R.F Framework Active
+
+**C.A.G.E.E.R.F Framework**
+
+You are operating under the C.A.G.E.E.R.F Framework for Showcase Review.
+
+Apply the C.A.G.E.E.R.F framework systematically:
+
+**Context**: Establish comprehensive situational awareness and environmental factors
+**Analysis**: Apply structured, systematic examination of the problem or opportunity
+**Goals**: Define specific, measurable, actionable objectives with clear success criteria
+**Execution**: Develop practical, implementable approach with detailed action steps
+**Evaluation**: Create robust success metrics and assessment methods
+**Refinement**: Enable continuous improvement and iteration processes
+
+Ensure each phase builds logically on the previous phases while maintaining focus on practical, actionable outcomes. Consider stakeholder perspectives, resource constraints, and environmental factors throughout the framework application.
+
+
+Apply this framework systematically to ensure comprehensive and structured responses.
+
+---
+
+
+> You produce client-side creative work guided by the Claude Prompts MCP server. The server renders prompts, propagates step results and manages reviews; the client agents research, write artifacts, implement and render. Use existing services and authored resource contracts. Never invent MCP parameters, workflow schemas or a parallel orchestrator. Preserve actual provenance: recording, source-derived depiction, smoke fixture and conceptual animation are different evidence classes. Do not imply a simulated agent or UI is a recorded Claude/Codex run. No narration, unsolicited public posting, git refs, commits or files outside caller-owned scope. A missing consequential choice becomes a concern; do not silently fabricate it. Read prior context and chain history, and cite actual paths/URLs used. Revisions must have observable rationale. If the selected story uses an environment or travel metaphor, keep its boundaries explicit: the client/resource author creates reusable prompts, gates and frameworks through resource_manager; problems may motivate authored improvements but the server does not learn or author them automatically. Frameworks structure reasoning; a depicted journey represents state/context progression and does not imply physical enforcement.
+
+Brief: A silent ~40 s showcase film for Claude Prompts MCP: a box arrives with a radiant gadget (raw capability) that overwhelms; a companion holds up a frame whose interior is someplace else; through it the human scaffolds one lit join at a time (category, prompt, chain, gate, framework, workspace); the trio settles. Audience: developers landing on the GitHub README; frame 0 is the poster. The bots are standardizing their own design process (D49), and this run is the trail. Clean slate on assets (D56): every object is mused from the board before it enters a shot.
+Constraints: ~40 s at 30 fps, 1280x720, silent, poster at frame 0; swangle renderer here, final render on the Windows host; drawn on twos, light on ones; one locked camera and one emitter per shot; no asset accepted as a first iteration.
+Production root: media/showcase
+Previous handoff:
+## Context
+Shot list step of `showcase_preproduction` run 1. Inputs: `v3/script.md` rev 1, `v3/beats.json` beats-01 (story handoff), `v3/creative-spec.md` animation language (camera locked within a beat, at most one move per beat; one actor at a time; one emitter per shot), `v3/references/board.json` board-04 card ids. creed: n/a — no CloudySky visual surface.
+
+## Analysis
+Six beats cut into eight shots. Beats 1, 3, 4 and 6 are one locked camera each. Beat 2 cuts once (the pop in the arrival framing, then a wide for the projections). Beat 5 is the long one: a through-frame view for joins 1–3, then the beat's single permitted reframe for joins 4–6. Every shot names one emitter; the joins carry their pulse frames from beats.json.
+
+## Goals
+`v3/shots.json` as the handoff to `showcase_shot`, and the object inventory that sets the muse budget before any shot renders.
+
+## Execution
+Shot Table (id · beat · frames · camera · emitter · join · cards):
+
+| id | beat | frames | camera | emitter | join | cards |
+| --- | --- | --- | --- | --- | --- | --- |
+| s01-arrival | arrival | 0–150 | locked medium-wide, trio and box centered, mark top-left | box seam | — | owner-board, seuss-no-one-youer, gospel-trailer-16, codex-official, clawd-official |
+| s02-pop | everything-at-once | 150–210 | same locked medium-wide | gadget dial | — | gospel-trailer-16, gospel-junkyard, seuss-freebird |
+| s03-projection | everything-at-once | 210–330 | cut to locked wide, gadget low center, field fills | gadget dial | — | gospel-trailer-72, gospel-cosmos, gospel-trailer-104, owner-board |
+| s04-cant-build | cant-build | 330–480 | cut to locked medium on the human, pieces at hand height | gadget dial, lost among projections | — | lin-unravel, lin-chicory, chetas, gospel-hallway |
+| s05-the-frame | the-frame | 480–600 | cut to locked medium on Clawd, frame fills the right two-thirds | the frame interior | — | seuss-nested-frames, seuss-archbishop-katz, klaus-lighting, lin-katamari, gospel-bg-pecini |
+| s06-joins-1-3 | scaffold | 600–800 | cut to locked through-frame view, hands enter from the left | the lit join of the moment | patch 634 · stalk 698 · string 786 | seuss-no-one-youer, seuss-green-cat-lights, lin-tiny-glade, lcslates, lin-chicory |
+| s07-joins-4-6 | scaffold | 800–1020 | one reframe wider, still locked; the only camera move of the beat | the lit join of the moment | arch keystone 882 · ring 920 · second patch seam 982 | seuss-archbishop-katz, seuss-nested-frames, lin-tiny-glade, lin-unravel |
+| s08-settle | settle | 1020–1200 | cut to locked wide, structure centered, trio at its base | gadget, rimming the structure | — | seuss-green-cat-lights, owner-board, lin-adventure-time, shfred |
+
+Object Inventory With Muse Commands (12 objects, none with an accepted sheet at the clean slate; D56):
+- **human** — resource_manager: the hands that place and lift pieces · sheet accepted: none · `>>showcase_asset_muse asset:"human: resource_manager: the hands that place and lift pieces" constraints:"cite board cards seuss-cat-stairway, lin-fosters, seuss-no-one-youer, seuss-archbishop-katz, chetas, codex-official, clawd-official; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed"`
+- **box** — the package; opens into the bubble · sheet accepted: none · `>>showcase_asset_muse asset:"box: the package; opens into the bubble" constraints:"cite board cards owner-board, seuss-no-one-youer; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed"`
+- **bubble** — capability seen through glass; swells from the box, pops · sheet accepted: none · `>>showcase_asset_muse asset:"bubble: capability seen through glass; swells from the box, pops" constraints:"cite board cards gospel-trailer-16, seuss-nested-frames, cloudysky-guide; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed"`
+- **gadget** — raw capability: the hybrid universe-simulator machine · sheet accepted: none · `>>showcase_asset_muse asset:"gadget: raw capability: the hybrid universe-simulator machine" constraints:"cite board cards gospel-junkyard, gospel-trailer-16, seuss-green-cat-lights, lin-katamari; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed"`
+- **frame** — prompt_engine: the frame held up, interior someplace else · sheet accepted: none · `>>showcase_asset_muse asset:"frame: prompt_engine: the frame held up, interior someplace else" constraints:"cite board cards seuss-nested-frames, seuss-archbishop-katz, klaus-lighting; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed"`
+- **stalk** — prompt: a curling stalk with a flag leaf · sheet accepted: none · `>>showcase_asset_muse asset:"stalk: prompt: a curling stalk with a flag leaf" constraints:"cite board cards seuss-no-one-youer, seuss-freebird; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed"`
+- **string** — chain: stalks joined by a beaded light string · sheet accepted: none · `>>showcase_asset_muse asset:"string: chain: stalks joined by a beaded light string" constraints:"cite board cards seuss-green-cat-lights, lcslates; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed"`
+- **arch** — gate: a pointed arch with a keystone pulse · sheet accepted: none · `>>showcase_asset_muse asset:"arch: gate: a pointed arch with a keystone pulse" constraints:"cite board cards seuss-archbishop-katz; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed"`
+- **patch** — category: a soft ground patch joining at seams · sheet accepted: none · `>>showcase_asset_muse asset:"patch: category: a soft ground patch joining at seams" constraints:"cite board cards seuss-cat-stairway, gospel-hallway; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed"`
+- **ring** — framework: a receding turned frame inside the interior · sheet accepted: none · `>>showcase_asset_muse asset:"ring: framework: a receding turned frame inside the interior" constraints:"cite board cards seuss-nested-frames; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed"`
+- **codex** — companion, identity pigments fixed; existing sprite is identity-anchored, re-muse is the owner's call · sheet accepted: none · `>>showcase_asset_muse asset:"codex: companion, identity pigments fixed; existing sprite is identity-anchored, re-muse is the owner's call" constraints:"cite board cards codex-official, lin-adventure-time; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed"`
+- **clawd** — companion, identity pigments fixed; existing sprite is identity-anchored, re-muse is the owner's call · sheet accepted: none · `>>showcase_asset_muse asset:"clawd: companion, identity pigments fixed; existing sprite is identity-anchored, re-muse is the owner's call" constraints:"cite board cards clawd-official, lin-adventure-time; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed"`
+
+Frame Total Versus Script: 8 shots sum to 1200 frames = 40.0 s, equal to the script's 1200 and beats-01.
+
+## Evaluation
+Written: `media/showcase/v3/shots.json` (shots-01: 8 shots, 12-object inventory, rules). `script.md` untouched; it is referenced by beat id only.
+
+Concerns: (1) the companions already exist as sprites with fixed identity pigments; whether they are re-mused under D56 or kept as identity anchors is the owner's call, flagged in the inventory. (2) The "structure" in s08 is the assembled environment, not a separate asset; it is listed so the render study knows the shot needs every piece. (3) Muse budget is 12 chains before the first shot; the human first, then frame, gadget, bubble, box, then the six resource objects. (4) Shots s05–s07 need the composition to read beats.json; today only hand-written scenes exist.
+
+## Refinement
+Next step (package grade) should grade this package against `v3/rubric.md` by criterion id and, as the package has no render yet, mark render-only criteria UNPROVEN rather than PASS.
+
+Read, before writing, the project files under the production root's `v3/`: `creative-spec.md` (rulings D41–D53, medium, palette law, animation language), `script.md` (resource vocabulary and beats), `rubric.md` (criteria C1–C18 and the receipt shape). They are the contract; this prompt does not restate them.
+
+Grade the actual rendered artifact against `rubric.md` by criterion id; do not grade anything you have not viewed. Use only the four marks: HOLDS, FAILS, UNPROVEN, TASTE. Each mark cites its evidence at or above the criterion's minimum tier (still, 3x crop, consecutive frames, moving render, owner viewing) and names the failing control it beats. Measure where the rubric allows it: per-frame pixel change for twos versus ones (C16), two renders hashed for determinism (C12), a sampled pixel for identity pigments (C1).
+
+Motion contract:
+Use the recorded Motion Contract step; flag missing handoff.
+
+Write the receipt in the rubric's five parts, in order: Changed (by file); Grades (one line per criterion touched); Controls (which earlier study each flipped FAILS beats); Owner (at most two TASTE questions, each with the default the planner takes if unanswered); Next (one fix per FAILS). Save it as `v3/studies/<name>.md` beside the artifact copies, copied unchanged from `out/` with sha256 prefixes. A render that is absent is BLOCKED, not PASS. Propose a rubric change only through its Evolution rules: a new ruling adds a row; three consecutive HOLDS bakes one; a standing TASTE is ruled or deleted.
+
+Return: Inspected Evidence; Grades; Controls; Owner; Next; Rubric Evolution; Concerns.
+
+---
+
+## Inline Gates
+
+### Reminders
+
+### Showcase Review Rubric
+Grade only what was viewed. One mark per touched criterion: HOLDS, FAILS, UNPROVEN or TASTE, each with evidence at or above the criterion's minimum tier and the failing control it beats. Identity pigments unchanged (C1); role fills, no hex in assets (C2); designed, stippled shadows (C3, C4); black negative space, one emitter under the assets (C5, C6); frame interior refracted and drawn in depth (C7, C8); grain subordinate (C9); interior is the subject (C10); gadget familiar-impossible (C11); byte-identical renders (C12); no shimmer, drawn on twos, staggered, light lagging (C13, C16, C17, C18); acting reads without text (C14); palette travel never greys (C15). Receipt in five parts: Changed, Grades, Controls, Owner, Next.
+
+Attest reminders in the verdict's `reminders` field; checks are recorded by the engine.
+
+---
+
+---
+
+### Required Response Format
+
+**Summary**: What was implemented (2-3 sentences)
+
+**Gate Coverage**:
+- [1] PASS|FAIL: rationale
+- [2] PASS|FAIL: rationale
+
+**GATE_REVIEW: PASS|FAIL - overall assessment**
+
+Chain: chain-showcase_preproduction#1
+→ Progress 4/4
+Next: chain_id="chain-showcase_preproduction#1", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"

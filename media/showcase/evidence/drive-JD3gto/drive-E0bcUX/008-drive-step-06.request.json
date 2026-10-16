@@ -1,0 +1,7 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_shot#1",
+    "user_response": "**Summary**: The key sheet `v3/keys/s01-arrival-overwhelm.json` is submitted as it stands on disk, byte-identical to the pre-drive backup (`cmp` clean). No plates were rebuilt this step.\n\n## Context\nRead `v3/poses/s01-arrival-overwhelm.json` and `v3/keys/s01-arrival-overwhelm.json`.\n\n## Analysis\nAll eight keys are the run 5 keys, including `awe` with its declared S spine.\n\n## Goals\nHave the `animation-key-fit` check run on the key sheet as it stands.\n\n## Execution\nNo edits. `python3 scripts/animation/probe-poses.py v3/poses v3/keys v3/charts --joints keys` exits 0 by hand.\n\n## Evaluation\nDone: the keys probe passes by hand. Not done: no plates rebuilt.\n\n**GATE_REVIEW: PASS - the key sheet reads as declared on every key.**\n\nHANDOFF RESULT\nnode: keys\nProposed Gate Review:\n- Animation Key Fit: PASS — the keys probe exits 0 on the sheet as it stands.\n"
+  }
+}

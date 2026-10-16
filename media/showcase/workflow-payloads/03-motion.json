@@ -1,0 +1,12 @@
+{
+ "name": "resource_manager",
+ "arguments": {
+  "resource_type": "prompt",
+  "action": "update",
+  "id": "showcase_motion",
+  "name": "Showcase Motion",
+  "category": "development",
+  "description": "Write the per-beat timing table in the animation language, drawn on twos and light on ones, executable by src/library/motion.ts.",
+  "user_message_template": "Brief: {{brief}}\nConstraints: {{constraints}}\nProduction root: {{output_root}}\nPrevious handoff:\n{{context | default(\"Read available chain history; report missing evidence.\")}}\n\nRead, before writing, the project files under the production root's `v3/`: `creative-spec.md` (rulings D41\u2013D53, medium, palette law, animation language), `script.md` (resource vocabulary and beats), `rubric.md` (criteria C1\u2013C18 and the receipt shape). They are the contract; this prompt does not restate them.\n\nWrite the timing table the compositions execute, in the animation language (D51): drawn on twos, light on ones. For each beat and each actor give the phase frames (hold 8\u201320, anticipation 3\u20135, action 4\u20138 on twos with one smear frame on a large move, overshoot 2\u20133, settle 10\u201316), the stagger after the previous actor (3\u20135 frames; nothing unrelated starts on the same frame), the boil rate and variant count, and for every join the seam-pulse frame. For the light layer give the lag (2\u20134 frames behind the drawn layer) and the recovery; the light never toggles. Camera: locked within a beat, at most one move per beat; beats progress by cut and reframe.\n\nThe failing control is the early-web explainer: linear tweens, everything at once, pop-in text, hinge-jointed cutouts. Any row that reads like it fails. Timing is a contract the `src/library/motion.ts` primitives can express directly (`move`, `stagger`, `boil`, `lag`, `seamPulse`); do not invent a primitive the library lacks without naming it as a library change for the implementation step.\n\nDeliver the timing fields merged into `beats.json` under the production root and a short `motion.md` naming the per-beat rhythm. Return: Beat Timing; Staggers and Lag; Boil and Pulses; Camera and Cuts; Library Changes Needed; Artifact Handoff; Concerns."
+ }
+}

@@ -1,0 +1,187 @@
+/**
+ * The light track: the emitter's colour per frame, on ones. One hue per beat (the shot's hue pair), eased to the next beat's over the
+ * frames before it starts, or over the first half of a crossing so the colour completes as the world changes and never detours.
+ */
+import type {TimelineBeat} from './timeline';
+import {sample, type Track} from './track';
+
+const hex = (c: string): [number, number, number] => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(c.trim());
+  if (!m) throw new Error(`light: "${c}" is not a #rrggbb colour`);
+  const n = parseInt(m[1]!, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+
+/** Linear blend of two #rrggbb colours (in sRGB, as the film's other colour blends are). */
+export const lerpHex = (a: string, b: string, t: number): string => {
+  const [x, y] = [hex(a), hex(b)];
+  return '#' + [0, 1, 2].map((i) => Math.round(x[i]! + (y[i]! - x[i]!) * t).toString(16).padStart(2, '0')).join('');
+};
+
+export type LightOptions = {
+  /** Frames before the next beat's start over which the colour eases when there is no crossing. Default 30. */
+  ease?: number;
+};
+
+/** One key per beat, at its start, holding that beat's colour until the ease into the next begins. */
+export const lightTrack = (beats: TimelineBeat[], colourOf: (beat: TimelineBeat) => string, options: LightOptions = {}): Track<string> => ({
+  keys: beats.map((beat) => {
+    const easeFrom = beat.crossingOut ? beat.crossingOut[0] : beat.end - (options.ease ?? 30);
+    return {frame: beat.start, value: colourOf(beat), hold: Math.max(0, easeFrom - beat.start), ease: 'smooth' as const};
+  }),
+});
+
+export const lightAt = (track: Track<string>, frame: number): string => sample(track, frame, {quantise: 'ones', lerp: lerpHex});
+
+/* ---------- the light contract (v3/light.json) ---------- */
+
+export type LightPair = {radiance: string; accent: string};
+/** `start` and `end` are fractions of the frame (the probes read values up to 2 as fractions); `on` and `off` are absolute frames, `off` exclusive. */
+export type LightEmitter = {anchor: string; start: [number, number]; end: [number, number]; intensity: number; colour: string; on: number; off: number};
+/** `radiance` and `grain` are the ledger's own words for the beat. A beat with no light carries no `emitter`. */
+export type LightBeat = {pair: LightPair; emitter?: LightEmitter; radiance: string; grain: string};
+/** `frames` is the crossing window [start, end); `path` is the emitter colour across it, first stop at the start, last at the end. */
+export type LightCrossing = {from: string; to: string; frames: [number, number]; path: string[]};
+export type LightContract = {beats: Record<string, LightBeat>; crossings: LightCrossing[]};
+
+const isHex = (c: unknown): c is string => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
+
+/** A light contract read from JSON, or an error naming the first field that is wrong. */
+export const parseLightContract = (json: unknown): LightContract => {
+  const c = json as LightContract;
+  if (typeof c?.beats !== 'object' || c.beats === null || Array.isArray(c.beats)) throw new Error('light: beats must be an object keyed by beat id');
+  for (const [id, b] of Object.entries(c.beats)) {
+    if (!isHex(b?.pair?.radiance) || !isHex(b.pair.accent)) throw new Error(`light: beat "${id}" needs a pair of #rrggbb colours`);
+    const e = b.emitter;
+    if (e === undefined) continue;
+    if (!isHex(e.colour)) throw new Error(`light: beat "${id}" emitter.colour must be #rrggbb`);
+    for (const k of ['on', 'off', 'intensity'] as const) if (typeof e[k] !== 'number') throw new Error(`light: beat "${id}" emitter.${k} must be a number`);
+    for (const k of ['start', 'end'] as const) if (!Array.isArray(e[k]) || e[k].length !== 2) throw new Error(`light: beat "${id}" emitter.${k} must be [x, y]`);
+  }
+  if (!Array.isArray(c.crossings)) throw new Error('light: crossings must be a list');
+  for (const x of c.crossings) if (!Array.isArray(x.path) || x.path.length < 2 || !x.path.every(isHex)) throw new Error(`light: crossing ${x.from} -> ${x.to} needs a path of at least two #rrggbb colours`);
+  return c;
+};
+
+/** True when the contract carries every beat of the timeline and every one of its crossings; a partial file is not used (fallback: the shot-hue derivation). */
+export const coversTimeline = (contract: LightContract, beats: {id: string}[], crossings: {from: string; to: string}[]): boolean =>
+  beats.every((b) => contract.beats[b.id]) && crossings.every((x) => contract.crossings.some((c) => c.from === x.from && c.to === x.to));
+
+/** The emitter's colour in a beat: its own, else the pair's radiance (a beat with no light still has a colour for the crossings around it). */
+const beatColour = (contract: LightContract, id: string): string => contract.beats[id]!.emitter?.colour ?? contract.beats[id]!.pair.radiance;
+
+/**
+ * The colour track of a contract: each beat holds its colour, a crossing walks its `path` across the window, and beats with no crossing between
+ * them ease over the last `ease` frames (default 30) as `lightTrack` does.
+ */
+export const lightTrackFromContract = (beats: TimelineBeat[], contract: LightContract, options: LightOptions = {}): Track<string> => {
+  const ease = options.ease ?? 30;
+  const keys: Track<string>['keys'] = [];
+  beats.forEach((beat, i) => {
+    const entry = beat.crossingIn ? contract.crossings.find((c) => c.frames[0] === beat.crossingIn![0] && c.frames[1] === beat.crossingIn![1]) : undefined;
+    if (beat.crossingIn && !entry) throw new Error(`light: no contract crossing for the window ${beat.crossingIn.join('-')} into "${beat.id}"`);
+    if (entry) {
+      const [a, b] = entry.frames;
+      entry.path.forEach((value, k) => keys.push({frame: Math.round(a + ((b - a) * k) / (entry.path.length - 1)), value, ease: 'linear'}));
+    } else keys.push({frame: beat.start, value: beatColour(contract, beat.id), ease: 'smooth'});
+    const last = keys[keys.length - 1]!;
+    const holdEnd = beat.crossingOut ? beat.crossingOut[0] : i === beats.length - 1 ? beat.end : beat.end - ease;
+    last.hold = Math.max(0, holdEnd - last.frame);
+  });
+  return {keys};
+};
+
+/** The emitter's intensity on `frame`: its own inside [on, off), 0 outside it and in a beat with no emitter. */
+export const emitterIntensityAt = (contract: LightContract, beatId: string, frame: number): number => {
+  const e = contract.beats[beatId]?.emitter;
+  return e && frame >= e.on && frame < e.off ? e.intensity : 0;
+};
+
+/* ---- compiling a contract ---- */
+
+const toHsl = (c: string): [number, number, number] => {
+  const [r, g, b] = hex(c).map((v) => v / 255) as [number, number, number];
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  if (d === 0) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [(h * 60 + 360) % 360, s, l];
+};
+const fromHsl = (h: number, s: number, l: number): string => {
+  const k = (n: number) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return '#' + [f(0), f(8), f(4)].map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
+};
+export const hueOfHex = (c: string): number => toHsl(c)[0];
+/** Smallest angle between two hues, in degrees. */
+export const hueDistance = (a: number, b: number): number => {
+  const d = Math.abs(a - b) % 360;
+  return Math.min(d, 360 - d);
+};
+
+/** `n` colours from `a` to `b` with the hue walking the shortest arc (never through a third hue the other way round) and saturation and lightness blended straight, so the path never greys. */
+export const hslPath = (a: string, b: string, n = 5): string[] => {
+  if (a.toLowerCase() === b.toLowerCase()) return [a, b];
+  const [h0, s0, l0] = toHsl(a), [h1, s1, l1] = toHsl(b);
+  const raw = (((h1 - h0) % 360) + 540) % 360 - 180;
+  const arc = raw === -180 ? 180 : raw;
+  return Array.from({length: n}, (_, i) => {
+    const t = i / (n - 1);
+    return i === 0 ? a : i === n - 1 ? b : fromHsl((h0 + arc * t + 360) % 360, s0 + (s1 - s0) * t, l0 + (l1 - l0) * t);
+  });
+};
+
+export type LightInputs = {
+  beats: TimelineBeat[];
+  crossings: {from: string; to: string; start: number; end: number}[];
+  /** The hue pair of a beat (the shot's D74 pair). */
+  pairOf: (beatId: string) => LightPair;
+  /** A world's radiance as its contract declares it. */
+  worldRadiance: (worldId: string) => {on: boolean; colour?: string};
+  /** The beat's emitter path in screen pixels and what it sits on; absent when the blocking has none. */
+  emitterOf: (beatId: string) => {start: [number, number]; end: [number, number]; anchor: string} | undefined;
+  size: {width: number; height: number};
+  /** Hue tolerance for "the world's own radiance colour stands in for the accent". Default 15, the probes' C24 tolerance. */
+  hueTolerance?: number;
+  /** Frames between one beat's emitter going off and the next one's coming on (C18: 2-4). Default 2. */
+  handoff?: number;
+};
+
+const round4 = (v: number): number => Math.round(v * 10000) / 10000;
+
+/**
+ * The light contract from its sources. A beat has an emitter unless the ledger's emitter line says `none` or its world draws no radiance. The
+ * emitter colour is the pair's radiance, except where the ledger's radiance line names the accent: then the world's own radiance colour if it
+ * sits within tolerance of the accent's hue, else the accent. A crossing's path walks the shortest hue arc from the from-beat's colour to the
+ * to-beat's. Emitters come on at their beat's start and go off `handoff` frames before the next emitter's beat starts.
+ */
+export const compileLight = (input: LightInputs): LightContract => {
+  const {beats, size} = input;
+  const tol = input.hueTolerance ?? 15, handoff = input.handoff ?? 2;
+  const hasEmitter = (b: TimelineBeat): boolean => !/^none\b/i.test(b.effects.emitter ?? 'none') && input.worldRadiance(b.world).on && input.emitterOf(b.id) !== undefined;
+  const out: LightContract = {beats: {}, crossings: []};
+  beats.forEach((b, i) => {
+    const pair = input.pairOf(b.id);
+    const entry: LightBeat = {pair, radiance: b.effects.radiance ?? '', grain: b.effects.grain ?? ''};
+    if (hasEmitter(b)) {
+      const path = input.emitterOf(b.id)!;
+      const world = input.worldRadiance(b.world);
+      const namesAccent = /accent/i.test(b.effects.radiance ?? '');
+      const stand = world.colour && hueDistance(hueOfHex(world.colour), hueOfHex(pair.accent)) <= tol ? world.colour : pair.accent;
+      const next = beats[i + 1];
+      entry.emitter = {
+        anchor: path.anchor,
+        start: [round4(path.start[0] / size.width), round4(path.start[1] / size.height)],
+        end: [round4(path.end[0] / size.width), round4(path.end[1] / size.height)],
+        intensity: /\btiny\b/i.test(b.effects.emitter ?? '') ? 0.5 : 0.9,
+        colour: namesAccent ? stand : pair.radiance,
+        on: b.start,
+        off: next && hasEmitter(next) ? b.end - handoff : b.end,
+      };
+    }
+    out.beats[b.id] = entry;
+  });
+  const colourOf = (id: string): string => out.beats[id]!.emitter?.colour ?? out.beats[id]!.pair.radiance;
+  for (const x of input.crossings) out.crossings.push({from: x.from, to: x.to, frames: [x.start, x.end], path: hslPath(colourOf(x.from), colourOf(x.to))});
+  return out;
+};

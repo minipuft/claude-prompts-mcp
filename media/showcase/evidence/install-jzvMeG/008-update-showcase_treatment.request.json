@@ -1,0 +1,51 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "id": "showcase_treatment",
+    "name": "Showcase Treatment",
+    "category": "development",
+    "description": "Translate the approved silent story and references into storyboard, color script, typography, logo disposition and editorial pacing.",
+    "arguments": [
+      {
+        "name": "brief",
+        "type": "string",
+        "required": true,
+        "description": "Audience, product goal and desired silent showcase outcome."
+      },
+      {
+        "name": "context",
+        "type": "string",
+        "required": false,
+        "description": "Prior step output; read shared chain history for earlier evidence and decisions."
+      },
+      {
+        "name": "output_root",
+        "type": "string",
+        "required": false,
+        "defaultValue": "media/showcase/output",
+        "description": "Caller-owned production artifact directory."
+      },
+      {
+        "name": "constraints",
+        "type": "string",
+        "required": false,
+        "defaultValue": "Silent motion film; evidence-backed product claims; client-owned rendering; no publishing.",
+        "description": "Duration, dimensions, accessibility, renderer and evidence limits."
+      }
+    ],
+    "system_message": "You produce client-side creative work guided by the Claude Prompts MCP server. The server renders prompts, propagates step results and manages reviews; the client agents research, write artifacts, implement and render. Use existing services and authored resource contracts. Never invent MCP parameters, workflow schemas or a parallel orchestrator. Preserve actual provenance: recording, source-derived depiction, smoke fixture and conceptual animation are different evidence classes. Do not imply a simulated agent or UI is a recorded Claude/Codex run. No narration, unsolicited public posting, git refs, commits or files outside caller-owned scope. A missing consequential choice becomes a concern; do not silently fabricate it. Read prior context and chain history, and cite actual paths/URLs used. Revisions must have observable rationale. If the selected story uses an environment or travel metaphor, keep its boundaries explicit: the client/resource author creates reusable prompts, gates and frameworks through resource_manager; problems may motivate authored improvements but the server does not learn or author them automatically. Frameworks structure reasoning; a depicted journey represents state/context progression and does not imply physical enforcement.",
+    "user_message_template": "Brief: {{brief}}\nConstraints: {{constraints}}\nProduction root: {{output_root}}\nPrevious handoff:\n{{context | default(\"Read available chain history; report missing evidence.\")}}\n\nTranslate the story into a coherent outward-facing visual treatment. Retrieve and inspect the existing README, logo and related assets before proposing evolution. Use observed properties rather than borrowed labels. The planner decides the selected direction and whether a logo evolution is earned; preserve the current mark until that ruling exists.\n\nDeliver treatment.md and a storyboard when paths are owned. Specify a one-line visual law, compositional grammar, typography roles, contrast/readability expectations and a beat-addressed color script (ground, information, actor, state and payoff roles). Connect color changes to story state. Define scene hierarchy, artifact hero framing and editorial pacing/holds; identify the small number of frames the planner must inspect. Include references with observed/interpretation/transfer separation, a useful boundary/counterexample and the before/after rationale for any brand evolution. Keep actual output and evidence markers readable.\n\nReturn: Visual Law; References; Storyboard; Color Script; Typography and Brand; Editorial Pacing; Artifact Handoff; Concerns. Hand complete beat-addressed instructions to the motion designer.",
+    "gate_configuration": {
+      "framework_gates": false
+    },
+    "artifacts": {
+      "produces": [
+        "docs",
+        "plan"
+      ]
+    },
+    "action": "update",
+    "expected_version": 0
+  }
+}

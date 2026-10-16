@@ -1,0 +1,1882 @@
+{
+ "shot": "s01-arrival-overwhelm",
+ "fps": 30,
+ "frames": [
+  0,
+  420
+ ],
+ "provisional": true,
+ "source": {
+  "timeline": "v3/timeline.json (arrival 0-180, everything-at-once 180-420, no crossing)",
+  "layout": "v3/layouts/s01-arrival-overwhelm.json",
+  "blocking": [
+   "v3/blocking/arrival.json",
+   "v3/blocking/everything-at-once.json"
+  ]
+ },
+ "actors": {
+  "human": {
+   "kind": "rig",
+   "keySheet": "v3/keys/s01-arrival-overwhelm.json",
+   "keys": [
+    {
+     "name": "rest-on-lid",
+     "frame": 0,
+     "pose": "upright behind the box, weight even, forearms resting on the lid's near edge, chin down, eyes on the lid",
+     "lineOfAction": "a gentle forward arc from the hips over the box: head, shoulders and forearms on one soft C",
+     "changes": "the poster pose",
+     "hold": 26
+    },
+    {
+     "name": "grip",
+     "frame": 42,
+     "pose": "shoulders drop and round, elbows bend, fingertips curl under the lid's near edge: the gather before the lift",
+     "lineOfAction": "the C deepens: spine curves toward the box, elbows out",
+     "changes": "anticipation: shoulders down 8 %, elbows bent, hands under the edge",
+     "hold": 16
+    },
+    {
+     "name": "lift",
+     "frame": 66,
+     "pose": "arms rise to chest height pulling the lid, torso straightens and leans a little back, chin lifts",
+     "lineOfAction": "a rising diagonal from the planted feet up through the lifted forearms",
+     "changes": "the lid is in the hands: arms up, spine from a C to a straight lean",
+     "hold": 26
+    },
+    {
+     "name": "awe",
+     "frame": 104,
+     "pose": "one step back, arms drop open and low at the sides, palms out, head tipped back to follow the rising bubble",
+     "lineOfAction": "an open S: heels, hips back, ribs forward, chin up",
+     "changes": "release: arms fall open, weight shifts back",
+     "hold": 26
+    },
+    {
+     "name": "brace",
+     "frame": 154,
+     "pose": "hands drawn in to the chest, shoulders up, weight leaning back on the heels, eyes fixed up on the swelling bubble",
+     "lineOfAction": "a backward lean from heels to crown, hands as the fulcrum",
+     "changes": "wonder tightens into held breath as the bubble swells",
+     "hold": 24
+    },
+    {
+     "name": "joy-a",
+     "frame": 190,
+     "pose": "arms flung up and out, back arched, hips pushed to the left, face up: the burst after the pop",
+     "lineOfAction": "one big diagonal from the right foot up through the left hand",
+     "changes": "the pop lands: everything in the body opens",
+     "hold": 22
+    },
+    {
+     "name": "joy-b",
+     "frame": 228,
+     "pose": "the same joy turned the other way: hips to the right, arms swapped, the hair swoop swinging across (the turn)",
+     "lineOfAction": "the diagonal reverses, an S-curve through the torso",
+     "changes": "the turn: weight crosses over, arms trade sides",
+     "hold": 20
+    },
+    {
+     "name": "shrink",
+     "frame": 272,
+     "pose": "knees bent, back rounded, chin to chest, forearms crossed over the head: small and covering",
+     "lineOfAction": "a closing C from the crown down to the bent knees",
+     "changes": "joy is overrun: the figure folds in on itself and holds (the field floods)",
+     "hold": 148
+    }
+   ],
+   "breakdowns": [
+    {
+     "frame": 26,
+     "favour": 0.104
+    },
+    {
+     "frame": 30,
+     "favour": 0.352
+    },
+    {
+     "frame": 34,
+     "favour": 0.648
+    },
+    {
+     "frame": 38,
+     "favour": 0.896
+    },
+    {
+     "frame": 58,
+     "favour": 0.104
+    },
+    {
+     "frame": 60,
+     "favour": 0.352
+    },
+    {
+     "frame": 62,
+     "favour": 0.648
+    },
+    {
+     "frame": 64,
+     "favour": 0.896
+    },
+    {
+     "frame": 92,
+     "favour": 0.156
+    },
+    {
+     "frame": 96,
+     "favour": 0.58
+    },
+    {
+     "frame": 100,
+     "favour": 0.844
+    },
+    {
+     "frame": 130,
+     "favour": 0.055
+    },
+    {
+     "frame": 134,
+     "favour": 0.198
+    },
+    {
+     "frame": 138,
+     "favour": 0.394
+    },
+    {
+     "frame": 142,
+     "favour": 0.606
+    },
+    {
+     "frame": 146,
+     "favour": 0.802
+    },
+    {
+     "frame": 150,
+     "favour": 0.945
+    },
+    {
+     "frame": 178,
+     "favour": 0.055
+    },
+    {
+     "frame": 180,
+     "favour": 0.198
+    },
+    {
+     "frame": 182,
+     "favour": 0.394
+    },
+    {
+     "frame": 184,
+     "favour": 0.606
+    },
+    {
+     "frame": 186,
+     "favour": 0.802
+    },
+    {
+     "frame": 188,
+     "favour": 0.945
+    },
+    {
+     "frame": 212,
+     "favour": 0.104
+    },
+    {
+     "frame": 216,
+     "favour": 0.352
+    },
+    {
+     "frame": 220,
+     "favour": 0.648
+    },
+    {
+     "frame": 224,
+     "favour": 0.896
+    },
+    {
+     "frame": 248,
+     "favour": 0.055
+    },
+    {
+     "frame": 252,
+     "favour": 0.198
+    },
+    {
+     "frame": 256,
+     "favour": 0.394
+    },
+    {
+     "frame": 260,
+     "favour": 0.606
+    },
+    {
+     "frame": 264,
+     "favour": 0.802
+    },
+    {
+     "frame": 268,
+     "favour": 0.945
+    }
+   ],
+   "note": "every move is 3-6 drawings of 4 frames on twos; keys held 10-24 frames before the move starts; the last key is a declared long hold to the end of the shot (the field floods, the figure stays folded)"
+  },
+  "box.lid": {
+   "kind": "scalar",
+   "param": "lid angle, 0 closed .. 1 about 105 degrees; hinge on the back edge",
+   "quantise": "twos",
+   "note": "cracks 2 frames after the human's grip key lands (frame 42) and follows the lift key (66) by 8 frames: cause then effect",
+   "keys": [
+    {
+     "frame": 0,
+     "value": 0,
+     "hold": 42,
+     "why": "closed; the seam hairline is the only light"
+    },
+    {
+     "frame": 44,
+     "value": 0.05,
+     "hold": 12,
+     "why": "a crack: the lid lifts 5 % as the fingers curl under (seam pulse), 2 frames after the grip key lands"
+    },
+    {
+     "frame": 74,
+     "value": 0.64,
+     "ease": "smooth",
+     "why": "pulled by the hands: the lift key lands at 66, the lid follows 8 frames later"
+    },
+    {
+     "frame": 90,
+     "value": 1.07,
+     "ease": "out",
+     "why": "swings past open under its own weight (overshoot)"
+    },
+    {
+     "frame": 102,
+     "value": 1.0,
+     "why": "settles open"
+    }
+   ]
+  },
+  "bubble.size": {
+   "kind": "scalar",
+   "param": "bubble radius in units of 140 px; 0 = not there",
+   "quantise": "twos",
+   "note": "the bubble leads the widen (frames 150-180) and pops on 180",
+   "keys": [
+    {
+     "frame": 0,
+     "value": 0,
+     "hold": 84
+    },
+    {
+     "frame": 88,
+     "value": 0.12,
+     "ease": "out",
+     "why": "a bead of light at the box's mouth"
+    },
+    {
+     "frame": 112,
+     "value": 0.5,
+     "ease": "smooth",
+     "why": "rises and swells with the gadget inside"
+    },
+    {
+     "frame": 146,
+     "value": 0.8,
+     "hold": 4,
+     "ease": "smooth",
+     "why": "the swell begins to lead the camera"
+    },
+    {
+     "frame": 178,
+     "value": 1.55,
+     "ease": "in",
+     "why": "the last two frames are the stretch before the pop"
+    },
+    {
+     "frame": 180,
+     "value": 0,
+     "why": "the pop: gone in one drawing; the burst ring is the light layer's"
+    }
+   ]
+  },
+  "gadget.rise": {
+   "kind": "scalar",
+   "param": "position along its path, 0 inside the box .. 1 above the box at the pop .. 2 hovering high with the dial at its end-of-move position",
+   "quantise": "twos",
+   "note": "bubble and gadget keep the same centre until the pop",
+   "keys": [
+    {
+     "frame": 0,
+     "value": 0,
+     "hold": 86,
+     "why": "hidden behind the box's front"
+    },
+    {
+     "frame": 90,
+     "value": 0.12,
+     "ease": "smooth",
+     "why": "starts to rise on its bubble"
+    },
+    {
+     "frame": 130,
+     "value": 0.6,
+     "ease": "smooth"
+    },
+    {
+     "frame": 178,
+     "value": 1.0,
+     "why": "rides the bubble to the pop"
+    },
+    {
+     "frame": 182,
+     "value": 1.0,
+     "ease": "smooth",
+     "why": "a hang: gravity takes a frame"
+    },
+    {
+     "frame": 262,
+     "value": 2.0,
+     "ease": "out",
+     "why": "rises and grows to tower over the trio"
+    }
+   ],
+   "path": [
+    {
+     "x": 745,
+     "y": 610,
+     "scale": 0.45
+    },
+    {
+     "x": 730,
+     "y": 330,
+     "scale": 1.15
+    },
+    {
+     "x": 699,
+     "y": -124,
+     "scale": 2.9
+    }
+   ]
+  },
+  "gadget.glow": {
+   "kind": "scalar",
+   "param": "dial opening 0..1 (the accent dot's radius)",
+   "quantise": "twos",
+   "note": "light follows the drawn pop by 4 frames (law 4)",
+   "keys": [
+    {
+     "frame": 0,
+     "value": 0,
+     "hold": 180
+    },
+    {
+     "frame": 184,
+     "value": 0.2,
+     "ease": "out",
+     "why": "the dial wakes 4 frames after the pop"
+    },
+    {
+     "frame": 204,
+     "value": 1.0
+    }
+   ]
+  },
+  "codex.lean": {
+   "kind": "scalar",
+   "param": "lean toward the box, 0 upright .. 1 full lean",
+   "quantise": "twos",
+   "note": "stagger: codex starts at 94, clawd at 98",
+   "keys": [
+    {
+     "frame": 0,
+     "value": 0,
+     "hold": 94
+    },
+    {
+     "frame": 98,
+     "value": 0.6,
+     "hold": 22,
+     "ease": "out",
+     "why": "leans in 4 frames after the lid is open: related staggered by 4 from clawd"
+    },
+    {
+     "frame": 146,
+     "value": 0.85,
+     "hold": 30,
+     "ease": "smooth",
+     "why": "leans in further as the bubble swells"
+    },
+    {
+     "frame": 186,
+     "value": 0.15,
+     "ease": "out",
+     "why": "recoil at the pop"
+    },
+    {
+     "frame": 226,
+     "value": 0.4,
+     "ease": "smooth",
+     "why": "turns to the incoming piece"
+    }
+   ]
+  },
+  "codex.catch": {
+   "kind": "scalar",
+   "param": "arms up to catch, 0..1",
+   "quantise": "twos",
+   "note": "piece p04 lands in its hands at frame 234",
+   "keys": [
+    {
+     "frame": 0,
+     "value": 0,
+     "hold": 224
+    },
+    {
+     "frame": 234,
+     "value": 1.0,
+     "hold": 14,
+     "ease": "out",
+     "why": "the piece lands in its hands"
+    },
+    {
+     "frame": 252,
+     "value": 0.0,
+     "ease": "smooth",
+     "why": "lets it down"
+    }
+   ]
+  },
+  "clawd.lean": {
+   "kind": "scalar",
+   "param": "lean toward the box, 0..1",
+   "quantise": "twos",
+   "note": null,
+   "keys": [
+    {
+     "frame": 0,
+     "value": 0,
+     "hold": 98
+    },
+    {
+     "frame": 102,
+     "value": 0.5,
+     "hold": 20,
+     "ease": "out",
+     "why": "leans in: 4 frames after codex"
+    },
+    {
+     "frame": 150,
+     "value": 0.7,
+     "hold": 30,
+     "ease": "smooth"
+    },
+    {
+     "frame": 190,
+     "value": 0.1,
+     "ease": "out",
+     "why": "recoil at the pop"
+    }
+   ]
+  },
+  "clawd.push": {
+   "kind": "scalar",
+   "param": "pushed by a stalk, 0 none .. 1 pushed right and tipped",
+   "quantise": "twos",
+   "note": "a stalk (piece p25) passes behind Clawd at 262",
+   "keys": [
+    {
+     "frame": 0,
+     "value": 0,
+     "hold": 258
+    },
+    {
+     "frame": 262,
+     "value": 0.0,
+     "ease": "in",
+     "why": "the stalk's tip reaches it"
+    },
+    {
+     "frame": 276,
+     "value": 1.12,
+     "ease": "out",
+     "why": "pushed past where it stays"
+    },
+    {
+     "frame": 290,
+     "value": 0.9,
+     "ease": "smooth",
+     "why": "settles"
+    }
+   ]
+  },
+  "stalk0.grow": {
+   "kind": "scalar",
+   "param": "the first stalk's curl, 0 not there .. 1 fully unrolled; rooted at the gadget's funnel",
+   "quantise": "twos",
+   "note": "leads the camera from 180 to 210",
+   "keys": [
+    {
+     "frame": 0,
+     "value": 0,
+     "hold": 176
+    },
+    {
+     "frame": 180,
+     "value": 0.04,
+     "ease": "out",
+     "why": "starts as the bubble pops (cause)"
+    },
+    {
+     "frame": 212,
+     "value": 1.0,
+     "why": "curl complete as the widen ends"
+    }
+   ]
+  },
+  "light.seam": {
+   "kind": "scalar",
+   "param": "box seam light, 0..1 (the one emitter before the pop)",
+   "quantise": "ones",
+   "note": "one emitter at a time: the seam window is frames 0-177, the dial window 182-419 (handoff gap 4)",
+   "keys": [
+    {
+     "frame": 0,
+     "value": 0.5,
+     "hold": 38,
+     "why": "hairline"
+    },
+    {
+     "frame": 44,
+     "value": 0.95,
+     "ease": "out",
+     "why": "crack: seam pulse"
+    },
+    {
+     "frame": 60,
+     "value": 0.7,
+     "hold": 40,
+     "ease": "smooth",
+     "why": "the lid opening widens it"
+    },
+    {
+     "frame": 140,
+     "value": 0.8,
+     "hold": 30,
+     "ease": "smooth"
+    },
+    {
+     "frame": 178,
+     "value": 0.0,
+     "ease": "smooth",
+     "why": "the bubble covers the mouth; the emitter window ends at 178"
+    }
+   ]
+  },
+  "light.dial": {
+   "kind": "scalar",
+   "param": "dial emitter, 0..1 (the one emitter after the pop)",
+   "quantise": "ones",
+   "note": null,
+   "keys": [
+    {
+     "frame": 0,
+     "value": 0,
+     "hold": 181
+    },
+    {
+     "frame": 182,
+     "value": 0.35,
+     "ease": "out",
+     "why": "on 2 frames after the pop; handoff gap 4 frames (seam off 178)"
+    },
+    {
+     "frame": 200,
+     "value": 1.0
+    }
+   ]
+  },
+  "light.flood": {
+   "kind": "scalar",
+   "param": "Turrell blue radiance flooding the field, 0..1",
+   "quantise": "ones",
+   "note": "cause then light then glass then settle",
+   "keys": [
+    {
+     "frame": 0,
+     "value": 0,
+     "hold": 183
+    },
+    {
+     "frame": 190,
+     "value": 0.15,
+     "ease": "out",
+     "why": "begins 4 frames after the dial (glass after light, law 4)"
+    },
+    {
+     "frame": 262,
+     "value": 1.0,
+     "ease": "smooth",
+     "why": "full; grain keeps rising to the end"
+    }
+   ]
+  },
+  "light.grain": {
+   "kind": "scalar",
+   "param": "grain amount, 0..1",
+   "quantise": "twos",
+   "note": "grain is boil, reseeded on twos from 3 variants",
+   "keys": [
+    {
+     "frame": 0,
+     "value": 0.1,
+     "hold": 190
+    },
+    {
+     "frame": 260,
+     "value": 0.5,
+     "ease": "smooth"
+    },
+    {
+     "frame": 420,
+     "value": 0.8,
+     "ease": "smooth",
+     "why": "rising to the cut into beat 3"
+    }
+   ]
+  }
+ },
+ "pieces": [
+  {
+   "id": "p00-stalk",
+   "kind": "stalk",
+   "start": 186,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     326.0,
+     -467.6
+    ],
+    [
+     -27.0,
+     -428.4
+    ]
+   ],
+   "to": [
+    -633.0,
+    -133.2
+   ],
+   "size": 1.19,
+   "rot": -8.5,
+   "layer": "back"
+  },
+  {
+   "id": "p01-arch",
+   "kind": "arch",
+   "start": 190,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     357.3,
+     -383.6
+    ],
+    [
+     35.6,
+     -647.3
+    ]
+   ],
+   "to": [
+    -507.8,
+    -361.9
+   ],
+   "size": 0.72,
+   "rot": 13.7,
+   "layer": "back"
+  },
+  {
+   "id": "p02-ring",
+   "kind": "ring",
+   "start": 193,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     484.7,
+     -357.5
+    ],
+    [
+     290.4,
+     -496.8
+    ]
+   ],
+   "to": [
+    1.9,
+    -279.7
+   ],
+   "size": 1.2,
+   "rot": 3.4,
+   "layer": "back"
+  },
+  {
+   "id": "p03-block",
+   "kind": "block",
+   "start": 198,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     304.4,
+     -463.7
+    ],
+    [
+     -70.3,
+     -770.1
+    ]
+   ],
+   "to": [
+    -719.5,
+    -495.7
+   ],
+   "size": 1.39,
+   "rot": -3.6,
+   "layer": "back"
+  },
+  {
+   "id": "p04-codex-block",
+   "kind": "block",
+   "start": 202,
+   "flight": 32,
+   "from": "funnel",
+   "via": [
+    [
+     900,
+     -330
+    ],
+    [
+     520,
+     140
+    ]
+   ],
+   "to": [
+    376,
+    596
+   ],
+   "size": 1.0,
+   "rot": -2.9,
+   "layer": "front",
+   "note": "codex catches this block in its raised hands at 234"
+  },
+  {
+   "id": "p05-stalk",
+   "kind": "stalk",
+   "start": 206,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     373.4,
+     -425.2
+    ],
+    [
+     67.8,
+     -904.0
+    ]
+   ],
+   "to": [
+    -443.5,
+    -585.1
+   ],
+   "size": 0.89,
+   "rot": 8.9,
+   "layer": "back"
+  },
+  {
+   "id": "p06-ring",
+   "kind": "ring",
+   "start": 209,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     463.2,
+     -490.3
+    ],
+    [
+     247.3,
+     -797.4
+    ]
+   ],
+   "to": [
+    -84.3,
+    -499.7
+   ],
+   "size": 0.78,
+   "rot": 12.0,
+   "layer": "back"
+  },
+  {
+   "id": "p07-block",
+   "kind": "block",
+   "start": 214,
+   "flight": 34,
+   "from": "funnel",
+   "via": [
+    [
+     566.8,
+     -482.6
+    ],
+    [
+     454.5,
+     -537.7
+    ]
+   ],
+   "to": [
+    330.1,
+    -305.6
+   ],
+   "size": 1.46,
+   "rot": 3.4,
+   "layer": "back"
+  },
+  {
+   "id": "p08-string",
+   "kind": "string",
+   "start": 218,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     334.5,
+     -403.0
+    ],
+    [
+     -9.9,
+     -1006.2
+    ]
+   ],
+   "to": [
+    -598.8,
+    -795.8
+   ],
+   "size": 0.9,
+   "rot": -13.7,
+   "layer": "back"
+  },
+  {
+   "id": "p09-arch",
+   "kind": "arch",
+   "start": 222,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     434.6,
+     -452.5
+    ],
+    [
+     190.1,
+     -907.8
+    ]
+   ],
+   "to": [
+    -198.8,
+    -681.9
+   ],
+   "size": 0.9,
+   "rot": -11.2,
+   "layer": "back"
+  },
+  {
+   "id": "p10-stalk",
+   "kind": "stalk",
+   "start": 225,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     386.4,
+     -432.0
+    ],
+    [
+     93.9,
+     -1092.9
+    ]
+   ],
+   "to": [
+    -391.3,
+    -857.6
+   ],
+   "size": 1.21,
+   "rot": -5.4,
+   "layer": "back"
+  },
+  {
+   "id": "p11-block",
+   "kind": "block",
+   "start": 230,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     517.4,
+     -394.0
+    ],
+    [
+     355.8,
+     -1013.6
+    ]
+   ],
+   "to": [
+    132.6,
+    -700.1
+   ],
+   "size": 1.4,
+   "rot": -8.5,
+   "layer": "back"
+  },
+  {
+   "id": "p12-stalk",
+   "kind": "stalk",
+   "start": 234,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     464.6,
+     -376.6
+    ],
+    [
+     250.1,
+     -1197.5
+    ]
+   ],
+   "to": [
+    -78.7,
+    -915.6
+   ],
+   "size": 0.7,
+   "rot": -1.1,
+   "layer": "back"
+  },
+  {
+   "id": "p13-arch",
+   "kind": "arch",
+   "start": 238,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     534.1,
+     -346.4
+    ],
+    [
+     389.2,
+     -1113.9
+    ]
+   ],
+   "to": [
+    199.4,
+    -911.1
+   ],
+   "size": 1.12,
+   "rot": 0.1,
+   "layer": "back"
+  },
+  {
+   "id": "p14-clawd-stalk",
+   "kind": "stalk",
+   "start": 241,
+   "flight": 21,
+   "from": "funnel",
+   "via": [
+    [
+     1100,
+     -300
+    ],
+    [
+     1000,
+     200
+    ]
+   ],
+   "to": [
+    905,
+    690
+   ],
+   "size": 0.95,
+   "rot": -8.5,
+   "layer": "front",
+   "note": "clawd is pushed by this stalk at 262"
+  },
+  {
+   "id": "p15-block",
+   "kind": "block",
+   "start": 246,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     758.6,
+     -494.9
+    ],
+    [
+     798.3,
+     -1037.9
+    ]
+   ],
+   "to": [
+    777.5,
+    -840.2
+   ],
+   "size": 1.45,
+   "rot": 3.4,
+   "layer": "back"
+  },
+  {
+   "id": "p16-frame",
+   "kind": "frame",
+   "start": 250,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     832.9,
+     -369.6
+    ],
+    [
+     946.8,
+     -1120.3
+    ]
+   ],
+   "to": [
+    1074.7,
+    -824.8
+   ],
+   "size": 1.11,
+   "rot": -7.9,
+   "layer": "back"
+  },
+  {
+   "id": "p17-stalk",
+   "kind": "stalk",
+   "start": 254,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     884.2,
+     -426.9
+    ],
+    [
+     1049.4,
+     -1145.0
+    ]
+   ],
+   "to": [
+    1279.8,
+    -909.0
+   ],
+   "size": 1.01,
+   "rot": 1.7,
+   "layer": "back"
+  },
+  {
+   "id": "p18-ring",
+   "kind": "ring",
+   "start": 257,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     992.7,
+     -350.1
+    ],
+    [
+     1266.5,
+     -1191.4
+    ]
+   ],
+   "to": [
+    1713.9,
+    -905.3
+   ],
+   "size": 1.12,
+   "rot": -2.2,
+   "layer": "back"
+  },
+  {
+   "id": "p19-block",
+   "kind": "block",
+   "start": 262,
+   "flight": 34,
+   "from": "funnel",
+   "via": [
+    [
+     824.3,
+     -412.1
+    ],
+    [
+     929.5,
+     -609.5
+    ]
+   ],
+   "to": [
+    1040.1,
+    -347.9
+   ],
+   "size": 0.82,
+   "rot": -7.4,
+   "layer": "back"
+  },
+  {
+   "id": "p20-string",
+   "kind": "string",
+   "start": 266,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     961.0,
+     -468.8
+    ],
+    [
+     1203.1,
+     -970.2
+    ]
+   ],
+   "to": [
+    1587.1,
+    -683.3
+   ],
+   "size": 1.02,
+   "rot": -11.4,
+   "layer": "back"
+  },
+  {
+   "id": "p21-arch",
+   "kind": "arch",
+   "start": 270,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     889.5,
+     -425.6
+    ],
+    [
+     1059.9,
+     -724.1
+    ]
+   ],
+   "to": [
+    1300.8,
+    -482.2
+   ],
+   "size": 1.11,
+   "rot": -12.5,
+   "layer": "back"
+  },
+  {
+   "id": "p22-stalk",
+   "kind": "stalk",
+   "start": 273,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     1067.2,
+     -404.5
+    ],
+    [
+     1415.3,
+     -1116.5
+    ]
+   ],
+   "to": [
+    2011.6,
+    -865.9
+   ],
+   "size": 1.46,
+   "rot": -8.6,
+   "layer": "back"
+  },
+  {
+   "id": "p23-block",
+   "kind": "block",
+   "start": 278,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     982.3,
+     -422.7
+    ],
+    [
+     1245.7,
+     -797.0
+    ]
+   ],
+   "to": [
+    1672.4,
+    -479.5
+   ],
+   "size": 1.35,
+   "rot": -4.2,
+   "layer": "back"
+  },
+  {
+   "id": "p24-stalk",
+   "kind": "stalk",
+   "start": 282,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     1042.6,
+     -369.4
+    ],
+    [
+     1366.2,
+     -813.1
+    ]
+   ],
+   "to": [
+    1913.5,
+    -527.2
+   ],
+   "size": 1.42,
+   "rot": -8.2,
+   "layer": "back"
+  },
+  {
+   "id": "p25-arch",
+   "kind": "arch",
+   "start": 286,
+   "flight": 38,
+   "from": "funnel",
+   "via": [
+    [
+     891.5,
+     -425.0
+    ],
+    [
+     1064.1,
+     -439.9
+    ]
+   ],
+   "to": [
+    1309.2,
+    -223.1
+   ],
+   "size": 0.72,
+   "rot": 11.1,
+   "layer": "back"
+  },
+  {
+   "id": "p26-ring",
+   "kind": "ring",
+   "start": 289,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     1052.9,
+     -469.6
+    ],
+    [
+     1386.9,
+     -432.5
+    ]
+   ],
+   "to": [
+    1954.8,
+    -228.9
+   ],
+   "size": 1.15,
+   "rot": 2.2,
+   "layer": "back"
+  },
+  {
+   "id": "p27-block",
+   "kind": "block",
+   "start": 294,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     969.4,
+     -360.7
+    ],
+    [
+     1219.7,
+     -481.2
+    ]
+   ],
+   "to": [
+    1620.5,
+    -177.6
+   ],
+   "size": 1.36,
+   "rot": 2.2,
+   "layer": "back"
+  },
+  {
+   "id": "p28-frame",
+   "kind": "frame",
+   "start": 298,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     914.7,
+     -466.3
+    ],
+    [
+     1110.5,
+     -354.4
+    ]
+   ],
+   "to": [
+    1402.0,
+    -28.9
+   ],
+   "size": 1.11,
+   "rot": 3.9,
+   "layer": "back"
+  },
+  {
+   "id": "p29-stalk",
+   "kind": "stalk",
+   "start": 302,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     1050.5,
+     -437.7
+    ],
+    [
+     1382.0,
+     -441.8
+    ]
+   ],
+   "to": [
+    1944.9,
+    157.9
+   ],
+   "size": 1.23,
+   "rot": -1.9,
+   "layer": "front"
+  },
+  {
+   "id": "p30-ring",
+   "kind": "ring",
+   "start": 305,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     936.2,
+     -487.3
+    ],
+    [
+     1153.4,
+     -375.8
+    ]
+   ],
+   "to": [
+    1487.8,
+    171.4
+   ],
+   "size": 1.16,
+   "rot": -11.0,
+   "layer": "front"
+  },
+  {
+   "id": "p31-block",
+   "kind": "block",
+   "start": 310,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     1077.0,
+     -379.9
+    ],
+    [
+     1434.9,
+     -354.0
+    ]
+   ],
+   "to": [
+    2050.8,
+    383.6
+   ],
+   "size": 1.24,
+   "rot": 12.2,
+   "layer": "front"
+  },
+  {
+   "id": "p32-string",
+   "kind": "string",
+   "start": 314,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     993.9,
+     -367.9
+    ],
+    [
+     1268.8,
+     -338.1
+    ]
+   ],
+   "to": [
+    1718.6,
+    328.6
+   ],
+   "size": 0.93,
+   "rot": -13.7,
+   "layer": "front"
+  },
+  {
+   "id": "p33-arch",
+   "kind": "arch",
+   "start": 318,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     1038.9,
+     -434.0
+    ],
+    [
+     1358.8,
+     -394.3
+    ]
+   ],
+   "to": [
+    1898.6,
+    631.0
+   ],
+   "size": 1.12,
+   "rot": 11.3,
+   "layer": "front"
+  },
+  {
+   "id": "p34-stalk",
+   "kind": "stalk",
+   "start": 321,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     969.0,
+     -429.0
+    ],
+    [
+     1219.1,
+     -310.2
+    ]
+   ],
+   "to": [
+    1619.1,
+    562.0
+   ],
+   "size": 1.02,
+   "rot": 12.3,
+   "layer": "front"
+  },
+  {
+   "id": "p35-block",
+   "kind": "block",
+   "start": 326,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     879.8,
+     -375.9
+    ],
+    [
+     1040.5,
+     -323.9
+    ]
+   ],
+   "to": [
+    1262.1,
+    457.8
+   ],
+   "size": 1.37,
+   "rot": -5.6,
+   "layer": "front"
+  },
+  {
+   "id": "p36-stalk",
+   "kind": "stalk",
+   "start": 330,
+   "flight": 36,
+   "from": "funnel",
+   "via": [
+    [
+     834.4,
+     -486.3
+    ],
+    [
+     949.8,
+     -310.8
+    ]
+   ],
+   "to": [
+    1080.6,
+    331.4
+   ],
+   "size": 1.33,
+   "rot": 6.8,
+   "layer": "front"
+  },
+  {
+   "id": "p37-arch",
+   "kind": "arch",
+   "start": 334,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     830.2,
+     -380.2
+    ],
+    [
+     941.4,
+     -367.3
+    ]
+   ],
+   "to": [
+    1063.7,
+    639.0
+   ],
+   "size": 0.85,
+   "rot": 9.7,
+   "layer": "front"
+  },
+  {
+   "id": "p38-ring",
+   "kind": "ring",
+   "start": 337,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     553.1,
+     -386.6
+    ],
+    [
+     427.1,
+     -403.6
+    ]
+   ],
+   "to": [
+    275.2,
+    580.3
+   ],
+   "size": 1.25,
+   "rot": 13.0,
+   "layer": "front"
+  },
+  {
+   "id": "p39-block",
+   "kind": "block",
+   "start": 342,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     496.6,
+     -484.8
+    ],
+    [
+     314.2,
+     -334.4
+    ]
+   ],
+   "to": [
+    49.4,
+    573.6
+   ],
+   "size": 1.32,
+   "rot": -4.8,
+   "layer": "front"
+  },
+  {
+   "id": "p40-frame",
+   "kind": "frame",
+   "start": 346,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     442.4,
+     -396.6
+    ],
+    [
+     205.7,
+     -427.2
+    ]
+   ],
+   "to": [
+    -167.6,
+    574.5
+   ],
+   "size": 1.03,
+   "rot": -0.9,
+   "layer": "front"
+  },
+  {
+   "id": "p41-stalk",
+   "kind": "stalk",
+   "start": 350,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     506.4,
+     -455.6
+    ],
+    [
+     333.7,
+     -421.6
+    ]
+   ],
+   "to": [
+    88.4,
+    357.6
+   ],
+   "size": 1.39,
+   "rot": 3.4,
+   "layer": "front"
+  },
+  {
+   "id": "p42-ring",
+   "kind": "ring",
+   "start": 353,
+   "flight": 34,
+   "from": "funnel",
+   "via": [
+    [
+     562.0,
+     -489.7
+    ],
+    [
+     445.0,
+     -314.9
+    ]
+   ],
+   "to": [
+    311.1,
+    123.2
+   ],
+   "size": 0.77,
+   "rot": -13.2,
+   "layer": "front"
+  },
+  {
+   "id": "p43-block",
+   "kind": "block",
+   "start": 358,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     378.6,
+     -454.8
+    ],
+    [
+     78.2,
+     -309.8
+    ]
+   ],
+   "to": [
+    -422.5,
+    506.9
+   ],
+   "size": 0.85,
+   "rot": 8.9,
+   "layer": "front"
+  },
+  {
+   "id": "p44-string",
+   "kind": "string",
+   "start": 362,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     404.5,
+     -486.6
+    ],
+    [
+     130.0,
+     -418.7
+    ]
+   ],
+   "to": [
+    -318.9,
+    287.4
+   ],
+   "size": 0.9,
+   "rot": -10.9,
+   "layer": "front"
+  },
+  {
+   "id": "p45-arch",
+   "kind": "arch",
+   "start": 366,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     302.6,
+     -479.6
+    ],
+    [
+     -73.8,
+     -308.8
+    ]
+   ],
+   "to": [
+    -726.6,
+    450.2
+   ],
+   "size": 1.11,
+   "rot": -11.3,
+   "layer": "front"
+  },
+  {
+   "id": "p46-stalk",
+   "kind": "stalk",
+   "start": 369,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     470.9,
+     -376.8
+    ],
+    [
+     262.7,
+     -410.0
+    ]
+   ],
+   "to": [
+    -53.6,
+    161.1
+   ],
+   "size": 0.96,
+   "rot": -3.7,
+   "layer": "front"
+  },
+  {
+   "id": "p47-block",
+   "kind": "block",
+   "start": 374,
+   "flight": 38,
+   "from": "funnel",
+   "via": [
+    [
+     510.4,
+     -498.2
+    ],
+    [
+     341.9,
+     -348.9
+    ]
+   ],
+   "to": [
+    104.7,
+    -9.0
+   ],
+   "size": 0.82,
+   "rot": 7.6,
+   "layer": "back"
+  },
+  {
+   "id": "p48-stalk",
+   "kind": "stalk",
+   "start": 378,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     312.5,
+     -456.7
+    ],
+    [
+     -54.0,
+     -352.5
+    ]
+   ],
+   "to": [
+    -687.1,
+    122.5
+   ],
+   "size": 1.13,
+   "rot": -14.0,
+   "layer": "front"
+  },
+  {
+   "id": "p49-arch",
+   "kind": "arch",
+   "start": 382,
+   "flight": 40,
+   "from": "funnel",
+   "via": [
+    [
+     414.4,
+     -465.9
+    ],
+    [
+     149.7,
+     -332.3
+    ]
+   ],
+   "to": [
+    -279.5,
+    -15.3
+   ],
+   "size": 0.7,
+   "rot": -0.2,
+   "layer": "back"
+  }
+ ],
+ "pulses": [
+  {
+   "frame": 44,
+   "what": "seam pulse: the lid cracks (the hairline widens)",
+   "length": 14
+  },
+  {
+   "frame": 180,
+   "what": "the pop: the burst ring and the accent flash (drawn cause); the dial wakes 182, the flood 190",
+   "length": 12
+  }
+ ],
+ "lag": {
+  "frames": 3,
+  "recovery": 12,
+  "note": "radiance follows the drawn cause by 2-4 frames (here: pop 180, seam off 178, dial on 182, flood 190, grain 190) and recovers over 12 frames without snapping"
+ },
+ "boil": {
+  "variants": 3,
+  "rate": 4,
+  "seed": 11
+ },
+ "camera": {
+  "span": [
+   150,
+   210
+  ],
+  "note": "locked 0-150, widen 150-210 on ones from (640,360,x1) to (604,103,x0.6), held to 420; led by the bubble (150-180) then stalk0's curl (180-210); numbers in the layout contract"
+ }
+}

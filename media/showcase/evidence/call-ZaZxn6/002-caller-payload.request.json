@@ -1,0 +1,45 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "animation-key-fit",
+    "name": "Animation Key Fit",
+    "description": "Check-tier gate on the key sheet step: every drawn key's registered joints fit the pose sheet's declaration (curve class, side and bow within 0.02, no undeclared twinning, root over the weight foot); a plate that draws a lean where a curve was declared is refused before render.",
+    "type": "validation",
+    "gate_type": "custom",
+    "severity": "high",
+    "subject": "animation-key-fit",
+    "enforcement_mode": "blocking",
+    "guidance": "Ground truth by exit code (D81). The probe runs `python3 scripts/animation/probe-poses.py v3/poses v3/keys v3/charts --joints keys` in the renderer root: the key sheet's registered joints, measured by the same spine fit as the pose gate, must read the declared class, side and bow (within 0.02) and put the root over the declared weight foot. Its first line is its control and it refuses to report if the control does not trip. On FAIL quote the probe's line naming the key and the property (class, sign, bow, twinning, weight) and regenerate or re-register that key; never the probe, never the declaration to match a plate. Control: a straight spine declared S is refused.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-poses.py",
+          "v3/poses",
+          "v3/keys",
+          "v3/charts",
+          "--joints",
+          "keys"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 600000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ],
+    "activation": {
+      "prompt_categories": [
+        "animation",
+        "development"
+      ],
+      "explicit_request": true
+    },
+    "retry_config": {
+      "max_attempts": 2,
+      "improvement_hints": true
+    }
+  }
+}

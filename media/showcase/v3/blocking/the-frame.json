@@ -1,0 +1,95 @@
+{
+  "id": "the-frame",
+  "provisional": true,
+  "derivedFrom": "v3/layouts/s02-cant-build-frame.json emitter.endXY (0.6, 0.481) of the frame -> join and the two blocks that touch at it; every other field is the test scene's: the layout's figure heights are not used (startHeightPct 63.4 measures the human bent in the reach, endHeightPct is null); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
+  "figure": {
+    "scale": 0.68,
+    "x": 420,
+    "y": 40
+  },
+  "codex": {
+    "x": 60,
+    "y": 440,
+    "scale": 1.8
+  },
+  "clawd": {
+    "x": 940,
+    "y": 470,
+    "scale": 1.5
+  },
+  "frame": {
+    "x": 910,
+    "y": 70,
+    "width": 280,
+    "height": 230
+  },
+  "blocks": [
+    {
+      "x": 688.0,
+      "y": 316.3,
+      "width": 80,
+      "height": 60,
+      "role": "main1"
+    },
+    {
+      "x": 768.0,
+      "y": 316.3,
+      "width": 80,
+      "height": 60,
+      "role": "main2"
+    }
+  ],
+  "join": {
+    "x": 768.0,
+    "y": 346.3
+  },
+  "arch": {
+    "x": 30,
+    "y": 40,
+    "width": 340,
+    "height": 430,
+    "opening": 0.6,
+    "top": 70
+  },
+  "gates": [
+    {
+      "x": 150,
+      "y": 388,
+      "r": 22
+    },
+    {
+      "x": 235,
+      "y": 382,
+      "r": 28
+    },
+    {
+      "x": 325,
+      "y": 376,
+      "r": 34
+    }
+  ],
+  "floor": {
+    "y": 480
+  },
+  "figureCrop": {
+    "x": 380,
+    "y": 0,
+    "width": 500,
+    "height": 720
+  },
+  "beat": "the-frame",
+  "shot": "s02-cant-build-frame",
+  "emitter": {
+    "start": [
+      1000,
+      140
+    ],
+    "end": [
+      1060,
+      200
+    ],
+    "anchor": "frame interior"
+  },
+  "card": "seuss-nested-frames",
+  "cardNote": "provisional: board §1 world, \"Nested frames on black\" for the frame interior; the layout sheet may replace it"
+}

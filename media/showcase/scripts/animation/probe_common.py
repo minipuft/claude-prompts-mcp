@@ -1,0 +1,513 @@
+"""Shared plumbing for the episode-tier probes (probe-*.py): contract loaders, the figure crop with the camera inverted,
+hue arithmetic and the control-first report. Every probe prints one `control:` line before anything else and exits 2
+without reporting when that control does not trip (dev-workflow: a null result needs a positive control).
+
+Exit codes: 0 pass, 1 fail, 2 input error or a control that did not trip (a refusal is not a verified negative).
+"""
+import glob, json, os, re, sys
+import numpy as np
+from PIL import Image
+
+STAGE = (1280, 720)                     # stage pixels; frames are any uniform scale of it
+FIGURE_BOX = (380, 0, 500, 720)         # STAGE.figureCrop in src/library/worlds/contract.ts (x, y, w, h)
+IDENTITY_PIGMENTS = {"codex": "#4f7df2", "clawd": "#e8694a"}
+IDENTITY_RADIUS = 28                    # Euclidean RGB distance counted as the pigment's neighbourhood
+WORLDS = ("home", "crayon", "line", "shaded")
+HUE_TOLERANCE = 15.0                    # C24
+# A camera that moved between two frames resamples the picture at a new sub-pixel phase, so every 1 px ink edge differs by up to its full contrast
+# even when nothing was drawn differently. Where the camera moved, change_series compares both crops through a box blur of MOVING_BLUR_STAGE_PX
+# (scaled to the frame) and counts a pixel changed only above MOVING_THRESHOLD (summed RGB). Measured on the animatic (0.5 scale, 640x360): odd-frame
+# "changes" with the camera moving were 2500-8000 px per frame at the exact 24 threshold and 0 px blurred; the real key changes stayed at 6600-20500 px.
+MOVING_BLUR_STAGE_PX = 10
+MOVING_THRESHOLD = 96
+
+
+# ---------- report ----------
+class Probe:
+    def __init__(self, name, json_out=None):
+        self.name, self.json_out = name, json_out
+        self.checks, self.control_text, self.control_ok = [], None, None
+        self.extra = {}
+
+    def control(self, ok, text):
+        self.control_text, self.control_ok = text, bool(ok)
+        print(f"control: {text}", flush=True)
+        if not ok:
+            print(f"refused: {self.name} did not trip its own control, so a pass or a fail from it would mean nothing", flush=True)
+            self._write("refused")
+            sys.exit(2)
+
+    def note(self, text): print(f"  {text}", flush=True)
+
+    def check(self, name, ok, text):
+        self.checks.append({"check": name, "ok": bool(ok), "text": text})
+        print(f"  {'ok  ' if ok else 'FAIL'} {name}: {text}", flush=True)
+
+    def finish(self, summary):
+        bad = [c for c in self.checks if not c["ok"]]
+        status = "fail" if bad else "pass"
+        print(f"{'FAIL' if bad else 'pass'}: {self.name} - {summary if not bad else f'{len(bad)} of {len(self.checks)} checks failed: ' + ', '.join(c['check'] for c in bad)}", flush=True)
+        self._write(status, summary)
+        sys.exit(1 if bad else 0)
+
+    def _write(self, status, summary=""):
+        if self.json_out:
+            with open(self.json_out, "w") as f:
+                json.dump({"probe": self.name, "status": status, "control": {"ok": self.control_ok, "text": self.control_text},
+                           "summary": summary, "checks": self.checks, **self.extra}, f, indent=2)
+                f.write("\n")
+
+
+def die(msg):
+    print(f"input error: {msg}", flush=True)
+    sys.exit(2)
+
+
+# ---------- contracts ----------
+def read_json(path, what):
+    try:
+        with open(path) as f: return json.load(f)
+    except (OSError, ValueError) as e:
+        die(f"{what} {path}: {e}")
+
+
+def normalise_timeline(d):
+    """Accepts the compiled shape (`durationInFrames`, top-level `crossings` of {from,to,start,end}, per-beat crossingIn/Out [a,b])
+    and the brief's shape (`duration`, per-beat `crossing` {from,to,frames:[a,b]}). Windows are [a, b): b is the first frame after."""
+    dur = d.get("duration", d.get("durationInFrames"))
+    beats = []
+    for i, b in enumerate(d.get("beats", [])):
+        start = b["start"]; end = b.get("end", start + b.get("frames", 0))
+        beats.append({"id": b["id"], "start": start, "end": end, "world": b.get("world"), "worldRaw": b.get("worldRaw", b.get("world")), "intentionalHold": bool(b.get("intentionalHold")),
+                      "index": i, "ledgerPath": b.get("ledger")})
+    wins, seen = [], set()
+    def add(frm, to, a, b):
+        if (a, b) in seen: return
+        seen.add((a, b)); wins.append({"from": frm, "to": to, "a": a, "b": b})
+    for c in d.get("crossings", []):
+        a, b = (c["frames"] if "frames" in c else (c["start"], c["end"])); add(c.get("from"), c.get("to"), a, b)
+    for i, b in enumerate(d.get("beats", [])):
+        c = b.get("crossing")
+        if c: add(c.get("from", b["id"]), c.get("to"), c["frames"][0], c["frames"][1])
+        if b.get("crossingIn"): add(beats[i - 1]["id"] if i else None, b["id"], *b["crossingIn"])
+        if b.get("crossingOut"): add(b["id"], beats[i + 1]["id"] if i + 1 < len(beats) else None, *b["crossingOut"])
+    return {"fps": d.get("fps", 30), "duration": dur, "beats": beats, "windows": sorted(wins, key=lambda w: w["a"]), "source": d}
+
+
+def load_timeline(path):
+    return normalise_timeline(read_json(path, "timeline"))
+
+
+def in_window(tl, f): return any(w["a"] <= f < w["b"] for w in tl["windows"])
+def beat_at(tl, f):
+    for b in tl["beats"]:
+        if b["start"] <= f < b["end"]: return b
+    return None
+
+
+def load_xsheet(path):
+    d = read_json(path, "xsheet")
+    rows = d["rows"] if isinstance(d, dict) else d
+    return {r["frame"]: r for r in rows}
+
+
+def camera_of(xs, f):
+    if not xs or f not in xs: return None
+    c = xs[f].get("camera")
+    if not isinstance(c, dict): return None
+    return {**c, "rot": c.get("rot", c.get("rotation", 0))}           # src/library/animation/camera.ts names it `rotation`
+
+
+def declared_long_holds(xs, min_len=28):
+    """Key rows whose declared hold is >= min_len: explicit `hold` (row or key object), else the span to the next key/breakdown row."""
+    if not xs: return []
+    frames = sorted(xs); out = []
+    marks = [f for f in frames if xs[f].get("key") or xs[f].get("breakdown")]
+    for i, f in enumerate(frames):
+        r = xs[f]; key = r.get("key")
+        if not key: continue
+        hold = r.get("hold") or (key.get("hold") if isinstance(key, dict) else None)
+        if hold is None:
+            nxt = [m for m in marks if m > f]; hold = (nxt[0] if nxt else frames[-1] + 1) - f
+        if hold >= min_len:
+            out.append({"start": f, "hold": int(hold), "key": key.get("id", key.get("name")) if isinstance(key, dict) else key})
+    return out
+
+
+# ---------- frames ----------
+def list_frames(d):
+    if not os.path.isdir(d): die(f"frames directory {d} does not exist")
+    out = {}
+    for p in glob.glob(os.path.join(d, "element-*.png")):
+        m = re.search(r"element-(\d+)\.png$", p)
+        if m: out[int(m.group(1))] = p
+    if not out: die(f"no element-NNN.png frames in {d}")
+    return dict(sorted(out.items()))
+
+
+def load_rgb(p):
+    """A path, or an array already in memory (the controls pass fixtures straight from fixtures/make.py)."""
+    if isinstance(p, np.ndarray): return p.astype(np.int16)
+    return np.array(Image.open(p).convert("RGB")).astype(np.int16)
+
+
+def parse_crop(s):
+    try:
+        x, y, w, h = (int(v) for v in s.split(","))
+        return x, y, w, h
+    except ValueError:
+        die(f"--crop wants x,y,w,h in frame pixels, got {s!r}")
+
+
+# ---------- camera ----------
+def camera_identity(cam):
+    return cam is None or (cam["x"] == STAGE[0] / 2 and cam["y"] == STAGE[1] / 2 and cam.get("zoom", 1) == 1 and not cam.get("rot", 0))
+
+
+def world_crop(img, cam, scale, box_px, with_valid=False):
+    """The crop `box_px` (x, y, w, h in frame pixels, as if the camera were at rest) read out of a rendered frame with the camera inverted.
+    Camera model (xsheet `camera`): {x, y} is the stage point at the frame centre, zoom scales about it, rot (degrees) turns the scene
+    clockwise on screen about it; identity is x 640, y 360, zoom 1, rot 0. So a stage point p lands at R(rot)(p - c) zoom + (640, 360)."""
+    x0, y0, w, h = box_px
+    H, W = img.shape[:2]
+    if camera_identity(cam):
+        out = img[max(y0, 0):min(y0 + h, H), max(x0, 0):min(x0 + w, W)]
+        return (out, np.ones(out.shape[:2], bool)) if with_valid else out
+    from scipy import ndimage as ndi
+    ii, jj = np.meshgrid(np.arange(y0, y0 + h), np.arange(x0, x0 + w), indexing="ij")
+    sx, sy = jj / scale - cam["x"], ii / scale - cam["y"]
+    z, th = cam.get("zoom", 1), np.deg2rad(cam.get("rot", 0)); c, s = np.cos(th), np.sin(th)
+    fx = (c * sx - s * sy) * z + STAGE[0] / 2; fy = (s * sx + c * sy) * z + STAGE[1] / 2
+    u, v = fx * scale, fy * scale
+    out = np.empty((h, w, 3), dtype=np.float32)
+    for k in range(3):
+        out[..., k] = ndi.map_coordinates(img[..., k].astype(np.float32), [v, u], order=1, mode="nearest")
+    # source points outside the rendered frame (the camera view does not reach them) are edge copies, not picture: `valid` marks the real ones
+    return (out, (u >= 0) & (u <= W - 1) & (v >= 0) & (v <= H - 1)) if with_valid else out
+
+
+def project(cam, x, y):
+    """Stage point -> stage-scale frame point under the camera model above."""
+    if camera_identity(cam): return x, y
+    z, th = cam.get("zoom", 1), np.deg2rad(cam.get("rot", 0)); c, s = np.cos(th), np.sin(th)
+    sx, sy = x - cam["x"], y - cam["y"]
+    return (c * sx - s * sy) * z + STAGE[0] / 2, (s * sx + c * sy) * z + STAGE[1] / 2
+
+
+def crop_box_px(img_shape, crop_arg=None):
+    H, W = img_shape[:2]; s = W / STAGE[0]
+    if crop_arg: return parse_crop(crop_arg), s
+    return tuple(int(round(v * s)) for v in FIGURE_BOX), s
+
+
+def changed_px(a, b, thresh):
+    return int((np.abs(a.astype(np.int32) - b.astype(np.int32)).sum(axis=2) > thresh).sum())
+
+
+def same_camera(a, b):
+    return a == b or (a is not None and b is not None and all(abs(a.get(k, 0) - b.get(k, 0)) < 1e-9 for k in ("x", "y", "zoom", "rot")))
+
+
+def blurred(a, k):
+    from scipy import ndimage as ndi
+    return np.stack([ndi.uniform_filter(a[..., c].astype(np.float32), size=k) for c in range(3)], -1)
+
+
+def change_series(frames, xs, crop_arg, thresh):
+    """For each frame f whose predecessor f-1 was also rendered: (pixels that differ inside the figure crop with the camera inverted,
+    pixels that differ in the raw frame outside the crop box). The second number is what the camera does; it proves the split sees motion.
+    Where the camera moved between the two frames the crops are compared blurred (see MOVING_BLUR_STAGE_PX); where it did not, exactly."""
+    out, prev, prev_raw = {}, None, None
+    for f, p in frames.items():
+        img = load_rgb(p)
+        box, s = crop_box_px(img.shape, crop_arg)
+        cam = camera_of(xs, f)
+        crop, valid = world_crop(img, cam, s, box, with_valid=True)
+        if prev is not None and f - 1 in frames and prev[0] == f - 1 and prev[1].shape == crop.shape:
+            raw = np.abs(img - prev_raw).sum(axis=2) > thresh
+            x0, y0, w, h = box; raw[y0:y0 + h, x0:x0 + w] = False
+            both = valid & prev[3]
+            if same_camera(cam, prev[2]): fig = int(((np.abs(crop.astype(np.int32) - prev[1].astype(np.int32)).sum(axis=2) > thresh) & both).sum())
+            else:
+                from scipy import ndimage as ndi
+                k = max(3, int(round(MOVING_BLUR_STAGE_PX * s)) | 1)
+                both = ndi.binary_erosion(both, structure=np.ones((k, k), bool))          # blur bleeds the edge copies inwards by half a kernel
+                fig = int(((np.abs(blurred(crop, k) - blurred(prev[1], k)).sum(axis=2) > max(thresh, MOVING_THRESHOLD)) & both).sum())
+            out[f] = (fig, int(raw.sum()))
+        prev, prev_raw = (f, crop, cam, valid), img
+    return out
+
+
+# ---------- colour ----------
+def hex_rgb(h):
+    h = h.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def valid_hex(s): return isinstance(s, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", s) is not None
+
+
+def hue_of(rgb):
+    r, g, b = (v / 255 for v in rgb); mx, mn = max(r, g, b), min(r, g, b)
+    if mx == mn: return None
+    d = mx - mn
+    h = ((g - b) / d) % 6 if mx == r else (b - r) / d + 2 if mx == g else (r - g) / d + 4
+    return 60.0 * h
+
+
+def hue_dist(a, b):
+    d = abs(a - b) % 360
+    return min(d, 360 - d)
+
+
+def signed_hue_diff(a, b):
+    """b - a on the shortest arc, in (-180, 180]."""
+    d = (b - a) % 360
+    return d - 360 if d > 180 else d
+
+
+def chroma_of(rgb): return max(rgb) - min(rgb)
+
+
+def hue_array(a):
+    r, g, b = (a[..., i].astype(np.float32) for i in range(3))
+    mx, mn = a.max(axis=-1).astype(np.float32), a.min(axis=-1).astype(np.float32)
+    d = np.where(mx == mn, 1, mx - mn)
+    h = np.where(mx == r, ((g - b) / d) % 6, np.where(mx == g, (b - r) / d + 2, (r - g) / d + 4)) * 60.0
+    return h
+
+
+def identity_mask(a, radius=IDENTITY_RADIUS):
+    m = np.zeros(a.shape[:2], bool)
+    for hx in IDENTITY_PIGMENTS.values():
+        m |= np.sqrt(((a.astype(np.int32) - np.array(hex_rgb(hx))) ** 2).sum(axis=2)) <= radius
+    return m
+
+
+def check_path_monotone(hues, slack=5.0):
+    """Hue samples along a crossing: returns (ok, reason). The path runs on the shortest arc from the first to the last sample, in one
+    direction, never behind the start or past the end by more than `slack` degrees (a detour through a third hue shows as either)."""
+    if len(hues) < 2: return True, "fewer than two samples"
+    total = signed_hue_diff(hues[0], hues[-1]); d = 1 if total >= 0 else -1
+    p = [d * signed_hue_diff(hues[0], h) for h in hues]
+    for i, v in enumerate(p):
+        if v < -slack: return False, f"sample {i} ({hues[i]:.0f} deg) sits {-v:.0f} deg behind the start"
+        if v > abs(total) + slack: return False, f"sample {i} ({hues[i]:.0f} deg) overshoots the end by {v - abs(total):.0f} deg"
+        if i and v < p[i - 1] - slack: return False, f"sample {i} ({hues[i]:.0f} deg) turns back {p[i - 1] - v:.0f} deg"
+    return True, f"{hues[0]:.0f} -> {hues[-1]:.0f} deg, {abs(total):.0f} deg {'up' if d > 0 else 'down'}, no detour"
+
+
+def add_common(ap, frames=True, xsheet=True):
+    if frames: ap.add_argument("frames", help="directory of element-NNN.png (npx remotion render --sequence --image-format=png)")
+    ap.add_argument("--timeline", default="v3/timeline.json")
+    if xsheet: ap.add_argument("--xsheet", default=None, help="v3/xsheet.json (rows with frame, beat, world, key, camera, emitter, phase)")
+    ap.add_argument("--json", default=None, help="write the result as JSON")
+    return ap
+
+
+def default_xsheet(args):
+    """--xsheet, else v3/xsheet.json beside the timeline when it exists."""
+    if args.xsheet: return load_xsheet(args.xsheet)
+    guess = os.path.join(os.path.dirname(os.path.abspath(args.timeline)), "xsheet.json")
+    return load_xsheet(guess) if os.path.exists(guess) else None
+
+
+# ---------- poses (the formulas of src/library/animation/pose.ts; change both or neither) ----------
+SPINE_RIDGE = 0.05                      # SPINE_FIT.ridge: ridge on the S term of the spine fit
+SPINE_SPEAK = 0.0962250449              # SPINE_FIT.sPeak: peak of t(1-t)(1-2t)
+SPINE_STRAIGHT_BOW = 0.04               # SPINE_FIT.straightBow: below this the spine is straight, class I
+SPINE_LOBE = 0.03                       # SPINE_FIT.lobe: each lobe of an S reaches this fraction of the figure
+SPINE_SAMPLES = 201                     # SPINE_FIT.samples
+TWIN_DEGREES = 40                       # TWIN_DEGREES in pose.ts: mean mirror/parallel difference at which twinning reaches 0
+TWIN_MAX = 0.7                          # a pose scoring above this must say why it is twinned
+BOW_MIN = 0.06                          # a measured bow below this is a straight spine unless the key declares class I and says why
+PAIRS = (("shoulder", "elbow"), ("elbow", "wrist"), ("hip", "knee"), ("knee", "ankle"))
+
+
+def spine_basis(t):
+    t = np.asarray(t, float)
+    return 4 * t * (1 - t), t * (1 - t) * (1 - 2 * t) / SPINE_SPEAK
+
+
+def classify_profile(alpha, beta):
+    """Class, bow, sign and inflection of the deviation alpha*C(t) + beta*S(t) (classifyProfile in pose.ts)."""
+    ts = np.linspace(0, 1, SPINE_SAMPLES); c, s = spine_basis(ts); dev = alpha * c + beta * s
+    pos, neg = max(0.0, dev.max()), max(0.0, (-dev).max()); bow = max(pos, neg)
+    if bow < SPINE_STRAIGHT_BOW: return {"class": "I", "bow": bow, "sign": 1 if pos >= neg else -1}
+    if pos >= SPINE_LOBE and neg >= SPINE_LOBE:
+        first = next(d for d in dev if abs(d) > 1e-9)
+        cross = next((i for i, d in enumerate(dev) if i > 0 and np.sign(d) == -np.sign(first) and abs(d) > 1e-12), 0)
+        return {"class": "S", "bow": bow, "sign": 1 if first > 0 else -1, "inflection": float(ts[max(0, cross - 1)])}
+    return {"class": "C", "bow": bow, "sign": 1 if pos >= neg else -1}
+
+
+def keys_hash(joints_a, joints_b):
+    """sha256 of the joints of the two keys a move runs between (first key, then second), the identity of what an authored breakdown was built on. Each joint is `name=x,y` at two decimals in name
+    order, the keys joined by `|`: scripts/animation/author-breakdowns.mjs writes the same string, so a sheet authored there verifies here."""
+    import hashlib
+    one = lambda j: ";".join(f"{n}={j[n][0]:.2f},{j[n][1]:.2f}" for n in sorted(j))
+    return hashlib.sha256((one(joints_a) + "|" + one(joints_b)).encode()).hexdigest()
+
+
+def spine_curve(j, height_px=None):
+    """The line of action a pose draws: least squares of alpha*C(t) + beta*S(t) (ridge on beta) to the offsets of the shoulder midpoint, torso and neck
+    from the root-to-head chord, in fractions of height_px (or of the chord when absent). Same formula and constants as spineCurve in pose.ts."""
+    P = lambda n: np.array(j[n], float)
+    root, head = P("root"), P("head"); chord = head - root; norm = float(np.hypot(*chord))
+    if norm < 1e-6: raise ValueError("root and head coincide")
+    n = np.array([-chord[1], chord[0]]) / norm
+    pts = ([(P("shoulderL") + P("shoulderR")) / 2] if "shoulderL" in j and "shoulderR" in j else []) + [P("torso"), P("neck")]
+    t = np.array([(p - root) @ chord / norm ** 2 for p in pts]); d = np.array([(p - root) @ n for p in pts]) / (height_px if height_px and height_px > 0 else norm)
+    c, s = spine_basis(t)
+    cc, cs, ss, cd, sd = c @ c, c @ s, s @ s + SPINE_RIDGE, c @ d, s @ d
+    det = cc * ss - cs * cs
+    return classify_profile((cd * ss - cs * sd) / det, (cc * sd - cs * cd) / det)
+
+
+def twinning_score(j):
+    """0 (nothing alike) to 1 (a perfect twin): mean over upper arm, forearm, thigh, shin of the smaller of the mirrored and the parallel angle between the
+    left and right bone, read against the spine axis, as 1 - mean/40 degrees (twinningScore in pose.ts)."""
+    P = lambda n: np.array(j[n], float)
+    ax = P("head") - P("root"); ax = ax / np.hypot(*ax) if np.hypot(*ax) > 1e-9 else np.array([0.0, -1.0])
+    fr = lambda v: np.array([v @ ax, ax[0] * v[1] - ax[1] * v[0]])
+    ang = lambda a, b: abs(np.arctan2(a[0] * b[1] - a[1] * b[0], a @ b))
+    tot = 0.0
+    for near, far in PAIRS:
+        l, r = (fr(P(far + s) - P(near + s)) for s in "LR")
+        tot += min(ang(np.array([l[0], -l[1]]), r), ang(l, r))
+    return max(0.0, 1 - np.degrees(tot / len(PAIRS)) / TWIN_DEGREES)
+
+
+def arc_deviation(path):
+    """Largest perpendicular distance of a path's points from the chord between its first and last point (arcDeviation in pose.ts); 0 under 3 points."""
+    p = np.asarray(path, float)
+    if len(p) < 3: return 0.0
+    c = p[-1] - p[0]; n = float(np.hypot(*c))
+    if n < 1e-9: return float(np.hypot(*(p - p[0]).T).max())
+    return float((np.abs(c[0] * (p[:, 1] - p[0, 1]) - c[1] * (p[:, 0] - p[0, 0])) / n).max())
+
+
+ARC_ZERO_PX = 1.0        # a deviation under this is zero: drawings are quantised and the rig rounds to 0.001 but a hand-set pose is not exact
+ARC_BACK_FRAC = 0.005    # a step back along the chord counts only above max(ARC_ZERO_PX, this x heightPx): 4.4 px at 880, above the kick-back a lagging part makes
+ARC_MAX_TURN_DEG = 90.0  # the turn between two consecutive segments of an arc
+ARC_MIN_SEGMENT_PX = 1.0 # a segment shorter than this (or than the back-step bar, when that is larger) has no direction worth a turn
+
+
+def reversal_points(kinds):
+    """Indexes of the path points a declared reversal makes: a drawing of kind `anticipation` or `overshoot`, and the point right after an overshoot (the settle, else the key):
+    the step INTO an anticipation goes back along the chord, the step OUT of an overshoot comes back from past the key, and the path turns there."""
+    if kinds is None: return set()
+    return {i for i, k in enumerate(kinds) if k in ("anticipation", "overshoot") or (i and kinds[i - 1] == "overshoot")}
+
+
+def arc_faults(path, frames=None, need=0.0, kinds=None, height_px=None):
+    """Why a path is not an arc: [(letter, text)] (empty: it is). A path is one joint over a move: the pose before it, then one position per drawing; `frames[i]` is the
+    frame path point i is drawn on (None for the pose before) and `kinds[i]` the declared kind of the breakdown that point shows (`anticipation`, `passing`, `overshoot`,
+    `settle`; None for the pose before and the key itself). An arc over a move has, with the chord from the first to the last point:
+      a  one sign: the signed perpendicular deviation of every interior point is on the same side of the chord (|deviation| < ARC_ZERO_PX is zero), a bow and not a zigzag;
+      b  monotone progress: the projection onto the chord never goes back by more than max(ARC_ZERO_PX, ARC_BACK_FRAC x height_px) from one drawing to the next, except into a declared
+         anticipation and out of a declared overshoot (`reversal_points`): those are the reversals the move's timing shape declares, and any other step back fails;
+      c  no hairpin: the turn between consecutive segments never exceeds ARC_MAX_TURN_DEG (segments under ARC_MIN_SEGMENT_PX or the back-step bar have no direction and are skipped), except at the
+         vertex of a declared reversal;
+      d  reach: the largest deviation is at least `need` (arcDeviation in pose.ts)."""
+    p = np.asarray(path, float); fr = list(frames) if frames is not None else [None] * len(p)
+    at = lambda i: "the pose before the move" if fr[i] is None else f"frame {fr[i]}"
+    kd = list(kinds) if kinds is not None else None
+    declared = reversal_points(kd); bar = max(ARC_ZERO_PX, ARC_BACK_FRAC * (height_px or 0.0))
+    out = []
+    c = p[-1] - p[0]; n = float(np.hypot(*c))
+    if len(p) < 3 or n < 1e-9: return [("d", f"it has {len(p)} points and a {n:.0f} px chord: nothing to bow")] if need > 0 else out
+    u = c / n; rel = p - p[0]
+    proj = rel @ u; dev = (c[0] * rel[:, 1] - c[1] * rel[:, 0]) / n
+    inner = [(i, float(dev[i])) for i in range(1, len(p) - 1) if abs(dev[i]) >= ARC_ZERO_PX]
+    pos, neg = [x for x in inner if x[1] > 0], [x for x in inner if x[1] < 0]
+    if pos and neg:
+        out.append(("a", "it bows to both sides of its chord (a zigzag, not an arc): " + ", ".join(f"{at(i)} {d:+.1f} px" for i, d in inner)))
+    back = [(i, float(proj[i] - proj[i - 1])) for i in range(1, len(p)) if proj[i] - proj[i - 1] < -bar and not (kd and (kd[i] == "anticipation" or kd[i - 1] == "overshoot"))]
+    if back:
+        out.append(("b", f"it moves back along its chord (undeclared; over {bar:.1f} px): " + ", ".join(f"{at(i - 1)} to {at(i)} by {abs(d):.1f} px" for i, d in back)))
+    seg = [(i, p[i + 1] - p[i]) for i in range(len(p) - 1) if float(np.hypot(*(p[i + 1] - p[i]))) >= max(ARC_MIN_SEGMENT_PX, bar)]
+    sharp = []
+    for (i, s0), (j, s1) in zip(seg, seg[1:]):
+        turn = float(np.degrees(np.arccos(np.clip(float(s0 @ s1) / (np.hypot(*s0) * np.hypot(*s1)), -1, 1))))
+        if turn > ARC_MAX_TURN_DEG and j not in declared: sharp.append((j, turn))
+    if sharp:
+        out.append(("c", "it turns sharply: " + ", ".join(f"{turn:.0f} degrees at {at(j)}" for j, turn in sharp) + f" (the most an arc turns between drawings is {ARC_MAX_TURN_DEG:.0f})"))
+    dmax = arc_deviation(p)
+    if dmax < need: out.append(("d", f"it leaves its {n:.0f} px chord by {dmax:.1f} px, needs {need:.1f}"))
+    return out
+
+
+def spacing_profile(path):
+    """Distance between each pair of consecutive drawings of a path (spacingProfile in pose.ts)."""
+    p = np.asarray(path, float)
+    return [float(x) for x in np.hypot(*(p[1:] - p[:-1]).T)] if len(p) > 1 else []
+
+
+# ---------- timing shape (the formulas of TIMING_SHAPE, chordPosition and timingFaults in src/library/animation/pose.ts; change both or neither) ----------
+TIMING_DRAWINGS = (3, 6)                                  # C28: a move between two holds
+TIMING_BANDS = {"anticipation": (-0.15, -0.05), "passing": (0.25, 0.75), "overshoot": (1.05, 1.15), "settle": (0.9, 1.0)}
+TIMING_RANK = {"anticipation": 0, "passing": 1, "overshoot": 2, "settle": 3}
+REACH_PAST = 0.25                                         # REACH_PAST in pose.ts
+
+
+def chord_position(kind, favour):
+    """Where along the chord (first key 0, second key 1) a breakdown draws; the stored favour is positive for every kind."""
+    return -REACH_PAST * favour if kind == "anticipation" else 1 + REACH_PAST * favour if kind == "overshoot" else favour
+
+
+def timing_moves(poses, holds=None):
+    """[(from key, to key, hold end frame, marks)] for every pair of consecutive pose keys: marks are the drawings the chart plays between the hold's end and the next key
+    ({frame, kind, favour, between}): the authored breakdowns, else the two automatic thirds (kind "automatic"), as `marksIn` does. `holds` maps a key name to its hold in frames
+    (the key sheet's); else the pose key's own."""
+    keys = sorted(poses["keys"], key=lambda k: k["frame"]); out = []
+    for a, b in zip(keys, keys[1:]):
+        hold = (holds or {}).get(a["name"], a.get("hold")) or 0; start = a["frame"] + hold
+        own = sorted((x for x in poses.get("breakdowns", []) if a["frame"] < x["frame"] < b["frame"]), key=lambda x: x["frame"])
+        marks = [{"frame": x["frame"], "kind": x["kind"], "favour": x["favour"], "between": list(x["between"])} for x in own] or \
+                [{"frame": int(np.floor(np.floor(start + (b["frame"] - start) * f + 0.5) / 2) * 2), "kind": "automatic", "favour": f, "between": None} for f in (1 / 3, 2 / 3)]
+        out.append((a, b, start, marks))
+    return out
+
+
+def timing_shape(a, b, start, marks, hold_known=True):
+    """(ok, line, faults) for one move: the drawings in order with their positions along the chord, and every way the move breaks the timing shape."""
+    at = f'{a["name"]} -> {b["name"]}'; lo, hi = TIMING_DRAWINGS; faults = []
+    if not lo <= len(marks) <= hi:
+        faults.append(f"{len(marks)} drawings, a move uses {lo}-{hi} (C28)" + (" (none authored: the chart adds two thirds)" if any(m["kind"] == "automatic" for m in marks) else ""))
+    kinds = [m for m in marks if m["kind"] != "automatic"]
+    for m in kinds:
+        if m["kind"] not in TIMING_BANDS: faults.append(f'unknown kind {m["kind"]!r} on frame {m["frame"]}'); continue
+        pos = chord_position(m["kind"], m["favour"]); band = TIMING_BANDS[m["kind"]]
+        if not band[0] - 1e-9 <= pos <= band[1] + 1e-9:
+            faults.append(f'{m["kind"]} on frame {m["frame"]} draws at {pos:+.3f} along the chord (favour {m["favour"]}), the band is {band[0]} to {band[1]}')
+        if list(m["between"]) != [a["name"], b["name"]]: faults.append(f'the breakdown on frame {m["frame"]} names {m["between"]}, not the keys its frame sits between')
+        if hold_known and m["frame"] < start: faults.append(f'{m["kind"]} on frame {m["frame"]} sits inside the hold of {a["name"]!r} (it ends on frame {start})')
+    for m0, m1 in zip(marks, marks[1:]):
+        if m0["frame"] == m1["frame"]: faults.append(f'two drawings on frame {m1["frame"]}')
+    for kind in ("anticipation", "overshoot", "settle"):
+        n = sum(1 for m in kinds if m["kind"] == kind)
+        if n > 1: faults.append(f"{n} {kind} drawings, at most one")
+    for m0, m1 in zip(kinds, kinds[1:]):
+        if m0["kind"] in TIMING_RANK and m1["kind"] in TIMING_RANK and TIMING_RANK[m0["kind"]] > TIMING_RANK[m1["kind"]]:
+            faults.append(f'{m1["kind"]} on frame {m1["frame"]} comes after a {m0["kind"]}: the order is anticipation, passing, overshoot, settle')
+    for m0, m1 in zip(marks, marks[1:]):
+        if m0["favour"] == m1["favour"]: faults.append(f'the drawing on frame {m1["frame"]} has the favour {m1["favour"]} of the one before it: the exposure sheet marks a breakdown only where the favour changes, so it would not show')
+    passing = [m for m in kinds if m["kind"] == "passing"]
+    for m0, m1 in zip(passing, passing[1:]):
+        if m1["favour"] <= m0["favour"]: faults.append(f'passing {m1["favour"]} on frame {m1["frame"]} does not rise past {m0["favour"]}')
+    desc = ", ".join(f'{m["kind"]} {chord_position(m["kind"], m["favour"]):+.2f}@{m["frame"]}' if m["kind"] in TIMING_BANDS else f'{m["kind"]} {m["favour"]:.2f}@{m["frame"]}' for m in marks)
+    return not faults, f'{at}: {len(marks)} drawings [{desc}]' + ("" if not faults else "; " + "; ".join(faults)), faults
+
+
+def lead_arm_faults(poses):
+    """[(move, text)] for every move whose to-key lead arm has a joint in a secondary that lags on it (leadArmFaults in pose.ts): a secondary is exempt on a move its `side` leads."""
+    out = []
+    for a, b, _, _ in timing_moves(poses):
+        arm = (b.get("lead") or {}).get("arm", "none")
+        if arm not in ("L", "R"): continue
+        for c in poses.get("secondaries", []):
+            if c.get("side") == arm: continue
+            held = [j for j in c["joints"] if j in (f"shoulder{arm}", f"elbow{arm}", f"wrist{arm}")]
+            if held: out.append((f'{a["name"]} -> {b["name"]}', f'{a["name"]} -> {b["name"]}: the lead arm ({arm}) joint {", ".join(held)} belongs to secondary {c["name"]!r}, which lags on that move; give it side {arm!r} or leave the arm out'))
+    return out

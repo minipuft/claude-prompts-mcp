@@ -1,0 +1,55 @@
+{
+  "id": "crayon",
+  "field": "#f1dcbc",
+  "line": {
+    "ratio": 166,
+    "colour": "dark",
+    "hex": "#2b2016"
+  },
+  "fills": "crayon",
+  "paper": {
+    "tooth": 0.18
+  },
+  "stroke": {
+    "angle": -75,
+    "figureStrength": 0.7,
+    "palette": {
+      "blue": "#1f427b",
+      "sky": "#3f78c8",
+      "red": "#ab3f37",
+      "yellow": "#f0b341"
+    }
+  },
+  "boil": {
+    "variants": 3,
+    "rate": 6
+  },
+  "radiance": {
+    "on": true,
+    "colour": "#e1750c"
+  },
+  "provisional": true,
+  "cards": [
+    "eagle-mfiyufl6jlve9 (saturation limit)",
+    "seuss-cat-stairway",
+    "Boy and the World (inbox)"
+  ],
+  "sheet": "assets/worlds/crayon-01.png",
+  "sheetSha256": "457109fee930a83b7c487bcddda1f4fbee85d8a44ac7cd569f626896891a997d",
+  "receipt": "evidence/call-JtIpoH + imagegen-world-crayon-01.json",
+  "measured": {
+    "field": "#f1dcbc",
+    "contour_px": 2.0,
+    "contour_target_px": 2.71,
+    "fills": "stepped",
+    "torso_dominant_colours": 12,
+    "torso_minor_colours": 40,
+    "identity_pigments": {
+      "codex": 0.00674,
+      "codex_accent": 0.00016,
+      "clawd": 0.03546,
+      "skin": 0.02817,
+      "skin_shadow": 0.02265
+    }
+  }
+}

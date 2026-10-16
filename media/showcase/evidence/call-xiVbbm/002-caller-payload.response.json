@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "📚 **Prompts** (73)\n\n**analysis**: action_plan, deep_investigation, initial_scan, interview, research_chain, research_synthesis\n**codebase-setup**: codebase_protocol_init, scaffold_project, scaffold_project/scaffold_analyze, scaffold_project/scaffold_generate, scaffold_project/scaffold_review\n**development**: design_muse, integration_assessment, library_overview, review, strategic_implement, strategic_worker, tech_evaluation_chain, tech_recommendation, technical_deep_dive, showcase_asset_muse, showcase_asset_sheet, showcase_board, showcase_evidence, showcase_key_sheet, showcase_layout_sheet, showcase_model_sheet, showcase_motion, showcase_preproduction, showcase_render_study, showcase_review, showcase_shot, showcase_shotlist, showcase_story, showcase_world_sheet\n**documentation**: documentation_change, readme_improver\n**examples**: create_framework, create_gate, create_prompt, deep_analysis, minimal_prompt, quick_decision, reference_demo, shared_intro, test_default, deep_analysis/deep_dive, deep_analysis/initial_scan, deep_analysis/notepage, deep_analysis/synthesis, quick_decision/identify_options, quick_decision/recommend, quick_decision/weigh_tradeoffs\n**guidance**: analytical, creative, procedural, reasoning\n**knowledge-capture**: practice_capture\n**planning**: implementation_plan, implementation_plan/completion, implementation_plan/design, implementation_plan/discovery, implementation_plan/plan_table, implementation_plan/verification\n**workflow**: github_repo_setup, investigate_unknown, triage\n**animation**: animation_animatic, animation_animatic_render, animation_blocking, animation_light_script, animation_poses, animation_timeline\n\n_Use `detail:\"full\"` for complete details, or `>>id` to execute._"
+    }
+  ],
+  "isError": false
+}

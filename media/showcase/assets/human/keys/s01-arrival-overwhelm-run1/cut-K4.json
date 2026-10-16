@@ -1,0 +1,30 @@
+{
+ "sheet": "assets/human/keys/s01-arrival-overwhelm/sheet-K4-02.png",
+ "sheetSha256": "cf003037630f6fb69a5f4a7b1584481e8d81213d9c68a0b49fd341cbc3391208",
+ "baselineRow": 1249,
+ "numeralX": [
+  509.5
+ ],
+ "keys": [
+  {
+   "key": "K4",
+   "cropBoxInSheet": [
+    96,
+    106,
+    845,
+    1253
+   ],
+   "cropPx": [
+    749,
+    1147
+   ],
+   "crop": "assets/human/keys/s01-arrival-overwhelm/K4-crop.png",
+   "cropSha256": "c138a3fb4e9c649df1f22139060bf20fb372352e0fbe8ad8fe4f71c3bedb25c1",
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K4.png",
+   "plateSha256": "2c2a82c2f64a7fe7e75c299e322756afaee2ab77dd2cc5833704e90a44b67ae1",
+   "parts": 1,
+   "figureHeightPx": 1147,
+   "baselineInCrop": 1143
+  }
+ ]
+}

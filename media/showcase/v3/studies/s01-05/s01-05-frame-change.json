@@ -1,0 +1,24 @@
+{
+  "probe": "twos-ones",
+  "status": "pass",
+  "control": {
+    "ok": true,
+    "text": "change on frame 7 -> FAIL (odd-frame figure changes at [7]); changes on even frames only with the camera moving every frame -> pass (0 odd-frame changes, 7 even-frame changes, camera moved on 24 odd frames)"
+  },
+  "summary": "the drawing changed on 106 even frames and 0 odd frames; the camera moved on 0 odd frames",
+  "checks": [
+    {
+      "check": "odd-frame changes",
+      "ok": true,
+      "text": "0 odd frame(s) where the figure changed (tolerance 0)"
+    },
+    {
+      "check": "figure moves",
+      "ok": true,
+      "text": "106 even-frame figure changes"
+    }
+  ],
+  "oddFrames": [],
+  "evenChanges": 106,
+  "cameraMovedOnOddFrames": 0
+}

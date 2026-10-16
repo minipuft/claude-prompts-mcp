@@ -1,0 +1,220 @@
+{
+ "drawnLayer": {
+  "figureOnlyPass": {
+   "oddFramesChanged": 30,
+   "evenFramesChanged": 129
+  },
+  "cameraOddFramesDuringWiden": 30,
+  "figureOnlyOutsideWidenOdd": 0
+ },
+ "lightLag": {
+  "pop": 180,
+  "popRing": 178,
+  "lampCore": 182,
+  "floodBlue": 178,
+  "note": "frame of the first response; law 4 asks 2-4 frames after the drawn cause"
+ },
+ "identity": {
+  "0": {
+   "codex.main1": 1556,
+   "clawd.main1": 4318,
+   "skin.main1": 162
+  },
+  "120": {
+   "codex.main1": 1564,
+   "clawd.main1": 4364,
+   "skin.main1": 123
+  },
+  "200": {
+   "codex.main1": 657,
+   "clawd.main1": 981,
+   "skin.main1": 0
+  },
+  "300": {
+   "codex.main1": 248,
+   "clawd.main1": 1193,
+   "skin.main1": 20
+  },
+  "419": {
+   "codex.main1": 160,
+   "clawd.main1": 335,
+   "skin.main1": 13
+  }
+ },
+ "colourPairIdentityComplete": {
+  "framesChecked": 70,
+  "framesOver2pct": [
+   [
+    0,
+    1072,
+    5486
+   ],
+   [
+    6,
+    1063,
+    5472
+   ],
+   [
+    12,
+    1074,
+    5492
+   ],
+   [
+    18,
+    1051,
+    5464
+   ],
+   [
+    24,
+    1051,
+    5464
+   ],
+   [
+    30,
+    1077,
+    5467
+   ],
+   [
+    36,
+    1064,
+    5441
+   ],
+   [
+    42,
+    744,
+    4965
+   ],
+   [
+    48,
+    1077,
+    5744
+   ],
+   [
+    54,
+    1075,
+    5699
+   ],
+   [
+    60,
+    1118,
+    5811
+   ],
+   [
+    66,
+    1095,
+    5766
+   ],
+   [
+    72,
+    734,
+    5091
+   ],
+   [
+    78,
+    749,
+    5087
+   ],
+   [
+    84,
+    724,
+    5068
+   ],
+   [
+    90,
+    1065,
+    6201
+   ],
+   [
+    96,
+    1008,
+    5655
+   ],
+   [
+    102,
+    948,
+    5322
+   ],
+   [
+    108,
+    1005,
+    5405
+   ],
+   [
+    114,
+    1036,
+    5926
+   ]
+  ],
+  "worstFrame": [
+   30,
+   1077,
+   5467
+  ],
+  "worstShare": 0.197
+ },
+ "c25": {
+  "0": {
+   "brightest0.5pctCentroid": [
+    430.5,
+    269.1
+   ],
+   "xsheetEmitter": [
+    650,
+    538
+   ],
+   "layout": [
+    665.6,
+    559.4
+   ],
+   "offsetPctOfWidth": 29.19,
+   "xsheetOffsetPctOfWidth": 2.07
+  },
+  "300": {
+   "brightest0.5pctCentroid": [
+    696.5,
+    223.5
+   ],
+   "xsheetEmitter": [
+    699,
+    -124
+   ],
+   "layout": [
+    697.6,
+    223.9
+   ],
+   "offsetPctOfWidth": 0.09,
+   "xsheetOffsetPctOfWidth": 27.18
+  },
+  "zoomEnd": 0.6,
+  "layoutFigureRatio": 0.4251
+ },
+ "identityPass": {
+  "0": {
+   "centre": [
+    645,
+    359
+   ],
+   "heightPx": 32,
+   "widthPx": 46,
+   "pixels": 891
+  },
+  "104": {
+   "centre": [
+    610,
+    350
+   ],
+   "heightPx": 41,
+   "widthPx": 36,
+   "pixels": 887
+  },
+  "419": {
+   "centre": [
+    648,
+    519
+   ],
+   "heightPx": 18,
+   "widthPx": 28,
+   "pixels": 242
+  }
+ }
+}

@@ -1,0 +1,583 @@
+{
+  "fps": 30,
+  "durationInFrames": 1950,
+  "beats": [
+    {
+      "id": "arrival",
+      "index": 0,
+      "start": 0,
+      "end": 180,
+      "frames": 180,
+      "world": "home",
+      "worldRaw": "home",
+      "camera": "medium-wide on the trio and the box; locked (frame 0 is the poster, D53)",
+      "effects": {
+        "emitter": "box seam, tiny",
+        "radiance": "settled",
+        "grain": "low",
+        "boil": "on"
+      },
+      "transitionIn": "title held",
+      "transitionOut": "the bubble swells (leading line up) into beat 2, no cut",
+      "crossingIn": null,
+      "crossingOut": null,
+      "flips": [
+        {
+          "key": "box.open",
+          "from": false,
+          "to": true,
+          "scope": {
+            "kind": "permanent",
+            "raw": "permanent"
+          },
+          "frame": 0,
+          "holds": [
+            0,
+            1950
+          ]
+        },
+        {
+          "key": "gadget.visible",
+          "from": false,
+          "to": true,
+          "scope": {
+            "kind": "permanent",
+            "raw": "permanent"
+          },
+          "frame": 0,
+          "holds": [
+            0,
+            1950
+          ]
+        }
+      ]
+    },
+    {
+      "id": "everything-at-once",
+      "index": 1,
+      "start": 180,
+      "end": 420,
+      "frames": 240,
+      "world": "home",
+      "worldRaw": "home",
+      "camera": "widen to the full field, led by the first stalk's curl",
+      "effects": {
+        "emitter": "gadget dial",
+        "radiance": "floods, Turrell blue (D74 s01)",
+        "grain": "rising",
+        "boil": "on",
+        "accent": "everywhere (the overwhelm exception to C6's scarcity)"
+      },
+      "transitionIn": "continuous from beat 1",
+      "transitionOut": "pieces keep arriving as the human reaches, into beat 3",
+      "crossingIn": null,
+      "crossingOut": null,
+      "flips": [
+        {
+          "key": "hue",
+          "from": "settled",
+          "to": "s01 Turrell blue",
+          "scope": {
+            "kind": "beats",
+            "raw": "beats 2-3",
+            "fromBeat": "everything-at-once",
+            "toBeat": "cant-build"
+          },
+          "frame": 180,
+          "holds": [
+            180,
+            630
+          ]
+        },
+        {
+          "key": "pieces.count",
+          "from": 0,
+          "to": "many",
+          "scope": {
+            "kind": "until",
+            "raw": "until beat 8 reduces them to the structure",
+            "beat": "home-settle"
+          },
+          "frame": 180,
+          "holds": [
+            180,
+            1650
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cant-build",
+      "index": 2,
+      "start": 420,
+      "end": 630,
+      "frames": 210,
+      "world": "home",
+      "worldRaw": "home",
+      "camera": "medium on the human, panning right (s02 layout, approved pending)",
+      "effects": {
+        "emitter": "gadget dial, lost on the floor",
+        "radiance": "Styx steel (D74 s02), noisy",
+        "grain": "high",
+        "boil": "on"
+      },
+      "transitionIn": "continuous",
+      "transitionOut": "the stalk slides back toward Clawd; the frame's left bar rises (leading line) into beat 4",
+      "crossingIn": null,
+      "crossingOut": null,
+      "flips": [
+        {
+          "key": "hue",
+          "from": "s01 blue",
+          "to": "s02 steel",
+          "scope": {
+            "kind": "beats",
+            "raw": "beats 3-4",
+            "fromBeat": "cant-build",
+            "toBeat": "the-frame"
+          },
+          "frame": 420,
+          "holds": [
+            420,
+            810
+          ]
+        },
+        {
+          "key": "gadget.held",
+          "from": true,
+          "to": false,
+          "scope": {
+            "kind": "until",
+            "raw": "until beat 8",
+            "beat": "home-settle"
+          },
+          "frame": 420,
+          "holds": [
+            420,
+            1650
+          ]
+        },
+        {
+          "key": "grain",
+          "from": "rising",
+          "to": "high",
+          "scope": {
+            "kind": "beats",
+            "raw": "beats 3-4",
+            "fromBeat": "cant-build",
+            "toBeat": "the-frame"
+          },
+          "frame": 420,
+          "holds": [
+            420,
+            810
+          ]
+        }
+      ]
+    },
+    {
+      "id": "the-frame",
+      "index": 3,
+      "start": 630,
+      "end": 810,
+      "frames": 180,
+      "world": "home",
+      "worldRaw": "home → portal",
+      "camera": "the raised frame at frame right; push toward its interior",
+      "effects": {
+        "emitter": "frame interior",
+        "radiance": "narrows to the frame",
+        "grain": "falling",
+        "boil": "on",
+        "glass": "refraction and diffusion pass on"
+      },
+      "transitionIn": "the frame rising",
+      "transitionOut": "the human steps through alone; the guides follow (plot default 3); the push crosses the frame edge into beat 5, no cut",
+      "crossingIn": null,
+      "crossingOut": [
+        775,
+        845
+      ],
+      "flips": [
+        {
+          "key": "human.garment",
+          "from": "cloak",
+          "to": "swoop",
+          "scope": {
+            "kind": "permanent",
+            "raw": "permanent"
+          },
+          "frame": 630,
+          "holds": [
+            630,
+            1950
+          ]
+        },
+        {
+          "key": "emitter",
+          "from": "dial",
+          "to": "frame interior",
+          "scope": {
+            "kind": "beats",
+            "raw": "beats 4-7",
+            "fromBeat": "the-frame",
+            "toBeat": "programming-world"
+          },
+          "frame": 630,
+          "holds": [
+            630,
+            1650
+          ]
+        },
+        {
+          "key": "world",
+          "from": "home",
+          "to": "crayon",
+          "scope": {
+            "kind": "beats",
+            "raw": "beats 5",
+            "fromBeat": "art-world",
+            "toBeat": "art-world"
+          },
+          "frame": 630,
+          "holds": [
+            810,
+            1170
+          ]
+        }
+      ]
+    },
+    {
+      "id": "art-world",
+      "index": 4,
+      "start": 810,
+      "end": 1170,
+      "frames": 360,
+      "world": "crayon",
+      "worldRaw": "crayon",
+      "camera": "wide, flat, paper-like depth; a slow lateral drift along a drawn horizon",
+      "effects": {
+        "emitter": "the drawn piece as it fills",
+        "radiance": "warm, s03 amber (D74) on a paper-coloured field, not black",
+        "grain": "paper tooth",
+        "boil": "heavy, crayon boil 3 variants",
+        "line": "crayon stroke pass over flat roles"
+      },
+      "transitionIn": "refill from the frame's glass into crayon",
+      "transitionOut": "the piece and the world reduce to their contour lines (the crossing, beat 6)",
+      "crossingIn": [
+        775,
+        845
+      ],
+      "crossingOut": [
+        1135,
+        1205
+      ],
+      "flips": [
+        {
+          "key": "world",
+          "from": "crayon",
+          "to": "line",
+          "scope": {
+            "kind": "beats",
+            "raw": "beat 6",
+            "fromBeat": "crossing",
+            "toBeat": "crossing"
+          },
+          "frame": 810,
+          "holds": [
+            1170,
+            1290
+          ]
+        },
+        {
+          "key": "field",
+          "from": "black",
+          "to": "paper",
+          "scope": {
+            "kind": "beats",
+            "raw": "beat 5 only",
+            "fromBeat": "art-world",
+            "toBeat": "art-world"
+          },
+          "frame": 810,
+          "holds": [
+            810,
+            1170
+          ]
+        },
+        {
+          "key": "pieces.made_by_human",
+          "from": 0,
+          "to": 1,
+          "scope": {
+            "kind": "permanent",
+            "raw": "permanent"
+          },
+          "frame": 810,
+          "holds": [
+            810,
+            1950
+          ]
+        }
+      ]
+    },
+    {
+      "id": "crossing",
+      "index": 5,
+      "start": 1170,
+      "end": 1290,
+      "frames": 120,
+      "world": "line",
+      "worldRaw": "line",
+      "camera": "locked; the lines re-route across the frame along the move's leading line",
+      "effects": {
+        "emitter": "none; the lines themselves glow faintly",
+        "radiance": "off",
+        "grain": "none",
+        "boil": "on",
+        "line": "pure contour, one weight (D76 ratio), no fills"
+      },
+      "transitionIn": "reduce-to-lines",
+      "transitionOut": "refill into the shaded world (beat 7)",
+      "crossingIn": [
+        1135,
+        1205
+      ],
+      "crossingOut": [
+        1255,
+        1325
+      ],
+      "flips": [
+        {
+          "key": "world",
+          "from": "line",
+          "to": "shaded",
+          "scope": {
+            "kind": "beats",
+            "raw": "beat 7",
+            "fromBeat": "programming-world",
+            "toBeat": "programming-world"
+          },
+          "frame": 1170,
+          "holds": [
+            1290,
+            1650
+          ]
+        },
+        {
+          "key": "guide.lead",
+          "from": "clawd",
+          "to": "codex",
+          "scope": {
+            "kind": "beats",
+            "raw": "beats 6-7",
+            "fromBeat": "crossing",
+            "toBeat": "programming-world"
+          },
+          "frame": 1170,
+          "holds": [
+            1170,
+            1650
+          ]
+        }
+      ]
+    },
+    {
+      "id": "programming-world",
+      "index": 6,
+      "start": 1290,
+      "end": 1650,
+      "frames": 360,
+      "world": "shaded",
+      "worldRaw": "shaded",
+      "camera": "three-quarter perspective, slow push along a lit grid line",
+      "effects": {
+        "emitter": "the lit join, then each gate in sequence",
+        "radiance": "cold cyan on black, s02 accent as the world's hue",
+        "grain": "none",
+        "boil": "off on the world, on for the figures",
+        "shading": "stepped toon shading, two steps, emissive contour"
+      },
+      "transitionIn": "refill from lines into shaded forms",
+      "transitionOut": "the structure's silhouette leads the pull back home (beat 8); the shaded world's lines fold into the Seuss stalks",
+      "crossingIn": [
+        1255,
+        1325
+      ],
+      "crossingOut": [
+        1615,
+        1685
+      ],
+      "flips": [
+        {
+          "key": "world",
+          "from": "shaded",
+          "to": "home",
+          "scope": {
+            "kind": "beats",
+            "raw": "beat 8",
+            "fromBeat": "home-settle",
+            "toBeat": "home-settle"
+          },
+          "frame": 1290,
+          "holds": [
+            1650,
+            1950
+          ]
+        },
+        {
+          "key": "joins.lit",
+          "from": 0,
+          "to": "n",
+          "scope": {
+            "kind": "permanent",
+            "raw": "permanent"
+          },
+          "frame": 1290,
+          "holds": [
+            1290,
+            1950
+          ]
+        },
+        {
+          "key": "chain.ran",
+          "from": false,
+          "to": true,
+          "scope": {
+            "kind": "permanent",
+            "raw": "permanent"
+          },
+          "frame": 1290,
+          "holds": [
+            1290,
+            1950
+          ]
+        }
+      ]
+    },
+    {
+      "id": "home-settle",
+      "index": 7,
+      "start": 1650,
+      "end": 1950,
+      "frames": 300,
+      "world": "home",
+      "worldRaw": "home",
+      "camera": "pull back to a wide with the structure centred and the trio at its base",
+      "effects": {
+        "emitter": "gadget, rimming the structure",
+        "radiance": "Soup! coral (D74 s04)",
+        "grain": "low",
+        "boil": "on"
+      },
+      "transitionIn": "pull along the structure's silhouette",
+      "transitionOut": "title; settled state returns",
+      "crossingIn": [
+        1615,
+        1685
+      ],
+      "crossingOut": null,
+      "flips": [
+        {
+          "key": "hue",
+          "from": "world hues",
+          "to": "s04 coral",
+          "scope": {
+            "kind": "beats",
+            "raw": "beat 8",
+            "fromBeat": "home-settle",
+            "toBeat": "home-settle"
+          },
+          "frame": 1650,
+          "holds": [
+            1650,
+            1950
+          ]
+        },
+        {
+          "key": "grain",
+          "from": "none",
+          "to": "low",
+          "scope": {
+            "kind": "permanent",
+            "raw": "permanent"
+          },
+          "frame": 1650,
+          "holds": [
+            1650,
+            1950
+          ]
+        },
+        {
+          "key": "gadget.held",
+          "from": false,
+          "to": "rests",
+          "scope": {
+            "kind": "permanent",
+            "raw": "permanent"
+          },
+          "frame": 1650,
+          "holds": [
+            1650,
+            1950
+          ]
+        }
+      ]
+    }
+  ],
+  "crossings": [
+    {
+      "from": "the-frame",
+      "to": "art-world",
+      "fromWorld": "home",
+      "toWorld": "crayon",
+      "start": 775,
+      "end": 845,
+      "length": 70,
+      "split": [
+        35,
+        35
+      ]
+    },
+    {
+      "from": "art-world",
+      "to": "crossing",
+      "fromWorld": "crayon",
+      "toWorld": "line",
+      "start": 1135,
+      "end": 1205,
+      "length": 70,
+      "split": [
+        35,
+        35
+      ]
+    },
+    {
+      "from": "crossing",
+      "to": "programming-world",
+      "fromWorld": "line",
+      "toWorld": "shaded",
+      "start": 1255,
+      "end": 1325,
+      "length": 70,
+      "split": [
+        35,
+        35
+      ]
+    },
+    {
+      "from": "programming-world",
+      "to": "home-settle",
+      "fromWorld": "shaded",
+      "toWorld": "home",
+      "start": 1615,
+      "end": 1685,
+      "length": 70,
+      "split": [
+        35,
+        35
+      ]
+    }
+  ]
+}
