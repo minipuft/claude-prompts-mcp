@@ -252,3 +252,14 @@ gate-enforce denies paused mutations for an owned exact pause with resume-or-abo
 ### B2 — #493 CI failure (2026-10-15)
 
 CI on #493: 1 of 1869 failed on both Node versions — `tests/integration/database/transaction-lock-mode` expects deferred step persists to write first; T1.2's `protectedPauseIds()` SELECT ran first. Fixed in the DELETE's own predicate (a nonterminal row whose state carries `conversationPause`, guarded by `json_valid`), shared with `deleteRunsForOwners`. No pause row's own check covered `tests/integration/database`; and a full `tests/integration` run after a src edit needs a fresh `npm run build`, or `structured-gate-verdict-flow` refuses 24 cases as stale dist.
+
+### T3.2p — native PostToolUse payload measured (2026-10-15)
+
+Headless `claude -p` (2.1.299, Haiku) with a capture hook and the branch-built server. Bash positive control fired (dict tool_response). For `mcp__…__prompt_engine`: an ordinary step arrived as a content-block list; pause and resume arrived as a **JSON string of the structuredContent object** (`{"conversation_control": {...}, "message": "..."}`) — no `structuredContent` key, no `content`, no `isError`. The model's tool_result is the same string. T3.2's parser (dict with `structuredContent`) and its `isError is False` gate therefore never fire under Claude Code; the pause would never be tracked natively. Row T3.2a fixes the reader. The pre-existing `succeeded` gate in post-prompt-engine (`isError is False` on a dict) can never be true for any MCP response from this host — reported to the owner with what it gates.
+
+### T3.2a accepted (2026-10-15)
+
+`read_tool_response` in session_state.py returns (text, structured, is_error|None) for the three shapes; post-prompt-engine reads the packet from it and applies by outcome alone (`APPLIED_OUTCOMES` = paused, already-paused, claimed, resumed; every refusal carries `refused`). On the captured native payloads a pause and resume were untouched before and are tracked after.
+
+- **Owner question raised (pre-existing on main, outside this plan's objective):** the non-packet path's `succeeded` (`isError is False` on a dict) is never true natively, and the text it matches is `str(list)` — so clearing on abort, on a completed verdict and on chain completion have never run under Claude Code; tracked rows leave only by the 24-hour sweep or overwrite. Reviving abort-clearing needs a way to tell a failed abort from a successful one (same leading text, no isError natively): the second line, or a structured packet on the abort reply.
+- **Findings (no rows):** `chain_interrupt` replies also arrive as JSON strings and the non-packet path parses the raw JSON text; `ralph-context-tracker.py:103-115` has its own dict-only extraction (→ T3.5 brief); the legacy refused fixture carries `pause: None` and cannot catch an outcome-gate defect — only a pause-carrying refusal can.

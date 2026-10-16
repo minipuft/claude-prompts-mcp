@@ -217,6 +217,39 @@ def is_subagent_payload(hook_input: dict) -> bool:
     return bool(hook_input.get("agent_id"))
 
 
+def _block_text(content: object) -> str:
+    if isinstance(content, list):
+        return " ".join(block.get("text", "") if isinstance(block, dict) else str(block) for block in content)
+    return content if isinstance(content, str) else str(content)
+
+
+def read_tool_response(tool_response: object) -> tuple[str, dict | None, bool | None]:
+    """A PostToolUse `tool_response` as `(text, structured, is_error)`, whatever shape the host sent.
+
+    Claude Code (measured on 2.1.299) hands an MCP result over as a LIST of `{type, text}` blocks
+    when it has no structuredContent, and as a JSON STRING of the structuredContent object itself
+    when it has one -- no wrapper, no `content`, no `isError`; that shape's text is the object's
+    `message`. Built-in tools, other hosts and tests send a dict `{content, isError, structuredContent}`.
+    `is_error` is None when the host gives no signal, which no MCP payload under Claude Code does.
+    """
+    if isinstance(tool_response, dict):
+        structured, flag = tool_response.get("structuredContent"), tool_response.get("isError")
+        text = _block_text(tool_response.get("content", ""))
+        return text, structured if isinstance(structured, dict) else None, flag if isinstance(flag, bool) else None
+    if isinstance(tool_response, list):
+        return _block_text(tool_response), None, None
+    if not isinstance(tool_response, str):
+        return ("" if tool_response is None else str(tool_response)), None, None
+    try:
+        parsed = json.loads(tool_response)
+    except ValueError:
+        return tool_response, None, None
+    if not isinstance(parsed, dict):
+        return tool_response, None, None
+    message = parsed.get("message")
+    return (message if isinstance(message, str) else tool_response), parsed, None
+
+
 def load_session_state(session_id: str) -> ChainState | None:
     """Load chain state for a session from SQLite."""
     data = load_state(TABLE_CHAIN_SESSION_STATE, session_id)

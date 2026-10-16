@@ -8,8 +8,9 @@ Parses the response to:
 1. Track current chain step
 2. Detect pending gates
 3. Inject reminders for gate reviews
-4. Track a conversation pause from a successful `structuredContent.conversation_control` only;
-   reply text (and `structuredContent.message`, which carries the recovery token) is never stored.
+4. Track a conversation pause from an applied `conversation_control` packet only, read from the
+   structured content in whichever shape the host sends (`read_tool_response`); reply text (and the
+   structured `message`, which carries the recovery token) is never stored.
 """
 
 import json
@@ -31,19 +32,23 @@ from session_state import (
     load_session_state,
     parse_prompt_engine_response,
     pause_fields,
+    read_tool_response,
     save_session_state,
 )
 
 COMPLETION_MARKER = re.compile(r"(?m)^(?:[✓✅][ \t]*)?(?:Chain complete\b|Execution complete\.)")
+# The outcomes a packet carries only when the control applied (conversation-control-response.ts);
+# `refused` -- busy, paused-run refusals, wrong scope -- never applies, since no MCP payload under
+# Claude Code carries `isError` to say so.
 PAUSE_OUTCOMES = frozenset({"paused", "already-paused", "claimed"})
+APPLIED_OUTCOMES = PAUSE_OUTCOMES | {"resumed"}
 # What a resumed run's owed obligation restores when the tracker lost the hold (e.g. a claim).
 OBLIGATION_HOLDS = {"blocking-unknown": UNKNOWN_INTERRUPT_LABEL, "review": "review", "exhausted-retry": "review"}
 
 
-def _control_packet(tool_response: object) -> dict | None:
-    """`structuredContent.conversation_control`, or None when the response carries none."""
-    structured = tool_response.get("structuredContent") if isinstance(tool_response, dict) else None
-    packet = structured.get("conversation_control") if isinstance(structured, dict) else None
+def _control_packet(structured: dict | None) -> dict | None:
+    """The structured content's `conversation_control`, or None when it carries none."""
+    packet = structured.get("conversation_control") if structured is not None else None
     return packet if isinstance(packet, dict) and packet.get("kind") == "conversation_control" else None
 
 
@@ -61,7 +66,7 @@ def _apply_control_packet(session_id: str, request_id: str, packet: dict) -> Non
     run = packet.get("run")
     identity = _packet_identity(run)
     outcome = packet.get("outcome")
-    if not isinstance(run, dict) or identity is None or outcome not in PAUSE_OUTCOMES | {"resumed"}:
+    if not isinstance(run, dict) or identity is None or outcome not in APPLIED_OUTCOMES:
         return
     if request_id and request_id != identity["chain_id"]:
         return
@@ -135,17 +140,18 @@ def main():
 
     # A rejected tool response cannot change the previously tracked run, even when its
     # explanation quotes a completion marker or an attempted resolution parameter.
-    if isinstance(tool_response, dict) and tool_response.get("isError") is True:
+    _, structured, is_error = read_tool_response(tool_response)
+    if is_error is True:
         sys.exit(0)
     succeeded = isinstance(tool_response, dict) and tool_response.get("isError") is False
     request_id = tool_input.get("chain_id", "") if isinstance(tool_input, dict) else ""
     request_id = request_id if isinstance(request_id, str) else ""
 
-    # A control reply decides by its packet alone: its text never pauses, resumes or saves.
-    packet = _control_packet(tool_response)
+    # A control reply decides by its packet alone -- its outcome, not a host error flag, says
+    # whether it applied; its text never pauses, resumes or saves.
+    packet = _control_packet(structured)
     if packet is not None:
-        if succeeded:
-            _apply_control_packet(session_id, request_id, packet)
+        _apply_control_packet(session_id, request_id, packet)
         sys.exit(0)
     if isinstance(tool_input, dict) and tool_input.get("gate_action") in ("pause", "resume"):
         sys.exit(0)  # a pause or resume reply without its packet proves neither

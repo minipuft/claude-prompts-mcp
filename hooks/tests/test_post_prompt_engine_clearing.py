@@ -330,14 +330,13 @@ class TestConversationControlPacket:
         ("structured", "is_error"),
         [
             (_control("resumed"), True),
-            (_control("resumed"), None),
             ({"conversation_control": {**_control("resumed")["conversation_control"], "outcome": "refused"}}, False),
             (None, False),
             ({"conversation_control": {"kind": "conversation_control", "outcome": "resumed"}}, False),
             (_control("resumed", workspace="other"), False),
             (_control("resumed", chain="chain-other#1"), False),
         ],
-        ids=["is-error", "status-unreported", "refused", "missing-packet", "no-run", "wrong-scope", "foreign-chain"],
+        ids=["is-error", "refused", "missing-packet", "no-run", "wrong-scope", "foreign-chain"],
     )
     def test_unproven_control_reply_leaves_the_pause_tracked(self, workspace, structured, is_error):
         before = _pause(workspace)
@@ -351,3 +350,94 @@ class TestConversationControlPacket:
         abort = {"chain_id": "chain-demo#1", "gate_action": "abort"}
         _run_hook(_payload("🛑 **Chain Cancelled**: `chain-demo#1`", abort), workspace)
         assert _load_row(workspace, "sess-clear") is None
+
+
+# Native Claude Code 2.1.299 PostToolUse shapes, captured verbatim by the T3.2p probe (token redacted):
+# a step without structuredContent arrives as a list of blocks; a control reply as the JSON string of
+# its structuredContent, with no `content` and no `isError`.
+NATIVE_STEP = [
+    {
+        "type": "text",
+        "text": "**Gate Review Required** (attempt 1/2)\n\n\n\nReview your output above against the gates, "
+        'then submit:\n\nChain: chain-quick_decision#1\n→ Progress 1/3\nNext: chain_id="chain-quick_decision#1", '
+        'user_response="<your step output>", gate_verdict={"overall": "PASS|FAIL", "rationale": "<why>"}',
+    }
+]
+NATIVE_RUN = (
+    '{"runId":"7d3d8de2-e3d1-4566-ad74-145c59691b67","chainId":"chain-quick_decision#1","scope":{"organizationId":'
+    'null,"workspaceId":"cwd","continuityScopeId":"cwd"},"currentNodeId":"options-1-3","step":{"current":1,'
+    '"total":3},"pause":%s,"obligations":[{"kind":"review","nodeId":"options-1-3","step":1,"review":{"kind":'
+    '"gate","phase":"awaiting-verdict"}}]}'
+)
+NATIVE_PAUSE = '{"kind":"conversation","nodeId":"options-1-3","pausedAt":1792111389179}'
+NATIVE_PAUSED = (
+    '{"conversation_control":{"kind":"conversation_control","outcome":"paused","run":%s},"message":"⏸️ '
+    "**Workflow Paused**: `chain-quick_decision#1` at step 1 of 3.\\n\\nRecovery token: `hnd_redacted` — "
+    'claim the paused run from another client with `prompt_engine(claim_token:\\"…\\")`."}'
+) % (NATIVE_RUN % NATIVE_PAUSE)
+NATIVE_RESUMED = (
+    '{"conversation_control":{"kind":"conversation_control","outcome":"resumed","run":%s},"message":"▶️ '
+    '**Workflow Resumed**: `chain-quick_decision#1` at step 1 of 3. Nothing was captured, graded or advanced."}'
+) % (NATIVE_RUN % "null")
+NATIVE_PAUSED_REFUSAL = (
+    '{"conversation_control":{"kind":"conversation_control","outcome":"refused","refusal":{"reason":'
+    '"conversation-paused","retryable":false},"run":%s},"message":"⏸️ **Workflow Paused**: refused."}'
+) % (NATIVE_RUN % NATIVE_PAUSE)
+NATIVE_BUSY = (
+    '{"conversation_control":{"kind":"conversation_control","outcome":"refused","refusal":{"reason":"busy",'
+    '"retryable":true}},"message":"⏳ **Control Busy**: `chain-quick_decision#1`"}'
+)
+NATIVE_CHAIN = "chain-quick_decision#1"
+
+
+def _native(tool_response: object, tool_input: dict) -> dict:
+    payload = {"tool_name": "mcp__cpprobe__prompt_engine", "session_id": "sess-native", "tool_input": tool_input}
+    return {**payload, "tool_response": tool_response}
+
+
+def _native_step(workspace: Path) -> dict:
+    _run_hook(_native(NATIVE_STEP, {"command": '>>quick_decision topic:"pick a database"'}), workspace)
+    return _load_row(workspace, "sess-native")
+
+
+class TestNativeHostShapes:
+    def test_read_tool_response_reads_every_shape(self):
+        sys.path.insert(0, str(HOOKS_LIB))
+        try:
+            from session_state import read_tool_response
+        finally:
+            sys.path.remove(str(HOOKS_LIB))
+        text, structured, flag = read_tool_response(NATIVE_PAUSED)
+        assert structured["conversation_control"]["outcome"] == "paused" and flag is None
+        assert text.startswith("⏸️ **Workflow Paused**")
+        assert (
+            read_tool_response(NATIVE_STEP)[1:] == (None, None) and "Progress 1/3" in read_tool_response(NATIVE_STEP)[0]
+        )
+        legacy = {"content": [{"type": "text", "text": "a"}], "isError": False, "structuredContent": {"k": 1}}
+        assert read_tool_response(legacy) == ("a", {"k": 1}, False)
+        assert read_tool_response("plain text") == ("plain text", None, None)
+
+    def test_native_pause_then_resume_is_tracked_and_the_token_never_stored(self, workspace):
+        step = _native_step(workspace)
+        assert (step["chain_id"], step["pending_gate"]) == (NATIVE_CHAIN, "review")
+        _run_hook(_native(NATIVE_PAUSED, {"chain_id": NATIVE_CHAIN, "gate_action": "pause"}), workspace)
+        paused = _load_row(workspace, "sess-native")
+        assert paused["run_identity"]["run_id"] == "7d3d8de2-e3d1-4566-ad74-145c59691b67"
+        assert paused["conversation_pause"] == {
+            "kind": "conversation",
+            "node_id": "options-1-3",
+            "paused_at": 1792111389179,
+        }
+        assert paused["pause_custody"] == "owned" and paused["pending_gate"] == "review"
+        stored = [path.read_bytes() for path in workspace.rglob("hooks-state.db*")]
+        assert stored and not any(b"hnd_" in data for data in stored)
+        _run_hook(_native(NATIVE_RESUMED, {"chain_id": NATIVE_CHAIN, "gate_action": "resume"}), workspace)
+        resumed = _load_row(workspace, "sess-native")
+        assert "conversation_pause" not in resumed and "pause_custody" not in resumed
+        assert resumed["pending_gate"] == "review"
+
+    @pytest.mark.parametrize("reply", [NATIVE_PAUSED_REFUSAL, NATIVE_BUSY], ids=["paused-refusal", "busy"])
+    def test_a_native_refusal_never_applies(self, workspace, reply):
+        before = _native_step(workspace)
+        _run_hook(_native(reply, {"chain_id": NATIVE_CHAIN, "gate_action": "pause"}), workspace)
+        assert _load_row(workspace, "sess-native") == before
