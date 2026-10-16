@@ -1,7 +1,7 @@
 ---
 title: Workflow verification loops are enforced at Stop — implementation notes
 date: 2026-10-15
-status: active
+status: reference
 tags: [hooks, gates, verification]
 ---
 
@@ -36,3 +36,7 @@ Root cause: the run's stored scope already had one owner, `ChainSessionStore.get
 ## 2026-10-15 — V2 passes natively; V4 cut
 
 Re-run on 317b12f0: the Stop hook ran `false` itself (it replaced `lastResult` after the server's write) and blocked with "Shell Verification FAILED"; Stop #2 was released by the host's `stop_hook_active`. The model read the reason correctly this time. **V4:** the reason names only the command, and it printed "Iteration 2/3" while the row stored 1 (`format_error_feedback` prints stored + 1, and for a workflow row the server owns the count). Finding (no row): the hook writes a workflow row's iteration back unchanged, so the `maxIterations` cap advances only when the client calls the server again — the server owns the loop.
+
+## 2026-10-15 — V4 accepted; plan retired
+
+`run_attribution(chain_state)` gives both the attribution and the failure reason one wording. Findings (no rows): the isolated-spawn failure branch (above `inContextThreshold`) names no run; when a host row and a workflow row both exist the host row blocks first; the V4 reason itself was not re-driven live (the hook tests pin it).

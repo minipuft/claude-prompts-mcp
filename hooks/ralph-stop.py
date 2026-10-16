@@ -191,15 +191,23 @@ def load_workflow_rows(identity: RunIdentity) -> tuple[list[tuple[str, dict]], l
     return exact, unresolved
 
 
+def run_attribution(chain_state: ChainState | None) -> tuple[str, str]:
+    """A tracked run named by chain id and step, and the call that resumes or aborts it: the two
+    phrases that let a model tell which run a Stop reason is about."""
+    if chain_state and (chain_id := chain_state.get("chain_id")):
+        step, total = chain_state.get("current_step", 0), chain_state.get("total_steps", 0)
+        return (
+            f"Workflow `{chain_id}`, step {step}/{total}.\n\n",
+            f'workflow `{chain_id}` through prompt_engine(chain_id="{chain_id}")',
+        )
+    return "", "the workflow through prompt_engine"
+
+
 def unresolved_reason(problems: list[str], chain_state: ChainState | None = None) -> str:
     """The fail-closed diagnostic: no command ran for these rows and no pause exemption applies.
     A tracked run is named by chain id and step, so the model can resume or abort that run."""
     lines = "\n".join(f"- {problem}" for problem in problems)
-    run, target = "", "the workflow through prompt_engine"
-    if chain_state and (chain_id := chain_state.get("chain_id")):
-        step, total = chain_state.get("current_step", 0), chain_state.get("total_steps", 0)
-        run = f"Workflow `{chain_id}`, step {step}/{total}.\n\n"
-        target = f'workflow `{chain_id}` through prompt_engine(chain_id="{chain_id}")'
+    run, target = run_attribution(chain_state)
     return (
         "## Shell verification could not be attributed\n\n"
         f"{run}{lines}\n\n"
@@ -249,18 +257,24 @@ def run_verification(command: str, timeout: int, working_dir: str | None = None)
         }
 
 
-def format_error_feedback(result: dict, verify_state: dict) -> str:
-    """Format error feedback message for Claude (in-context mode)."""
+def format_error_feedback(result: dict, verify_state: dict, run: ChainState | None = None) -> str:
+    """Format error feedback message for Claude (in-context mode).
+
+    A host row prints the next attempt (stored + 1). A workflow row passes its `run`: the server
+    owns its count, so the stored iteration prints as is, and the run is named so it can be resumed.
+    """
     config = verify_state["config"]
     state = verify_state["state"]
-    iteration = state["iteration"] + 1
+    iteration = state["iteration"] + (0 if run else 1)
     max_iterations = config["maxIterations"]
+    named, target = run_attribution(run) if run else ("", "")
 
     error_output = result["stderr"] or result["stdout"] or "No output captured"
 
     lines = [
         f"## Shell Verification FAILED (Iteration {iteration}/{max_iterations})",
         "",
+        *([named.rstrip(), ""] if named else []),
         f"**Command:** `{config['command']}`",
         f"**Exit Code:** {result['exitCode']}",
     ]
@@ -279,6 +293,8 @@ def format_error_feedback(result: dict, verify_state: dict) -> str:
             "Please fix the issues and continue working. Verification will run again when you finish.",
         ]
     )
+    if run:
+        lines.extend(["", f"Resume or abort {target} if the run should not continue."])
 
     return "\n".join(lines)
 
@@ -513,7 +529,7 @@ def main():
 
     allowed: list[dict] = []
     for key, verify_state, workflow in obligations:
-        outcome = enforce_obligation(key, verify_state, workflow)
+        outcome = enforce_obligation(key, verify_state, workflow, chain_state)
         if outcome.get("decision") == "block":
             if unresolved:
                 outcome["reason"] += "\n\n" + unresolved_reason(unresolved, chain_state)
@@ -535,7 +551,7 @@ def main():
     emit(allowed[0] if allowed else None)
 
 
-def enforce_obligation(key: str, verify_state: dict, workflow: bool) -> dict:
+def enforce_obligation(key: str, verify_state: dict, workflow: bool, chain_state: ChainState | None = None) -> dict:
     """Run one verify row's loop. Every write and clear names `key`, the row it was read from.
 
     Returns the block, an allow with a message, or `{}` for a silent allow. A workflow row lives as
@@ -584,6 +600,7 @@ def enforce_obligation(key: str, verify_state: dict, workflow: bool) -> dict:
     working_dir = config.get("workingDir")
 
     result = run_verification(command, timeout, working_dir)
+    run = chain_state if workflow else None  # only a workflow row's failure names its run
 
     # Update iteration count in state
     state["iteration"] = iteration
@@ -617,7 +634,7 @@ def enforce_obligation(key: str, verify_state: dict, workflow: bool) -> dict:
         # Check if we're already in a spawned instance (avoid infinite recursion)
         if os.environ.get("RALPH_SPAWNED"):
             # Already spawned - continue in-context
-            return {"decision": "block", "reason": format_error_feedback(result, verify_state)}
+            return {"decision": "block", "reason": format_error_feedback(result, verify_state, run)}
 
         # Spawn isolated instance
         try:
@@ -704,15 +721,15 @@ Please review the isolated attempt and try a different approach."""
         except ImportError as e:
             # Libraries not available - fall back to in-context
             print(f"[Verify] Isolation libraries unavailable: {e}", file=sys.stderr)
-            return {"decision": "block", "reason": format_error_feedback(result, verify_state)}
+            return {"decision": "block", "reason": format_error_feedback(result, verify_state, run)}
 
         except Exception as e:
             # Spawn failed - fall back to in-context
             print(f"[Verify] Isolation spawn failed: {e}", file=sys.stderr)
-            return {"decision": "block", "reason": format_error_feedback(result, verify_state)}
+            return {"decision": "block", "reason": format_error_feedback(result, verify_state, run)}
 
     # In-context mode - block stop and feed error back
-    return {"decision": "block", "reason": format_error_feedback(result, verify_state)}
+    return {"decision": "block", "reason": format_error_feedback(result, verify_state, run)}
 
 
 if __name__ == "__main__":

@@ -128,6 +128,29 @@ class TestFormatErrorFeedback:
         feedback = format_error_feedback(result, verify_state)
         assert "assertion error" in feedback
 
+    def test_a_host_row_reason_is_pinned_byte_for_byte(self):
+        result = {"exitCode": 1, "stderr": "boom", "stdout": "", "timedOut": False}
+        verify_state = {"config": {"command": "false", "maxIterations": 3}, "state": {"iteration": 1}}
+
+        assert format_error_feedback(result, verify_state) == (
+            "## Shell Verification FAILED (Iteration 2/3)\n\n"
+            "**Command:** `false`\n"
+            "**Exit Code:** 1\n\n"
+            "### Error Output\n```\nboom\n```\n\n"
+            "Please fix the issues and continue working. Verification will run again when you finish."
+        )
+
+    def test_a_workflow_row_reason_names_the_run_and_prints_the_stored_count(self):
+        result = {"exitCode": 1, "stderr": "boom", "stdout": "", "timedOut": False}
+        verify_state = {"config": {"command": "false", "maxIterations": 3}, "state": {"iteration": 1}}
+        run = {"chain_id": "chain-x#1", "current_step": 2, "total_steps": 3}
+
+        feedback = format_error_feedback(result, verify_state, run)
+
+        assert "Iteration 1/3" in feedback
+        assert "Workflow `chain-x#1`, step 2/3." in feedback
+        assert 'prompt_engine(chain_id="chain-x#1")' in feedback
+
 
 class TestEnsureRalphSessionId:
     def test_extracts_from_state(self):
@@ -480,6 +503,20 @@ class TestStopReadsRowsByExactIdentity:
         assert output is None
         assert commands == []
         assert self.rows() == before
+
+    def test_a_failing_workflow_row_names_its_run_and_the_host_row_keeps_its_count(self):
+        self.workflow("run-a", "ws-a", "cmd-a")
+
+        output, _ = self.stop(self.chain())
+        assert output is not None
+        assert "Iteration 1/10" in output["reason"]
+        assert f"Workflow `{self.CHAIN}`, step 2/3." in output["reason"]
+
+        self.store.delete_verify_row("workflow-run-run-a")
+        self.store.save_verify_active_state(self.loop("host-cmd"), self.HOST)
+        output, _ = self.stop(self.chain())
+        assert output is not None
+        assert "Iteration 2/10" in output["reason"] and "Workflow `" not in output["reason"]
 
     def test_an_independent_host_row_still_enforces_while_the_run_is_parked(self):
         self.workflow("run-a", "ws-a", "cmd-a")
