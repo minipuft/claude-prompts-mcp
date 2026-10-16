@@ -304,6 +304,47 @@ def load_active_chain_state(chain_id: str | None = None) -> dict | None:
         conn.close()
 
 
+def resolve_run_identity(chain_id: str) -> RunIdentity | None:
+    """The exact identity of the one projected run of `chain_id` a live server owns, or None.
+
+    The chain id alone cannot name a run: two scopes can each hold `chain-x#1`. So the identity
+    comes only from a `chain_sessions` row, by the same liveness and visibility tests the loaders
+    apply, and only when exactly one row passes them. No such row (none projected, or only a dead
+    owner's, whose run is not live) or several (another scope runs the same chain id) gives None:
+    nothing is borrowed from a run this conversation cannot be shown to own. A passing row whose
+    identity is incomplete still counts, so it can make a choice ambiguous but never supplies one.
+    """
+    conn = _connect_readonly() if chain_id else None
+    if not conn:
+        return None
+    sql = (
+        "SELECT run_owner_pid, organization_id, workspace_id, continuity_scope_id, chain_id, state "
+        "FROM chain_sessions WHERE chain_id = ?"
+    )
+    try:
+        rows = conn.execute(sql, [chain_id]).fetchall()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    candidates: list[RunIdentity | None] = []
+    for row in rows:
+        session = _parse_json_field(row["state"]) if _owner_alive(row) else None
+        if not isinstance(session, dict) or _session_to_hook_state(session) is None:
+            continue
+        raw = {key: row[key] for key in ("chain_id", "organization_id", "workspace_id", "continuity_scope_id")}
+        candidates.append(exact_run_identity({**raw, "run_id": session.get("sessionId")}))
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _owner_alive(row: sqlite3.Row) -> bool | None:
+    """Whether the row's `run_owner_pid` is a live process; None when the column is not a PID."""
+    try:
+        return _is_pid_alive(int(row["run_owner_pid"]))
+    except (ValueError, TypeError):
+        return None
+
+
 def _identity_params(identity: RunIdentity) -> list[object]:
     """Bind values for the identity clause both routes append, in clause order."""
     keys = ("run_id", "continuity_scope_id", "organization_id", "workspace_id")
@@ -315,11 +356,8 @@ def _select_row(rows: list[sqlite3.Row], identity: RunIdentity | None, convert) 
     pause a dead owner retained: guidance for an explicit claim, never adoption."""
     retained = None
     for row in rows:
-        try:
-            alive = _is_pid_alive(int(row["run_owner_pid"]))
-        except (ValueError, TypeError):
-            continue
-        if not alive and identity is None:
+        alive = _owner_alive(row)
+        if alive is None or (not alive and identity is None):
             continue
         hook_state, document = convert(row)
         if hook_state is None:
