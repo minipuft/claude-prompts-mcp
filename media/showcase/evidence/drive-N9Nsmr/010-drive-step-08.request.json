@@ -1,0 +1,23 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_animatic#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "Animatic probe gate ran in the engine: probe-all.py exit 0, 120405 ms, and a fresh hand run (129 s) printed the same 7 probe lines and 'pass: probe-all - 7 of 7 probes passed'; frames reused, nothing re-rendered",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "Animation Animatic Probes: engine shell verification PASSED exit 0 in 120405 ms, 7 of 7 probes passed (twos-ones, hold-band, screen-time, eye-trace, loop-closure, colour-continuity, determinism), each control line tripped on its planted defect"
+        }
+      ],
+      "reminders": {
+        "satisfied": [
+          "framework-compliance"
+        ],
+        "not_applicable": []
+      }
+    }
+  }
+}

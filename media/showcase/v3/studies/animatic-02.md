@@ -138,3 +138,22 @@ The planted refusal: with `clawd.x` removed, the engine ran the gate itself afte
 Gate 2 of step 4 (`probe-render-manifest.py --all out`) failed on `out/s01-arrival-overwhelm`: five layers stale against the renderer source (`codeVersion dea05b1ca9e0`) and confirm frames 252, 254 and 195 over tolerance. That cache belongs to the live s01 render, so it was not touched; after two attempts the engine showed `Retry Limit Reached`, naming `animation-animatic-probes` and `framework-compliance` as well as the manifest gate although both passed, and the drive continued with `gate_action: "skip"`.
 
 Step 6's check was therefore never run by the engine; run by hand on the reply it printed `ok` for all five paths (exit 0) and exited 1 on empty input. The chain ended `Chain complete (6/6)` after two skips (steps 4 and 6). Drive: 19 mailbox steps; receipts `evidence/drive-kNopGR`; mailbox `mailbox/animatic-trail-split`.
+
+## Closing drive (2026-10-16)
+
+The same chain, `workflow-payloads/48-run-animatic-trail.json`, driven again with every answer sent alone and every verdict sent alone once the review rendered, no planted failure, and no `gate_action` sent at any step (`rg gate_action` over the receipts finds none). Frames and artifacts are the earlier runs' (`out/animatic-seq` and the rest, nothing re-rendered); the compiled `v3/timeline.json` and `v3/light.json` were regenerated and are byte-identical (`cmp`). The animatic step now carries only `animation-animatic-probes`: the render-manifest gate was removed from it (payload 121), so the intro shot's cache no longer reaches this chain. Two things changed in the driver to make the last step run: `workflow-client.mjs` now allowlists the gate's resolved absolute command (`node <server>/resources/gates/handoff-artifacts/check-artifacts.js`); the entry `node check-artifacts.js` it already carried never matched, because the engine resolves the gate's script path before it matches the allowlist (the refusal text of the previous drive shows the absolute path).
+
+| Step | Shell block rendered | Command | Exit | Engine time | Verdict sent | Skipped |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 timeline | yes, on the first render and again after the answer | `probe-timeline.py v3/timeline.json` | 0 | 5345 ms, 503 ms | PASS | no |
+| 2 blocking | yes | `probe-blocking.py v3/timeline.json v3/blocking` | 0 | 315 ms | PASS | no |
+| 3 light | yes | `probe-colour.py --contract v3/light.json --timeline v3/timeline.json` | 0 | 304 ms | PASS | no |
+| 4 animatic | yes | `probe-all.py out/animatic-seq ...` | 0 | 120405 ms | PASS | no |
+| 5 rubric review | no (reminder only) | none | n/a | n/a | PASS, reminder `animation-review` satisfied | no |
+| 6 filing | yes | `node <server>/resources/gates/handoff-artifacts/check-artifacts.js` | 0 | 45 ms | PASS | no |
+
+The seven lines of the step-4 gate were quoted from a fresh hand run of the gate command (exit 0, 129 s) and match the engine's run (`pass: probe-all - 7 of 7 probes passed`). The step-6 check was run by hand from the server directory as well: `ok` for all five named paths (exit 0), exit 1 on an empty reply (`handoff-artifacts: no artifacts: line under done`). The chain ended `Chain complete (6/6)`.
+
+The rubric step's grades come from the 12-frame strip viewed in this drive, at still tier: C10 FAILS and C8 FAILS (the home beats repeat one composition and show no architecture), C6 HOLDS, C13 and C14 UNPROVEN. Nothing was watched in motion.
+
+Drive: 12 mailbox steps; receipts `evidence/drive-N9Nsmr`; mailbox `mailbox/animatic-trail-final`.

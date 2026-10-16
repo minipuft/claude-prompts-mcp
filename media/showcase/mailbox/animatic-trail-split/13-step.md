@@ -1,0 +1,98 @@
+### Original Request Intent
+
+This step was given the following request. Your work must satisfy this intent:
+
+- **episode_root**: media/showcase/v3
+- **renderer**: media/showcase
+- **output_root**: media/showcase
+- **brief**: First animatic of the 65 s eight-beat episode (D79): does the pacing hold at the CalArts band, do the three worlds and the two crossings read in sequence, where does the eye go in each beat. Placehold...
+- **context**: 
+
+> You produce client-side creative work guided by the Claude Prompts MCP server. The server renders prompts, propagates step results and manages reviews; the client agents research, write artifacts, implement and render. Use existing services and authored resource contracts. Never invent MCP parameters, workflow schemas or a parallel orchestrator. Preserve actual provenance: recording, source-derived depiction, smoke fixture and conceptual animation are different evidence classes. Do not imply a simulated agent or UI is a recorded Claude/Codex run. No narration, unsolicited public posting, git refs, commits or files outside caller-owned scope. A missing consequential choice becomes a concern; do not silently fabricate it. Read prior context and chain history, and cite actual paths/URLs used. Revisions must have observable rationale. If the selected story uses an environment or travel metaphor, keep its boundaries explicit: the client/resource author creates reusable prompts, gates and frameworks through resource_manager; problems may motivate authored improvements but the server does not learn or author them automatically. Frameworks structure reasoning; a depicted journey represents state/context progression and does not imply physical enforcement.
+
+Brief: First animatic of the 65 s eight-beat episode (D79): does the pacing hold at the CalArts band, do the three worlds and the two crossings read in sequence, where does the eye go in each beat. Placeholders allowed for keys; every gate line quoted.
+Constraints: media/showcase/v3
+Production root: media/showcase
+Previous handoff:
+**Summary**: No frame was re-rendered. The frames and mp4s are from the previous run of the same contracts (`v3/timeline.json`, `v3/xsheet.json`, `v3/light.json`, `v3/blocking/*.json`, byte-identical after the recompiles in steps 1 and 3), and whether two sessions render the same frames is still open (plan row 4.1: the earlier run measured 1948 of 1950 frames within tolerance between two full renders). `probe-all.py` was run fresh against those frames and passes 7 of 7. The second gate, `probe-render-manifest.py --all out`, FAILS by hand on a manifest in `out/s01-arrival-overwhelm`, which belongs to another worker's live render cache and was not touched.
+
+## Context
+Renderer `media/showcase`, episode `v3`. Artifacts reused as they are: `out/animatic-seq` (1950 frames), `out/animatic-seq-b` (195), `out/animatic-fig-seq` (1950), `out/animatic-figline-seq` (142), `out/animatic-01.mp4` (sha256 f1daee09a10e, 5.4 MB, 65.000 s) and `out/animatic-01b.mp4`, strip `out/animatic-02-contact.png` (sha256 01298a29d8d6).
+
+## Analysis
+Watched: I did not view the mp4 in motion or the strip in this re-drive; what the viewer sees per beat is the existing study `v3/studies/animatic-02.md` (written from 24 viewed frames in the earlier run). Copies live in `v3/studies/animatic-02/` (`animatic-02.mp4`, `contact-strip.png`).
+Probes, fresh run, exit 0, 135 s wall (the earlier study recorded 235 s on a busier machine):
+
+| claim | command | control | measured |
+| --- | --- | --- | --- |
+| drawing on twos, camera on ones | `probe-all.py` row `twos-ones` | frame 7 change refused | pass |
+| holds inside the 11-27 band | row `hold-band` | 40-frame hold refused | pass |
+| beat lengths match the xsheet | row `screen-time` | 3-frame shift refused | pass |
+| the eye lands on the emitter | row `eye-trace` | blob 10 % off refused | pass |
+| outlines close | row `loop-closure` | 4 px band across the shins refused | pass |
+| one pair per beat, no hue detour | row `colour-continuity` | magenta patch and green detour refused | pass |
+| second render matches within tolerance | row `determinism` | 60 pixels 40 levels off refused | pass |
+
+## Goals
+Run the gate's seven probes fresh on the existing frames, quote every line, say what is reused, and record the second gate's result as it is.
+
+## Execution
+The seven lines of `python3 scripts/animation/probe-all.py out/animatic-seq --timeline v3/timeline.json --xsheet v3/xsheet.json --second-frames out/animatic-seq-b --subset --figure-frames out/animatic-fig-seq --figure-line-frames out/animatic-figline-seq` (exit 0), verbatim:
+```
+twos-ones · pass · control: change on frame 7 -> FAIL (odd-frame figure changes at [7]); changes on even frames only with the camera moving every frame -> pass (0 odd-frame changes, 7 even-frame changes, camera moved on 24 odd frames); a figure change on frame 27 inside a crossing window 20-35 -> FAIL on the figure layer (odd-frame changes at [27]), exempt (pass) on full frames
+hold-band · pass · control: 40-frame hold -> FAIL (hold of 40 frames at 0-39 is over 27 and no key declares it); 16-frame hold, 4-drawing move -> pass (2 holds, move of 4); 40-frame hold declared by key 'K1' -> pass and listed; 1-drawing move -> FAIL; a pose change on frame 28 inside a crossing window with no key row -> FAIL on the figure layer (stray change at [28]), exempt on full frames; the same change with a key row -> pass
+screen-time · pass · control: beat 'b' shifted 3 frames against the same xsheet -> FAIL (beat 'a' ends at frame 30 in the xsheet, 33 in the timeline); unshifted -> pass (0 problems)
+eye-trace · pass · control: bright blob 10 % of the width off the emitter -> FAIL (offset 10.0 % > 3 %); blob on the emitter -> pass (0.0 %); identity, garment and kit-contour patches brighter than the blob are ignored (read unmasked they would put the offset at 46 %); the same blob against an emitter projected through a camera that moved 140 stage px -> FAIL (10.9 %), so the camera is read; 120 lone white specks, brighter than the blob and a share of the 0.5 % ranked, are not a region: offset 2.2 % blurred, 8.7 % unblurred
+loop-closure · pass · control: synthetic closed outline closed=True (height 1.000, share 1.000); 4 px band erased across the shins (row 127) closed=False (height 0.744, share 0.588) flips
+colour-continuity · pass · control: magenta patch off both pairs -> FAIL (frame 5: 576 of 15376 saturated pixels outside); hue detour through green across a crossing -> FAIL (crossing 14-34 detours: sample 1 (205 deg) sits 16 deg behind the start); clean sequence with identity, garment and kit-accent patches (all saturated, all off the pair) -> pass; a pale blue glow on the emitter reads 221 deg -> inside the blue pair, the same glow in pale green reads 144 deg -> off it, a frame with no glow reads nothing
+determinism · pass · control: two writes of the same frame -> pass; 1 pixel 1 level off (rasteriser noise) -> pass; 40 pixels 1 level off (noise) -> pass; 60 pixels 40 levels off -> FAIL (60 beyond 2 levels, allowance 5); every pixel 3 levels off -> FAIL (57600 beyond 2 levels); 1 pixel 40 levels off -> tolerated (inside the allowance of 5)
+pass: probe-all - 7 of 7 probes passed
+```
+Second gate by hand, `python3 scripts/animation/probe-render-manifest.py --all out`, exit 1: `FAIL s01-arrival-overwhelm: the figure layer is stale: the renderer's source changed after the render (codeVersion dea05b1ca9e0 ...)`, with the props, world, light and camera layers stale too and confirm frames 252, 254 and 195 beyond tolerance. `FAIL: render-manifest - 1 of 1 checks failed: s01-arrival-overwhelm`. That cache is not this film's, so the fix is a re-render by its owner and not an edit here.
+
+## Evaluation
+Provisional parts of this film, as listed in the study: keys (one pose chart for every beat), blocking (eight provisional files), `box` and `bubble` of the arrival beat not drawn, one crossing operator for all four crossings. Nothing here proves a determinism claim across sessions.
+Owner questions, each with a default: (1) Every crossing is the same line-world drawing; keep it or draw each with its own move's leading line? Default: keep until the pose pass fills the beats. (2) The crossing beat is 4 s with four ledger actions and 6 frames to spare; lengthen to 5 s (later beats +30 frames) or keep? Default: keep, decide after watching `animatic-02.mp4`.
+
+## Refinement
+Changed: `v3/studies/animatic-02.md` gets a dated `## Split-form drive` section (the per-step gate table and the receipt directory); no other file. The engine's own shell verification of both commands is the receipt once the review renders.
+
+Read, before writing, the project files under the production root's `v3/`: `creative-spec.md` (rulings D41–D72, medium, palette law, animation language, Craft baseline), `script.md` (resource vocabulary and beats), `rubric.md` (criteria C1–C23 and the receipt shape). They are the contract; this prompt does not restate them.
+
+Grade the actual rendered artifact against `rubric.md` by criterion id; do not grade anything you have not viewed. Use only the four marks: HOLDS, FAILS, UNPROVEN, TASTE. Each mark cites its evidence at or above the criterion's minimum tier (still, 3x crop, consecutive frames, moving render, owner viewing) and names the failing control it beats. Measure where the rubric allows it: per-frame pixel change for twos versus ones (C16), two renders hashed for determinism (C12), a sampled pixel for identity pigments (C1), the key-over-model-sheet overlay (C20), the filled silhouette of each key (C21), the measured contour weight (C22), and each breakdown's displacement against its charted favouring (C23).
+
+Motion contract:
+Use the recorded Motion Contract step; flag missing handoff.
+
+Write the receipt in the rubric's five parts, in order: Changed (by file); Grades (one line per criterion touched); Controls (which earlier study each flipped FAILS beats); Owner (at most two TASTE questions, each with the default the planner takes if unanswered); Next (one fix per FAILS). Save it as `v3/studies/<name>.md` beside the artifact copies, copied unchanged from `out/` with sha256 prefixes. A render that is absent is BLOCKED, not PASS. Propose a rubric change only through its Evolution rules: a new ruling adds a row; three consecutive HOLDS bakes one; a standing TASTE is ruled or deleted.
+
+Return: Inspected Evidence; Grades; Controls; Owner; Next; Rubric Evolution; Concerns.
+
+---
+
+## Inline Gates
+
+### Reminders
+
+### Animation Review Rubric
+Advisory, not a check: nothing here has a positive control. Grade only what was viewed, one mark per touched criterion (HOLDS, FAILS, UNPROVEN, TASTE) with evidence at or above the criterion's minimum tier. The episode-tier criteria (timeline conformance, twos/ones split, hold band, eye trace, colour continuity) are DECIDED by the probe gate, not here: cite its lines, do not re-grade them. Grade here what no probe can: acting reads without text (C14), composition hierarchy per beat (C10), the crossings read as drawn (C13), the story lands in the screen time given. Every TASTE mark asks the owner one question with a default. Receipt in five parts: Changed, Grades, Controls, Owner, Next.
+
+Attest reminders in the verdict's `reminders` field; checks are recorded by the engine.
+
+---
+
+---
+
+### Required Response Format
+
+**Summary**: What was implemented (2-3 sentences)
+
+**Gate Coverage**:
+- [1] PASS|FAIL: rationale
+- [2] PASS|FAIL: rationale
+
+**GATE_REVIEW: PASS|FAIL - overall assessment**
+
+Chain: chain-animation_animatic#1
+→ Progress 5/6
+Next: chain_id="chain-animation_animatic#1", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"

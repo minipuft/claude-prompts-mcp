@@ -1,0 +1,23 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_animatic#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "Blocking gate ran in the engine: probe-blocking.py exit 0, 315 ms, and a fresh hand run printed the same 5 ok lines and the pass line",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "Animation Blocking Contract: engine shell verification PASSED exit 0 in 315 ms, 8 beats staged, actors placed, emitter inside the frame, a card cited on every beat, identity boxes apart, control line tripped on 5 planted defects"
+        }
+      ],
+      "reminders": {
+        "satisfied": [
+          "framework-compliance"
+        ],
+        "not_applicable": []
+      }
+    }
+  }
+}

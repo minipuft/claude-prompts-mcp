@@ -468,6 +468,11 @@ async function main() {
     MCP_SHELL_VERIFY_ALLOWLIST: [
       "python3 scripts/animation/*",
       "node scripts/animation/*",
+      "node check-artifacts.js", // the bundled handoff-artifacts gate, run in its own working dir
+      // The engine resolves the gate's relative script to an absolute path before matching (drive-kNopGR step 17:
+      // `node <server>/resources/gates/handoff-artifacts/check-artifacts.js`), so the bare entry above never matches.
+      "node " + path.join(serverRoot, "resources/gates/handoff-artifacts/check-artifacts.js"),
+      "node scripts/check-artifacts.js*",
     ].join("\n"),
     MCP_SHELL_VERIFY_ALLOWED_DIRS: mediaRoot,
   };
