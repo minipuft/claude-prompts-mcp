@@ -348,14 +348,27 @@ class TestQualifiedRunBinding:
             if terminal == "abort"
             else f"Chain complete (3/3)\nChain: `{response}`\n"
         )
-        code, _ = run_post_prompt_engine(
-            monkeypatch,
-            capsys,
-            session_id=sid,
-            content=content,
-            tool_input={"chain_id": request, **({"gate_action": "abort"} if terminal == "abort" else {})},
-            is_error=binding == "refusal",
-        )
+        if terminal == "abort":
+            # Natively an abort reply is the JSON string of its run_control packet, with no isError;
+            # a refused release says so in its outcome.
+            outcome = "release-incomplete" if binding == "refusal" else "cancelled"
+            packet = {"action": "abort", "outcome": outcome, "chainId": response}
+            payload = {"session_id": sid, "tool_name": "mcp__claude-prompts__prompt_engine"}
+            payload["tool_input"] = {"chain_id": request, "gate_action": "abort"}
+            payload["tool_response"] = json.dumps({"run_control": packet})
+            monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+            with pytest.raises(SystemExit) as excinfo:
+                post_prompt_engine.main()
+            code = excinfo.value.code
+        else:
+            code, _ = run_post_prompt_engine(
+                monkeypatch,
+                capsys,
+                session_id=sid,
+                content=content,
+                tool_input={"chain_id": request},
+                is_error=binding == "refusal",
+            )
         assert code == 0
         assert load_session_state(sid) == (None if binding == "exact" else tracked)
 

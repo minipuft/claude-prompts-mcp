@@ -366,14 +366,21 @@ class TestConversationPauseDirective:
         assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert out["hookSpecificOutput"]["permissionDecisionReason"] == DIRECTIVE
 
-    @pytest.mark.parametrize("custody", ["retained", "unconfirmed"])
-    def test_unowned_custody_renders_recovery_guidance(self, suggest, monkeypatch, capsys, custody):
+    def test_retained_custody_renders_the_claim_guidance(self, suggest, monkeypatch, capsys):
         from session_state import PAUSE_RECOVERY_GUIDANCE
 
-        _, out = run_stdout_hook(suggest, monkeypatch, capsys, {**OWNED, "pause_custody": custody})
+        _, out = run_stdout_hook(suggest, monkeypatch, capsys, {**OWNED, "pause_custody": "retained"})
         context = json.loads(out)["hookSpecificOutput"]["additionalContext"]
         assert context == f"Workflow paused for conversation at step 2 of 3: `chain-demo#1`. {PAUSE_RECOVERY_GUIDANCE}"
         assert 'gate_action:"resume"' not in context and "<INTERRUPT>" not in context
+
+    def test_unconfirmed_custody_shows_the_explicit_calls(self, suggest, monkeypatch, capsys):
+        _, out = run_stdout_hook(suggest, monkeypatch, capsys, {**OWNED, "pause_custody": "unconfirmed"})
+        context = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        assert context.startswith("Workflow paused for conversation at step 2 of 3: `chain-demo#1`.")
+        assert "not confirmed live" in context and 'gate_action:"abort"' in context
+        assert 'prompt_engine(chain_id:"chain-demo#1", gate_action:"resume")' in context
+        assert "<INTERRUPT>" not in context
 
     def test_unknown_only_path_is_unchanged(self, suggest, monkeypatch, capsys):
         state = {key: value for key, value in OWNED.items() if key not in (*PAUSE_KEYS, "run_identity")}

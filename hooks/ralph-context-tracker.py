@@ -20,6 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
 from lesson_extractor import summarize_error
+from session_state import read_tool_response
 from session_tracker import get_session_tracker
 from verify_active_store import load_verify_active_state
 
@@ -100,19 +101,8 @@ def main():
         sys.exit(0)
 
     tool_input = hook_input.get("tool_input", {})
-    tool_response = hook_input.get("tool_response", "")
-
-    # Convert response to string if needed
-    if isinstance(tool_response, dict):
-        content = tool_response.get("content", "")
-        if isinstance(content, list):
-            tool_response = " ".join(
-                block.get("text", "") if isinstance(block, dict) else str(block) for block in content
-            )
-        else:
-            tool_response = str(content)
-    else:
-        tool_response = str(tool_response)
+    # Bash's {stdout, stderr} dict and every MCP shape read through the one tool_response reader.
+    tool_response, _, _ = read_tool_response(hook_input.get("tool_response", ""))
 
     # Get session tracker
     tracker = get_session_tracker(ralph_session)

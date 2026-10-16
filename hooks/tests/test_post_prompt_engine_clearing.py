@@ -71,6 +71,18 @@ def _payload(
     }
 
 
+def _aborted(outcome: str = "cancelled", chain: str = "chain-demo#1", run_id: str | None = None) -> dict:
+    """An abort reply's structuredContent (prompt-executor.ts handleAbort)."""
+    return {
+        "run_control": {
+            "action": "abort",
+            "outcome": outcome,
+            "chainId": chain,
+            **({"runId": run_id} if run_id else {}),
+        }
+    }
+
+
 class TestSessionRowClearing:
     def test_a_resolved_verdict_clears_the_row(self, workspace):
         """Gate armed → PASS verdict → 'Execution complete.' (no markers).
@@ -94,7 +106,8 @@ class TestSessionRowClearing:
         assert _load_row(workspace, "sess-clear")["chain_id"] == "chain-demo#1"
 
         response = "🛑 **Chain Cancelled**: `chain-demo#1`\n\nFurther progression is blocked."
-        abort = _run_hook(_payload(response, {"chain_id": "chain-demo#1", "gate_action": "abort"}), workspace)
+        abort_input = {"chain_id": "chain-demo#1", "gate_action": "abort"}
+        abort = _run_hook(_payload(response, abort_input, structured=_aborted()), workspace)
         assert abort.returncode == 0
         assert _load_row(workspace, "sess-clear") is None
 
@@ -108,6 +121,7 @@ class TestSessionRowClearing:
             ("🛑 **Chain Cancelled**: `other#1`", {"chain_id": "chain-demo#1", "gate_action": "abort"}, False),
             ("🛑 **Chain Cancelled**: `other#1`", {"chain_id": "other#1", "gate_action": "abort"}, False),
             ("🛑 **Chain Cancelled**: `chain-demo#1`", {"chain_id": "chain-demo#1", "gate_action": "abort"}, None),
+            ("🛑 **Chain Cancelled**: `chain-demo#1`", {"chain_id": "chain-demo#1", "gate_action": "abort"}, False),
             (
                 "Nothing was recorded.",
                 {"chain_id": "chain-demo#1", "gate_verdict": {"overall": "PASS", "rationale": "ok"}},
@@ -117,11 +131,6 @@ class TestSessionRowClearing:
                 "Execution complete.",
                 {"chain_id": "chain-demo#1", "gate_verdict": {"overall": "PASS", "rationale": "ok"}},
                 True,
-            ),
-            (
-                "Execution complete.",
-                {"chain_id": "chain-demo#1", "gate_verdict": {"overall": "PASS", "rationale": "ok"}},
-                None,
             ),
             (
                 "Execution complete.",
@@ -137,9 +146,9 @@ class TestSessionRowClearing:
             "abort-response-id-mismatch",
             "abort-request-id-mismatch",
             "abort-status-unreported",
+            "abort-text-without-run-control",
             "verdict-markerless",
             "completion-error",
-            "completion-status-unreported",
             "completion-request-id-mismatch",
         ],
     )
@@ -167,10 +176,8 @@ class TestSessionRowClearing:
         _run_hook(_payload(GATE_REVIEW_RESPONSE, {"command": ">>demo"}), workspace)
         before = _load_row(workspace, "sess-clear")
         assert before["chain_id"] == ""
-        _run_hook(
-            _payload("🛑 **Chain Cancelled**: `chain-demo#1`", {"chain_id": "chain-demo#1", "gate_action": "abort"}),
-            workspace,
-        )
+        abort = {"chain_id": "chain-demo#1", "gate_action": "abort"}
+        _run_hook(_payload("🛑 **Chain Cancelled**: `chain-demo#1`", abort, structured=_aborted()), workspace)
         assert _load_row(workspace, "sess-clear") == before
 
     def test_a_delivered_final_step_is_kept(self, workspace):
@@ -254,13 +261,13 @@ class TestQualifiedTerminalBinding:
         assert arm.returncode == 0
         before = _load_row(workspace, "sess-clear")
         assert before["chain_id"] == tracked
-        tool_input = {"chain_id": request_id}
+        tool_input, structured = {"chain_id": request_id}, None
         if action == "abort":
             tool_input["gate_action"] = "abort"
-            content = f"🛑 **Chain Cancelled**: `{response_id}`"
+            content, structured = f"🛑 **Chain Cancelled**: `{response_id}`", _aborted(chain=response_id)
         else:
             content = f"✓ Chain complete (3/3) `{response_id}`"
-        response = _run_hook(_payload(content, tool_input, is_error=is_error), workspace)
+        response = _run_hook(_payload(content, tool_input, is_error=is_error, structured=structured), workspace)
         assert response.returncode == 0
         after = _load_row(workspace, "sess-clear")
         if cleared:
@@ -348,7 +355,7 @@ class TestConversationControlPacket:
         _run_hook({**_call("resume", _control("resumed")), "agent_id": "w1"}, workspace)
         assert _load_row(workspace, "sess-clear") == before
         abort = {"chain_id": "chain-demo#1", "gate_action": "abort"}
-        _run_hook(_payload("🛑 **Chain Cancelled**: `chain-demo#1`", abort), workspace)
+        _run_hook(_payload("🛑 **Chain Cancelled**: `chain-demo#1`", abort, structured=_aborted(run_id="r")), workspace)
         assert _load_row(workspace, "sess-clear") is None
 
 
@@ -441,3 +448,99 @@ class TestNativeHostShapes:
         before = _native_step(workspace)
         _run_hook(_native(reply, {"chain_id": NATIVE_CHAIN, "gate_action": "pause"}), workspace)
         assert _load_row(workspace, "sess-native") == before
+
+
+NATIVE_RUN_ID = "7d3d8de2-e3d1-4566-ad74-145c59691b67"
+NATIVE_ABORT = {"chain_id": NATIVE_CHAIN, "gate_action": "abort"}
+
+
+def _native_abort(outcome: str, run_id: str = NATIVE_RUN_ID) -> str:
+    """The native abort reply: the JSON string of its structuredContent -- no text, no isError."""
+    return json.dumps(_aborted(outcome, NATIVE_CHAIN, run_id))
+
+
+def _native_paused(workspace: Path) -> dict:
+    _native_step(workspace)
+    _run_hook(_native(NATIVE_PAUSED, {"chain_id": NATIVE_CHAIN, "gate_action": "pause"}), workspace)
+    return _load_row(workspace, "sess-native")
+
+
+class TestNativeTerminalClearing:
+    """The three clears on the shapes Claude Code actually sends (no `isError`, no `content` key)."""
+
+    def test_a_cancelled_abort_clears_the_paused_run(self, workspace):
+        assert "conversation_pause" in _native_paused(workspace)
+        _run_hook(_native(_native_abort("cancelled"), NATIVE_ABORT), workspace)
+        assert _load_row(workspace, "sess-native") is None
+
+    @pytest.mark.parametrize(
+        ("outcome", "run_id"),
+        [("release-incomplete", NATIVE_RUN_ID), ("not-applied", NATIVE_RUN_ID), ("cancelled", "another-run")],
+        ids=["release-incomplete", "not-applied", "another-run-same-chain"],
+    )
+    def test_an_abort_that_did_not_cancel_this_run_keeps_it(self, workspace, outcome, run_id):
+        before = _native_paused(workspace)
+        _run_hook(_native(_native_abort(outcome, run_id), NATIVE_ABORT), workspace)
+        assert _load_row(workspace, "sess-native") == before
+
+    def test_a_completed_verdict_clears_the_gate_row(self, workspace):
+        assert _native_step(workspace)["pending_gate"] == "review"
+        verdict = {"chain_id": NATIVE_CHAIN, "gate_verdict": {"overall": "PASS", "rationale": "ok"}}
+        _run_hook(_native([{"type": "text", "text": "Execution complete."}], verdict), workspace)
+        assert _load_row(workspace, "sess-native") is None
+
+    def test_chain_completion_clears_the_row(self, workspace):
+        _native_step(workspace)
+        done = "Final answer.\n\n---\nChain: chain-quick_decision#1\n✓ Chain complete (3/3)"
+        _run_hook(_native([{"type": "text", "text": done}], {"chain_id": NATIVE_CHAIN}), workspace)
+        assert _load_row(workspace, "sess-native") is None
+
+    @pytest.mark.parametrize(
+        "tool_input", [{"command": ">>other"}, {"chain_id": "chain-other#1"}], ids=["no-chain", "other-chain"]
+    )
+    def test_an_unrelated_prompt_run_keeps_the_tracked_pause(self, workspace, tool_input):
+        before = _native_paused(workspace)
+        other = [{"type": "text", "text": "**Review Required**\n\n**Gates**: code-quality\n\n→ Progress 1/2"}]
+        _run_hook(_native(other, tool_input), workspace)
+        assert _load_row(workspace, "sess-native") == before
+
+    def test_the_paused_runs_own_step_still_replaces_its_row(self, workspace):
+        _native_paused(workspace)  # positive control: the guard keys on the chain, not on any reply
+        _run_hook(_native([{"type": "text", "text": "→ Progress 2/3"}], {"chain_id": NATIVE_CHAIN}), workspace)
+        row = _load_row(workspace, "sess-native")
+        assert row["current_step"] == 2 and "conversation_pause" not in row
+
+
+class TestPauseIdentityAndGuidance:
+    def _lib(self):
+        sys.path.insert(0, str(HOOKS_LIB))
+        try:
+            import session_state
+
+            return session_state
+        finally:
+            sys.path.remove(str(HOOKS_LIB))
+
+    @pytest.mark.parametrize("missing", ["organization_id", "workspace_id", "run_id"])
+    def test_a_partial_identity_is_none_not_a_crash(self, missing):
+        full = {
+            "run_id": "r",
+            "chain_id": "c",
+            "organization_id": None,
+            "workspace_id": "w",
+            "continuity_scope_id": "w",
+        }
+        lib = self._lib()
+        assert lib.exact_run_identity(full) == full
+        assert lib.exact_run_identity({k: v for k, v in full.items() if k != missing}) is None
+
+    def test_unconfirmed_shows_the_calls_and_retained_keeps_the_claim(self):
+        lib = self._lib()
+        identity = {"run_id": "r", "chain_id": "chain-demo#1", "organization_id": None}
+        identity |= {"workspace_id": "w", "continuity_scope_id": "w"}
+        paused = {"chain_id": "chain-demo#1", "run_identity": identity, "conversation_pause": {"kind": "conversation"}}
+        unconfirmed = lib.format_pause_directive({**paused, "pause_custody": "unconfirmed"})
+        assert 'prompt_engine(chain_id:"chain-demo#1", gate_action:"resume")' in unconfirmed
+        assert 'gate_action:"abort"' in unconfirmed and "not confirmed live" in unconfirmed
+        retained = lib.format_pause_directive({**paused, "pause_custody": "retained"})
+        assert retained.endswith(lib.PAUSE_RECOVERY_GUIDANCE) and 'gate_action:"resume"' not in retained

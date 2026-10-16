@@ -11,6 +11,9 @@ Parses the response to:
 4. Track a conversation pause from an applied `conversation_control` packet only, read from the
    structured content in whichever shape the host sends (`read_tool_response`); reply text (and the
    structured `message`, which carries the recovery token) is never stored.
+5. Clear the tracked run on an abort whose `run_control` outcome is `cancelled`, and on a completion
+   marker in the reply text. Every read of `tool_response` goes through `read_tool_response`: under
+   Claude Code no MCP payload carries `isError`, so the absence of an error is the success signal.
 """
 
 import json
@@ -95,6 +98,25 @@ def _apply_control_packet(session_id: str, request_id: str, packet: dict) -> Non
     save_session_state(session_id, state)
 
 
+def _abort_cancelled_tracked_run(session_id: str, request_id: str, structured: dict | None) -> bool:
+    """Whether an abort reply's `run_control` says this conversation's tracked run is cancelled.
+
+    Only `cancelled` releases the run; `release-incomplete` still holds verify-loop state and
+    `not-applied` changed nothing. The reply text cannot decide: a failed release leads with the
+    same "Chain Cancelled" words, and natively the text is not even sent beside the packet.
+    """
+    packet = structured.get("run_control") if structured is not None else None
+    if not isinstance(packet, dict) or packet.get("action") != "abort" or packet.get("outcome") != "cancelled":
+        return False
+    chain_id = packet.get("chainId")
+    if not request_id or not isinstance(chain_id, str):
+        return False
+    if not _matches_tracked_run(session_id, request_id, chain_id, require_named=True):
+        return False
+    identity = exact_run_identity((load_session_state(session_id) or {}).get("run_identity"))
+    return identity is None or packet.get("runId") in (None, identity["run_id"])
+
+
 def _matches_tracked_run(session_id: str, request_id: str, response_id: str, *, require_named: bool = False) -> bool:
     """Bind a terminal response to this conversation's tracked run before clearing it."""
     tracked = load_session_state(session_id) if session_id else None
@@ -140,10 +162,9 @@ def main():
 
     # A rejected tool response cannot change the previously tracked run, even when its
     # explanation quotes a completion marker or an attempted resolution parameter.
-    _, structured, is_error = read_tool_response(tool_response)
+    content, structured, is_error = read_tool_response(tool_response)
     if is_error is True:
         sys.exit(0)
-    succeeded = isinstance(tool_response, dict) and tool_response.get("isError") is False
     request_id = tool_input.get("chain_id", "") if isinstance(tool_input, dict) else ""
     request_id = request_id if isinstance(request_id, str) else ""
 
@@ -155,38 +176,22 @@ def main():
         sys.exit(0)
     if isinstance(tool_input, dict) and tool_input.get("gate_action") in ("pause", "resume"):
         sys.exit(0)  # a pause or resume reply without its packet proves neither
-
-    # Parse response for chain/gate state
-    if isinstance(tool_response, dict):
-        content = tool_response.get("content", "")
-        # Handle array of content blocks
-        if isinstance(content, list):
-            content = " ".join(block.get("text", "") if isinstance(block, dict) else str(block) for block in content)
-    else:
-        content = str(tool_response)
+    if isinstance(tool_input, dict) and tool_input.get("gate_action") == "abort":
+        # An abort reply decides by its run_control packet alone and never saves a snapshot.
+        if _abort_cancelled_tracked_run(session_id, request_id, structured):
+            clear_session_state(session_id)
+        sys.exit(0)
 
     state = parse_prompt_engine_response(content)
 
     if not state:
-        abort_match = re.match(r"^🛑 \*\*Chain Cancelled\*\*: `([^`\n]+)`(?:\n|$)", content)
-        abort_succeeded = (
-            succeeded
-            and isinstance(tool_input, dict)
-            and tool_input.get("gate_action") == "abort"
-            and bool(request_id)
-            and abort_match is not None
-            and abort_match.group(1) == request_id
-            and _matches_tracked_run(session_id, request_id, request_id, require_named=True)
-        )
-        completed = bool(COMPLETION_MARKER.search(content))
         verdict_completed = (
-            succeeded
-            and isinstance(tool_input, dict)
+            isinstance(tool_input, dict)
             and bool(tool_input.get("gate_verdict"))
-            and completed
+            and bool(COMPLETION_MARKER.search(content))
             and _matches_tracked_run(session_id, request_id, "")
         )
-        if abort_succeeded or verdict_completed:
+        if verdict_completed:
             clear_session_state(session_id)
         sys.exit(0)
 
@@ -200,13 +205,19 @@ def main():
     # discriminator.
     run_is_complete = bool(COMPLETION_MARKER.search(content))
     if run_is_complete and not state.get("pending_gate") and not state.get("pending_shell_verify"):
-        if succeeded and _matches_tracked_run(session_id, request_id, response_id):
+        if _matches_tracked_run(session_id, request_id, response_id):
             clear_session_state(session_id)
         sys.exit(0)
 
     # Extract chain_id from tool_input (higher priority than regex parsing)
     if request_id:
         state["chain_id"] = request_id
+
+    # A prompt run for another chain (or none) during a discussion must not erase the paused run's
+    # pause and exact identity; only that run's own replies change its row.
+    tracked = load_session_state(session_id) if session_id else None
+    if tracked and "conversation_pause" in tracked and state.get("chain_id", "") != tracked.get("chain_id"):
+        sys.exit(0)
 
     # Save state for this session
     save_session_state(session_id, state)

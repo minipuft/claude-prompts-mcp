@@ -119,10 +119,10 @@ PAUSE_RECOVERY_GUIDANCE = (
 
 def exact_run_identity(raw: object) -> RunIdentity | None:
     """`raw` as a complete RunIdentity, or None when any field is missing or mistyped."""
-    if not isinstance(raw, dict):
+    if not isinstance(raw, dict) or not all(key in raw for key in RunIdentity.__annotations__):
         return None
     texts = [raw.get(key) for key in ("run_id", "chain_id", "continuity_scope_id")]
-    scopes = [raw.get(key, "") for key in ("organization_id", "workspace_id")]
+    scopes = [raw.get(key) for key in ("organization_id", "workspace_id")]
     if not all(isinstance(value, str) and value for value in texts):
         return None
     if not all(value is None or isinstance(value, str) for value in scopes):
@@ -167,28 +167,46 @@ def holds_pause_exemption(state: ChainState | None, bound: RunIdentity | None) -
     )
 
 
+def _paused_chain_id(state: ChainState) -> str:
+    identity = exact_run_identity(state.get("run_identity"))
+    return identity["chain_id"] if identity else state.get("chain_id", "")
+
+
 def pause_recovery_guidance(state: ChainState | None) -> str | None:
-    """Recovery guidance for a pause no live server is confirmed to hold; never an adoption."""
-    if state and "conversation_pause" in state and state.get("pause_custody") != "owned":
+    """Recovery guidance for a tracked pause that grants no exemption; never an adoption.
+
+    A retained pause (its server stopped) is claimed with the handoff token. Any other unowned or
+    unbound pause is unconfirmed, not refused: the explicit resume and abort calls are shown, and
+    the server decides whether either applies.
+    """
+    if not state or "conversation_pause" not in state:
+        return None
+    if holds_pause_exemption(state, exact_run_identity(state.get("run_identity"))):
+        return None
+    if state.get("pause_custody") == "retained":
         return PAUSE_RECOVERY_GUIDANCE
-    return None
+    return (
+        "The server holding this paused workflow is not confirmed live. Resume it explicitly with "
+        f'prompt_engine(chain_id:"{_paused_chain_id(state)}", gate_action:"resume") or end it with '
+        'gate_action:"abort"; the server checks either call. It does not resume on its own.'
+    )
 
 
 def format_pause_directive(state: ChainState | None) -> str | None:
     """The one instruction every hook renders while this conversation's run is paused, or None.
 
     An owned exact pause gets discussion plus the explicit resume/abort calls; any other tracked
-    pause gets the recovery guidance. Either way it replaces the continue, fix and verdict
+    pause gets `pause_recovery_guidance`. Either way it replaces the continue, fix and verdict
     instructions, which a paused run refuses until an explicit resume.
     """
     if not state or "conversation_pause" not in state:
         return None
-    identity = exact_run_identity(state.get("run_identity"))
-    chain_id = identity["chain_id"] if identity else state.get("chain_id", "")
+    chain_id = _paused_chain_id(state)
     step, total = state.get("current_step", 0), state.get("total_steps", 0)
     head = f"Workflow paused for conversation{f' at step {step} of {total}' if step and total else ''}: `{chain_id}`."
-    if not holds_pause_exemption(state, identity):
-        return f"{head} {PAUSE_RECOVERY_GUIDANCE}"
+    recovery = pause_recovery_guidance(state)
+    if recovery is not None:
+        return f"{head} {recovery}"
     return (
         f"{head} Discuss with the user; resume explicitly with "
         f'prompt_engine(chain_id:"{chain_id}", gate_action:"resume") or end it with gate_action:"abort".'
@@ -250,11 +268,16 @@ def read_tool_response(tool_response: object) -> tuple[str, dict | None, bool | 
     Claude Code (measured on 2.1.299) hands an MCP result over as a LIST of `{type, text}` blocks
     when it has no structuredContent, and as a JSON STRING of the structuredContent object itself
     when it has one -- no wrapper, no `content`, no `isError`; that shape's text is the object's
-    `message`. Built-in tools, other hosts and tests send a dict `{content, isError, structuredContent}`.
+    `message`. Built-in tools send their own dict (Bash: `{stdout, stderr, interrupted, ...}`, whose
+    text is stdout then stderr); other hosts and tests send a dict `{content, isError, structuredContent}`.
     `is_error` is None when the host gives no signal, which no MCP payload under Claude Code does.
+    This is the one reader of `tool_response` (test_tool_response_reads.py enforces it).
     """
     if isinstance(tool_response, dict):
         structured, flag = tool_response.get("structuredContent"), tool_response.get("isError")
+        streams = [tool_response.get(key) for key in ("stdout", "stderr")]
+        if "content" not in tool_response and any(isinstance(stream, str) for stream in streams):
+            return "\n".join(stream for stream in streams if isinstance(stream, str) and stream), None, None
         text = _block_text(tool_response.get("content", ""))
         return text, structured if isinstance(structured, dict) else None, flag if isinstance(flag, bool) else None
     if isinstance(tool_response, list):
