@@ -33,13 +33,15 @@ def parse_hook_input() -> dict:
         return {}
 
 
-def get_active_ralph_session(hook_session_id: str | None = None) -> str | None:
+def get_active_ralph_session(hook_session_id: str) -> str | None:
     """
-    Get the currently active Ralph session ID.
+    Get the host session's active Ralph session ID.
 
-    Checks verify-state.db (source of truth for Ralph sessions).
-    When hook_session_id is provided, scopes lookup to that client's state.
+    Reads the one verify-state.db row keyed by the host session id (the source of
+    truth for Ralph sessions). A hook with no session id has no row to read.
     """
+    if not hook_session_id:
+        return None
     state = load_verify_active_state(hook_session_id)
     if not state:
         return None
@@ -95,7 +97,7 @@ def main():
         sys.exit(0)
 
     # Only track during active Ralph sessions (scoped to this client)
-    ralph_session = get_active_ralph_session(session_id or None)
+    ralph_session = get_active_ralph_session(session_id)
     if not ralph_session:
         # No active Ralph session, no tracking needed
         sys.exit(0)

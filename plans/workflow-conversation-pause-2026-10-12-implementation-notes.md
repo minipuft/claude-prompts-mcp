@@ -310,3 +310,7 @@ post-prompt-engine reads text through `read_tool_response` (no `str(list)`); `su
 - **DEV-T3-3 (planner):** the T3.5 brief named the concurrent writer as server-only while C2 edited hooks files; the three failures T3.5 saw were C2's fixtures in flight.
 - **T3.5a (new row):** the None-to-all store paths remain for two callers outside T3.5's files.
 - **Owner question raised:** workflow shell-verification loops have never been enforced at Stop natively — the hook read `WHERE session_id = <client session id>`, which never matched a server key — and after this row they are enforced only for a run this session paused, because only pause/resume packets record `run_identity` and the next ordinary step drops it.
+
+### T3.5a accepted (2026-10-15)
+
+`clear_verify_active_state` deleted (only the round-trip test called it); `load_verify_active_state` kept because it is imported downstream, with a None/empty session id now returning None instead of any row. **Contract note:** `hooks/lib/*` module API is in the Public API Contract; this narrows a call that returned an arbitrary row. `gemini-prompts/hooks/ralph-context-tracker.py:46` calls it with no argument and would silently stop tracking after it syncs this library — named in the P3 PR body; the downstream change is an external-repo action awaiting the owner (no autonomous submission). `make_verify_state` nests `sessionId` under `state` while the tracker reads it top-level (finding, no runtime mismatch measured).

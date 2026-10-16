@@ -329,45 +329,91 @@ class TestConcurrentSessionIsolation:
 
 
 class TestVerifyStateSingleSlot:
-    """verify-state.db uses a single-row table (id=1).
-
-    This means only one Ralph verification loop is active at a time.
-    These tests verify the serialization behavior.
-    """
+    """verify-state.db keeps one row per session key, read and deleted by that exact key."""
 
     def test_save_and_load_round_trip(self, patch_workspace):
-        """Verify state can be saved and loaded."""
+        """Verify state can be saved, loaded and deleted under its session key."""
         from verify_active_store import (
-            clear_verify_active_state,
+            delete_verify_row,
             load_verify_active_state,
             save_verify_active_state,
         )
 
         state = make_verify_state(command="npm test", iteration=2, max_iterations=5)
-        save_verify_active_state(state)
+        save_verify_active_state(state, "host-A")
 
-        loaded = load_verify_active_state()
+        loaded = load_verify_active_state("host-A")
         assert loaded is not None
         assert loaded["config"]["command"] == "npm test"
         assert loaded["state"]["iteration"] == 2
 
-        clear_verify_active_state()
-        assert load_verify_active_state() is None
+        delete_verify_row("host-A")
+        assert load_verify_active_state("host-A") is None
+
+    def test_another_sessions_row_is_neither_read_nor_deleted(self, patch_workspace):
+        """A missing id reads nothing, and deleting session A leaves session B's row byte-identical."""
+        import sqlite3
+
+        from verify_active_store import (
+            delete_verify_row,
+            get_verify_state_db_path,
+            load_verify_active_state,
+            save_verify_active_state,
+        )
+
+        save_verify_active_state(make_verify_state(command="npm test", session_id="A"), "host-A")
+        save_verify_active_state(make_verify_state(command="cargo test", session_id="B"), "host-B")
+
+        def rows():
+            conn = sqlite3.connect(str(get_verify_state_db_path()))
+            try:
+                query = "SELECT session_id, state_json, updated_at FROM verify_active_state"
+                return {key: (raw, at) for key, raw, at in conn.execute(query)}
+            finally:
+                conn.close()
+
+        before = rows()
+        assert set(before) == {"host-A", "host-B"}
+        assert load_verify_active_state(None) is None
+        assert load_verify_active_state("") is None
+        with pytest.raises(ValueError):
+            delete_verify_row("")
+        assert rows() == before
+
+        delete_verify_row("host-A")
+        assert load_verify_active_state("host-A") is None
+        assert rows() == {"host-B": before["host-B"]}
+
+    def test_tracker_reads_only_the_host_sessions_row(self, patch_workspace):
+        """ralph-context-tracker resolves the host session's own row; no id means no tracking."""
+        from verify_active_store import save_verify_active_state
+
+        spec = importlib.util.spec_from_file_location("ralph_context_tracker", HOOKS_DIR / "ralph-context-tracker.py")
+        tracker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tracker)
+
+        save_verify_active_state({"sessionId": "ralph-A", "config": {"command": "npm test"}}, "host-A")
+        save_verify_active_state({"sessionId": "ralph-B", "config": {"command": "cargo test"}}, "host-B")
+
+        assert tracker.get_active_ralph_session("host-A") == "ralph-A"
+        assert tracker.get_active_ralph_session("host-B") == "ralph-B"
+        assert tracker.get_active_ralph_session("host-C") is None
+        assert tracker.get_active_ralph_session("") is None
 
     def test_second_save_overwrites_first(self, patch_workspace):
-        """Writing a new verify state replaces the previous one (single slot)."""
+        """Writing a new verify state under the same key replaces the previous one."""
         from verify_active_store import (
             load_verify_active_state,
             save_verify_active_state,
         )
 
         state_1 = make_verify_state(command="npm test", iteration=1)
-        save_verify_active_state(state_1)
+        save_verify_active_state(state_1, "host-A")
 
         state_2 = make_verify_state(command="cargo test", iteration=5)
-        save_verify_active_state(state_2)
+        save_verify_active_state(state_2, "host-A")
 
-        loaded = load_verify_active_state()
+        loaded = load_verify_active_state("host-A")
         assert loaded["config"]["command"] == "cargo test"
         assert loaded["state"]["iteration"] == 5
 
@@ -389,9 +435,9 @@ class TestVerifyStateSingleSlot:
                 "task_path": "/tmp/task.md",
             },
         )
-        save_verify_active_state(state)
+        save_verify_active_state(state, "host-A")
 
-        loaded = load_verify_active_state()
+        loaded = load_verify_active_state("host-A")
         assert loaded["state"]["delegation"]["method"] == "subagent_delegation"
         assert loaded["state"]["delegation"]["task_id"] == "task-abc12345"
 

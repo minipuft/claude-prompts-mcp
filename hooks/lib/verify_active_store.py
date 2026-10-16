@@ -93,12 +93,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 
 
 def load_verify_active_state(session_id: str | None = None) -> dict[str, Any] | None:
-    """Load verify-active state from SQLite.
+    """Load the verify-active state stored under exactly `session_id`.
 
-    Args:
-        session_id: If provided, load state for this specific session.
-                    If None, load the first active row (any session).
+    An empty or missing id names no row, so it returns None; it never falls back to
+    some other session's row.
     """
+    if not session_id:
+        return None
     db_path = get_verify_state_db_path()
     if not db_path.exists():
         return None
@@ -106,15 +107,10 @@ def load_verify_active_state(session_id: str | None = None) -> dict[str, Any] | 
     try:
         conn = _connect()
         _ensure_schema(conn)
-        if session_id:
-            row = conn.execute(
-                "SELECT state_json FROM verify_active_state WHERE session_id = ?",
-                (session_id,),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT state_json FROM verify_active_state LIMIT 1",
-            ).fetchone()
+        row = conn.execute(
+            "SELECT state_json FROM verify_active_state WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
         conn.close()
         if row is None:
             return None
@@ -200,27 +196,6 @@ def save_verify_active_state(state: dict[str, Any], session_id: str = "") -> Non
             """,
             (session_id, json.dumps(state)),
         )
-        conn.commit()
-        conn.close()
-    finally:
-        _release_lock()
-
-
-def clear_verify_active_state(session_id: str | None = None) -> None:
-    """Clear verify-active state from SQLite.
-
-    Args:
-        session_id: If provided, clear only this session's state.
-                    If None, clear ALL rows (used for full cleanup).
-    """
-    _acquire_lock()
-    try:
-        conn = _connect()
-        _ensure_schema(conn)
-        if session_id:
-            conn.execute("DELETE FROM verify_active_state WHERE session_id = ?", (session_id,))
-        else:
-            conn.execute("DELETE FROM verify_active_state")
         conn.commit()
         conn.close()
     finally:
