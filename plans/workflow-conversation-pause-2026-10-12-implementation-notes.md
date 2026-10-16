@@ -322,3 +322,7 @@ The integration driver gained `isAlive`, `liveAtLaunch` (earlier PIDs still aliv
 - **R-T4.1-TERMINAL → T4.1a:** a conversation resume on a cancelled run returns the ordinary completed-run reply with isError false; the contract's "refuse truthfully" means an error refusal.
 - **For T4.3:** the token appears in `structuredContent.message` by design (the reply text mirror Claude Code shows the model), never inside `conversation_control` or `run_control`; docs must say "never in the packet", not "never in structured content".
 - **Findings (no rows):** a cancelled row keeps its pause record and a non-null token (inert: a claim is refused); the plan row's "in-process" label and "mock persistence" plant were not in the brief (every snapshot here is process-written).
+
+### T4.2 accepted (2026-10-15)
+
+Runner `server/tests/e2e/claims-conformance.test.ts`; the phase-guard answer is anchored once and aliased. The YAML driver reads text only, so abort asserts the cancelled text, not `run_control` (T4.1 covers the packet). Finding: the paused-run guard is also what makes resume mean "clear the pause" — without it a resume falls into the pipeline and advances. **DEV-T4-1 (planner):** T4.3 is dispatched directly rather than through `>>documentation_change`, because the accepted rows fix every fact the docs state; the brief carries the docs standards.
