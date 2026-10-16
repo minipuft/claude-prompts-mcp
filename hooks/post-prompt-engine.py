@@ -11,7 +11,10 @@ Parses the response to:
 4. Track a conversation pause from an applied `conversation_control` packet only, read from the
    structured content in whichever shape the host sends (`read_tool_response`); reply text (and the
    structured `message`, which carries the recovery token) is never stored.
-5. Clear the tracked run on an abort whose `run_control` outcome is `cancelled`, and on a completion
+5. Record the exact run behind every tracked chain step (`run_identity`), so Stop can find that
+   run's verification loop: kept across the same chain's steps, otherwise resolved from the one live
+   `chain_sessions` row for the chain id, and absent when that is ambiguous.
+6. Clear the tracked run on an abort whose `run_control` outcome is `cancelled`, and on a completion
    marker in the reply text. Every read of `tool_response` goes through `read_tool_response`: under
    Claude Code no MCP payload carries `isError`, so the absence of an error is the success signal.
 """
@@ -24,6 +27,7 @@ from pathlib import Path
 # Add hooks lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
+from db_reader import resolve_run_identity
 from session_state import (
     UNKNOWN_INTERRUPT_LABEL,
     ChainState,
@@ -96,6 +100,18 @@ def _apply_control_packet(session_id: str, request_id: str, packet: dict) -> Non
     state.update({"chain_id": identity["chain_id"], "run_identity": identity})
     state["current_step"], state["total_steps"] = int(step.get("current") or 0), int(step.get("total") or 0)
     save_session_state(session_id, state)
+
+
+def _step_identity(chain_id: str, tracked: ChainState | None) -> RunIdentity | None:
+    """The exact run behind an ordinary step of `chain_id`.
+
+    The identity already tracked for this chain (a control packet or an earlier step recorded it)
+    is kept; a step of another chain drops it, and resolves its own from the projection.
+    """
+    kept = exact_run_identity((tracked or {}).get("run_identity"))
+    if kept is not None and kept["chain_id"] == chain_id and (tracked or {}).get("chain_id") == chain_id:
+        return kept
+    return resolve_run_identity(chain_id) if chain_id else None
 
 
 def _abort_cancelled_tracked_run(session_id: str, request_id: str, structured: dict | None) -> bool:
@@ -218,6 +234,10 @@ def main():
     tracked = load_session_state(session_id) if session_id else None
     if tracked and "conversation_pause" in tracked and state.get("chain_id", "") != tracked.get("chain_id"):
         sys.exit(0)
+
+    identity = _step_identity(state.get("chain_id", ""), tracked)
+    if identity is not None:
+        state["run_identity"] = identity
 
     # Save state for this session
     save_session_state(session_id, state)

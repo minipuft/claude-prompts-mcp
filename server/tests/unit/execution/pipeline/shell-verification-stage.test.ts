@@ -1,7 +1,13 @@
-import { describe, expect, jest, test } from '@jest/globals';
+import { afterAll, beforeAll, describe, expect, jest, test } from '@jest/globals';
+
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
 import { ShellVerificationStage } from '../../../../src/engine/execution/pipeline/stages/17-shell-verification-stage.js';
+import { SqliteEngine } from '../../../../src/infra/database/index.js';
+import { ChainSessionStore } from '../../../../src/modules/chains/manager.js';
 
 import type {
   ShellVerifyExecutor,
@@ -50,6 +56,12 @@ const createMockSessionService = (): ChainSessionService =>
     getPendingShellVerification: jest.fn().mockReturnValue(undefined),
     clearPendingShellVerification: jest.fn().mockResolvedValue(undefined),
     getSession: jest.fn().mockReturnValue(undefined),
+    // The store's namespace is unscoped here, so a run's stored scope is its continuity alone.
+    getConversationControlScope: (continuityScopeId: string) => ({
+      organizationId: null,
+      workspaceId: null,
+      continuityScopeId,
+    }),
   }) as unknown as ChainSessionService;
 
 /** The advance owner a released hold moves the run through (`GateVerdictProcessor`). */
@@ -967,6 +979,101 @@ describe('ShellVerificationStage', () => {
       // otherwise. Now the reply never forms; the failure does instead.
       await expect(stage.execute(context)).rejects.toThrow(/could not be cleared|Failed to clear/);
       expect(context.response).toBeUndefined();
+    });
+  });
+
+  // R-V3: one run has one scope. The request's organization falls back to its workspace, while the
+  // run is stored with the organization the store was given (none), and the Stop hook compares the
+  // loop row's scope to the run's exactly. Real store, real schema: the row must carry the scope
+  // the registry wrote to `chain_runs` and projected to `chain_sessions`, not the request's.
+  describe("the loop row records the run's stored scope, not the request's (R-V3)", () => {
+    let tmpDir: string;
+    let engine: SqliteEngine;
+    let store: ChainSessionStore;
+
+    beforeAll(async () => {
+      tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'verify-loop-scope-'));
+      engine = await SqliteEngine.getInstance(createLogger(), {
+        dbPath: path.join(tmpDir, 'runtime-state', 'state.db'),
+      });
+      await engine.initialize();
+      store = new ChainSessionStore(
+        createLogger(),
+        { buildChainVariables: jest.fn().mockReturnValue({}) } as never,
+        { cleanupIntervalMs: 60_000, defaultScope: { workspaceId: 'cwd' } },
+        engine
+      );
+    });
+
+    afterAll(async () => {
+      await store.cleanup();
+      await engine.shutdown();
+      await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    test('a request scoped with an organization arms the row under the stored run scope', async () => {
+      const requestScope = { continuityScopeId: 'cwd', workspaceId: 'cwd', organizationId: 'cwd' };
+      const run = await store.createSession(
+        'uuid-live',
+        'chain-live#1',
+        2,
+        {},
+        {
+          ...requestScope,
+          nodes: [
+            { id: 'n1', promptId: 'p', stepName: 'One' },
+            { id: 'n2', promptId: 'p', stepName: 'Two' },
+          ],
+        }
+      );
+      const stateManager = createMockStateManager();
+      const stage = new ShellVerificationStage(
+        createMockExecutor(false),
+        stateManager,
+        store,
+        createAdvanceOwner(),
+        createLogger()
+      );
+      const context = new ExecutionContext({ chain_id: run.chainId });
+      context.state.session.resumeSessionId = 'uuid-live';
+      context.state.identity.continuityScopeId = 'cwd';
+      context.state.identity.context = { organizationId: 'cwd', workspaceId: 'cwd' } as never;
+      context.state.gates.pendingShellVerification = {
+        gateId: 'shell-verify-inline',
+        shellVerify: { command: 'false', loop: true },
+        attemptCount: 0,
+        maxAttempts: 5,
+        previousResults: [],
+      };
+      // Precondition: the request scope carries the organization the run is stored without.
+      expect(context.getScopeOptions()).toEqual(requestScope);
+
+      await stage.execute(context);
+
+      const [identity] = (stateManager.writeWorkflowState as jest.Mock).mock.calls[0] as [
+        { runSessionId: string; scope: Record<string, unknown> },
+      ];
+      const [stored] = engine.query<{
+        organization_id: string | null;
+        workspace_id: string | null;
+      }>('SELECT organization_id, workspace_id FROM chain_runs WHERE session_id = ?', [
+        'uuid-live',
+      ]);
+      const [projected] = engine.query<{
+        organization_id: string | null;
+        workspace_id: string | null;
+        continuity_scope_id: string;
+      }>(
+        'SELECT organization_id, workspace_id, continuity_scope_id FROM chain_sessions WHERE chain_id = ?',
+        [run.chainId]
+      );
+      expect(stored).toEqual({ organization_id: null, workspace_id: 'cwd' });
+      expect(projected).toEqual({ ...stored, continuity_scope_id: 'cwd' });
+      expect(identity.runSessionId).toBe('uuid-live');
+      expect(identity.scope).toEqual({
+        continuityScopeId: projected?.continuity_scope_id,
+        workspaceId: projected?.workspace_id,
+      });
     });
   });
 });

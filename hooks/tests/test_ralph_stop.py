@@ -128,6 +128,29 @@ class TestFormatErrorFeedback:
         feedback = format_error_feedback(result, verify_state)
         assert "assertion error" in feedback
 
+    def test_a_host_row_reason_is_pinned_byte_for_byte(self):
+        result = {"exitCode": 1, "stderr": "boom", "stdout": "", "timedOut": False}
+        verify_state = {"config": {"command": "false", "maxIterations": 3}, "state": {"iteration": 1}}
+
+        assert format_error_feedback(result, verify_state) == (
+            "## Shell Verification FAILED (Iteration 2/3)\n\n"
+            "**Command:** `false`\n"
+            "**Exit Code:** 1\n\n"
+            "### Error Output\n```\nboom\n```\n\n"
+            "Please fix the issues and continue working. Verification will run again when you finish."
+        )
+
+    def test_a_workflow_row_reason_names_the_run_and_prints_the_stored_count(self):
+        result = {"exitCode": 1, "stderr": "boom", "stdout": "", "timedOut": False}
+        verify_state = {"config": {"command": "false", "maxIterations": 3}, "state": {"iteration": 1}}
+        run = {"chain_id": "chain-x#1", "current_step": 2, "total_steps": 3}
+
+        feedback = format_error_feedback(result, verify_state, run)
+
+        assert "Iteration 1/3" in feedback
+        assert "Workflow `chain-x#1`, step 2/3." in feedback
+        assert 'prompt_engine(chain_id="chain-x#1")' in feedback
+
 
 class TestEnsureRalphSessionId:
     def test_extracts_from_state(self):
@@ -481,6 +504,20 @@ class TestStopReadsRowsByExactIdentity:
         assert commands == []
         assert self.rows() == before
 
+    def test_a_failing_workflow_row_names_its_run_and_the_host_row_keeps_its_count(self):
+        self.workflow("run-a", "ws-a", "cmd-a")
+
+        output, _ = self.stop(self.chain())
+        assert output is not None
+        assert "Iteration 1/10" in output["reason"]
+        assert f"Workflow `{self.CHAIN}`, step 2/3." in output["reason"]
+
+        self.store.delete_verify_row("workflow-run-run-a")
+        self.store.save_verify_active_state(self.loop("host-cmd"), self.HOST)
+        output, _ = self.stop(self.chain())
+        assert output is not None
+        assert "Iteration 2/10" in output["reason"] and "Workflow `" not in output["reason"]
+
     def test_an_independent_host_row_still_enforces_while_the_run_is_parked(self):
         self.workflow("run-a", "ws-a", "cmd-a")
         self.store.save_verify_active_state(self.loop("host-cmd"), self.HOST)
@@ -532,6 +569,7 @@ class TestStopReadsRowsByExactIdentity:
         assert commands == []
         assert output is not None and output["decision"] == "block"
         assert "could not be attributed" in output["reason"] and why in output["reason"]
+        assert f"Workflow `{self.CHAIN}`, step 2/3" in output["reason"]
         assert self.rows() == before
 
     def test_an_unreadable_row_at_the_runs_key_fails_closed(self):
@@ -605,3 +643,178 @@ class TestStopReadsRowsByExactIdentity:
             hook_mod.save_verify_state({}, "")
         with pytest.raises(ValueError):
             self.store.delete_verify_row("")
+
+
+class TestStopEnforcesAnUnpausedWorkflowRun:
+    """V1: an ordinary chain step records its run's exact identity from the `chain_sessions`
+    projection, so Stop reaches that run's verification row without any pause having happened.
+
+    Real hooks end to end: post-prompt-engine runs as a subprocess against a state.db carrying the
+    server's own DDL; ralph-stop's main reads the identity it recorded, and only the command runs
+    through a spy. Two scopes holding one chain id record no identity, so neither row is borrowed.
+    """
+
+    CHAIN = "chain-x#1"
+    HOST = "sess-v1"
+
+    @pytest.fixture(autouse=True)
+    def _workspace(self, patch_workspace, monkeypatch):
+        import sqlite3
+
+        import verify_active_store
+        from test_db_reader import _extract_server_schema
+
+        monkeypatch.setenv("RALPH_SESSION_ID", "unchanged")
+        monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+        self.store = verify_active_store
+        self.root = patch_workspace["root"]
+        self.db = sqlite3.connect(self.root / "runtime-state" / "state.db")
+        self.db.executescript(_extract_server_schema()[0])
+        yield
+        self.db.close()
+
+    def project(self, run, scope, pid=None, chain=CHAIN):
+        doc = {"sessionId": run, "chainId": chain, "currentStep": 1, "totalSteps": 3, "runStatus": "working"}
+        self.db.execute(
+            "INSERT INTO chain_sessions (run_owner_pid, workspace_id, continuity_scope_id, chain_id, state) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (str(pid or os.getpid()), scope, scope, chain, json.dumps(doc)),
+        )
+        self.db.commit()
+
+    def step(self, content, tool_input):
+        import subprocess
+
+        payload = {"tool_name": "mcp__claude-prompts__prompt_engine", "session_id": self.HOST}
+        payload |= {"tool_input": tool_input, "tool_response": {"content": content, "isError": False}}
+        hook = HOOKS_DIR / "post-prompt-engine.py"
+        done = subprocess.run(
+            [sys.executable, str(hook)], input=json.dumps(payload), capture_output=True, text=True, timeout=30
+        )
+        assert done.returncode == 0, done.stderr
+        from session_state import load_session_state
+
+        return load_session_state(self.HOST)
+
+    def identity(self, run, scope):
+        return {"run_id": run, "chain_id": self.CHAIN, "organization_id": None} | {
+            "workspace_id": scope,
+            "continuity_scope_id": scope,
+        }
+
+    def seed_loops(self):
+        """A pending loop row per run, filed under the key the server derives from its UUID."""
+        for run, scope in (("run-a", "ws-a"), ("run-b", "ws-b")):
+            row = TestStopReadsRowsByExactIdentity.loop(
+                f"cmd-{run[-1]}",
+                sessionId=f"workflow-run-{run}",
+                runSessionId=run,
+                chainId=self.CHAIN,
+                scope={"continuityScopeId": scope, "workspaceId": scope},
+            )
+            self.store.save_verify_active_state(row, f"workflow-run-{run}")
+
+    def stop(self):
+        import contextlib
+        import io
+
+        commands = []
+
+        def spy(command, timeout, working_dir=None):
+            commands.append(command)
+            return {"passed": False, "exitCode": 1, "stdout": "", "stderr": "FAIL", "timedOut": False}
+
+        captured = io.StringIO()
+        with patch("sys.stdin", io.StringIO(json.dumps({"session_id": self.HOST}))):
+            with patch.object(hook_mod, "run_verification", autospec=True, side_effect=spy):
+                with patch.object(
+                    hook_mod, "load_context_isolation_config", autospec=True, return_value={"enabled": False}
+                ):
+                    with contextlib.redirect_stdout(captured):
+                        with pytest.raises(SystemExit):
+                            hook_mod.main()
+        output = captured.getvalue().strip()
+        return (json.loads(output) if output else None), commands
+
+    def test_an_ordinary_step_binds_the_run_and_stop_enforces_its_pending_loop(self):
+        self.project("run-a", "ws-a")
+        self.seed_loops()
+
+        first = self.step(f"Step 1 of 3 {self.CHAIN}", {"command": ">>x"})
+        assert first["run_identity"] == self.identity("run-a", "ws-a") and "conversation_pause" not in first
+
+        decision, commands = self.stop()
+
+        assert commands == ["cmd-a"]
+        assert decision["decision"] == "block" and "Shell Verification FAILED" in decision["reason"]
+
+    def test_a_later_step_of_the_run_keeps_the_identity_and_another_chain_drops_it(self):
+        self.project("run-a", "ws-a")
+        self.step(f"Step 1 of 3 {self.CHAIN}", {"command": ">>x"})
+        self.db.execute("DELETE FROM chain_sessions")  # kept, not re-resolved
+        self.db.commit()
+
+        second = self.step(f"Step 2 of 3 {self.CHAIN}", {"chain_id": self.CHAIN})
+        assert (second["current_step"], second["run_identity"]) == (2, self.identity("run-a", "ws-a"))
+
+        other = self.step("Step 1 of 2 chain-y#1", {"command": ">>y"})
+        assert other["chain_id"] == "chain-y#1" and "run_identity" not in other
+        self.project("run-y", "ws-a", chain="chain-y#1")
+        again = self.step("Step 2 of 2 chain-y#1", {"chain_id": "chain-y#1"})
+        assert again["run_identity"]["run_id"] == "run-y"
+
+    @pytest.mark.parametrize(
+        ("row_scope", "enforced"),
+        [
+            # The run's stored scope, as the server writes the row now: no organization.
+            ({"continuityScopeId": "cwd", "workspaceId": "cwd"}, True),
+            # The request scope an earlier writer recorded, its organization falling back to the
+            # workspace: not the run's scope, so it stays refused exactly like a foreign row.
+            ({"continuityScopeId": "cwd", "workspaceId": "cwd", "organizationId": "cwd"}, False),
+        ],
+    )
+    def test_the_loop_is_enforced_only_under_the_runs_stored_scope(self, row_scope, enforced):
+        self.project("run-a", "cwd")  # organization_id NULL, as the run registry stores it
+        row = TestStopReadsRowsByExactIdentity.loop(
+            "false", sessionId="workflow-run-run-a", runSessionId="run-a", chainId=self.CHAIN, scope=row_scope
+        )
+        self.store.save_verify_active_state(row, "workflow-run-run-a")
+        tracked = self.step(f"Step 1 of 3 {self.CHAIN}", {"command": ">>x"})
+        assert tracked is not None and tracked.get("run_identity") == self.identity("run-a", "cwd")
+
+        decision, commands = self.stop()
+
+        assert decision is not None and decision["decision"] == "block"
+        if enforced:
+            assert commands == ["false"] and "Shell Verification FAILED" in decision["reason"]
+        else:
+            assert commands == [] and "scope is not the run's scope" in decision["reason"]
+            assert f"Workflow `{self.CHAIN}`, step 1/3" in decision["reason"]
+            assert f'prompt_engine(chain_id="{self.CHAIN}")' in decision["reason"]
+
+    def test_two_scopes_with_one_chain_id_bind_nothing_and_stop_runs_neither_loop(self):
+        self.project("run-a", "ws-a")
+        self.project("run-b", "ws-b")
+        self.seed_loops()
+        before = {key: self.store.load_verify_rows([key]) for key in ("workflow-run-run-a", "workflow-run-run-b")}
+
+        tracked = self.step(f"Step 1 of 3 {self.CHAIN}", {"command": ">>x"})
+        assert "run_identity" not in tracked
+
+        decision, commands = self.stop()
+
+        assert commands == []
+        # Without an identity the workflow rows are not this conversation's: the run itself blocks.
+        assert decision["decision"] == "block" and "Shell Verification" not in decision["reason"]
+        assert {key: self.store.load_verify_rows([key]) for key in before} == before
+
+    def test_a_dead_owners_row_binds_nothing_and_its_loop_is_not_run(self):
+        from test_db_reader import _dead_pid
+
+        self.project("run-a", "ws-a", pid=_dead_pid())
+        self.seed_loops()
+
+        tracked = self.step(f"Step 1 of 3 {self.CHAIN}", {"command": ">>x"})
+        assert "run_identity" not in tracked
+
+        assert self.stop() == (None, [])
