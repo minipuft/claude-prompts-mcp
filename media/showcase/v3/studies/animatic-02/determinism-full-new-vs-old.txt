@@ -1,0 +1,5 @@
+control: two writes of the same frame -> pass; 1 pixel 1 level off (rasteriser noise) -> pass; 40 pixels 1 level off (noise) -> pass; 60 pixels 40 levels off -> FAIL (60 beyond 2 levels, allowance 5); every pixel 3 levels off -> FAIL (57600 beyond 2 levels); 1 pixel 40 levels off -> tolerated (inside the allowance of 5)
+  ok   same frame list: 1950 frames in a, 1950 in b
+  14 of 1950 common frames differ at all; 12 of those inside the tolerance (at most 194 pixels beyond 2 levels, 56 levels the largest difference)
+  FAIL identical within tolerance: 1948 of 1950 common frames match within 2 levels on all but 0.01 % of the pixels; over the bar at 841 (102 pixels beyond 2 levels, allowance 23, largest 22), 1111 (194 pixels beyond 2 levels, allowance 23, largest 41)
+FAIL: determinism - 1 of 2 checks failed: identical within tolerance
