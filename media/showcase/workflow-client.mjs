@@ -250,8 +250,23 @@ class WorkflowClient {
         const raw = await this.awaitReply(replyPath);
         let args = { chain_id: chainId, user_response: raw };
         if (raw.trimStart().startsWith("{")) args = { chain_id: chainId, ...JSON.parse(raw) };
+        // A reply carrying BOTH the step's answer and a gate verdict in one call is accepted by the
+        // server without running the step's shell checks (measured 2026-10-16, ~/.cache/gate-diag2:
+        // the verdict opens a review nobody graded), and the engine's own `Next:` footer advertises
+        // that form. The driver never sends it: the answer goes alone, and a verdict that rode with
+        // it is held and sent on its own once the server renders the review.
+        let heldVerdict = null;
+        if (args.user_response !== undefined && args.gate_verdict !== undefined) {
+          heldVerdict = args.gate_verdict;
+          args = { chain_id: chainId, user_response: args.user_response };
+          await writeFile(path.join(mailbox, nn + "-split.md"), "answer sent alone; the verdict follows once the review renders (the combined form skips shell checks)\n");
+        }
         const label = "drive-step-" + nn + (refusals ? "-retry" + refusals : "");
         result = await this.call(label, "prompt_engine", args, { allowError: true });
+        if (!result.isError && heldVerdict && /Gate Review Required|GATE_REVIEW|Shell Verification Results/i.test(textOf(result))) {
+          await writeFile(path.join(mailbox, nn + "-review.md"), textOf(result) + "\n");
+          result = await this.call(label + "-verdict", "prompt_engine", { chain_id: chainId, gate_verdict: heldVerdict }, { allowError: true });
+        }
         if (!result.isError) break;
         await writeFile(path.join(mailbox, nn + "-error.md"), textOf(result) + "\n");
         await rename(replyPath, path.join(mailbox, nn + "-reply.refused-" + (refusals + 1) + ".md"));
