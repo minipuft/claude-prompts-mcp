@@ -248,3 +248,7 @@ gate-enforce denies paused mutations for an owned exact pause with resume-or-abo
 
 - **Unverified premise → T3.2p:** whether Claude Code's PostToolUse `tool_response` for an MCP tool carries `structuredContent`. Fails closed if not (nothing tracked), but the pause tracking would not work natively.
 - **Findings (no rows):** the text path's `save_session_state` overwrites the whole row, so the first ordinary step after a resume drops `run_identity` — harmless, since the next pause arrives with its own packet; check 2 denies a call to any chain id while a pending gate is tracked (pre-existing); `RUN_CONTROLS` is hand-written because the generated verb file carries parameter names, not enum values; the paused deny text lives in gate-enforce and T3.4's shared directive may absorb it.
+
+### B2 — #493 CI failure (2026-10-15)
+
+CI on #493: 1 of 1869 failed on both Node versions — `tests/integration/database/transaction-lock-mode` expects deferred step persists to write first; T1.2's `protectedPauseIds()` SELECT ran first. Fixed in the DELETE's own predicate (a nonterminal row whose state carries `conversationPause`, guarded by `json_valid`), shared with `deleteRunsForOwners`. No pause row's own check covered `tests/integration/database`; and a full `tests/integration` run after a src edit needs a fresh `npm run build`, or `structured-gate-verdict-flow` refuses 24 cases as stale dist.
