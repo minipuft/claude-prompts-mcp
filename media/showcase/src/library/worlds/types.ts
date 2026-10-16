@@ -2,6 +2,7 @@ import type {FC} from 'react';
 import type {Joints} from '../motion';
 import type {Blocking} from '../animation/blocking';
 import type {Emitter} from '../Radiance';
+import type {RoleMap} from '../tokens';
 
 export type WorldId = 'home' | 'crayon' | 'line' | 'shaded';
 
@@ -61,12 +62,12 @@ export type WorldContract = {
  * contract's field so a crossing can lerp it. All three default to the world at rest. `blocking` is where everything stands (default: the test
  * scene, v3/blocking/test-scene.json).
  */
-export type SceneProps = {frame: number; pose: Joints; emitter?: Emitter; reduce?: number; shift?: [number, number]; field?: string; parts?: PropsPart[]; blocking?: Blocking};
+export type SceneProps = {frame: number; pose: Joints; emitter?: Emitter; reduce?: number; shift?: [number, number]; field?: string; parts?: PropsPart[]; blocking?: Blocking; /** The roles the beat's `actors` are filled with (the beat's colour pair, `lightPlan.pairRoles`); omitted = the settled palette's. */ actorRoles?: RoleMap};
 
 /**
- * The scene's drawn parts. Home draws the first three; the others add `arch`, `gates` and `floor` (the blocking's). A scene's `parts`
+ * The scene's drawn parts. Home draws `companions`, `architecture`, `blocks` and the beat's `actors` (the props its blocking names: box, bubble, gadget, stalk, structure); the others add `arch`, `gates` and `floor` (the blocking's). A scene's `parts`
  * prop intersects with the world's own list, so a measurement can drop `floor` and leave every world otherwise untouched.
  */
-export type PropsPart = 'companions' | 'architecture' | 'blocks' | 'arch' | 'gates' | 'floor';
+export type PropsPart = 'companions' | 'architecture' | 'blocks' | 'actors' | 'arch' | 'gates' | 'floor';
 
 export type World = {contract: WorldContract; Scene: FC<SceneProps>};

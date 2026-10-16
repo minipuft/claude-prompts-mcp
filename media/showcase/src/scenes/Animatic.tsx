@@ -5,7 +5,7 @@ import {settled} from '../library/tokens';
 import {worlds, type WorldId} from '../library/worlds';
 import {Crossing} from '../library/worlds/Crossing';
 import {frameState, reelCamera, reelChart, SIZE, timeline} from './animaticPlan';
-import {hueOf} from './lightPlan';
+import {hueOf, pairRoles} from './lightPlan';
 import {jointParents} from '../library/cast/humanPose';
 import {poseAt} from '../library/motion';
 import {FlatFigure, reducedLine} from '../library/worlds/parts';
@@ -21,7 +21,8 @@ const worldId = (id: string): WorldId => {
  * (holds only, no inbetweens), crossings through the line world inside their windows, the camera on ones over the top, and the emitter in the
  * shot's hue. A caption strip names the world, the beat and the frame; it is review chrome over the picture, not part of the film, so the probe
  * renders turn it off (`--props='{"captions":false}'`): it covers the figure's boots, which the loop-closure probe needs to see.
- * Everything is read from `animaticPlan`, the module the exposure sheet reads.
+ * Everything is read from `animaticPlan`, the module the exposure sheet reads. The props a beat's blocking names (`blocking.actors`) are drawn by the worlds as placeholders (`worlds/actors.tsx`);
+ * `omit` leaves the named ones out, which is how the props' positive control renders a beat without its box (`probe-props.py`).
  *
  * `layers="figure"` draws only the human, flat and filled, at the beat's blocking under the camera, on the field colour, in every frame including a crossing's: the drawing's pose
  * and nothing else (no world, no props, no light, no fill morph, no caption). The twos and hold probes measure the drawn layer on this pass (`Animatic65Figure`), so a crossing needs no
@@ -29,7 +30,7 @@ const worldId = (id: string): WorldId => {
  * `reducedLine` of the line contract at full reduction, the figure of `LineScene` without its arch, gates, floor and props): the loop probe measures closure and clipping on it, because the
  * line world's floor grid runs through the figure and into the crop's border and merges with its outline in the full frame.
  */
-export const Animatic: React.FC<{captions?: boolean; layers?: 'all' | 'figure' | 'figure-line'}> = ({captions = true, layers = 'all'}) => {
+export const Animatic: React.FC<{captions?: boolean; layers?: 'all' | 'figure' | 'figure-line'; omit?: string[]}> = ({captions = true, layers = 'all', omit = []}) => {
   const frame = useCurrentFrame();
   const s = frameState(frame);
   if (layers === 'figure-line') {
@@ -51,12 +52,14 @@ export const Animatic: React.FC<{captions?: boolean; layers?: 'all' | 'figure' |
     );
   }
   const hue = hueOf(s.beat.id);
+  const actorRoles = pairRoles(hue);
+  const blocking = omit.length && s.blocking.actors ? {...s.blocking, actors: Object.fromEntries(Object.entries(s.blocking.actors).filter(([name]) => !omit.includes(name)))} : s.blocking;
   const scene = s.crossing ? (
-    <Crossing from={worldId(s.crossing.fromWorld)} to={worldId(s.crossing.toWorld)} frame={frame} start={s.crossing.start} length={s.crossing.length} chart={s.heldChart} lead={[56, 0]} blocking={s.blocking} emitter={s.emitter} />
+    <Crossing from={worldId(s.crossing.fromWorld)} to={worldId(s.crossing.toWorld)} frame={frame} start={s.crossing.start} length={s.crossing.length} chart={s.heldChart} lead={[56, 0]} blocking={blocking} emitter={s.emitter} actorRoles={actorRoles} />
   ) : (
     (() => {
       const {Scene} = worlds[worldId(s.beat.world)];
-      return <Scene frame={frame} pose={s.pose} emitter={s.emitter} blocking={s.blocking} />;
+      return <Scene frame={frame} pose={s.pose} emitter={s.emitter} blocking={blocking} actorRoles={actorRoles} />;
     })()
   );
   return (

@@ -60,6 +60,10 @@ export const parseLightContract = (json: unknown): LightContract => {
   }
   if (!Array.isArray(c.crossings)) throw new Error('light: crossings must be a list');
   for (const x of c.crossings) if (!Array.isArray(x.path) || x.path.length < 2 || !x.path.every(isHex)) throw new Error(`light: crossing ${x.from} -> ${x.to} needs a path of at least two #rrggbb colours`);
+  for (const x of c.crossings) {
+    const dips = pathDips(x.path);
+    if (dips.length) throw new Error(`light: crossing ${x.from} -> ${x.to} dips on the way (sample ${dips[0]![0]}: ${dips[0]![1]}); a crossing path holds value and chroma`);
+  }
   return c;
 };
 
@@ -120,15 +124,49 @@ export const hueDistance = (a: number, b: number): number => {
   return Math.min(d, 360 - d);
 };
 
+/**
+ * How far a crossing path's value (the largest channel, 0..1) may sit below the lower of its two endpoints' before the path is called a dip: one twentieth of the range. It is a bound on the
+ * path, not a measurement fitted to a frame: a straight blend of two colours is never below its lower endpoint in value, so a path that is has been pulled through something darker (a
+ * grey, a tan) on the way. Chroma (largest channel minus smallest, 0..1) gets one 8-bit level, the rounding of a #rrggbb sample, and no more: it may not fall below the lower endpoint's.
+ */
+export const PATH_VALUE_MARGIN = 0.05;
+
+const valueOf = (c: string): number => Math.max(...hex(c)) / 255;
+const chromaOf = (c: string): number => (Math.max(...hex(c)) - Math.min(...hex(c))) / 255;
+
+/** The samples of a path that dip: `[index, what]` for each interior sample whose value is more than `PATH_VALUE_MARGIN` under the lower endpoint's, or whose chroma is under the lower endpoint's. Empty for a held path. */
+export const pathDips = (path: string[]): [number, string][] => {
+  if (path.length < 3) return [];
+  const first = path[0]!, last = path[path.length - 1]!;
+  const valueFloor = Math.min(valueOf(first), valueOf(last)) - PATH_VALUE_MARGIN, chromaFloor = Math.min(chromaOf(first), chromaOf(last)) - 1 / 255;
+  const dips: [number, string][] = [];
+  path.forEach((c, i) => {
+    if (i === 0 || i === path.length - 1) return;
+    if (valueOf(c) < valueFloor) dips.push([i, `value ${valueOf(c).toFixed(2)} under the floor ${valueFloor.toFixed(2)}`]);
+    else if (chromaOf(c) < chromaFloor) dips.push([i, `chroma ${chromaOf(c).toFixed(2)} under the lower endpoint's ${(chromaFloor).toFixed(2)}`]);
+  });
+  return dips;
+};
+
 /** `n` colours from `a` to `b` with the hue walking the shortest arc (never through a third hue the other way round) and saturation and lightness blended straight, so the path never greys. */
 export const hslPath = (a: string, b: string, n = 5): string[] => {
   if (a.toLowerCase() === b.toLowerCase()) return [a, b];
   const [h0, s0, l0] = toHsl(a), [h1, s1, l1] = toHsl(b);
   const raw = (((h1 - h0) % 360) + 540) % 360 - 180;
   const arc = raw === -180 ? 180 : raw;
+  const valueFloor = Math.min(valueOf(a), valueOf(b)) - PATH_VALUE_MARGIN * 0.5, chromaFloor = Math.min(chromaOf(a), chromaOf(b));
   return Array.from({length: n}, (_, i) => {
     const t = i / (n - 1);
-    return i === 0 ? a : i === n - 1 ? b : fromHsl((h0 + arc * t + 360) % 360, s0 + (s1 - s0) * t, l0 + (l1 - l0) * t);
+    if (i === 0) return a;
+    if (i === n - 1) return b;
+    const h = (h0 + arc * t + 360) % 360;
+    let s = s0 + (s1 - s0) * t, l = l0 + (l1 - l0) * t;
+    // held: raise the blended sample to the path's floors (saturation first, at the blended lightness, then lightness) so the path is never muddier or darker than its endpoints allow
+    for (let k = 0; k < 100 && (valueOf(fromHsl(h, s, l)) < valueFloor || chromaOf(fromHsl(h, s, l)) < chromaFloor); k++) {
+      if (s < 1) s = Math.min(1, s + 0.01);
+      else l = Math.min(1, l + 0.01);
+    }
+    return fromHsl(h, s, l);
   });
 };
 

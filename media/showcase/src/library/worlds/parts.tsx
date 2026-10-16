@@ -10,6 +10,7 @@ import type {Blocking} from '../animation/blocking';
 import type {PartName} from '../motion/partsRig';
 import {boil, onTwos, type Joints} from '../motion';
 import {Frame} from '../props/Frame';
+import {ActorsLayer} from './actors';
 import {Radiance, type Emitter} from '../Radiance';
 import {Sprite} from '../Sprite';
 import {identity, settled, type RoleMap} from '../tokens';
@@ -101,7 +102,7 @@ export const StageStrokes: React.FC<{parts: PropsPart[]; ink: string; width: num
 };
 
 /** Codex and Clawd (identity pigments, C1), the frame (architecture) and the two kit blocks (the join), drawn flat as SVG. */
-export const PropsLayer: React.FC<{look: PropsLook; frame: number; contract: WorldContract; parts?: PropsPart[]; opacity?: number; blocking?: Blocking}> = ({look, frame, contract, parts = ['companions', 'architecture', 'blocks'], opacity = 1, blocking = STAGE}) => {
+export const PropsLayer: React.FC<{look: PropsLook; frame: number; contract: WorldContract; parts?: PropsPart[]; opacity?: number; blocking?: Blocking; actorRoles?: RoleMap}> = ({look, frame, contract, parts = ['companions', 'architecture', 'blocks'], opacity = 1, blocking = STAGE, actorRoles}) => {
   if (opacity <= 0) return null;
   const outline = look.ink ?? 'transparent';
   const lwFor = (scale: number) => (look.lw === null ? {} : {'--lw': `${look.lw / scale}px`} as React.CSSProperties);
@@ -123,6 +124,11 @@ export const PropsLayer: React.FC<{look: PropsLook; frame: number; contract: Wor
             <KitBlock width={b.width} height={b.height} />
           </Sprite>
         ))}
+      {parts.includes('actors') && (
+        <div className="wl-flat" style={{position: 'absolute', inset: 0}}>
+          <ActorsLayer blocking={blocking} outline={outline} fill={look.fill} roles={actorRoles} style={lwFor} />
+        </div>
+      )}
       {parts.includes('companions') && (
         <>
           <Sprite roles={look.fill ? identity.codex : clear} outline={outline} x={blocking.codex.x} y={blocking.codex.y} scale={blocking.codex.scale} style={lwFor(blocking.codex.scale)}>
@@ -253,12 +259,12 @@ export const reducedLine = (c: WorldContract, lineWorld: WorldContract, reduce: 
  * The props through a crossing: at rest the world's own look; with `reduce` the fills fade out (opacity) while the strokes are redrawn at the
  * contract's contour width in the line colour and stay, so the lines are never cross-dissolved with a second render of the same props.
  */
-export const PropsStack: React.FC<{contract: WorldContract; lineWorld: WorldContract; reduce: number; native: PropsLook; frame: number; parts?: PropsPart[]; blocking?: Blocking}> = ({contract, lineWorld, reduce, native, frame, parts, blocking = STAGE}) => {
+export const PropsStack: React.FC<{contract: WorldContract; lineWorld: WorldContract; reduce: number; native: PropsLook; frame: number; parts?: PropsPart[]; blocking?: Blocking; actorRoles?: RoleMap}> = ({contract, lineWorld, reduce, native, frame, parts, blocking = STAGE, actorRoles}) => {
   const r = clamp01(reduce);
-  if (r === 0) return <PropsLayer look={native} frame={frame} contract={contract} parts={parts} blocking={blocking} />;
+  if (r === 0) return <PropsLayer look={native} frame={frame} contract={contract} parts={parts} blocking={blocking} actorRoles={actorRoles} />;
   return (
     <>
-      <PropsLayer look={{...native, ink: null, lw: null}} frame={frame} contract={contract} parts={parts} opacity={1 - r} blocking={blocking} />
+      <PropsLayer look={{...native, ink: null, lw: null}} frame={frame} contract={contract} parts={parts} opacity={1 - r} blocking={blocking} actorRoles={actorRoles} />
       <PropsLayer look={{fill: false, ink: reducedLine(contract, lineWorld, r, blocking).colour, lw: contourPx(contract, blocking), shading: false}} frame={frame} contract={contract} parts={parts} blocking={blocking} />
     </>
   );

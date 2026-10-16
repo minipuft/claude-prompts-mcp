@@ -11,6 +11,14 @@ apart (C18); every timeline crossing has a contract crossing on the same window 
 to the to-beat's, in one direction, never grey. Control first: two emitters live on one frame, a 1-frame handoff and a hue path via green must each
 fail, the clean contract must pass.
 
+Both modes also hold a crossing's VALUE and CHROMA (C15, "palette travel never dips to grey"). On the contract: no interior sample of a path may sit more than VALUE_MARGIN (0.05 of the range) under
+the lower of the two endpoints' value (largest channel), nor under the lower endpoint's chroma (largest channel minus smallest, one 8-bit level of rounding). On frames: the dominant colour of each frame
+of a crossing window (the most common 16-level colour of the picture) is read, and the same two floors are taken from the window's first and last readable frames, the chroma floor with CHROMA_SLACK
+8-bit levels of rasteriser noise. The control is a path (and a frame sequence) through a tan and through a grey, which must be refused, beside a hue walk between the same endpoints that holds both floors, which must pass.
+A straight blend of two colours never leaves the range between them in VALUE, so the value floor cannot refuse a plain fade from a light colour to a dark one however muddy it reads in between: it refuses
+a path pulled below both ends. Between two saturated ends of different hue a straight blend does lose CHROMA (orange to blue goes through a grey at its middle, the C15 case), which the chroma floor refuses;
+between a light colour and a near-black one the lower endpoint has almost no chroma, so that floor is met by a plain fade too (v3/studies/animatic-02.md C15: value 0.84, 0.35, 0.12 at 1135, 1150, 1160).
+
 Frames mode has two measures. The light's own hue (`radiance_hue`: the chroma-weighted mean hue of the brightest region outside the fixed fills, the region the eye trace finds, when it sits on the emitter; a pale tint keeps its hue, which the saturated-pixel check below cannot see once an emitter is lifted to a luma floor)
 must sit inside the beat's pair on every frame the emitter is drawn, and across a crossing walk from the from-beat's pair to the to-beat's without a detour (2 readable frames in the first third of the window and 2 in the last, else the crossing is not measurable on frames and says so). And per frame: the saturated pixels (chroma >= 60, max >= 64) minus the fixed colours (v3/roles.json, `npm run roles`: the identity pigments, the human's, kit's and gadget's role fills and each world's own texture colours; a neighbourhood of 28 RGB) must sit inside the beat's hue pair +-15
 degrees (at most --max-outside of them outside, and at least --min-outside-px). Across a crossing window the dominant hue (2 degree bins) starts in
@@ -18,8 +26,9 @@ the from-beat's pair, ends in the to-beat's and moves monotonically between (5 d
 30 saturated pixels are skipped and counted. Control first: a frame with an off-pair saturated patch and a crossing whose hue detours through
 green must fail, the clean sequence must pass.
 """
-import argparse, os, sys
+import argparse, os, sys, tempfile
 import numpy as np
+from PIL import Image
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from probe_common import *
 from fixtures import make
@@ -30,6 +39,58 @@ MIN_SAT_PX = 30
 # `check_path_monotone`'s default, which was set on the dominant hue of thousands of saturated pixels. A detour through a third hue is 16 degrees behind the start on its first sample (the control) and 130-180 over the path.
 PATH_SLACK = 10.0
 GLOW_CHROMA, GLOW_MIN_PX = 8, 40      # the light's own hue needs this much chroma summed over this many pixels of its region
+# C15, a crossing holds value and chroma: the same constants as src/library/animation/light.ts (PATH_VALUE_MARGIN) so the contract and the frames are read by one rule
+VALUE_MARGIN = 0.05
+CHROMA_SLACK = 4        # 8-bit levels: the dominant colour of a frame is a mean of one 16-level bin, whose max and min channels each carry the rasteriser's 2 levels
+DOM_BIN = 16
+
+
+def _value(rgb): return max(rgb) / 255.0
+def _chroma(rgb): return (max(rgb) - min(rgb)) / 255.0
+
+
+def path_dips(colours, chroma_slack=1.0, interior_only=True):
+    """Samples of a colour sequence (RGB triples) that leave the floors its endpoints set: value more than VALUE_MARGIN under the lower endpoint's, or chroma more than `chroma_slack` 8-bit levels under the
+    lower endpoint's. [(index, text)]; the endpoints themselves are the floors and never dip."""
+    if len(colours) < 3: return []
+    first, last = colours[0], colours[-1]
+    vf = min(_value(first), _value(last)) - VALUE_MARGIN; cf = min(_chroma(first), _chroma(last)) - chroma_slack / 255.0
+    out = []
+    for i, c in enumerate(colours):
+        if interior_only and i in (0, len(colours) - 1): continue
+        if _value(c) < vf: out.append((i, f"value {_value(c):.2f} under the floor {vf:.2f}"))
+        elif _chroma(c) < cf: out.append((i, f"chroma {_chroma(c):.2f} under the lower endpoint's {cf:.2f}"))
+    return out
+
+
+def dominant_colour(img):
+    """The mean colour of the most common DOM_BIN-level bin of the picture (RGB triple, 0-255)."""
+    px = img.reshape(-1, 3).astype(np.int32); q = px // DOM_BIN
+    key = (q[:, 0] * 256 + q[:, 1]) * 256 + q[:, 2]
+    vals, counts = np.unique(key, return_counts=True); k = vals[counts.argmax()]
+    return tuple(float(v) for v in px[key == k].mean(axis=0))
+
+
+def control_paths():
+    """(clean, tan, grey) paths between the same two saturated ends (orange, Turrell blue): a hue walk that keeps both floors, a walk pulled through a tan darker than both ends, a walk pulled through a grey as light as the ends but chromaless."""
+    a, b = hex_rgb("#e1750c"), hex_rgb("#0a51fb")
+    clean = [a, hex_rgb("#ff2a1a"), hex_rgb("#ff20c0"), hex_rgb("#a020ff"), b]
+    tan = [a, hex_rgb("#8c7a5c"), hex_rgb("#6f6248"), hex_rgb("#a020ff"), b]
+    grey = [a, hex_rgb("#e6e6e6"), hex_rgb("#e0e0e0"), hex_rgb("#dadada"), b]
+    return clean, tan, grey
+
+
+def check_crossing_frames(frames, tl):
+    """([(window, problem text)], [window not measurable], {window: (frames read, min value, min chroma, floors)}). Per crossing window, the dominant colour of every frame given, the floors from the first and last of them."""
+    probs, unmeasured, seen = [], [], {}
+    for w in tl["windows"]:
+        fs = sorted(f for f in frames if w["a"] <= f < w["b"])
+        if len(fs) < 3: unmeasured.append((w["a"], w["b"], len(fs))); continue
+        cols = [dominant_colour(load_rgb(frames[f])) for f in fs]
+        dips = path_dips(cols, CHROMA_SLACK)
+        seen[(w["a"], w["b"])] = (len(fs), min(_value(c) for c in cols), min(_chroma(c) for c in cols), (min(_value(cols[0]), _value(cols[-1])) - VALUE_MARGIN, min(_chroma(cols[0]), _chroma(cols[-1])) - CHROMA_SLACK / 255.0))
+        if dips: probs.append(((w["a"], w["b"]), f"crossing {w['a']}-{w['b']}: the dominant colour dips at frame {fs[dips[0][0]]} ({dips[0][1]}); {len(dips)} of {len(fs)} frames read dip"))
+    return probs, unmeasured, seen
 
 
 # ---------- contract mode ----------
@@ -106,6 +167,13 @@ def check_contract(light, tl, shots=None, min_chroma=24):
         ok, why = check_path_monotone(hues)
         if not ok: probs.append(f"crossing {w['from']!r} -> {w['to']!r}: hue detour, {why}")
     out.append(("crossing hue paths", not probs, "; ".join(probs) if probs else f"{len(tl['windows'])} crossings, each monotonic from the from-pair to the to-pair"))
+    probs = []
+    for w in tl["windows"]:
+        c = cl.get((w["from"], w["to"]))
+        if not c or not all(valid_hex(h) for h in (c.get("path") or [])): continue            # reported by the check above
+        dips = path_dips([hex_rgb(h) for h in c["path"]])
+        if dips: probs.append(f"crossing {w['from']!r} -> {w['to']!r}: sample {dips[0][0]} ({c['path'][dips[0][0]]}) dips, {dips[0][1]}")
+    out.append(("crossing value and chroma held", not probs, "; ".join(probs) if probs else f"{len(tl['windows'])} crossings hold value (within {VALUE_MARGIN} of the lower endpoint's) and chroma (not under the lower endpoint's)"))
     return out
 
 
@@ -202,8 +270,10 @@ def main():
             lc, t = make.light_contract(**kw); return [c for c in check_contract(lc, normalise_timeline(t), None, a.min_chroma) if not c[1]]
         lc, t = make.light_contract(); clean = [c for c in check_contract(lc, normalise_timeline(t), None, a.min_chroma) if not c[1]]
         ov, ti, de = failing(overlap=True), failing(tight=True), failing(detour=True)
-        pr.control(not clean and ov and ti and de and "two emitters" in ov[0][2] and de[0][0] == "crossing hue paths",
-                   f"two emitters live on one frame -> FAIL ({ov[0][2]}); handoff 1 frame apart -> FAIL; hue path via green -> FAIL; clean contract -> pass ({len(clean)} failures)")
+        cp_clean, cp_tan, cp_grey = control_paths(); d_clean, d_tan, d_grey = path_dips(cp_clean), path_dips(cp_tan), path_dips(cp_grey)
+        pr.control(not clean and ov and ti and de and "two emitters" in ov[0][2] and de[0][0] == "crossing hue paths" and not d_clean and d_tan and d_grey,
+                   f"two emitters live on one frame -> FAIL ({ov[0][2]}); handoff 1 frame apart -> FAIL; hue path via green -> FAIL; clean contract -> pass ({len(clean)} failures); "
+                   f"a path through a tan -> FAIL (sample {d_tan[0][0]}: {d_tan[0][1]}); through a grey -> FAIL (sample {d_grey[0][0]}: {d_grey[0][1]}); a hue walk between the same ends that holds both floors -> pass")
         tl = load_timeline(a.timeline); light = read_json(a.contract, "light contract")
         shots_path = a.shots or os.path.join(os.path.dirname(os.path.abspath(a.timeline)), "shots.json")
         shots = read_json(shots_path, "shots") if os.path.exists(shots_path) else None
@@ -225,6 +295,17 @@ def main():
                f"magenta patch off both pairs -> FAIL (frame {patch[0][0][0]}: {patch[0][0][1]} of {patch[0][0][2]} saturated pixels outside); hue detour through green across a crossing -> FAIL "
                f"({detour[1][0]}); clean sequence with identity, garment and kit-accent patches (all saturated, all off the pair) -> pass; a pale blue glow on the emitter reads {g_ok[0]:.0f} deg -> inside the blue pair, "
                f"the same glow in pale green reads {g_bad[0]:.0f} deg -> off it, a frame with no glow reads nothing")
+    cp_clean, cp_tan, cp_grey = control_paths()
+    def fade_frames(path, tmp):
+        os.makedirs(tmp); out = {}
+        for i, c in enumerate(path):
+            fn = os.path.join(tmp, f"element-{100 + i:03d}.png"); Image.fromarray(np.full((36, 64, 3), c, np.uint8)).save(fn); out[100 + i] = fn
+        return out
+    ctl_tl = {"windows": [{"a": 100, "b": 100 + len(cp_clean), "from": "x", "to": "y"}]}
+    with tempfile.TemporaryDirectory() as t:
+        cf_clean, cf_tan, cf_grey = (check_crossing_frames(fade_frames(p_, os.path.join(t, n_)), ctl_tl)[0] for p_, n_ in ((cp_clean, "clean"), (cp_tan, "tan"), (cp_grey, "grey")))
+    pr.control(not cf_clean and cf_tan and cf_grey,
+               f"a crossing whose frames pass through a tan -> FAIL ({cf_tan[0][1] if cf_tan else 'NOT REFUSED'}); through a grey -> FAIL ({cf_grey[0][1] if cf_grey else 'NOT REFUSED'}); a hue walk between the same ends that holds both floors -> pass")
     hexes = fixed_role_hexes(a.roles, plates=False); masks = (hexes, fixed_fill_hexes(a.roles), fixed_role_hexes(a.roles, sheets=True), plate_hexes(a.roles))
     tl = load_timeline(a.timeline); frames = list_frames(a.frames)
     tl, _, frames, shot_note = apply_shot(a, tl, None, frames)
@@ -247,7 +328,11 @@ def main():
     measured = len(tl["windows"]) - len(unmeasured)
     pr.check("crossing hue path", not probs, "; ".join(probs) if probs else f"{measured} of {len(tl['windows'])} crossings measured on frames move monotonically between pairs"
              + (f"; {len(unmeasured)} left too few measurable frames at one end (2 are needed in its first third and 2 in its last, and a frame needs {MIN_SAT_PX} saturated pixels outside the fixed fills and their blends; the line world in the middle has none by design): {[(u[0], u[1], f'{u[2]} in the first third, {u[3]} in the last') for u in unmeasured]}; only the light contract's path covers those (probe-colour.py --contract)" if unmeasured else ""))
-    pr.extra.update({"offPair": off, "glowOffPair": glow_off, "glowMeasured": glow_n, "crossingProblems": probs, "skipped": skipped})
+    cprobs, cunmeasured, cseen = check_crossing_frames(frames, tl)
+    pr.check("crossing value and chroma held", not cprobs, "; ".join(t for _, t in cprobs) if cprobs else
+             f"{len(cseen)} of {len(tl['windows'])} crossings hold value and chroma on their dominant colour: " + "; ".join(f"{a_}-{b_}: {n} frames read, lowest value {v:.2f} (floor {fl[0]:.2f}), lowest chroma {c:.3f} (floor {fl[1]:.3f})" for (a_, b_), (n, v, c, fl) in cseen.items())
+             + (f"; {len(cunmeasured)} with under 3 frames read: {cunmeasured}" if cunmeasured else ""))
+    pr.extra.update({"crossingHold": {f"{a_}-{b_}": {"frames": n, "minValue": v, "minChroma": c} for (a_, b_), (n, v, c, _) in cseen.items()}, "offPair": off, "glowOffPair": glow_off, "glowMeasured": glow_n, "crossingProblems": probs, "skipped": skipped})
     pr.finish(f"all measured frames sit inside their beat's hue pair; {measured} of {len(tl['windows'])} crossings measured on frames run without a detour ({skipped} frames skipped)")
 
 

@@ -50,9 +50,9 @@ export const archOutline = (a = STAGE.arch): [number, number][] => {
 };
 
 const ORIGINAL_PARTS: PropsPart[] = ['companions', 'architecture', 'blocks'];
-/** What each world draws. Home never includes the arch, the gates or the floor: its output is today's look, byte for byte. */
+/** What each world draws. Home never includes the arch, the gates or the floor, and draws `actors` only where the blocking names some: with none, its output is today's look, byte for byte. */
 export const WORLD_PARTS: Record<WorldId, PropsPart[]> = {
-  home: ORIGINAL_PARTS,
+  home: [...ORIGINAL_PARTS, 'actors'],
   crayon: [...ORIGINAL_PARTS, 'arch', 'gates', 'floor'],
   line: [...ORIGINAL_PARTS, 'arch', 'gates', 'floor'],
   shaded: [...ORIGINAL_PARTS, 'arch', 'gates', 'floor'],

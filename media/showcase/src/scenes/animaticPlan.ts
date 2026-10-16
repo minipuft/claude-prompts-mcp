@@ -11,19 +11,22 @@ import everythingAtOnce from '../../v3/blocking/everything-at-once.json';
 import homeSettle from '../../v3/blocking/home-settle.json';
 import programmingWorld from '../../v3/blocking/programming-world.json';
 import theFrame from '../../v3/blocking/the-frame.json';
+import s01Keys from '../../v3/keys/s01-arrival-overwhelm.json';
+import s01Poses from '../../v3/poses/s01-arrival-overwhelm.json';
 import s02Keys from '../../v3/keys/s02-cant-build-frame.json';
 import s02Layout from '../../v3/layouts/s02-cant-build-frame.json';
 import lightFile from '../../v3/light.json';
 import timelineFile from '../../v3/timeline.json';
 import {blockingAt, blockingTrack, emitterPointAt, parseBlocking, type Blocking} from '../library/animation/blocking';
 import {cameraAt, cameraFromLayout, lockedCamera, type Camera, type CameraPose} from '../library/animation/camera';
-import {heldDrawing, parseKeySheet, type FrameInfo, type KeySheet} from '../library/animation/keys';
+import {describeFrame, heldDrawing, parseKeySheet, type FrameInfo, type KeySheet} from '../library/animation/keys';
 import {coversTimeline, emitterIntensityAt, lightAt, lightTrack, lightTrackFromContract, parseLightContract} from '../library/animation/light';
 import {beatAt, crossingAt, type CrossingWindow, type Timeline, type TimelineBeat} from '../library/animation/timeline';
-import type {Key} from '../library/animation/track';
+import {quantise, type Key} from '../library/animation/track';
 import {crossingPhase, emitterStrength, type XState} from '../library/animation/xsheet';
-import {liftChart, liftPose} from '../library/cast/humanPose';
-import type {Joints, PoseChart} from '../library/motion';
+import {jointParents, liftChart, liftPose} from '../library/cast/humanPose';
+import {parsePoseSheet, poseChartFrom, poseKeySheet} from '../library/animation/pose';
+import {poseAt, type Joints, type PoseChart} from '../library/motion';
 import {hueOf} from './lightPlan';
 
 export const SIZE = {width: 1280, height: 720};
@@ -47,7 +50,24 @@ const blockingOnTimeline = blockingTrack(timeline.beats, blockingByBeat);
 
 /** The layout contracts and key sheets that exist, by shot. A shot with none gets the placeholders below. */
 const layouts: Record<string, Parameters<typeof cameraFromLayout>[0]> = {'s02-cant-build-frame': s02Layout};
-const keySheets: Record<string, KeySheet> = {'s02-cant-build-frame': parseKeySheet(s02Keys)};
+/**
+ * s01 has a pose sheet (v3/poses): its figure is PLAYED, the chart `poseChartFrom` builds over its key sheet, and `describeFrame` over the key sheet with the pose sheet's breakdowns says what each frame is. A shot with a key sheet and no pose sheet (s02)
+ * is HELD: each key for exactly the hold it declares and then the next, no inbetweens. A holds-only drawing of s01 gave its last key 260 frames against the 148 it declares, because the moves
+ * between its keys are not drawn, and `probe-holds` refused it; `poseChartFrom` also refuses a pose sheet whose keys are not the key sheet's, on the same frames.
+ */
+const s01Keys_ = parseKeySheet(s01Keys);
+const s01Poses_ = parsePoseSheet(s01Poses);
+const s01Sheet = poseKeySheet(s01Poses_, s01Keys_);
+/**
+ * What the animatic plays of it: the keys, their holds and the pose sheet's drawn breakdowns (every drawing of a move is a breakdown the exposure sheet has a row for). The shot render's finishing passes,
+ * a secondary lagging behind the body and a moving hold's drift, redraw the figure on frames no row accounts for; at the animatic's figure scale `probe-holds` read 89 of them on s01 as strays, so they are
+ * left to the shot's own render (`ShotS01`), which plays the whole chart.
+ */
+const playedCharts: Record<string, PoseChart> = (() => {
+  const {keys, breakdowns} = poseChartFrom(s01Poses_, s01Keys_, jointParents);
+  return {'s01-arrival-overwhelm': {keys, breakdowns}};
+})();
+const keySheets: Record<string, KeySheet> = {'s01-arrival-overwhelm': s01Sheet, 's02-cant-build-frame': parseKeySheet(s02Keys)};
 
 /** liftChart as a key sheet (rest / raise / settle), the placeholder for every shot whose key sheet is not drawn yet. */
 const placeholderSheet: KeySheet = {
@@ -127,7 +147,7 @@ export type FrameState = {
   emitter: {x: number; y: number; radius: number; color: string; intensity: number};
   /** The beat-local frame the key sheet is read at. */
   local: number;
-  /** The pose held on this frame (animatic: holds only, each key for exactly the hold it declares) and the single-key chart that holds it. */
+  /** The pose drawn on this frame (a held shot: each key for exactly the hold it declares; a played shot: its pose chart on twos) and the single-key chart that holds it. */
   pose: Joints;
   heldChart: PoseChart;
   drawing: string;
@@ -143,7 +163,13 @@ export const frameState = (frame: number): FrameState => {
   const own = shot ? keySheets[shot] : undefined;
   const sheet = own ?? placeholderSheet;
   const local = frame - (own ? shotStart(beat) : beat.start);
-  const held = heldDrawing(sheet, local);
+  const played = shot ? playedCharts[shot] : undefined;
+  // a played shot reads its pose from the chart on twos, as its own render does; a held one draws each key for the hold it declares
+  const q = Math.max(0, quantise(local, 2));
+  const held = played ? null : heldDrawing(sheet, local);
+  const info: FrameInfo = held ? held.info : describeFrame(sheet, q);
+  const pose = played ? poseAt(played, local, jointParents) : held!.key.joints;
+  const drawnFrom = held ? held.start : info.phase === 'key' && sheet.keys.some((k) => k.name === info.from && k.frame === q) ? q : -1;
   // The figure's placement (scale, x, y) is part of its drawing: it steps at a cut with the pose and never eases like a prop does, so the drawn layer changes only where the exposure sheet has a key.
   const blocking = {...blockingAt(blockingOnTimeline, frame), figure: blockingByBeat[beat.id]!.figure};
   const colour = lightAt(light, frame);
@@ -162,11 +188,11 @@ export const frameState = (frame: number): FrameState => {
       intensity: contract ? emitterIntensityAt(contract, beat.id, frame) : 0.9,
     },
     local,
-    pose: held.key.joints,
-    heldChart: {keys: [{frame: 0, joints: held.key.joints}]},
-    drawing: held.key.name,
-    drawnFrom: held.start,
-    chart: held.info,
+    pose,
+    heldChart: {keys: [{frame: 0, joints: pose}]},
+    drawing: info.phase === 'breakdown' ? `${info.from}>${info.to}` : info.from,
+    drawnFrom,
+    chart: info,
     sheet,
   };
 };

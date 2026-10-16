@@ -262,7 +262,7 @@ def light_contract(overlap=False, detour=False, tight=False):
         on, off = emit[b["id"]]
         e = {"anchor": "dial", "start": [0.4, 0.8], "end": [0.6, 0.5], "intensity": 0.8, "colour": pairs[b["id"]][0], "on": on, "off": off} if on is not None else None
         beats[b["id"]] = {"pair": {"radiance": pairs[b["id"]][0], "accent": pairs[b["id"]][1]}, "emitter": e, "radiance": "settled", "grain": "low"}
-    cr = [{"from": "a", "to": "b", "frames": [24, 36], "path": ["#0a51fb", "#a030e0", "#e03090", "#e1750c"]},
+    cr = [{"from": "a", "to": "b", "frames": [24, 36], "path": ["#0a51fb", "#8a20ff", "#ff2090", "#e1750c"]},
           {"from": "b", "to": "c", "frames": [60, 72], "path": ["#e1750c", "#e1750c"]}]
     if detour: cr[0]["path"] = ["#0a51fb", "#10b0a0", "#a030e0", "#e1750c"]   # swings to green, then back round to the end
     return {"beats": beats, "crossings": cr}, tl
