@@ -87,6 +87,8 @@ Chains persist across messages. You don't need to feed the entire history back t
   `workspace_id` on these storage rows is the server's launch namespace;
   `continuity_scope_id` identifies the request's run scope. Neither replaces process ownership
   in `run_owner_pid`. A missing request scope retains the existing legacy unfiltered policy.
+  A run paused for conversation is the one exception to PID scoping: it outlives its owner
+  ([Pausing a Run for Conversation](#pausing-a-run-for-conversation)).
 - **Resume**: Just provide `chain_id` + `user_response`.
   Preserve the full returned token, such as `chain-implementation_plan/plan_table#1`,
   including namespace segments and the run suffix. Reference admission does not normalize
@@ -141,6 +143,68 @@ A meaningful request scope must match the run before its token is used; a scope 
 the token and owner, so the original request scope can claim it. Request continuity is
 separate from the launch storage namespace and process owner. An effective unfiltered
 scope keeps legacy behavior; it does not replace either storage or ownership checks.
+A paused run is the exception to resuming in the same call: its claim stops at custody (below).
+
+### Pausing a Run for Conversation
+
+Sometimes the right next move is to talk a step through with the user rather than answer it.
+Without a separate state, anything the model sends during that discussion would be captured as the
+step's answer, graded, or used to advance the run. A conversation pause holds the run where it
+stands. Both calls are control calls that carry `chain_id` and nothing else:
+
+```
+prompt_engine(chain_id:"chain-research#1", gate_action:"pause")    # hold the run
+prompt_engine(chain_id:"chain-research#1", gate_action:"resume")   # end the hold
+```
+
+A pause changes none of the run's facts: the current step, captured answers, open reviews and
+their attempt counts, a pending shell verification and an owed detached report all stay as they
+were. It records `{kind:"conversation", nodeId, pausedAt}` beside them, plus a recovery token.
+
+- **Control calls only.** A `pause` or `resume` sent with `user_response`, `gate_verdict`,
+  `remainder`, `observations`, `command`, `workflow`, `force_restart`, `handoff`, `claim_token`,
+  `inputs`, `options` or `gates` is refused before anything changes. Presence decides, so an empty
+  string or `false` still counts as sent.
+- **While paused**, every other workflow call on the run is refused with the resume-or-abort
+  instruction, and nothing changes. Reads still work: `system_control` session list and inspect,
+  and the session resources, show the pause and what the run still owes, and reading does not
+  touch the run. Pausing again is idempotent and keeps the original pause.
+- **Busy.** A pause while a request on the run is still in flight is refused as retryable.
+- **Resume** clears only the pause and returns the step or review the run already owed,
+  unchanged. It captures, grades and advances nothing; answer the owed step in a separate call.
+  When the run is also held on a [blocking unknown](#blocking-unknown-interrupt), the first
+  resume clears the conversation pause and the unknown hold remains.
+- **Abort** ends a paused run like any other. Pausing or resuming a completed, failed or
+  cancelled run is refused as an error (`run-terminal`). Nothing resumes a pause implicitly: not
+  a timer, a reconnect, compaction or a restart.
+
+**Recovery when the server stops.** The pause reply's text carries a single-use recovery token
+(`Recovery token: hnd_…`). Pausing keeps a handoff token the run already has, or mints one. A
+paused run outlives its server: startup cleanup of a dead owner, the inactivity sweep and run
+history pruning all keep a nonterminal paused run, though they still remove an ordinary one. A new
+server does not take the run over by itself. Claim it from the scope it was paused in:
+
+```
+prompt_engine(claim_token:"hnd_…")
+```
+
+The claim stops at custody. The claiming server now holds the run, still paused, with nothing
+rendered or advanced, and the reply carries a fresh successor token, so the run stays recoverable
+through a second restart. The token you sent is spent. A claim from another organization,
+workspace or continuity scope is answered as an unknown token and changes nothing. Scope resolves
+the way run creation resolves it: a default launch derives its workspace from the working
+directory, so a replacement started in the same directory matches. Then resume or abort as usual.
+
+**Limits.** A pause changes server state only. It does not stop a shell command already running
+(a `shell_verify` check or a script tool) or an external or detached worker. A late detached
+result stays owed and can be submitted only after resume. The plugin hooks that act on a pause
+([hooks/README.md](../../hooks/README.md)) were measured against the payload Claude Code hands a
+PostToolUse hook; no other client behavior is claimed.
+
+Evidence: real STDIO and HTTP processes in
+[`structured-gate-verdict-flow.test.ts`](../../server/tests/integration/gates/structured-gate-verdict-flow.test.ts)
+and the `conversation-pause-*` cases in
+[`chain-lifecycle.yaml`](../../server/tests/e2e/conformance/chain-lifecycle.yaml).
 
 ## Step Identity
 

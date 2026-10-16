@@ -333,3 +333,7 @@ Runner `server/tests/e2e/claims-conformance.test.ts`; the phase-guard answer is 
 
 - **DEV-T4-2 (planner):** T4.1a's brief checked only the unit suite, and its change left T4.1's live-handoff integration case red (it still expected the ordinary "already complete" reply); T4.1b found it and fixed the assertion inside its own bound. A row changing a reply that an integration case pins needs that integration file in its own check.
 - **Accepted:** a resume carrying a chain_id this process does not hold is refused even if another live process owns it — recovery across processes goes through `claim_token`.
+
+### T4.3 accepted (2026-10-15)
+
+Pause sections added to chains-lifecycle.md and mcp-tools.md (both packets, outcome tables, "never inside the packet" with the `message` mirror stated), sqlite-persistence.md's "Live Run Ownership" rewritten so an ordinary run does not survive its owner's death and a paused one does, hooks/README.md updated for native payload shapes, custody, Stop and delegation. **Blind spots (accepted, no gate added):** no check catches a reintroduced "recovery requires the original live owner" sentence or a claim of native Stop proof (the row's fault lines expected comparisons that do not exist); `validate:documented-tool-actions` excludes `gate_action` values by design, so documented gate_action values are unchecked against the contract enum. Finding: a dead owner's `chain_sessions` row is deleted at the next server's startup, so hooks fall from `retained` to `unconfirmed` guidance then, while only a claim recovers the run.
