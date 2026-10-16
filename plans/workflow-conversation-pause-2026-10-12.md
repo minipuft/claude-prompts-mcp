@@ -19,7 +19,7 @@ tags: [hooks, workflows, contracts, execution]
 
 Goal: durable conversation pause with exact run/scope recovery and truthful hook guidance, landed before the 6.0.0 release is cut (owner, 2026-10-15).
 Slice: worktree `claude-prompts-mcp-pause`, branch `feat/conversation-pause` = main 5e703819 (#492) + the five accepted pause commits cherry-picked (fbba5bca, e865411e, 409f7ed0, 080c9211, 1ee922ab). The Claude session took this plan over from the Codex planner (out of tokens 2026-10-14); accepted receipts carry over (R-TAKEOVER-P).
-Next: P1+P2 incl. B1 and T2.8 ✓ → boundary re-run → #493 → P3 (T3.1–T3.5) (packet + control text into ResponseAssembler) → T2.4 … T2.7 → one PR carrying P1+P2 → T1.4 → PR P1. Then P2 (T2.1–T2.7), P3 (T3.1–T3.5), P4 (T4.1–T4.3), one PR each (R-P-SLICES).
+Shipped in #493: P1+P2 (R0–T2.8, B1) — the pause is reachable from prompt_engine. Next: P3 (T3.1–T3.5, hooks), then P4 (T4.1–T4.3); 6.0.0 is cut only after P4 and the owner's word. (packet + control text into ResponseAssembler) → T2.4 … T2.7 → one PR carrying P1+P2 → T1.4 → PR P1. Then P2 (T2.1–T2.7), P3 (T3.1–T3.5), P4 (T4.1–T4.3), one PR each (R-P-SLICES).
 Constraint: one source writer at a time on overlapping files; workers never stage; planner commits. No installed, CloudySky, shared runtime or release mutation. Preserve every abort, unknown, review, namespace and custody contract.
 Boundary: process restart, STDIO/HTTP and native event delivery each need their own evidence; source fixtures prove none of them.
 
