@@ -1,0 +1,13 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "update",
+    "id": "showcase_render_study",
+    "tool_operation": "remove",
+    "tool_ids": [
+      "blender_render"
+    ],
+    "confirm": true
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_animatic#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "Engine shell verification passed: probe-colour.py exit 0 in 316 ms, 5 of 5 checks ok on the regenerated and byte-identical light.json",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "Animation Colour Script PASSED exit 0 in 316 ms: 8 beats carry one pair each, 7 emitters hand off one at a time 2-4 frames apart, 4 crossings run without a hue detour; control line tripped on 3 planted defects"
+        }
+      ],
+      "reminders": {
+        "satisfied": [],
+        "not_applicable": [
+          {
+            "id": "framework-compliance",
+            "reason": "the answer keeps the required section headers and structure is graded by the engine"
+          }
+        ]
+      }
+    }
+  }
+}

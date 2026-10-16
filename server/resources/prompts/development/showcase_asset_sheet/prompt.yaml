@@ -1,0 +1,25 @@
+id: showcase_asset_sheet
+name: Showcase Asset Sheet
+description: Turn design_muse directions for one asset into 3+ generated sheets
+  (imagegen tool from board images, D65/D66) laid side by side in the Remotion
+  AssetSheet, each citing the board cards it borrows and the cast property it
+  sits between; never hand-drawn.
+category: development
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: asset
+    type: string
+    description: "The asset's job in the script's resource vocabulary."
+    required: true
+  - name: context
+    type: string
+    description: The design_muse output for this asset (directions, reference set,
+      capability contract).
+    required: false
+  - name: files
+    type: string
+    description: Owned path for the sheet scene.
+    required: false
+    defaultValue: media/showcase/src/sheets/
+tools:
+  - imagegen

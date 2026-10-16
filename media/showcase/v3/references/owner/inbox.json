@@ -1,0 +1,98 @@
+{
+  "inbox": [
+    {
+      "folder": "Movies › Shorts › CalArts 2025 › Continue?",
+      "why": "Lantz Prize 2025; pose-to-pose with 11–27 frame holds, measured in craft-ref-01",
+      "source": "v3/studies/craft-ref-01.md",
+      "name": "",
+      "tags": [
+        "calarts",
+        "cadence"
+      ],
+      "url": "https://www.youtube.com/watch?v=SvSnPa-Rr7c"
+    },
+    {
+      "url": "https://www.toonboom.com/mercury-filmworks-on-the-magic-behind-hilda",
+      "folder": "TV Shows › Animation › Hilda",
+      "why": "rigs plus traditional methods to retain a drawn aesthetic; drawings tweaked not redrawn",
+      "source": "v3/studies/tech-rig-02.md",
+      "tags": [
+        "pipeline",
+        "rig"
+      ]
+    },
+    {
+      "folder": "Artwork › Animation › Tron Uprising",
+      "why": "shaded 3D with emissive edges that still reads drawn; art-directed by Alberto Mielgo, whose Windshield Wiper is already in the library; feeds the programming world (D78)",
+      "source": "v3/beats-v2.json beat 7, 2026-10-13",
+      "name": "",
+      "tags": [
+        "tron",
+        "shaded",
+        "world"
+      ],
+      "url": "https://vimeo.com/65043932"
+    },
+    {
+      "folder": "Movies › Boy and the World",
+      "why": "crayon and sketch world, wordless, a child's eye; feeds the art world (D78)",
+      "source": "v3/beats-v2.json beat 5, 2026-10-13",
+      "name": "",
+      "tags": [
+        "crayon",
+        "world"
+      ],
+      "url": "https://www.imdb.com/title/tt3183630/"
+    },
+    {
+      "folder": "Animation Craft › Line of action",
+      "why": "Preston Blair's line-of-action page: the same figure on a straight line, a C and an S, showing how the curve alone changes the pose's force",
+      "source": "pose-pass 2026-10-14 (gap: drawn line-of-action and spacing craft)",
+      "name": "",
+      "tags": [
+        "line-of-action",
+        "preston-blair",
+        "pose"
+      ],
+      "url": "http://gurneyjourney.blogspot.com/2012/09/line-of-action.html"
+    },
+    {
+      "folder": "Animation Craft › Line of action",
+      "why": "a sheet of line-of-action examples with the curve drawn over each pose: the drawn-over curve is what our solver must reproduce",
+      "source": "pose-pass 2026-10-14 (gap: drawn line-of-action and spacing craft)",
+      "name": "",
+      "tags": [
+        "line-of-action",
+        "pose",
+        "sheet"
+      ],
+      "url": "https://poselibrary.com/line-of-action-drawing"
+    },
+    {
+      "folder": "Animation Craft › Spacing and overlap",
+      "why": "Richard Williams' chart pages: breakdown as a passing position that goes somewhere else en route, eased spacing clusters at the arc's ends, wrist leads and hand drags",
+      "source": "pose-pass 2026-10-14 (gap: drawn line-of-action and spacing craft)",
+      "name": "",
+      "tags": [
+        "spacing",
+        "breakdown",
+        "arc",
+        "overlap",
+        "richard-williams"
+      ],
+      "url": "http://livlily.blogspot.com/2010/10/richard-williams-animators-survival-kit.html"
+    },
+    {
+      "folder": "Animation Craft › Spacing and overlap",
+      "why": "overlap drawn frame by frame: the secondary reaches its pose drawings after the primary, the lag our overlap probe measures",
+      "source": "pose-pass 2026-10-14 (gap: drawn line-of-action and spacing craft)",
+      "name": "",
+      "tags": [
+        "overlap",
+        "drag",
+        "follow-through"
+      ],
+      "url": "https://rbossert27.wixsite.com/mysite-2/post/creating-overlap"
+    }
+  ]
+}

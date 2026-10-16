@@ -1,0 +1,5 @@
+control: change on frame 7 -> FAIL (odd-frame figure changes at [7]); changes on even frames only with the camera moving every frame -> pass (0 odd-frame changes, 7 even-frame changes, camera moved on 24 odd frames)
+  frames 420 (0..419); camera inverted from xsheet; crossing windows exempt: []
+  FAIL odd-frame changes: 1 odd frame(s) where the figure changed (tolerance 0): [209]
+  ok   figure moves: 42 even-frame figure changes
+FAIL: twos-ones - 1 of 2 checks failed: odd-frame changes

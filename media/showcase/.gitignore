@@ -1,0 +1,32 @@
+node_modules/
+out/
+.remotion/
+build/
+.mcp-client/
+v3/references/owner/thumbs/
+v3/references/owner/picks/
+v3/references/owner/eagle-index.json
+v3/references/owner/eagle-board.html
+
+# Third-party reference media stays out of the repository (copyright, size): the board cites it by
+# url/eagle id, the stills and clips live in the owner's library. Owner-made boards and the card
+# ledger (board.json, picks.json, card-schema.json, style-board) are kept.
+v3/references/*.mp4
+v3/references/*.gif
+v3/references/*.webp
+v3/references/x-*.jpg
+v3/references/yt-*.jpg
+v3/references/midnight-gospel-*.jpg
+v3/references/seuss-*
+v3/references/cloudysky-visual-guide.png
+v3/references/calarts/
+v3/references/owner/unfiled-recent.png
+v3/references/owner/calarts-folder.png
+# generator rejects and run backups
+assets/**/rejected*/
+assets/**/*-run2*
+assets/human-gen-16/
+mailbox/*/*.refused-*.md
+
+# the v2 pass is history; v3 is the film
+v2/

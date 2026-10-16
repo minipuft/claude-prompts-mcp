@@ -1,0 +1,37 @@
+id: animation-pose-contract
+name: Animation Pose Contract
+type: validation
+description: "Check-tier gate on the pose step: every chart key has a pose with
+  a moment; the key sheet's spine fits the declared curve with a bow of at least
+  6 % of height; limbs do not twin without a why; a weight foot is declared;
+  every key pair has a breakdown that is a pose; secondaries lag one to three
+  drawings; long holds move. On the pose step the spine fit and weight are
+  measured on the sheet's solved joints (the key sheet is drawn afterwards and
+  measures its own keys against the same declarations with --joints keys)."
+guidanceFile: guidance.md
+pass_criteria:
+  - type: shell_verify
+    shell_command:
+      - python3
+      - scripts/animation/probe-poses.py
+      - v3/poses
+      - v3/keys
+      - v3/charts
+      - --joints
+      - solved
+    shell_timeout: 600000
+    shell_working_dir: ../media/showcase
+    shell_max_attempts: 1
+    shell_preset: full
+activation:
+  prompt_categories:
+    - animation
+  explicit_request: true
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+subject: animation-pose-contract
+severity: high
+enforcementMode: blocking
+gate_type: custom

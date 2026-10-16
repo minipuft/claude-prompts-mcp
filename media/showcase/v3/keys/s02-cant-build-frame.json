@@ -1,0 +1,237 @@
+{
+  "shot": "s02-cant-build-frame",
+  "actor": "human",
+  "provisional": true,
+  "note": "Placeholder: liftChart's three keys (humanPose.ts), named rest / raise / settle. They are the PuppetProof lift, not s02's reach; replace with the showcase_key_sheet output for the shot. Frames are shot-local.",
+  "keys": [
+    {
+      "name": "rest",
+      "frame": 0,
+      "hold": 24,
+      "joints": {
+        "root": [
+          349,
+          475
+        ],
+        "torso": [
+          348,
+          213
+        ],
+        "neck": [
+          352,
+          195
+        ],
+        "head": [
+          347,
+          176
+        ],
+        "shoulderL": [
+          306,
+          252
+        ],
+        "elbowL": [
+          263,
+          363
+        ],
+        "wristL": [
+          183,
+          452
+        ],
+        "shoulderR": [
+          396,
+          252
+        ],
+        "elbowR": [
+          443,
+          365
+        ],
+        "wristR": [
+          506,
+          455
+        ],
+        "hipL": [
+          319,
+          475
+        ],
+        "kneeL": [
+          281,
+          655
+        ],
+        "ankleL": [
+          241,
+          835
+        ],
+        "hipR": [
+          376,
+          475
+        ],
+        "kneeR": [
+          399,
+          645
+        ],
+        "ankleR": [
+          426,
+          838
+        ],
+        "ponchoPoint": [
+          355,
+          470
+        ]
+      }
+    },
+    {
+      "name": "raise",
+      "frame": 36,
+      "joints": {
+        "root": [
+          349,
+          475
+        ],
+        "torso": [
+          348,
+          213
+        ],
+        "neck": [
+          352,
+          195
+        ],
+        "head": [
+          347,
+          176
+        ],
+        "shoulderL": [
+          306,
+          252
+        ],
+        "elbowL": [
+          221.20659584637366,
+          168.45313523512817
+        ],
+        "wristL": [
+          180.9678095868668,
+          55.75069479854437
+        ],
+        "shoulderR": [
+          396,
+          252
+        ],
+        "elbowR": [
+          481.0403218424552,
+          163.98782095112267
+        ],
+        "wristR": [
+          530.2443682290234,
+          65.76378204420108
+        ],
+        "hipL": [
+          319,
+          475
+        ],
+        "kneeL": [
+          281,
+          655
+        ],
+        "ankleL": [
+          241,
+          835
+        ],
+        "hipR": [
+          376,
+          475
+        ],
+        "kneeR": [
+          399,
+          645
+        ],
+        "ankleR": [
+          426,
+          838
+        ],
+        "ponchoPoint": [
+          355,
+          470
+        ]
+      }
+    },
+    {
+      "name": "settle",
+      "frame": 50,
+      "joints": {
+        "root": [
+          349,
+          475
+        ],
+        "torso": [
+          348,
+          213
+        ],
+        "neck": [
+          352,
+          195
+        ],
+        "head": [
+          347,
+          176
+        ],
+        "shoulderL": [
+          306,
+          252
+        ],
+        "elbowL": [
+          209.9114522213218,
+          181.73627546319025
+        ],
+        "wristL": [
+          153.64042043742947,
+          76.12107304433306
+        ],
+        "shoulderR": [
+          396,
+          252
+        ],
+        "elbowR": [
+          492.98512325084624,
+          177.35493406782894
+        ],
+        "wristR": [
+          556.0101900920608,
+          87.37248605900652
+        ],
+        "hipL": [
+          319,
+          475
+        ],
+        "kneeL": [
+          281,
+          655
+        ],
+        "ankleL": [
+          241,
+          835
+        ],
+        "hipR": [
+          376,
+          475
+        ],
+        "kneeR": [
+          399,
+          645
+        ],
+        "ankleR": [
+          426,
+          838
+        ],
+        "ponchoPoint": [
+          355,
+          470
+        ]
+      }
+    }
+  ],
+  "breakdowns": [
+    {
+      "frame": 44,
+      "favour": 0.6666666666666666
+    }
+  ]
+}

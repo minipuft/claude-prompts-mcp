@@ -1,0 +1,23 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_shot#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "The pose sheet names a reference card per key (nine apply records), a plate family, and solved joints; the solved-joints probe exits 0 with its control tripped, and the run 1 key sheet is reported as the re-key brief (16 of 34 measured-joints checks fail).",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "probe-poses.py v3/poses v3/keys v3/charts --joints solved exited 0 in 296 ms: keys, line of action (16 items), twinning (8), weight (8), breakdowns, secondaries, holds, 7 timing-shape lines and 6 lead-arm lines all ok; grip and brace carry twinned.why."
+        }
+      ],
+      "reminders": {
+        "satisfied": [
+          "framework-compliance"
+        ],
+        "not_applicable": []
+      }
+    }
+  }
+}

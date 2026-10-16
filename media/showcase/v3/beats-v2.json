@@ -1,0 +1,508 @@
+{
+  "revision": "beats-v2 · 2026-10-13 · D78 worlds and guides, D79 65 s · provisional until the plot asks are answered; beats.json (6 beats, 40 s) stays the composition's input until the shots are rebuilt",
+  "fps": 30,
+  "durationInFrames": 1950,
+  "fields": {
+    "world": "home | crayon | line | shaded",
+    "state": "each entry flips a tracked value; scope says when it flips back (a beat range) or 'permanent'",
+    "effects": "emitter, radiance, grain, boil, plus world-specific passes",
+    "asks": "plot points the owner is asked about before the beat is charted"
+  },
+  "tracked_state": [
+    "world",
+    "hue",
+    "emitter",
+    "grain",
+    "boil",
+    "field",
+    "human.garment",
+    "gadget.held",
+    "pieces.count",
+    "pieces.made_by_human",
+    "joins.lit",
+    "chain.ran",
+    "guide.lead",
+    "box.open",
+    "gadget.visible"
+  ],
+  "beats": [
+    {
+      "id": "arrival",
+      "world": "home",
+      "seconds": 6,
+      "camera": "medium-wide on the trio and the box; locked (frame 0 is the poster, D53)",
+      "actions": [
+        {
+          "actor": "human",
+          "does": "opens the box lid"
+        },
+        {
+          "actor": "box",
+          "does": "lid lifts; the gadget rises on its bubble"
+        },
+        {
+          "actor": "codex",
+          "does": "leans in"
+        },
+        {
+          "actor": "clawd",
+          "does": "leans in"
+        }
+      ],
+      "effects": {
+        "emitter": "box seam, tiny",
+        "radiance": "settled",
+        "grain": "low",
+        "boil": "on"
+      },
+      "transition_in": "title held",
+      "transition_out": "the bubble swells (leading line up) into beat 2, no cut",
+      "state": [
+        {
+          "key": "box.open",
+          "from": false,
+          "to": true,
+          "scope": "permanent"
+        },
+        {
+          "key": "gadget.visible",
+          "from": false,
+          "to": true,
+          "scope": "permanent"
+        }
+      ],
+      "references": [
+        "board §1 world",
+        "seuss-no-one-youer"
+      ],
+      "asks": [],
+      "frames": [
+        0,
+        180
+      ]
+    },
+    {
+      "id": "everything-at-once",
+      "world": "home",
+      "seconds": 8,
+      "camera": "widen to the full field, led by the first stalk's curl",
+      "actions": [
+        {
+          "actor": "gadget",
+          "does": "projects every piece, structure and route around the trio"
+        },
+        {
+          "actor": "human",
+          "does": "turns with joy, then shrinks"
+        },
+        {
+          "actor": "codex",
+          "does": "catches a piece"
+        },
+        {
+          "actor": "clawd",
+          "does": "is pushed by a stalk"
+        }
+      ],
+      "effects": {
+        "emitter": "gadget dial",
+        "radiance": "floods, Turrell blue (D74 s01)",
+        "grain": "rising",
+        "boil": "on",
+        "accent": "everywhere (the overwhelm exception to C6's scarcity)"
+      },
+      "transition_in": "continuous from beat 1",
+      "transition_out": "pieces keep arriving as the human reaches, into beat 3",
+      "state": [
+        {
+          "key": "hue",
+          "from": "settled",
+          "to": "s01 Turrell blue",
+          "scope": "beats 2-3"
+        },
+        {
+          "key": "pieces.count",
+          "from": 0,
+          "to": "many",
+          "scope": "until beat 8 reduces them to the structure"
+        }
+      ],
+      "references": [
+        "GIANT CRUSH gold figure (board §7)",
+        "Aten Reign blue"
+      ],
+      "asks": [],
+      "frames": [
+        180,
+        420
+      ]
+    },
+    {
+      "id": "cant-build",
+      "world": "home",
+      "seconds": 7,
+      "camera": "medium on the human, panning right (s02 layout, approved pending)",
+      "actions": [
+        {
+          "actor": "human",
+          "does": "reaches for the stalk and misses; grabs pieces; a stack collapses"
+        },
+        {
+          "actor": "codex",
+          "does": "winces, small at frame left"
+        },
+        {
+          "actor": "clawd",
+          "does": "winces, then goes to fetch the frame"
+        }
+      ],
+      "effects": {
+        "emitter": "gadget dial, lost on the floor",
+        "radiance": "Styx steel (D74 s02), noisy",
+        "grain": "high",
+        "boil": "on"
+      },
+      "transition_in": "continuous",
+      "transition_out": "the stalk slides back toward Clawd; the frame's left bar rises (leading line) into beat 4",
+      "state": [
+        {
+          "key": "hue",
+          "from": "s01 blue",
+          "to": "s02 steel",
+          "scope": "beats 3-4"
+        },
+        {
+          "key": "gadget.held",
+          "from": true,
+          "to": false,
+          "scope": "until beat 8"
+        },
+        {
+          "key": "grain",
+          "from": "rising",
+          "to": "high",
+          "scope": "beats 3-4"
+        }
+      ],
+      "references": [
+        "s02 cinematography sheet",
+        "corner of a cold room (board §8)"
+      ],
+      "asks": [],
+      "frames": [
+        420,
+        630
+      ]
+    },
+    {
+      "id": "the-frame",
+      "world": "home → portal",
+      "seconds": 6,
+      "camera": "the raised frame at frame right; push toward its interior",
+      "actions": [
+        {
+          "actor": "clawd",
+          "does": "holds the frame up"
+        },
+        {
+          "actor": "human",
+          "does": "turns to the frame; the cloak drops (D69); the Swoop is revealed hands first; looks through"
+        },
+        {
+          "actor": "codex",
+          "does": "joins Clawd at the frame"
+        },
+        {
+          "actor": "frame",
+          "does": "interior lights: the crayon world visible inside, refracted (D45)"
+        }
+      ],
+      "effects": {
+        "emitter": "frame interior",
+        "radiance": "narrows to the frame",
+        "grain": "falling",
+        "boil": "on",
+        "glass": "refraction and diffusion pass on"
+      },
+      "transition_in": "the frame rising",
+      "transition_out": "the human steps through alone; the guides follow (plot default 3); the push crosses the frame edge into beat 5, no cut",
+      "state": [
+        {
+          "key": "human.garment",
+          "from": "cloak",
+          "to": "swoop",
+          "scope": "permanent"
+        },
+        {
+          "key": "emitter",
+          "from": "dial",
+          "to": "frame interior",
+          "scope": "beats 4-7"
+        },
+        {
+          "key": "world",
+          "from": "home",
+          "to": "crayon",
+          "scope": "beats 5"
+        }
+      ],
+      "references": [
+        "figure in a lit doorway (board §8)",
+        "seuss-nested-frames"
+      ],
+      "asks": [],
+      "frames": [
+        630,
+        810
+      ]
+    },
+    {
+      "id": "art-world",
+      "world": "crayon",
+      "seconds": 12,
+      "camera": "wide, flat, paper-like depth; a slow lateral drift along a drawn horizon",
+      "actions": [
+        {
+          "actor": "clawd",
+          "does": "guides: hands the human a crayon (Clawd owns the art workflow)"
+        },
+        {
+          "actor": "human",
+          "does": "draws one piece in the air; the drawing fills in and becomes a real piece (a prompt becoming a resource)"
+        },
+        {
+          "actor": "codex",
+          "does": "watches, small, keeps the piece from drifting"
+        },
+        {
+          "actor": "world",
+          "does": "crayon architecture: stacked arches as paper scribbles, stalks as waxy lines"
+        }
+      ],
+      "effects": {
+        "emitter": "the drawn piece as it fills",
+        "radiance": "warm, s03 amber (D74) on a paper-coloured field, not black",
+        "grain": "paper tooth",
+        "boil": "heavy, crayon boil 3 variants",
+        "line": "crayon stroke pass over flat roles"
+      },
+      "transition_in": "refill from the frame's glass into crayon",
+      "transition_out": "the piece and the world reduce to their contour lines (the crossing, beat 6)",
+      "state": [
+        {
+          "key": "world",
+          "from": "crayon",
+          "to": "line",
+          "scope": "beat 6"
+        },
+        {
+          "key": "field",
+          "from": "black",
+          "to": "paper",
+          "scope": "beat 5 only"
+        },
+        {
+          "key": "pieces.made_by_human",
+          "from": 0,
+          "to": 1,
+          "scope": "permanent"
+        }
+      ],
+      "references": [
+        "Boy and the World (to file)",
+        "Lulu Mckown chartreuse (board §7, the refused limit)"
+      ],
+      "asks": [
+        "which object the human draws first (default: the first stalk)"
+      ],
+      "frames": [
+        810,
+        1170
+      ]
+    },
+    {
+      "id": "crossing",
+      "world": "line",
+      "seconds": 4,
+      "camera": "locked; the lines re-route across the frame along the move's leading line",
+      "actions": [
+        {
+          "actor": "world",
+          "does": "everything reduces to pale contour lines; the lines re-route and connect (a chain being wired)"
+        },
+        {
+          "actor": "human",
+          "does": "holds the drawn piece; its lines connect to the next world's grid"
+        },
+        {
+          "actor": "codex",
+          "does": "takes the lead (the programming workflow is his)"
+        },
+        {
+          "actor": "clawd",
+          "does": "follows"
+        }
+      ],
+      "effects": {
+        "emitter": "none; the lines themselves glow faintly",
+        "radiance": "off",
+        "grain": "none",
+        "boil": "on",
+        "line": "pure contour, one weight (D76 ratio), no fills"
+      },
+      "transition_in": "reduce-to-lines",
+      "transition_out": "refill into the shaded world (beat 7)",
+      "state": [
+        {
+          "key": "world",
+          "from": "line",
+          "to": "shaded",
+          "scope": "beat 7"
+        },
+        {
+          "key": "guide.lead",
+          "from": "clawd",
+          "to": "codex",
+          "scope": "beats 6-7"
+        }
+      ],
+      "references": [
+        "Spider-Verse glitch frames (owner's folder, to pick)",
+        "Midnight Gospel reality shift (board)"
+      ],
+      "asks": [],
+      "frames": [
+        1170,
+        1290
+      ]
+    },
+    {
+      "id": "programming-world",
+      "world": "shaded",
+      "seconds": 12,
+      "camera": "three-quarter perspective, slow push along a lit grid line",
+      "actions": [
+        {
+          "actor": "codex",
+          "does": "guides: points to the join"
+        },
+        {
+          "actor": "human",
+          "does": "places the drawn piece against another; the join lights; the chain runs down the grid (a step passing a gate)"
+        },
+        {
+          "actor": "clawd",
+          "does": "watches from the edge"
+        },
+        {
+          "actor": "world",
+          "does": "shaded architecture with emissive edges; gates as rings that light in sequence"
+        }
+      ],
+      "effects": {
+        "emitter": "the lit join, then each gate in sequence",
+        "radiance": "cold cyan on black, s02 accent as the world's hue",
+        "grain": "none",
+        "boil": "off on the world, on for the figures",
+        "shading": "stepped toon shading, two steps, emissive contour"
+      },
+      "transition_in": "refill from lines into shaded forms",
+      "transition_out": "the structure's silhouette leads the pull back home (beat 8); the shaded world's lines fold into the Seuss stalks",
+      "state": [
+        {
+          "key": "world",
+          "from": "shaded",
+          "to": "home",
+          "scope": "beat 8"
+        },
+        {
+          "key": "joins.lit",
+          "from": 0,
+          "to": "n",
+          "scope": "permanent"
+        },
+        {
+          "key": "chain.ran",
+          "from": false,
+          "to": true,
+          "scope": "permanent"
+        }
+      ],
+      "references": [
+        "Tron: Uprising (to file)",
+        "Arcane S1 (owner's folder, to pick)"
+      ],
+      "asks": [
+        "how many gates light (default: three, the third is the one the human made)"
+      ],
+      "frames": [
+        1290,
+        1650
+      ]
+    },
+    {
+      "id": "home-settle",
+      "world": "home",
+      "seconds": 10,
+      "camera": "pull back to a wide with the structure centred and the trio at its base",
+      "actions": [
+        {
+          "actor": "structure",
+          "does": "stands, the crayon piece and the lit joins inside it"
+        },
+        {
+          "actor": "gadget",
+          "does": "rests inside, bright but bounded"
+        },
+        {
+          "actor": "human",
+          "does": "at ease; one last look through the frame, now a window"
+        },
+        {
+          "actor": "codex",
+          "does": "settles left"
+        },
+        {
+          "actor": "clawd",
+          "does": "settles right"
+        }
+      ],
+      "effects": {
+        "emitter": "gadget, rimming the structure",
+        "radiance": "Soup! coral (D74 s04)",
+        "grain": "low",
+        "boil": "on"
+      },
+      "transition_in": "pull along the structure's silhouette",
+      "transition_out": "title; settled state returns",
+      "state": [
+        {
+          "key": "hue",
+          "from": "world hues",
+          "to": "s04 coral",
+          "scope": "beat 8"
+        },
+        {
+          "key": "grain",
+          "from": "none",
+          "to": "low",
+          "scope": "permanent"
+        },
+        {
+          "key": "gadget.held",
+          "from": false,
+          "to": "rests",
+          "scope": "permanent"
+        }
+      ],
+      "references": [
+        "Soup! coral (board §7)"
+      ],
+      "asks": [],
+      "frames": [
+        1650,
+        1950
+      ]
+    }
+  ]
+}

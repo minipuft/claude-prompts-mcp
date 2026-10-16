@@ -1,0 +1,130 @@
+{
+ "shot": "s01-arrival-overwhelm",
+ "renderer": "remotion 4.0.530, swangle, 1280x720, 30 fps, 420 frames",
+ "frames": {
+  "0": {
+   "path": "out/s01-seq/element-000.png",
+   "sha256": "d15812150aaaadd5",
+   "secondRender": "out/s01-seq-b/element-000.png",
+   "secondSha256": "d15812150aaaadd5",
+   "identical": true
+  },
+  "42": {
+   "path": "out/s01-seq/element-042.png",
+   "sha256": "ce677230354b04bd"
+  },
+  "66": {
+   "path": "out/s01-seq/element-066.png",
+   "sha256": "79c55d5f8393c142"
+  },
+  "104": {
+   "path": "out/s01-seq/element-104.png",
+   "sha256": "2550294bd5f96ebf"
+  },
+  "154": {
+   "path": "out/s01-seq/element-154.png",
+   "sha256": "0859c7c4d668be5e"
+  },
+  "180": {
+   "path": "out/s01-seq/element-180.png",
+   "sha256": "de36c6281acfe78c",
+   "secondRender": "out/s01-seq-b/element-180.png",
+   "secondSha256": "c3bcd4ac1b850fa7",
+   "identical": false
+  },
+  "190": {
+   "path": "out/s01-seq/element-190.png",
+   "sha256": "6bf9ffe1491a41e8",
+   "secondRender": "out/s01-seq-b/element-190.png",
+   "secondSha256": "6bf9ffe1491a41e8",
+   "identical": true
+  },
+  "210": {
+   "path": "out/s01-seq/element-210.png",
+   "sha256": "bed7e89fe0a254f2",
+   "secondRender": "out/s01-seq-b/element-210.png",
+   "secondSha256": "716ed77cb011487e",
+   "identical": false
+  },
+  "228": {
+   "path": "out/s01-seq/element-228.png",
+   "sha256": "41456a01f5aedd0d"
+  },
+  "272": {
+   "path": "out/s01-seq/element-272.png",
+   "sha256": "28e39d23bbb3cdd4"
+  },
+  "330": {
+   "path": "out/s01-seq/element-330.png",
+   "sha256": "fd3fce8ea73c1479",
+   "secondRender": "out/s01-seq-b/element-330.png",
+   "secondSha256": "efff0f0a9bfdff1f",
+   "identical": false
+  },
+  "419": {
+   "path": "out/s01-seq/element-419.png",
+   "sha256": "7e1edb3f4e9c5636"
+  }
+ },
+ "files": {
+  "mp4": {
+   "path": "out/s01-01.mp4",
+   "sha256": "b55d45395420bd6e"
+  },
+  "strip": {
+   "path": "out/s01-strip.png",
+   "sha256": "51a9bf825ddfe3a8"
+  },
+  "poseSheet": {
+   "path": "out/s01-pose-sheet.png",
+   "sha256": "619847c02814923d"
+  },
+  "layoutSheet": {
+   "path": "out/s01-layout-sheet.png",
+   "sha256": "f52d0c9c126927ba"
+  },
+  "identityPass": {
+   "path": "out/s01-identity-pass.png",
+   "sha256": "dcbfd1a4b68b963d"
+  },
+  "keysSilhouettes": {
+   "path": "out/s01-keys-silhouettes.png",
+   "sha256": "8ca0769c9199bb85"
+  },
+  "chart": {
+   "path": "v3/charts/s01-arrival-overwhelm.json",
+   "sha256": "71ceaa226debf659"
+  },
+  "keys": {
+   "path": "v3/keys/s01-arrival-overwhelm.json",
+   "sha256": "19d3a1509508cc3e"
+  },
+  "layout": {
+   "path": "v3/layouts/s01-arrival-overwhelm.json",
+   "sha256": "865cb1e987cfc496"
+  },
+  "xsheet": {
+   "path": "out/s01-xsheet.json",
+   "sha256": "c1beb943373ac033"
+  }
+ },
+ "probes": {
+  "probeAllFilmTimeline": "out/s01-probes.json (text: out/s01-probe-all-film-timeline.txt)",
+  "probeAllShotTimeline": "out/s01-probes-shot-timeline.json (text: out/s01-probe-all-shot-timeline.txt)",
+  "twosFigureOnly": "out/s01-probe-twos-figure.json",
+  "holdsFigureOnly": "out/s01-probe-holds-figure.json",
+  "silhouetteFigureOnly": "out/s01-silhouette-figure-pass.txt",
+  "chartConformance": "out/s01-chart-conformance.json",
+  "wholeFrameParity": "out/s01-whole-frame-parity.json",
+  "frameMeasures": "out/s01-measure.json",
+  "keysMeasure": "out/s01-keys-measure.json",
+  "keysC20": "out/s01-keys-c20.json"
+ },
+ "receiptSkeleton": {
+  "changed": [],
+  "grades": [],
+  "controls": [],
+  "owner": [],
+  "next": []
+ }
+}

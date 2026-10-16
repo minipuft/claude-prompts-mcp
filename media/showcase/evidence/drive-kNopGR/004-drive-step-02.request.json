@@ -1,0 +1,26 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_animatic#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "Timeline gate ran in the engine: probe-timeline.py exit 0, 488 ms, and a fresh run of the same command by hand printed the identical 4 ok lines and pass line",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "Animation Timeline Contract: engine shell verification PASSED exit 0 in 488 ms, 8 beats cover 1950 frames, 4 crossings inside both beats, every beat can hold, control line tripped on 5 planted defects"
+        }
+      ],
+      "reminders": {
+        "satisfied": [],
+        "not_applicable": [
+          {
+            "id": "framework-compliance",
+            "reason": "reply keeps the required section headers and the framework sections are graded structurally by the engine, no separate attestation is made"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+id: showcase_key_sheet
+name: Showcase Key Sheet
+description: "Per shot and actor after the pose sheet (D72, D77, D83, D85):
+  build every key plate from the pose sheet's solved joints through its plate
+  family's mesh at model-sheet scale, measure what the rubric contracts per key
+  (C20 overlay, C21 silhouette, C22 contour, C31 spine fit), propose a new plate
+  family through the imagegen tool only for a silhouette the rig cannot hold and
+  register it by toolchain, and render the staging row at the layout camera
+  (C25); the key gate reads the measured joints."
+category: development
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: shot
+    type: string
+    description: Shot id from v3/shots.json.
+    required: true
+  - name: context
+    type: string
+    description: The motion step's timing chart (key list per actor); read chain
+      history when absent.
+    required: false
+  - name: actors
+    type: string
+    description: "Comma-separated actor ids to draw keys for; default: every actor
+      the chart lists with keys."
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory.
+    required: false
+    defaultValue: media/showcase

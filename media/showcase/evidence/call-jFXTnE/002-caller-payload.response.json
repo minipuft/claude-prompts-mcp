@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ Gate 'animation-animatic-probes' updated successfully\n\n📁 Files updated:\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/animation-animatic-probes\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/animation-animatic-probes/gate.yaml\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +2 additions, -1 deletions\n\n```diff\n===================================================================\n--- a/animation-animatic-probes/gate.yaml\n+++ b/animation-animatic-probes/gate.yaml\n@@ -20,7 +20,7 @@\n       - out/animatic-seq-b\n       - --subset\n     shell_timeout: 600000\n-    shell_working_dir: media/showcase\n+    shell_working_dir: ../media/showcase\n     shell_max_attempts: 1\n     shell_preset: full\n activation:\n@@ -30,6 +30,7 @@\n retry_config:\n   max_attempts: 2\n   improvement_hints: true\n+  preserve_context: true\n subject: animation-animatic-probes\n severity: high\n enforcementMode: blocking\n\n```\n\n🔄 Gate reloaded"
+    }
+  ],
+  "isError": false
+}

@@ -1,0 +1,80 @@
+{
+  "id": "test-scene",
+  "provisional": false,
+  "derivedFrom": "STAGE in worlds/contract.ts as of D78: the one scene every world was proved on",
+  "figure": {
+    "scale": 0.68,
+    "x": 420,
+    "y": 40
+  },
+  "codex": {
+    "x": 60,
+    "y": 440,
+    "scale": 1.8
+  },
+  "clawd": {
+    "x": 940,
+    "y": 470,
+    "scale": 1.5
+  },
+  "frame": {
+    "x": 910,
+    "y": 70,
+    "width": 280,
+    "height": 230
+  },
+  "blocks": [
+    {
+      "x": 960,
+      "y": 360,
+      "width": 80,
+      "height": 60,
+      "role": "main1"
+    },
+    {
+      "x": 1040,
+      "y": 360,
+      "width": 80,
+      "height": 60,
+      "role": "main2"
+    }
+  ],
+  "join": {
+    "x": 1040,
+    "y": 390
+  },
+  "arch": {
+    "x": 30,
+    "y": 40,
+    "width": 340,
+    "height": 430,
+    "opening": 0.6,
+    "top": 70
+  },
+  "gates": [
+    {
+      "x": 150,
+      "y": 388,
+      "r": 22
+    },
+    {
+      "x": 235,
+      "y": 382,
+      "r": 28
+    },
+    {
+      "x": 325,
+      "y": 376,
+      "r": 34
+    }
+  ],
+  "floor": {
+    "y": 480
+  },
+  "figureCrop": {
+    "x": 380,
+    "y": 0,
+    "width": 500,
+    "height": 720
+  }
+}

@@ -1,0 +1,30 @@
+id: animation-blocking-contract
+name: Animation Blocking Contract
+type: validation
+description: "Check-tier gate on the blocking step: every actor a beat's actions
+  name has a position and scale; the emitter anchor is inside the frame; a
+  composition card is cited; actors keep out of each other's identity boxes."
+guidanceFile: guidance.md
+pass_criteria:
+  - type: shell_verify
+    shell_command:
+      - python3
+      - scripts/animation/probe-blocking.py
+      - v3/timeline.json
+      - v3/blocking
+    shell_timeout: 600000
+    shell_working_dir: ../media/showcase
+    shell_max_attempts: 1
+    shell_preset: full
+activation:
+  prompt_categories:
+    - animation
+  explicit_request: true
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+subject: animation-blocking-contract
+severity: high
+enforcementMode: blocking
+gate_type: custom

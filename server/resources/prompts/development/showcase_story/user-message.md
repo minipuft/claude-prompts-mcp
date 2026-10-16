@@ -1,0 +1,13 @@
+Brief: {{brief}}
+Constraints: {{constraints}}
+Production root: {{output_root}}
+Previous handoff:
+{{context | default("Read available chain history; report missing evidence.")}}
+
+Read, before writing, the project files under the production root's `v3/`: `creative-spec.md` (rulings D41–D53, medium, palette law, animation language), `script.md` (resource vocabulary and beats), `rubric.md` (criteria C1–C18 and the receipt shape). They are the contract; this prompt does not restate them.
+
+Write or revise the silent script. Every object on screen is a server resource drawn by the fixed vocabulary in `script.md` (prompt = stalk, chain = beaded string, framework = receding frames, gate = arch, category = patch, style = light state, resource_manager = the human's hands, prompt_engine = the frame); never invent a second symbol for a resource that has one. Beats carry purpose, actors, action, light state and the house phases (hold, anticipation, action on twos, overshoot, settle). Frame 0 is the poster (D53): mark, trio, box, settled black field; the film never opens on overwhelm.
+
+Deliver `script.md` and `beats.json` under the production root `v3/`. `beats.json` is the artifact the Remotion compositions read: an array of beats, each `{id, start, duration, purpose, actors[], actions[{actor, phase_frames:{hold,anticipation,action,overshoot,settle}, start, stagger_after}], light_state, emitter, joins[{object, pulse_at}]}`. Sum durations against the requested length. No narration; no text beyond the held title unless a ruling permits one held line per beat. Label any depicted server activity as illustrative unless a captured receipt exists.
+
+Return: Thesis; Vocabulary Check (every object named with its resource); Beats; Artifact Handoff; Concerns. End with the actual paths written, or complete content marked unpersisted.

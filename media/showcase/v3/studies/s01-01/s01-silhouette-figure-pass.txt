@@ -1,0 +1,4 @@
+positive control: intact frame 0 = 1 component(s), same frame with a 4 px band erased across the shins (row 562) = 3
+frames: 420; field colour (7, 6, 12); blobs under 12 px ignored
+8-connected: min 1, max 1, frames != 1: none
+4-connected: min 1, max 1, frames != 1: none

@@ -1,0 +1,7 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_shot#1",
+    "user_response": "**Summary**: The key sheet `v3/keys/s01-arrival-overwhelm.json` is restored byte-for-byte from the pre-drive backup (`cmp` clean), so key `awe` carries its declared S spine again. No plates were rebuilt; the sheet is the one run 5 produced.\n\n## Context\nRead `v3/keys/s01-arrival-overwhelm.json` and `v3/poses/s01-arrival-overwhelm.json`.\n\n## Analysis\nThe planted straight spine on key `awe` was undone by restoring the file. All eight keys are the run 5 keys.\n\n## Goals\nHave the `animation-key-fit` check pass on the restored key sheet.\n\n## Execution\nRestored `v3/keys/s01-arrival-overwhelm.json` from `~/.cache/showcase-gateproof/before/`. `python3 scripts/animation/probe-poses.py v3/poses v3/keys v3/charts --joints keys` exits 0 by hand.\n\n## Evaluation\nDone: restore verified with `cmp`; the keys probe passes by hand. Not done: no plates rebuilt.\n\n**GATE_REVIEW: PASS - the restored key sheet reads as declared on every key.**\n\nHANDOFF RESULT\nnode: keys\nProposed Gate Review:\n- Animation Key Fit: PASS — the keys probe exits 0 on the restored sheet.\n"
+  }
+}

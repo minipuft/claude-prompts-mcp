@@ -1,0 +1,615 @@
+{
+  "revision": "beats-01 · 2026-10-13 · emitted by showcase_preproduction run 1 (story step); frame ranges provisional until a showcase_shot run writes measured ranges (D60)",
+  "fps": 30,
+  "width": 1280,
+  "height": 720,
+  "durationInFrames": 1200,
+  "vocabulary": "v3/script.md §Resource vocabulary",
+  "beats": [
+    {
+      "id": "arrival",
+      "start": 0,
+      "duration": 150,
+      "purpose": "Poster and settled state: the package arrives; raw capability is still boxed. Frame 0 is the GitHub thumbnail (D53).",
+      "actors": [
+        "codex",
+        "human",
+        "box",
+        "clawd"
+      ],
+      "actions": [
+        {
+          "actor": "human",
+          "phase_frames": {
+            "hold": 60,
+            "anticipation": 4,
+            "action": 8,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 60,
+          "stagger_after": 0
+        },
+        {
+          "actor": "box.lid",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 8,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 70,
+          "stagger_after": 4
+        },
+        {
+          "actor": "bubble",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 40,
+            "overshoot": 3,
+            "settle": 16
+          },
+          "start": 84,
+          "stagger_after": 4
+        },
+        {
+          "actor": "codex",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 4,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 96,
+          "stagger_after": 4
+        },
+        {
+          "actor": "clawd",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 4,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 100,
+          "stagger_after": 4
+        }
+      ],
+      "light_state": "settled",
+      "emitter": "box seam",
+      "joins": []
+    },
+    {
+      "id": "everything-at-once",
+      "start": 150,
+      "duration": 180,
+      "purpose": "The bubble pops and the gadget projects every resource at once; the one permitted violation of law 1 is the point of the beat.",
+      "actors": [
+        "gadget",
+        "stalk",
+        "arch",
+        "ring",
+        "patch",
+        "string",
+        "codex",
+        "clawd"
+      ],
+      "actions": [
+        {
+          "actor": "bubble.pop",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 2,
+            "action": 1,
+            "overshoot": 0,
+            "settle": 6
+          },
+          "start": 150,
+          "stagger_after": 0
+        },
+        {
+          "actor": "gadget.dial",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 8,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 157,
+          "stagger_after": 3
+        },
+        {
+          "actor": "stalk.projection",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 6,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 166,
+          "stagger_after": 3
+        },
+        {
+          "actor": "arch.projection",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 6,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 169,
+          "stagger_after": 3
+        },
+        {
+          "actor": "ring.projection",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 6,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 172,
+          "stagger_after": 3
+        },
+        {
+          "actor": "patch.projection",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 6,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 175,
+          "stagger_after": 3
+        },
+        {
+          "actor": "string.projection",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 6,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 178,
+          "stagger_after": 0
+        },
+        {
+          "actor": "codex.glyph",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 2,
+            "overshoot": 2,
+            "settle": 4
+          },
+          "start": 200,
+          "stagger_after": 4
+        },
+        {
+          "actor": "clawd.eyes",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 2,
+            "overshoot": 2,
+            "settle": 4
+          },
+          "start": 204,
+          "stagger_after": 4
+        }
+      ],
+      "light_state": "overwhelm",
+      "emitter": "gadget dial",
+      "joins": []
+    },
+    {
+      "id": "cant-build",
+      "start": 330,
+      "duration": 150,
+      "purpose": "The human reaches for pieces; nothing joins. Capability without structure.",
+      "actors": [
+        "human",
+        "stalk",
+        "patch",
+        "arch",
+        "codex",
+        "clawd"
+      ],
+      "actions": [
+        {
+          "actor": "human.reach",
+          "phase_frames": {
+            "hold": 12,
+            "anticipation": 4,
+            "action": 8,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 340,
+          "stagger_after": 0
+        },
+        {
+          "actor": "stalk.slide-back",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 6,
+            "overshoot": 2,
+            "settle": 14
+          },
+          "start": 362,
+          "stagger_after": 4
+        },
+        {
+          "actor": "human.reach2",
+          "phase_frames": {
+            "hold": 12,
+            "anticipation": 4,
+            "action": 8,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 386,
+          "stagger_after": 0
+        },
+        {
+          "actor": "arch.stays-dark",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 0,
+            "overshoot": 2,
+            "settle": 10
+          },
+          "start": 404,
+          "stagger_after": 4
+        },
+        {
+          "actor": "patch.stack.collapse",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 6,
+            "overshoot": 2,
+            "settle": 14
+          },
+          "start": 420,
+          "stagger_after": 3
+        },
+        {
+          "actor": "codex.wince",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 2,
+            "overshoot": 2,
+            "settle": 8
+          },
+          "start": 440,
+          "stagger_after": 4
+        },
+        {
+          "actor": "clawd.wince",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 2,
+            "overshoot": 2,
+            "settle": 8
+          },
+          "start": 444,
+          "stagger_after": 4
+        }
+      ],
+      "light_state": "overwhelm",
+      "emitter": "gadget dial, lost among projections",
+      "joins": []
+    },
+    {
+      "id": "the-frame",
+      "start": 480,
+      "duration": 120,
+      "purpose": "Clawd raises the frame; through it the whole environment is already assembled, someplace else (D42, D45, D46).",
+      "actors": [
+        "clawd",
+        "frame",
+        "human"
+      ],
+      "actions": [
+        {
+          "actor": "clawd.raise",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 8,
+            "overshoot": 3,
+            "settle": 14
+          },
+          "start": 484,
+          "stagger_after": 0
+        },
+        {
+          "actor": "frame.interior.reveal",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 24,
+            "overshoot": 0,
+            "settle": 16
+          },
+          "start": 494,
+          "stagger_after": 4
+        },
+        {
+          "actor": "human.look",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 4,
+            "overshoot": 2,
+            "settle": 10
+          },
+          "start": 540,
+          "stagger_after": 0
+        }
+      ],
+      "light_state": "overwhelm → scaffold (lag chain)",
+      "emitter": "the frame interior; outside projections dim through the lag",
+      "joins": []
+    },
+    {
+      "id": "scaffold",
+      "start": 600,
+      "duration": 420,
+      "purpose": "One join at a time, each a seam pulse, each staggered after the previous settle; the environment is built in the order the server's resources depend on each other.",
+      "actors": [
+        "human",
+        "patch",
+        "stalk",
+        "string",
+        "arch",
+        "ring",
+        "frame",
+        "gadget"
+      ],
+      "actions": [
+        {
+          "actor": "human.place.patch",
+          "phase_frames": {
+            "hold": 12,
+            "anticipation": 4,
+            "action": 6,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 612,
+          "stagger_after": 0
+        },
+        {
+          "actor": "human.plant.stalk",
+          "phase_frames": {
+            "hold": 12,
+            "anticipation": 4,
+            "action": 6,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 676,
+          "stagger_after": 4
+        },
+        {
+          "actor": "stalk.leaf.open",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 6,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 700,
+          "stagger_after": 3
+        },
+        {
+          "actor": "human.plant.stalk2",
+          "phase_frames": {
+            "hold": 12,
+            "anticipation": 4,
+            "action": 6,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 740,
+          "stagger_after": 4
+        },
+        {
+          "actor": "string.join",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 8,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 772,
+          "stagger_after": 3
+        },
+        {
+          "actor": "arch.drop",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 8,
+            "overshoot": 3,
+            "settle": 12
+          },
+          "start": 836,
+          "stagger_after": 4
+        },
+        {
+          "actor": "piece.pass.arch",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 8,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 868,
+          "stagger_after": 3
+        },
+        {
+          "actor": "ring.spin.out",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 12,
+            "overshoot": 2,
+            "settle": 16
+          },
+          "start": 900,
+          "stagger_after": 4
+        },
+        {
+          "actor": "human.place.patch2",
+          "phase_frames": {
+            "hold": 12,
+            "anticipation": 4,
+            "action": 6,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 960,
+          "stagger_after": 4
+        },
+        {
+          "actor": "gadget.dial.close",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 380,
+            "overshoot": 0,
+            "settle": 20
+          },
+          "start": 612,
+          "stagger_after": 0
+        }
+      ],
+      "light_state": "scaffold",
+      "emitter": "the lit join of the moment",
+      "joins": [
+        {
+          "object": "category patch",
+          "pulse_at": 634
+        },
+        {
+          "object": "prompt stalk",
+          "pulse_at": 698
+        },
+        {
+          "object": "chain string",
+          "pulse_at": 786
+        },
+        {
+          "object": "gate arch, keystone",
+          "pulse_at": 882
+        },
+        {
+          "object": "framework ring",
+          "pulse_at": 920
+        },
+        {
+          "object": "second category patch, seam",
+          "pulse_at": 982
+        }
+      ]
+    },
+    {
+      "id": "settle",
+      "start": 1020,
+      "duration": 180,
+      "purpose": "The structure stands; the gadget rests inside it, bright but bounded; frame 1199 is the second poster.",
+      "actors": [
+        "human",
+        "codex",
+        "clawd",
+        "frame",
+        "gadget"
+      ],
+      "actions": [
+        {
+          "actor": "human.sit",
+          "phase_frames": {
+            "hold": 12,
+            "anticipation": 4,
+            "action": 8,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 1030,
+          "stagger_after": 0
+        },
+        {
+          "actor": "codex.idle",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 2,
+            "overshoot": 2,
+            "settle": 8
+          },
+          "start": 1060,
+          "stagger_after": 4
+        },
+        {
+          "actor": "clawd.idle",
+          "phase_frames": {
+            "hold": 0,
+            "anticipation": 4,
+            "action": 2,
+            "overshoot": 2,
+            "settle": 8
+          },
+          "start": 1066,
+          "stagger_after": 4
+        },
+        {
+          "actor": "frame.set-down",
+          "phase_frames": {
+            "hold": 12,
+            "anticipation": 4,
+            "action": 8,
+            "overshoot": 2,
+            "settle": 12
+          },
+          "start": 1090,
+          "stagger_after": 4
+        },
+        {
+          "actor": "title.hold",
+          "phase_frames": {
+            "hold": 60,
+            "anticipation": 0,
+            "action": 0,
+            "overshoot": 0,
+            "settle": 0
+          },
+          "start": 1140,
+          "stagger_after": 0
+        }
+      ],
+      "light_state": "settled",
+      "emitter": "gadget, rimming the structure",
+      "joins": []
+    }
+  ]
+}

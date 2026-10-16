@@ -1,0 +1,34 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "update",
+    "id": "animation-animatic-probes",
+    "guidance": "Ground truth by exit code (D81). The probe runs `python3 scripts/animation/probe-all.py out/animatic-seq --timeline v3/timeline.json --xsheet v3/xsheet.json --second-frames out/animatic-seq-b --subset --figure-frames out/animatic-fig-seq --figure-line-frames out/animatic-figline-seq` in the renderer root: twos, hold band, screen time, eye trace, loop closure (on the figure-only line-phase frames, because the floor grid merges with the outline on full frames), colour continuity and determinism (second render, tolerant within 2 levels on at most 0.01 % of pixels). Every probe prints its control first and refuses to report if it does not trip. On FAIL quote the probe's line naming the beat or frame and fix the contract or the render, never the probe.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-all.py",
+          "out/animatic-seq",
+          "--timeline",
+          "v3/timeline.json",
+          "--xsheet",
+          "v3/xsheet.json",
+          "--second-frames",
+          "out/animatic-seq-b",
+          "--subset",
+          "--figure-frames",
+          "out/animatic-fig-seq",
+          "--figure-line-frames",
+          "out/animatic-figline-seq"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 600000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ]
+  }
+}

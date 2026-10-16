@@ -1,0 +1,130 @@
+[
+ {
+  "key": "K1",
+  "name": "rest-on-lid",
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K1.png",
+  "family": "home",
+  "cropPx": [
+   230,
+   504
+  ],
+  "baselineInCrop": 502,
+  "scale": 0.4745,
+  "originMask": [
+   85,
+   -106
+  ]
+ },
+ {
+  "key": "K2",
+  "name": "grip",
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K2.png",
+  "family": "home",
+  "cropPx": [
+   237,
+   512
+  ],
+  "baselineInCrop": 509,
+  "scale": 0.4745,
+  "originMask": [
+   82,
+   -122
+  ]
+ },
+ {
+  "key": "K3",
+  "name": "lift",
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K3.png",
+  "family": "home",
+  "cropPx": [
+   339,
+   449
+  ],
+  "baselineInCrop": 446,
+  "scale": 0.4745,
+  "originMask": [
+   25,
+   10
+  ]
+ },
+ {
+  "key": "K4",
+  "name": "awe",
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K4.png",
+  "family": "home",
+  "cropPx": [
+   391,
+   427
+  ],
+  "baselineInCrop": 424,
+  "scale": 0.4745,
+  "originMask": [
+   -55,
+   58
+  ]
+ },
+ {
+  "key": "K5",
+  "name": "brace",
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K5.png",
+  "family": "home",
+  "cropPx": [
+   289,
+   428
+  ],
+  "baselineInCrop": 425,
+  "scale": 0.4745,
+  "originMask": [
+   19,
+   56
+  ]
+ },
+ {
+  "key": "K6",
+  "name": "joy-a",
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K6.png",
+  "family": "home",
+  "cropPx": [
+   279,
+   520
+  ],
+  "baselineInCrop": 517,
+  "scale": 0.4745,
+  "originMask": [
+   35,
+   -138
+  ]
+ },
+ {
+  "key": "K7",
+  "name": "joy-b",
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K7.png",
+  "family": "home",
+  "cropPx": [
+   378,
+   517
+  ],
+  "baselineInCrop": 514,
+  "scale": 0.4745,
+  "originMask": [
+   -210,
+   -133
+  ]
+ },
+ {
+  "key": "K8",
+  "name": "shrink",
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K8.png",
+  "family": "home",
+  "cropPx": [
+   236,
+   509
+  ],
+  "baselineInCrop": 506,
+  "scale": 0.4745,
+  "originMask": [
+   72,
+   -116
+  ]
+ }
+]

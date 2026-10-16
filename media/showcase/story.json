@@ -1,0 +1,91 @@
+{
+  "title": "Claude Prompts — A workflow in motion",
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "durationInFrames": 2250,
+  "scenes": [
+    {
+      "id": "problem",
+      "startFrame": 0,
+      "durationInFrames": 180,
+      "kicker": "THE GOAL",
+      "headline": "Stop rewriting the workflow.",
+      "body": "Reuse the instructions. Change the task.",
+      "kind": "problem",
+      "labels": ["Research", "Review", "Create"]
+    },
+    {
+      "id": "identity",
+      "startFrame": 180,
+      "durationInFrames": 180,
+      "kicker": "CLAUDE PROMPTS",
+      "headline": "The portable workflow layer.",
+      "body": "Beside your AI coding client.",
+      "kind": "identity",
+      "labels": ["MCP server", "Client executes"]
+    },
+    {
+      "id": "compose",
+      "startFrame": 360,
+      "durationInFrames": 240,
+      "kicker": "COMPOSE THE PROCESS",
+      "headline": "Prompts. Chains. Gates.",
+      "body": "Reusable resources. Context between steps.",
+      "kind": "compose",
+      "labels": [">> Prompt", "--> Chain", ":: Gate", "==> Handoff"]
+    },
+    {
+      "id": "request",
+      "startFrame": 600,
+      "durationInFrames": 240,
+      "kicker": "EDITORIAL ANIMATION",
+      "headline": "Create a showcase.",
+      "body": "One brief starts the creative workflow.",
+      "kind": "request",
+      "code": ">>showcase_pipeline\nbrief:\"Create a silent 75-second film\"",
+      "labels": ["Client executes", "75-second silent film"]
+    },
+    {
+      "id": "agents",
+      "startFrame": 840,
+      "durationInFrames": 450,
+      "kicker": "EDITORIAL ANIMATION",
+      "headline": "Specialists share the workflow.",
+      "body": "Research informs story. Story informs design.",
+      "kind": "agents",
+      "labels": ["Research agent", "Story agent", "Design agent"]
+    },
+    {
+      "id": "check",
+      "startFrame": 1290,
+      "durationInFrames": 270,
+      "kicker": "EDITORIAL ANIMATION",
+      "headline": "Review before render.",
+      "body": "Claims. Timing. Contrast.",
+      "kind": "check",
+      "labels": ["Review criteria", "No implied verdict"]
+    },
+    {
+      "id": "result",
+      "startFrame": 1560,
+      "durationInFrames": 390,
+      "kicker": "EDITORIAL ANIMATION",
+      "headline": "A film. A poster. A reusable process.",
+      "body": "The client renders the output.",
+      "kind": "result",
+      "labels": ["75-second film draft", "Poster frame", "Client executes"]
+    },
+    {
+      "id": "cta",
+      "startFrame": 1950,
+      "durationInFrames": 300,
+      "kicker": "CLAUDE PROMPTS",
+      "headline": "Build around the work you repeat.",
+      "body": "github.com/minipuft/claude-prompts-mcp",
+      "kind": "cta",
+      "code": ">>showcase_pipeline",
+      "labels": ["Reuse", "Adapt", "Create"]
+    }
+  ]
+}

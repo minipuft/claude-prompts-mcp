@@ -1,0 +1,16 @@
+{
+  "about": "Rules that guess why an UNFILED Eagle item was saved. First match wins; match is a case-insensitive regex over name + url + annotation. Edit freely; eagle_board.py render re-applies them.",
+  "clusters": [
+    {"id": "boondocks", "title": "Boondocks model sheets and posters", "match": "boondocks|huey|riley|disegno del personaggio", "folder": "TV Shows/Animation/The Boondocks + Character Design", "note": "single-weight line, model-sheet discipline, two-tone poster as silhouette test (saved during the film's character work)"},
+    {"id": "hercules", "title": "Hercules: Hades, blue flame on black", "match": "Screenshot - 2026-09-07 06\\.5", "folder": "Movies/Hercules + Lighting", "note": "black field with one coloured light source: the medium"},
+    {"id": "light-volume", "title": "Turrell / Eliasson light volumes", "match": "turrell|weather project|rotunda|eliasson", "folder": "Lighting + Atmosphere", "note": "light as the subject, one hue filling the frame, figures as silhouettes"},
+    {"id": "cloak-gen", "title": "The cloak figure before it had a name", "match": "20260729_195604|celestial figure", "folder": "Personal Art + Character Design", "note": "SD prompt in the annotation: S-curve turn, cloak thrown wide, starfield glitter"},
+    {"id": "hair", "title": "Hair as a graphic shape", "match": "hair_mastery|hair__mastery|autumnandwinter|x_xzzin", "folder": "Character Design/Hair", "note": "hair mass as one silhouette"},
+    {"id": "downtown", "title": "Downtown (MTV 1999)", "match": "downtown", "folder": "TV Shows/Animation/Downtown", "note": "rough-line 2D with grounded acting; folder already exists"},
+    {"id": "liquid", "title": "Liquid / generative blobs", "match": "liquid|touchdesig|generative", "folder": "Texture/Patterns", "note": "soft-body look for a companion or the boil"},
+    {"id": "hifi-rush", "title": "Hi-Fi Rush designs", "match": "hi-fi rush|hi fi rush", "folder": "Videogames/Hi-Fi Rush + Character Design", "note": "cel-shaded 3D that reads as 2D; line and colour blocking"},
+    {"id": "sd-output", "title": "Stable Diffusion outputs", "match": "127\\.0\\.0\\.1:(7860|8188)|upscale_\\d+|^\\d{8}_\\d{6}", "folder": "Artwork/Stable Diffusion (mine)", "note": "local generations saved from the web UI"},
+    {"id": "fashion", "title": "Fashion / portrait photos", "match": "instagram\\.com|photo by|runway|look\\d+", "folder": "Composition/Fashion Photography", "note": "silhouette and costume references"},
+    {"id": "work-screenshot", "title": "Work screenshots (not references)", "match": "^(Screenshot|Clipboard) - 20", "folder": "Scratch (or delete)", "note": "terminals, dashboards, forms; Eagle is the default screenshot sink"}
+  ]
+}

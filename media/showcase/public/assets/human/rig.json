@@ -1,0 +1,191 @@
+{
+ "canvas": [
+  600,
+  960
+ ],
+ "parts": {
+  "hair": {
+   "src": "part02",
+   "anchor": [
+    40,
+    20
+   ],
+   "pivot": [
+    386,
+    100
+   ],
+   "parent": "head",
+   "z": 1
+  },
+  "head": {
+   "src": "part11",
+   "anchor": [
+    300,
+    52
+   ],
+   "pivot": [
+    348,
+    152
+   ],
+   "parent": "neck",
+   "z": 5
+  },
+  "neck": {
+   "src": "part14",
+   "anchor": [
+    318,
+    150
+   ],
+   "pivot": [
+    351,
+    210
+   ],
+   "parent": "torso",
+   "z": 3
+  },
+  "torso": {
+   "src": "part01",
+   "anchor": [
+    200,
+    196
+   ],
+   "pivot": [
+    348,
+    230
+   ],
+   "parent": null,
+   "z": 4
+  },
+  "armL_up": {
+   "src": "part09",
+   "anchor": [
+    180,
+    236
+   ],
+   "pivot": [
+    228,
+    246
+   ],
+   "parent": "torso",
+   "z": 2
+  },
+  "armL_lo": {
+   "src": "part13",
+   "anchor": [
+    198,
+    384
+   ],
+   "pivot": [
+    228,
+    394
+   ],
+   "parent": "armL_up",
+   "z": 2
+  },
+  "handL": {
+   "src": "part06",
+   "anchor": [
+    150,
+    516
+   ],
+   "pivot": [
+    228,
+    526
+   ],
+   "parent": "armL_lo",
+   "z": 6
+  },
+  "armR_up": {
+   "src": "part08",
+   "anchor": [
+    422,
+    236
+   ],
+   "pivot": [
+    470,
+    246
+   ],
+   "parent": "torso",
+   "z": 2
+  },
+  "armR_lo": {
+   "src": "part12",
+   "anchor": [
+    435,
+    384
+   ],
+   "pivot": [
+    470,
+    394
+   ],
+   "parent": "armR_up",
+   "z": 2
+  },
+  "handR": {
+   "src": "part05",
+   "anchor": [
+    404,
+    516
+   ],
+   "pivot": [
+    470,
+    526
+   ],
+   "parent": "armR_lo",
+   "z": 6
+  },
+  "legL": {
+   "src": "part03",
+   "anchor": [
+    246,
+    470
+   ],
+   "pivot": [
+    300,
+    480
+   ],
+   "parent": "torso",
+   "z": 0
+  },
+  "legR": {
+   "src": "part04",
+   "anchor": [
+    352,
+    470
+   ],
+   "pivot": [
+    400,
+    480
+   ],
+   "parent": "torso",
+   "z": 0
+  },
+  "bootL": {
+   "src": "part10",
+   "anchor": [
+    190,
+    858
+   ],
+   "pivot": [
+    300,
+    870
+   ],
+   "parent": "legL",
+   "z": 0
+  },
+  "bootR": {
+   "src": "part07",
+   "anchor": [
+    372,
+    858
+   ],
+   "pivot": [
+    400,
+    870
+   ],
+   "parent": "legR",
+   "z": 0
+  }
+ },
+ "reference": "part00 is the generated full figure; not a puppet part, kept as the assembly control"
+}

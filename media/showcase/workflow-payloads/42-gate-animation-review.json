@@ -1,0 +1,22 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "animation-review",
+    "name": "Animation Review Rubric",
+    "description": "Advisory (no control, says so): grade the animatic against the episode's rubric by criterion id with cited evidence; TASTE rows carry one question with a default for the owner.",
+    "type": "guidance",
+    "gate_type": "custom",
+    "severity": "medium",
+    "subject": "animation-review",
+    "enforcement_mode": "advisory",
+    "guidance": "Advisory, not a check: nothing here has a positive control. Grade only what was viewed, one mark per touched criterion (HOLDS, FAILS, UNPROVEN, TASTE) with evidence at or above the criterion's minimum tier. The episode-tier criteria (timeline conformance, twos/ones split, hold band, eye trace, colour continuity) are DECIDED by the probe gate, not here: cite its lines, do not re-grade them. Grade here what no probe can: acting reads without text (C14), composition hierarchy per beat (C10), the crossings read as drawn (C13), the story lands in the screen time given. Every TASTE mark asks the owner one question with a default. Receipt in five parts: Changed, Grades, Controls, Owner, Next.",
+    "activation": {
+      "prompt_categories": [
+        "animation"
+      ],
+      "explicit_request": true
+    }
+  }
+}

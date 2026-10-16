@@ -1,0 +1,1 @@
+Input validation error: Invalid arguments for tool prompt_engine: user_response: User response cannot be empty if provided

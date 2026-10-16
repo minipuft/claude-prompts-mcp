@@ -1,0 +1,108 @@
+{
+  "id": "everything-at-once",
+  "provisional": true,
+  "derivedFrom": "test-scene (no layout contract for this beat's shot yet); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
+  "figure": {
+    "scale": 0.68,
+    "x": 420,
+    "y": 40
+  },
+  "codex": {
+    "x": 60,
+    "y": 440,
+    "scale": 1.8
+  },
+  "clawd": {
+    "x": 940,
+    "y": 470,
+    "scale": 1.5
+  },
+  "frame": {
+    "x": 910,
+    "y": 70,
+    "width": 280,
+    "height": 230
+  },
+  "blocks": [
+    {
+      "x": 960,
+      "y": 360,
+      "width": 80,
+      "height": 60,
+      "role": "main1"
+    },
+    {
+      "x": 1040,
+      "y": 360,
+      "width": 80,
+      "height": 60,
+      "role": "main2"
+    }
+  ],
+  "join": {
+    "x": 1040,
+    "y": 390
+  },
+  "arch": {
+    "x": 30,
+    "y": 40,
+    "width": 340,
+    "height": 430,
+    "opening": 0.6,
+    "top": 70
+  },
+  "gates": [
+    {
+      "x": 150,
+      "y": 388,
+      "r": 22
+    },
+    {
+      "x": 235,
+      "y": 382,
+      "r": 28
+    },
+    {
+      "x": 325,
+      "y": 376,
+      "r": 34
+    }
+  ],
+  "floor": {
+    "y": 480
+  },
+  "figureCrop": {
+    "x": 380,
+    "y": 0,
+    "width": 500,
+    "height": 720
+  },
+  "beat": "everything-at-once",
+  "shot": "s01-arrival-overwhelm",
+  "actors": {
+    "gadget": {
+      "x": 1040,
+      "y": 330,
+      "scale": 0.8
+    },
+    "stalk": {
+      "x": 900,
+      "y": 300,
+      "scale": 1.0,
+      "facing": "left"
+    }
+  },
+  "emitter": {
+    "start": [
+      1010,
+      384
+    ],
+    "end": [
+      1040,
+      330
+    ],
+    "anchor": "gadget dial"
+  },
+  "card": "seuss-no-one-youer",
+  "cardNote": "provisional: board §1 world, the overwhelm of towers and stalks the field widens onto; s01 lists it first"
+}

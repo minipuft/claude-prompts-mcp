@@ -1,0 +1,2950 @@
+{
+ "shot": "s01-arrival-overwhelm",
+ "actor": "human",
+ "provisional": true,
+ "note": "Key plates built in the project (D85): each key's joints are the pose sheet's solved joints (`source: \"solver\"`, npm run solve-poses) and its plate is the plate family's mesh (a parts rig: every part its own ARAP mesh, drawn in the key's order) posed to those joints and rendered at the model sheet's scale on its baseline (scripts/animation/plates-from-poses.mjs). A key no family mesh holds is `needs-family` and has no plate. `measured` is scripts/animation/measure-keys.py. Frames are shot-local = film frames. Holds and breakdowns are the chart's.",
+ "keys": [
+  {
+   "name": "rest-on-lid",
+   "frame": 0,
+   "hold": 26,
+   "joints": {
+    "root": [
+     333.5,
+     486.47
+    ],
+    "head": [
+     389.17,
+     199.52
+    ],
+    "torso": [
+     361.82,
+     226
+    ],
+    "neck": [
+     374.69,
+     212.8
+    ],
+    "shoulderL": [
+     304.5,
+     225.93
+    ],
+    "hipL": [
+     306.61,
+     499.77
+    ],
+    "shoulderR": [
+     370.37,
+     287.26
+    ],
+    "hipR": [
+     357.7,
+     474.5
+    ],
+    "ponchoPoint": [
+     340.46,
+     482.21
+    ],
+    "ankleL": [
+     241,
+     838
+    ],
+    "kneeL": [
+     337.81,
+     681.07
+    ],
+    "ankleR": [
+     425.3,
+     834.27
+    ],
+    "kneeR": [
+     381.31,
+     644.42
+    ],
+    "wristL": [
+     282.93,
+     288.2
+    ],
+    "elbowL": [
+     402.48,
+     293.53
+    ],
+    "wristR": [
+     336.92,
+     338.46
+    ],
+    "elbowR": [
+     248.84,
+     272.79
+    ]
+   },
+   "source": "solver",
+   "solvedAt": "2026-10-15",
+   "plateFamily": "lid",
+   "status": "plate",
+   "family": "home",
+   "registration": "skeleton",
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K1.png",
+   "plateSha256": "99540c3fe697f2a811a8ebe3898bb7023349787ebb7a7c9822893ee619948e41",
+   "plateInfo": {
+    "cropPx": [
+     230,
+     504
+    ],
+    "baselineInCrop": 502,
+    "scale": 0.4745,
+    "originMask": [
+     85,
+     -106
+    ]
+   },
+   "render": {
+    "hold": {
+     "inverted": 0.0002,
+     "strained": 0.014,
+     "overlap": 0
+    },
+    "partScales": {
+     "head": 1,
+     "armL": 1,
+     "armR": 1,
+     "legL": 1,
+     "legR": 1
+    },
+    "rig": "parts",
+    "order": [
+     "handR",
+     "upperArmR",
+     "foreArmR",
+     "head",
+     "torso",
+     "upperArmL",
+     "poncho",
+     "handL",
+     "foreArmL",
+     "upperLegL",
+     "upperLegR",
+     "lowerLegL",
+     "lowerLegR",
+     "footL",
+     "footR",
+     "hair"
+    ],
+    "depths": {
+     "armL": {
+      "front": false,
+      "reason": null
+     },
+     "armR": {
+      "front": true,
+      "reason": "crossing"
+     },
+     "legL": {
+      "front": false,
+      "reason": null
+     },
+     "legR": {
+      "front": false,
+      "reason": null
+     }
+    },
+    "declaredOrder": null,
+    "parts": {
+     "hair": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "head": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "torso": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "poncho": {
+      "inverted": 0.0002,
+      "strained": 0.014,
+      "overlap": 0
+     },
+     "upperArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     }
+    },
+    "worstParts": {
+     "inverted": "poncho",
+     "strained": "poncho",
+     "overlap": null
+    },
+    "jointFill": {
+     "shoulderL": {
+      "fill": 1,
+      "fade": 1.07,
+      "depth": 3.32,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "shoulderR": {
+      "fill": 1,
+      "fade": 1.32,
+      "depth": 2.65,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "elbowL": {
+      "fill": 1,
+      "fade": 0.22,
+      "depth": 3.53,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "elbowR": {
+      "fill": 1,
+      "fade": 0.34,
+      "depth": 3.21,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "kneeL": {
+      "fill": 1,
+      "fade": 1.31,
+      "depth": 2.09,
+      "front": "upperLegL",
+      "pass": true
+     },
+     "kneeR": {
+      "fill": 1,
+      "fade": 1.24,
+      "depth": 1.51,
+      "front": "upperLegR",
+      "pass": true
+     }
+    }
+   },
+   "measured": {
+    "c31": {
+     "declared": "C 0.06 -1",
+     "read": {
+      "class": "C",
+      "bow": 0.062,
+      "sign": -1
+     },
+     "twinning": 0.74,
+     "pass": true,
+     "refused": []
+    },
+    "c20": {
+     "headScale": 1,
+     "headCount": 8.0,
+     "limbScales": {
+      "armL": 1,
+      "armR": 1,
+      "legL": 1,
+      "legR": 1
+     },
+     "jointChains": {
+      "armL": 1.0,
+      "armR": 1.0,
+      "legL": 1.0,
+      "legR": 1.0
+     },
+     "worstDevPct": 0,
+     "pass": true
+    },
+    "c21": {
+     "components": 1,
+     "solidity": 0.37,
+     "wristsFromSpineH": {
+      "wristL": 0.078,
+      "wristR": 0.014
+     },
+     "kind": "closed",
+     "wristsApartRequired": 0,
+     "wristsApart": 0,
+     "pass": true
+    },
+    "c22": {
+     "contourPx": 4.178764612139285,
+     "targetPx": 3.6029989445399884,
+     "vsModelPct": 16.0,
+     "pass": true
+    },
+    "joints": {
+     "fill": 1,
+     "fade": 1.51,
+     "pass": true,
+     "open": []
+    },
+    "film": {
+     "mad": 9.54,
+     "centroid": {
+      "head": 0.93,
+      "handL": 0.29,
+      "footL": 0.59,
+      "handR": 0.09,
+      "footR": 0.14
+     },
+     "worstPart": "head",
+     "worstPx": 0.93,
+     "bar": {
+      "centroidPx": 3.6,
+      "mad": 10.0
+     },
+     "pass": true
+    },
+    "verdict": "accepted"
+   }
+  },
+  {
+   "name": "grip",
+   "frame": 42,
+   "hold": 16,
+   "joints": {
+    "root": [
+     352,
+     483.6
+    ],
+    "head": [
+     422.6,
+     207.92
+    ],
+    "torso": [
+     388.13,
+     224.1
+    ],
+    "neck": [
+     404.65,
+     215.91
+    ],
+    "shoulderL": [
+     334.22,
+     204.65
+    ],
+    "hipL": [
+     328.64,
+     502.42
+    ],
+    "shoulderR": [
+     375.46,
+     284.64
+    ],
+    "hipR": [
+     373.02,
+     466.66
+    ],
+    "ponchoPoint": [
+     359.38,
+     479.58
+    ],
+    "ankleL": [
+     241,
+     838
+    ],
+    "kneeL": [
+     344.9,
+     685.67
+    ],
+    "ankleR": [
+     424.72,
+     829.05
+    ],
+    "kneeR": [
+     389.13,
+     637.45
+    ],
+    "wristL": [
+     336.55,
+     294.69
+    ],
+    "elbowL": [
+     445.85,
+     245.96
+    ],
+    "wristR": [
+     311.2,
+     245.52
+    ],
+    "elbowR": [
+     383.14,
+     162.49
+    ]
+   },
+   "source": "solver",
+   "solvedAt": "2026-10-15",
+   "plateFamily": "lid",
+   "status": "plate",
+   "family": "home",
+   "registration": "skeleton",
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K2.png",
+   "plateSha256": "9b4c0f45abc3de89adfa48f5309c440f0fd93933a85d21440748f95fbaa66909",
+   "plateInfo": {
+    "cropPx": [
+     237,
+     512
+    ],
+    "baselineInCrop": 509,
+    "scale": 0.4745,
+    "originMask": [
+     82,
+     -122
+    ]
+   },
+   "render": {
+    "hold": {
+     "inverted": 0.0034,
+     "strained": 0.0242,
+     "overlap": 0
+    },
+    "partScales": {
+     "head": 1,
+     "armL": 1,
+     "armR": 1,
+     "legL": 1,
+     "legR": 1
+    },
+    "rig": "parts",
+    "order": [
+     "handR",
+     "upperArmR",
+     "foreArmR",
+     "head",
+     "torso",
+     "upperArmL",
+     "poncho",
+     "handL",
+     "foreArmL",
+     "upperLegL",
+     "upperLegR",
+     "lowerLegL",
+     "lowerLegR",
+     "footL",
+     "footR",
+     "hair"
+    ],
+    "depths": {
+     "armL": {
+      "front": false,
+      "reason": null
+     },
+     "armR": {
+      "front": true,
+      "reason": "lead"
+     },
+     "legL": {
+      "front": false,
+      "reason": null
+     },
+     "legR": {
+      "front": false,
+      "reason": null
+     }
+    },
+    "declaredOrder": null,
+    "parts": {
+     "hair": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "head": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "torso": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "poncho": {
+      "inverted": 0.0034,
+      "strained": 0.0242,
+      "overlap": 0
+     },
+     "upperArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     }
+    },
+    "worstParts": {
+     "inverted": "poncho",
+     "strained": "poncho",
+     "overlap": null
+    },
+    "jointFill": {
+     "shoulderL": {
+      "fill": 1,
+      "fade": 0.69,
+      "depth": 3.21,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "shoulderR": {
+      "fill": 1,
+      "fade": 1.22,
+      "depth": 2.56,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "elbowL": {
+      "fill": 1,
+      "fade": 0.22,
+      "depth": 3.61,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "elbowR": {
+      "fill": 1,
+      "fade": 0.37,
+      "depth": 3.15,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "kneeL": {
+      "fill": 1,
+      "fade": 1.28,
+      "depth": 2.07,
+      "front": "upperLegL",
+      "pass": true
+     },
+     "kneeR": {
+      "fill": 1,
+      "fade": 1.27,
+      "depth": 1.54,
+      "front": "upperLegR",
+      "pass": true
+     }
+    }
+   },
+   "measured": {
+    "c31": {
+     "declared": "C 0.10 -1",
+     "read": {
+      "class": "C",
+      "bow": 0.102,
+      "sign": -1
+     },
+     "twinning": 0.28,
+     "pass": true,
+     "refused": []
+    },
+    "c20": {
+     "headScale": 1,
+     "headCount": 8.0,
+     "limbScales": {
+      "armL": 1,
+      "armR": 1,
+      "legL": 1,
+      "legR": 1
+     },
+     "jointChains": {
+      "armL": 1.0,
+      "armR": 1.0,
+      "legL": 1.0,
+      "legR": 1.0
+     },
+     "worstDevPct": 0,
+     "pass": true
+    },
+    "c21": {
+     "components": 1,
+     "solidity": 0.38,
+     "wristsFromSpineH": {
+      "wristL": 0.045,
+      "wristR": 0.079
+     },
+     "kind": "fold",
+     "wristsApartRequired": 0,
+     "wristsApart": 0,
+     "pass": true
+    },
+    "c22": {
+     "contourPx": 3.8469467074695576,
+     "targetPx": 3.6029989445399884,
+     "vsModelPct": 6.8,
+     "pass": true
+    },
+    "joints": {
+     "fill": 1,
+     "fade": 1.54,
+     "pass": true,
+     "open": []
+    },
+    "film": {
+     "mad": 8.19,
+     "centroid": {
+      "head": 0.77,
+      "handL": 0.34,
+      "footL": 0.3,
+      "handR": 0.42,
+      "footR": 0.25
+     },
+     "worstPart": "head",
+     "worstPx": 0.77,
+     "bar": {
+      "centroidPx": 3.6,
+      "mad": 10.0
+     },
+     "pass": true
+    },
+    "verdict": "accepted"
+   }
+  },
+  {
+   "name": "lift",
+   "frame": 66,
+   "hold": 26,
+   "joints": {
+    "root": [
+     359.4,
+     482.73
+    ],
+    "head": [
+     324.68,
+     192.22
+    ],
+    "torso": [
+     349.55,
+     220.91
+    ],
+    "neck": [
+     338.65,
+     206.04
+    ],
+    "shoulderL": [
+     333.59,
+     275.96
+    ],
+    "hipL": [
+     333.85,
+     498.46
+    ],
+    "shoulderR": [
+     410.78,
+     229.67
+    ],
+    "hipR": [
+     382.39,
+     468.57
+    ],
+    "ponchoPoint": [
+     364.68,
+     477.56
+    ],
+    "ankleL": [
+     204,
+     810.34
+    ],
+    "kneeL": [
+     336.79,
+     682.4
+    ],
+    "ankleR": [
+     425.3,
+     832.11
+    ],
+    "kneeR": [
+     394.36,
+     639.7
+    ],
+    "wristL": [
+     208.69,
+     479.1
+    ],
+    "elbowL": [
+     275.85,
+     380.06
+    ],
+    "wristR": [
+     603.52,
+     155.7
+    ],
+    "elbowR": [
+     532.75,
+     239.73
+    ]
+   },
+   "source": "solver",
+   "solvedAt": "2026-10-15",
+   "plateFamily": "lid",
+   "status": "plate",
+   "family": "home",
+   "registration": "skeleton",
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K3.png",
+   "plateSha256": "bb0f4373b651fd27c752ce0f44408549ab303124f33d951d170c75785a833618",
+   "plateInfo": {
+    "cropPx": [
+     339,
+     449
+    ],
+    "baselineInCrop": 446,
+    "scale": 0.4745,
+    "originMask": [
+     25,
+     10
+    ]
+   },
+   "render": {
+    "hold": {
+     "inverted": 0.0006,
+     "strained": 0.0027,
+     "overlap": 0
+    },
+    "partScales": {
+     "head": 1,
+     "armL": 1,
+     "armR": 1,
+     "legL": 1,
+     "legR": 1
+    },
+    "rig": "parts",
+    "order": [
+     "handR",
+     "upperArmR",
+     "foreArmR",
+     "head",
+     "torso",
+     "upperArmL",
+     "poncho",
+     "handL",
+     "foreArmL",
+     "upperLegL",
+     "lowerLegL",
+     "footL",
+     "upperLegR",
+     "lowerLegR",
+     "footR",
+     "hair"
+    ],
+    "depths": {
+     "armL": {
+      "front": false,
+      "reason": null
+     },
+     "armR": {
+      "front": true,
+      "reason": "lead"
+     },
+     "legL": {
+      "front": true,
+      "reason": "lead"
+     },
+     "legR": {
+      "front": false,
+      "reason": null
+     }
+    },
+    "declaredOrder": null,
+    "parts": {
+     "hair": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "head": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "torso": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "poncho": {
+      "inverted": 0.0006,
+      "strained": 0.0027,
+      "overlap": 0
+     },
+     "upperArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     }
+    },
+    "worstParts": {
+     "inverted": "poncho",
+     "strained": "poncho",
+     "overlap": null
+    },
+    "jointFill": {
+     "shoulderL": {
+      "fill": 1,
+      "fade": 1.73,
+      "depth": 1.67,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "shoulderR": {
+      "fill": 1,
+      "fade": 1.41,
+      "depth": 1.37,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "elbowL": {
+      "fill": 1,
+      "fade": 0.24,
+      "depth": 2.6,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "elbowR": {
+      "fill": 1,
+      "fade": 0.43,
+      "depth": 2.09,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "kneeL": {
+      "fill": 1,
+      "fade": 1.29,
+      "depth": 2.13,
+      "front": "upperLegL",
+      "pass": true
+     },
+     "kneeR": {
+      "fill": 1,
+      "fade": 1.29,
+      "depth": 1.52,
+      "front": "upperLegR",
+      "pass": true
+     }
+    }
+   },
+   "measured": {
+    "c31": {
+     "declared": "C 0.06 +1",
+     "read": {
+      "class": "C",
+      "bow": 0.062,
+      "sign": 1
+     },
+     "twinning": 0.0,
+     "pass": true,
+     "refused": []
+    },
+    "c20": {
+     "headScale": 1,
+     "headCount": 8.0,
+     "limbScales": {
+      "armL": 1,
+      "armR": 1,
+      "legL": 1,
+      "legR": 1
+     },
+     "jointChains": {
+      "armL": 1.0,
+      "armR": 1.0,
+      "legL": 1.0,
+      "legR": 1.0
+     },
+     "worstDevPct": 0,
+     "pass": true
+    },
+    "c21": {
+     "components": 1,
+     "solidity": 0.33,
+     "wristsFromSpineH": {
+      "wristL": 0.163,
+      "wristR": 0.284
+     },
+     "kind": "open",
+     "wristsApartRequired": 1,
+     "wristsApart": 2,
+     "pass": true
+    },
+    "c22": {
+     "contourPx": 4.147621428493511,
+     "targetPx": 3.6029989445399884,
+     "vsModelPct": 15.1,
+     "pass": true
+    },
+    "joints": {
+     "fill": 1,
+     "fade": 1.41,
+     "pass": true,
+     "open": []
+    },
+    "film": {
+     "mad": 7.93,
+     "centroid": {
+      "head": 0.46,
+      "handL": 0.19,
+      "footL": 0.46,
+      "handR": 0.42,
+      "footR": 0.21
+     },
+     "worstPart": "head",
+     "worstPx": 0.46,
+     "bar": {
+      "centroidPx": 3.6,
+      "mad": 10.0
+     },
+     "pass": true
+    },
+    "verdict": "accepted"
+   }
+  },
+  {
+   "name": "awe",
+   "frame": 104,
+   "hold": 26,
+   "joints": {
+    "root": [
+     329.8,
+     485.82
+    ],
+    "head": [
+     375.29,
+     206.95
+    ],
+    "torso": [
+     400.44,
+     233.52
+    ],
+    "neck": [
+     392.14,
+     217.05
+    ],
+    "shoulderL": [
+     346.95,
+     254.11
+    ],
+    "hipL": [
+     327.5,
+     515.73
+    ],
+    "shoulderR": [
+     430.5,
+     287.57
+    ],
+    "hipR": [
+     331.87,
+     458.9
+    ],
+    "ponchoPoint": [
+     334.75,
+     482.08
+    ],
+    "ankleL": [
+     241,
+     838
+    ],
+    "kneeL": [
+     359.66,
+     696.86
+    ],
+    "ankleR": [
+     459.84,
+     801.86
+    ],
+    "kneeR": [
+     384.11,
+     622.3
+    ],
+    "wristL": [
+     109.74,
+     278.54
+    ],
+    "elbowL": [
+     229.21,
+     271.6
+    ],
+    "wristR": [
+     606.32,
+     396.58
+    ],
+    "elbowR": [
+     496.62,
+     390.55
+    ]
+   },
+   "source": "solver",
+   "solvedAt": "2026-10-15",
+   "plateFamily": "open",
+   "status": "plate",
+   "family": "home",
+   "registration": "skeleton",
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K4.png",
+   "plateSha256": "4a2398c9e4f05186caafa5d1388a490569f436a41ebe24592e057734b7207ded",
+   "plateInfo": {
+    "cropPx": [
+     391,
+     427
+    ],
+    "baselineInCrop": 424,
+    "scale": 0.4745,
+    "originMask": [
+     -55,
+     58
+    ]
+   },
+   "render": {
+    "hold": {
+     "inverted": 0,
+     "strained": 0.0002,
+     "overlap": 0
+    },
+    "partScales": {
+     "head": 1,
+     "armL": 1,
+     "armR": 1,
+     "legL": 1,
+     "legR": 1
+    },
+    "rig": "parts",
+    "order": [
+     "handR",
+     "upperArmR",
+     "foreArmR",
+     "head",
+     "torso",
+     "upperArmL",
+     "poncho",
+     "handL",
+     "foreArmL",
+     "upperLegR",
+     "lowerLegR",
+     "upperLegL",
+     "footR",
+     "lowerLegL",
+     "footL",
+     "hair"
+    ],
+    "depths": {
+     "armL": {
+      "front": false,
+      "reason": null
+     },
+     "armR": {
+      "front": true,
+      "reason": "lead"
+     },
+     "legL": {
+      "front": false,
+      "reason": null
+     },
+     "legR": {
+      "front": true,
+      "reason": "lead"
+     }
+    },
+    "declaredOrder": null,
+    "parts": {
+     "hair": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "head": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "torso": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "poncho": {
+      "inverted": 0,
+      "strained": 0.0002,
+      "overlap": 0
+     },
+     "upperArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     }
+    },
+    "worstParts": {
+     "inverted": null,
+     "strained": "poncho",
+     "overlap": null
+    },
+    "jointFill": {
+     "shoulderL": {
+      "fill": 1,
+      "fade": 1.46,
+      "depth": 1.84,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "shoulderR": {
+      "fill": 1,
+      "fade": 1.44,
+      "depth": 1.32,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "elbowL": {
+      "fill": 1,
+      "fade": 0.27,
+      "depth": 2.61,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "elbowR": {
+      "fill": 1,
+      "fade": 0.42,
+      "depth": 2.07,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "kneeL": {
+      "fill": 1,
+      "fade": 1.27,
+      "depth": 2.17,
+      "front": "upperLegL",
+      "pass": true
+     },
+     "kneeR": {
+      "fill": 1,
+      "fade": 1.28,
+      "depth": 1.51,
+      "front": "upperLegR",
+      "pass": true
+     }
+    }
+   },
+   "measured": {
+    "c31": {
+     "declared": "S 0.10 -1",
+     "read": {
+      "class": "S",
+      "bow": 0.075,
+      "sign": -1
+     },
+     "twinning": 0.64,
+     "pass": true,
+     "refused": []
+    },
+    "c20": {
+     "headScale": 1,
+     "headCount": 8.0,
+     "limbScales": {
+      "armL": 1,
+      "armR": 1,
+      "legL": 1,
+      "legR": 1
+     },
+     "jointChains": {
+      "armL": 1.0,
+      "armR": 1.0,
+      "legL": 1.0,
+      "legR": 1.0
+     },
+     "worstDevPct": 0,
+     "pass": true
+    },
+    "c21": {
+     "components": 1,
+     "solidity": 0.31,
+     "wristsFromSpineH": {
+      "wristL": 0.29,
+      "wristR": 0.263
+     },
+     "kind": "open",
+     "wristsApartRequired": 1,
+     "wristsApart": 2,
+     "pass": true
+    },
+    "c22": {
+     "contourPx": 4.182348494353315,
+     "targetPx": 3.6029989445399884,
+     "vsModelPct": 16.1,
+     "pass": true
+    },
+    "joints": {
+     "fill": 1,
+     "fade": 1.44,
+     "pass": true,
+     "open": []
+    },
+    "film": {
+     "mad": 9.64,
+     "centroid": {
+      "head": 0.63,
+      "handL": 0.09,
+      "footL": 0.08,
+      "handR": 0.57,
+      "footR": 0.48
+     },
+     "worstPart": "head",
+     "worstPx": 0.63,
+     "bar": {
+      "centroidPx": 3.6,
+      "mad": 10.0
+     },
+     "pass": true
+    },
+    "verdict": "accepted"
+   }
+  },
+  {
+   "name": "brace",
+   "frame": 154,
+   "hold": 24,
+   "joints": {
+    "root": [
+     340.9,
+     487.9
+    ],
+    "head": [
+     283.7,
+     204.96
+    ],
+    "torso": [
+     314.46,
+     227.23
+    ],
+    "neck": [
+     300.42,
+     215.28
+    ],
+    "shoulderL": [
+     311.53,
+     284.47
+    ],
+    "hipL": [
+     317.31,
+     506.44
+    ],
+    "shoulderR": [
+     376.07,
+     221.75
+    ],
+    "hipR": [
+     362.13,
+     471.22
+    ],
+    "ponchoPoint": [
+     345.61,
+     482.44
+    ],
+    "ankleL": [
+     241,
+     838
+    ],
+    "kneeL": [
+     348,
+     687.83
+    ],
+    "ankleR": [
+     463,
+     810.34
+    ],
+    "kneeR": [
+     363.53,
+     642.76
+    ],
+    "wristL": [
+     311.57,
+     344.83
+    ],
+    "elbowL": [
+     427.02,
+     313.32
+    ],
+    "wristR": [
+     364.46,
+     293.43
+    ],
+    "elbowR": [
+     259.81,
+     260
+    ]
+   },
+   "source": "solver",
+   "solvedAt": "2026-10-15",
+   "plateFamily": "guard",
+   "status": "plate",
+   "family": "home",
+   "registration": "skeleton",
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K5.png",
+   "plateSha256": "a492e30043bb220c07370025868d26c3fe21ff1204d2267e63de8ea92537ac2d",
+   "plateInfo": {
+    "cropPx": [
+     289,
+     428
+    ],
+    "baselineInCrop": 425,
+    "scale": 0.4745,
+    "originMask": [
+     19,
+     56
+    ]
+   },
+   "render": {
+    "hold": {
+     "inverted": 0.0006,
+     "strained": 0.0144,
+     "overlap": 0
+    },
+    "partScales": {
+     "head": 1,
+     "armL": 1,
+     "armR": 1,
+     "legL": 1,
+     "legR": 1
+    },
+    "rig": "parts",
+    "order": [
+     "handL",
+     "upperArmL",
+     "foreArmL",
+     "head",
+     "torso",
+     "upperArmR",
+     "poncho",
+     "handR",
+     "foreArmR",
+     "upperLegR",
+     "lowerLegR",
+     "upperLegL",
+     "footR",
+     "lowerLegL",
+     "footL",
+     "hair"
+    ],
+    "depths": {
+     "armL": {
+      "front": true,
+      "reason": "lead"
+     },
+     "armR": {
+      "front": false,
+      "reason": null
+     },
+     "legL": {
+      "front": false,
+      "reason": null
+     },
+     "legR": {
+      "front": true,
+      "reason": "lead"
+     }
+    },
+    "declaredOrder": null,
+    "parts": {
+     "hair": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "head": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "torso": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "poncho": {
+      "inverted": 0.0006,
+      "strained": 0.0144,
+      "overlap": 0
+     },
+     "upperArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     }
+    },
+    "worstParts": {
+     "inverted": "poncho",
+     "strained": "poncho",
+     "overlap": null
+    },
+    "jointFill": {
+     "shoulderL": {
+      "fill": 1,
+      "fade": 1.52,
+      "depth": 3.31,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "shoulderR": {
+      "fill": 1,
+      "fade": 0.75,
+      "depth": 2.64,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "elbowL": {
+      "fill": 1,
+      "fade": 0.21,
+      "depth": 3.5,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "elbowR": {
+      "fill": 1,
+      "fade": 0.38,
+      "depth": 3.17,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "kneeL": {
+      "fill": 1,
+      "fade": 1.3,
+      "depth": 2.12,
+      "front": "upperLegL",
+      "pass": true
+     },
+     "kneeR": {
+      "fill": 1,
+      "fade": 1.34,
+      "depth": 1.48,
+      "front": "upperLegR",
+      "pass": true
+     }
+    }
+   },
+   "measured": {
+    "c31": {
+     "declared": "C 0.08 +1",
+     "read": {
+      "class": "C",
+      "bow": 0.082,
+      "sign": 1
+     },
+     "twinning": 0.5,
+     "pass": true,
+     "refused": []
+    },
+    "c20": {
+     "headScale": 1,
+     "headCount": 8.0,
+     "limbScales": {
+      "armL": 1,
+      "armR": 1,
+      "legL": 1,
+      "legR": 1
+     },
+     "jointChains": {
+      "armL": 1.0,
+      "armR": 1.0,
+      "legL": 1.0,
+      "legR": 1.0
+     },
+     "worstDevPct": 0,
+     "pass": true
+    },
+    "c21": {
+     "components": 1,
+     "solidity": 0.38,
+     "wristsFromSpineH": {
+      "wristL": 0.016,
+      "wristR": 0.047
+     },
+     "kind": "closed",
+     "wristsApartRequired": 0,
+     "wristsApart": 0,
+     "pass": true
+    },
+    "c22": {
+     "contourPx": 4.106216066251471,
+     "targetPx": 3.6029989445399884,
+     "vsModelPct": 14.0,
+     "pass": true
+    },
+    "joints": {
+     "fill": 1,
+     "fade": 1.48,
+     "pass": true,
+     "open": []
+    },
+    "film": {
+     "mad": 7.32,
+     "centroid": {
+      "head": 0.47,
+      "handL": 0.29,
+      "footL": 0.19,
+      "handR": 0.7,
+      "footR": 0.35
+     },
+     "worstPart": "handR",
+     "worstPx": 0.7,
+     "bar": {
+      "centroidPx": 3.6,
+      "mad": 10.0
+     },
+     "pass": true
+    },
+    "verdict": "accepted"
+   }
+  },
+  {
+   "name": "joy-a",
+   "frame": 190,
+   "hold": 22,
+   "joints": {
+    "root": [
+     381.6,
+     481.05
+    ],
+    "head": [
+     271.08,
+     222.31
+    ],
+    "torso": [
+     250.38,
+     254.27
+    ],
+    "neck": [
+     260.19,
+     238.66
+    ],
+    "shoulderL": [
+     194.16,
+     265.42
+    ],
+    "hipL": [
+     377.71,
+     510.79
+    ],
+    "shoulderR": [
+     270.76,
+     312.66
+    ],
+    "hipR": [
+     385.1,
+     454.27
+    ],
+    "ponchoPoint": [
+     385.05,
+     473.28
+    ],
+    "ankleL": [
+     204,
+     810.34
+    ],
+    "kneeL": [
+     345.31,
+     691.88
+    ],
+    "ankleR": [
+     423.9,
+     818.27
+    ],
+    "kneeR": [
+     395.13,
+     625.53
+    ],
+    "wristL": [
+     179.99,
+     27.37
+    ],
+    "elbowL": [
+     181.77,
+     147.03
+    ],
+    "wristR": [
+     473.3,
+     293.08
+    ],
+    "elbowR": [
+     384.52,
+     357.79
+    ]
+   },
+   "source": "solver",
+   "solvedAt": "2026-10-15",
+   "plateFamily": "burst-a",
+   "status": "plate",
+   "family": "home",
+   "registration": "skeleton",
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K6.png",
+   "plateSha256": "a6a2c4fca077a6bb280719edc09eb11e66a2e95604b7847c9f4d0f5a92775952",
+   "plateInfo": {
+    "cropPx": [
+     279,
+     520
+    ],
+    "baselineInCrop": 517,
+    "scale": 0.4745,
+    "originMask": [
+     35,
+     -138
+    ]
+   },
+   "render": {
+    "hold": {
+     "inverted": 0.0051,
+     "strained": 0.0337,
+     "overlap": 0.0012
+    },
+    "partScales": {
+     "head": 1,
+     "armL": 1,
+     "armR": 1,
+     "legL": 1,
+     "legR": 1
+    },
+    "rig": "parts",
+    "order": [
+     "handL",
+     "upperArmL",
+     "foreArmL",
+     "handR",
+     "upperArmR",
+     "foreArmR",
+     "head",
+     "torso",
+     "poncho",
+     "upperLegL",
+     "lowerLegL",
+     "footL",
+     "upperLegR",
+     "lowerLegR",
+     "footR",
+     "hair"
+    ],
+    "depths": {
+     "armL": {
+      "front": true,
+      "reason": "lead"
+     },
+     "armR": {
+      "front": true,
+      "reason": "crossing"
+     },
+     "legL": {
+      "front": true,
+      "reason": "lead"
+     },
+     "legR": {
+      "front": false,
+      "reason": null
+     }
+    },
+    "declaredOrder": null,
+    "parts": {
+     "hair": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "head": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "torso": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "poncho": {
+      "inverted": 0.0051,
+      "strained": 0.0337,
+      "overlap": 0
+     },
+     "upperArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0.0012
+     },
+     "handL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     }
+    },
+    "worstParts": {
+     "inverted": "poncho",
+     "strained": "poncho",
+     "overlap": "foreArmL"
+    },
+    "jointFill": {
+     "shoulderL": {
+      "fill": 1,
+      "fade": 0.99,
+      "depth": 1.63,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "shoulderR": {
+      "fill": 1,
+      "fade": 1.68,
+      "depth": 1.42,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "elbowL": {
+      "fill": 1,
+      "fade": 0.25,
+      "depth": 2.61,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "elbowR": {
+      "fill": 1,
+      "fade": 0.42,
+      "depth": 2.14,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "kneeL": {
+      "fill": 1,
+      "fade": 1.29,
+      "depth": 2.06,
+      "front": "upperLegL",
+      "pass": true
+     },
+     "kneeR": {
+      "fill": 1,
+      "fade": 1.28,
+      "depth": 1.53,
+      "front": "upperLegR",
+      "pass": true
+     }
+    }
+   },
+   "measured": {
+    "c31": {
+     "declared": "C 0.12 -1",
+     "read": {
+      "class": "C",
+      "bow": 0.122,
+      "sign": -1
+     },
+     "twinning": 0.0,
+     "pass": true,
+     "refused": []
+    },
+    "c20": {
+     "headScale": 1,
+     "headCount": 8.0,
+     "limbScales": {
+      "armL": 1,
+      "armR": 1,
+      "legL": 1,
+      "legR": 1
+     },
+     "jointChains": {
+      "armL": 1.0,
+      "armR": 1.0,
+      "legL": 1.0,
+      "legR": 1.0
+     },
+     "worstDevPct": 0,
+     "pass": true
+    },
+    "c21": {
+     "components": 1,
+     "solidity": 0.32,
+     "wristsFromSpineH": {
+      "wristL": 0.233,
+      "wristR": 0.188
+     },
+     "kind": "star",
+     "wristsApartRequired": 2,
+     "wristsApart": 2,
+     "pass": true
+    },
+    "c22": {
+     "contourPx": 4.194738846136046,
+     "targetPx": 3.6029989445399884,
+     "vsModelPct": 16.4,
+     "pass": true
+    },
+    "joints": {
+     "fill": 1,
+     "fade": 1.53,
+     "pass": true,
+     "open": []
+    },
+    "film": {
+     "mad": 7.75,
+     "centroid": {
+      "head": 0.46,
+      "handL": 0.2,
+      "footL": 0.19,
+      "handR": 0.56,
+      "footR": 0.08
+     },
+     "worstPart": "handR",
+     "worstPx": 0.56,
+     "bar": {
+      "centroidPx": 3.6,
+      "mad": 10.0
+     },
+     "pass": true
+    },
+    "verdict": "accepted"
+   }
+  },
+  {
+   "name": "joy-b",
+   "frame": 228,
+   "hold": 20,
+   "joints": {
+    "root": [
+     248.4,
+     481.05
+    ],
+    "head": [
+     242.25,
+     197.99
+    ],
+    "torso": [
+     214.75,
+     221.21
+    ],
+    "neck": [
+     223.99,
+     205.26
+    ],
+    "shoulderL": [
+     175.34,
+     262.84
+    ],
+    "hipL": [
+     252.54,
+     451.33
+    ],
+    "shoulderR": [
+     265.16,
+     257.04
+    ],
+    "hipR": [
+     244.67,
+     507.79
+    ],
+    "ponchoPoint": [
+     255.17,
+     475.11
+    ],
+    "ankleL": [
+     204,
+     810.34
+    ],
+    "kneeL": [
+     261.34,
+     635.09
+    ],
+    "ankleR": [
+     420.87,
+     828.66
+    ],
+    "kneeR": [
+     319.98,
+     661.92
+    ],
+    "wristL": [
+     -43.85,
+     168.91
+    ],
+    "elbowL": [
+     63.94,
+     220.9
+    ],
+    "wristR": [
+     290.28,
+     75.31
+    ],
+    "elbowR": [
+     349.17,
+     168.05
+    ]
+   },
+   "source": "solver",
+   "solvedAt": "2026-10-15",
+   "plateFamily": "burst-b",
+   "status": "plate",
+   "family": "home",
+   "registration": "skeleton",
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K7.png",
+   "plateSha256": "c6892ec85569549a51fc718552e1bcd70e7dedfa2b0dd0bcf65d523e5baba397",
+   "plateInfo": {
+    "cropPx": [
+     378,
+     517
+    ],
+    "baselineInCrop": 514,
+    "scale": 0.4745,
+    "originMask": [
+     -210,
+     -133
+    ]
+   },
+   "render": {
+    "hold": {
+     "inverted": 0,
+     "strained": 0.0002,
+     "overlap": 0
+    },
+    "partScales": {
+     "head": 1,
+     "armL": 1,
+     "armR": 1,
+     "legL": 1,
+     "legR": 1
+    },
+    "rig": "parts",
+    "order": [
+     "handR",
+     "upperArmR",
+     "foreArmR",
+     "head",
+     "torso",
+     "upperArmL",
+     "poncho",
+     "handL",
+     "foreArmL",
+     "upperLegL",
+     "lowerLegL",
+     "footL",
+     "upperLegR",
+     "lowerLegR",
+     "footR",
+     "hair"
+    ],
+    "depths": {
+     "armL": {
+      "front": false,
+      "reason": null
+     },
+     "armR": {
+      "front": true,
+      "reason": "lead"
+     },
+     "legL": {
+      "front": true,
+      "reason": "lead"
+     },
+     "legR": {
+      "front": false,
+      "reason": null
+     }
+    },
+    "declaredOrder": null,
+    "parts": {
+     "hair": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "head": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "torso": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "poncho": {
+      "inverted": 0,
+      "strained": 0.0002,
+      "overlap": 0
+     },
+     "upperArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     }
+    },
+    "worstParts": {
+     "inverted": null,
+     "strained": "poncho",
+     "overlap": null
+    },
+    "jointFill": {
+     "shoulderL": {
+      "fill": 1,
+      "fade": 1.34,
+      "depth": 1.59,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "shoulderR": {
+      "fill": 1,
+      "fade": 1.06,
+      "depth": 1.08,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "elbowL": {
+      "fill": 1,
+      "fade": 0.23,
+      "depth": 2.62,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "elbowR": {
+      "fill": 1,
+      "fade": 0.52,
+      "depth": 2.35,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "kneeL": {
+      "fill": 1,
+      "fade": 1.32,
+      "depth": 1.95,
+      "front": "upperLegL",
+      "pass": true
+     },
+     "kneeR": {
+      "fill": 1,
+      "fade": 1.24,
+      "depth": 1.52,
+      "front": "upperLegR",
+      "pass": true
+     }
+    }
+   },
+   "measured": {
+    "c31": {
+     "declared": "S 0.12 +1",
+     "read": {
+      "class": "S",
+      "bow": 0.071,
+      "sign": 1
+     },
+     "twinning": 0.44,
+     "pass": true,
+     "refused": []
+    },
+    "c20": {
+     "headScale": 1,
+     "headCount": 8.0,
+     "limbScales": {
+      "armL": 1,
+      "armR": 1,
+      "legL": 1,
+      "legR": 1
+     },
+     "jointChains": {
+      "armL": 1.0,
+      "armR": 1.0,
+      "legL": 1.0,
+      "legR": 1.0
+     },
+     "worstDevPct": 0,
+     "pass": true
+    },
+    "c21": {
+     "components": 1,
+     "solidity": 0.27,
+     "wristsFromSpineH": {
+      "wristL": 0.286,
+      "wristR": 0.143
+     },
+     "kind": "star",
+     "wristsApartRequired": 2,
+     "wristsApart": 2,
+     "pass": true
+    },
+    "c22": {
+     "contourPx": 4.107666234932406,
+     "targetPx": 3.6029989445399884,
+     "vsModelPct": 14.0,
+     "pass": true
+    },
+    "joints": {
+     "fill": 1,
+     "fade": 1.08,
+     "pass": true,
+     "open": []
+    },
+    "film": {
+     "mad": 8.98,
+     "centroid": {
+      "head": 0.77,
+      "handL": 0.29,
+      "footL": 0.43,
+      "handR": 0.21,
+      "footR": 0.11
+     },
+     "worstPart": "head",
+     "worstPx": 0.77,
+     "bar": {
+      "centroidPx": 3.6,
+      "mad": 10.0
+     },
+     "pass": true
+    },
+    "verdict": "accepted"
+   }
+  },
+  {
+   "name": "shrink",
+   "frame": 272,
+   "hold": 148,
+   "joints": {
+    "root": [
+     333.5,
+     486.47
+    ],
+    "head": [
+     321.64,
+     208.05
+    ],
+    "torso": [
+     289.34,
+     228.22
+    ],
+    "neck": [
+     304.92,
+     218.36
+    ],
+    "shoulderL": [
+     233.93,
+     213.57
+    ],
+    "hipL": [
+     321.5,
+     513.96
+    ],
+    "shoulderR": [
+     282.04,
+     289.63
+    ],
+    "hipR": [
+     344.3,
+     461.73
+    ],
+    "ponchoPoint": [
+     339.53,
+     480.37
+    ],
+    "ankleL": [
+     241,
+     838
+    ],
+    "kneeL": [
+     356.81,
+     694.51
+    ],
+    "ankleR": [
+     421.97,
+     819.45
+    ],
+    "kneeR": [
+     372.67,
+     630.91
+    ],
+    "wristL": [
+     230.11,
+     306.75
+    ],
+    "elbowL": [
+     341.82,
+     263.85
+    ],
+    "wristR": [
+     200.53,
+     260
+    ],
+    "elbowR": [
+     261.94,
+     168.91
+    ]
+   },
+   "source": "solver",
+   "solvedAt": "2026-10-15",
+   "plateFamily": "fold",
+   "status": "plate",
+   "family": "home",
+   "registration": "skeleton",
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K8.png",
+   "plateSha256": "c18a5708b2c406e5dfc3afd5be5ae0262377f779b6f51fca31cff322d3d198d3",
+   "plateInfo": {
+    "cropPx": [
+     236,
+     509
+    ],
+    "baselineInCrop": 506,
+    "scale": 0.4745,
+    "originMask": [
+     72,
+     -116
+    ]
+   },
+   "render": {
+    "hold": {
+     "inverted": 0.0068,
+     "strained": 0.0411,
+     "overlap": 0
+    },
+    "partScales": {
+     "head": 1,
+     "armL": 0.9999,
+     "armR": 1,
+     "legL": 1,
+     "legR": 1
+    },
+    "rig": "parts",
+    "order": [
+     "head",
+     "torso",
+     "upperArmL",
+     "upperArmR",
+     "poncho",
+     "handL",
+     "handR",
+     "foreArmL",
+     "foreArmR",
+     "upperLegL",
+     "upperLegR",
+     "lowerLegL",
+     "lowerLegR",
+     "footL",
+     "footR",
+     "hair"
+    ],
+    "depths": {
+     "armL": {
+      "front": false,
+      "reason": null
+     },
+     "armR": {
+      "front": false,
+      "reason": null
+     },
+     "legL": {
+      "front": false,
+      "reason": null
+     },
+     "legR": {
+      "front": false,
+      "reason": null
+     }
+    },
+    "declaredOrder": null,
+    "parts": {
+     "hair": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "head": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "torso": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "poncho": {
+      "inverted": 0.0068,
+      "strained": 0.0411,
+      "overlap": 0
+     },
+     "upperArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "foreArmR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "handR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footL": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "upperLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "lowerLegR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     },
+     "footR": {
+      "inverted": 0,
+      "strained": 0,
+      "overlap": 0
+     }
+    },
+    "worstParts": {
+     "inverted": "poncho",
+     "strained": "poncho",
+     "overlap": null
+    },
+    "jointFill": {
+     "shoulderL": {
+      "fill": 1,
+      "fade": 0.7,
+      "depth": 3.25,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "shoulderR": {
+      "fill": 1,
+      "fade": 1.53,
+      "depth": 2.58,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "elbowL": {
+      "fill": 1,
+      "fade": 0.22,
+      "depth": 3.61,
+      "front": "upperArmL",
+      "pass": true
+     },
+     "elbowR": {
+      "fill": 1,
+      "fade": 0.35,
+      "depth": 3.08,
+      "front": "upperArmR",
+      "pass": true
+     },
+     "kneeL": {
+      "fill": 1,
+      "fade": 1.3,
+      "depth": 2.15,
+      "front": "upperLegL",
+      "pass": true
+     },
+     "kneeR": {
+      "fill": 1,
+      "fade": 1.23,
+      "depth": 1.53,
+      "front": "upperLegR",
+      "pass": true
+     }
+    }
+   },
+   "measured": {
+    "c31": {
+     "declared": "C 0.14 -1",
+     "read": {
+      "class": "C",
+      "bow": 0.142,
+      "sign": -1
+     },
+     "twinning": 0.0,
+     "pass": true,
+     "refused": []
+    },
+    "c20": {
+     "headScale": 1,
+     "headCount": 8.0,
+     "limbScales": {
+      "armL": 0.9999,
+      "armR": 1,
+      "legL": 1,
+      "legR": 1
+     },
+     "jointChains": {
+      "armL": 1.0,
+      "armR": 1.0,
+      "legL": 1.0,
+      "legR": 1.0
+     },
+     "worstDevPct": 0.0,
+     "pass": true
+    },
+    "c21": {
+     "components": 1,
+     "solidity": 0.38,
+     "wristsFromSpineH": {
+      "wristL": 0.078,
+      "wristR": 0.101
+     },
+     "kind": "fold",
+     "wristsApartRequired": 0,
+     "wristsApart": 1,
+     "pass": true
+    },
+    "c22": {
+     "contourPx": 3.992630386048707,
+     "targetPx": 3.6029989445399884,
+     "vsModelPct": 10.8,
+     "pass": true
+    },
+    "joints": {
+     "fill": 1,
+     "fade": 1.53,
+     "pass": true,
+     "open": []
+    },
+    "film": {
+     "mad": 7.54,
+     "centroid": {
+      "head": 0.55,
+      "handL": 0.21,
+      "footL": 0.23,
+      "handR": 0.28,
+      "footR": 0.22
+     },
+     "worstPart": "head",
+     "worstPx": 0.55,
+     "bar": {
+      "centroidPx": 3.6,
+      "mad": 10.0
+     },
+     "pass": true
+    },
+    "verdict": "accepted"
+   }
+  }
+ ],
+ "breakdowns": [
+  {
+   "frame": 26,
+   "favour": 0.104
+  },
+  {
+   "frame": 30,
+   "favour": 0.352
+  },
+  {
+   "frame": 34,
+   "favour": 0.648
+  },
+  {
+   "frame": 38,
+   "favour": 0.896
+  },
+  {
+   "frame": 58,
+   "favour": 0.104
+  },
+  {
+   "frame": 60,
+   "favour": 0.352
+  },
+  {
+   "frame": 62,
+   "favour": 0.648
+  },
+  {
+   "frame": 64,
+   "favour": 0.896
+  },
+  {
+   "frame": 92,
+   "favour": 0.156
+  },
+  {
+   "frame": 96,
+   "favour": 0.58
+  },
+  {
+   "frame": 100,
+   "favour": 0.844
+  },
+  {
+   "frame": 130,
+   "favour": 0.055
+  },
+  {
+   "frame": 134,
+   "favour": 0.198
+  },
+  {
+   "frame": 138,
+   "favour": 0.394
+  },
+  {
+   "frame": 142,
+   "favour": 0.606
+  },
+  {
+   "frame": 146,
+   "favour": 0.802
+  },
+  {
+   "frame": 150,
+   "favour": 0.945
+  },
+  {
+   "frame": 178,
+   "favour": 0.055
+  },
+  {
+   "frame": 180,
+   "favour": 0.198
+  },
+  {
+   "frame": 182,
+   "favour": 0.394
+  },
+  {
+   "frame": 184,
+   "favour": 0.606
+  },
+  {
+   "frame": 186,
+   "favour": 0.802
+  },
+  {
+   "frame": 188,
+   "favour": 0.945
+  },
+  {
+   "frame": 212,
+   "favour": 0.104
+  },
+  {
+   "frame": 216,
+   "favour": 0.352
+  },
+  {
+   "frame": 220,
+   "favour": 0.648
+  },
+  {
+   "frame": 224,
+   "favour": 0.896
+  },
+  {
+   "frame": 248,
+   "favour": 0.055
+  },
+  {
+   "frame": 252,
+   "favour": 0.198
+  },
+  {
+   "frame": 256,
+   "favour": 0.394
+  },
+  {
+   "frame": 260,
+   "favour": 0.606
+  },
+  {
+   "frame": 264,
+   "favour": 0.802
+  },
+  {
+   "frame": 268,
+   "favour": 0.945
+  }
+ ]
+}

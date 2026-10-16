@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "❌ gate_action \"abort\" has nothing to act on: this run holds no gate review and no shell check. To stop the run, send cancel: true. Nothing was recorded."
+    }
+  ],
+  "isError": true
+}

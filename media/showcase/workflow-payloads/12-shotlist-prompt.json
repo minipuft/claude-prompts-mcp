@@ -1,0 +1,45 @@
+{
+ "name": "resource_manager",
+ "arguments": {
+  "resource_type": "prompt",
+  "action": "create",
+  "id": "showcase_shotlist",
+  "name": "Showcase Shot List",
+  "category": "development",
+  "description": "Break the six-beat script into shots: one row per shot with beat, frame range, locked camera, actors, the one emitter, the join, the board cards cited and the objects it needs; emits v3/shots.json and the object inventory that sets the muse budget.",
+  "arguments": [
+   {
+    "name": "brief",
+    "type": "string",
+    "required": true,
+    "description": "Audience, product goal and desired silent showcase outcome."
+   },
+   {
+    "name": "context",
+    "type": "string",
+    "required": false,
+    "description": "Prior step output; read shared chain history for earlier evidence and decisions."
+   },
+   {
+    "name": "output_root",
+    "type": "string",
+    "required": false,
+    "defaultValue": "media/showcase",
+    "description": "Caller-owned production artifact directory."
+   },
+   {
+    "name": "constraints",
+    "type": "string",
+    "required": false,
+    "description": "Duration, dimensions, renderer and evidence limits."
+   }
+  ],
+  "user_message_template": "Brief: {{brief}}\nConstraints: {{constraints}}\nProduction root: {{output_root}}\nPrevious handoff:\n{{context | default(\"Read v3/script.md and the story step's beats.json from chain history.\")}}\n\nRead `v3/script.md` (resource vocabulary, six beats), the story step's `beats.json`, `v3/creative-spec.md` (animation language: the camera is locked within a beat and moves at most once per beat; one actor at a time; one emitter per shot) and `v3/references/board.json` (card ids). Write `v3/shots.json`: an array of shots, each `{id, beat, title, frames:[start,end], camera, actors:[], emitter, join, objects:[], cards:[], measured:null}`. Rules: a shot is one locked camera; a cut starts a new shot; `frames` are provisional until a shot run writes `measured`; `cards` cite board card ids for the shot's look; `objects` lists every asset the shot needs in the resource vocabulary (box, bubble, gadget, frame, human, stalk, string, arch, patch, ring, companions). Then write the object inventory: every distinct object across shots, which has a muse sheet accepted (none at a clean slate), and the exact command to muse each: `>>showcase_asset_muse asset:\"<object: its job>\"`. The muse runs per object from this inventory, not inside this chain. Keep `script.md` the owner's text: do not rewrite beats, only reference them.\n\nReturn: Shot Table (id \u00b7 beat \u00b7 frames \u00b7 camera \u00b7 emitter \u00b7 join \u00b7 cards); Object Inventory With Muse Commands; Frame Total Versus Script; Concerns.",
+  "artifacts": {
+   "produces": [
+    "docs",
+    "plan"
+   ]
+  }
+ }
+}

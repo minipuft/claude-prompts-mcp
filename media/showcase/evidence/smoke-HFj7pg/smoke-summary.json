@@ -1,0 +1,52 @@
+{
+  "evidenceClass": "explicitly labeled smoke fixture",
+  "chainId": "chain-showcase_pipeline#1",
+  "handoffSentinel": "SMOKE_REFERENCE_HANDOFF_7D3A",
+  "sentinelPresent": true,
+  "storyTemplatePresent": true,
+  "referenceChallengeMapped": true,
+  "referenceOutputInStoryContext": true,
+  "briefPresent": true,
+  "gateVerdictSubmitted": false,
+  "creativeProductionExecuted": false,
+  "modifier": "%clean: protocol/mapping probe only; production gate reviews not exercised",
+  "handoffChecks": [
+    {
+      "from": "story",
+      "expectedNext": "Showcase Treatment",
+      "outputSentinelPresent": true,
+      "nextPromptPresent": true
+    },
+    {
+      "from": "treatment",
+      "expectedNext": "Showcase Motion",
+      "outputSentinelPresent": true,
+      "nextPromptPresent": true
+    },
+    {
+      "from": "motion",
+      "expectedNext": "Technology Recommendation",
+      "outputSentinelPresent": true,
+      "nextPromptPresent": true
+    },
+    {
+      "from": "technique",
+      "expectedNext": "Strategic Worker",
+      "outputSentinelPresent": true,
+      "nextPromptPresent": true,
+      "rendererDecisionInTask": true,
+      "motionContractInHistory": true
+    },
+    {
+      "from": "implementation",
+      "expectedNext": "Showcase Review",
+      "outputSentinelPresent": true,
+      "nextPromptPresent": true,
+      "implementationInContext": true,
+      "motionContractAliasCorrect": true,
+      "rendererDoesNotReplaceMotion": true
+    }
+  ],
+  "allSevenStepsRendered": true,
+  "beforeSessionResponseRecorded": true
+}

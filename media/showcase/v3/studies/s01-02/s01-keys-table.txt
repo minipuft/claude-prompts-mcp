@@ -1,0 +1,16 @@
+key          declared       measured                twin  status
+rest-on-lid  C 0.06 -1      C 0.094 +1              0.66  accepted
+             flag: the spine bows right, the declaration left
+grip         C 0.10 -1      C 0.101 +1              0.60  REJECTED: weight on R at 0.60: the root is at x 260, expected 349 between the ankles (256, 411); 58% of the stance away, over 25%
+             flag: the spine bows right, the declaration left
+lift         C 0.06 +1      I 0.035 -1              0.20  REJECTED: declared line of action C, the key sheet draws I (bow 0.035 of the figure, sign -1); the spine bows 0.035 of the figure, under 0.06 
+             flag: the spine bows left, the declaration right
+awe          S 0.10 -1      C 0.051 +1              0.84  REJECTED: declared line of action S, the key sheet draws C (bow 0.051 of the figure, sign +1); the spine bows 0.051 of the figure, under 0.06 
+             flag: the spine bows right, the declaration left
+brace        C 0.08 +1      I 0.013 -1              0.26  REJECTED: declared line of action C, the key sheet draws I (bow 0.013 of the figure, sign -1); the spine bows 0.013 of the figure, under 0.06 
+joy-a        C 0.12 -1      I 0.033 +1              0.00  REJECTED: declared line of action C, the key sheet draws I (bow 0.033 of the figure, sign +1); the spine bows 0.033 of the figure, under 0.06 
+             flag: the spine bows right, the declaration left
+joy-b        S 0.12 +1      C 0.048 +1              0.11  REJECTED: declared line of action S, the key sheet draws C (bow 0.048 of the figure, sign +1); the spine bows 0.048 of the figure, under 0.06 
+shrink       C 0.14 -1      C 0.072 -1              0.68  accepted
+             flag: measured bow 0.072 is more than 0.02 under the declared 0.14
+wrote v3/keys/s01-arrival-overwhelm.json

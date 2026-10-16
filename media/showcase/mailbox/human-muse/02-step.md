@@ -1,0 +1,157 @@
+═════════════════════════════════════════════════════════════════
+EXECUTION BRIEF (sub-agent prompt — pass everything between these delimiters)
+═════════════════════════════════════════════════════════════════
+
+### Original Request Intent
+
+This step was given the following request. Your work must satisfy this intent:
+
+- **asset**: human: resource_manager: the hands that place and lift pieces
+- **constraints**: Cite board cards seuss-cat-stairway, lin-fosters, seuss-no-one-youer, seuss-archbishop-katz, chetas, codex-official, clawd-official (v3/references/board.json). Five-role flat SVG on a black field; ski...
+
+Asset: human: resource_manager: the hands that place and lift pieces
+Muse directions:
+## Context
+Design muse, brainstorm mode, for the human: resource_manager, the hands that place and lift pieces. The step rendered an empty Challenge line (the chain's `challenge: asset` mapping did not carry; constraints did), so the asset is restated here from `v3/shots.json` object_inventory. creed: n/a — no CloudySky visual surface.
+
+### 1. FRAME
+Surface: a five-role flat SVG sprite on a black field, Seuss contour with a pale contour one step behind, Midnight Gospel two-scale stipple shadows, drawn on twos with 2–3 boil variants, skin green `#67b479` with mauve `#c885c2` shadow step. Experience sought: a figure whose hands are what you watch, who reads as the third member of a tricolor trio beside two companions that are themselves morphing to the world (D63). Constraints: clean slate (D56), the frozen compact face retired unless earned; silhouette must read at 64 px before any fill; every variant cites board cards. Uncertainty a comparison resolves: whether the human can be built from the world's own contour grammar without colliding with the resource vocabulary (a stalk is a prompt, a pointed arch is a gate) and still read as a person.
+
+## Analysis
+### 2. GOAL-RELATIVE REFERENCE SET
+| Pointer / source | Role for this goal | OBSERVATION | INTERPRETATION | TRANSFER | Confidence / caveat |
+| --- | --- | --- | --- | --- | --- |
+| board `seuss-cat-stairway` (Midnight Paintings, Eisner photo) | silhouette language | long-necked figure on stepped planes; outlines are colored contour strokes, not black | a figure in this world is a swoop with a small head, read by contour not by face | neck-led silhouette; pale contour | high; one painting, one figure |
+| board `seuss-no-one-youer` (drseussart.com secret archive) | body-as-stalk, flag leaves | clock-stalks and curling stalks with flag leaves on black | the stalk IS the prompt object in our vocabulary | borrow the curl and the leaf as hair/hand gesture only; never as the torso | high, with the vocabulary caveat |
+| board `seuss-archbishop-katz` | garment and mass | interlocking arches in mauve, blue, black, cream; small figure for scale | a soft bell of layered mauve/blue/cream can be a cloak, with black as a positive shape | garment family and a bell silhouette; keep the apex round so it never reads as a gate | high |
+| board `lin-fosters` (Wilt, archived CN asset) | proportion and hands | extremely tall irregular figure, thin limbs, enlarged hands and shoes | personality from proportion before surface; hands can be the largest skin area | long thin arms, enlarged hands = resource_manager emphasis | medium; low-res asset |
+| board `chetas` (Little Company, owner-supplied) | expression economy | eye, mouth, ear and face direction carry personality on a near-featureless head | two dots and a direction are enough; no compact face needed | dot eyes + one mouth stroke; face direction drives acting | medium; UI, not full-body |
+| counterexample: board `codex-official` / `clawd-official` | boundary | a cloud-lobed head with a terminal face; a coral block on four legs | the companions are a species of simple masses; a human with more detail than them breaks the trio | the human has no more features than the companions; kinship by mass and contour | high |
+
+### 3. CAPABILITY CONTRACT
+| Desired property | Primitive / field / component | Control parameters | [we own] or [client limit] | Verification |
+| --- | --- | --- | --- | --- |
+| pale contour one step behind | `contour()` helper in `src/sheets/human-variants.tsx` (light-role stroke 9 under outline stroke 3) | stroke widths | we own | 3x crop |
+| stipple form + cast shadow, hue shift to mauve | `DitherDefs` (`src/library/Dither.tsx`), `-ramp-x`, `-cast` gradients, `shadow="var(--skin-shadow)"` | seed, fine, coarse | we own | 3x crop, C3/C4 |
+| hands as the largest skin area | hand ellipses radius vs head radius | hand r ≥ 0.45 head r | we own | measure in SVG units |
+| 64 px silhouette readability | new `SilhouetteStrip` row on `AssetSheet`: each variant filled `#000` on `#e7e4da` at 64 px height | height | we own | sheet still, read by eye |
+| lift pose shared across variants | `lift` prop 0..1 on every variant | lift | we own | sheet at lift 0.6 |
+| boil | 2–3 seeded variants per sprite (`variant` prop as in `Clawd`) | variant index | we own | consecutive frames, C13 |
+| identity pigments fixed | `identity.humanSkin` in `tokens.ts` via `--skin`, `--skin-shadow` | none | we own | sampled pixel, C1 |
+
+## Goals
+Three materially different constructions, same skin, same garment family, same lift pose, each citing cards, none colliding with a resource object, and a sheet that proves silhouette at 64 px before fills are judged.
+
+## Execution
+### 4. DISTINCT DIRECTIONS
+**A · Bell** (uses seuss-archbishop-katz, lin-fosters, chetas; ignores no-one-youer's stalk body). A tall soft bell of layered cloak bands (cream over blue over mauve) with a rounded apex, a small round head sitting in the apex, two long thin arms leaving the bell at mid-height and ending in enlarged hands. Original: the rounded apex and the hand-to-head ratio. Cost: fewer legs to act with; benefit: the strongest 64 px silhouette, hands clear of the body; failure mode: reads as a gate arch if the apex sharpens. Bounded by the counterexample: no more features than Codex.
+
+**B · Kite** (uses lin-fosters, seuss-freebird, chetas; ignores archbishop's mass). A diamond torso on two stick legs, long stick arms with enlarged hands, a small head, hair as one trailing swoop like Freebird's trailing lines. Original: the diamond. Cost: thin limbs vanish at 64 px unless the hands are big; benefit: the most agile acting (reach, place, lift). Failure mode: stick figure. Bounded: hands must stay ≥ 0.45 of head radius.
+
+**C · Kin** (uses codex-official, clawd-official, seuss-cat-stairway; ignores Foster's). The human built from the companions' grammar: one rounded mass for the body (like Clawd's block softened to the stairway's feathered contour), a lobed cap of hair echoing Codex's cloud lobes, short arms with big hands. Original: the mass-and-cap pairing. Cost: least human; benefit: the trio reads as one species at any size. Failure mode: a third companion, not a person. Bounded: the hands and the neck are the two human tells it must keep.
+
+**D · Stalk** (uses seuss-no-one-youer, cat-stairway) is named to be refused: a stalk body is the prompt object. Kept out of the sheet.
+
+### 5. PAIRWISE CRITIQUE
+A vs B: deciding distinction is what the body is for. A's body is a garment mass that holds light and shadow (stipple has room); B's body is a line drawing that acts. The film's beats are about hands placing pieces, which B serves, but the shadow law (C3, C4) needs mass, which A serves. A leads.
+A vs C: deciding distinction is species kinship versus personhood. C makes the trio one species at a glance, which D63 now asks for; A keeps a person. The counter-vector is that D63 may be satisfied by the companions morphing toward A, not by the human morphing toward them.
+B vs C: B is the better actor, C the better poster. The poster (D53) is one frame; acting is 1200.
+
+### 6. CONTROLLED VISUAL EVIDENCE
+Artifact: `HumanSheet` composition, revision 2, seed 1; three variants A, B, C at lift 0.6 with companions at the edges, plus a new 64 px silhouette strip under the labels (each variant black on cream). One variable: construction. Held constant: skin and shadow pigments, garment roles, contour widths, stipple seeds' scales, lift, scale. Views: the sheet still at frame 0; a 3x crop of each hand; the 64 px strip. Criteria: at 64 px, can you tell which blob is the person and where its hands are; at 3x, does the stipple grade across the body with the mauve shift; does any variant read as a stalk or an arch. Feasibility: one `remotion still`, under a minute. Reversal: if A's silhouette at 64 px reads as an arch, B wins; if B's hands vanish at 64 px, C wins.
+
+## Evaluation
+### 7. SYNTHESIS
+- **[CRITIQUE]** A's weakest point is the gate collision: a bell is one sharpened apex away from a pointed arch, and the arch is on screen in the same shots.
+- **[ALTERNATIVES]** B costs shadow mass and buys acting; C costs personhood and buys a one-species trio.
+- **[SYNTHESIS]** Build all three, lead with A, keep the apex round and the hands large; smallest next move is the sheet with the 64 px strip.
+- **[COUNTER-VECTOR]** The assumption worth breaking: that the human needs a garment at all. A bare green contour figure (skin only, mauve stipple) might be the most Seuss and the least collision-prone; it is not on this sheet because the garment family was a binding constraint.
+
+### 8. CAPTURE PROPOSAL + BOUNCE
+capture: none — goal-local evidence only.
+
+Forks: (1) hands ≥ 0.45 head radius as a rule for every variant, or let C keep small hands to test kinship honestly? (2) Keep the garment constraint, or add a fourth bare-contour variant as the counter-vector? (3) Companions morph toward the winning human construction, or stay as they are until their own muse?
+
+## Refinement
+Next step builds the three constructions under `src/sheets/` as new files (the earlier sheet's components stay as controls, unused), adds the silhouette strip to `AssetSheet`, renders `out/human-sheet-15.png`, and does not pick.
+
+Read `v3/creative-spec.md` (palette law, contour language, animation language), `v3/script.md` (the asset's job) and `v3/rubric.md` (C1–C19). Build one sprite component per muse direction (3 or more) under media/showcase/src/sheets/, each a five-role flat SVG with a pale contour, designed shadow shapes and 2–3 boil variants, fills by role never hex. Each variant's label names the reference properties it borrows (by file in `v3/references/` and the property, e.g. 'Seuss cat-stairway: elongated neck, flowing hair mass') and the existing cast property it sits between (e.g. 'Clawd's block mass and Codex's cloud lobes'). Register the variants in an `AssetSheet` composition and render one still at frame 0. Do not pick; the owner picks from the still. Losers remain as controls, not deleted.
+
+Return: Variants (id, title, borrows, between, file); Sheet Path; What Was Held Constant; Concerns.
+
+### Quality Gates
+
+---
+
+## Inline Gates
+
+### Reminders
+
+### Framework Compliance
+**CAGEERF Framework Guidelines:**
+- Include Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework considerations
+- Structure responses according to framework principles
+- Include systematic thinking and framework awareness
+- Show iterative improvement and refinement processes
+
+Attest reminders in the verdict's `reminders` field; checks are recorded by the engine.
+
+---
+
+### Result Contract
+
+Return your complete work product as plain text — it becomes the chain’s step output verbatim.
+
+You are the worker for this one step. Do not call `prompt_engine` or any other chain tool, and do not put chain metadata or tool calls in your reply — the orchestrating agent owns the run and resumes it with your text.
+
+End your reply with this exact block — `node` is how the server matches your result back to this step, followed by a proposed self-review: PROPOSED only; the orchestrating agent reviews and may override before submitting the actual verdict:
+
+```
+HANDOFF RESULT
+node: sheet
+Proposed Gate Review:
+- [gate 1 name]: PASS|FAIL — <one-line rationale>
+- [gate 2 name]: PASS|FAIL — <one-line rationale>
+```
+
+═════════════════════════════════════════════════════════════════
+END EXECUTION BRIEF
+═════════════════════════════════════════════════════════════════
+
+⚡ HANDOFF: Execute Step 2 ("Showcase Asset Sheet") via sub-agent for context isolation.
+
+═════════════════════════════════════════════════════════════════
+HANDOFF INSTRUCTIONS
+═════════════════════════════════════════════════════════════════
+
+→ Handoff: Use your client's sub-agent/handoff capability
+→ Prompt: Pass the EXECUTION BRIEF above (everything between the BRIEF delimiters) as the agent's prompt
+→ Result: Include the sub-agent's result in user_response along with your ratified gate_verdict to continue the chain
+→ Review: the worker's "Proposed Gate Review" is INPUT to your gate_verdict — review it against the criteria, override what you disagree with, then submit
+
+⚠️ CONSTRAINT: Use handed-off execution when available; do not answer inline if handoff exists.
+⚠️ RESULT CONTRACT: Include handed-off output in user_response and then resume the chain.
+
+---
+
+### Required Response Format
+
+**Summary**: What was implemented (2-3 sentences)
+
+**Required Sections** — emit these headers verbatim; they are graded structurally:
+- `## Context` (required)
+- `## Analysis` (required)
+- `## Goals` (required)
+- `## Execution` (required)
+- `## Evaluation` (optional)
+- `## Refinement` (optional)
+
+**Gate Coverage**:
+- [1] PASS|FAIL: rationale
+- [2] PASS|FAIL: rationale
+
+**GATE_REVIEW: PASS|FAIL - overall assessment**
+
+Chain: chain-showcase_asset_muse#1
+→ Progress 2/3
+Next: Handoff via your client sub-agent mechanism (see instructions above), then: chain_id="chain-showcase_asset_muse#1", user_response="<sub-agent result>"

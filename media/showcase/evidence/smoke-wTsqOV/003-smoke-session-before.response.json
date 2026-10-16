@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "📋 **Active Sessions** (1)\n\n### Session: `54bfa311-f809-489b-b5d4-5698d2451e61`\n**Chain**: `chain-showcase_pipeline#1` (`showcase_pipeline`)\n**Progress**: Step 1/7\n**Status**: 🟢 Active\n\n💡 Use 'show_details: true' for more information about each session.\n\n🔧 Clear sessions using: action=\"session\", operation=\"clear\", session_id=\"<id>\""
+    }
+  ],
+  "isError": false
+}

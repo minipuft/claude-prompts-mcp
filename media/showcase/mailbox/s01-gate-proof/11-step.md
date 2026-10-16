@@ -1,0 +1,1 @@
+❌ gate_action "abort" is accepted only on an exhausted review; the review of step 6 is at 0/2 attempts — answer it or send a gate_verdict. Nothing was recorded.

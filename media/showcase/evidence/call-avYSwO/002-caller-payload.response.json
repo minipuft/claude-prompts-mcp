@@ -1,0 +1,31 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Created**: Animation Blocking (animation_blocking)\n\n📝 Step 2: write one blocking contract per beat (where every actor, prop, gate and the emitter stand, with scale and a cited composition card), derived from the layouts where they exist and from the test scene otherwise, so every world renders the beat at the same staging.\n🧠 single\n\n💡 **Suggested Gates**: Consider adding these gates:\n- code-quality\nUse `update` action with `gate_configuration` parameter to add gates.\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_blocking\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_blocking/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_blocking/user-message.md\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "create",
+    "valid": true,
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "create",
+      "id": "animation_blocking",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_blocking",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_blocking/prompt.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_blocking/user-message.md"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 1
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Created**: Animation Blocking (animation_blocking)\n\n📝 Step 2: write one blocking contract per beat (where every actor, prop, gate and the emitter stand, with scale and a cited composition card), derived from the layouts where they exist and from the test scene otherwise, so every world renders the beat at the same staging.\n🧠 single\n\n💡 **Suggested Gates**: Consider adding these gates:\n- code-quality\nUse `update` action with `gate_configuration` parameter to add gates.\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_blocking\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_blocking/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_blocking/user-message.md\n"
+  },
+  "isError": false
+}
