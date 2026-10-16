@@ -24,6 +24,7 @@
     "plates": "node scripts/animation/plates-from-poses.mjs",
     "parts": "node scripts/animation/cut-parts.mjs",
     "render": "node scripts/animation/render-cached.mjs",
+    "render:shards": "node scripts/animation/render-shards.mjs",
     "render:manifest": "node scripts/animation/render-manifest.mjs",
     "film-keys": "remotion render src/index.ts KeyFilmS01 out/s01-arrival-overwhelm-key-film --sequence --image-format=png --concurrency=4",
     "eagle:sync": "python3 $HOME/.claude/skills/inspiration/scripts/eagle_board.py sync --out v3/references/owner",
