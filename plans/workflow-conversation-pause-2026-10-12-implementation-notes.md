@@ -263,3 +263,18 @@ Headless `claude -p` (2.1.299, Haiku) with a capture hook and the branch-built s
 
 - **Owner question raised (pre-existing on main, outside this plan's objective):** the non-packet path's `succeeded` (`isError is False` on a dict) is never true natively, and the text it matches is `str(list)` — so clearing on abort, on a completed verdict and on chain completion have never run under Claude Code; tracked rows leave only by the 24-hour sweep or overwrite. Reviving abort-clearing needs a way to tell a failed abort from a successful one (same leading text, no isError natively): the second line, or a structured packet on the abort reply.
 - **Findings (no rows):** `chain_interrupt` replies also arrive as JSON strings and the non-packet path parses the raw JSON text; `ralph-context-tracker.py:103-115` has its own dict-only extraction (→ T3.5 brief); the legacy refused fixture carries `pause: None` and cannot catch an outcome-gate defect — only a pause-carrying refusal can.
+
+### Owner ruling: fix the never-run hook clearing now (2026-10-15)
+
+The owner ruled on 2026-10-15 to fix, before 6.0.0, the three post-prompt-engine clearing behaviors T3.2a found had never run under Claude Code (abort, completed verdict, chain completion).
+
+- **R-CLEAR-SLICE:** they land in the P3 hooks PR as rows C1 (server abort outcome) and C2 (hooks), not a separate PR off main: the shared `read_tool_response` exists only on this branch and C2 edits `post-prompt-engine.py`, which P3 already changes; a separate PR would duplicate the reader or conflict with it.
+- **R-CLEAR-ABORT:** the abort reply gains `structuredContent.run_control` because a failed abort ("Verify-loop release incomplete") and an applied one share their leading text and natively neither carries isError; the second line of text is not a contract.
+- **Class closure:** C2 moves every hook that reads `tool_response` onto the helper and adds a test that fails on a direct read elsewhere — the shape (`tool_response.get(...)` on a dict the host never sends) already exists at two sites.
+
+### T3.3 accepted (2026-10-15)
+
+`paused_for_conversation(state)` binds the tracked `run_identity` only when its chain equals the delegating chain, then asks `holds_pause_exemption`; under an owned pause the hook exits after the pending-delegation check with no demand, no spawn-pin check and no clear. **R-T3.3-PIN (ruled):** the spawn-pin check is delegation pressure (its deny is the step-must-run demand) and is suspended too. The brief's "independent capability check" does not exist in this hook (every deny derives from `pending_delegation`) — the planner's error.
+
+- **Defect → C2:** `exact_run_identity` (session_state.py ~124-130) validates the two scope keys with `raw.get(key, "")` and then builds with `raw[key]`, so a stored identity missing them raises KeyError and crashes gate-enforce/delegation-enforce instead of failing closed. Reachable only through legacy or hand-written rows; fixed in C2 (session_state.py is T3.4's file until it lands).
+- **To check at the P3 boundary:** a teardown error in `test_verify_state_schema_parity.py::test_session_id_is_the_primary_key_on_both_sides` during a full run while two workers ran pytest; passes alone.

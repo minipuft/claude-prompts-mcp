@@ -19,6 +19,9 @@ Behavior:
 - No delegation pending → no-op
 - Any call from inside a subagent (payload carries `agent_id`) → no-op: it
   arrives under the parent's session_id but is not the delegating session
+- An owned exact pause of the delegated run → no demand and state untouched, so
+  `pending_delegation` and the report identity survive and the demand returns on
+  resume; a retained, unconfirmed or foreign pause suspends nothing.
 
 The server owns the floor: it renders `run_in_background: false` in the
 handoff instructions and refuses to resume a delegated node whose reply
@@ -33,7 +36,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
-from session_state import clear_delegation_state, is_subagent_payload, load_session_state
+from session_state import (
+    ChainState,
+    clear_delegation_state,
+    exact_run_identity,
+    holds_pause_exemption,
+    is_subagent_payload,
+    load_session_state,
+)
 from spawn_pin import spawn_call_is_pinned
 
 # Tools allowed during pending delegation (read-only + delegation itself).
@@ -64,6 +74,18 @@ def log(msg: str) -> None:
     print(f"[delegation-enforce] {msg}", file=sys.stderr)
 
 
+def paused_for_conversation(state: ChainState) -> bool:
+    """Whether this conversation owns an exact pause of the run its pending delegation belongs to.
+
+    The host binding is the tracked run itself: a recorded identity naming another chain id is a
+    foreign pause, and `holds_pause_exemption` refuses a retained or unconfirmed one.
+    """
+    identity = exact_run_identity(state.get("run_identity"))
+    if identity is None or identity["chain_id"] != state.get("chain_id"):
+        return False
+    return holds_pause_exemption(state, identity)
+
+
 def parse_hook_input() -> dict:
     """Parse JSON input from Claude Code hook system."""
     try:
@@ -90,6 +112,12 @@ def main(client_id: str = "claude-code") -> None:
 
     state = load_session_state(session_id)
     if not state or not state.get("pending_delegation"):
+        sys.exit(0)
+
+    # Paused for discussion: no demand, and no clear either — a spawn now is not the delegated
+    # step, so the worker's report is still owed once the run resumes.
+    if paused_for_conversation(state):
+        log(f"workflow paused for conversation, delegation demand suspended for {tool_name}")
         sys.exit(0)
 
     # Default mirrors CLAUDE_CODE_DEFAULT_AGENT_TYPE in the server's delegation strategy.
