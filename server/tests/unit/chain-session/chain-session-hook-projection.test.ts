@@ -19,6 +19,7 @@ import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
+import { DirectChainRunRegistry } from '../../../src/modules/chains/run-registry.js';
 import type { ChainRunRegistry, ClaimRunResult } from '../../../src/modules/chains/run-registry.js';
 import type { ChainSession } from '../../../src/shared/types/chain-session.js';
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
@@ -584,6 +585,56 @@ describe('chain_sessions hook projection — conversation pause', () => {
     expect(JSON.parse(hookRow('dormant-paused')!)).toHaveProperty('conversationPause.nodeId', 'n1');
     expect(hookRow('dormant-plain')).toBeUndefined();
     expect(held('dormant-paused').lifecycle).toBe('dormant');
+  });
+
+  test('a paused claim projects the run under the claimer, writing no run table (T3.0a)', async () => {
+    // A claim refuses a run with no blueprint, so this one carries the smallest one.
+    const plan = { strategy: 'chain', gates: [], requiresFramework: false, requiresSession: true };
+    const blueprint = { parsedCommand: { promptId: 'p1' }, executionPlan: plan } as any;
+    await store.createSession('c', 'chain-c', 3, {}, { continuityScopeId: SCOPE, blueprint });
+    await store.setReview('c', { nodeId: 'n1', kind: 'gate', phase: 'awaiting-verdict' } as any);
+    const paused = await store.pauseConversation('c', control());
+    if (paused.outcome !== 'paused') throw new Error(`expected paused, got ${paused.outcome}`);
+    const options = {
+      cleanupIntervalMs: 1000,
+      defaultScope: { continuityScopeId: 'hook-claimer' },
+    };
+    const refs = new StubTextReferenceStore() as any;
+    const claimer = new ChainSessionStore(createLogger(), refs, options, engine);
+    await (claimer as any).initPromise;
+    // One test process hosts both servers, so the claimer gets its own server PID.
+    (claimer as any).serverPid = 'claimer-pid';
+    const runRows = () =>
+      JSON.stringify([
+        engine.query('SELECT * FROM chain_runs WHERE session_id = ?', ['c']),
+        engine.query('SELECT * FROM chain_run_nodes WHERE session_id = ? ORDER BY position', ['c']),
+      ]);
+    // The run tables as the claim's own commit left them, read the moment it returns.
+    const claimOriginal = DirectChainRunRegistry.prototype.claimRunByToken;
+    let afterClaimCommit = '';
+    jest.spyOn(DirectChainRunRegistry.prototype, 'claimRunByToken').mockImplementation(function (
+      this: DirectChainRunRegistry,
+      ...args
+    ) {
+      const result = claimOriginal.apply(this, args);
+      afterClaimCommit = runRows();
+      return result;
+    });
+    const claimed = await claimer.claimHandoff(paused.token, { continuityScopeId: SCOPE });
+    expect(claimed.status).toBe('claimed');
+    expect(afterClaimCommit).toContain('"run_owner_pid":"hook-claimer"');
+    expect(runRows()).toBe(afterClaimCommit);
+    const rows = engine.query<{ run_owner_pid: string; state: string }>(
+      `SELECT run_owner_pid, state FROM chain_sessions WHERE json_extract(state, '$.sessionId') = ?`,
+      ['c']
+    );
+    expect(rows.map((row) => row.run_owner_pid)).toEqual(['claimer-pid']);
+    const state = JSON.parse(rows[0]!.state) as Record<string, unknown>;
+    expect(state).toHaveProperty('conversationPause.nodeId', 'n1');
+    expect(state['owed']).toEqual([expect.objectContaining({ kind: 'review', nodeId: 'n1' })]);
+    const successor = claimed.status === 'claimed' ? claimed.session.handoffToken : undefined;
+    const wholeTable = JSON.stringify(engine.query('SELECT * FROM chain_sessions'));
+    for (const token of [paused.token, successor!]) expect(wholeTable).not.toContain(token);
   });
 });
 

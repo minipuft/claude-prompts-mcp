@@ -1066,6 +1066,24 @@ export class ChainSessionStore implements ChainSessionService {
   }
 
   /**
+   * Rewrite only this process's `chain_sessions` rows, in their own transaction: a paused claim
+   * skips the bulk save, so its hooks would not see the run until a later persist. No port, no
+   * projection table (the port-less save path projects nothing either).
+   */
+  private refreshHookView(): void {
+    const db = this.resolvedDbEngine;
+    if (db === undefined) return;
+    db.beginTransaction('deferred');
+    try {
+      this.projectToHookView(db);
+      db.commit();
+    } catch (error) {
+      db.rollback();
+      throw error;
+    }
+  }
+
+  /**
    * Collect active canonical sessions, and paused dormant ones, that need hook visibility.
    * A session is "active" while its run is not complete (`isSessionActiveForHooks`).
    */
@@ -1762,7 +1780,8 @@ export class ChainSessionStore implements ChainSessionService {
 
     const session = result.session;
     // A paused claim already committed owner + successor credential; its row is held exactly as
-    // stored: no lifecycle/clock edit and no bulk rewrite (bulk save retains paused rows anyway).
+    // stored: no lifecycle/clock edit and no bulk rewrite (bulk save retains paused rows anyway);
+    // only the derived hook projection is refreshed.
     const paused = session.conversationPause !== undefined;
     // The claim above is its own committed write: the row is this server's now, so a rejected
     // save below restores the run's own fields but keeps it held, which is what the rows say.
@@ -1776,7 +1795,8 @@ export class ChainSessionStore implements ChainSessionService {
     sessionIds.add(session.sessionId);
     this.chainSessionMapping.set(session.chainId, sessionIds);
     this.ensureRunMappingConsistency();
-    if (!paused) await this.persistMutation(snapshot);
+    if (paused) this.refreshHookView();
+    else await this.persistMutation(snapshot);
     this.logger.info(`[Handoff] Claimed ${session.chainId} (session ${session.sessionId})`);
     return result;
   }
