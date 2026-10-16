@@ -287,3 +287,7 @@ The owner ruled on 2026-10-15 to fix, before 6.0.0, the three post-prompt-engine
 - **R-T3.4-UNCONFIRMED (ruled, overrides the row's fail-closed reading):** failing closed means no exemption, not hiding the call — unconfirmed guidance shows the resume/abort calls (the server validates them); retained guidance keeps the claim instructions. → C2.
 - **Defect → C2:** the post-prompt-engine text path saves a freshly parsed state with no pause check, so an unrelated gated prompt run during the discussion erases `conversation_pause` and `run_identity`.
 - **DEV-T3-1 (planner):** the T3.3/T3.4 briefs did not announce C1 as a concurrent server writer; the tree-state guard's teardown error in both full-suite runs was C1's edits, not a defect.
+
+### C1 accepted (2026-10-15)
+
+`abortRunControl` (pure, in conversation-control-response.ts beside the conversation_control packet) builds `structuredContent.run_control` = {action:'abort', outcome, chainId, runId?}. `cancelled` = applied or already cancelled (`cancelChain` true, the only "run is cancelled" outcome); `release-incomplete` = cancelled but the verify-loop release failed (isError); `not-applied` = no chain_id, or `cancelChain` false (completed, failed, missing or out-of-scope — one boolean branch). **For C2:** clear tracking on `cancelled` only. **For T4.3:** neither `conversation_control` nor `run_control` is documented under docs/.

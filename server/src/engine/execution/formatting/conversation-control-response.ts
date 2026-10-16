@@ -1,10 +1,10 @@
-// @lifecycle canonical - Conversation-control packet and reply text for pause, resume, paused refusal and custody.
+// @lifecycle canonical - Conversation-control packet and reply text for pause, resume, paused refusal and custody, plus abort's run-control packet.
 /**
  * What `pause`, `resume`, a call refused on a paused run and a paused claim answer (T2.3): text
  * and `structuredContent.conversation_control`, both rendered from one run snapshot so they cannot
  * disagree. The owed obligation is read off the snapshot, never executed. The recovery credential
  * appears only in a direct pause or custody reply's text; the packet picks its fields explicitly.
- * ResponseAssembler's `format*` methods are the callers. PURE.
+ * ResponseAssembler's `format*` methods are the callers; `abortRunControl` is PromptExecutor's. PURE.
  */
 
 import { HANDOFF_RESULT_HEADING } from '../delegation/handoff-contract.js';
@@ -325,3 +325,29 @@ export const renderPausedMintRefusal = (chainId: string): ToolResponse =>
       `first.\n\n${resumeOrAbort(chainId)}`,
     true
   );
+
+/**
+ * What an abort reply did, for a reader of `structuredContent` alone: Claude Code hands a
+ * PostToolUse hook that JSON and no `isError`, and a release-incomplete abort shares its text
+ * header with an applied one. Only `cancelled` means the run is cancelled and fully released, by
+ * this call or an earlier one; `release-incomplete` is cancelled but owes a retried abort;
+ * `not-applied` changed nothing (no `chain_id`, a completed or failed run, or none in this scope).
+ * Never carries a handoff token or any other credential.
+ */
+export interface RunControlPacket {
+  readonly action: 'abort';
+  readonly outcome: 'cancelled' | 'release-incomplete' | 'not-applied';
+  /** The run's chain id, else the caller's; `null` when the call named none. */
+  readonly chainId: string | null;
+  /** The run UUID (`sessionId`), when the store resolved the run. */
+  readonly runId?: string;
+}
+
+/** `structuredContent` for an abort reply. PURE. */
+export const abortRunControl = (
+  outcome: RunControlPacket['outcome'],
+  chainId: string | null,
+  runId?: string
+): { run_control: RunControlPacket } => ({
+  run_control: { action: 'abort', outcome, chainId, ...(runId !== undefined ? { runId } : {}) },
+});
