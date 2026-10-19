@@ -135,7 +135,7 @@ export const PropsLayer: React.FC<{look: PropsLook; frame: number; contract: Wor
             <Codex variant={variantOf(frame, contract, 1)} look={variantOf(frame, contract, 5) % 2} />
           </Sprite>
           <Sprite roles={look.fill ? identity.clawd : clear} outline={outline} x={blocking.clawd.x} y={blocking.clawd.y} scale={blocking.clawd.scale} style={lwFor(blocking.clawd.scale)}>
-            <Clawd raise={0.2} variant={variantOf(frame, contract, 2)} />
+            <Clawd raise={blocking.clawd.raise ?? 0.2} variant={variantOf(frame, contract, 2)} />
           </Sprite>
         </>
       )}
@@ -221,11 +221,12 @@ export const textureWidth = (contractPx: number, figureScale: number): number =>
 const orthoResolution = (scale: number): [number, number] => [Math.round((canvasW + 2 * PAD_SIDE) * scale), Math.round((canvasH + PAD_TOP) * scale)];
 
 export const FlatFigure: React.FC<{pose: Joints; fill: number; line: LineSpec | null; blocking?: Blocking; order?: readonly PartName[]}> = ({pose, fill, line, blocking = STAGE, order}) => {
-  if (fill >= 1 && !line) return <MeshFigure pose={pose} order={order} {...blocking.figure} />;
+  const {order: placedOrder, ...place} = blocking.figure;
+  if (fill >= 1 && !line) return <MeshFigure pose={pose} order={order ?? (placedOrder as readonly PartName[] | undefined)} {...place} />;
   return (
     <MeshFigure
       pose={pose}
-      {...blocking.figure}
+      {...place}
       mesh={(parts) => (
         <>
           {fill > 0 && (

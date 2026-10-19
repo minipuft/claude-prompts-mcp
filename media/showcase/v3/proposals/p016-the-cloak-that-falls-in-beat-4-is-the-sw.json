@@ -1,0 +1,25 @@
+{
+  "id": "p016",
+  "kind": "owner-ask",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "the-frame",
+    "frame": 760
+  },
+  "title": "The cloak that falls in beat 4 is the Swoop's own poncho: is that the cloak?",
+  "text": "D69 says the human arrives wearing the heavy Cloak (the bell-shaped, hooded left direction of human-gen-16) and becomes the Swoop; the pose sheet of beat 4 calls the cloth that drops at frame 760 'cloak', and it is the rig's `poncho` part, the diamond poncho the Swoop itself wears. No heavy Cloak was ever drawn or cut as an asset. Row 9.5 made the garment change the only way the rig can show it: from frame 760 the human is drawn as the parts rig without the poncho part, the cloak heap lies on the floor from the same frame, and the figure loses 14 % of its area ('a lighter figure'). Two consequences are open. First, the figure that is revealed is the Swoop without its diamond top: a collar piece, limbs and hair (out/animatic-05-draft-seq frame 780). Second, the one-piece mesh the contour worlds draw (a crossing's line phase, the line, crayon and shaded worlds) has no poncho to take off, so from frame ~900 and through beats 5 to 7 the poncho is back.\n\nOptions, in the vocabulary: 'hold' keeps what is drawn now (the poncho is the cloak) and accepts the second consequence for the draft (the Swoop builds in beat 5, D69's own default); 'drape' draws the heavy Cloak as a garment of its own over the Swoop before the drop (a new plate and a new part that hangs and folds under its own weight), so the poncho stays and the drop reveals the whole Swoop in every world. Default: hold, until the owner has looked at the revealed figure.",
+  "references": [
+    "spirited-away-shoes"
+  ],
+  "before": "the figure wears its poncho through all of beat 4 and every world",
+  "after": "the rig's poncho leaves on frame 760 in the home world, the heap stays; the contour worlds still draw it",
+  "intent": "wonder",
+  "default": "hold",
+  "options": [
+    "hold",
+    "drape"
+  ],
+  "status": "open",
+  "ruling": null
+}

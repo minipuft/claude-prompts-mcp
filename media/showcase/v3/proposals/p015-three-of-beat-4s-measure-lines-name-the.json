@@ -1,0 +1,19 @@
+{
+  "id": "p015",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "the-frame",
+    "frame": 800
+  },
+  "title": "Three of beat 4's measure lines name the human; the staging can only move Codex and set the hand once",
+  "text": "Row 9.5 restaged beat 4 wide (D101) and all six story points pass `probe-story.py`, but three measure lines of v3/screenplay.json are not what the probe reads or what the film can show.\n\nsp-4.4 STEP says 'human x moves toward frame >= 60 px; codex contact with heap; heap displacement 4-12 px'. Its `after` key is `codex.near_frame`, which reads CODEX's x (110 -> 262 here, 152 px toward the frame); the human's placement is one number per beat (`figure` in the blocking steps at a cut with the pose, it never eases) and the pose sheet's joints carry no travel (the head goes 469 -> 263 across the six keys in the sheet's space, which is body language, not a walk). The human therefore does not move toward the frame at all. The heap's 4-12 px is measured by probe-blocking.py from the contact the blocking declares (8 px), not by the story probe.\n\nsp-4.5 THRESHOLD says 'hand within 8 px of frame edge'. True at the threshold key only (the right wrist at the frame's left edge, 590); the arms are wider at the turn, rise and step and reach 15 to 25 px into the frame's bar, which the blocking declares as a contact (human and frame). Nothing probes the 8 px.\n\nsp-4.6 THROUGH says 'human crosses frame x'. The figure's body stays left of the frame's left edge (stage x 590) on every frame of the beat; only its hands reach the bar (the figure layer's ink spans x 313 to 657 on frames 690-870, `out/animatic-05-draft-staging.txt`): the through key is a small S in place.\n\nOptions: (a) restate the three measure lines to what is probed (Codex toward the frame by 60 px; the hand at the edge on the threshold key; the figure at the frame on the through key), or (b) give the human travel: a placement key per pose key in the blocking (the figure's x stepping with the pose, as its placement already steps at a cut) or a root translation in the pose sheet, then probe the human's x. (b) is a pose-step and probe-story change, not a staging one.",
+  "references": [
+    "totoro-lived-in"
+  ],
+  "before": "sp-4.4 STEP, 4.5 THRESHOLD and 4.6 THROUGH state their measure in the human's x, the hand's gap and the frame's plane; probe-story reads codex.near_frame, the bound key and the world change",
+  "after": "probe-story passes the six story points; the human's travel toward and through the frame is not drawn or measured (open)",
+  "status": "open",
+  "ruling": null
+}

@@ -26,7 +26,9 @@ import {coversTimeline, emitterIntensityAt, lightAt, lightTrack, lightTrackFromC
 import {beatAt, crossingAt, type CrossingWindow, type Timeline, type TimelineBeat} from '../library/animation/timeline';
 import {quantise, type Key} from '../library/animation/track';
 import {crossingPhase, emitterStrength, type XState} from '../library/animation/xsheet';
-import {jointParents, liftChart, liftPose} from '../library/cast/humanPose';
+import {jointParents, liftChart, liftPose, restPose} from '../library/cast/humanPose';
+import partsFile from '../../assets/human/families/home/parts/parts.json';
+import {applyOrder, defaultOrder, parseParts, type PartName} from '../library/motion/partsRig';
 import {parsePoseSheet, poseChartFrom, poseKeySheet} from '../library/animation/pose';
 import {poseAt, type Joints, type PoseChart} from '../library/motion';
 import {hueOf} from './lightPlan';
@@ -78,6 +80,25 @@ const playedCharts: Record<string, PoseChart> = (() => {
   const {keys, breakdowns} = poseChartFrom(s01Poses_, s01Keys_, jointParents);
   return {'s01-arrival-overwhelm': {keys, breakdowns}, 's02-the-frame': {keys: s02FrameChart.keys, breakdowns: s02FrameChart.breakdowns, follows: s02FrameChart.follows}};
 })();
+/**
+ * The garment (D69, D99): the pose sheet's cloak is the rig's poncho part (`ponchoPoint` is its tip), and the sheet says on which frame it comes off (`dropsAt`, the first frame after the cloth has stopped moving).
+ * A shot whose sheet drops a garment is drawn as the parts rig (the plate family cut into parts, the same figure its key plates are built from), in the order the key governs, and from that frame the parts rig
+ * leaves the poncho out: the figure is the Swoop. The contour worlds (a crossing's line phase, the line, crayon and shaded worlds) draw the one-piece mesh, which has no garment to take off; that is left open.
+ */
+const partsRigFile = parseParts(partsFile, restPose);
+const dropsAt: Record<string, number | undefined> = {'s02-the-frame': s02FramePoses_.secondaries.find((c) => c.dropsAt !== undefined)?.dropsAt};
+const poseSheets: Record<string, typeof s02FramePoses_> = {'s02-the-frame': s02FramePoses_};
+export type Garment = 'cloak' | 'swoop';
+export const garmentAt = (shot: string | null, frame: number): Garment | null => {
+  const drop = shot ? dropsAt[shot] : undefined;
+  return drop === undefined ? null : frame >= drop ? 'swoop' : 'cloak';
+};
+/** The parts rig's draw order for the body `pose` on a frame of `shot` (front first): the rule over the joints with the lead of the key the frame is on or moving toward, under that key's own `order`, without the garment that is off. */
+const partsOrder = (shot: string, pose: Joints, info: FrameInfo, garment: Garment): PartName[] => {
+  const key = poseSheets[shot]!.keys.find((k) => k.name === (info.phase === 'breakdown' && info.to ? info.to : info.from))!;
+  const order = applyOrder(defaultOrder(partsRigFile, pose, key.lead, key.weight.foot), key.order);
+  return garment === 'swoop' ? order.filter((n) => n !== 'poncho') : order;
+};
 const bodyCharts: Record<string, PoseChart> = Object.fromEntries(Object.entries(playedCharts).map(([shot, chart]) => [shot, {keys: chart.keys, breakdowns: chart.breakdowns}]));
 const keySheets: Record<string, KeySheet> = {'s01-arrival-overwhelm': s01Sheet, 's02-cant-build-frame': parseKeySheet(s02Keys), 's02-the-frame': poseKeySheet(s02FramePoses_, s02FrameKeys_)};
 /** Key sheets whose frames are film frames (a beat's own sheet inside a shot that starts earlier): their keys are read at `frame`, not at the frame since the shot began. */
@@ -163,6 +184,8 @@ export type FrameState = {
   local: number;
   /** The pose drawn on this frame (a held shot: each key for exactly the hold it declares; a played shot: its pose chart on twos) and the single-key chart that holds it. */
   pose: Joints;
+  /** Which garment the figure wears on this frame, in a shot whose pose sheet drops one (null elsewhere). */
+  garment: Garment | null;
   /** The same frame's body without its derived secondaries (equal to `pose` where the shot has none): what the figure layers draw, which the hold and twos probes measure. */
   bodyPose: Joints;
   heldChart: PoseChart;
@@ -188,7 +211,8 @@ export const frameState = (frame: number): FrameState => {
   const bodyPose = played ? poseAt(bodyCharts[shot!]!, local, jointParents) : pose;
   const drawnFrom = held ? held.start : info.phase === 'key' && sheet.keys.some((k) => k.name === info.from && k.frame === q) ? q : -1;
   // The figure's placement (scale, x, y) is part of its drawing: it steps at a cut with the pose and never eases like a prop does, so the drawn layer changes only where the exposure sheet has a key.
-  const blocking = {...blockingAt(blockingOnTimeline, frame), figure: blockingByBeat[beat.id]!.figure};
+  const garment = garmentAt(shot, frame);
+  const blocking = {...blockingAt(blockingOnTimeline, frame), figure: {...blockingByBeat[beat.id]!.figure, ...(garment ? {order: partsOrder(shot!, bodyPose, info, garment)} : {})}};
   const colour = lightAt(light, frame);
   const spot = contract ? emitterPointAt(blockingByBeat[beat.id]!, beat, frame) : null;
   return {
@@ -206,6 +230,7 @@ export const frameState = (frame: number): FrameState => {
     },
     local,
     pose,
+    garment,
     bodyPose,
     heldChart: {keys: [{frame: 0, joints: pose}]},
     drawing: info.phase === 'breakdown' ? `${info.from}>${info.to}` : info.from,

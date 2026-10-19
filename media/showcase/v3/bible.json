@@ -38,10 +38,12 @@
     "v3/proposals/p012-home-settle-the-structure-stands-small-u.json",
     "v3/proposals/p013-beat-4-staging-the-frame-is-the-subject.json",
     "v3/proposals/p014-the-screenplay-28-story-points-the-film.json",
+    "v3/proposals/p015-three-of-beat-4s-measure-lines-name-the.json",
+    "v3/proposals/p016-the-cloak-that-falls-in-beat-4-is-the-sw.json",
     "v3/materials.json",
     "v3/materials.schema.json"
   ],
-  "inputsHash": "3681580213f990dc716d09a3b7d655195a216efafb496b4f489d1b91f0b1e2c6",
+  "inputsHash": "069af3444b43430f461178abb4c0634c43d47981b8453b2844dfb9784dc9bd9c",
   "tracks": [
     {
       "name": "pacing",
@@ -1026,30 +1028,52 @@
           "data": {
             "provisional": true,
             "figure": {
-              "scale": 0.58,
-              "x": 452,
-              "y": 85
+              "scale": 0.34,
+              "x": 395,
+              "y": 266
             },
             "codex": {
-              "x": 60,
-              "y": 440,
-              "scale": 1.8
+              "x": 110,
+              "y": 474,
+              "scale": 0.9,
+              "at": [
+                {
+                  "frame": 788,
+                  "x": 110
+                },
+                {
+                  "frame": 812,
+                  "x": 262
+                }
+              ]
             },
             "clawd": {
-              "x": 940,
-              "y": 470,
-              "scale": 1.5
+              "x": 1700,
+              "y": 499,
+              "scale": 0.75,
+              "raise": 0.85,
+              "at": [
+                {
+                  "frame": 690,
+                  "x": 1700
+                },
+                {
+                  "frame": 738,
+                  "x": 1002
+                }
+              ]
             },
             "emitter": {
               "start": [
-                1000,
-                140
+                780,
+                390
               ],
               "end": [
-                1060,
-                200
+                800,
+                400
               ],
               "anchor": "frame interior",
+              "follows": "frame",
               "storyPoint": "sp-4.2"
             },
             "card": "seuss-nested-frames"
@@ -5154,12 +5178,12 @@
               "anchor": "frame interior",
               "path": {
                 "from": [
-                  0.7813,
-                  0.1944
+                  0.6094,
+                  0.5417
                 ],
                 "to": [
-                  0.8281,
-                  0.2778
+                  0.625,
+                  0.5556
                 ]
               },
               "intensity": 0.9,
@@ -6755,7 +6779,7 @@
               "beat": "the-frame",
               "frame": 630
             },
-            "text": "Animatic 04 played beat 4 from the six D99 keys and the hold-band check refused it: 'hold of 36 frames at 630-665, 740-775 and 840-875 is over 27 and no key declares it' (quoted in v3/studies/animatic-04.md; the first render's frames are kept as out/animatic-fig-seq-04a and out/animatic-seq-04a). The first drawing of each move landed 10 frames after the ruled hold ended, so the viewer saw slump, rise and threshold for 36 frames, not 26, 20 and 24.\n\nDone 2026-10-19, the hold wins. In v3/poses/s02-the-frame.json (breakdown frames only; the keys, their solved joints and the joints of every kept drawing are unchanged, so every keysHash and the plates stand) each move's first drawing now lands on the frame its key's hold ends: 656, 706, 760, 814 and 864. The exposure sheet (v3/xsheet.json) holds slump, turn, rise, step, threshold and through for exactly 26, 16, 20, 14, 24 and 30 frames.\n\nThe 4-frame spacing could not be kept on any of the five moves. They run 34, 34, 40, 26 and 36 frames from the end of a hold to the next key; six drawings of at most 4 frames cover 24, and the hold-band check (C28) calls a drawing held 5 to 10 frames a hold under 11. So each move opens with one hold-length drawing, the coil, held 16, 14, 20, 12 and 16 frames (the anticipation, and for turn -> rise a new anticipation at -0.10 because a first drawing 26 % along the chord failed the joints-only ease check); the rest of the move is drawn on fours, its last drawing 2 to 4 frames before the next key. To keep the arcs and the cloak's response inside their checks: turn -> rise lost its 0.74 passing; step -> threshold lost its 0.26 and 0.40 passings for one 0.30 passing on 826 (the heel tap stays on 828 and its settle on 836); slump -> turn ends on 688, two frames before the turn key (a layout ending on 686 read the cloak settling 20 frames after a step against 14 declared).\n\nCost: five more holds and five more pops (a held drawing against a key's hold with no drawing between): the animatic's hold-band lists 34 holds and 15 pops against 29 and 10, and the pose gate's per-shot form, which runs hold-band with --no-pops, would refuse the five. Open for the owner: the coil is the check's only door. A 34-frame move could instead run 8 drawings (C28 allows 3 to 6), or draw on sixes (the check calls a 6-frame drawing a hold under 11); either changes the rubric, not this sheet.",
+            "text": "Animatic 04 played beat 4 from the six D99 keys and the hold-band check refused it: 'hold of 36 frames at 630-665, 740-775 and 840-875 is over 27 and no key declares it' (quoted in v3/studies/animatic-04.md; the first render's frames are kept as out/animatic-fig-seq-04a and out/animatic-seq-04a). The first drawing of each move landed 10 frames after the ruled hold ended, so the viewer saw slump, rise and threshold for 36 frames, not 26, 20 and 24.\n\nDone 2026-10-19, the hold wins. In v3/poses/s02-the-frame.json (breakdown frames only; the keys, their solved joints and the joints of every kept drawing are unchanged, so every keysHash and the plates stand) each move's first drawing now lands on the frame its key's hold ends: 656, 706, 760, 814 and 864. The exposure sheet (v3/xsheet.json) holds slump, turn, rise, step, threshold and through for exactly 26, 16, 20, 14, 24 and 30 frames.\n\nThe 4-frame spacing could not be kept on any of the five moves. They run 34, 34, 40, 26 and 36 frames from the end of a hold to the next key; six drawings of at most 4 frames cover 24, and the hold-band check (C28) calls a drawing held 5 to 10 frames a hold under 11. So each move opens with one hold-length drawing, the coil, held 16, 14, 20, 12 and 16 frames (the anticipation, and for turn -> rise a new anticipation at -0.10 because a first drawing 26 % along the chord failed the joints-only ease check); the rest of the move is drawn on fours, its last drawing 2 to 4 frames before the next key. To keep the arcs and the cloak's response inside their checks: turn -> rise lost its 0.74 passing; step -> threshold lost its 0.26 and 0.40 passings for one 0.30 passing on 826 (the heel tap stays on 828 and its settle on 836); slump -> turn ends on 688, two frames before the turn key (a layout ending on 686 read the cloak settling 20 frames after a step against 14 declared).\n\nCost: five more holds and five more pops (a held drawing against a key's hold with no drawing between): the animatic's hold-band lists 34 holds and 15 pops against 29 and 10, and the pose gate's per-shot form, which runs hold-band with --no-pops, would refuse the five. Open for the owner: the coil is the check's only door. A 34-frame move could instead run 8 drawings (C28 allows 3 to 6), or draw on sixes (the check calls a 6-frame drawing a hold under 11); either changes the rubric, not this sheet.\n\nRow 9.5, 2026-10-19: the wide restage (D101) leaves the holds as they were. On the restaged animatic (`out/animatic-05-draft-seq`, `out/animatic-05-draft-fig-seq`) `probe-holds.py` reads `pass: hold-band - 34 holds in the band or declared, 12 moves of 3-6 drawings, 15 pops, 7 intentional long holds listed` (the same 34, 12 and 15 as above) and `probe-twos.py` `pass: twos-ones - the drawing changed on 85 even frames and 0 odd frames`. Beat 4's figure is now drawn as the parts rig (the garment change of sp-4.3 needs it) and the poncho leaves on frame 760, the frame the rise hold ends and the first drawing of the rise -> step move lands, so the change falls on a drawing the exposure sheet has a row for. The coil question above is untouched and still open.",
             "references": [
               {
                 "id": "samurai-jack-holds",
@@ -6775,7 +6799,7 @@
               }
             ],
             "before": "slump, rise and threshold on screen 36 frames (ruled 26, 20, 24); hold-band FAIL on those three holds; 29 holds, 10 pops",
-            "after": "every key on screen exactly its D99 frames (26, 16, 20, 14, 24, 30); hold-band pass (34 holds, 12 moves of 3-6 drawings, 15 pops); probe-all --contract pass; followthrough pass on the shot's and the animatic's joints; five moves open with a held drawing of 12 to 20 frames",
+            "after": "every key on screen exactly its D99 frames (26, 16, 20, 14, 24, 30); hold-band pass (34 holds, 12 moves of 3-6 drawings, 15 pops); probe-all --contract pass; followthrough pass on the shot's and the animatic's joints; five moves open with a held drawing of 12 to 20 frames; held at 34 holds, 12 moves, 15 pops after the wide restage (row 9.5)",
             "file": "v3/proposals/p009-beat-4-plays-slump-rise-and-threshold-fo.json"
           }
         },
@@ -6796,7 +6820,7 @@
               "beat": "the-frame",
               "frame": 800
             },
-            "text": "With the six D99 keys played, the figure layer touched the bottom edge of the picture on 166 frames of beat 4, from 733 to 906 (ink within 2 px of an edge on out/animatic-fig-seq-04a), and Codex was half out of the picture by 780. The layout carried no camera numbers, so cameraFromLayout derived the move from the emitter's travel: from the locked pose on 630 to (803, 215) at zoom 1 on 895, a pan up and right written for the earlier three-key figure.\n\nDone 2026-10-19: v3/layouts/s02-cant-build-frame.json carries `cameraPose` (span 690 to 895; start the locked pose; end x 690, y 360, zoom 1): a pan right of 50 stage px, the layout's own move word, that begins as the body turns toward the light and arrives where the crossing starts; the layout's camera words are unchanged. Measured on the re-render (out/animatic-fig-seq, out/animatic-seq): figure ink within 2 px of an edge on 0 of 300 frames of beat 4 (166 before); the figure's lowest ink is picture row 669 of 719 (50 px clear), its highest row 18; Codex lies at picture x 39 to 247 and y 482 to 691 on all 265 frames from 630 to 894, 39 px from the left edge at its closest (frame 879) and 28 px above the bottom; the frame, stage x 910 to 1190, is inside the picture on every frame with its centre 50 px nearer the middle of the picture at the end (x 1000, from 1050).\n\nThe move is that small because the stage allows no more. The figure and Codex use 674 of the stage's 720 px of height (the hair reaches stage y 17 on 814 to 825, Codex's bottom is at y 691), so a push or any pan up or down cuts one of them; Codex's left edge (x 89) and the frame's right edge (x 1190) leave 100 px of width. A push toward the lit frame, which the figure's 'through' key small in its light would need, takes Codex or the figure moved in the blocking, which is staging and was not changed here; a zoom below 1 shows the black outside the stage and was not tried. The eye trace does not change with it (270 of 300 frames of beat 4 over 3 %, 24.9 % at 700 and 21.5 % at 780, was 23.7 %): the brightest region is on Clawd, which is p011.",
+            "text": "With the six D99 keys played, the figure layer touched the bottom edge of the picture on 166 frames of beat 4, from 733 to 906 (ink within 2 px of an edge on out/animatic-fig-seq-04a), and Codex was half out of the picture by 780. The layout carried no camera numbers, so cameraFromLayout derived the move from the emitter's travel: from the locked pose on 630 to (803, 215) at zoom 1 on 895, a pan up and right written for the earlier three-key figure.\n\nDone 2026-10-19: v3/layouts/s02-cant-build-frame.json carries `cameraPose` (span 690 to 895; start the locked pose; end x 690, y 360, zoom 1): a pan right of 50 stage px, the layout's own move word, that begins as the body turns toward the light and arrives where the crossing starts; the layout's camera words are unchanged. Measured on the re-render (out/animatic-fig-seq, out/animatic-seq): figure ink within 2 px of an edge on 0 of 300 frames of beat 4 (166 before); the figure's lowest ink is picture row 669 of 719 (50 px clear), its highest row 18; Codex lies at picture x 39 to 247 and y 482 to 691 on all 265 frames from 630 to 894, 39 px from the left edge at its closest (frame 879) and 28 px above the bottom; the frame, stage x 910 to 1190, is inside the picture on every frame with its centre 50 px nearer the middle of the picture at the end (x 1000, from 1050).\n\nThe move is that small because the stage allows no more. The figure and Codex use 674 of the stage's 720 px of height (the hair reaches stage y 17 on 814 to 825, Codex's bottom is at y 691), so a push or any pan up or down cuts one of them; Codex's left edge (x 89) and the frame's right edge (x 1190) leave 100 px of width. A push toward the lit frame, which the figure's 'through' key small in its light would need, takes Codex or the figure moved in the blocking, which is staging and was not changed here; a zoom below 1 shows the black outside the stage and was not tried. The eye trace does not change with it (270 of 300 frames of beat 4 over 3 %, 24.9 % at 700 and 21.5 % at 780, was 23.7 %): the brightest region is on Clawd, which is p011.\n\nRow 9.5, 2026-10-19: the restaging this proposal said it needed ('Codex or the figure moved in the blocking') is D101's wide beat 4 (p013): the figure at scale 0.34 (0.58 before) with its feet at stage y 600, Codex at 0.9 (1.8), Clawd at 0.75 (1.5), the frame 400 x 410 (280 x 230) standing on the floor line. The camera is as p010 left it (pan right 50 px, 690 to 895). Measured with `scripts/animation/measure-staging.py out/animatic-05-draft-seq out/animatic-05-draft-fig-seq 630 930` on 1280 x 720 frames: the figure's ink is within 2 px of an edge on 0 of 300 frames (166 before), its lowest ink row is 609 of 719 (111 px clear), Codex stands in picture on every frame from 630 to 894 (stage x 108 to 318 in picture), Clawd enters at the right edge on 720 and stands in picture from 750, the frame and the heap lie inside the picture on every frame they are on; `pass: staging - 0 fault(s) over 300 frames`. The script's control is animatic 04's first render, where it names 19 frames of cut feet in 725-759.",
             "references": [
               {
                 "id": "spirited-away-shoes",
@@ -6814,7 +6838,7 @@
               }
             ],
             "before": "figure cut by the bottom edge on 166 of 300 frames of beat 4 (733 to 906); Codex half out at 780",
-            "after": "figure and Codex inside the picture on all 300 frames of beat 4 (0 frames touching an edge; Codex 39 px from the left edge at closest); the through key small in the picture is not done, it needs the blocking moved",
+            "after": "figure and Codex inside the picture on all 300 frames of beat 4 (0 frames touching an edge; Codex 39 px from the left edge at closest); the through key small in the picture is done by D101's wide restage (row 9.5)",
             "file": "v3/proposals/p010-the-beat-4-camera-cuts-off-the-humans-fe.json"
           }
         },
@@ -6835,7 +6859,7 @@
               "beat": "the-frame",
               "frame": 700
             },
-            "text": "Run on animatic 04's frames the eye-trace check reports 462 frames over 3 % of the width: 270 of the 300 frames of beat 4 (worst 30 %) and 192 of the shaded world's frames 1382-1619 (worst 67 %). In beat 4 at frame 630 the brightest unmasked region is at about (1109, 508), on Clawd, not the frame's glow at (1000, 140); the same check on the committed code's frames 700 and 780 (this run's 'before' stills, old keys and old blocking) read 19.7 % and 19.6 %, so it was red before the pose changed. The restaging helped elsewhere: arrival at frame 90 went from 2.5 % to 0.5 %, everything-at-once at 300 from 1.9 % to 0.4 %, cant-build at 525 from 3.8 % to 0.9 %, home-settle at 1700 from 5.0 % to 0.6 % and at 1800 from 4.0 % to 0.4 %, because the props no longer sit over the lit blocks. This is the question p007 asks (what the light pushes, per beat); the colour-continuity check fails on the same frames (630 drawn but unreadable). Row 8.6 (2026-10-19), after D100: the check now asks each story point's target and masks the kit's and gadget's pale roles only where their props are drawn. The beat-4 failure was the measurement: with the old mask the lamp (frames 700-880) read 18-27 % off, with the new one 0.1 % (0.0 % against the frame interior); retargeting alone, old mask, left 7-16 %. Animatic 04 now reads 232 of 1196 measured frames over 3 % (was 462 of 1638): beat 4 has 2 (928-929, 3.5 %); the shaded world's frames 1382-1519 and 1648-1649 (140) fail because the animatic's glow sits on the gates while the story points name the join and the frame interior; 1860-1949 (90) read 7.6-7.9 % because the held picture's light rests in the structure and the frame interior is dark; 510 frames name targets the animatic does not draw (the crayon's colour, the drawn line, the leaf, the piece's lines, the running bead) and are refused by name. The colour check's unreadable-hue frames fell from 630 to 149.",
+            "text": "Run on animatic 04's frames the eye-trace check reports 462 frames over 3 % of the width: 270 of the 300 frames of beat 4 (worst 30 %) and 192 of the shaded world's frames 1382-1619 (worst 67 %). In beat 4 at frame 630 the brightest unmasked region is at about (1109, 508), on Clawd, not the frame's glow at (1000, 140); the same check on the committed code's frames 700 and 780 (this run's 'before' stills, old keys and old blocking) read 19.7 % and 19.6 %, so it was red before the pose changed. The restaging helped elsewhere: arrival at frame 90 went from 2.5 % to 0.5 %, everything-at-once at 300 from 1.9 % to 0.4 %, cant-build at 525 from 3.8 % to 0.9 %, home-settle at 1700 from 5.0 % to 0.6 % and at 1800 from 4.0 % to 0.4 %, because the props no longer sit over the lit blocks. This is the question p007 asks (what the light pushes, per beat); the colour-continuity check fails on the same frames (630 drawn but unreadable). Row 8.6 (2026-10-19), after D100: the check now asks each story point's target and masks the kit's and gadget's pale roles only where their props are drawn. The beat-4 failure was the measurement: with the old mask the lamp (frames 700-880) read 18-27 % off, with the new one 0.1 % (0.0 % against the frame interior); retargeting alone, old mask, left 7-16 %. Animatic 04 now reads 232 of 1196 measured frames over 3 % (was 462 of 1638): beat 4 has 2 (928-929, 3.5 %); the shaded world's frames 1382-1519 and 1648-1649 (140) fail because the animatic's glow sits on the gates while the story points name the join and the frame interior; 1860-1949 (90) read 7.6-7.9 % because the held picture's light rests in the structure and the frame interior is dark; 510 frames name targets the animatic does not draw (the crayon's colour, the drawn line, the leaf, the piece's lines, the running bead) and are refused by name. The colour check's unreadable-hue frames fell from 630 to 149. With the screenplay's eye field read first (sp-2.2 the trio, sp-2.3 the human), animatic 04 reads 422 of 1198 measured frames over and s01 233 of 416 with the layer: the flood frames fail on both renders because the lamp's white core is the brightest thing and sits 110-170 px from the cast; the staging, not the probe, has to move the light onto what the script says the eye follows.",
             "references": [
               {
                 "id": "elmo-world",
@@ -6916,7 +6940,7 @@
               "beat": "the-frame",
               "frame": 900
             },
-            "text": "D91 says beat 4's light narrows the field to the frame, lit from inside. On the animatic the human and Codex use 674 of the stage's 720 px of height and the frame sits small at top right; the camera now keeps feet and Codex in picture (p010) but no camera move can make the frame the subject while the figure is this large, and a zoom below 1 shows black outside the stage. Options in the vocabulary: 'wide' restages beat 4 so the frame is large and near centre and the figure stands further off, small against it, the field narrowing to the frame as ruled; 'medium' keeps the present figure scale and lets the frame read as a small lit object the figure walks into. Default: wide.",
+            "text": "D91 says beat 4's light narrows the field to the frame, lit from inside. On the animatic the human and Codex use 674 of the stage's 720 px of height and the frame sits small at top right; the camera now keeps feet and Codex in picture (p010) but no camera move can make the frame the subject while the figure is this large, and a zoom below 1 shows black outside the stage. Options in the vocabulary: 'wide' restages beat 4 so the frame is large and near centre and the figure stands further off, small against it, the field narrowing to the frame as ruled; 'medium' keeps the present figure scale and lets the frame read as a small lit object the figure walks into. Default: wide.\n\nDone 2026-10-19 under D101 (row 9.5): 'wide'. The frame is 400 x 410 at (590, 190) with its base on the floor line the figure stands on; the figure is 0.34 of its old scale; Clawd carries the frame in from the right (frames 690 to 738, `frame.carriedBy`) and the light sits in its interior and travels with it (`emitter.follows`); the cloak heap lies on the floor from 760; Codex walks to the heap and nudges it on 812. The beat is cut into on 630 and out of on 930 (`cutIn`, `cutOut`: the placements of the beats around it do not ease). Beat 4 is the only beat whose frames changed: `compare-renders.py out/animatic-seq out/animatic-05-draft-seq` finds 1382 of 1950 frames identical and the others in 630-929 (beat 4) and 1682-1949 (home settle, where the heap now lies). Study: v3/studies/beat4-restage.md.",
             "references": [
               {
                 "id": "totoro-lived-in",
@@ -6952,7 +6976,7 @@
               }
             ],
             "before": "beat 4 staged with the figure at full stage height and the frame small at top right; eye trace 270 of 300 frames off the frame",
-            "after": "beat 4 restaged wide: the frame large, the figure small against it, the field narrowing to the frame (D91, D99)",
+            "after": "beat 4 restaged wide: the frame large (400 x 410 against 280 x 230), the figure small (0.34 against 0.58) and standing against it, the field narrowing to the lit frame (D91, D99, D101); probe-story passes sp-4.1 to sp-4.6",
             "file": "v3/proposals/p013-beat-4-staging-the-frame-is-the-subject.json"
           }
         },
@@ -7024,6 +7048,86 @@
             "before": "beats-v2.json: eight beats with actions and state flips that nothing binds to or measures; beat 4 posed as six body keys with no heap, no frame carried in, no nudge",
             "after": "screenplay.json is the target: every key, blocking action and emitter names its story point; probe-story checks each story point changes the world, not only the figure; the bible's script lane shows the active story point",
             "file": "v3/proposals/p014-the-screenplay-28-story-points-the-film.json"
+          }
+        },
+        {
+          "start": 800,
+          "end": 801,
+          "beat": "the-frame",
+          "label": "p015 Three of beat 4's measure lines name the human; the staging can only move Codex and set the hand once",
+          "data": {
+            "id": "p015",
+            "title": "Three of beat 4's measure lines name the human; the staging can only move Codex and set the hand once",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "the-frame",
+              "frame": 800
+            },
+            "text": "Row 9.5 restaged beat 4 wide (D101) and all six story points pass `probe-story.py`, but three measure lines of v3/screenplay.json are not what the probe reads or what the film can show.\n\nsp-4.4 STEP says 'human x moves toward frame >= 60 px; codex contact with heap; heap displacement 4-12 px'. Its `after` key is `codex.near_frame`, which reads CODEX's x (110 -> 262 here, 152 px toward the frame); the human's placement is one number per beat (`figure` in the blocking steps at a cut with the pose, it never eases) and the pose sheet's joints carry no travel (the head goes 469 -> 263 across the six keys in the sheet's space, which is body language, not a walk). The human therefore does not move toward the frame at all. The heap's 4-12 px is measured by probe-blocking.py from the contact the blocking declares (8 px), not by the story probe.\n\nsp-4.5 THRESHOLD says 'hand within 8 px of frame edge'. True at the threshold key only (the right wrist at the frame's left edge, 590); the arms are wider at the turn, rise and step and reach 15 to 25 px into the frame's bar, which the blocking declares as a contact (human and frame). Nothing probes the 8 px.\n\nsp-4.6 THROUGH says 'human crosses frame x'. The figure's body stays left of the frame's left edge (stage x 590) on every frame of the beat; only its hands reach the bar (the figure layer's ink spans x 313 to 657 on frames 690-870, `out/animatic-05-draft-staging.txt`): the through key is a small S in place.\n\nOptions: (a) restate the three measure lines to what is probed (Codex toward the frame by 60 px; the hand at the edge on the threshold key; the figure at the frame on the through key), or (b) give the human travel: a placement key per pose key in the blocking (the figure's x stepping with the pose, as its placement already steps at a cut) or a root translation in the pose sheet, then probe the human's x. (b) is a pose-step and probe-story change, not a staging one.",
+            "references": [
+              {
+                "id": "totoro-lived-in",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "My Neighbor Totoro (1988): Mei's shoes, the rotting pillar, the acorns",
+                "borrow": [
+                  "the details only a child would notice: a shoe left askew, a pillar that crumbles when pushed, acorns on the floor",
+                  "weight on contact: a body lands, settles, then the cloth settles after",
+                  "a world that is lived in before the story touches it"
+                ],
+                "governs": [
+                  "D92",
+                  "C14",
+                  "C31"
+                ]
+              }
+            ],
+            "before": "sp-4.4 STEP, 4.5 THRESHOLD and 4.6 THROUGH state their measure in the human's x, the hand's gap and the frame's plane; probe-story reads codex.near_frame, the bound key and the world change",
+            "after": "probe-story passes the six story points; the human's travel toward and through the frame is not drawn or measured (open)",
+            "file": "v3/proposals/p015-three-of-beat-4s-measure-lines-name-the.json"
+          }
+        },
+        {
+          "start": 760,
+          "end": 761,
+          "beat": "the-frame",
+          "label": "p016 The cloak that falls in beat 4 is the Swoop's own poncho: is that the cloak?",
+          "data": {
+            "id": "p016",
+            "title": "The cloak that falls in beat 4 is the Swoop's own poncho: is that the cloak?",
+            "kind": "owner-ask",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "the-frame",
+              "frame": 760
+            },
+            "text": "D69 says the human arrives wearing the heavy Cloak (the bell-shaped, hooded left direction of human-gen-16) and becomes the Swoop; the pose sheet of beat 4 calls the cloth that drops at frame 760 'cloak', and it is the rig's `poncho` part, the diamond poncho the Swoop itself wears. No heavy Cloak was ever drawn or cut as an asset. Row 9.5 made the garment change the only way the rig can show it: from frame 760 the human is drawn as the parts rig without the poncho part, the cloak heap lies on the floor from the same frame, and the figure loses 14 % of its area ('a lighter figure'). Two consequences are open. First, the figure that is revealed is the Swoop without its diamond top: a collar piece, limbs and hair (out/animatic-05-draft-seq frame 780). Second, the one-piece mesh the contour worlds draw (a crossing's line phase, the line, crayon and shaded worlds) has no poncho to take off, so from frame ~900 and through beats 5 to 7 the poncho is back.\n\nOptions, in the vocabulary: 'hold' keeps what is drawn now (the poncho is the cloak) and accepts the second consequence for the draft (the Swoop builds in beat 5, D69's own default); 'drape' draws the heavy Cloak as a garment of its own over the Swoop before the drop (a new plate and a new part that hangs and folds under its own weight), so the poncho stays and the drop reveals the whole Swoop in every world. Default: hold, until the owner has looked at the revealed figure.",
+            "references": [
+              {
+                "id": "spirited-away-shoes",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Spirited Away (2001): Chihiro taps her heel into her shoe",
+                "borrow": [
+                  "one unneeded gesture that proves the body is real",
+                  "the pause before a step through a threshold (beat 4, the frame)"
+                ],
+                "governs": [
+                  "D92",
+                  "D89"
+                ]
+              }
+            ],
+            "before": "the figure wears its poncho through all of beat 4 and every world",
+            "after": "the rig's poncho leaves on frame 760 in the home world, the heap stays; the contour worlds still draw it",
+            "file": "v3/proposals/p016-the-cloak-that-falls-in-beat-4-is-the-sw.json"
           }
         }
       ]

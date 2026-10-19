@@ -314,7 +314,8 @@ export type LayerJob = {pass: Pass; id: string; p: PassProjection[Pass]};
  * The figure's canvas, drawing nothing. In the whole frame the figure's WebGL canvas is a compositing layer, and what is painted after it and overlaps it is a compositing layer of its own, whose origin the browser snaps to a whole pixel; a pass drawn without a canvas under it keeps its sub-pixel
  * position, a half-pixel off the whole frame's (measured on Clawd's outline, frame 0). The back carries this canvas where the figure's is, the front and the lamp's core carry it before them.
  */
-const FigureCanvasShim: React.FC = () => <MeshFigure mesh={() => null} {...blocking.figure} />;
+const {order: _unusedOrder, ...figurePlace} = blocking.figure;
+const FigureCanvasShim: React.FC = () => <MeshFigure mesh={() => null} {...figurePlace} />;
 
 export const ShotS01Layer: React.FC<{jobs: LayerJob[]}> = ({jobs}) => {
   const frame = useCurrentFrame();

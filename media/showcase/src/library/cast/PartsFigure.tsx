@@ -87,7 +87,7 @@ const useDraws = (textures: {map: Texture[]; ramp: Texture[]; owners: Texture}):
     [textures],
   );
 
-/** The parts rig inside a ThreeCanvas laid out like MeshFigure's (HumanPuppet canvas units, y up): re-solved and re-ordered on every render. */
+/** The parts rig inside a ThreeCanvas laid out like MeshFigure's (HumanPuppet canvas units, y up): re-solved and re-ordered on every render. A part `order` does not list is not drawn (the garment that has come off). */
 export const PartsMesh: React.FC<{pose: Joints; order: readonly PartName[]}> = ({pose, order}) => {
   const draws = useDraws(useTextures());
   // layout effects run before ThreeCanvas advances the frame, so the render sees this frame's positions and order
@@ -104,7 +104,7 @@ export const PartsMesh: React.FC<{pose: Joints; order: readonly PartName[]}> = (
   return (
     <>
       {draws.map(({spec, geometry, material}) => (
-        <mesh key={spec.name} geometry={geometry} material={material} frustumCulled={false} renderOrder={order.length - order.indexOf(spec.name)} />
+        <mesh key={spec.name} geometry={geometry} material={material} frustumCulled={false} visible={order.includes(spec.name)} renderOrder={order.length - order.indexOf(spec.name)} />
       ))}
     </>
   );

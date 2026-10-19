@@ -3,24 +3,25 @@ import type {ActorPlacement, Blocking} from '../animation/blocking';
 import {Box} from '../props/Box';
 import {Bubble} from '../props/Bubble';
 import {Gadget} from '../props/Gadget';
+import {Heap} from '../props/Heap';
 import {ArchPiece, StalkPiece} from '../props/Pieces';
 import {Sprite} from '../Sprite';
 import {settled, type RoleMap} from '../tokens';
 
 /**
- * The actors a beat's blocking names (`blocking.actors`: box, bubble, gadget, stalk, structure), drawn as the placeholders the animatic stages with: the project's hand-coded
+ * The actors a beat's blocking names (`blocking.actors`: box, bubble, gadget, stalk, structure, heap), drawn as the placeholders the animatic stages with: the project's hand-coded
  * props in flat role fills (settled roles, no stipple: the animatic has no shading pass), at the blocking's position and scale. None of the muse proposals is accepted, so these
  * are not the film's art; they say where each thing stands and how big it is so the staging can be judged. An actor the blocking does not name is not drawn, and an actor
  * name with no drawing here is an error, not a silent skip.
  *
  * Anchors (the blocking says "an anchor point in screen pixels and a scale"; this module fixes what the point is, per prop): the box and the stalk stand on it (the foot centre of the
- * box's front face, the stalk's root), the structure stands on it (the centre of its base), the bubble is centred on it, and the gadget hangs from its dial (the chart's gadget path is the
+ * box's front face, the stalk's root), the structure stands on it (the centre of its base), the heap lies on it (the bottom centre of the mound), the bubble is centred on it, and the gadget hangs from its dial (the chart's gadget path is the
  * dial's position, and the blocking's emitter anchor 'gadget dial' sits on the same point).
  */
-export type ActorName = 'box' | 'bubble' | 'gadget' | 'stalk' | 'structure';
+export type ActorName = 'box' | 'bubble' | 'gadget' | 'stalk' | 'structure' | 'heap';
 
 /** Which role map each placeholder is filled with when the scene is given none: a settled map, so every fill is a fixed colour of v3/roles.json (C1, C24). The animatic gives every beat its own (`SceneProps.actorRoles`). */
-const ROLES: Record<ActorName, RoleMap> = {box: settled.gadget, bubble: settled.kit, gadget: settled.gadget, stalk: settled.kit, structure: settled.kit};
+const ROLES: Record<ActorName, RoleMap> = {box: settled.gadget, bubble: settled.kit, gadget: settled.gadget, stalk: settled.kit, structure: settled.kit, heap: settled.kit};
 
 /** Offset of the anchor inside each prop's own SVG box, in the prop's native pixels (Box 220 x 170 from (-10, -30); Bubble 280 x 280; Gadget 200 x 260 from (-20, -20), dial at (88, 170)). */
 const BOX_FOOT: [number, number] = [95, 160];
@@ -31,7 +32,7 @@ const STRUCTURE = {outer: {width: 220, height: 300}, inner: {width: 130, height:
 /** The lid of the placeholder box is drawn part open: the arrival beat is the one where it lifts. */
 const BOX_LID = 0.7;
 
-export const ACTOR_NAMES: readonly ActorName[] = ['structure', 'stalk', 'box', 'bubble', 'gadget'];
+export const ACTOR_NAMES: readonly ActorName[] = ['structure', 'stalk', 'heap', 'box', 'bubble', 'gadget'];
 const isActor = (name: string): name is ActorName => (ACTOR_NAMES as readonly string[]).includes(name);
 
 const at = (a: ActorPlacement, offset: [number, number]): {x: number; y: number; scale: number} => ({x: a.x - offset[0] * a.scale, y: a.y - offset[1] * a.scale, scale: a.scale});
@@ -46,6 +47,8 @@ const drawing = (name: ActorName, a: ActorPlacement): React.ReactNode => {
       return <Gadget glow={0.5} />;
     case 'stalk':
       return <StalkPiece flip={a.facing === 'left'} />;
+    case 'heap':
+      return <Heap />;
     case 'structure':
       return (
         <>

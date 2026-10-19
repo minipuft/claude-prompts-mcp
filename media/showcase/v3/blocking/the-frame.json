@@ -1,27 +1,53 @@
 {
   "id": "the-frame",
   "provisional": true,
-  "derivedFrom": "restaged 2026-10-19 (animatic 04, blocking step): props apart per probe-blocking.py; v3/layouts/s02-cant-build-frame.json emitter.endXY (0.6, 0.481) of the frame -> join and the two blocks that touch at it; every other field is the test scene's: the layout's figure heights are not used (startHeightPct 63.4 measures the human bent in the reach, endHeightPct is null); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
+  "derivedFrom": "restaged wide 2026-10-19 (D101, row 9.5): the frame large near centre, the figure small against it; props apart per probe-blocking.py; Clawd enters from the right carrying the frame (690-738), the cloak heap lies on the floor from the frame the cloak drops (760, the pose sheet's dropsAt), Codex walks to the heap and nudges it (812). The test scene's arch, gates and floor stand unused",
+  "cutIn": true,
+  "cutOut": true,
+  "shot": "s02-cant-build-frame",
+  "poseShot": "s02-the-frame",
   "figure": {
-    "scale": 0.58,
-    "x": 452,
-    "y": 85
+    "scale": 0.34,
+    "x": 395,
+    "y": 266
   },
   "codex": {
-    "x": 60,
-    "y": 440,
-    "scale": 1.8
+    "x": 110,
+    "y": 474,
+    "scale": 0.9,
+    "at": [
+      {
+        "frame": 788,
+        "x": 110
+      },
+      {
+        "frame": 812,
+        "x": 262
+      }
+    ]
   },
   "clawd": {
-    "x": 940,
-    "y": 470,
-    "scale": 1.5
+    "x": 1700,
+    "y": 499,
+    "scale": 0.75,
+    "raise": 0.85,
+    "at": [
+      {
+        "frame": 690,
+        "x": 1700
+      },
+      {
+        "frame": 738,
+        "x": 1002
+      }
+    ]
   },
   "frame": {
-    "x": 910,
-    "y": 70,
-    "width": 280,
-    "height": 230
+    "x": 590,
+    "y": 190,
+    "width": 400,
+    "height": 410,
+    "carriedBy": "clawd"
   },
   "blocks": [
     {
@@ -72,26 +98,68 @@
     "y": 480
   },
   "figureCrop": {
-    "x": 380,
-    "y": 0,
-    "width": 500,
-    "height": 720
+    "x": 396,
+    "y": 190,
+    "width": 250,
+    "height": 430
   },
+  "actors": {
+    "heap": {
+      "x": 436,
+      "y": 602,
+      "scale": 1.0,
+      "on": 760,
+      "at": [
+        {
+          "frame": 812,
+          "x": 436
+        },
+        {
+          "frame": 822,
+          "x": 444
+        }
+      ]
+    }
+  },
+  "contacts": [
+    {
+      "a": "human",
+      "b": "frame",
+      "why": "the hand rests on the frame's edge at the threshold (sp-4.5) and the arms reach for it at the rise and the step"
+    },
+    {
+      "a": "human",
+      "b": "heap",
+      "why": "the cloak falls in a pool around her feet at the rise (sp-4.3)"
+    },
+    {
+      "a": "codex",
+      "b": "heap",
+      "frame": 812,
+      "why": "Codex, passing, nudges the heap with a foot and it shifts a little (sp-4.4, D99's gag)",
+      "moves": {
+        "actor": "heap",
+        "by": [
+          4,
+          12
+        ]
+      }
+    }
+  ],
   "beat": "the-frame",
-  "shot": "s02-cant-build-frame",
   "emitter": {
     "start": [
-      1000,
-      140
+      780,
+      390
     ],
     "end": [
-      1060,
-      200
+      800,
+      400
     ],
     "anchor": "frame interior",
+    "follows": "frame",
     "storyPoint": "sp-4.2"
   },
   "card": "seuss-nested-frames",
-  "cardNote": "provisional: board §1 world, \"Nested frames on black\" for the frame interior; the layout sheet may replace it",
-  "poseShot": "s02-the-frame"
+  "cardNote": "provisional: board §1 world, \"Nested frames on black\" for the frame interior; the layout sheet may replace it"
 }

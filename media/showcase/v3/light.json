@@ -79,12 +79,12 @@
       "emitter": {
         "anchor": "frame interior",
         "start": [
-          0.7813,
-          0.1944
+          0.6094,
+          0.5417
         ],
         "end": [
-          0.8281,
-          0.2778
+          0.625,
+          0.5556
         ],
         "intensity": 0.9,
         "colour": "#d5e0ee",
