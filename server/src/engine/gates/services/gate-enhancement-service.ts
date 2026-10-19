@@ -10,6 +10,11 @@ import { DEFAULT_FRAMEWORK_GATE_ID, GateSetResolver } from './gate-set-resolver.
 import { suppressingModifier } from './gate-suppression-refusal.js';
 import { liveNodeIds } from './run-step-view.js';
 import {
+  resolvedInlineGateIds,
+  stepGateContext,
+  walkedStepResolutionInput,
+} from './step-gate-resolution-input.js';
+import {
   planNodeDrivenRender,
   steplessBaseStep,
 } from '../../execution/operators/node-step-projection.js';
@@ -132,7 +137,7 @@ const NOTHING_WALKED: StepWalkOutcome = { applied: 0, accepted: [] };
  *
  * A free function rather than a method: the answer reads two strings and nothing else, so it is
  * answerable without a PromptRequestContext (`architecture.md`), the same reasoning
- * `stepResolutionInput` carries below.
+ * `stepResolutionInput` carries in `step-gate-resolution-input.ts`.
  *
  * The prompt's own category wins because the loader stamps it from the category directory the
  * prompt was discovered in, which is the registry entry's id. The plan's value is the fallback for
@@ -1378,46 +1383,6 @@ export function runOrderWalk(
 }
 
 /**
- * A step's `inlineGateIds` with each chain-prompt reference replaced by the id it registered
- * under (P6.158). PURE. A reference nothing registered stays as given and resolves to no gate.
- */
-function resolvedInlineGateIds(
-  step: ChainStepPrompt,
-  stepDefinitionIds: ReadonlyMap<string, string>
-): string[] | undefined {
-  return step.inlineGateIds?.map((gateId) => stepDefinitionIds.get(gateId) ?? gateId);
-}
-
-/**
- * The resolution input for one step of the gate walk: its own prompt (not the chain entry
- * prompt — each step may carry its own injection block and `gateConfiguration`), its inline gates
- * with chain-prompt references resolved, and the walk's settings. PURE.
- */
-function walkedStepResolutionInput(
-  step: ChainStepPrompt,
-  prompt: ConvertedPrompt,
-  frameworkId: string | undefined,
-  settings: Pick<
-    ChainStepEnhancementInput,
-    'gatesConfig' | 'frameworkGateIds' | 'inlineDefinitionGateIds' | 'stepDefinitionIds'
-  >
-): GateResolutionInput {
-  return stepResolutionInput({
-    step,
-    inlineGateIds: resolvedInlineGateIds(step, settings.stepDefinitionIds),
-    prompt,
-    frameworkId,
-    frameworkInjected: isFrameworkInjected({
-      modifiers: step.executionPlan?.modifiers,
-      promptInjection: prompt.injection,
-    }),
-    frameworkGatesEnabled: settings.gatesConfig?.enableFrameworkGates !== false,
-    knownFrameworkGateIds: [...settings.frameworkGateIds],
-    inlineDefinitionGateIds: settings.inlineDefinitionGateIds,
-  });
-}
-
-/**
  * Every chain-prompt gate definition the walk's steps reference, with the definition it names
  * (P6.158). PURE apart from the lookup. A definition declaring no `id` registers under its name's
  * slug, so a resume finds the one it registered (P6.107) rather than minting a gate per call.
@@ -1440,69 +1405,6 @@ function stepGateDefinitionsOf(
       return [{ ref, promptId: chainPrompt.id, definition: { ...definition, id } }];
     })
   );
-}
-
-/**
- * One step's contribution to the chain's cumulative gate resolution.
- *
- * A free function rather than a method: deciding WHAT a step contributes reads only the step and
- * its prompt, so it stays answerable without a PromptRequestContext (`architecture.md`).
- */
-function stepResolutionInput(args: {
-  readonly step: ChainStepPrompt;
-  /** The step's `inlineGateIds`, chain-prompt references resolved (P6.158). */
-  readonly inlineGateIds: string[] | undefined;
-  readonly prompt: ConvertedPrompt;
-  readonly frameworkId: string | undefined;
-  readonly frameworkInjected: boolean;
-  readonly frameworkGatesEnabled: boolean;
-  readonly knownFrameworkGateIds: readonly string[];
-  readonly inlineDefinitionGateIds: readonly string[];
-}): GateResolutionInput {
-  const { step, prompt } = args;
-  const plannedGates =
-    Array.isArray(step.executionPlan?.gates) && step.executionPlan.gates.length > 0
-      ? step.executionPlan.gates
-      : [];
-
-  return {
-    prompt,
-    category: prompt.category ?? '',
-    modifiers: step.executionPlan?.modifiers,
-    frameworkId: args.frameworkId,
-    frameworkInjected: args.frameworkInjected,
-    frameworkGatesEnabled: args.frameworkGatesEnabled,
-    knownFrameworkGateIds: args.knownFrameworkGateIds,
-    inlineOperatorGateIds: args.inlineGateIds ?? [],
-    plannedGateIds: plannedGates,
-    inlineDefinitionGateIds: args.inlineDefinitionGateIds,
-    // A step with no category must not pull in registry gates on a 'general' fallback.
-    autoAssignCategoryGates: prompt.category !== undefined && prompt.category.length > 0,
-  };
-}
-
-/**
- * The gate context one step's enhancement runs under.
- *
- * Optional fields are assigned only when present: an absent key is what the readers of
- * `GateContext` test for, so writing `undefined` would not mean the same thing.
- */
-function stepGateContext(
-  prompt: ConvertedPrompt,
-  inlineGateIds: string[] | undefined,
-  frameworkId: string | undefined
-): GateContext {
-  const gateCtx: GateContext = { promptId: prompt.id, criteriaExecution: 'pipeline' };
-  if (inlineGateIds !== undefined) {
-    gateCtx.explicitGateIds = inlineGateIds;
-  }
-  if (frameworkId !== undefined) {
-    gateCtx.framework = frameworkId;
-  }
-  if (prompt.category !== undefined) {
-    gateCtx.category = prompt.category;
-  }
-  return gateCtx;
 }
 
 /** Per-gate execution metadata the gate registry carries for a `registry-auto` entry. */
