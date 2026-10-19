@@ -44,6 +44,9 @@ tags: []
 - **R12 (row 9)** `TransportType {STDIO}` (logger only) and `HttpTransportType {STREAMABLE_HTTP, BOTH}` (HTTP transport only) are partial copies of `TransportMode`, and both are compared against `TransportMode` values. Superseded fork: delete both, compare against the `TransportMode` literals. No behavior change.
 - **R1 note** Merge order: this PR still merges before #473.
 
+- **R13 (row 10, from the `>>diagnose` run chain-diagnose#2)** `version_history.resource_type` is one column with two writers. Server: prompt, gate, framework, category, config (`config-utils.ts:154`). cpm: prompt, gate, framework, config. `style` has no writer. One type names what the column HOLDS: `StoredResourceType = 'prompt'|'gate'|'framework'|'category'|'config'`, in `shared/types/version-history.ts`. Server `ResourceType = Exclude<StoredResourceType,'config'>`, which keeps R53: no MCP config write surface. cpm `HistoryResourceType = Exclude<StoredResourceType,'category'>`. No schema bump; the column is plain TEXT.
+- **R14 (defaults applied; owner may override before merge)** (a) cpm keeps not reading category history, stated in its type comment. (b) cpm refuses `style` by name for history, compare, rename and delete, as `rollback` already does. The cast at `version-history.ts:675` becomes a guard that admits only prompt, gate and framework to byte restore; any other value gets a projection-only result with a named reason.
+
 ## Measured inputs (origin/main `ee3986e2`, 2026-10-19)
 
 - 37 baseline names over 87 exported definitions. Reference counts per definition come from ts-morph `findReferencesAsNodes`, run over a snapshot of `server/src` + `server/tests`. The counts include barrel re-export sites, which R3 says are not consumers, so every count is re-measured by the row.
