@@ -40,6 +40,8 @@ tags: []
 
 ## Findings
 
+- Row 4: the current docs already agreed with the contracts on every check (12 tables, 2 views, postures, scopes). The validator adds the guard, not a fix. `validate:suite-membership` also reads a quoted `':<path>'` string as staged-content reading, so keep validator message strings plain.
+
 - Row 5: `validate:suite-membership` re-derives a step's `reads` from string literals, so a message naming an npm command reads as `spawn`. The new script avoids the literal text. Recorded for the row 4 brief.
 - Row 5: the 37 remaining homonyms (`ToolParameter` ×5, `ToolCommand` ×4, `ResourceType` ×4, …) are cleanup candidates. The stale-entry failure forces each rename to shrink the baseline.
 
