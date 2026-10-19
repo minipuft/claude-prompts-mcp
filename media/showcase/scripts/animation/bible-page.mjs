@@ -162,9 +162,9 @@ footer{margin-top:30px;color:#777;font-size:12px;border-top:1px solid #2a2a2a;pa
     <div class="cursor" id="cursor"></div>
   </div>
   <div class="player" id="player" aria-label="player">
-    <button id="pStart" title="start (Home)">⏮</button><button id="pPrevBeat" title="previous beat (PageUp)">⏪</button><button id="pPrevKey" title="previous key ([)">◀|</button><button id="pBack" title="one frame back (←), one second with Shift">◀</button>
+    <button id="pStart" title="start (Home)">|◀</button><button id="pPrevBeat" title="previous beat (PageUp)">◀◀</button><button id="pPrevKey" title="previous key ([)">◀|</button><button id="pBack" title="one frame back (←), one second with Shift">◀</button>
     <button id="pPlay" title="play / pause (Space)" style="min-width:58px">▶ play</button>
-    <button id="pFwd" title="one frame forward (→), one second with Shift">▶</button><button id="pNextKey" title="next key (])">|▶</button><button id="pNextBeat" title="next beat (PageDown)">⏩</button><button id="pEnd" title="end (End)">⏭</button>
+    <button id="pFwd" title="one frame forward (→), one second with Shift">▶</button><button id="pNextKey" title="next key (])">|▶</button><button id="pNextBeat" title="next beat (PageDown)">▶▶</button><button id="pEnd" title="end (End)">▶|</button>
     <span class="sep"></span><button id="pLoop" title="loop the beat under the cursor (L)">loop beat</button>
     <select id="pSpeed" title="speed"><option value="1">1×</option><option value="0.5">½×</option><option value="0.25">¼×</option><option value="2">2×</option></select>
     <span class="pk" id="pKey"></span><span class="twos" id="pTwos" title="amber when the drawing changes on this frame (twos)"></span>
@@ -350,7 +350,7 @@ footer{margin-top:30px;color:#777;font-size:12px;border-top:1px solid #2a2a2a;pa
     }
     PLAY.raf = requestAnimationFrame(tick);
   }
-  function play() { if (PLAY.on) return; if (CUR >= D - 1 && !PLAY.loop) setFrame(0, true); PLAY.on = true; PLAY.last = 0; PLAY.acc = 0; $('pPlay').textContent = '❚❚ pause'; $('pPlay').classList.add('on'); preload(CUR); PLAY.raf = requestAnimationFrame(tick); }
+  function play() { if (PLAY.on) return; if (CUR >= D - 1 && !PLAY.loop) setFrame(0, true); PLAY.on = true; PLAY.last = 0; PLAY.acc = 0; $('pPlay').textContent = '‖ pause'; $('pPlay').classList.add('on'); preload(CUR); PLAY.raf = requestAnimationFrame(tick); }
   function pause() { if (!PLAY.on) return; PLAY.on = false; cancelAnimationFrame(PLAY.raf); $('pPlay').textContent = '▶ play'; $('pPlay').classList.remove('on'); setFrame(CUR); }
   function jumpKey(dir) {
     var ks = track('keys').items.map(function (k) { return k.start; }).sort(function (a, b) { return a - b; });
