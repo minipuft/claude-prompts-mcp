@@ -268,13 +268,8 @@ export const gatePassCriteriaSchema = z.strictObject(
 // Each shape mirrors the reader that consumes the value. `gate_configuration` is not here: the
 // prompt write path already refuses a wrongly shaped one by name before anything is written.
 //
-// Each field below is `<loose>.pipe(<shape>)`: the loose schema is what `tools/list` publishes,
-// because the JSON Schema of the input side is the one a client receives, and the shape is what
-// a call is checked against. Publishing the shapes too would add 2,044 bytes to this tool's
-// published `inputSchema` (36,365 → 38,409, measured 2026-10-19), over the 37,000 ceiling in
-// `tests/snapshots/mcp-input-schema-sizes.json` that `validate:tool-schemas` holds. The contract
-// descriptions name each shape's keys meanwhile. *(flips when the owner raises that ceiling; then
-// drop each `.pipe()` and publish the shape itself.)*
+// Each shape is also what `tools/list` publishes, so a client reads the same keys a call is
+// checked against.
 
 /** One script tool, written to `tools/{id}/`; the fields `planToolFiles` reads. */
 const scriptToolDefinitionSchema = z.strictObject(
@@ -612,11 +607,7 @@ export const resourceManagerInputSchema = z
      */
     artifacts: PromptArtifactsSchema.optional().describe(describe('artifacts')),
     /** [Prompt] Script tools to create with the prompt — see `scriptToolDefinitionSchema`. */
-    tools: z
-      .array(z.unknown())
-      .pipe(z.array(scriptToolDefinitionSchema))
-      .optional()
-      .describe(describe('tools')),
+    tools: z.array(scriptToolDefinitionSchema).optional().describe(describe('tools')),
     /**
      * [Prompt] Update-only: how a `tools` change relates to the current binding (P2.3).
      *
@@ -779,17 +770,9 @@ export const resourceManagerInputSchema = z
       .optional()
       .describe(describe('pass_criteria')),
     /** [Gate] Activation rules — see `gateActivationSchema`. */
-    activation: z
-      .record(z.string(), z.unknown())
-      .pipe(gateActivationSchema)
-      .optional()
-      .describe(describe('activation')),
+    activation: gateActivationSchema.optional().describe(describe('activation')),
     /** [Gate] Retry configuration — see `gateRetryConfigSchema`. */
-    retry_config: z
-      .record(z.string(), z.unknown())
-      .pipe(gateRetryConfigSchema)
-      .optional()
-      .describe(describe('retry_config')),
+    retry_config: gateRetryConfigSchema.optional().describe(describe('retry_config')),
 
     // ── Framework parameters ─────────────────────────────────────────────
     /** [Framework] Framework type identifier (e.g. 'CAGEERF', 'ReACT'). */
@@ -797,21 +780,12 @@ export const resourceManagerInputSchema = z
     /** [Framework] System prompt guidance injected when active. */
     system_prompt_guidance: z.string().optional().describe(describe('system_prompt_guidance')),
     /** [Framework] Phase definitions → `phases.yaml`. */
-    phases: z
-      .array(z.unknown())
-      .pipe(z.array(frameworkPhaseSchema))
-      .optional()
-      .describe(describe('phases')),
+    phases: z.array(frameworkPhaseSchema).optional().describe(describe('phases')),
     /** [Framework] Gate configuration: include, exclude arrays. */
-    gates: z
-      .record(z.string(), z.unknown())
-      .pipe(frameworkGateFilterSchema)
-      .optional()
-      .describe(describe('gates')),
+    gates: frameworkGateFilterSchema.optional().describe(describe('gates')),
     /** [Framework] Tool description overlays when active, keyed by tool name. */
     tool_descriptions: z
-      .record(z.string(), z.unknown())
-      .pipe(z.record(z.string(), toolDescriptionOverlaySchema))
+      .record(z.string(), toolDescriptionOverlaySchema)
       .optional()
       .describe(describe('tool_descriptions')),
     /** [Framework] Whether the framework is enabled. */
@@ -878,9 +852,7 @@ export const resourceManagerInputSchema = z
     /** [Framework] Execution steps with dependencies → `phases.yaml`. */
     execution_steps: z.array(executionStepSchema).optional().describe(describe('execution_steps')),
     /** [Framework] Per-execution-type step overlays → `phases.yaml`. */
-    execution_type_enhancements: z
-      .record(z.string(), z.unknown())
-      .pipe(executionTypeEnhancementsSchema)
+    execution_type_enhancements: executionTypeEnhancementsSchema
       .optional()
       .describe(describe('execution_type_enhancements')),
     /** [Framework] System/user prompt additions and contextual hints → `phases.yaml`. */
@@ -909,8 +881,7 @@ export const resourceManagerInputSchema = z
       .describe(describe('execution_flow')),
     /** [Framework] Per-phase keywords and patterns for compliance scoring → `phases.yaml`. */
     quality_indicators: z
-      .record(z.string(), z.unknown())
-      .pipe(z.record(z.string(), qualityIndicatorSchema))
+      .record(z.string(), qualityIndicatorSchema)
       .optional()
       .describe(describe('quality_indicators')),
 
