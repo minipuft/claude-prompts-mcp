@@ -46,5 +46,8 @@ tags: []
 
 ## Findings
 
+- Row 1: `.husky/commit-msg` strips `Co-Authored-By: Claude` trailers on purpose (project policy), so briefs no longer ask for one.
+- Row 1: `shared-types.ts` survives only as a one-line re-export of `ErrorContext`, because `mcp/tools/shared/structured-response-builder.ts:13` imports it from there. Row 7 repoints that import and deletes the file. `ConfigError` in `errorHandling.ts` has 0 references; it is not a homonym, so it is out of scope.
+
 - Row 2: deleting a definition can orphan others (`GateRequirement`, `GateRequirementType`, and `GateType` in gate-definitions), so re-measure after each cut. `engine/gates/types.ts` and the directory `engine/gates/types/` coexist; `'../types.js'` resolves to the file.
 - Row 2: `engine/gates/types.ts` still holds unmeasured, possibly unused types (`ValidationContext`, `GateActivationResult`). They are outside this plan's objective (not homonyms).
