@@ -22,9 +22,10 @@
     "v3/script.md",
     "v3/creative-spec.md",
     "v3/proposals/p001-beat4-action.json",
-    "v3/proposals/p002-materials-as-a-contract-not-a-3d-engine.json"
+    "v3/proposals/p002-materials-as-a-contract-not-a-3d-engine.json",
+    "v3/proposals/p003-light-as-a-signed-distance-shader-layer.json"
   ],
-  "inputsHash": "863b203a71df9261914fa9ba679ccc9bc4f6ea9260d637dacfe84e7086ebad7f",
+  "inputsHash": "bc562b16af51128da0f236e12f88ef4157660ffe336129a36278816a2170d64c",
   "tracks": [
     {
       "name": "pacing",
@@ -6021,6 +6022,56 @@
               "note": "the inspiration card schema gains material facets so a reference can be filed for how a thing moves, not only how it looks"
             },
             "file": "v3/proposals/p002-materials-as-a-contract-not-a-3d-engine.json"
+          }
+        },
+        {
+          "start": 930,
+          "end": 1230,
+          "beat": "art-world",
+          "label": "p003 Light as a signed-distance shader layer, no engine",
+          "data": {
+            "id": "p003",
+            "title": "Light as a signed-distance shader layer, no engine",
+            "kind": "change",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-18",
+            "ruling": null,
+            "anchor": {
+              "beat": "art-world"
+            },
+            "text": "Keep Remotion and Three. Borrow Godot's 2D light model (a per-pixel light function, occluder shadows, a viewport signed-distance field for soft shadows) and Spine's physics-constraint shape (a secondary derived from a few numbers on the bone) as techniques, not engines. Light becomes one cached layer: the drawn roles form an occluder mask, a jump-flood pass turns it into a distance field, the emitter's volume is the field's falloff, its shadow is a march toward the emitter with the penumbra from the distance along the ray, one bounce level makes lit edges weak secondary emitters in the role's hue shifted toward the pair, and the existing stipple quantises the result so the shading law (dither, not ramps) is untouched. Glass reads the same buffer. The layer is hashed on the occluder masks, the emitter path, the material table and the backend name. Materials (p002) gain occluder class, bounce albedo and shadow class, so one file drives motion and radiance. Every engine and runtime (r3f, drei, postprocessing, Pixi, Babylon, Godot web export, Unity, Spine/Rive runtimes, Matter, Rapier, Lottie) is avoided; Blender stays the optional renderer (D62); radiance cascades proper is a trial only if a shot needs more than one emitter and two bounces. Order: p002 first for beat 4, then this layer before the world beats. Recommendation receipt: chain-tech_recommendation#1 (second pass, 2026-10-18).",
+            "references": [
+              {
+                "id": "seuss-no-one-youer",
+                "kind": "board card",
+                "section": "1 · World architecture",
+                "title": "There Is No One Alive That Is You-er Than You",
+                "borrow": [
+                  "black field with one blue cloud as the only large light mass",
+                  "clock-stalks and curling stalks with flag leaves = the prompt object",
+                  "sparse colored stars, pale thin outlines"
+                ],
+                "governs": [
+                  "D50",
+                  "C5",
+                  "C8"
+                ]
+              }
+            ],
+            "before": {
+              "note": "light is the emitter path, the feathered radiance mask and the lag chain; no occlusion, no bounce; glass and stipple each read their own inputs; secondaries are hand-written lags"
+            },
+            "after": {
+              "files": [
+                "src/library/light/sdf.ts + fragment shader (jump flood, falloff, shadow march, one bounce, stipple quantisation)",
+                "scripts/animation/probe-light.py occlusion control (a planted occluder darkens the far side)",
+                "render manifest: light layer with backend name"
+              ],
+              "gate": "animation-render-manifest reads the light layer; eye-trace keeps passing",
+              "note": "determinism inherited from sharded concurrency-1 renders on one ANGLE backend"
+            },
+            "file": "v3/proposals/p003-light-as-a-signed-distance-shader-layer.json"
           }
         }
       ]
