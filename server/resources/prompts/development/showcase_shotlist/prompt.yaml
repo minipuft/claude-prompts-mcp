@@ -29,3 +29,4 @@ artifacts:
   produces:
     - docs
     - plan
+systemMessageFile: system-message.md

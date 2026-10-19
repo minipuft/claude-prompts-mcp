@@ -5,6 +5,7 @@
 // Binds 127.0.0.1 only. No dependencies: node:http, node:fs, node:child_process.
 //   GET  /state                                                  -> {ok, hash, inputsHash, today}
 //   POST /edit       {file:'beats-v2', beat, field, value}       field: seconds | register | light_pushes | camera | actions | asks
+//   POST /edit       {file:'materials', material, field, value}  field: any non-null property of v3/materials.json; the value is patched as a number or a word and the probe judges the range
 //   POST /boundary   {beat, newEndSeconds}
 //   POST /proposal   {kind, title, text, anchor:{beat, frame?}, references:[], before?, after?, from}
 //   POST /inspiration  the same plus url?: a proposal of kind inspiration, then an Eagle inbox entry through the inspiration skill's `add`
@@ -15,6 +16,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import {loadMaterials, loadSchema, propertyShape, writeMaterials} from './materials-io.mjs';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const root = path.resolve(here, '..', '..');
@@ -32,6 +34,7 @@ const P = {
   ledger: path.join(root, 'v3/beats-v2.json'),
   timeline: path.join(root, 'v3/timeline.json'),
   bible: path.join(root, 'v3/bible.json'),
+  materials: path.join(root, 'v3/materials.json'),
   spec: path.join(root, 'v3/creative-spec.md'),
   proposals: path.join(root, 'v3/proposals'),
   ownerRefs: path.join(root, 'v3/references/owner'),
@@ -115,8 +118,31 @@ const validators = {
 };
 
 // ---------- the edits: each returns {files:[abs paths it may write], apply():void, after?(): Promise} ----------
+/** A material's property value, patched in place; the file is rewritten in its canonical layout and the probe (probe-materials.py, through `npm run bible`) refuses a value outside the schema's range. */
+const planMaterialEdit = (body) => {
+  let materials;
+  try {
+    materials = loadMaterials();
+  } catch (e) {
+    throw new Refusal(e instanceof Error ? e.message : String(e), 500);
+  }
+  const schema = loadSchema();
+  const material = typeof body.material === 'string' && Object.hasOwn(materials, body.material) ? materials[body.material] : null;
+  if (!material) throw bad(`there is no material called ${JSON.stringify(body.material)}; the materials are ${Object.keys(materials).join(', ')}`);
+  const fields = Object.keys(schema.$defs.material.properties);
+  if (!fields.includes(body.field)) throw bad(`field must be one of ${fields.join(', ')}, not ${JSON.stringify(body.field)}`);
+  const rated = material[body.field];
+  if (rated === null) throw bad(`${body.material} declares no ${body.field} (it is null), so there is no value to change; add one by hand in v3/materials.json`);
+  const {value: rule} = propertyShape(schema, body.field);
+  const wantsWord = Array.isArray(rule.enum);
+  if (wantsWord ? typeof body.value !== 'string' : typeof body.value !== 'number' || !Number.isFinite(body.value)) throw bad(`${body.field} takes ${wantsWord ? `one of ${rule.enum.join(', ')}` : 'a number'}, not ${JSON.stringify(body.value)}`);
+  rated.value = body.value;
+  return {files: [P.materials], apply: () => writeMaterials(materials), what: `${body.material}.${body.field}`};
+};
+
 const planEdit = (body) => {
-  if (body.file !== 'beats-v2') throw bad(`/edit patches only the beat ledger (file "beats-v2"), not ${JSON.stringify(body.file)}`);
+  if (body.file === 'materials') return planMaterialEdit(body);
+  if (body.file !== 'beats-v2') throw bad(`/edit patches the beat ledger (file "beats-v2") or the materials (file "materials"), not ${JSON.stringify(body.file)}`);
   if (!FIELDS.includes(body.field)) throw bad(`field must be one of ${FIELDS.join(', ')}, not ${JSON.stringify(body.field)}`);
   const ledger = loadLedger();
   const beat = findBeat(ledger, body.beat);

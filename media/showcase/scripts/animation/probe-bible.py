@@ -7,12 +7,13 @@ and the pacing items are the timeline's beats; every proposal file has an item a
 inside the beat, a beat range on beats the timeline has); a proposal with status ruled names a D-number ruling, and its kind is one of the five; the page footer's
 hash prefix and the hash the page carries equal the bible's inputsHash; the inputsHash equals the hash of the declared inputs' bytes today (a stale bible is refused);
 no flag says an input disagrees with another (stale xsheet or timeline, an unresolved reference, a script section without a beat); every ruling bullet in the spec has an
-entry in the rulings mirror (v3/rulings.json) whose raw bullet equals the spec's; every D-number a proposal's `ruling` names is a ruling in the spec.
+entry in the rulings mirror (v3/rulings.json) whose raw bullet equals the spec's; every D-number a proposal's `ruling` names is a ruling in the spec; when v3/materials.json exists the bible
+carries it unchanged as `materials` and probe-materials.py's checks (shape, ranges, intents, refs, cross-rules) pass on it.
 Control first: a copy of the bible with the last pacing item dropped, one with a proposal anchored at frame 5 of beat the-frame, one with a ruled proposal and no
 ruling, one page whose footer hash differs, one bible whose inputsHash is not the hash of its inputs, one carrying a stale flag, a rulings mirror with one spec ruling deleted and a proposal whose ruling
-names a D-number the spec lacks must each be refused by the check that names it. Exit 0 pass, 1 refusal (named in plain words), 2 a control that did not trip or an unreadable input.
+names a D-number the spec lacks, and (with materials) a cloth whose stiffness is 1 must each be refused by the check that names it. Exit 0 pass, 1 refusal (named in plain words), 2 a control that did not trip or an unreadable input.
 """
-import argparse, copy, hashlib, json, os, re, sys
+import argparse, copy, hashlib, importlib.util, json, os, re, sys
 
 KINDS = ("change", "inspiration", "eureka", "owner-ask", "finding")
 DENSE = ("pacing", "script", "blocking", "camera", "light", "colour-script", "look")
@@ -130,9 +131,29 @@ def check_proposal_rulings(b, tl, proposals, spec=None, **_):
     return not p, "; ".join(p) if p else f"{sum(1 for _i, r, _w in seen if r)} ruling name(s) on proposals, each a ruling in the spec"
 
 
+def probe_materials():
+    """probe-materials.py as a module (its file name has a hyphen, so it is loaded by path)."""
+    spec = importlib.util.spec_from_file_location("probe_materials", os.path.join(HERE, "probe-materials.py"))
+    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    return mod
+
+
+def check_materials(b, tl, root=DEFAULT_ROOT, **_):
+    file = os.path.join(root, "v3", "materials.json")
+    if not os.path.exists(file): return True, "no v3/materials.json, nothing to check"
+    if "materials" not in b: return False, "v3/materials.json exists and the bible carries no materials block: re-run compile-bible.mjs"
+    pm = probe_materials()
+    schema = load(os.path.join(root, "v3", "materials.schema.json"), "the materials schema")
+    board = pm.board_ids_of(os.path.join(root, "v3", "references", "board.json"))
+    problems = [p[2] for p in pm.check_materials(b["materials"], schema, board)]
+    if b["materials"] != load(file, "the materials"): problems.append("the bible's materials block is not v3/materials.json as it is today: re-run compile-bible.mjs")
+    if problems: return False, "; ".join(problems[:3]) + (f" (+{len(problems) - 3} more)" if len(problems) > 3 else "")
+    return True, f"the bible carries {len(b['materials'])} materials as the file declares them, each in range with its intent word and the cross-rules holding"
+
+
 CHECKS = [("tracks cover the timeline", check_coverage), ("proposals inside their beats", check_anchors), ("rulings close properly", check_rulings),
           ("page shows this bible", check_page), ("bible matches its inputs", check_hash), ("inputs agree", check_flags),
-          ("rulings mirror the spec", check_mirror), ("proposal rulings exist in the spec", check_proposal_rulings)]
+          ("rulings mirror the spec", check_mirror), ("proposal rulings exist in the spec", check_proposal_rulings), ("materials in range", check_materials)]
 
 
 def planted(b, proposals, page, tl, rulings, spec):
@@ -158,6 +179,9 @@ def planted(b, proposals, page, tl, rulings, spec):
     pr[sorted(pr)[0]]["ruling"] = "D9999"
     out["a proposal naming a ruling the spec lacks"] = ("proposal rulings exist in the spec", dict(b=b, proposals=pr, page=page))
     out["a spec ruling with no mirror entry"] = ("rulings mirror the spec", dict(b=b, proposals=proposals, page=page, rulings=[r for r in rulings if r["id"] != rulings[-1]["id"]]))
+    if "materials" in b:
+        x = copy.deepcopy(b); x["materials"]["cloth"]["stiffness"]["value"] = 1
+        out["cloth stiffness 1 in the materials block"] = ("materials in range", dict(b=x, proposals=proposals, page=page))
     return out
 
 

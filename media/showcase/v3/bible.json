@@ -24,9 +24,11 @@
     "v3/proposals/p001-beat4-action.json",
     "v3/proposals/p002-materials-as-a-contract-not-a-3d-engine.json",
     "v3/proposals/p003-light-as-a-signed-distance-shader-layer.json",
-    "v3/proposals/p004-a-direction-vocabulary-one-skill-referen.json"
+    "v3/proposals/p004-a-direction-vocabulary-one-skill-referen.json",
+    "v3/materials.json",
+    "v3/materials.schema.json"
   ],
-  "inputsHash": "b906b84bfaf99e503c48c0dfab11518394df5cc3b0e665dded52a99ea3e71556",
+  "inputsHash": "eb25d0ea2473048364db0df7156d55c8d6f909f45b1aa14301258f4021e8fd7f",
   "tracks": [
     {
       "name": "pacing",
@@ -6715,6 +6717,420 @@
       "text": "the bible is also the editing system before any further ruling. A local server on the preview port serves the page and accepts its edits, patching the one JSON file each belongs to and rebuilding through `npm run bible` so no edit bypasses the probe; the page edits beat boundaries by dragging on the pacing lane, seconds, register, light intent and actions inline, files a proposal or an inspiration at the cursor, and rules a proposal with the next D-number written into this list; the chains' evidence and muse steps file their findings and picks as proposals (row 7.5). Round two resumes only when all of that is built."
     }
   ],
+  "materials": {
+    "cloth": {
+      "mass": {
+        "value": 1,
+        "intent": "weighted",
+        "ref": "totoro-lived-in"
+      },
+      "lagFrames": {
+        "value": 6,
+        "intent": "drape",
+        "ref": "totoro-lived-in"
+      },
+      "settleFrames": {
+        "value": 14,
+        "intent": "drape",
+        "ref": null
+      },
+      "overshoot": {
+        "value": 0.18,
+        "intent": "soft",
+        "ref": null
+      },
+      "drag": {
+        "value": 0.12,
+        "intent": "drape",
+        "ref": null
+      },
+      "stiffness": {
+        "value": 0.1,
+        "intent": "drape",
+        "ref": null
+      },
+      "contact": {
+        "value": 6,
+        "intent": "weighted",
+        "ref": "totoro-lived-in"
+      },
+      "boil": {
+        "value": 1,
+        "intent": "soft",
+        "ref": "line-boil"
+      },
+      "shadowClass": {
+        "value": "stipple-2",
+        "intent": "soft",
+        "ref": "gospel-bg-pecini"
+      },
+      "occluder": {
+        "value": "solid",
+        "intent": "crisp",
+        "ref": null
+      },
+      "albedo": {
+        "value": 0.25,
+        "intent": "soft",
+        "ref": null
+      },
+      "refraction": null,
+      "diffusion": null
+    },
+    "hair": {
+      "mass": {
+        "value": 0.6,
+        "intent": "float",
+        "ref": null
+      },
+      "lagFrames": {
+        "value": 4,
+        "intent": "float",
+        "ref": null
+      },
+      "settleFrames": {
+        "value": 10,
+        "intent": "float",
+        "ref": null
+      },
+      "overshoot": {
+        "value": 0.25,
+        "intent": "float",
+        "ref": null
+      },
+      "drag": {
+        "value": 0.1,
+        "intent": "float",
+        "ref": null
+      },
+      "stiffness": {
+        "value": 0.6,
+        "intent": "crisp",
+        "ref": null
+      },
+      "contact": null,
+      "boil": {
+        "value": 1.2,
+        "intent": "soft",
+        "ref": "line-boil"
+      },
+      "shadowClass": {
+        "value": "stipple-1",
+        "intent": "soft",
+        "ref": "gospel-bg-pecini"
+      },
+      "occluder": {
+        "value": "solid",
+        "intent": "crisp",
+        "ref": null
+      },
+      "albedo": {
+        "value": 0.2,
+        "intent": "soft",
+        "ref": null
+      },
+      "refraction": null,
+      "diffusion": null
+    },
+    "body": {
+      "mass": {
+        "value": 1,
+        "intent": "weighted",
+        "ref": null
+      },
+      "lagFrames": {
+        "value": 0,
+        "intent": "snap",
+        "ref": null
+      },
+      "settleFrames": {
+        "value": 8,
+        "intent": "weighted",
+        "ref": null
+      },
+      "overshoot": {
+        "value": 0.1,
+        "intent": "crisp",
+        "ref": null
+      },
+      "drag": null,
+      "stiffness": {
+        "value": 1,
+        "intent": "crisp",
+        "ref": null
+      },
+      "contact": {
+        "value": 8,
+        "intent": "weighted",
+        "ref": "spirited-away-shoes"
+      },
+      "boil": {
+        "value": 1,
+        "intent": "crisp",
+        "ref": "line-boil"
+      },
+      "shadowClass": {
+        "value": "stipple-2",
+        "intent": "soft",
+        "ref": "gospel-bg-pecini"
+      },
+      "occluder": {
+        "value": "solid",
+        "intent": "crisp",
+        "ref": null
+      },
+      "albedo": {
+        "value": 0.3,
+        "intent": "soft",
+        "ref": null
+      },
+      "refraction": null,
+      "diffusion": null
+    },
+    "box": {
+      "mass": {
+        "value": 2,
+        "intent": "weighted",
+        "ref": null
+      },
+      "lagFrames": {
+        "value": 0,
+        "intent": "snap",
+        "ref": null
+      },
+      "settleFrames": {
+        "value": 4,
+        "intent": "snap",
+        "ref": null
+      },
+      "overshoot": {
+        "value": 0.05,
+        "intent": "crisp",
+        "ref": null
+      },
+      "drag": null,
+      "stiffness": {
+        "value": 1,
+        "intent": "crisp",
+        "ref": null
+      },
+      "contact": {
+        "value": 4,
+        "intent": "weighted",
+        "ref": null
+      },
+      "boil": {
+        "value": 0.5,
+        "intent": "crisp",
+        "ref": "line-boil"
+      },
+      "shadowClass": {
+        "value": "stipple-2",
+        "intent": "soft",
+        "ref": "gospel-bg-pecini"
+      },
+      "occluder": {
+        "value": "solid",
+        "intent": "crisp",
+        "ref": null
+      },
+      "albedo": {
+        "value": 0.15,
+        "intent": "soft",
+        "ref": null
+      },
+      "refraction": null,
+      "diffusion": null
+    },
+    "glass": {
+      "mass": {
+        "value": 0.3,
+        "intent": "float",
+        "ref": null
+      },
+      "lagFrames": {
+        "value": 2,
+        "intent": "soft",
+        "ref": null
+      },
+      "settleFrames": {
+        "value": 6,
+        "intent": "soft",
+        "ref": null
+      },
+      "overshoot": {
+        "value": 0.05,
+        "intent": "soft",
+        "ref": null
+      },
+      "drag": {
+        "value": 0.3,
+        "intent": "float",
+        "ref": null
+      },
+      "stiffness": {
+        "value": 0.9,
+        "intent": "crisp",
+        "ref": null
+      },
+      "contact": null,
+      "boil": {
+        "value": 0.3,
+        "intent": "still",
+        "ref": "line-boil"
+      },
+      "shadowClass": {
+        "value": "none",
+        "intent": "still",
+        "ref": null
+      },
+      "occluder": {
+        "value": "transmissive",
+        "intent": "soft",
+        "ref": null
+      },
+      "albedo": {
+        "value": 0,
+        "intent": "still",
+        "ref": null
+      },
+      "refraction": {
+        "value": 0.6,
+        "intent": "soft",
+        "ref": null
+      },
+      "diffusion": {
+        "value": 0.4,
+        "intent": "soft",
+        "ref": null
+      }
+    },
+    "light": {
+      "mass": null,
+      "lagFrames": {
+        "value": 3,
+        "intent": "soft",
+        "ref": "klaus-lighting"
+      },
+      "settleFrames": {
+        "value": 10,
+        "intent": "soft",
+        "ref": "klaus-lighting"
+      },
+      "overshoot": {
+        "value": 0,
+        "intent": "still",
+        "ref": null
+      },
+      "drag": null,
+      "stiffness": null,
+      "contact": null,
+      "boil": {
+        "value": 0,
+        "intent": "still",
+        "ref": null
+      },
+      "shadowClass": {
+        "value": "none",
+        "intent": "still",
+        "ref": null
+      },
+      "occluder": {
+        "value": "emissive",
+        "intent": "soft",
+        "ref": null
+      },
+      "albedo": {
+        "value": 1,
+        "intent": "soft",
+        "ref": null
+      },
+      "refraction": null,
+      "diffusion": null
+    },
+    "paper": {
+      "mass": null,
+      "lagFrames": null,
+      "settleFrames": null,
+      "overshoot": null,
+      "drag": null,
+      "stiffness": null,
+      "contact": null,
+      "boil": {
+        "value": 1.6,
+        "intent": "soft",
+        "ref": "elmo-world"
+      },
+      "shadowClass": {
+        "value": "stipple-3",
+        "intent": "soft",
+        "ref": "gospel-bg-pecini"
+      },
+      "occluder": {
+        "value": "solid",
+        "intent": "crisp",
+        "ref": null
+      },
+      "albedo": {
+        "value": 0.4,
+        "intent": "soft",
+        "ref": null
+      },
+      "refraction": null,
+      "diffusion": null
+    },
+    "line": {
+      "mass": null,
+      "lagFrames": {
+        "value": 2,
+        "intent": "snap",
+        "ref": null
+      },
+      "settleFrames": {
+        "value": 6,
+        "intent": "snap",
+        "ref": null
+      },
+      "overshoot": {
+        "value": 0,
+        "intent": "still",
+        "ref": null
+      },
+      "drag": {
+        "value": 0.2,
+        "intent": "drape",
+        "ref": null
+      },
+      "stiffness": {
+        "value": 0.8,
+        "intent": "crisp",
+        "ref": null
+      },
+      "contact": null,
+      "boil": {
+        "value": 1.4,
+        "intent": "soft",
+        "ref": "lin-ed-edd-eddy"
+      },
+      "shadowClass": {
+        "value": "none",
+        "intent": "still",
+        "ref": null
+      },
+      "occluder": {
+        "value": "solid",
+        "intent": "crisp",
+        "ref": null
+      },
+      "albedo": {
+        "value": 0.1,
+        "intent": "soft",
+        "ref": null
+      },
+      "refraction": null,
+      "diffusion": null
+    }
+  },
   "flags": [
     {
       "beat": "cant-build",

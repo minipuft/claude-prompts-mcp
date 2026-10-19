@@ -2,12 +2,14 @@
 // Compiles the production bible (D94): the film's pacing, script, blocking, camera, keys, light, colour script, look and proposals joined on
 // one frame axis. v3/bible.json is a projection of the files it declares in `generatedFrom`; it is copied, never edited.
 // Shape (showcase.bible.1, OpenTimelineIO-shaped): {schema, fps, duration, generatedFrom, inputsHash, tracks:[{name, items:[{start,end,beat,label,data}]}], flags:[{beat,text}]}.
-// Extra keys: `revision` (the ledger's own revision string) and `unanchored` (rulings that close no proposal: not timed, so not on a lane).
+// Extra keys: `revision` (the ledger's own revision string), `unanchored` (rulings that close no proposal: not timed, so not on a lane) and `materials` (v3/materials.json as it is: not timed either,
+// so a table under the flags rather than a lane; its schema is hashed with it because the schema owns the ranges the probe judges it by).
 // The spec's rulings list is also mirrored machine-readably into v3/rulings.json (D95 row 7.8): [{id, ids, who, date, text, closes, raw}].
 // usage: node scripts/animation/compile-bible.mjs [--ledger v3/beats-v2.json] [--timeline v3/timeline.json] [--xsheet v3/xsheet.json]
 //        [--light v3/light.json] [--frames out/animatic-seq] [--out v3/bible.json] [--spec v3/creative-spec.md] [--rulings-out v3/rulings.json]
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import {parseRuling as parseRulingForm} from './rulings.mjs';
 import path from 'node:path';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
@@ -45,6 +47,8 @@ const inputs = [
   abs('v3/script.md'),
   specPath,
   ...listJson('v3/proposals').map(abs),
+  abs('v3/materials.json'),
+  abs('v3/materials.schema.json'),
 ];
 for (const p of inputs) if (!fs.existsSync(p)) fail(`declared input ${rel(p)} does not exist`);
 const bytes = new Map(inputs.map((p) => [p, fs.readFileSync(p)]));
@@ -61,6 +65,7 @@ const board = json(abs('v3/references/board.json'));
 const picks = json(abs('v3/references/owner/picks.json'));
 const script = bytes.get(abs('v3/script.md')).toString('utf8');
 const specText = bytes.get(specPath).toString('utf8');
+const materials = json(abs('v3/materials.json'));
 const blockingFiles = listJson('v3/blocking').map((p) => json(abs(p)));
 const proposalFiles = listJson('v3/proposals').map((p) => ({file: p, ...json(abs(p))}));
 
@@ -326,17 +331,8 @@ const headerColon = (line) => {
   }
   return -1;
 };
-const parseRuling = (raw) => {
-  const colon = headerColon(raw);
-  const header = colon > -1 ? raw.slice(2, colon) : raw.slice(2);
-  const text = colon > -1 ? raw.slice(colon + 2).trim() : '';
-  const ids = header.match(/D\d+/g) ? [...new Set(header.match(/^D\d+(?:\/D\d+)*/)[0].split('/'))] : [];
-  const bare = header.replace(/\([^)]*\)/g, '').replace(/^D\d+(?:\/D\d+)*/, '');
-  const date = (bare.match(/\d{4}-\d{2}-\d{2}/) || [null])[0];
-  const who = bare.split(',').map((x) => x.trim()).filter((x) => x && !/^\d{4}-\d{2}-\d{2}$/.test(x) && !/^corrected\b/.test(x))[0] ?? null;
-  const closes = [...new Set([...text.matchAll(/\(closes ((?:p\d+[,\s]*)+)\)/g)].flatMap((m) => m[1].match(/p\d+/g)))];
-  return {id: ids[0], ids, who, date, text, closes, raw};
-};
+// The ruling form (D96) is parsed by scripts/animation/rulings.mjs; its output is a superset of the mirror's older fields.
+const parseRuling = (raw) => ({...parseRulingForm(raw), raw});
 const rulings = specText.split('\n').filter((l) => /^- D\d+/.test(l)).map(parseRuling);
 for (const r of rulings) {
   for (const p of proposalFiles) if (p.ruling && (r.ids.includes(p.ruling) || p.ruling === r.id) && !r.closes.includes(p.id)) r.closes.push(p.id);
@@ -390,6 +386,7 @@ const bible = {
     {name: 'rulings', items: rulingsItems},
   ],
   unanchored,
+  materials,
   flags,
 };
 fs.mkdirSync(path.dirname(outPath), {recursive: true});

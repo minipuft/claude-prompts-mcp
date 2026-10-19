@@ -34,3 +34,4 @@ arguments:
     description: Caller-owned production artifact directory for studies and receipts.
     required: false
     defaultValue: media/showcase
+systemMessageFile: system-message.md

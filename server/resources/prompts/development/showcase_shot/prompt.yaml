@@ -70,6 +70,7 @@ chainSteps:
       output_root: output_root
     inlineGateIds:
       - animation-pose-contract
+      - animation-vocabulary
     id: poses
     stepName: Pose Sheet
   - promptId: showcase_key_sheet
@@ -105,6 +106,7 @@ chainSteps:
       output_root: output_root
     inlineGateIds:
       - showcase-review
+      - animation-vocabulary
     id: grade
     stepName: Rubric Grade
   - promptId: showcase_evidence
@@ -117,6 +119,7 @@ chainSteps:
     stepName: File and Feed Back
     inlineGateIds:
       - animation-bible
+      - animation-vocabulary
 budget:
   pauseOnBlocking: true
 artifacts:
@@ -132,3 +135,4 @@ gateConfiguration:
     - product-positioning-fidelity
     - prose-hygiene
     - semantic-discoverability
+systemMessageFile: system-message.md

@@ -53,6 +53,7 @@ chainSteps:
       output_root: output_root
     inlineGateIds:
       - animation-blocking-contract
+      - animation-vocabulary
     id: blocking
     stepName: Blocking
   - promptId: animation_light_script
@@ -83,6 +84,7 @@ chainSteps:
       output_root: output_root
     inlineGateIds:
       - animation-review
+      - animation-vocabulary
     id: grade
     stepName: Rubric Grade
   - promptId: showcase_evidence
@@ -94,5 +96,7 @@ chainSteps:
     inlineGateIds:
       - handoff-artifacts
       - animation-bible
+      - animation-vocabulary
     id: evidence
     stepName: File and Feed Back
+systemMessageFile: system-message.md

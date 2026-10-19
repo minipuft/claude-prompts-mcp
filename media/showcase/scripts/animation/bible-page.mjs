@@ -35,12 +35,23 @@ const boardFile = path.join(root, 'v3/references/board.json');
 const boardCards = fs.existsSync(boardFile)
   ? JSON.parse(fs.readFileSync(boardFile, 'utf8')).sections.flatMap((sec) => sec.cards.map((c) => ({id: c.id, title: c.title, section: sec.title})))
   : [];
+// the materials table's columns: each property with the kind and range v3/materials.schema.json gives it (the schema owns them; the page draws the inputs from it)
+const materialsSchemaFile = path.join(root, 'v3/materials.schema.json');
+const materialsSchema = bible.materials && fs.existsSync(materialsSchemaFile) ? JSON.parse(fs.readFileSync(materialsSchemaFile, 'utf8')) : null;
+const materialFields = materialsSchema
+  ? Object.entries(materialsSchema.$defs.material.properties).map(([name, prop]) => {
+      const branches = prop.anyOf ?? [prop];
+      return {name, nullable: branches.some((b) => b.type === 'null'), description: prop.description ?? '', ...branches.find((b) => b.type === 'object').properties.value};
+    })
+  : [];
 const rootFromOut = path.relative(path.dirname(outPath), root).split(path.sep).join('/') || '.';
 const view = {
   bible,
   hashPrefix,
   startFrame,
   boardCards,
+  materialFields,
+  intents: materialsSchema ? materialsSchema.$defs.intent.enum : [],
   animBase: fs.existsSync(framesDir) ? path.relative(path.dirname(outPath), framesDir).split(path.sep).join('/') : null,
   rootFromOut,
 };
@@ -103,6 +114,16 @@ details summary{cursor:pointer;color:#aaa}
 .player .twos{display:inline-block;width:10px;height:10px;border-radius:50%;background:#444;margin-left:4px;vertical-align:middle}.player .twos.draw{background:#f0b35a}
 .flags{background:var(--panel);border-radius:8px;padding:8px 16px;border-left:6px solid var(--gag)}
 .flags li{color:#ff9d8f;margin:3px 0}.flags li b{color:var(--gag)}
+.matwrap{background:var(--panel);border-radius:8px;padding:8px 12px;overflow-x:auto}
+table.mat{border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+table.mat th,table.mat td{border-bottom:1px solid #262626;padding:3px 8px;text-align:left;white-space:nowrap;vertical-align:top}
+table.mat thead th{color:#aaa;font-weight:500;cursor:help;position:sticky;top:0}
+table.mat tbody th{color:#eee;font-weight:600}
+table.mat td.nil{color:#555}
+table.mat .v{font-weight:600;color:#eee}
+table.mat .iw{display:block;color:#8fb7ff;font-size:10px;letter-spacing:.03em}
+table.mat input,table.mat select{background:#1c1c1c;color:#eee;border:1px solid #5a4a2a;border-radius:4px;padding:1px 4px;font:inherit;font-size:12px}
+table.mat input[type=number]{width:64px}
 .cards{display:grid;gap:14px}
 .card{background:var(--panel);border-radius:8px;padding:12px 16px;border-left:6px solid var(--c,#f0b35a)}
 .card.hit{outline:2px solid #fff}
@@ -173,6 +194,8 @@ footer{margin-top:30px;color:#777;font-size:12px;border-top:1px solid #2a2a2a;pa
 </div>
 <h2>Flags</h2>
 <ul class="flags" id="flags"></ul>
+<h2>Materials</h2>
+<div class="matwrap" id="materials"></div>
 <h2>Rulings with no proposal on a beat</h2>
 <div id="unanch"></div>
 <h2>Proposals</h2>
@@ -391,6 +414,39 @@ footer{margin-top:30px;color:#777;font-size:12px;border-top:1px solid #2a2a2a;pa
   // ---- flags ----
   $('flags').innerHTML = B.flags.length ? B.flags.map(function (f) { return '<li><b>' + esc(f.beat) + '</b> · ' + esc(f.text) + '</li>'; }).join('') : '<li style="color:#999">no flags</li>';
 
+  // ---- materials: one row per material, one column per property, the intent word under each value; in edit mode a value is an input that posts /edit {file:'materials'} ----
+  function cellText(v) { return typeof v === 'number' ? String(v) : esc(v); }
+  function matInput(m, f, r) {
+    var attrs = ' data-m="' + esc(m) + '" data-f="' + esc(f.name) + '"';
+    if (f.enum) return '<select' + attrs + '>' + f.enum.map(function (w) { return '<option' + (w === r.value ? ' selected' : '') + '>' + esc(w) + '</option>'; }).join('') + '</select>';
+    var lo = f.minimum != null ? f.minimum : f.exclusiveMinimum != null ? f.exclusiveMinimum : '', step = f.type === 'integer' ? 1 : 0.01;
+    return '<input type="number"' + attrs + ' step="' + step + '" min="' + lo + '" max="' + (f.maximum != null ? f.maximum : '') + '" value="' + esc(r.value) + '">';
+  }
+  function renderMaterials() {
+    var host = $('materials'), mats = B.materials, F = V.materialFields;
+    if (!mats || !F.length) { host.parentNode.hidden = true; host.previousElementSibling.hidden = true; return; }
+    var head = '<tr><th></th>' + F.map(function (f) {
+      var range = f.enum ? f.enum.join(' | ') : (f.type === 'integer' ? 'whole ' : '') + (f.minimum != null ? f.minimum : f.exclusiveMinimum != null ? 'above ' + f.exclusiveMinimum : '') + ' to ' + f.maximum;
+      return '<th title="' + esc(f.description + ' [' + range + ']') + '">' + esc(f.name) + '</th>';
+    }).join('') + '</tr>';
+    var rows = Object.keys(mats).map(function (id) {
+      return '<tr><th>' + esc(id) + '</th>' + F.map(function (f) {
+        var r = mats[id][f.name];
+        if (r === null) return '<td class="nil" title="' + esc(id + ' declares no ' + f.name) + '">–</td>';
+        var tip = esc(f.name + ': ' + r.intent + (r.ref ? ' · ref ' + r.ref : ''));
+        return '<td title="' + tip + '">' + (EDIT.on ? matInput(id, f, r) : '<span class="v">' + cellText(r.value) + '</span>') + '<span class="iw">' + esc(r.intent) + '</span></td>';
+      }).join('') + '</tr>';
+    }).join('');
+    host.innerHTML = '<table class="mat"><thead>' + head + '</thead><tbody>' + rows + '</tbody></table>';
+  }
+  $('materials').addEventListener('change', function (e) {
+    var t = e.target;
+    if (!t.dataset || !t.dataset.m) return;
+    var value = t.tagName === 'SELECT' ? t.value : Number(t.value);
+    post('/edit', {file: 'materials', material: t.dataset.m, field: t.dataset.f, value: value}, t).then(function (j) { if (!j || !j.ok) renderMaterials(); });
+  });
+  renderMaterials();
+
   // ---- proposals as cards ----
   var IMG = /\.(png|jpe?g|gif|webp|svg)$/i;
   function side(v) {
@@ -572,7 +628,7 @@ footer{margin-top:30px;color:#777;font-size:12px;border-top:1px solid #2a2a2a;pa
     $('editToggle').checked = EDIT.on;
     try { sessionStorage.setItem('bibleEdit', EDIT.on ? '1' : '0'); } catch (e) {}
     $('edstat').textContent = EDIT.on ? 'edit mode: drag a beat end on the pacing lane, edit fields in the readout, or propose at the cursor' : EDIT.ok ? 'the bible server answers; switch on to edit' : $('edstat').textContent;
-    setFrame(CUR); renderCards();
+    setFrame(CUR); renderCards(); renderMaterials();
   }
   $('editToggle').addEventListener('change', function () { setEdit(this.checked); });
   (location.protocol === 'file:' ? Promise.resolve(null) : fetch('/state', {cache: 'no-store'}).then(function (r) { return r.ok ? r.json() : null; })).catch(function () { return null; }).then(function (j) {

@@ -1,0 +1,32 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Created**: Animation Direction (animation_direction)\n\n📝 Direct an animation production in the controlled vocabulary (D96): put one question per turn to the owner in the fixed interview form (situation, options as vocabulary words, default, what it changes, reference card), file it as an owner-ask proposal on the bible, and write rulings in the form D<N>, <who>, <date>: <verb> <object> <value> because <intent word> (ref <card id>) (closes p<NNN>). The vocabulary is a file beside the episode's contracts; this prompt never restates it.\n🧠 single\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_direction\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_direction/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_direction/user-message.md\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_direction/system-message.md\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "create",
+    "valid": true,
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "create",
+      "id": "animation_direction",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_direction",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_direction/prompt.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_direction/user-message.md",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_direction/system-message.md"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 1
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Created**: Animation Direction (animation_direction)\n\n📝 Direct an animation production in the controlled vocabulary (D96): put one question per turn to the owner in the fixed interview form (situation, options as vocabulary words, default, what it changes, reference card), file it as an owner-ask proposal on the bible, and write rulings in the form D<N>, <who>, <date>: <verb> <object> <value> because <intent word> (ref <card id>) (closes p<NNN>). The vocabulary is a file beside the episode's contracts; this prompt never restates it.\n🧠 single\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_direction\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_direction/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_direction/user-message.md\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_direction/system-message.md\n"
+  },
+  "isError": false
+}

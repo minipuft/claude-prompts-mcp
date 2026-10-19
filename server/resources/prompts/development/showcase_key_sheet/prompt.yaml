@@ -29,3 +29,4 @@ arguments:
     description: Caller-owned production artifact directory.
     required: false
     defaultValue: media/showcase
+systemMessageFile: system-message.md

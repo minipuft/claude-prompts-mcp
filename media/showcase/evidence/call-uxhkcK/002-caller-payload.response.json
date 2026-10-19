@@ -1,0 +1,30 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Updated**: Showcase World Sheet (showcase_world_sheet)\n\nUpdated prompt: showcase_world_sheet\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +1 additions, -0 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_world_sheet/prompt.yaml\n+++ b/development/showcase_world_sheet/prompt.yaml\n@@ -27,3 +27,4 @@\n     defaultValue: media/showcase\n tools:\n   - imagegen\n+systemMessageFile: system-message.md\n\n```\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet/system-message.md\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "update",
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "update",
+      "id": "showcase_world_sheet",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet/prompt.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet/system-message.md"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 2
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Updated**: Showcase World Sheet (showcase_world_sheet)\n\nUpdated prompt: showcase_world_sheet\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +1 additions, -0 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_world_sheet/prompt.yaml\n+++ b/development/showcase_world_sheet/prompt.yaml\n@@ -27,3 +27,4 @@\n     defaultValue: media/showcase\n tools:\n   - imagegen\n+systemMessageFile: system-message.md\n\n```\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet/system-message.md\n"
+  },
+  "isError": false
+}

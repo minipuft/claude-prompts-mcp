@@ -1,0 +1,30 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Updated**: Showcase Evidence (showcase_evidence)\n\nUpdated prompt: showcase_evidence\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +1 additions, -0 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_evidence/prompt.yaml\n+++ b/development/showcase_evidence/prompt.yaml\n@@ -38,3 +38,4 @@\n     - product-positioning-fidelity\n     - prose-hygiene\n     - semantic-discoverability\n+systemMessageFile: system-message.md\n\n```\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_evidence\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_evidence/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_evidence/system-message.md\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "update",
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "update",
+      "id": "showcase_evidence",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_evidence",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_evidence/prompt.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_evidence/system-message.md"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 2
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Updated**: Showcase Evidence (showcase_evidence)\n\nUpdated prompt: showcase_evidence\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +1 additions, -0 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_evidence/prompt.yaml\n+++ b/development/showcase_evidence/prompt.yaml\n@@ -38,3 +38,4 @@\n     - product-positioning-fidelity\n     - prose-hygiene\n     - semantic-discoverability\n+systemMessageFile: system-message.md\n\n```\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_evidence\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_evidence/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_evidence/system-message.md\n"
+  },
+  "isError": false
+}

@@ -38,3 +38,4 @@ gateConfiguration:
     - product-positioning-fidelity
     - prose-hygiene
     - semantic-discoverability
+systemMessageFile: system-message.md

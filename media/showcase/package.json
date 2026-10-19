@@ -6,7 +6,7 @@
   "description": "Private, silent editorial animation trial; no server runtime dependency.",
   "scripts": {
     "studio": "remotion studio src/index.ts --port=3107",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "python3 scripts/animation/probe-materials.py v3/materials.json && tsc --noEmit",
     "compositions": "remotion compositions src/index.ts",
     "render:proof": "remotion render src/index.ts Showcase out/renderer-proof.mp4 --frames=0-599 --codec=h264 --scale=0.6666666666666666 --crf=18 --concurrency=4",
     "render:full": "remotion render src/index.ts Showcase out/showcase-draft.mp4 --codec=h264 --scale=0.6666666666666666 --crf=18 --concurrency=4",

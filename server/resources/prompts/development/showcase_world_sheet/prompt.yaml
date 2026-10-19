@@ -27,3 +27,4 @@ arguments:
     defaultValue: media/showcase
 tools:
   - imagegen
+systemMessageFile: system-message.md
