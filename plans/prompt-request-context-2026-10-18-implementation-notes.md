@@ -29,12 +29,17 @@ tags: []
 
 ## Deviations
 
+- **DEV-T1-4** Row 3 fixed two stale table names outside the section it was given (`overview.md` ≈344 `framework_state`, ≈847 `argument_history`), because its own check covered the whole file. Accepted.
+
 - **DEV-T1-2** Row 2 also renamed the class's test file (`execution-context.test.ts` → `prompt-request-context.test.ts`) and moved its typecheck-tests baseline key (332 → 332). Accepted: the brief's "its file" reads naturally as covering the test named after it.
 - **DEV-T1-3** R7 says shared-tree with the planner committing, but the briefs tell workers to commit their own paths. The briefs win: R7 now reads "workers commit explicit paths on the initiative branch".
 
 - **DEV-T1-1** Row 1 committed a shorter subject than briefed: the brief's was 106 characters, over commitlint `header-max-length` 100. Briefs now check subject length before sending.
 
 ## Findings
+
+- Row 3: the old anti-pattern examples called `chainSessionStore.isRetryLimitExceeded`, which does not exist, and recommended `setPendingGateReview`, which is `@deprecated`. Both are replaced. Nothing checks method names in doc snippets; not cut as a row (outside this slice's objective, R192).
+- Row 3 follow-up, measured by the planner: after the row, retired table names appear in docs and handbooks only as history (`sqlite-persistence.md:14`). `CLAUDE.md` §Runtime State is another hand-kept table list. Row 4 also guards that list and the retired names.
 
 - Row 2: ts-morph `SourceFile.move` under NodeNext rewrote 84 import specifiers without their `.js` extension (33 typecheck errors). The worker restored them with a count-checked script. Any future ts-morph move in this repo needs `rg` over the rewritten specifiers afterwards.
 - Row 2: `validate:category-enumerations` reads `git ls-files`, so an unstaged move reads as ENOENT on the old path. Stage moves before `validate:all`.
