@@ -12,12 +12,8 @@ import { GateDefinitionLoader } from '../core/gate-definition-loader.js';
 import { createGenericGateGuide } from '../registry/generic-gate-guide.js';
 
 import type { Logger } from '#infra/logging/index.js';
+import type { FileChangeOperation } from '#shared/types/index.js';
 import type { GateRegistry } from '../registry/gate-registry.js';
-
-/**
- * File change operation types for hot reload events
- */
-export type FileChangeOperation = 'added' | 'modified' | 'removed';
 
 /**
  * Hot reload event for gates

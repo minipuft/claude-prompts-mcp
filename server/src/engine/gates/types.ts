@@ -37,127 +37,8 @@ export type {
   GateSelectionResult,
 } from './types/index.js';
 
-/**
- * Gate requirement types - comprehensive enumeration
- */
-export type GateRequirementType =
-  | 'content_length'
-  | 'keyword_presence'
-  | 'format_validation'
-  | 'section_validation'
-  | 'custom'
-  // Content quality gates
-  | 'readability_score'
-  | 'grammar_quality'
-  | 'tone_analysis'
-  // Structure gates
-  | 'hierarchy_validation'
-  | 'link_validation'
-  | 'code_quality'
-  | 'structure'
-  // Pattern matching gates
-  | 'pattern_matching'
-  // Completeness gates
-  | 'required_fields'
-  | 'completeness_score'
-  | 'completeness'
-  // Chain-specific gates
-  | 'step_continuity'
-  | 'framework_compliance'
-  // Security gates
-  | 'security_validation'
-  | 'citation_validation'
-  | 'security_scan'
-  | 'privacy_compliance'
-  | 'content_policy'
-  // Workflow gates
-  | 'dependency_validation'
-  | 'context_consistency'
-  | 'resource_availability'
-  // LLM Quality Gates
-  | 'llm_coherence'
-  | 'llm_accuracy'
-  | 'llm_helpfulness'
-  | 'llm_contextual';
-
-/**
- * Gate requirement definition
- */
-export interface GateRequirement {
-  type: GateRequirementType;
-  criteria: any;
-  weight?: number;
-  required?: boolean;
-  // LLM-specific extensions (backward compatible)
-  llmCriteria?: {
-    qualityDimensions?: ('coherent' | 'accurate' | 'helpful' | 'contextual')[];
-    confidenceThreshold?: number;
-    evaluationContext?: string;
-    targetAudience?: 'general' | 'technical' | 'beginner' | 'expert';
-    expectedStyle?: 'formal' | 'casual' | 'technical' | 'conversational';
-    factCheckingEnabled?: boolean;
-    usefulnessThreshold?: number;
-    appropriatenessLevel?: 'strict' | 'standard' | 'relaxed';
-  };
-}
-
-/**
- * Comprehensive gate definition
- * Consolidates lightweight and enhanced gate definitions
- */
-export interface GateDefinition {
-  /** Unique identifier for the gate */
-  id: string;
-  /** Human-readable name */
-  name: string;
-  /** Gate type: 'validation' runs checks, 'guidance' only provides instructional text */
-  type: 'validation' | 'guidance';
-  /** Description of what this gate checks/guides */
-  description?: string;
-  /** Requirements for this gate */
-  requirements: GateRequirement[];
-  /** Action to take on failure */
-  failureAction: 'stop' | 'retry' | 'skip' | 'rollback';
-  /** Retry policy configuration */
-  retryPolicy?: {
-    maxRetries: number;
-    retryDelay: number;
-  };
-
-  // Lightweight gate extensions
-  /** Guidance text injected into prompts */
-  guidance?: string;
-  /** Pass/fail criteria for validation gates */
-  pass_criteria?: GatePassCriteria[];
-  /** Retry configuration (lightweight format) */
-  retry_config?: {
-    max_attempts: number;
-    improvement_hints: boolean;
-    preserve_context: boolean;
-  };
-  /** Activation rules - when this gate should be applied */
-  activation?: {
-    prompt_categories?: string[];
-    explicit_request?: boolean;
-    framework_context?: string[];
-  };
-}
-
 // GatePassCriteria canonical definition in ./types/gate-primitives.ts
 export type { GatePassCriteria } from './types/gate-primitives.js';
-
-// ValidationCheck now imported from execution/types.js - no need to redefine
-
-/**
- * Gate evaluation result
- */
-export interface GateEvaluationResult {
-  requirementId: string;
-  passed: boolean;
-  score?: number;
-  message?: string;
-  details?: any;
-}
 
 /**
  * Context for validation
@@ -262,16 +143,6 @@ export interface LightweightGateDefinition {
    * cwd, not this package. Absent for a temporary (in-memory) gate, which has no directory.
    */
   sourceRoot?: string;
-}
-
-/**
- * Gate type enumeration
- * - VALIDATION: Runs validation checks against content
- * - GUIDANCE: Only provides instructional text, no validation
- */
-export enum GateType {
-  VALIDATION = 'validation',
-  GUIDANCE = 'guidance',
 }
 
 // Primitive gate types canonical in ./types/gate-primitives.ts
