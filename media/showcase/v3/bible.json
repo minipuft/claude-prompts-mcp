@@ -25,7 +25,7 @@
     "v3/proposals/p002-materials-as-a-contract-not-a-3d-engine.json",
     "v3/proposals/p003-light-as-a-signed-distance-shader-layer.json"
   ],
-  "inputsHash": "bc562b16af51128da0f236e12f88ef4157660ffe336129a36278816a2170d64c",
+  "inputsHash": "f610a9b402539ed6e2f775bbbae56463de93f396cc7a49ec1a0926178f95d78b",
   "tracks": [
     {
       "name": "pacing",
@@ -6019,7 +6019,8 @@
                 "scripts/animation/probe-followthrough.py (control: a cloth settling before the body is refused)"
               ],
               "chain": "animation_poses reads the material of each secondary; animation-pose-contract gains the follow-through probe",
-              "note": "the inspiration card schema gains material facets so a reference can be filed for how a thing moves, not only how it looks"
+              "note": "the inspiration card schema gains material facets so a reference can be filed for how a thing moves, not only how it looks",
+              "spec": "v3/materials-contract.md: five goals (weight, nothing arrives at once, a lived-in world, light as a volume, drawn not simulated), twelve properties each with what it does, its goal, how it is reached and the probe and control that measure it, first values per material, and the build order"
             },
             "file": "v3/proposals/p002-materials-as-a-contract-not-a-3d-engine.json"
           }

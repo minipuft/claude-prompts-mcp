@@ -1,29 +1,30 @@
 {
-  "id": "p002",
-  "kind": "change",
-  "from": "director",
-  "date": "2026-10-18",
-  "anchor": {
-    "beat": "the-frame"
-  },
-  "title": "Materials as a contract, not a 3D engine",
-  "text": "Every asset declares a material (cloth, hair, glass, light, paper, box, bubble, line) in v3/materials.json, and a material carries the drawn-animation properties that are re-derived by hand today: mass class, follow-through lag in frames, settle frames and overshoot, drag on arcs, boil amplitude, shadow class (stipple), and for transmissive ones refraction and diffusion. The pose step's secondaries are generated from the material, not written per pose: a cloak lags the body by its declared frames and settles after it; hair lags less; glass displaces what is behind it. A follow-through probe with a control refuses a secondary that settles before its primary. No simulation: the properties are the twelve principles as numbers, deterministic and cached like everything else; the GPU glass pass and the ARAP mesh stay as they are. Test case: the cloak drop in beat 4 (p001 step 3) and the heel tap settle (step 4).",
-  "references": [
-    "totoro-lived-in",
-    "spirited-away-shoes"
+ "id": "p002",
+ "kind": "change",
+ "from": "director",
+ "date": "2026-10-18",
+ "anchor": {
+  "beat": "the-frame"
+ },
+ "title": "Materials as a contract, not a 3D engine",
+ "text": "Every asset declares a material (cloth, hair, glass, light, paper, box, bubble, line) in v3/materials.json, and a material carries the drawn-animation properties that are re-derived by hand today: mass class, follow-through lag in frames, settle frames and overshoot, drag on arcs, boil amplitude, shadow class (stipple), and for transmissive ones refraction and diffusion. The pose step's secondaries are generated from the material, not written per pose: a cloak lags the body by its declared frames and settles after it; hair lags less; glass displaces what is behind it. A follow-through probe with a control refuses a secondary that settles before its primary. No simulation: the properties are the twelve principles as numbers, deterministic and cached like everything else; the GPU glass pass and the ARAP mesh stay as they are. Test case: the cloak drop in beat 4 (p001 step 3) and the heel tap settle (step 4).",
+ "references": [
+  "totoro-lived-in",
+  "spirited-away-shoes"
+ ],
+ "before": {
+  "note": "secondaries (lags, drifts, moving holds) are declared per pose in each pose sheet; the inspiration schema has an fx facet but no material; the cloak, hair, glass and light each carry their own ad hoc numbers in code (poseChartFrom lags, Crossing.tsx, the glass pass, the light lag chain)"
+ },
+ "after": {
+  "files": [
+   "v3/materials.json",
+   "src/library/animation/materials.ts (reads it; secondaries solver)",
+   "scripts/animation/probe-followthrough.py (control: a cloth settling before the body is refused)"
   ],
-  "before": {
-    "note": "secondaries (lags, drifts, moving holds) are declared per pose in each pose sheet; the inspiration schema has an fx facet but no material; the cloak, hair, glass and light each carry their own ad hoc numbers in code (poseChartFrom lags, Crossing.tsx, the glass pass, the light lag chain)"
-  },
-  "after": {
-    "files": [
-      "v3/materials.json",
-      "src/library/animation/materials.ts (reads it; secondaries solver)",
-      "scripts/animation/probe-followthrough.py (control: a cloth settling before the body is refused)"
-    ],
-    "chain": "animation_poses reads the material of each secondary; animation-pose-contract gains the follow-through probe",
-    "note": "the inspiration card schema gains material facets so a reference can be filed for how a thing moves, not only how it looks"
-  },
-  "status": "open",
-  "ruling": null
+  "chain": "animation_poses reads the material of each secondary; animation-pose-contract gains the follow-through probe",
+  "note": "the inspiration card schema gains material facets so a reference can be filed for how a thing moves, not only how it looks",
+  "spec": "v3/materials-contract.md: five goals (weight, nothing arrives at once, a lived-in world, light as a volume, drawn not simulated), twelve properties each with what it does, its goal, how it is reached and the probe and control that measure it, first values per material, and the build order"
+ },
+ "status": "open",
+ "ruling": null
 }
