@@ -14,6 +14,8 @@ import theFrame from '../../v3/blocking/the-frame.json';
 import s01Keys from '../../v3/keys/s01-arrival-overwhelm.json';
 import s01Poses from '../../v3/poses/s01-arrival-overwhelm.json';
 import s02Keys from '../../v3/keys/s02-cant-build-frame.json';
+import s02FrameKeys from '../../v3/keys/s02-the-frame.json';
+import s02FramePoses from '../../v3/poses/s02-the-frame.json';
 import s02Layout from '../../v3/layouts/s02-cant-build-frame.json';
 import lightFile from '../../v3/light.json';
 import timelineFile from '../../v3/timeline.json';
@@ -63,11 +65,23 @@ const s01Sheet = poseKeySheet(s01Poses_, s01Keys_);
  * a secondary lagging behind the body and a moving hold's drift, redraw the figure on frames no row accounts for; at the animatic's figure scale `probe-holds` read 89 of them on s01 as strays, so they are
  * left to the shot's own render (`ShotS01`), which plays the whole chart.
  */
+const s02FrameKeys_ = parseKeySheet(s02FrameKeys);
+const s02FramePoses_ = parsePoseSheet(s02FramePoses);
+const s02FrameChart = poseChartFrom(s02FramePoses_, s02FrameKeys_, jointParents);
+/**
+ * Beat 4 (`s02-the-frame`, D99) is the one shot whose secondaries are DERIVED (D97: the cloak is cloth, the hair is hair, `PoseChart.follows`), and the animatic plays them: `pose` below is the chart with its follows, so the cloak
+ * trails the body and drops, as the shot's own render draws it. The body alone, `bodyPose`, is the chart without them: what the hold-band and twos probes measure on the figure layers, because a cloak still moving 24 frames
+ * after a key lands is not a drawing the exposure sheet can have a row for (the 89 strays s01's lags made at this scale). The secondaries are measured where they are defined, by `probe-followthrough.py` on the played joints.
+ * The pose sheet's moving holds (`drifts`) are left to the shot render, as s01's are.
+ */
 const playedCharts: Record<string, PoseChart> = (() => {
   const {keys, breakdowns} = poseChartFrom(s01Poses_, s01Keys_, jointParents);
-  return {'s01-arrival-overwhelm': {keys, breakdowns}};
+  return {'s01-arrival-overwhelm': {keys, breakdowns}, 's02-the-frame': {keys: s02FrameChart.keys, breakdowns: s02FrameChart.breakdowns, follows: s02FrameChart.follows}};
 })();
-const keySheets: Record<string, KeySheet> = {'s01-arrival-overwhelm': s01Sheet, 's02-cant-build-frame': parseKeySheet(s02Keys)};
+const bodyCharts: Record<string, PoseChart> = Object.fromEntries(Object.entries(playedCharts).map(([shot, chart]) => [shot, {keys: chart.keys, breakdowns: chart.breakdowns}]));
+const keySheets: Record<string, KeySheet> = {'s01-arrival-overwhelm': s01Sheet, 's02-cant-build-frame': parseKeySheet(s02Keys), 's02-the-frame': poseKeySheet(s02FramePoses_, s02FrameKeys_)};
+/** Key sheets whose frames are film frames (a beat's own sheet inside a shot that starts earlier): their keys are read at `frame`, not at the frame since the shot began. */
+const FILM_FRAME_SHEETS: ReadonlySet<string> = new Set(['s02-the-frame']);
 
 /** liftChart as a key sheet (rest / raise / settle), the placeholder for every shot whose key sheet is not drawn yet. */
 const placeholderSheet: KeySheet = {
@@ -149,6 +163,8 @@ export type FrameState = {
   local: number;
   /** The pose drawn on this frame (a held shot: each key for exactly the hold it declares; a played shot: its pose chart on twos) and the single-key chart that holds it. */
   pose: Joints;
+  /** The same frame's body without its derived secondaries (equal to `pose` where the shot has none): what the figure layers draw, which the hold and twos probes measure. */
+  bodyPose: Joints;
   heldChart: PoseChart;
   drawing: string;
   /** The beat-local frame the drawing on this frame came on (a key's pop frame). */
@@ -159,16 +175,17 @@ export type FrameState = {
 
 export const frameState = (frame: number): FrameState => {
   const beat = beatAt(timeline, frame);
-  const shot = blockingByBeat[beat.id]?.shot ?? null;
+  const shot = blockingByBeat[beat.id]?.poseShot ?? blockingByBeat[beat.id]?.shot ?? null;
   const own = shot ? keySheets[shot] : undefined;
   const sheet = own ?? placeholderSheet;
-  const local = frame - (own ? shotStart(beat) : beat.start);
+  const local = frame - (own ? (FILM_FRAME_SHEETS.has(shot!) ? 0 : shotStart(beat)) : beat.start);
   const played = shot ? playedCharts[shot] : undefined;
   // a played shot reads its pose from the chart on twos, as its own render does; a held one draws each key for the hold it declares
   const q = Math.max(0, quantise(local, 2));
   const held = played ? null : heldDrawing(sheet, local);
   const info: FrameInfo = held ? held.info : describeFrame(sheet, q);
   const pose = played ? poseAt(played, local, jointParents) : held!.key.joints;
+  const bodyPose = played ? poseAt(bodyCharts[shot!]!, local, jointParents) : pose;
   const drawnFrom = held ? held.start : info.phase === 'key' && sheet.keys.some((k) => k.name === info.from && k.frame === q) ? q : -1;
   // The figure's placement (scale, x, y) is part of its drawing: it steps at a cut with the pose and never eases like a prop does, so the drawn layer changes only where the exposure sheet has a key.
   const blocking = {...blockingAt(blockingOnTimeline, frame), figure: blockingByBeat[beat.id]!.figure};
@@ -189,6 +206,7 @@ export const frameState = (frame: number): FrameState => {
     },
     local,
     pose,
+    bodyPose,
     heldChart: {keys: [{frame: 0, joints: pose}]},
     drawing: info.phase === 'breakdown' ? `${info.from}>${info.to}` : info.from,
     drawnFrom,

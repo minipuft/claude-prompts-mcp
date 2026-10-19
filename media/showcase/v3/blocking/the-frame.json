@@ -1,7 +1,7 @@
 {
   "id": "the-frame",
   "provisional": true,
-  "derivedFrom": "v3/layouts/s02-cant-build-frame.json emitter.endXY (0.6, 0.481) of the frame -> join and the two blocks that touch at it; every other field is the test scene's: the layout's figure heights are not used (startHeightPct 63.4 measures the human bent in the reach, endHeightPct is null); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
+  "derivedFrom": "restaged 2026-10-19 (animatic 04, blocking step): props apart per probe-blocking.py; v3/layouts/s02-cant-build-frame.json emitter.endXY (0.6, 0.481) of the frame -> join and the two blocks that touch at it; every other field is the test scene's: the layout's figure heights are not used (startHeightPct 63.4 measures the human bent in the reach, endHeightPct is null); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
   "figure": {
     "scale": 0.58,
     "x": 452,
@@ -25,23 +25,23 @@
   },
   "blocks": [
     {
-      "x": 688.0,
-      "y": 316.3,
-      "width": 80,
-      "height": 60,
+      "x": 355,
+      "y": 617,
+      "width": 56,
+      "height": 42,
       "role": "main1"
     },
     {
-      "x": 768.0,
-      "y": 316.3,
-      "width": 80,
-      "height": 60,
+      "x": 411,
+      "y": 617,
+      "width": 56,
+      "height": 42,
       "role": "main2"
     }
   ],
   "join": {
-    "x": 768.0,
-    "y": 346.3
+    "x": 411,
+    "y": 638.0
   },
   "arch": {
     "x": 30,
@@ -91,5 +91,6 @@
     "anchor": "frame interior"
   },
   "card": "seuss-nested-frames",
-  "cardNote": "provisional: board §1 world, \"Nested frames on black\" for the frame interior; the layout sheet may replace it"
+  "cardNote": "provisional: board §1 world, \"Nested frames on black\" for the frame interior; the layout sheet may replace it",
+  "poseShot": "s02-the-frame"
 }

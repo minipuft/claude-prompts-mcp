@@ -1,0 +1,19 @@
+{
+  "id": "p010",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "the-frame",
+    "frame": 800
+  },
+  "title": "The beat 4 camera cuts off the human's feet from frame 733 and Codex from 780",
+  "text": "With the six D99 keys played, the figure layer touches the bottom edge of the frame on 166 frames of beat 4, from 733 to 906 (out/animatic-fig-seq measured for ink within 2 px of an edge; cant-build and home-settle: none). The s02 layout camera pans up and right across the beat, ending centred (802, 215) in stage pixels at frame 880, a move written for the earlier three-key figure; her ankles are at stage y 571 to 598 in the six keys and the frame's bottom edge sits at stage y 575 there. Codex, who the ledger says joins Clawd at the frame, stays at frame left and is half out of the picture by 780. The pose sheet notes that how small the human is in the frame at 'through' is the camera's job; the camera does not yet do it. Options: pull the camera back and down toward the end of the beat, or hold the layout and move the figure up; Codex's walk to the frame is its own staging question.",
+  "references": [
+    "spirited-away-shoes"
+  ],
+  "before": "figure cut by the bottom edge on 166 of 300 frames of beat 4; Codex half out at 780",
+  "after": "the whole human inside the frame through the step and the threshold; the through key small in the picture",
+  "status": "open",
+  "ruling": null
+}

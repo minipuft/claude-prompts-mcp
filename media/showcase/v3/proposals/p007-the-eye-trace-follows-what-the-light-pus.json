@@ -8,13 +8,19 @@
     "frame": 200
   },
   "title": "The eye trace follows what the light pushes, not the emitter",
-  "text": "The eye-trace check asks every lit frame to keep the brightest region within 3 % of the emitter. With the light layer on, 56 of 416 frames miss; 29 of those are frames 183-231, the flood rising, where the dots below the lamp carry the eye down to the trio. The beat sheet says this beat's light pushes delight then overwhelm: the flood is the subject, not the lamp. Under D91 (light leads composition) the probe's target should be what the beat's light pushes, read from beats-v2 light_pushes, with the emitter as the target only where the beat names the emitter (arrival: the seam asks to be opened). The other 27 misses are a measurement fault: roles.json colours are RGB spheres and the pale kit and gadget roles are also the lamp's halo, so the mask eats the lamp; the fix is a region-plus-colour mask in probe_common.py, outside taste.",
+  "text": "The eye-trace check asks every lit frame to keep the brightest region within 3 % of the emitter. With the light layer on, 56 of 416 frames miss; 29 of those are frames 183-231, the flood rising, where the dots below the lamp carry the eye down to the trio. The beat sheet says this beat's light pushes delight then overwhelm: the flood is the subject, not the lamp. Under D91 (light leads composition) the probe's target should be what the beat's light pushes, read from beats-v2 light_pushes, with the emitter as the target only where the beat names the emitter (arrival: the seam asks to be opened). The other 27 misses are a measurement fault: roles.json colours are RGB spheres and the pale kit and gadget roles are also the lamp's halo, so the mask eats the lamp; the fix is a region-plus-colour mask in probe_common.py, outside taste. Options in the vocabulary: 'emitter' keeps the eye on the lamp on every lit frame; 'push' sends the eye where the beat's light pushes. Default: push.",
   "references": [
     "kyle-baker-timing",
     "elmo-world"
   ],
   "before": "eye trace: brightest region within 3 % of the emitter on every lit frame (56 of 416 over with the layer, 27 without)",
   "after": "eye trace: target per beat = what the light pushes (flood -> the trio, seam -> the box, frame -> the frame interior); emitter only where named; mask by region + colour. Default: accept.",
+  "intent": "motivated",
+  "options": [
+    "emitter",
+    "push"
+  ],
+  "default": "push",
   "status": "open",
   "ruling": null
 }

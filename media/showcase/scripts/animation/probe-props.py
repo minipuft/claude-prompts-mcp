@@ -4,7 +4,7 @@
 usage: probe-props.py <stills-dir> <blocking-dir> [--timeline v3/timeline.json] [--json out]
 <stills-dir> holds what `node scripts/animation/render-props.mjs <stills-dir>` writes: per beat that names actors, `<beat>.png` (the animatic's frame in the middle of the beat) and, for each
 actor the blocking names, `<beat>--no-<actor>.png` (the same frame rendered with `omit: [<actor>]`). For every actor of every beat the picture with it and the picture without it must differ by at least
-MIN_PX pixels (more than 8 levels in a channel; at 640x360 and 1280x720 alike, scaled by the frame's area against 1280x720), and the centre of what differs must lie within REACH stage pixels of the
+MIN_PX pixels (more than 8 levels in a channel; at 640x360 and 1280x720 alike, scaled by the frame's area against 1280x720), and the centre of what differs within REACH stage pixels of the
 actor's anchor in the blocking (anchors and sizes: src/library/worlds/actors.tsx). An actor the blocking names that has no stills pair is a failure, not a skip. A beat whose blocking names no
 actor draws none, and its picture is not read.
 Control first, on synthetic 320x180 frames: a frame pair that differs by a blob on the anchor passes; a pair that does not differ at all (the actor was omitted from both: the prop is not drawn) is
@@ -21,20 +21,26 @@ LEVEL = 8
 REACH = 420           # stage pixels from the anchor to the centre of the difference: the stalk is 333 tall, the structure 300, the gadget 260 x 0.8; the anchor is a foot or a dial, never the centre
 
 
-def difference(with_, without):
-    """(pixels differing by more than LEVEL, centre of those pixels in stage pixels or None)."""
+def difference(with_, without, anchor=None):
+    """(pixels differing by more than LEVEL, centre of those pixels in stage pixels or None). With an `anchor` (stage pixels) only the pixels within REACH of it count: leaving a prop out of the tree also shifts
+    the grain and glow of the scene around it (cant-build, frame 525: 68 631 pixels of the floor glow differ when the 3 544 pixels of the stalk are omitted; the two stills of one tree are identical), and a
+    centre taken over all of it lands on the glow, not on the prop."""
     if with_.shape != without.shape: return -1, None
     m = np.abs(with_.astype(np.int16) - without.astype(np.int16)).max(axis=2) > LEVEL
+    sc = STAGE[0] / with_.shape[1]
+    if anchor is not None:
+        yy, xx = np.mgrid[0:m.shape[0], 0:m.shape[1]]
+        m &= np.hypot(xx * sc - anchor[0], yy * sc - anchor[1]) <= REACH
     n = int(m.sum())
     if not n: return 0, None
-    ys, xs = np.nonzero(m); sc = STAGE[0] / with_.shape[1]
+    ys, xs = np.nonzero(m)
     return n, (float(xs.mean()) * sc, float(ys.mean()) * sc)
 
 
 def judge(with_, without, anchor):
-    n, c = difference(with_, without); need = MIN_PX * with_.shape[0] * with_.shape[1] / (STAGE[0] * STAGE[1])
+    n, c = difference(with_, without, anchor); need = MIN_PX * with_.shape[0] * with_.shape[1] / (STAGE[0] * STAGE[1])
     if n < 0: return False, "the two pictures differ in size"
-    if n < need: return False, f"drawing it changes {n} pixels (needs {need:.0f}): it is not drawn"
+    if n < need: return False, f"drawing it changes {n} pixels within {REACH} stage px of its anchor (needs {need:.0f}): it is not drawn there"
     d = float(np.hypot(c[0] - anchor[0], c[1] - anchor[1]))
     if d > REACH: return False, f"drawn, but its centre is {d:.0f} stage px from the anchor {tuple(round(v) for v in anchor)} (reach {REACH})"
     return True, f"{n} pixels differ, centred {d:.0f} stage px from the anchor"

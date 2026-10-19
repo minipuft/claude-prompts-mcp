@@ -1,0 +1,19 @@
+{
+  "id": "p009",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "the-frame",
+    "frame": 630
+  },
+  "title": "Beat 4 plays slump, rise and threshold for 36 frames, the ruled holds are 26, 20 and 24",
+  "text": "Animatic 04 plays beat 4 from the six D99 keys. The hold-band check refuses it: 'hold of 36 frames at 630-665, 740-775 and 840-875 is over 27 and no key declares it' (out/animatic-04-probe-all.txt). The sheet rules those three holds at 26, 20 and 24 frames, but the first drawing of each move lands 10 frames after the ruled hold ends, because drawings sit 4 frames apart and a move has six, so the viewer sees each pose for 36 frames. This is the second TASTE question of study s02-01 (default: keep the drawings), and with that default the animatic cannot pass the band. Three ways out, none taken here: widen the moves so the ruled holds are what is on screen; keep the drawings and rule the three holds at 36 with the key declaring each; or start each move's first drawing sooner. Which one is the owner's.",
+  "references": [
+    "samurai-jack-holds"
+  ],
+  "before": "slump, rise and threshold on screen 36 frames (ruled 26, 20, 24); hold-band FAIL on those three holds",
+  "after": "the held pose on screen for the frames its key declares, or the key declaring the frames it is on screen",
+  "status": "open",
+  "ruling": null
+}

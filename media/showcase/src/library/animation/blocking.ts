@@ -22,6 +22,10 @@ export type Blocking = {
   derivedFrom?: string;
   /** The shot (v3/shots.json) this beat belongs to, when one exists. */
   shot?: string | null;
+  /** The key sheet (v3/keys/<name>.json) the beat's figure plays, when it is not the shot's: a beat that has its own pose sheet inside a shot that has none (beat 4 inside the s02 layout shot). The camera still follows `shot`. */
+  poseShot?: string;
+  /** Props and boxes that touch on purpose (`probe-blocking.py`, props apart): each names two things on the stage and why they overlap. An overlap nobody declared is refused. */
+  contacts?: {a: string; b: string; why: string}[];
   /** The human: HumanPuppet canvas scale and the canvas's top-left. */
   figure: {scale: number; x: number; y: number};
   codex: {x: number; y: number; scale: number};

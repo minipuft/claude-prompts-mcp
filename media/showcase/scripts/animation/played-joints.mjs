@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Writes the joints a pose sheet plays, frame by frame, from the sheets alone: the input of probe-inbetweens.py and probe-followthrough.py for a shot that has no scene plan of its own (s02 and on).
-// usage: node scripts/animation/played-joints.mjs <shot-id> [--out out/<shot>-joints.json] [--tail 60]      (npm run played-joints -- <shot-id>)
+// usage: node scripts/animation/played-joints.mjs <shot-id> [--out out/<shot>-joints.json] [--tail 60] [--animatic]      (npm run played-joints -- <shot-id>)
+// `--animatic` writes the joints the ANIMATIC draws for that shot instead (src/scenes/animaticPlan.ts `frameState`: its pose with the derived secondaries, its body without them as the rigid ride, the xsheet's camera), over the frames of the beat that plays the shot, default out/<shot>-animatic-joints.json:
+// the same probes read it, so a secondary the animatic draws is measured against its material the way the shot's own render is.
 // It reads v3/poses/<shot>.json and the key sheet it names, builds the chart `poseChartFrom` plays (secondaries drawn from their material, v3/materials.json) and writes the same file scripts/animation/joints.mjs
 // writes for s01: {shot, fps, frames: [first, last), parents, rows: [{frame, phase, from, to, favour, camera, joints}]}, from the first key's frame to the last key's hold plus `--tail` frames (default 60: the longest settle a
 // material declares is 30), with the camera at identity (a shot's camera is its own sheet's). `sheets` carries the sha256 of the pose sheet, the key sheet and the materials file it was written from, so a probe can refuse a dump
@@ -20,7 +22,8 @@ const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`);
   return i > -1 ? process.argv[i + 1] : fallback;
 };
-const outPath = path.resolve(root, arg('out', `out/${shot}-joints.json`));
+const animatic = process.argv.includes('--animatic');
+const outPath = path.resolve(root, arg('out', animatic ? `out/${shot}-animatic-joints.json` : `out/${shot}-joints.json`));
 const tail = Number(arg('tail', 60));
 const posesPath = path.join(root, 'v3/poses', `${shot}.json`);
 if (!fs.existsSync(posesPath)) {
@@ -39,17 +42,24 @@ const poseSheet = parsePoseSheet(posesRaw), keySheet = parseKeySheet(JSON.parse(
 const shotFrames = JSON.parse(read(path.join(root, poseSheet.source.chart)).toString('utf8')).frames;
 const chart = poseChartFrom(poseSheet, keySheet, jointParents), described = poseKeySheet(poseSheet, keySheet);
 const round = (v) => Math.round(v * 1000) / 1000;
-const first = Math.min(...keySheet.keys.map((k) => k.frame)), last = Math.max(...keySheet.keys.map((k) => k.frame + (k.hold ?? 0))) + tail;
+let first = Math.min(...keySheet.keys.map((k) => k.frame)), last = Math.max(...keySheet.keys.map((k) => k.frame + (k.hold ?? 0))) + tail;
+const plan = animatic ? await loadTs('src/scenes/animaticPlan.ts') : null;
+if (plan) {
+  const beats = plan.timeline.beats.filter((b) => plan.frameState(b.start).sheet.shot === shot);
+  if (!beats.length) { console.error(`input error: no beat of the animatic plays ${shot}`); process.exit(2); }
+  first = beats[0].start; last = beats[beats.length - 1].end;
+}
 const rows = [];
 const rounded = (pose) => Object.fromEntries(Object.entries(pose).map(([n, p]) => [n, [round(p[0]), round(p[1])]]));
 // where each part made of a material would be if it rode its primary rigidly: the chart with its derived secondaries taken out (drifts stay, they move the whole figure), which is the path the material's chain was driven by
 const bare = {...chart, follows: undefined};
 const derived = (chart.follows ?? []).flatMap((f) => f.joints.map((name) => ({name, virtual: f.virtual})));
 for (let frame = first; frame < last; frame++) {
-  const info = describeFrame(described, frame), pose = poseAt(chart, frame, jointParents);
-  const row = {frame, phase: info.phase, from: info.from, to: info.to, favour: info.favour, camera: {x: 640, y: 360, zoom: 1, rot: 0}, joints: rounded(pose)};
+  const at = plan ? plan.frameState(frame) : null;
+  const info = at ? at.chart : describeFrame(described, frame), pose = at ? at.pose : poseAt(chart, frame, jointParents);
+  const row = {frame, phase: info.phase, from: info.from, to: info.to, favour: info.favour, camera: at ? at.camera : {x: 640, y: 360, zoom: 1, rot: 0}, joints: rounded(pose)};
   if (derived.length) {
-    const ride = poseAt(bare, frame, jointParents);
+    const ride = at ? at.bodyPose : poseAt(bare, frame, jointParents);
     row.rigid = rounded(Object.fromEntries(derived.map(({name, virtual}) => [name, virtual ? virtualJoint(virtual, ride) : ride[name]])));
   }
   rows.push(row);

@@ -10,12 +10,12 @@
       "emitter": {
         "anchor": "box seam",
         "start": [
-          0.7813,
-          0.55
+          0.8086,
+          0.5583
         ],
         "end": [
-          0.7891,
-          0.5333
+          0.8164,
+          0.5306
         ],
         "intensity": 0.824,
         "colour": "#eff3ff",
@@ -33,12 +33,12 @@
       "emitter": {
         "anchor": "gadget dial",
         "start": [
-          0.7891,
-          0.5333
+          0.8164,
+          0.5306
         ],
         "end": [
-          0.8125,
-          0.4583
+          0.8203,
+          0.4861
         ],
         "intensity": 0.9,
         "colour": "#d1dffe",
@@ -56,12 +56,12 @@
       "emitter": {
         "anchor": "gadget dial, lost on the floor (the join)",
         "start": [
-          0.345,
-          0.886
+          0.3211,
+          0.8861
         ],
         "end": [
-          0.345,
-          0.886
+          0.3211,
+          0.8861
         ],
         "intensity": 0.9,
         "colour": "#d5e0ee",
@@ -156,12 +156,12 @@
       "emitter": {
         "anchor": "gadget, rimming the structure",
         "start": [
-          0.7813,
-          0.4722
+          0.8047,
+          0.5556
         ],
         "end": [
-          0.8438,
-          0.4722
+          0.8359,
+          0.5556
         ],
         "intensity": 0.9,
         "colour": "#f4d9d6",

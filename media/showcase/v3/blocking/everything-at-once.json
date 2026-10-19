@@ -1,7 +1,7 @@
 {
   "id": "everything-at-once",
   "provisional": true,
-  "derivedFrom": "test-scene (no layout contract for this beat's shot yet); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
+  "derivedFrom": "restaged 2026-10-19 (animatic 04, blocking step): props apart per probe-blocking.py; test-scene (no layout contract for this beat's shot yet); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
   "figure": {
     "scale": 0.68,
     "x": 420,
@@ -25,23 +25,23 @@
   },
   "blocks": [
     {
-      "x": 960,
-      "y": 360,
-      "width": 80,
-      "height": 60,
+      "x": 985,
+      "y": 382,
+      "width": 60,
+      "height": 46,
       "role": "main1"
     },
     {
-      "x": 1040,
-      "y": 360,
-      "width": 80,
-      "height": 60,
+      "x": 1045,
+      "y": 382,
+      "width": 60,
+      "height": 46,
       "role": "main2"
     }
   ],
   "join": {
-    "x": 1040,
-    "y": 390
+    "x": 1045,
+    "y": 405.0
   },
   "arch": {
     "x": 30,
@@ -81,28 +81,40 @@
   "shot": "s01-arrival-overwhelm",
   "actors": {
     "gadget": {
-      "x": 1040,
-      "y": 330,
-      "scale": 0.8
+      "x": 1050,
+      "y": 406,
+      "scale": 0.55
     },
     "stalk": {
-      "x": 900,
-      "y": 300,
-      "scale": 1.0,
+      "x": 1212,
+      "y": 478,
+      "scale": 0.5,
       "facing": "left"
     }
   },
   "emitter": {
     "start": [
-      1010,
-      384
+      1045,
+      382
     ],
     "end": [
-      1040,
-      330
+      1050,
+      350
     ],
     "anchor": "gadget dial"
   },
   "card": "seuss-no-one-youer",
-  "cardNote": "provisional: board §1 world, the overwhelm of towers and stalks the field widens onto; s01 lists it first"
+  "cardNote": "provisional: board §1 world, the overwhelm of towers and stalks the field widens onto; s01 lists it first",
+  "contacts": [
+    {
+      "a": "gadget",
+      "b": "blocks",
+      "why": "the gadget stands on the join of the kit's blocks"
+    },
+    {
+      "a": "stalk",
+      "b": "clawd",
+      "why": "the stalk pushes Clawd"
+    }
+  ]
 }

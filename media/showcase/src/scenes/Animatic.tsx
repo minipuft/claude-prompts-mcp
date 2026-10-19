@@ -24,6 +24,7 @@ const worldId = (id: string): WorldId => {
  * Everything is read from `animaticPlan`, the module the exposure sheet reads. The props a beat's blocking names (`blocking.actors`) are drawn by the worlds as placeholders (`worlds/actors.tsx`);
  * `omit` leaves the named ones out, which is how the props' positive control renders a beat without its box (`probe-props.py`).
  *
+ * `layers="figure"` (and `figure-line`) draw the human's BODY (`bodyPose`: the played chart without its derived secondaries, see `animaticPlan`), so the hold and twos probes measure the drawings the exposure sheet has rows for; the full frames draw the secondaries.
  * `layers="figure"` draws only the human, flat and filled, at the beat's blocking under the camera, on the field colour, in every frame including a crossing's: the drawing's pose
  * and nothing else (no world, no props, no light, no fill morph, no caption). The twos and hold probes measure the drawn layer on this pass (`Animatic65Figure`), so a crossing needs no
  * exemption for the figure: only the world's fills change there, and they are not in this layer. `layers="figure-line"` is the same with the figure as the line world draws it (contour only,
@@ -37,7 +38,7 @@ export const Animatic: React.FC<{captions?: boolean; layers?: 'all' | 'figure' |
     return (
       <AbsoluteFill style={{background: contracts.line.field}}>
         <CameraView pose={s.camera} size={SIZE}>
-          <FlatFigure pose={s.pose} fill={0} line={reducedLine(contracts.line, contracts.line, 1, s.blocking)} blocking={s.blocking} />
+          <FlatFigure pose={s.bodyPose} fill={0} line={reducedLine(contracts.line, contracts.line, 1, s.blocking)} blocking={s.blocking} />
         </CameraView>
       </AbsoluteFill>
     );
@@ -46,7 +47,7 @@ export const Animatic: React.FC<{captions?: boolean; layers?: 'all' | 'figure' |
     return (
       <AbsoluteFill style={{background: settled.field}}>
         <CameraView pose={s.camera} size={SIZE}>
-          <FlatFigure pose={s.pose} fill={1} line={null} blocking={s.blocking} />
+          <FlatFigure pose={s.bodyPose} fill={1} line={null} blocking={s.blocking} />
         </CameraView>
       </AbsoluteFill>
     );

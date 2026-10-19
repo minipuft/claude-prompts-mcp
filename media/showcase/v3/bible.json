@@ -28,10 +28,15 @@
     "v3/proposals/p005-the-light-layers-first-numbers-shadow-so.json",
     "v3/proposals/p006-which-drawn-thing-is-which-material-for.json",
     "v3/proposals/p007-the-eye-trace-follows-what-the-light-pus.json",
+    "v3/proposals/p008-the-vocabulary-gate-refuses-the-bible-wh.json",
+    "v3/proposals/p009-beat-4-plays-slump-rise-and-threshold-fo.json",
+    "v3/proposals/p010-the-beat-4-camera-cuts-off-the-humans-fe.json",
+    "v3/proposals/p011-the-eye-trace-is-red-in-beat-4-and-the-s.json",
+    "v3/proposals/p012-home-settle-the-structure-stands-small-u.json",
     "v3/materials.json",
     "v3/materials.schema.json"
   ],
-  "inputsHash": "d9abf724d61029ade39726a55e96c93a8d459aa4c739f5e3413335bcc1992363",
+  "inputsHash": "df4b9a2419ded81418cab4557161d1bf594d57806a91391aa73b02b556f37a35",
   "tracks": [
     {
       "name": "pacing",
@@ -375,12 +380,12 @@
             },
             "emitter": {
               "start": [
-                1000,
-                396
+                1035,
+                402
               ],
               "end": [
-                1010,
-                384
+                1045,
+                382
               ],
               "anchor": "box seam"
             },
@@ -411,12 +416,12 @@
             },
             "emitter": {
               "start": [
-                1010,
-                384
+                1045,
+                382
               ],
               "end": [
-                1040,
-                330
+                1050,
+                350
               ],
               "anchor": "gadget dial"
             },
@@ -447,12 +452,12 @@
             },
             "emitter": {
               "start": [
-                441.6,
-                637.9
+                411,
+                638
               ],
               "end": [
-                441.6,
-                637.9
+                411,
+                638
               ],
               "anchor": "gadget dial, lost on the floor (the join)"
             },
@@ -627,12 +632,12 @@
             },
             "emitter": {
               "start": [
-                1000,
-                340
+                1030,
+                400
               ],
               "end": [
-                1080,
-                340
+                1070,
+                400
               ],
               "anchor": "gadget, rimming the structure"
             },
@@ -5200,6 +5205,66 @@
           }
         },
         {
+          "start": 630,
+          "end": 690,
+          "beat": "the-frame",
+          "label": "slump",
+          "data": {
+            "hold": 26,
+            "breakdowns": 6
+          }
+        },
+        {
+          "start": 690,
+          "end": 740,
+          "beat": "the-frame",
+          "label": "turn",
+          "data": {
+            "hold": 16,
+            "breakdowns": 6
+          }
+        },
+        {
+          "start": 740,
+          "end": 800,
+          "beat": "the-frame",
+          "label": "rise",
+          "data": {
+            "hold": 20,
+            "breakdowns": 6
+          }
+        },
+        {
+          "start": 800,
+          "end": 840,
+          "beat": "the-frame",
+          "label": "step",
+          "data": {
+            "hold": 14,
+            "breakdowns": 6
+          }
+        },
+        {
+          "start": 840,
+          "end": 900,
+          "beat": "the-frame",
+          "label": "threshold",
+          "data": {
+            "hold": 24,
+            "breakdowns": 6
+          }
+        },
+        {
+          "start": 900,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "through",
+          "data": {
+            "hold": 30,
+            "breakdowns": 0
+          }
+        },
+        {
           "start": 930,
           "end": 954,
           "beat": "art-world",
@@ -5338,12 +5403,12 @@
               "anchor": "box seam",
               "path": {
                 "from": [
-                  0.7813,
-                  0.55
+                  0.8086,
+                  0.5583
                 ],
                 "to": [
-                  0.7891,
-                  0.5333
+                  0.8164,
+                  0.5306
                 ]
               },
               "intensity": 0.824,
@@ -5369,12 +5434,12 @@
               "anchor": "gadget dial",
               "path": {
                 "from": [
-                  0.7891,
-                  0.5333
+                  0.8164,
+                  0.5306
                 ],
                 "to": [
-                  0.8125,
-                  0.4583
+                  0.8203,
+                  0.4861
                 ]
               },
               "intensity": 0.9,
@@ -5400,12 +5465,12 @@
               "anchor": "gadget dial, lost on the floor (the join)",
               "path": {
                 "from": [
-                  0.345,
-                  0.886
+                  0.3211,
+                  0.8861
                 ],
                 "to": [
-                  0.345,
-                  0.886
+                  0.3211,
+                  0.8861
                 ]
               },
               "intensity": 0.9,
@@ -5539,12 +5604,12 @@
               "anchor": "gadget, rimming the structure",
               "path": {
                 "from": [
-                  0.7813,
-                  0.4722
+                  0.8047,
+                  0.5556
                 ],
                 "to": [
-                  0.8438,
-                  0.4722
+                  0.8359,
+                  0.5556
                 ]
               },
               "intensity": 0.9,
@@ -6255,7 +6320,7 @@
               "beat": "everything-at-once",
               "frame": 200
             },
-            "text": "The eye-trace check asks every lit frame to keep the brightest region within 3 % of the emitter. With the light layer on, 56 of 416 frames miss; 29 of those are frames 183-231, the flood rising, where the dots below the lamp carry the eye down to the trio. The beat sheet says this beat's light pushes delight then overwhelm: the flood is the subject, not the lamp. Under D91 (light leads composition) the probe's target should be what the beat's light pushes, read from beats-v2 light_pushes, with the emitter as the target only where the beat names the emitter (arrival: the seam asks to be opened). The other 27 misses are a measurement fault: roles.json colours are RGB spheres and the pale kit and gadget roles are also the lamp's halo, so the mask eats the lamp; the fix is a region-plus-colour mask in probe_common.py, outside taste.",
+            "text": "The eye-trace check asks every lit frame to keep the brightest region within 3 % of the emitter. With the light layer on, 56 of 416 frames miss; 29 of those are frames 183-231, the flood rising, where the dots below the lamp carry the eye down to the trio. The beat sheet says this beat's light pushes delight then overwhelm: the flood is the subject, not the lamp. Under D91 (light leads composition) the probe's target should be what the beat's light pushes, read from beats-v2 light_pushes, with the emitter as the target only where the beat names the emitter (arrival: the seam asks to be opened). The other 27 misses are a measurement fault: roles.json colours are RGB spheres and the pale kit and gadget roles are also the lamp's halo, so the mask eats the lamp; the fix is a region-plus-colour mask in probe_common.py, outside taste. Options in the vocabulary: 'emitter' keeps the eye on the lamp on every lit frame; 'push' sends the eye where the beat's light pushes. Default: push.",
             "references": [
               {
                 "id": "kyle-baker-timing",
@@ -6292,6 +6357,208 @@
             "before": "eye trace: brightest region within 3 % of the emitter on every lit frame (56 of 416 over with the layer, 27 without)",
             "after": "eye trace: target per beat = what the light pushes (flood -> the trio, seam -> the box, frame -> the frame interior); emitter only where named; mask by region + colour. Default: accept.",
             "file": "v3/proposals/p007-the-eye-trace-follows-what-the-light-pus.json"
+          }
+        },
+        {
+          "start": 200,
+          "end": 201,
+          "beat": "everything-at-once",
+          "label": "p008 The vocabulary gate refuses the bible while p007 is open",
+          "data": {
+            "id": "p008",
+            "title": "The vocabulary gate refuses the bible while p007 is open",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "everything-at-once",
+              "frame": 200
+            },
+            "text": "Animatic 04 ran the blocking step of animation_animatic with the animation-vocabulary gate in the chain, and the engine's shell check FAILED (exit 1): `FAIL proposals: owner-ask p007 has no intent, options, default`. The vocabulary check requires every owner-ask to carry an intent word, its options as vocabulary words and a default (the form D96 fixed); p007, filed with the light layer, has the question in prose and none of the three. The light row is open on p005-p007 and this run did not touch them, so the chain is held at its second step (attempt 1 of 2 used) and the later steps, among them the evidence step where the animation-bible gate runs, have not run in the chain. What unblocks it: p007 gets its intent, options and default (the planner's or the owner's wording), then the same answer is sent again to the held chain.",
+            "references": [
+              {
+                "id": "samurai-jack-holds",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Samurai Jack (2001–2017): holds, snaps, the silent episode",
+                "borrow": [
+                  "long held poses that are compositions, then one snap",
+                  "silence carried by staging and light alone",
+                  "wide flat planes of colour as the field"
+                ],
+                "governs": [
+                  "D92",
+                  "C28",
+                  "C31"
+                ]
+              }
+            ],
+            "before": "owner-ask p007: question in prose only; vocabulary gate exit 1 in the chain (receipt evidence/drive-uzeuoq, mailbox/animatic-04/04-step.md)",
+            "after": "owner-ask p007 carries intent, options and default; the vocabulary gate passes in the chain",
+            "file": "v3/proposals/p008-the-vocabulary-gate-refuses-the-bible-wh.json"
+          }
+        },
+        {
+          "start": 630,
+          "end": 631,
+          "beat": "the-frame",
+          "label": "p009 Beat 4 plays slump, rise and threshold for 36 frames, the ruled holds are 26, 20 and 24",
+          "data": {
+            "id": "p009",
+            "title": "Beat 4 plays slump, rise and threshold for 36 frames, the ruled holds are 26, 20 and 24",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "the-frame",
+              "frame": 630
+            },
+            "text": "Animatic 04 plays beat 4 from the six D99 keys. The hold-band check refuses it: 'hold of 36 frames at 630-665, 740-775 and 840-875 is over 27 and no key declares it' (out/animatic-04-probe-all.txt). The sheet rules those three holds at 26, 20 and 24 frames, but the first drawing of each move lands 10 frames after the ruled hold ends, because drawings sit 4 frames apart and a move has six, so the viewer sees each pose for 36 frames. This is the second TASTE question of study s02-01 (default: keep the drawings), and with that default the animatic cannot pass the band. Three ways out, none taken here: widen the moves so the ruled holds are what is on screen; keep the drawings and rule the three holds at 36 with the key declaring each; or start each move's first drawing sooner. Which one is the owner's.",
+            "references": [
+              {
+                "id": "samurai-jack-holds",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Samurai Jack (2001–2017): holds, snaps, the silent episode",
+                "borrow": [
+                  "long held poses that are compositions, then one snap",
+                  "silence carried by staging and light alone",
+                  "wide flat planes of colour as the field"
+                ],
+                "governs": [
+                  "D92",
+                  "C28",
+                  "C31"
+                ]
+              }
+            ],
+            "before": "slump, rise and threshold on screen 36 frames (ruled 26, 20, 24); hold-band FAIL on those three holds",
+            "after": "the held pose on screen for the frames its key declares, or the key declaring the frames it is on screen",
+            "file": "v3/proposals/p009-beat-4-plays-slump-rise-and-threshold-fo.json"
+          }
+        },
+        {
+          "start": 800,
+          "end": 801,
+          "beat": "the-frame",
+          "label": "p010 The beat 4 camera cuts off the human's feet from frame 733 and Codex from 780",
+          "data": {
+            "id": "p010",
+            "title": "The beat 4 camera cuts off the human's feet from frame 733 and Codex from 780",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "the-frame",
+              "frame": 800
+            },
+            "text": "With the six D99 keys played, the figure layer touches the bottom edge of the frame on 166 frames of beat 4, from 733 to 906 (out/animatic-fig-seq measured for ink within 2 px of an edge; cant-build and home-settle: none). The s02 layout camera pans up and right across the beat, ending centred (802, 215) in stage pixels at frame 880, a move written for the earlier three-key figure; her ankles are at stage y 571 to 598 in the six keys and the frame's bottom edge sits at stage y 575 there. Codex, who the ledger says joins Clawd at the frame, stays at frame left and is half out of the picture by 780. The pose sheet notes that how small the human is in the frame at 'through' is the camera's job; the camera does not yet do it. Options: pull the camera back and down toward the end of the beat, or hold the layout and move the figure up; Codex's walk to the frame is its own staging question.",
+            "references": [
+              {
+                "id": "spirited-away-shoes",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Spirited Away (2001): Chihiro taps her heel into her shoe",
+                "borrow": [
+                  "one unneeded gesture that proves the body is real",
+                  "the pause before a step through a threshold (beat 4, the frame)"
+                ],
+                "governs": [
+                  "D92",
+                  "D89"
+                ]
+              }
+            ],
+            "before": "figure cut by the bottom edge on 166 of 300 frames of beat 4; Codex half out at 780",
+            "after": "the whole human inside the frame through the step and the threshold; the through key small in the picture",
+            "file": "v3/proposals/p010-the-beat-4-camera-cuts-off-the-humans-fe.json"
+          }
+        },
+        {
+          "start": 700,
+          "end": 701,
+          "beat": "the-frame",
+          "label": "p011 The eye trace is red in beat 4 and the shaded beat: the brightest region is not the emitter",
+          "data": {
+            "id": "p011",
+            "title": "The eye trace is red in beat 4 and the shaded beat: the brightest region is not the emitter",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "the-frame",
+              "frame": 700
+            },
+            "text": "Run on animatic 04's frames the eye-trace check reports 462 frames over 3 % of the width: 270 of the 300 frames of beat 4 (worst 30 %) and 192 of the shaded world's frames 1382-1619 (worst 67 %). In beat 4 at frame 630 the brightest unmasked region is at about (1109, 508), on Clawd, not the frame's glow at (1000, 140); the same check on the committed code's frames 700 and 780 (this run's 'before' stills, old keys and old blocking) read 19.7 % and 19.6 %, so it was red before the pose changed. The restaging helped elsewhere: arrival at frame 90 went from 2.5 % to 0.5 %, everything-at-once at 300 from 1.9 % to 0.4 %, cant-build at 525 from 3.8 % to 0.9 %, home-settle at 1700 from 5.0 % to 0.6 % and at 1800 from 4.0 % to 0.4 %, because the props no longer sit over the lit blocks. This is the question p007 asks (what the light pushes, per beat); the colour-continuity check fails on the same frames (630 drawn but unreadable).",
+            "references": [
+              {
+                "id": "elmo-world",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Elmo's World (Sesame Street, 1998–)",
+                "borrow": [
+                  "a world that wants to play with the child: furniture, door and window answer when addressed",
+                  "the crayon-drawn room as a warm field, lines that wobble because a child drew them",
+                  "failures are met with delight, never shame"
+                ],
+                "governs": [
+                  "D88",
+                  "C14"
+                ]
+              }
+            ],
+            "before": "eye-trace: 462 frames over 3 %, beat 4 and the shaded world",
+            "after": "decided by p007: the target per beat",
+            "file": "v3/proposals/p011-the-eye-trace-is-red-in-beat-4-and-the-s.json"
+          }
+        },
+        {
+          "start": 1800,
+          "end": 1801,
+          "beat": "home-settle",
+          "label": "p012 Home-settle: the structure stands small under the frame, which keeps the frame clear and weakens the last picture",
+          "data": {
+            "id": "p012",
+            "title": "Home-settle: the structure stands small under the frame, which keeps the frame clear and weakens the last picture",
+            "kind": "change",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "home-settle",
+              "frame": 1800
+            },
+            "text": "The structure used to stand over the frame (a 264 x 222 px overlap), hiding the window the ledger says the human takes one last look through. Restaged, it stands at half size under the frame at (1050, 452) holding the gadget and the lit joins: the frame is clear and the ending stays wide and small (D93), but the structure now reads as a small glowing arch and the last picture has less in it than animatic 03's. Alternatives: a larger structure at frame left behind Codex (the upper left is empty), or the frame itself set inside the structure as its window. Staged as the smallest change that clears the collision; the choice is the owner's.",
+            "references": [
+              {
+                "id": "seuss-nested-frames",
+                "kind": "board card",
+                "section": "1 · World architecture",
+                "title": "Nested frames on black",
+                "borrow": [
+                  "receding frames, each slightly turned = the frame interior's depth",
+                  "faint curling filigree between rings",
+                  "gold on black for the frame bars"
+                ],
+                "governs": [
+                  "D42",
+                  "D45",
+                  "C7"
+                ]
+              }
+            ],
+            "before": "structure x1.2 over the frame; frame hidden",
+            "after": "structure x0.5 under the frame; frame clear; the ending small",
+            "file": "v3/proposals/p012-home-settle-the-structure-stands-small-u.json"
           }
         }
       ]
@@ -7289,10 +7556,6 @@
     {
       "beat": "cant-build",
       "text": "no breakdowns between keys: straight inbetweens"
-    },
-    {
-      "beat": "the-frame",
-      "text": "no keys: the figure is not posed in this beat"
     },
     {
       "beat": "art-world",

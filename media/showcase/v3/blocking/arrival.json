@@ -1,7 +1,7 @@
 {
   "id": "arrival",
   "provisional": true,
-  "derivedFrom": "test-scene (no layout contract for this beat's shot yet); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
+  "derivedFrom": "restaged 2026-10-19 (animatic 04, blocking step): props apart per probe-blocking.py; test-scene (no layout contract for this beat's shot yet); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
   "figure": {
     "scale": 0.68,
     "x": 420,
@@ -25,23 +25,23 @@
   },
   "blocks": [
     {
-      "x": 960,
-      "y": 360,
-      "width": 80,
-      "height": 60,
+      "x": 985,
+      "y": 382,
+      "width": 60,
+      "height": 46,
       "role": "main1"
     },
     {
-      "x": 1040,
-      "y": 360,
-      "width": 80,
-      "height": 60,
+      "x": 1045,
+      "y": 382,
+      "width": 60,
+      "height": 46,
       "role": "main2"
     }
   ],
   "join": {
-    "x": 1040,
-    "y": 390
+    "x": 1045,
+    "y": 405.0
   },
   "arch": {
     "x": 30,
@@ -81,27 +81,44 @@
   "shot": "s01-arrival-overwhelm",
   "actors": {
     "box": {
-      "x": 1010,
-      "y": 440,
-      "scale": 1.0
+      "x": 1040,
+      "y": 450,
+      "scale": 0.9
     },
     "bubble": {
-      "x": 1010,
-      "y": 380,
+      "x": 1050,
+      "y": 372,
       "scale": 0.5
     }
   },
   "emitter": {
     "start": [
-      1000,
-      396
+      1035,
+      402
     ],
     "end": [
-      1010,
-      384
+      1045,
+      382
     ],
     "anchor": "box seam"
   },
   "card": "eagle-lyio3is7tokub",
-  "cardNote": "provisional: board §8 \"Silhouette before a lit interior\" for the medium-wide on the trio and the box; not yet chosen against the layout sheet"
+  "cardNote": "provisional: board §8 \"Silhouette before a lit interior\" for the medium-wide on the trio and the box; not yet chosen against the layout sheet",
+  "contacts": [
+    {
+      "a": "box",
+      "b": "blocks",
+      "why": "the kit's blocks lie inside the box until the lid is up"
+    },
+    {
+      "a": "box",
+      "b": "bubble",
+      "why": "the gadget's bubble rises out of the open box"
+    },
+    {
+      "a": "blocks",
+      "b": "bubble",
+      "why": "the bubble rises from the blocks inside the box"
+    }
+  ]
 }
