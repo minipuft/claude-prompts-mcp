@@ -41,4 +41,10 @@ tags: []
 
 ## Deviations
 
+- **DEV-T1-1** R8 revised on 2026-10-19 after the client crash. Rows 1–7 commit NO ratchet baseline, because every row lowers the same counts and parallel commits to one JSON file conflict. Row 8 regenerates eslint, knip, typecheck-tests and homonyms once, on the merged tree. Row 2 had already committed a knip baseline (613 → 603 types); row 8's regeneration supersedes it.
+- **DEV-T1-2** All three running rows were stopped by a client crash, with uncommitted edits in their worktrees. They were resumed through their saved transcripts, and each re-read its own diff before continuing.
+
 ## Findings
+
+- Row 2: deleting a definition can orphan others (`GateRequirement`, `GateRequirementType`, and `GateType` in gate-definitions), so re-measure after each cut. `engine/gates/types.ts` and the directory `engine/gates/types/` coexist; `'../types.js'` resolves to the file.
+- Row 2: `engine/gates/types.ts` still holds unmeasured, possibly unused types (`ValidationContext`, `GateActivationResult`). They are outside this plan's objective (not homonyms).
