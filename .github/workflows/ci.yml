@@ -200,6 +200,16 @@ jobs:
         working-directory: .
         run: node server/scripts/validate-pipeline-stage-table.js
 
+      # The SQLite table map in docs/architecture/sqlite-persistence.md and the Runtime State table
+      # in CLAUDE.md are documentation as well: an edit to either classifies as `docs` and skips
+      # `validate:all`, so on exactly the pull request that could make them drift from
+      # table-contracts.ts, a suite-only registration would never run. It imports only node:
+      # builtins, so it needs no node_modules on either lightweight route.
+      - name: Validate SQLite table map (lightweight routes)
+        if: needs.classify.outputs.scope != 'full'
+        working-directory: .
+        run: node server/scripts/validate-table-map-docs.js
+
       # CLAUDE.md, AGENTS.md, and .claude/rules/*.md are documentation paths, so their pull
       # requests intentionally skip validate:all. The full route checks this inside that suite;
       # lightweight routes run the same byte comparison here so a stale projection cannot merge.

@@ -331,6 +331,13 @@ export const SUITE = [
       'NOT checked — a stage class renamed consistently in both the code and the doc passes, and a stage whose behavior changed passes: the check reads names, order and counts, never the row descriptions or what a stage does',
   },
   {
+    script: 'validate:table-map-docs',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'NOT checked — the Owner column of the Map, retention and readers are prose the check never reads, a table renamed consistently in the contracts and the docs passes, and a retired name written other than as an exact backticked identifier is not seen',
+  },
+  {
     script: 'validate:conformance-coverage',
     io: 'read',
     reads: ['file', 'walk'],
