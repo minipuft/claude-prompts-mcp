@@ -6,7 +6,11 @@
  * that routes to prompt, gate, and framework handlers.
  */
 
-import type { ExecutionStep } from '#engine/frameworks/types/framework-types.js';
+import type {
+  FrameworkGate,
+  TemplateSuggestion,
+} from '#engine/frameworks/definitions/framework-schema.js';
+import type { ExecutionStep, ProcessingStep } from '#engine/frameworks/types/framework-types.js';
 import type { ExecutionTypeEnhancements } from '#engine/frameworks/utils/step-generator.js';
 import type {
   ArgumentValidationYaml,
@@ -16,11 +20,8 @@ import type { Logger, ToolResponse } from '#shared/types/index.js';
 import type { CategoryToolHandler } from '../../category-manager/index.js';
 import type {
   FrameworkManagerInput,
-  FrameworkGate,
-  TemplateSuggestion,
   FrameworkElements,
   ArgumentSuggestion,
-  ProcessingStep,
   TemplateEnhancements,
   ExecutionFlow,
   QualityIndicators,
