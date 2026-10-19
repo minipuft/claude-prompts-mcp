@@ -21,9 +21,10 @@
     "v3/references/owner/picks.json",
     "v3/script.md",
     "v3/creative-spec.md",
-    "v3/proposals/p001-beat4-action.json"
+    "v3/proposals/p001-beat4-action.json",
+    "v3/proposals/p002-materials-as-a-contract-not-a-3d-engine.json"
   ],
-  "inputsHash": "15654964b3e00aae385fc02af3735b408f0d8c64e59e4b8c801fffb2c6e4e5f3",
+  "inputsHash": "863b203a71df9261914fa9ba679ccc9bc4f6ea9260d637dacfe84e7086ebad7f",
   "tracks": [
     {
       "name": "pacing",
@@ -5956,6 +5957,70 @@
               "note": "six keys over 300 frames, holds in the house band 11-27 except the final hold, breakdowns to be authored by the pose step"
             },
             "file": "v3/proposals/p001-beat4-action.json"
+          }
+        },
+        {
+          "start": 630,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "p002 Materials as a contract, not a 3D engine",
+          "data": {
+            "id": "p002",
+            "title": "Materials as a contract, not a 3D engine",
+            "kind": "change",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-18",
+            "ruling": null,
+            "anchor": {
+              "beat": "the-frame"
+            },
+            "text": "Every asset declares a material (cloth, hair, glass, light, paper, box, bubble, line) in v3/materials.json, and a material carries the drawn-animation properties that are re-derived by hand today: mass class, follow-through lag in frames, settle frames and overshoot, drag on arcs, boil amplitude, shadow class (stipple), and for transmissive ones refraction and diffusion. The pose step's secondaries are generated from the material, not written per pose: a cloak lags the body by its declared frames and settles after it; hair lags less; glass displaces what is behind it. A follow-through probe with a control refuses a secondary that settles before its primary. No simulation: the properties are the twelve principles as numbers, deterministic and cached like everything else; the GPU glass pass and the ARAP mesh stay as they are. Test case: the cloak drop in beat 4 (p001 step 3) and the heel tap settle (step 4).",
+            "references": [
+              {
+                "id": "totoro-lived-in",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "My Neighbor Totoro (1988): Mei's shoes, the rotting pillar, the acorns",
+                "borrow": [
+                  "the details only a child would notice: a shoe left askew, a pillar that crumbles when pushed, acorns on the floor",
+                  "weight on contact: a body lands, settles, then the cloth settles after",
+                  "a world that is lived in before the story touches it"
+                ],
+                "governs": [
+                  "D92",
+                  "C14",
+                  "C31"
+                ]
+              },
+              {
+                "id": "spirited-away-shoes",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Spirited Away (2001): Chihiro taps her heel into her shoe",
+                "borrow": [
+                  "one unneeded gesture that proves the body is real",
+                  "the pause before a step through a threshold (beat 4, the frame)"
+                ],
+                "governs": [
+                  "D92",
+                  "D89"
+                ]
+              }
+            ],
+            "before": {
+              "note": "secondaries (lags, drifts, moving holds) are declared per pose in each pose sheet; the inspiration schema has an fx facet but no material; the cloak, hair, glass and light each carry their own ad hoc numbers in code (poseChartFrom lags, Crossing.tsx, the glass pass, the light lag chain)"
+            },
+            "after": {
+              "files": [
+                "v3/materials.json",
+                "src/library/animation/materials.ts (reads it; secondaries solver)",
+                "scripts/animation/probe-followthrough.py (control: a cloth settling before the body is refused)"
+              ],
+              "chain": "animation_poses reads the material of each secondary; animation-pose-contract gains the follow-through probe",
+              "note": "the inspiration card schema gains material facets so a reference can be filed for how a thing moves, not only how it looks"
+            },
+            "file": "v3/proposals/p002-materials-as-a-contract-not-a-3d-engine.json"
           }
         }
       ]
