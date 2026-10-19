@@ -589,13 +589,13 @@ describe('Export to Agent Skills clients', () => {
           'tool.json',
         ]);
         expect(await read('tooled', 'tools', 'py_tool', 'script.py')).toBe('print("py")\n');
-        expect(JSON.parse(await read('tooled', 'tools', 'py_tool', 'schema.json'))).toEqual({
-          type: 'object',
-          properties: { text: { type: 'string' } },
-        });
+        // In the repository formatter's layout, trailing newline included.
+        expect(await read('tooled', 'tools', 'py_tool', 'schema.json')).toBe(
+          '{\n  "type": "object",\n  "properties": {\n    "text": {\n      "type": "string"\n    }\n  }\n}\n'
+        );
         // timeout and env appear only when the index carries them.
         expect(await read('tooled', 'tools', 'py_tool', 'tool.json')).toBe(
-          JSON.stringify(
+          `${JSON.stringify(
             {
               name: 'Py Tool',
               runtime: 'python',
@@ -607,7 +607,7 @@ describe('Export to Agent Skills clients', () => {
             },
             null,
             2
-          )
+          )}\n`
         );
 
         // No input_schema and no execution block: the default execution config, no schema.json.
@@ -616,7 +616,7 @@ describe('Export to Agent Skills clients', () => {
           'tool.json',
         ]);
         expect(await read('tooled', 'tools', 'node_tool', 'tool.json')).toBe(
-          JSON.stringify(
+          `${JSON.stringify(
             {
               name: 'Node Tool',
               runtime: 'node',
@@ -626,7 +626,7 @@ describe('Export to Agent Skills clients', () => {
             },
             null,
             2
-          )
+          )}\n`
         );
 
         // An unknown runtime writes the script with no extension.
