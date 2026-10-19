@@ -37,9 +37,11 @@ file around your change. Two cases, and the difference is worth knowing:
 - **Changing a value** — a description, a name, a severity — rewrites only the lines that value
   occupies. Comments, blank lines, key order, quoting style, and the wrapping of long text you did
   not touch all stay exactly as you left them.
-- **Adding or removing a key**, or changing the number of entries in a list, re-renders the
-  document. Your comments still survive, but a long value elsewhere in the file may come back
-  wrapped at a different width.
+- **Adding or removing an entry in a list** changes only that entry's lines. Comments, the
+  wrapping of long text and a list written in `[a, b]` style all stay as you left them.
+- **Adding or removing a key**, or a value changing kind, re-renders the document. Your comments
+  still survive, but a long value elsewhere in the file may come back wrapped at a different
+  width.
 
 A file the edit does not change is not written at all, so it is untouched either way. Nothing here
 changes what a file _means_ — only how much of its formatting an edit disturbs.

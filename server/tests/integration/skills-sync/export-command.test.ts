@@ -1596,18 +1596,14 @@ describe('Export Command Integration', () => {
       expect(out.logs.join('\n')).toContain('Updated skills-sync.yaml registrations (+1 key(s))');
 
       // Measured by diff against the fixture, line by line. A key appended to a list is a
-      // STRUCTURAL edit, so `serializeYamlPreservingSource` takes its document tier, not its
-      // byte-exact CST tier: beside the added entry that tier pads the untouched flow list's
-      // brackets and puts a blank line before the trailing comment. Both are pinned here as
-      // measured, so a change to either tier is seen. Every comment, the key order and the
-      // flow style survive; `yaml.dump` kept none of them.
+      // list-length edit, made on the source tokens: the added entry is its only new line. The
+      // untouched flow list keeps its brackets and no blank line is added before the trailing
+      // comment. Every comment, the key order and the flow style survive; `yaml.dump` kept none
+      // of them.
       const before = fixture.split('\n');
       const expected = [
-        ...before.slice(0, 8),
-        '    project: [ prompt:alpha/one, prompt:beta/two ] # flow style on purpose',
-        ...before.slice(9, 12),
+        ...before.slice(0, 12),
         '      - prompt:general/plain',
-        '',
         ...before.slice(12),
       ];
       expect((await readFile(configPath, 'utf-8')).split('\n')).toEqual(expected);

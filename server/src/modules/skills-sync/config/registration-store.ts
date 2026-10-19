@@ -128,8 +128,9 @@ export async function applyRegistrationMutations(
   }
 
   // `skills-sync.yaml` is operator-edited, so its comments and key order survive the write. A key
-  // added to a list is structural and takes the writer's document tier, which may re-pad a flow
-  // list's brackets; the fixed header is written only when there was no prior layout to keep.
+  // added to an existing list is a list-length edit made on the source tokens, so only the new
+  // entry's line changes and a flow list keeps its brackets; the fixed header is written only when
+  // there was no prior layout to keep.
   const written = serializeYamlPreservingSource(config, raw);
   const content =
     written.fidelity === 'created' ? `${CONFIG_HEADER}\n${written.content}` : written.content;
