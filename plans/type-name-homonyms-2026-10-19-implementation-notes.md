@@ -36,6 +36,8 @@ tags: []
 
 - **R9 (row 3 concerns, 2026-10-19)** Merge `ProcessingStep`, `FrameworkGate` and `TemplateSuggestion` onto the engine / Zod-inferred types, because those match the runtime schemas in `src/mcp/tools/schemas/` (`processingStepSchema`, `frameworkGateSchema`, `templateSuggestionSchema`). The tool-layer copies promised fields as required, and `marker`, that the schema does not enforce or accept. Same logic: `ExecutionStep.dependencies` becomes optional to match `executionStepSchema`, and its readers handle the absence with `?? []` (no non-null assertion). This loosens types toward what the server already receives; it is not a tool-surface change.
 
+- **R10 (row 4 concern, 2026-10-19)** `TemporaryGateDefinition` is two concepts: `engine/execution/types.ts` is the pre-registration draft (no `id`/`created_at`, consumed by `gate-analyzer.ts`), and `gates/core/temporary-gate-registry.ts` is the stored record. Row 7 renames the execution one to `TemporaryGateDraft`; the registry keeps the name. Typing between them is not unified in this plan. When two same-layer copies merge (`PromptLookup`), the survivor is the one its other consumer already imports from.
+
 ## Measured inputs (origin/main `ee3986e2`, 2026-10-19)
 
 - 37 baseline names over 87 exported definitions. Reference counts per definition come from ts-morph `findReferencesAsNodes`, run over a snapshot of `server/src` + `server/tests`. The counts include barrel re-export sites, which R3 says are not consumers, so every count is re-measured by the row.
@@ -47,6 +49,8 @@ tags: []
 - **DEV-T1-2** All three running rows were stopped by a client crash, with uncommitted edits in their worktrees. They were resumed through their saved transcripts, and each re-read its own diff before continuing.
 
 ## Findings
+
+- Row 4: load average on this box reached 35–43 on 9 cores with 3 workers and 2 other sessions. A whole-project `lint:ratchet` took >10 min and was killed once at the background limit. Run ratchets in the foreground, one at a time.
 
 - Row 3: the left-over probe state (three pairs merged) typechecked clean; it was restored before the row committed. `step-gate`-style near-twins under different names (`ExecutionStepDefinition`, `ProcessingStepDefinition` in step-generator) are invisible to the homonym ratchet; out of scope. `template-enhancer.ts:27` re-exports `ProcessingStepDefinition` as a second import path; unchecked.
 
