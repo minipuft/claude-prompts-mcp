@@ -26,7 +26,7 @@
     "v3/proposals/p003-light-as-a-signed-distance-shader-layer.json",
     "v3/proposals/p004-a-direction-vocabulary-one-skill-referen.json"
   ],
-  "inputsHash": "ff160dabd81116b25ba264df76b9769e9f4adcfc3f847122a7abad0695f995a4",
+  "inputsHash": "b906b84bfaf99e503c48c0dfab11518394df5cc3b0e665dded52a99ea3e71556",
   "tracks": [
     {
       "name": "pacing",
@@ -5848,10 +5848,10 @@
             "id": "p001",
             "title": "What happens in beat 4",
             "kind": "change",
-            "status": "open",
+            "status": "ruled",
             "from": "director",
             "date": "2026-10-18",
-            "ruling": null,
+            "ruling": "D99",
             "anchor": {
               "beat": "the-frame"
             },
@@ -5970,10 +5970,10 @@
             "id": "p002",
             "title": "Materials as a contract, not a 3D engine",
             "kind": "change",
-            "status": "open",
+            "status": "ruled",
             "from": "director",
             "date": "2026-10-18",
-            "ruling": null,
+            "ruling": "D97",
             "anchor": {
               "beat": "the-frame"
             },
@@ -6035,10 +6035,10 @@
             "id": "p003",
             "title": "Light as a signed-distance shader layer, no engine",
             "kind": "change",
-            "status": "open",
+            "status": "ruled",
             "from": "director",
             "date": "2026-10-18",
-            "ruling": null,
+            "ruling": "D98",
             "anchor": {
               "beat": "art-world"
             },
@@ -6085,10 +6085,10 @@
             "id": "p004",
             "title": "A direction vocabulary: one skill, referenced by the prompts, enforced by a gate",
             "kind": "change",
-            "status": "open",
+            "status": "ruled",
             "from": "director",
             "date": "2026-10-18",
-            "ruling": null,
+            "ruling": "D96",
             "anchor": {
               "beat": "arrival"
             },
@@ -6146,7 +6146,80 @@
     },
     {
       "name": "rulings",
-      "items": []
+      "items": [
+        {
+          "start": 0,
+          "end": 180,
+          "beat": "arrival",
+          "label": "D96",
+          "data": {
+            "id": "D96",
+            "ids": [
+              "D96"
+            ],
+            "who": "owner",
+            "date": "2026-10-18",
+            "closes": [
+              "p004"
+            ],
+            "text": "adopt the direction vocabulary as a project-agnostic skill referenced by every animation and showcase prompt and enforced by the animation-vocabulary gate, with the ruling form and the one-question interview form, because every later ruling is written in it (ref samurai-jack-holds) (closes p004)"
+          }
+        },
+        {
+          "start": 630,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "D97",
+          "data": {
+            "id": "D97",
+            "ids": [
+              "D97"
+            ],
+            "who": "owner",
+            "date": "2026-10-18",
+            "closes": [
+              "p002"
+            ],
+            "text": "adopt the material contract v3/materials.json with the twelve properties, the Verlet secondaries solver, the bench and the follow-through probe on the pose gate, because weight and follow-through are derived from declared numbers rather than re-reasoned per pose (ref totoro-lived-in) (closes p002)"
+          }
+        },
+        {
+          "start": 930,
+          "end": 1230,
+          "beat": "art-world",
+          "label": "D98",
+          "data": {
+            "id": "D98",
+            "ids": [
+              "D98"
+            ],
+            "who": "owner",
+            "date": "2026-10-18",
+            "closes": [
+              "p003"
+            ],
+            "text": "adopt light as one cached signed-distance shader layer with soft shadows and one bounce, quantised by the existing stipple, reading occluder, albedo and shadow class from the materials, with an occlusion control on the render probes, because light stays a volume and no engine is adopted (ref seuss-no-one-youer) (closes p003)"
+          }
+        },
+        {
+          "start": 630,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "D99",
+          "data": {
+            "id": "D99",
+            "ids": [
+              "D99"
+            ],
+            "who": "owner",
+            "date": "2026-10-18",
+            "closes": [
+              "p001"
+            ],
+            "text": "adopt the six-step beat-4 action, slump, turn, rise, step, threshold, through, with the cloak heap left in frame and Codex's nudge as the beat's gag, because the remembered image is the frame rise and the body must read as real before it goes through (ref spirited-away-shoes) (closes p001)"
+          }
+        }
+      ]
     }
   ],
   "unanchored": [

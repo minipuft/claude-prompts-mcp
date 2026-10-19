@@ -538,5 +538,57 @@
     "text": "the bible is also the editing system before any further ruling. A local server on the preview port serves the page and accepts its edits, patching the one JSON file each belongs to and rebuilding through `npm run bible` so no edit bypasses the probe; the page edits beat boundaries by dragging on the pacing lane, seconds, register, light intent and actions inline, files a proposal or an inspiration at the cursor, and rules a proposal with the next D-number written into this list; the chains' evidence and muse steps file their findings and picks as proposals (row 7.5). Round two resumes only when all of that is built.",
     "closes": [],
     "raw": "- D95, owner, 2026-10-18 (\"we need this scaffolded and set up fully before I continue with making decisions\"): the bible is also the editing system before any further ruling. A local server on the preview port serves the page and accepts its edits, patching the one JSON file each belongs to and rebuilding through `npm run bible` so no edit bypasses the probe; the page edits beat boundaries by dragging on the pacing lane, seconds, register, light intent and actions inline, files a proposal or an inspiration at the cursor, and rules a proposal with the next D-number written into this list; the chains' evidence and muse steps file their findings and picks as proposals (row 7.5). Round two resumes only when all of that is built."
+  },
+  {
+    "id": "D96",
+    "ids": [
+      "D96"
+    ],
+    "who": "owner",
+    "date": "2026-10-18",
+    "text": "adopt the direction vocabulary as a project-agnostic skill referenced by every animation and showcase prompt and enforced by the animation-vocabulary gate, with the ruling form and the one-question interview form, because every later ruling is written in it (ref samurai-jack-holds) (closes p004)",
+    "closes": [
+      "p004"
+    ],
+    "raw": "- D96, owner, 2026-10-18: adopt the direction vocabulary as a project-agnostic skill referenced by every animation and showcase prompt and enforced by the animation-vocabulary gate, with the ruling form and the one-question interview form, because every later ruling is written in it (ref samurai-jack-holds) (closes p004)"
+  },
+  {
+    "id": "D97",
+    "ids": [
+      "D97"
+    ],
+    "who": "owner",
+    "date": "2026-10-18",
+    "text": "adopt the material contract v3/materials.json with the twelve properties, the Verlet secondaries solver, the bench and the follow-through probe on the pose gate, because weight and follow-through are derived from declared numbers rather than re-reasoned per pose (ref totoro-lived-in) (closes p002)",
+    "closes": [
+      "p002"
+    ],
+    "raw": "- D97, owner, 2026-10-18: adopt the material contract v3/materials.json with the twelve properties, the Verlet secondaries solver, the bench and the follow-through probe on the pose gate, because weight and follow-through are derived from declared numbers rather than re-reasoned per pose (ref totoro-lived-in) (closes p002)"
+  },
+  {
+    "id": "D98",
+    "ids": [
+      "D98"
+    ],
+    "who": "owner",
+    "date": "2026-10-18",
+    "text": "adopt light as one cached signed-distance shader layer with soft shadows and one bounce, quantised by the existing stipple, reading occluder, albedo and shadow class from the materials, with an occlusion control on the render probes, because light stays a volume and no engine is adopted (ref seuss-no-one-youer) (closes p003)",
+    "closes": [
+      "p003"
+    ],
+    "raw": "- D98, owner, 2026-10-18: adopt light as one cached signed-distance shader layer with soft shadows and one bounce, quantised by the existing stipple, reading occluder, albedo and shadow class from the materials, with an occlusion control on the render probes, because light stays a volume and no engine is adopted (ref seuss-no-one-youer) (closes p003)"
+  },
+  {
+    "id": "D99",
+    "ids": [
+      "D99"
+    ],
+    "who": "owner",
+    "date": "2026-10-18",
+    "text": "adopt the six-step beat-4 action, slump, turn, rise, step, threshold, through, with the cloak heap left in frame and Codex's nudge as the beat's gag, because the remembered image is the frame rise and the body must read as real before it goes through (ref spirited-away-shoes) (closes p001)",
+    "closes": [
+      "p001"
+    ],
+    "raw": "- D99, owner, 2026-10-18: adopt the six-step beat-4 action, slump, turn, rise, step, threshold, through, with the cloak heap left in frame and Codex's nudge as the beat's gag, because the remembered image is the frame rise and the body must read as real before it goes through (ref spirited-away-shoes) (closes p001)"
   }
 ]

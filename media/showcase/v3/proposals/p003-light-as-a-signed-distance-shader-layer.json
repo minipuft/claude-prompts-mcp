@@ -23,6 +23,6 @@
     "gate": "animation-render-manifest reads the light layer; eye-trace keeps passing",
     "note": "determinism inherited from sharded concurrency-1 renders on one ANGLE backend"
   },
-  "status": "open",
-  "ruling": null
+  "status": "ruled",
+  "ruling": "D98"
 }

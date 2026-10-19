@@ -25,6 +25,6 @@
     "materials": "every property value carries an intent word from the material domain (snap, float, weighted, drape, crisp, soft) and a reference; presets per acting register (warm-playful, reverent, focused) so a register ruling sets a whole family of values; the bench prints the intent word beside the measured curve",
     "ledger": "eagle_board.py apply already records reference -> contract change; the same ledger entry is written for a material or ruling change, so 'what led to what' is one query"
   },
-  "status": "open",
-  "ruling": null
+  "status": "ruled",
+  "ruling": "D96"
 }
