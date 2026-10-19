@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { GateEnforcementAuthority } from '../../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import { GateReviewStage } from '../../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { GateLoader } from '../../../../src/engine/gates/core/gate-loader.js';
@@ -58,7 +58,7 @@ describe('GateReviewStage', () => {
       () => undefined
     );
 
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.parsedCommand = {
       steps: [{ stepNumber: 1, promptId: 'analyze', args: {} }],
     } as any;
@@ -98,7 +98,7 @@ describe('GateReviewStage', () => {
       () => undefined
     );
 
-    const context = new ExecutionContext({ command: 'noop' });
+    const context = new PromptRequestContext({ command: 'noop' });
     context.sessionContext = {
       sessionId: 'session-1',
       chainId: 'chain-1',
@@ -145,7 +145,7 @@ describe('GateReviewStage — recording check evidence on the pending review', (
   });
 
   const createContext = (review: Record<string, unknown>) => {
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.parsedCommand = {
       steps: [{ stepNumber: 1, promptId: 'analyze', args: {} }],
     } as any;
@@ -331,7 +331,7 @@ describe('GateReviewStage — renders and clears the review of the node it names
   });
 
   const contextOnStep2 = () => {
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.parsedCommand = {
       steps: [
         { stepNumber: 1, promptId: 'draft', args: {} },
@@ -528,7 +528,7 @@ describe('GateReviewStage — review metadata variants', () => {
   });
 
   const makeContext = (review: Record<string, unknown>, request: Record<string, unknown> = {}) => {
-    const context = new ExecutionContext({ command: '>>chain', ...request });
+    const context = new PromptRequestContext({ command: '>>chain', ...request });
     context.parsedCommand = {
       steps: [{ stepNumber: 1, promptId: 'analyze', args: {} }],
     } as any;

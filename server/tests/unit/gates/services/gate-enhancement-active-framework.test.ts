@@ -1,7 +1,7 @@
 // @lifecycle canonical - Pins which sources decide GateEnhancementService's active framework.
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { GateEnhancementService } from '../../../../src/engine/gates/services/gate-enhancement-service.js';
 import { GateMetricsRecorder } from '../../../../src/engine/gates/services/gate-metrics-recorder.js';
 
@@ -16,7 +16,10 @@ import { GateMetricsRecorder } from '../../../../src/engine/gates/services/gate-
 const createLogger = () =>
   ({ info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }) as never;
 
-const activeFrameworkIdOf = (context: ExecutionContext, provider: string): string | undefined => {
+const activeFrameworkIdOf = (
+  context: PromptRequestContext,
+  provider: string
+): string | undefined => {
   const service = new GateEnhancementService(
     {} as never,
     undefined,
@@ -27,12 +30,15 @@ const activeFrameworkIdOf = (context: ExecutionContext, provider: string): strin
     createLogger()
   );
   return (
-    service as unknown as { getActiveFrameworkId(c: ExecutionContext): string | undefined }
+    service as unknown as { getActiveFrameworkId(c: PromptRequestContext): string | undefined }
   ).getActiveFrameworkId(context);
 };
 
-const createContext = (plan: Record<string, unknown>, frameworkId?: string): ExecutionContext => {
-  const context = new ExecutionContext({ command: '>>demo' } as never);
+const createContext = (
+  plan: Record<string, unknown>,
+  frameworkId?: string
+): PromptRequestContext => {
+  const context = new PromptRequestContext({ command: '>>demo' } as never);
   context.executionPlan = { strategy: 'single', requiresFramework: true, ...plan } as never;
   if (frameworkId !== undefined) {
     context.frameworkContext = { selectedFramework: { id: frameworkId } } as never;

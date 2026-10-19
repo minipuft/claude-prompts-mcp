@@ -26,7 +26,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { ChainBlueprintResolver } from '../../../src/engine/execution/parsers/chain-blueprint-resolver.js';
@@ -267,7 +267,7 @@ const buildPipeline = (options: {
     if (name === 'CommandParsing') {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           // The live path: a resume never re-parses — stage 04 restores the persisted blueprint
           // and returns. Only the FIRST call parses.
           if (context.mcpRequest.chain_id) {
@@ -289,7 +289,7 @@ const buildPipeline = (options: {
       return {
         name,
         provides: ['executionPlan'],
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.executionPlan = {
             strategy: 'chain',
             gates: [GATE_ID],
@@ -304,7 +304,7 @@ const buildPipeline = (options: {
     if (name === 'GateEnhancement') {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.state.gates.hasBlockingGates = true;
           context.state.gates.accumulatedGateIds = [GATE_ID];
           context.state.gates.enforcementMode = 'blocking';

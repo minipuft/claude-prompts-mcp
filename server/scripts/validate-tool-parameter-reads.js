@@ -668,7 +668,7 @@ function pipelineRequestReads(project, directory) {
  * executor either consumes a parameter itself (`gate_action:abort`, `handoff`, `claim_token`) or copies it
  * into the `request` it hands the pipeline; and past that, a copied field must have a reader in
  * `engine/execution` — its context or any stage. OQ2 measured 2026-09-23: stage 01 alone reads
- * none of `gate_verdict`, `gate_action`, `observations`, `remainder` (execution-context.ts,
+ * none of `gate_verdict`, `gate_action`, `observations`, `remainder` (prompt-request-context.ts,
  * stages 16 and 17 do), so a boundary drawn at stage 01 would report four false findings.
  */
 const promptEngineAdapter = {

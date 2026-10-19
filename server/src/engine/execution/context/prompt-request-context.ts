@@ -21,7 +21,7 @@ import { buildIdentityScope } from '#shared/utils/request-identity-scope.js';
  * Unified execution context that flows through the new pipeline
  * Replaces the six different "args" objects inside the legacy engine.
  */
-export class ExecutionContext {
+export class PromptRequestContext {
   /** Immutable MCP request data */
   public readonly mcpRequest: McpToolRequest;
   public parsedCommand?: ParsedCommand;
@@ -75,7 +75,7 @@ export class ExecutionContext {
   public readonly state: PipelineInternalState;
 
   /**
-   * Creates a new ExecutionContext with validated request data
+   * Creates a new PromptRequestContext with validated request data
    *
    * @param mcpRequest - Validated MCP tool request (should be pre-validated)
    * @param logger - Optional logger instance (defaults to no-op logger for tests)
@@ -328,7 +328,7 @@ export class ExecutionContext {
    * Type guard that narrows to chain execution context.
    * Provides compile-time type safety for chain-specific properties.
    */
-  hasChainCommand(): this is ExecutionContext & {
+  hasChainCommand(): this is PromptRequestContext & {
     parsedCommand: ParsedCommand & { commandType: 'chain'; steps: ChainStepPrompt[] };
   } {
     return this.parsedCommand?.commandType === 'chain' && Array.isArray(this.parsedCommand.steps);
@@ -338,7 +338,7 @@ export class ExecutionContext {
    * Type guard that narrows to single prompt execution context.
    * Provides compile-time type safety for single prompt properties.
    */
-  hasSinglePromptCommand(): this is ExecutionContext & {
+  hasSinglePromptCommand(): this is PromptRequestContext & {
     parsedCommand: ParsedCommand & { commandType: 'single'; convertedPrompt: ConvertedPrompt };
   } {
     return (

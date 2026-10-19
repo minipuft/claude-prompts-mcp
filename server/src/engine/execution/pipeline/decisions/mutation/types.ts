@@ -54,7 +54,7 @@ export type ChainMutation =
     };
 
 /**
- * Inputs to {@link decideMutation}. Deliberately not `ExecutionContext` or any pipeline type —
+ * Inputs to {@link decideMutation}. Deliberately not `PromptRequestContext` or any pipeline type —
  * this module lives in `decisions/`, which by convention (sibling `gates/enforcement-mode.ts`,
  * `injection/injection-decision-service.ts`) takes plain data in and returns plain data out.
  *

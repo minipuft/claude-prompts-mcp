@@ -25,7 +25,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { ChainBlueprintResolver } from '../../../src/engine/execution/parsers/chain-blueprint-resolver.js';
@@ -340,7 +340,7 @@ const buildPipeline = (options: {
     if (name === 'CommandParsing') {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           if (context.mcpRequest.chain_id) {
             new ChainBlueprintResolver(sessionStore, logger).restoreFromBlueprint(context);
             return;
@@ -359,7 +359,7 @@ const buildPipeline = (options: {
     if (name === 'GateEnhancement' && review !== undefined) {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           const detached = context.parsedCommand?.steps?.find((step) => step.await === 'run');
           if (detached !== undefined) {
             context.state.gates.detachedReviewGateIds = {
@@ -372,7 +372,7 @@ const buildPipeline = (options: {
     if (name === 'FrameworkResolution' && review?.structure === true) {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.frameworkContext = { selectedFramework: { id: 'cageerf' } } as never;
         },
       };
@@ -381,7 +381,7 @@ const buildPipeline = (options: {
       return {
         name,
         provides: ['executionPlan'],
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.executionPlan = {
             strategy: 'chain',
             gates: [],

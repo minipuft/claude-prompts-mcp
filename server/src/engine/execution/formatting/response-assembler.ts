@@ -43,7 +43,7 @@ import type {
   ChainFormattingContext,
   SinglePromptFormattingContext,
 } from './formatting-context.js';
-import type { ExecutionContext } from '../context/index.js';
+import type { PromptRequestContext } from '../context/index.js';
 import type { DelegationPayload } from '../delegation/types.js';
 import type { GateOperator } from '../parsers/types/operator-types.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../types.js';
@@ -129,7 +129,7 @@ export class ResponseAssembler {
    * Formats response for chain execution with session tracking.
    */
   formatChainResponse(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     _formatterContext: ChainFormattingContext
   ): string {
     const sections: string[] = [];
@@ -188,7 +188,7 @@ export class ResponseAssembler {
    * Formats response for single prompt execution.
    */
   formatSinglePromptResponse(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     _formatterContext: SinglePromptFormattingContext
   ): string {
     const sections: string[] = [];
@@ -250,7 +250,7 @@ export class ResponseAssembler {
   /**
    * Formats a blocked response when gate failure suppresses content.
    */
-  formatBlockedResponse(context: ExecutionContext): string {
+  formatBlockedResponse(context: PromptRequestContext): string {
     const blockedGateIds = context.state.gates.blockedGateIds ?? [];
     const gateInstructions = this.resolveBlockedReviewInstructions(context);
 
@@ -343,7 +343,7 @@ export class ResponseAssembler {
    * omits the counter in that state for the same reason.
    */
   private resolveAttemptCounter(
-    context: ExecutionContext
+    context: PromptRequestContext
   ): { current: number; max: number } | undefined {
     const pendingReview = context.sessionContext?.pendingReview;
     if (pendingReview === undefined || pendingReview.maxAttempts <= 1) {
@@ -361,7 +361,7 @@ export class ResponseAssembler {
    * Falls back to the bare object form when no review is pending — there is no gate list to key
    * a template to, and inventing per-gate slots would advertise a shape the caller cannot fill.
    */
-  private buildBlockedResubmitBlock(context: ExecutionContext, chainId: string): string {
+  private buildBlockedResubmitBlock(context: PromptRequestContext, chainId: string): string {
     const pendingReview = context.sessionContext?.pendingReview;
     if (pendingReview === undefined) {
       return `Resume: \`chain_id="${chainId}", gate_verdict={"overall": "PASS"|"FAIL", "rationale": "<reason>"}\``;
@@ -388,7 +388,7 @@ export class ResponseAssembler {
   /**
    * Builds GateValidationInfo for structured response contract.
    */
-  buildGateValidationInfo(context: ExecutionContext):
+  buildGateValidationInfo(context: PromptRequestContext):
     | {
         enabled: boolean;
         passed: boolean;
@@ -452,14 +452,14 @@ export class ResponseAssembler {
    * the CTA line cannot disagree — they were two independent `currentStep >= totalSteps`
    * computations before.
    */
-  private isRunLatchedComplete(context: ExecutionContext): boolean {
+  private isRunLatchedComplete(context: PromptRequestContext): boolean {
     return context.state.session.chainComplete === true;
   }
 
   /**
    * Builds chain footer with session and progress tracking.
    */
-  buildChainFooter(context: ExecutionContext): string {
+  buildChainFooter(context: PromptRequestContext): string {
     const lines: string[] = [];
     const sessionContext = context.sessionContext!;
     const chainIdentifier = sessionContext.chainId ?? sessionContext.sessionId;
@@ -551,7 +551,7 @@ export class ResponseAssembler {
    * Validation") is delegated" for a 2-step chain — the synthetic step's coordinates must never
    * reach the advisory.
    */
-  private buildHandoffSection(context: ExecutionContext): string | null {
+  private buildHandoffSection(context: PromptRequestContext): string | null {
     const metadata = context.executionResults?.metadata ?? {};
 
     const nextStep = this.findNextDelegatedStep(context);
@@ -607,12 +607,12 @@ export class ResponseAssembler {
     return renderer.renderNextStepAdvisory(payload);
   }
 
-  private resolveClientProfile(context: ExecutionContext): RequestClientProfile | undefined {
+  private resolveClientProfile(context: PromptRequestContext): RequestClientProfile | undefined {
     const identityContext = context.state.identity.context;
     return identityContext?.clientProfile ?? identityContext?.identity.clientProfile;
   }
 
-  private buildHandoffFooterLine(context: ExecutionContext, chainIdentifier: string): string {
+  private buildHandoffFooterLine(context: PromptRequestContext, chainIdentifier: string): string {
     const delegationProfile = this.resolveClientProfile(context)?.delegationProfile;
     const prefix = getHandoffFooterInstruction(delegationProfile);
     return `Next: ${prefix} (see instructions above), then: chain_id="${chainIdentifier}", user_response="<sub-agent result>"`;
@@ -647,7 +647,7 @@ export class ResponseAssembler {
    */
   formatConfirmationRequest(
     confirmation: NonNullable<
-      typeof ExecutionContext.prototype.state.scripts
+      typeof PromptRequestContext.prototype.state.scripts
     >['confirmationRequired']
   ): string {
     if (!confirmation) return '';
@@ -704,7 +704,7 @@ export class ResponseAssembler {
    * Checks StepExecutionStage metadata first, falls back to parsed step `delegated` flag
    * (always available from CommandParsingStage, even when pendingReview blocked StepExecutionStage).
    */
-  private isNextStepDelegated(context: ExecutionContext): boolean {
+  private isNextStepDelegated(context: PromptRequestContext): boolean {
     const metadata = context.executionResults?.metadata ?? {};
     if (metadata['nextStepDelegated'] === true) {
       return true;
@@ -720,11 +720,11 @@ export class ResponseAssembler {
    * is no earlier parse-time signal to fall back to.
    */
   /** The rendered step carries gates and its render asked for the verdict (R171). */
-  private renderAsksVerdict(context: ExecutionContext): boolean {
+  private renderAsksVerdict(context: PromptRequestContext): boolean {
     return context.executionResults?.metadata?.['asksVerdict'] === true;
   }
 
-  private isCurrentStepDelegated(context: ExecutionContext): boolean {
+  private isCurrentStepDelegated(context: PromptRequestContext): boolean {
     const metadata = context.executionResults?.metadata ?? {};
     return metadata['currentStepDelegated'] === true;
   }
@@ -734,7 +734,7 @@ export class ResponseAssembler {
    * Returns undefined if no delegation is found.
    */
   private findNextDelegatedStep(
-    context: ExecutionContext
+    context: PromptRequestContext
   ): { promptId: string; agentType?: string; subagentModel?: string; index: number } | undefined {
     const steps = context.parsedCommand?.steps;
     if (!steps || steps.length === 0) {
@@ -778,7 +778,7 @@ export class ResponseAssembler {
    * exactly, which is what leaves an unmutated run byte-identical.
    */
   private resolveNextStepIndex(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     steps: readonly { nodeId?: string; stepNumber: number }[]
   ): number | undefined {
     const nodeAddressed = steps.some((step) => step.nodeId != null);
@@ -818,7 +818,7 @@ export class ResponseAssembler {
    * `filterGatesForTarget` refuses to fire a gate whose target is not live: a step that will not
    * execute cannot be the step being handed off to.
    */
-  private resolveNextRunNodeId(context: ExecutionContext): string | null | undefined {
+  private resolveNextRunNodeId(context: PromptRequestContext): string | null | undefined {
     const view = this.resolveRunStepView(context);
     if (view === undefined) {
       return undefined;
@@ -848,7 +848,7 @@ export class ResponseAssembler {
    * cannot change while one response is being assembled, and the provider reads already-loaded
    * session maps.
    */
-  private resolveRunStepView(context: ExecutionContext): RunStepView | undefined {
+  private resolveRunStepView(context: PromptRequestContext): RunStepView | undefined {
     if (this.runStepViewProvider === undefined) {
       return undefined;
     }
@@ -861,7 +861,7 @@ export class ResponseAssembler {
   /**
    * Resolves the prompt name for the next delegated step from parsed steps.
    */
-  private resolveNextStepPromptName(context: ExecutionContext): string | undefined {
+  private resolveNextStepPromptName(context: PromptRequestContext): string | undefined {
     return this.findNextDelegatedStep(context)?.promptId;
   }
 
@@ -872,7 +872,7 @@ export class ResponseAssembler {
    * captured output and verdict template render here only, and the step render and footer point
    * at them.
    */
-  private buildGateReviewCTA(context: ExecutionContext): string | null {
+  private buildGateReviewCTA(context: PromptRequestContext): string | null {
     const pendingReview = context.sessionContext?.pendingReview;
     if (!pendingReview) {
       return null;
@@ -946,7 +946,7 @@ export class ResponseAssembler {
    * Empty string when no gate in the review is judge-routed, so a self-reviewed reply renders
    * byte-identical to what it did before this section existed.
    */
-  private buildJudgeReviewSection(context: ExecutionContext): string {
+  private buildJudgeReviewSection(context: PromptRequestContext): string {
     const judge = this.resolveJudgeReview(context);
     if (judge === undefined) {
       return '';
@@ -972,7 +972,7 @@ export class ResponseAssembler {
    * Present but malformed throws: skipping it would send a judge-routed gate back to self-review
    * with nothing in the reply to say so.
    */
-  private resolveJudgeReview(context: ExecutionContext): JudgeReviewMetadata | undefined {
+  private resolveJudgeReview(context: PromptRequestContext): JudgeReviewMetadata | undefined {
     const judge = context.executionResults?.metadata?.['judge'] as
       Partial<JudgeReviewMetadata> | undefined;
     if (judge === undefined) {
@@ -999,7 +999,7 @@ export class ResponseAssembler {
    * Empty string when this call carried no per-gate detail — an overall-only verdict, a PASS,
    * or no verdict at all — so every existing reply renders byte-identical.
    */
-  private buildFailedGateSummary(context: ExecutionContext): string {
+  private buildFailedGateSummary(context: PromptRequestContext): string {
     const failed = this.resolveFailedGateVerdicts(context);
     if (failed.size === 0) {
       return '';
@@ -1020,7 +1020,7 @@ export class ResponseAssembler {
    * A FAIL entry whose rationale is empty still appears: the gate id is the fact worth
    * carrying, and dropping the entry would make a terse reviewer look like a silent one.
    */
-  private resolveFailedGateVerdicts(context: ExecutionContext): ReadonlyMap<string, string> {
+  private resolveFailedGateVerdicts(context: PromptRequestContext): ReadonlyMap<string, string> {
     const failed = new Map<string, string>();
     for (const entry of context.state.gates.perGateVerdicts ?? []) {
       if (entry.verdict !== 'FAIL') {
@@ -1050,7 +1050,7 @@ export class ResponseAssembler {
    * exists to suppress, and returning it would defeat the block. Verified on the render: it
    * carries no `user_response` text.
    */
-  private resolveBlockedReviewInstructions(context: ExecutionContext): string {
+  private resolveBlockedReviewInstructions(context: PromptRequestContext): string {
     const enhanced = context.gateInstructions ?? '';
     if (enhanced.trim() !== '') return enhanced;
 
@@ -1071,7 +1071,7 @@ export class ResponseAssembler {
    * Returns null when this call raised no interrupt, which is every call on a run with no open
    * blocking unknown.
    */
-  private buildInterruptSection(context: ExecutionContext): string | null {
+  private buildInterruptSection(context: PromptRequestContext): string | null {
     const interrupt = context.state.session.chainInterrupt;
     if (interrupt === undefined) return null;
 
@@ -1108,7 +1108,9 @@ export class ResponseAssembler {
    * the assembler builds payloads and the stage owns the response object, the same split the
    * string sections already follow. Undefined means "no interrupt", not "empty interrupt".
    */
-  buildInterruptStructuredContent(context: ExecutionContext): Record<string, unknown> | undefined {
+  buildInterruptStructuredContent(
+    context: PromptRequestContext
+  ): Record<string, unknown> | undefined {
     const interrupt = context.state.session.chainInterrupt;
     if (interrupt === undefined) return undefined;
     const latched = this.isRunLatchedComplete(context);
@@ -1145,7 +1147,7 @@ export class ResponseAssembler {
    * the same one-call-early claim the footer made, on a second surface. With the footer now
    * honest the two would have contradicted each other inside one payload.
    */
-  private buildFinalStepMessage(context: ExecutionContext): string | null {
+  private buildFinalStepMessage(context: PromptRequestContext): string | null {
     if (!this.isFinalChainStep(context) || !this.isRunLatchedComplete(context)) {
       return null;
     }
@@ -1157,7 +1159,7 @@ export class ResponseAssembler {
   /**
    * Checks whether the current step is the final step of a chain execution.
    */
-  private isFinalChainStep(context: ExecutionContext): boolean {
+  private isFinalChainStep(context: PromptRequestContext): boolean {
     const session = context.sessionContext;
     if (!session?.isChainExecution) {
       return false;
@@ -1184,13 +1186,13 @@ export class ResponseAssembler {
    * An id with no recorded tier answers `check` so it stays visible in the verdict template.
    * Classification alone establishes no criterion result; those come from `checkResults`.
    */
-  private resolveGateTiers(context: ExecutionContext): ReadonlyMap<string, GateTier> {
+  private resolveGateTiers(context: PromptRequestContext): ReadonlyMap<string, GateTier> {
     const tiers = context.sessionContext?.pendingReview?.gateTiers;
     return new Map(Object.entries(tiers ?? {}));
   }
 
   /** Recorded check results for the pending review, keyed by gate id (empty when none ran). */
-  private resolveCheckResults(context: ExecutionContext): ReadonlyMap<string, GateCheckResult> {
+  private resolveCheckResults(context: PromptRequestContext): ReadonlyMap<string, GateCheckResult> {
     const results = context.sessionContext?.pendingReview?.checkResults ?? [];
     return new Map(results.map((result) => [result.gateId, result]));
   }
@@ -1203,7 +1205,7 @@ export class ResponseAssembler {
    * in `chain-operator-executor.ts` verbatim rather than reimplementing the format, so the two
    * declaration surfaces cannot drift from each other.
    */
-  private buildDeclaredSectionsBlock(context: ExecutionContext): string | null {
+  private buildDeclaredSectionsBlock(context: PromptRequestContext): string | null {
     const declaredSections = this.resolveDeclaredSections(context);
     if (declaredSections.length === 0) {
       return null;
@@ -1262,7 +1264,7 @@ export class ResponseAssembler {
    * Reads through the provider on every call — no cache — so framework hot-reload keeps working,
    * matching the chain path's `resolveDeclaredSections`.
    */
-  private resolveDeclaredSections(context: ExecutionContext): DeclaredSection[] {
+  private resolveDeclaredSections(context: PromptRequestContext): DeclaredSection[] {
     const provider = this.declaredSectionsProvider;
     if (!provider) {
       return [];
@@ -1306,7 +1308,7 @@ export class ResponseAssembler {
    * mode). It reports the call itself, so it renders even when gate content is suppressed: the
    * FAIL that completes a chain still happened (P6.37).
    */
-  private buildAdvisoryWarnings(context: ExecutionContext): string[] {
+  private buildAdvisoryWarnings(context: PromptRequestContext): string[] {
     const warnings = context.state.gates.advisoryWarnings;
     return warnings.length === 0
       ? []
@@ -1325,16 +1327,16 @@ export class ResponseAssembler {
    * Entry points: formatChainResponse, formatSinglePromptResponse (top-level),
    *               buildGateValidationInfo (external entry from ResponseFormattingStage)
    */
-  private isGateContentSuppressed(context: ExecutionContext): boolean {
+  private isGateContentSuppressed(context: PromptRequestContext): boolean {
     return context.state.session.chainComplete === true;
   }
 
   /** Checks injection control setting for gate guidance (not suppression — caller handles that). */
-  private isGateGuidanceInjectionEnabled(context: ExecutionContext): boolean {
+  private isGateGuidanceInjectionEnabled(context: PromptRequestContext): boolean {
     return context.state.injection?.gateGuidance?.inject !== false;
   }
 
-  private extractBaseContent(context: ExecutionContext): string {
+  private extractBaseContent(context: PromptRequestContext): string {
     return typeof context.executionResults!.content === 'string'
       ? context.executionResults!.content
       : JSON.stringify(context.executionResults!.content, null, 2);
@@ -1345,7 +1347,7 @@ export class ResponseAssembler {
    * written with its operators (P6.186); an arrow-chain run is the command text the parser consumed
    * whole and the blueprint keeps (P6.194), the JSON form's decoded (P6.222). A workflow: no line.
    */
-  private buildUsageCTA(context: ExecutionContext): string | null {
+  private buildUsageCTA(context: PromptRequestContext): string | null {
     const parsed = context.parsedCommand;
     const command =
       parsed?.convertedPrompt !== undefined
@@ -1359,7 +1361,7 @@ export class ResponseAssembler {
    * Composition: primary action (exclusive) + hints (additive) + re-run (always).
    * Gate action is only appended when gateActive is true (decided by caller).
    */
-  private buildNextActionCTA(context: ExecutionContext, gateActive = true): string | null {
+  private buildNextActionCTA(context: PromptRequestContext, gateActive = true): string | null {
     const lines: string[] = ['---'];
     if (!this.isRunLatchedComplete(context)) {
       const hasPrimaryAction = gateActive && this.appendGateAction(lines, context);
@@ -1379,7 +1381,7 @@ export class ResponseAssembler {
   }
 
   /** Appends the action accepted by the actual pending review, including deferred singles. */
-  private appendGateAction(lines: string[], context: ExecutionContext): boolean {
+  private appendGateAction(lines: string[], context: PromptRequestContext): boolean {
     const chainId = context.sessionContext?.chainId;
     const pendingReview = context.sessionContext?.pendingReview;
     if (pendingReview === undefined) return false;
@@ -1431,7 +1433,7 @@ export class ResponseAssembler {
   }
 
   /** Appends shell verification command hint when :: verify:"cmd" operators are present. */
-  private appendVerifyHint(lines: string[], context: ExecutionContext): void {
+  private appendVerifyHint(lines: string[], context: PromptRequestContext): void {
     const namedGates = context.parsedCommand?.namedInlineGates;
     if (namedGates == null) return;
 
@@ -1459,7 +1461,7 @@ export class ResponseAssembler {
    * what the USER typed, which for a bare `:fast` is `maxIterations: undefined`. That is exactly
    * how `appendLoopHint` came to print the global default for every preset.
    */
-  private appendVerifyBudget(lines: string[], context: ExecutionContext): void {
+  private appendVerifyBudget(lines: string[], context: PromptRequestContext): void {
     const budget = context.state?.gates?.shellVerifyBudget;
     if (budget == null) return;
 
@@ -1472,7 +1474,7 @@ export class ResponseAssembler {
   }
 
   /** Appends Ralph loop hint when :: verify:"cmd" loop:true is active. */
-  private appendLoopHint(lines: string[], context: ExecutionContext): void {
+  private appendLoopHint(lines: string[], context: PromptRequestContext): void {
     const operators = context.parsedCommand?.operators?.operators;
     if (operators == null) return;
 
@@ -1492,7 +1494,7 @@ export class ResponseAssembler {
   }
 
   /** Appends session resume CTA when an active session has no pending review action. */
-  private appendSessionAction(lines: string[], context: ExecutionContext): void {
+  private appendSessionAction(lines: string[], context: PromptRequestContext): void {
     const chainId = context.sessionContext?.chainId;
     if (chainId == null || chainId.length === 0) return;
 
@@ -1500,14 +1502,14 @@ export class ResponseAssembler {
   }
 
   /** Appends the re-run line; with no prompt to name there is none — never `>>prompt` (R89). */
-  private appendRerunLine(lines: string[], context: ExecutionContext): void {
+  private appendRerunLine(lines: string[], context: PromptRequestContext): void {
     const prompt = context.parsedCommand?.convertedPrompt;
     if (prompt !== undefined)
       lines.push(`Re-run: \`${this.buildInvocationString(context, prompt)}\``);
   }
 
   /** The command that re-parses to this run (R89): its operators, the prompt and args, its gates. */
-  private buildInvocationString(context: ExecutionContext, prompt: ConvertedPrompt): string {
+  private buildInvocationString(context: PromptRequestContext, prompt: ConvertedPrompt): string {
     const parts: string[] = [];
     this.appendOperatorPrefixes(parts, context);
     parts.push(`>>${prompt.id}${this.buildArgString(prompt, context.parsedCommand?.promptArgs)}`);
@@ -1516,7 +1518,7 @@ export class ResponseAssembler {
   }
 
   /** Appends modifier, framework, and style operator prefixes to parts. */
-  private appendOperatorPrefixes(parts: string[], context: ExecutionContext): void {
+  private appendOperatorPrefixes(parts: string[], context: PromptRequestContext): void {
     const modifierToken = this.resolveModifierToken(context.parsedCommand?.modifiers);
     if (modifierToken != null) {
       parts.push(modifierToken);
@@ -1534,7 +1536,7 @@ export class ResponseAssembler {
   }
 
   /** Resolves the framework operator token for CTA display. */
-  private resolveFrameworkToken(context: ExecutionContext): string | null {
+  private resolveFrameworkToken(context: PromptRequestContext): string | null {
     const fwDecision = context.frameworkAuthority.getCachedDecision();
     if (fwDecision?.source === 'operator' && fwDecision.frameworkId != null) {
       return `^${fwDecision.frameworkId}`;
@@ -1554,7 +1556,7 @@ export class ResponseAssembler {
   }
 
   /** Appends inline gate criteria and named gates as suffixes. */
-  private appendGateSuffixes(parts: string[], context: ExecutionContext): void {
+  private appendGateSuffixes(parts: string[], context: PromptRequestContext): void {
     // A chain prompt's command criteria were folded onto its steps and left the command (R37);
     // the anonymous gate operator the command was parsed into still carries them (P6.186).
     const anonymousGate = context.parsedCommand?.operators?.operators.find(

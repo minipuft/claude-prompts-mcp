@@ -7,7 +7,7 @@
  */
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 import { InlineGateProcessor } from '../../../../src/engine/gates/services/inline-gate-processor.js';
 
@@ -43,8 +43,8 @@ const inlineResolver = {
   resolve: async (ref: string) => ({ referenceType: 'inline', criteria: ref }),
 } as unknown as GateReferenceResolver;
 
-const contextInRun = (runId: string | undefined): ExecutionContext => {
-  const context = new ExecutionContext({ command: '>>demo' } as McpToolRequest);
+const contextInRun = (runId: string | undefined): PromptRequestContext => {
+  const context = new PromptRequestContext({ command: '>>demo' } as McpToolRequest);
   if (runId !== undefined) context.state.session.resumeSessionId = runId;
   return context;
 };
@@ -248,7 +248,7 @@ describe('InlineGateProcessor: a `verify:` gate resolves its budget', () => {
 
   const setup = (
     shellVerify: Partial<ShellVerifyGate>,
-    context: ExecutionContext = contextInRun('run-1'),
+    context: PromptRequestContext = contextInRun('run-1'),
     overrides: Partial<ParsedCommand> = {}
   ) => {
     const logger = makeLogger();
@@ -326,7 +326,7 @@ describe('InlineGateProcessor: a `verify:` gate resolves its budget', () => {
   });
 
   describe('the goal the loop is told to keep working toward', () => {
-    const goalOf = (context: ExecutionContext) =>
+    const goalOf = (context: PromptRequestContext) =>
       context.state.gates.pendingShellVerification?.originalGoal;
 
     test('prefers the parsed command text', async () => {
@@ -337,16 +337,16 @@ describe('InlineGateProcessor: a `verify:` gate resolves its budget', () => {
     });
 
     test('falls back to the request command, then the prompt id, then a generic goal', async () => {
-      const fromRequest = new ExecutionContext({ command: '>>from-request' } as McpToolRequest);
+      const fromRequest = new PromptRequestContext({ command: '>>from-request' } as McpToolRequest);
       await setup({}, fromRequest).run();
       expect(goalOf(fromRequest)).toBe('>>from-request');
 
-      const fromPrompt = new ExecutionContext({} as McpToolRequest);
+      const fromPrompt = new PromptRequestContext({} as McpToolRequest);
       fromPrompt.parsedCommand = commandWith({ metadata: undefined, promptId: 'prompt-x' });
       await setup({}, fromPrompt).run();
       expect(goalOf(fromPrompt)).toBe('prompt-x');
 
-      const bare = new ExecutionContext({} as McpToolRequest);
+      const bare = new PromptRequestContext({} as McpToolRequest);
       await setup({}, bare).run();
       expect(goalOf(bare)).toBe('Fix verification failures');
     });

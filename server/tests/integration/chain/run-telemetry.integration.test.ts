@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 
 import { DatabaseSync } from 'node:sqlite';
 
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { PromptExecutionPipeline } from '../../../src/engine/execution/pipeline/prompt-execution-pipeline.js';
 import { ResponseFormattingStage } from '../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
@@ -271,7 +271,7 @@ describe('run telemetry, session counters through the ledger', () => {
       recordStore,
       sessionStore
     );
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.executionPlan = { strategy: 'chain', gates: [] } as any;
     context.sessionContext = {
       sessionId: 'sess-interrupted',
@@ -304,7 +304,7 @@ describe('run telemetry, session counters through the ledger', () => {
       recordStore,
       sessionStore
     );
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.executionPlan = { strategy: 'chain', gates: [] } as any;
     context.sessionContext = {
       sessionId: 'sess-mutated',
@@ -341,7 +341,7 @@ describe('run telemetry, session counters through the ledger', () => {
       if (name === 'SessionManagement') {
         return {
           name,
-          execute: async (ctx: ExecutionContext) => {
+          execute: async (ctx: PromptRequestContext) => {
             ctx.sessionContext = {
               sessionId: 'sess-mutated-doomed',
               chainId: 'chain-tel',
@@ -397,7 +397,7 @@ describe('run telemetry, session counters through the ledger', () => {
       sessionStore
     );
 
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.executionPlan = {
       strategy: 'chain',
       gates: [],
@@ -443,7 +443,7 @@ describe('run telemetry, session counters through the ledger', () => {
       recordStore,
       sessionStore
     );
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.executionPlan = { strategy: 'chain', gates: [] } as any;
     context.sessionContext = {
       sessionId: 'sess-agree',
@@ -479,7 +479,7 @@ describe('run telemetry, session counters through the ledger', () => {
       if (name === 'SessionManagement') {
         return {
           name,
-          execute: async (context: ExecutionContext) => {
+          execute: async (context: PromptRequestContext) => {
             context.sessionContext = {
               sessionId: 'sess-doomed',
               chainId: 'chain-tel',
@@ -536,7 +536,7 @@ describe('run telemetry, session counters through the ledger', () => {
       recordStore,
       sessionStore
     );
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.executionPlan = { strategy: 'chain', gates: [] } as any;
     context.sessionContext = {
       sessionId: 'sess-render',

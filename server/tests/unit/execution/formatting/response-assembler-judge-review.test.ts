@@ -11,7 +11,7 @@
  */
 import { describe, expect, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../../src/engine/execution/formatting/response-assembler.js';
 import {
   JUDGE_OUTPUT_PLACEHOLDER,
@@ -40,7 +40,7 @@ const judgeMetadata = {
   modelHint: composed.modelHint,
 };
 
-function reviewContext(judge?: unknown, blocked = false): ExecutionContext {
+function reviewContext(judge?: unknown, blocked = false): PromptRequestContext {
   const pendingReview: PendingGateReview = {
     combinedPrompt: 'Review the output',
     gateIds: ['judged-gate'],
@@ -49,7 +49,7 @@ function reviewContext(judge?: unknown, blocked = false): ExecutionContext {
     attemptCount: 0,
     maxAttempts: 3,
   };
-  const context = new ExecutionContext({ command: '>>demo' });
+  const context = new PromptRequestContext({ command: '>>demo' });
   context.executionResults = {
     content: 'REVIEW-RENDER',
     metadata: {
@@ -73,7 +73,7 @@ function reviewContext(judge?: unknown, blocked = false): ExecutionContext {
   return context;
 }
 
-const chainReply = (context: ExecutionContext): string =>
+const chainReply = (context: PromptRequestContext): string =>
   assembler.formatChainResponse(context, { isChainFormatting: true } as never);
 
 const occurrences = (text: string, needle: string): number => text.split(needle).length - 1;

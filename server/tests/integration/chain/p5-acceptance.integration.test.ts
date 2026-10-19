@@ -47,7 +47,7 @@ import * as path from 'node:path';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { BRIEF_END, BRIEF_START } from '../../../src/engine/execution/delegation/brief.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
@@ -394,7 +394,7 @@ const buildPipeline = (options: {
       // where the registrar reads them (01-request-normalization-stage.ts:146).
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           const requested = context.mcpRequest.gates;
           if (requested) {
             context.state.gates.requestedOverrides = { gates: [...requested] };
@@ -405,7 +405,7 @@ const buildPipeline = (options: {
     if (name === 'CommandParsing') {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.parsedCommand = {
             commandType: 'chain',
             promptId: 'plan',
@@ -421,7 +421,7 @@ const buildPipeline = (options: {
       return {
         name,
         provides: ['executionPlan'],
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.executionPlan = {
             strategy: 'chain',
             // Empty at the RUN level: the run-wide gate is planned per step (see PLANNED), and

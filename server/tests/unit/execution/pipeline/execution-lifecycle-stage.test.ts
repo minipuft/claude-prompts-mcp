@@ -1,7 +1,7 @@
 // @lifecycle test - Stage 02 ends a call's temporary gates; a run keeps the ones it adopted (R47).
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ExecutionLifecycleStage } from '../../../../src/engine/execution/pipeline/stages/02-execution-lifecycle-stage.js';
 import { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 
@@ -28,7 +28,7 @@ describe('ExecutionLifecycleStage', () => {
       isCanonicalGateId: () => false,
     });
     const stage = new ExecutionLifecycleStage(registry, createLogger() as never);
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
 
     await stage.execute(context);
     expect(context.state.session.executionScopeId).toBeDefined();

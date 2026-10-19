@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { JudgeSelectionStage } from '../../../../src/engine/execution/pipeline/stages/10-judge-selection-stage.js';
 
 import type { ConfigManager } from '../../../../src/infra/config/index.js';
@@ -85,7 +85,7 @@ describe('JudgeSelectionStage', () => {
 
   describe('Judge Phase Detection', () => {
     test('skips when judge modifier is not set', async () => {
-      const context = new ExecutionContext({ command: '>>demo' });
+      const context = new PromptRequestContext({ command: '>>demo' });
       context.executionPlan = createExecutionPlan();
 
       await stage.execute(context);
@@ -108,7 +108,7 @@ describe('JudgeSelectionStage', () => {
         createLogger()
       );
 
-      const context = new ExecutionContext({ command: '%judge >>demo' });
+      const context = new PromptRequestContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
         modifiers: { judge: true },
       });
@@ -130,7 +130,7 @@ describe('JudgeSelectionStage', () => {
         createLogger()
       );
 
-      const context = new ExecutionContext({ command: '%judge >>demo' });
+      const context = new PromptRequestContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
         modifiers: { judge: true },
       });
@@ -144,7 +144,7 @@ describe('JudgeSelectionStage', () => {
 
   describe('Resource Collection', () => {
     test('skips when no resources are available', async () => {
-      const context = new ExecutionContext({ command: '%judge >>demo' });
+      const context = new PromptRequestContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
         modifiers: { judge: true },
       });
@@ -169,7 +169,7 @@ describe('JudgeSelectionStage', () => {
         createLogger()
       );
 
-      const context = new ExecutionContext({ command: '%judge >>demo' });
+      const context = new PromptRequestContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
         modifiers: { judge: true },
       });
@@ -200,7 +200,7 @@ describe('JudgeSelectionStage', () => {
         null,
         createLogger()
       );
-      const context = new ExecutionContext({ command: '%judge >>demo' });
+      const context = new PromptRequestContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
         modifiers: { judge: true },
       });
@@ -212,7 +212,7 @@ describe('JudgeSelectionStage', () => {
     });
 
     test('skips when session blueprint is restored', async () => {
-      const context = new ExecutionContext({ command: '%judge >>demo' });
+      const context = new PromptRequestContext({ command: '%judge >>demo' });
       context.executionPlan = createExecutionPlan({
         modifiers: { judge: true },
       });

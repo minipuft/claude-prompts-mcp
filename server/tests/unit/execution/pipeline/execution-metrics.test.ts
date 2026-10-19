@@ -1,13 +1,13 @@
 /**
  * Unit spec for the MetricsCollector payload builders.
  *
- * Uses a real ExecutionContext rather than a fake: the builders read a dozen of its
+ * Uses a real PromptRequestContext rather than a fake: the builders read a dozen of its
  * getters (`getSessionId`, `isChainExecution`, `executionPlan`, `state.gates`), and a fake
  * shaped to satisfy them would be asserting the fake.
  */
 import { describe, expect, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import {
   buildCommandMetric,
   buildStageMetric,
@@ -29,8 +29,8 @@ const memory = (heapUsed: number, rss: number): NodeJS.MemoryUsage => ({
   arrayBuffers: 0,
 });
 
-const createContext = (request: McpToolRequest = { command: '>>demo' }): ExecutionContext =>
-  new ExecutionContext(request);
+const createContext = (request: McpToolRequest = { command: '>>demo' }): PromptRequestContext =>
+  new PromptRequestContext(request);
 
 const attempt = (overrides: Partial<StageAttempt> = {}): StageAttempt => ({
   stageName: 'CommandParsing',

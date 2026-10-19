@@ -3,7 +3,7 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { FrameworkValidator } from '../../../frameworks/framework-validator.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 import type { SymbolicOperator } from '../../parsers/types/operator-types.js';
 
 /**
@@ -37,7 +37,7 @@ export class OperatorValidationStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     if (context.state.session.isBlueprintRestored) {
@@ -91,7 +91,7 @@ export class OperatorValidationStage extends BasePipelineStage {
   }
 
   private normalizeFrameworkOperators(
-    parsedCommand: ExecutionContext['parsedCommand'],
+    parsedCommand: PromptRequestContext['parsedCommand'],
     operators: SymbolicOperator[]
   ): number {
     let normalizedCount = 0;
@@ -150,7 +150,7 @@ export class OperatorValidationStage extends BasePipelineStage {
    * `generateExecutionPlan`), to seed `ChainStepPrompt.delegated` for symbolic chains — a real,
    * pre-normalization consumer, not this stage's dead mirror.
    */
-  private normalizeDelegation(parsedCommand: ExecutionContext['parsedCommand']): void {
+  private normalizeDelegation(parsedCommand: PromptRequestContext['parsedCommand']): void {
     this.markDelegatedStepPrompts(parsedCommand);
   }
 
@@ -169,7 +169,7 @@ export class OperatorValidationStage extends BasePipelineStage {
    * Idempotent by construction: an already-declared `true` is re-asserted, never cleared. This
    * does not turn a declared `false` into `true`, and never demotes.
    */
-  private markDelegatedStepPrompts(parsedCommand: ExecutionContext['parsedCommand']): void {
+  private markDelegatedStepPrompts(parsedCommand: PromptRequestContext['parsedCommand']): void {
     if (parsedCommand?.steps == null) return;
     for (const step of parsedCommand.steps) {
       if (step.delegated === true || step.subagentModel != null || step.await === 'run') {

@@ -33,7 +33,7 @@ import type {
 } from './gate-set-resolver.js';
 import type { RunStepView, RunStepViewProvider } from './run-step-view.js';
 import type { RegisteredGateResult, StepGateDefinition } from './temporary-gate-registrar.js';
-import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
+import type { PromptRequestContext, SessionContext } from '../../execution/context/index.js';
 import type { ChainStepPrompt } from '../../execution/operators/types.js';
 import type { FrameworkDecisionInput } from '../../execution/pipeline/decisions/index.js';
 import type { GateSource } from '../../execution/pipeline/state/types.js';
@@ -106,7 +106,7 @@ interface CurrentStepKey {
  * one input object (`GateResolutionInput`).
  */
 interface ChainStepEnhancementInput {
-  readonly context: ExecutionContext;
+  readonly context: PromptRequestContext;
   readonly gateService: GateService;
   readonly gatesConfig: GateSystemSettings | undefined;
   readonly frameworkGateIds: Set<string>;
@@ -131,7 +131,7 @@ const NOTHING_WALKED: StepWalkOutcome = { applied: 0, accepted: [] };
  * The ONE category a single-prompt run asks with — selection and render both read this (B.91).
  *
  * A free function rather than a method: the answer reads two strings and nothing else, so it is
- * answerable without an ExecutionContext (`architecture.md`), the same reasoning
+ * answerable without a PromptRequestContext (`architecture.md`), the same reasoning
  * `stepResolutionInput` carries below.
  *
  * The prompt's own category wins because the loader stamps it from the category directory the
@@ -224,7 +224,7 @@ export class GateEnhancementService {
   /**
    * Type-safe resolution of gate enhancement context.
    */
-  resolveGateContext(context: ExecutionContext): GateEnhancementContext | null {
+  resolveGateContext(context: PromptRequestContext): GateEnhancementContext | null {
     const steps = context.parsedCommand?.steps;
     if (context.hasChainCommand() || (steps !== undefined && steps.length > 0)) {
       return { type: 'chain', steps: this.walkInRunOrder(context, steps ?? [], steps ?? []) };
@@ -276,7 +276,7 @@ export class GateEnhancementService {
    */
   async enhanceSinglePrompt(
     gateContext: SinglePromptGateContext,
-    context: ExecutionContext,
+    context: PromptRequestContext,
     registeredGates: RegisteredGateResult,
     gatesConfig: GateSystemSettings | undefined,
     frameworkGateIds: Set<string>,
@@ -403,7 +403,7 @@ export class GateEnhancementService {
    */
   async enhanceChainSteps(
     gateContext: ChainStepGateContext,
-    context: ExecutionContext,
+    context: PromptRequestContext,
     registeredGates: RegisteredGateResult,
     gatesConfig: GateSystemSettings | undefined,
     frameworkGateIds: Set<string>,
@@ -486,7 +486,7 @@ export class GateEnhancementService {
    * gate's FAIL held the run exactly as a blocking one did. Unset when no gate applies.
    */
   private async publishEnforcementMode(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     gateIds: readonly string[],
     undeclared: 'advisory' | 'blocking'
   ): Promise<void> {
@@ -684,7 +684,7 @@ export class GateEnhancementService {
    * for an inserted node, and the enforcement posture.
    */
   private publishChainGateState(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     runStepView: RunStepView | undefined,
     stepBindings: StepGateBindings,
     totalGatesApplied: number
@@ -755,7 +755,7 @@ export class GateEnhancementService {
    * earlier branch) short-circuits before any lookup.
    */
   async ensurePostAdvanceReview(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionContext: SessionContext
   ): Promise<void> {
     if (sessionContext.pendingReview !== undefined) {
@@ -891,7 +891,7 @@ export class GateEnhancementService {
    * the gate registry for per-gate execution metadata, which is not a resolution concern.
    */
   private async resolveIntoAccumulator(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     input: GateResolutionInput
   ): Promise<GateResolutionResult> {
     const resolution = await this.buildGateSetResolver().resolve(input);
@@ -902,7 +902,10 @@ export class GateEnhancementService {
   }
 
   /** Record a resolution's accepted gates in the accumulator, with their registry enrichment. */
-  private recordIntoAccumulator(context: ExecutionContext, resolution: GateResolutionResult): void {
+  private recordIntoAccumulator(
+    context: PromptRequestContext,
+    resolution: GateResolutionResult
+  ): void {
     // In resolution order, one gate at a time: the accumulator's order is the rendered guidance
     // order and the per-gate numbering a verdict answers against, so a planned gate the registry
     // derived again keeps its planned place rather than moving behind every other source.
@@ -930,7 +933,7 @@ export class GateEnhancementService {
   }
 
   private addGatesToAccumulator(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     gateIds: readonly string[] | undefined,
     source: GateSource
   ): void {
@@ -948,7 +951,7 @@ export class GateEnhancementService {
   }
 
   private addRegistryGatesWithRetryConfig(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     gateIds: readonly string[]
   ): void {
     if (!gateIds || gateIds.length === 0) {
@@ -1006,7 +1009,7 @@ export class GateEnhancementService {
    * steps carry no node ids, which pairs nodes positionally.
    */
   private walkInRunOrder(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     parseSteps: ChainStepPrompt[],
     joinInto: ChainStepPrompt[]
   ): ChainStepPrompt[] {
@@ -1038,7 +1041,7 @@ export class GateEnhancementService {
    * run view.
    */
   private steplessBaseStep(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     prompt: ConvertedPrompt,
     inlineGateIds: string[]
   ): ChainStepPrompt | undefined {
@@ -1061,7 +1064,7 @@ export class GateEnhancementService {
    * Resolved once per chain enhancement rather than per step: the answer cannot change while
    * one call walks the step list, and a per-step lookup would let it appear to.
    */
-  private resolveRunStepView(context: ExecutionContext): RunStepView | undefined {
+  private resolveRunStepView(context: PromptRequestContext): RunStepView | undefined {
     if (this.runStepViewProvider === undefined) {
       return undefined;
     }
@@ -1139,7 +1142,7 @@ export class GateEnhancementService {
    * step's resolution by id: the call's own accumulator is not touched, since it still feeds the
    * gate guidance already injected for this call. PURE apart from reading the run and resolving.
    */
-  async inheritedReviewGateIdsNow(context: ExecutionContext): Promise<string[] | undefined> {
+  async inheritedReviewGateIdsNow(context: PromptRequestContext): Promise<string[] | undefined> {
     const settings = context.state.gates.chainWalkSettings;
     const runStepView = this.resolveRunStepView(context);
     if (settings === undefined || runStepView?.currentNodeOrigin === undefined) {
@@ -1256,12 +1259,12 @@ export class GateEnhancementService {
     return true;
   }
 
-  private getActiveFrameworkId(context: ExecutionContext): string | undefined {
+  private getActiveFrameworkId(context: PromptRequestContext): string | undefined {
     const decisionInput = this.buildDecisionInput(context);
     return context.frameworkAuthority.getFrameworkId(decisionInput);
   }
 
-  private buildDecisionInput(context: ExecutionContext): FrameworkDecisionInput {
+  private buildDecisionInput(context: PromptRequestContext): FrameworkDecisionInput {
     // The framework toggle decides a run's framework at its first call (R158): the plan records
     // it as `requiresFramework`, and a resumed run restores that plan from its blueprint, so a
     // toggle switched mid-run changes nothing for the run and a run started with it off gets none.
@@ -1443,7 +1446,7 @@ function stepGateDefinitionsOf(
  * One step's contribution to the chain's cumulative gate resolution.
  *
  * A free function rather than a method: deciding WHAT a step contributes reads only the step and
- * its prompt, so it stays answerable without an ExecutionContext (`architecture.md`).
+ * its prompt, so it stays answerable without a PromptRequestContext (`architecture.md`).
  */
 function stepResolutionInput(args: {
   readonly step: ChainStepPrompt;

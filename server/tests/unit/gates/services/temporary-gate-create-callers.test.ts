@@ -30,7 +30,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 import { InlineGateProcessor } from '../../../../src/engine/gates/services/inline-gate-processor.js';
 import { TemporaryGateRegistrar } from '../../../../src/engine/gates/services/temporary-gate-registrar.js';
@@ -49,8 +49,8 @@ const inlineResolver = {
 } as unknown as GateReferenceResolver;
 
 /** A call of `runId` (undefined: the call that starts a run) carrying request `gates`. */
-const callOf = (runId: string | undefined, gates: unknown[] = []): ExecutionContext => {
-  const context = new ExecutionContext({ command: '>>demo' });
+const callOf = (runId: string | undefined, gates: unknown[] = []): PromptRequestContext => {
+  const context = new PromptRequestContext({ command: '>>demo' });
   context.state.gates.requestedOverrides = { gates };
   if (runId !== undefined) context.state.session.resumeSessionId = runId;
   return context;

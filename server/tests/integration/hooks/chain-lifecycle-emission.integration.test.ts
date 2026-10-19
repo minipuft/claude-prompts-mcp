@@ -39,7 +39,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
@@ -231,7 +231,7 @@ const buildPipeline = (options: {
     if (name === 'CommandParsing') {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.parsedCommand = {
             commandType: 'chain',
             promptId: 'draft',
@@ -247,7 +247,7 @@ const buildPipeline = (options: {
       return {
         name,
         provides: ['executionPlan'],
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.executionPlan = {
             strategy: 'chain',
             gates: [],

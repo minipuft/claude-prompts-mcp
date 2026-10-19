@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
-import { ExecutionContext } from '../../../src/engine/execution/context/index.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/index.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
@@ -57,10 +57,10 @@ describe('unknown observations, schema through ledger', () => {
     );
   };
 
-  const buildContext = (observations: unknown): ExecutionContext => {
+  const buildContext = (observations: unknown): PromptRequestContext => {
     // Parse through the real tool schema so the batch under test is one a client could send.
     const parsed = schema.parse({ chain_id: 'chain-demo#1', observations });
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       chain_id: parsed.chain_id,
       ...(parsed.observations === undefined ? {} : { observations: parsed.observations }),
     });

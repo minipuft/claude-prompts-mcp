@@ -3,7 +3,7 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { StateStoreOptions } from '#infra/database/stores/interface.js';
 import type { Logger } from '#infra/logging/index.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 import type { ExecutionPlanner } from '../../planning/execution-planner.js';
 import type { ExecutionPlan } from '../../types.js';
 
@@ -14,7 +14,7 @@ import type { ExecutionPlan } from '../../types.js';
 type FrameworkEnabledProvider = (scope: StateStoreOptions | undefined) => boolean;
 
 /** Whether the call itself requested a gate, in any spelling. */
-type GatesRequestedProvider = (context: ExecutionContext) => boolean;
+type GatesRequestedProvider = (context: PromptRequestContext) => boolean;
 
 /**
  * Pipeline Stage 07: Execution Planning
@@ -39,7 +39,7 @@ export class ExecutionPlanningStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     if (context.state.session.isBlueprintRestored) {
@@ -64,7 +64,7 @@ export class ExecutionPlanningStage extends BasePipelineStage {
     }
   }
 
-  private async planSinglePromptExecution(context: ExecutionContext): Promise<void> {
+  private async planSinglePromptExecution(context: PromptRequestContext): Promise<void> {
     const parsedCommand = context.requireParsedCommand();
     const convertedPrompt = context.requireConvertedPrompt();
 
@@ -93,7 +93,7 @@ export class ExecutionPlanningStage extends BasePipelineStage {
     });
   }
 
-  private async planChainExecution(context: ExecutionContext): Promise<void> {
+  private async planChainExecution(context: PromptRequestContext): Promise<void> {
     const parsedCommand = context.requireParsedCommand();
     const steps = context.requireChainSteps();
     const gateOverrides = this.buildGateOverrides(context);
@@ -155,7 +155,7 @@ export class ExecutionPlanningStage extends BasePipelineStage {
    * Build gate overrides from normalized gates in metadata.
    * Uses unified 'gates' parameter (already normalized from legacy parameters).
    */
-  private buildGateOverrides(context: ExecutionContext) {
+  private buildGateOverrides(context: PromptRequestContext) {
     const overrides = context.state.gates.requestedOverrides as Record<string, any> | undefined;
 
     return {

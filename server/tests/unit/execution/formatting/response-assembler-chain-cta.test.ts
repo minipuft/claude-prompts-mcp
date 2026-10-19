@@ -1,6 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../../src/engine/execution/formatting/response-assembler.js';
 
 import type { PendingGateReview } from '../../../../src/shared/types/chain-execution.js';
@@ -44,8 +44,8 @@ function createChainContext(overrides: {
    * before the run could complete.
    */
   chainComplete?: boolean;
-}): ExecutionContext {
-  const context = new ExecutionContext({
+}): PromptRequestContext {
+  const context = new PromptRequestContext({
     command: `>>${overrides.promptId ?? 'demo-prompt'}`,
   });
 
@@ -452,7 +452,7 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
     });
 
     test('renders without resume when no chainId', () => {
-      const context = new ExecutionContext({ command: '>>demo-prompt' });
+      const context = new PromptRequestContext({ command: '>>demo-prompt' });
       context.state.gates.blockedGateIds = ['quality'];
       // No sessionContext at all
 
@@ -563,7 +563,7 @@ describe('ResponseAssembler – chain-path CTA methods', () => {
 
   describe('advisory warnings', () => {
     test('renders advisory warnings in single prompt', () => {
-      const context = new ExecutionContext({ command: '>>demo-prompt' });
+      const context = new PromptRequestContext({ command: '>>demo-prompt' });
       context.executionResults = {
         content: 'Test output',
         metadata: {},

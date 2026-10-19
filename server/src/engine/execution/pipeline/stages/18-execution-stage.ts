@@ -12,7 +12,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type { ChainSessionService } from '#shared/types/index.js';
 import type { ScriptReferenceResolverPort } from '#shared/utils/jsonUtils.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
 import type { ChainStepPrompt, ChainStepRenderResult } from '../../operators/types.js';
 import type { PromptReferenceResolver } from '../../reference/prompt-reference-resolver.js';
@@ -45,7 +45,7 @@ export class StepExecutionStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     if (context.response) {
@@ -127,7 +127,7 @@ export class StepExecutionStage extends BasePipelineStage {
    * published one — it carries the gate instructions written for each step — else the base step
    * alone; every node neither names is synthesized from itself by the projection.
    */
-  private grownSteplessRunSteps(context: ExecutionContext): ChainStepPrompt[] | undefined {
+  private grownSteplessRunSteps(context: PromptRequestContext): ChainStepPrompt[] | undefined {
     const session = context.sessionContext;
     const prompt = context.parsedCommand?.convertedPrompt;
     if (session === undefined || prompt === undefined) return undefined;
@@ -158,7 +158,7 @@ export class StepExecutionStage extends BasePipelineStage {
    * by the verdict processor from `advanceStep`'s return. An *undefined* `currentNodeId` means
    * "unknown", not "complete", so it deliberately reads as unfinished.
    */
-  private isRunFinished(context: ExecutionContext): boolean {
+  private isRunFinished(context: PromptRequestContext): boolean {
     const sessionContext = context.sessionContext;
     if (sessionContext === undefined) return false;
 
@@ -176,7 +176,7 @@ export class StepExecutionStage extends BasePipelineStage {
    * Render the held-run notice when the run has walked past its last node but something still
    * holds it open — naming each hold (P6.30). @returns true when it rendered (the stage is done).
    */
-  private renderHeldRun(context: ExecutionContext): boolean {
+  private renderHeldRun(context: PromptRequestContext): boolean {
     const sessionContext = context.sessionContext;
     if (sessionContext === undefined) return false;
     const session = this.chainSessionStore.getSession(
@@ -195,7 +195,7 @@ export class StepExecutionStage extends BasePipelineStage {
   }
 
   private async executeChainStep(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     steps: readonly ChainStepPrompt[]
   ): Promise<void> {
     // Type-safe access using direct field access with proper null checks
@@ -358,7 +358,7 @@ export class StepExecutionStage extends BasePipelineStage {
    * from `recordedStep`, the resolution every step-level writer shares, which names the parsed
    * command's prompt for a stepless run's planned node. A single prompt with no run has no ledger.
    */
-  private ledgerRenderedRunPrompt(context: ExecutionContext): void {
+  private ledgerRenderedRunPrompt(context: PromptRequestContext): void {
     const session = context.sessionContext;
     if (this.executionRecordStore === null || session === undefined) return;
     const decision = context.state.session.lifecycleDecision;
@@ -384,7 +384,7 @@ export class StepExecutionStage extends BasePipelineStage {
     });
   }
 
-  private async executeSinglePrompt(context: ExecutionContext): Promise<void> {
+  private async executeSinglePrompt(context: PromptRequestContext): Promise<void> {
     // Type-safe access using direct field access with proper null checks
     const prompt = context.parsedCommand?.convertedPrompt;
 
@@ -471,7 +471,7 @@ export class StepExecutionStage extends BasePipelineStage {
    * - A tool with id 'framework_builder' would be available as {{tool_framework_builder}}
    * - Its auto-execute result would be available as {{tool_framework_builder_result}}
    */
-  private buildTemplateArgs(context: ExecutionContext): Record<string, unknown> {
+  private buildTemplateArgs(context: PromptRequestContext): Record<string, unknown> {
     const baseArgs = context.getPromptArgs();
     const scriptResults = context.state.scripts?.results;
     const autoExecuteResults = context.state.scripts?.autoExecuteResults;

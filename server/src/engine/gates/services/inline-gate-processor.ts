@@ -10,7 +10,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { ChainSessionService } from '#shared/types/chain-session.js';
 import type { GateScope } from '#shared/types/execution.js';
 import type { GateReferenceResolver, GateReferenceResolution } from './gate-reference-resolver.js';
-import type { ExecutionContext, ParsedCommand } from '../../execution/context/index.js';
+import type { PromptRequestContext, ParsedCommand } from '../../execution/context/index.js';
 import type { ChainStepPrompt } from '../../execution/operators/types.js';
 import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { PendingShellVerification, ShellVerifyGate } from '../shell/index.js';
@@ -136,7 +136,7 @@ export class InlineGateProcessor {
 
   /** Inline declarations registered after restore share the same manager-owned remap boundary. */
   async remapRegisteredGateIds(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     registered: ReadonlyMap<string, string>
   ): Promise<void> {
     const runId = context.getSessionId();
@@ -156,7 +156,7 @@ export class InlineGateProcessor {
    * and step-level `inlineGateIds` as a side effect.
    */
   async processInlineGates(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     parsedCommand: ParsedCommand
   ): Promise<InlineGateProcessingResult> {
     const createdIds: string[] = [];
@@ -324,7 +324,7 @@ export class InlineGateProcessor {
    * request-gate registrar (stage 11) when the run owns none. Returns the ids registered here.
    */
   async restoreRunGates(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     parsedCommand: ParsedCommand
   ): Promise<string[]> {
     const runId = context.getSessionId();
@@ -482,7 +482,7 @@ export class InlineGateProcessor {
    * id to handed-back id, for the run's reviews to follow.
    */
   private restoreRequestGates(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     parsedCommand: ParsedCommand,
     runId: string
   ): Map<string, string> {
@@ -514,7 +514,7 @@ export class InlineGateProcessor {
   }
 
   private async applyGateCriteria(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     criteria: readonly string[],
     scope: InlineGateScope,
     declaredNamedGates: DeclaredGateView
@@ -576,7 +576,7 @@ export class InlineGateProcessor {
    * propagates: a gate the client asked for is never dropped from the run (R11.8).
    */
   private createInlineGate(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     criteria: readonly string[],
     scope: InlineGateScope
   ): string {
@@ -607,7 +607,7 @@ export class InlineGateProcessor {
    * propagates: a gate the client asked for is never dropped from the run (R11.8).
    */
   private createNamedInlineGate(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     explicitId: string,
     criteria: readonly string[],
     scope: InlineGateScope & { readonly bindingKey: string }
@@ -716,7 +716,7 @@ export class InlineGateProcessor {
     }
   }
 
-  private getScopeId(context: ExecutionContext, stepNumber?: number): string {
+  private getScopeId(context: PromptRequestContext, stepNumber?: number): string {
     const baseScope =
       context.state.session.executionScopeId ||
       context.getSessionId?.() ||
@@ -736,7 +736,7 @@ export class InlineGateProcessor {
    * Supports presets (:fast, :full, :extended) that expand to max/timeout values.
    */
   private setupShellVerification(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     gateId: string,
     shellVerifyConfig: ShellVerifyGate
   ): void {

@@ -8,7 +8,7 @@ import { buildWorkflowRejectionResponse } from '../workflow-rejection-response.j
 import type { Logger } from '#infra/logging/index.js';
 // ChainSessionService no longer needed — blueprint resolution delegated to ChainBlueprintResolver
 import type { WorkflowIR, WorkflowRejection } from '#modules/workflow-ir/types.js';
-import type { ExecutionContext, ParsedCommand } from '../../context/index.js';
+import type { PromptRequestContext, ParsedCommand } from '../../context/index.js';
 import type { ArgumentParser, ArgumentContext } from '../../parsers/argument-parser.js';
 import type { ChainBlueprintResolver } from '../../parsers/chain-blueprint-resolver.js';
 import type { UnifiedCommandParser } from '../../parsers/command-parser.js';
@@ -85,7 +85,7 @@ export class CommandParsingStage extends BasePipelineStage {
   private readonly blueprintResolver: ChainBlueprintResolver | undefined;
   private readonly workflowCommandBuilder: WorkflowCommandBuilder | undefined;
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     const workflow = context.mcpRequest.workflow;
@@ -189,7 +189,7 @@ export class CommandParsingStage extends BasePipelineStage {
    * against the ids it DECLARED, and its gates retargeted to the node's last step, exactly as its
    * start call's were (`declaredNodes` on the blueprint).
    */
-  private resumeFromBlueprint(context: ExecutionContext): void {
+  private resumeFromBlueprint(context: PromptRequestContext): void {
     this.logger.debug('[ParsingStage] Response-only mode detected - resuming chain', {
       chainId: context.mcpRequest.chain_id,
       hasUserResponse: Boolean(context.mcpRequest.user_response),
@@ -221,7 +221,7 @@ export class CommandParsingStage extends BasePipelineStage {
    * else — schema conformance, caps, acyclicity, linearization, compilation — belongs to
    * `modules/workflow-ir/` and reaches this stage only through the injected builder.
    */
-  private executeWorkflowSubmission(context: ExecutionContext, workflow: WorkflowIR): void {
+  private executeWorkflowSubmission(context: PromptRequestContext, workflow: WorkflowIR): void {
     const conflicts = collectSourceConflicts(context);
     if (conflicts.length > 0) {
       this.rejectWorkflow(context, [
@@ -268,7 +268,7 @@ export class CommandParsingStage extends BasePipelineStage {
    * every refusing stage shares ({@link buildWorkflowRejectionResponse}).
    */
   private rejectWorkflow(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     rejections: readonly WorkflowRejection[]
   ): void {
     context.diagnostics.warn(this.name, 'Workflow submission rejected', {
@@ -288,7 +288,7 @@ export class CommandParsingStage extends BasePipelineStage {
    */
   private async buildDirectCommand(
     parseResult: import('../../parsers/command-parser.js').CommandParseResult,
-    context: ExecutionContext
+    context: PromptRequestContext
   ): Promise<ParsedCommand> {
     const convertedPrompt = this.findConvertedPrompt(parseResult.promptId);
     if (!convertedPrompt) {
@@ -333,7 +333,7 @@ export class CommandParsingStage extends BasePipelineStage {
     promptArgs: Record<string, any> | undefined,
     rawArgs: string,
     prompt: ConvertedPrompt | undefined,
-    context: ExecutionContext
+    context: PromptRequestContext
   ): void {
     const requestOptions = context.state.normalization.requestOptions;
     const requestInputs = context.state.normalization.requestInputs;
@@ -393,7 +393,7 @@ export class CommandParsingStage extends BasePipelineStage {
  * Also read with no workflow present: both names returned means `command` beside `chain_id`
  * (P6.119), refused by the same rule.
  */
-function collectSourceConflicts(context: ExecutionContext): string[] {
+function collectSourceConflicts(context: PromptRequestContext): string[] {
   const conflicts: string[] = [];
   const command = context.mcpRequest.command;
   if (typeof command === 'string' && command.trim().length > 0) {
@@ -409,7 +409,7 @@ function collectSourceConflicts(context: ExecutionContext): string[] {
  * The request's gates as stage 01 captured them: the `gates` parameter plus, on a workflow
  * submission, the workflow's own `gates` (the executor concatenates them, same objects).
  */
-function requestedGates(context: ExecutionContext): NonNullable<WorkflowIR['gates']> {
+function requestedGates(context: PromptRequestContext): NonNullable<WorkflowIR['gates']> {
   return (context.state.gates.requestedOverrides?.gates ?? []) as NonNullable<WorkflowIR['gates']>;
 }
 
@@ -417,7 +417,7 @@ function requestedGates(context: ExecutionContext): NonNullable<WorkflowIR['gate
  * The submission with every requested gate on it, for validation (P6.117): a `gates` parameter
  * sent beside a workflow addresses the same declared node ids as the workflow's own `gates`.
  */
-function withRequestedGates(workflow: WorkflowIR, context: ExecutionContext): WorkflowIR {
+function withRequestedGates(workflow: WorkflowIR, context: PromptRequestContext): WorkflowIR {
   const own = workflow.gates ?? [];
   const beside = requestedGates(context).filter((gate) => !own.includes(gate));
   return beside.length > 0 ? { ...workflow, gates: [...own, ...beside] } : workflow;
@@ -434,7 +434,7 @@ function withRequestedGates(workflow: WorkflowIR, context: ExecutionContext): Wo
  * are the client's submission.
  */
 function retargetRequestedGates(
-  context: ExecutionContext,
+  context: PromptRequestContext,
   retarget: <Gate>(gates: readonly Gate[]) => Gate[]
 ): void {
   const overrides = context.state.gates.requestedOverrides;

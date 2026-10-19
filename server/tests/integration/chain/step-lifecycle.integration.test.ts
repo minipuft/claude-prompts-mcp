@@ -40,7 +40,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
@@ -400,7 +400,7 @@ const buildPipeline = (options: {
     if (name === 'CommandParsing') {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.parsedCommand = {
             commandType: 'chain',
             promptId: 'draft',
@@ -416,7 +416,7 @@ const buildPipeline = (options: {
       return {
         name,
         provides: ['executionPlan'],
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.executionPlan = {
             strategy: 'chain',
             gates: [GATE_ID],
@@ -431,7 +431,7 @@ const buildPipeline = (options: {
     if (name === 'FrameworkResolution') {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           const frameworkId = options.activeFramework?.();
           if (frameworkId !== undefined) {
             context.frameworkAuthority.decide({ globalActiveFramework: frameworkId });
@@ -442,7 +442,7 @@ const buildPipeline = (options: {
     if (name === 'GateEnhancement') {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.state.gates.hasBlockingGates = options.blockingGates?.() ?? true;
           const selection = options.gateSelection?.();
           context.state.gates.accumulatedGateIds = selection?.accumulated ?? [GATE_ID];

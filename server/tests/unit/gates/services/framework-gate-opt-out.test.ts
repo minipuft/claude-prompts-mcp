@@ -1,7 +1,7 @@
 // @lifecycle canonical - Unit tests for F2: the default framework gate must honour every veto.
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { GateEnhancementService } from '../../../../src/engine/gates/services/gate-enhancement-service.js';
 import { GateMetricsRecorder } from '../../../../src/engine/gates/services/gate-metrics-recorder.js';
 
@@ -109,7 +109,7 @@ const resolveGateIds = async (scenario: Scenario = {}): Promise<readonly string[
     createLogger()
   );
 
-  const context = new ExecutionContext({ command: '>>demo' } as never);
+  const context = new PromptRequestContext({ command: '>>demo' } as never);
   context.executionPlan = {
     strategy: 'single',
     gates: [PLANNED_GATE],
@@ -341,7 +341,7 @@ const resolveChainStepGateIds = async (
     createLogger()
   );
 
-  const context = new ExecutionContext({ command: '>>step-one --> >>step-two' } as never);
+  const context = new PromptRequestContext({ command: '>>step-one --> >>step-two' } as never);
   context.executionPlan = {
     strategy: 'chain',
     gates: [PLANNED_GATE],

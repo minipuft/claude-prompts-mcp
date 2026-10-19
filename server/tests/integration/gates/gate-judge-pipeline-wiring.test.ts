@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { GateReviewStage } from '../../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
 import { createGateLoader } from '../../../src/engine/gates/core/gate-loader.js';
 import { JUDGE_OUTPUT_PLACEHOLDER } from '../../../src/engine/gates/core/review-utils.js';
@@ -139,7 +139,7 @@ function createStageWithGates(
     }
   );
 
-  const context = new ExecutionContext({ command: '>>chain' });
+  const context = new PromptRequestContext({ command: '>>chain' });
   context.parsedCommand = {
     steps: [{ stepNumber: 1, promptId: 'analyze', args: {} }],
   } as any;

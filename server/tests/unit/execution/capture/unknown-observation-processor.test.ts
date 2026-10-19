@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import {
   computeUnknownLedger,
   UNKNOWN_LEDGER_MAX_ENTRIES,
@@ -388,7 +388,7 @@ describe('UnknownObservationProcessor', () => {
     const processor = new UnknownObservationProcessor(store, createLogger());
 
     const ledger = await processor.applyObservations(
-      new ExecutionContext({ command: '>>demo' }),
+      new PromptRequestContext({ command: '>>demo' }),
       'sess-1',
       'n2',
       []
@@ -406,7 +406,7 @@ describe('UnknownObservationProcessor', () => {
 
     const observations = [discovered('cache-ttl', 'TTL undecided')];
     const ledger = await processor.applyObservations(
-      new ExecutionContext({ command: '>>demo' }),
+      new PromptRequestContext({ command: '>>demo' }),
       'sess-1',
       'n2',
       observations
@@ -422,7 +422,7 @@ describe('UnknownObservationProcessor', () => {
     const processor = new UnknownObservationProcessor(store, createLogger());
 
     await expect(
-      processor.applyObservations(new ExecutionContext({ command: '>>demo' }), 'sess-1', 'n2', [
+      processor.applyObservations(new PromptRequestContext({ command: '>>demo' }), 'sess-1', 'n2', [
         discovered('cache-ttl', 'TTL undecided'),
       ])
     ).rejects.toThrow('persist failed');

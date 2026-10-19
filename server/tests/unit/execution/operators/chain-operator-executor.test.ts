@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ChainOperatorExecutor } from '../../../../src/engine/execution/operators/chain-operator-executor.js';
 import { DEFAULT_INJECTION_CONFIG } from '../../../../src/engine/execution/pipeline/decisions/injection/constants.js';
 import { InjectionDecisionService } from '../../../../src/engine/execution/pipeline/decisions/injection/injection-decision-service.js';
@@ -961,7 +961,7 @@ describe('P6.152: a review render of a step follows the steps target, like the n
       mockLogger,
       () => undefined
     );
-    const context = new ExecutionContext({ command: '>>analyze' });
+    const context = new PromptRequestContext({ command: '>>analyze' });
     context.parsedCommand = { steps: [step] } as any;
     context.sessionContext = {
       sessionId: 'session-131',

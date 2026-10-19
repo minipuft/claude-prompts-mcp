@@ -5,7 +5,7 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ChainSessionRouterPort, ToolResponse } from '#shared/types/index.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 import type { RoutedToolCall } from '../routing/tool-routing.js';
 
 /**
@@ -36,7 +36,7 @@ export class RequestNormalizationStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     if (!(await this.validateRequest(context))) {
@@ -119,7 +119,7 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
     });
   }
 
-  private async validateRequest(context: ExecutionContext): Promise<boolean> {
+  private async validateRequest(context: PromptRequestContext): Promise<boolean> {
     try {
       McpToolRequestValidator.validatePartial(context.mcpRequest);
       return true;
@@ -133,11 +133,11 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
     }
   }
 
-  private hasResumeIdentifier(context: ExecutionContext): boolean {
+  private hasResumeIdentifier(context: PromptRequestContext): boolean {
     return Boolean(context.mcpRequest.chain_id || context.mcpRequest.user_response);
   }
 
-  private captureRequestMetadata(context: ExecutionContext): boolean {
+  private captureRequestMetadata(context: PromptRequestContext): boolean {
     context.state.normalization.isCanonical = true;
 
     if (context.mcpRequest.chain_id) {
@@ -165,7 +165,7 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
 
   private async tryHandleChainCommand(
     command: string,
-    context: ExecutionContext
+    context: PromptRequestContext
   ): Promise<boolean> {
     if (!this.chainSessionRouter) {
       return false;
@@ -188,7 +188,7 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
     }
   }
 
-  private async tryRouteCommand(command: string, context: ExecutionContext): Promise<boolean> {
+  private async tryRouteCommand(command: string, context: PromptRequestContext): Promise<boolean> {
     if (!this.toolRouter) {
       return false;
     }

@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { SessionManagementStage } from '../../../src/engine/execution/pipeline/stages/13-session-stage.js';
 
 import type { ChainSession, ChainSessionStore } from '../../../src/modules/chains/manager.js';
@@ -89,7 +89,7 @@ describe('SessionManagementStage continuity', () => {
     const stubManager = new StubChainSessionStore(logger);
     const stage = new SessionManagementStage(stubManager as any, logger);
 
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.executionPlan = { ...sampleExecutionPlan, totalSteps: 2 } as any;
     context.parsedCommand = {
       promptId: 'demo',
@@ -119,7 +119,7 @@ describe('SessionManagementStage continuity', () => {
     const existingSession = await stubManager.createSession('session-123', 'chain-abc', 3, {});
 
     const stage = new SessionManagementStage(stubManager as any, logger);
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.state.session.resumeSessionId = existingSession.sessionId;
     context.executionPlan = { ...sampleExecutionPlan, totalSteps: 3 } as any;
 

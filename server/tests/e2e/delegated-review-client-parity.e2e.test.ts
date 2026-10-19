@@ -16,7 +16,7 @@ import { runFakeWorker } from '../helpers/delegation/fake-worker.js';
 import { ChainOperatorExecutor } from '../../src/engine/execution/operators/chain-operator-executor.js';
 import { GateGuidanceRenderer } from '../../src/engine/gates/guidance/GateGuidanceRenderer.js';
 import { GateReviewStage } from '../../src/engine/execution/pipeline/stages/20-gate-review-stage.js';
-import { ExecutionContext } from '../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../src/engine/execution/formatting/response-assembler.js';
 import {
   createSemanticReviewContext,
@@ -510,7 +510,7 @@ describe('frozen semantic source rendering', () => {
         run.reviews = { n1: next };
       },
     } as unknown as ChainSessionService;
-    const context = new ExecutionContext({ command: '>>source-task' });
+    const context = new PromptRequestContext({ command: '>>source-task' });
     context.parsedCommand = {
       steps: [
         { stepNumber: 1, nodeId: 'n1', promptId: prompt.id, args: {}, convertedPrompt: prompt },

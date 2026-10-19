@@ -31,7 +31,7 @@ import type {
 import type { GateDefinitionProvider } from '../../../../gates/core/gate-loader.js';
 import type { JudgeEvaluationDefaults } from '../../../../gates/judge/types.js';
 import type { LightweightGateDefinition } from '../../../../gates/types.js';
-import type { ExecutionContext, SessionContext } from '../../../context/index.js';
+import type { PromptRequestContext, SessionContext } from '../../../context/index.js';
 
 import { acceptsVerdictlessJoin } from '#shared/types/chain-session.js';
 import { parseStepForNode } from '#shared/utils/node-order.js';
@@ -293,7 +293,7 @@ export class GateEnforcementAuthority {
    * gate's limit exhausts after the same number of FAILs whichever path opened its review.
    */
   resolveReviewMaxAttempts(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     nodeId: string,
     ordinal: number
   ): number | undefined {
@@ -315,7 +315,7 @@ export class GateEnforcementAuthority {
    * @throws when the step has no node id: a review is keyed by its node (R8), never by position.
    */
   async createReviewForStep(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionContext: SessionContext,
     gateIds: string[]
   ): Promise<GateReview | null> {
@@ -372,7 +372,7 @@ export class GateEnforcementAuthority {
    * @returns the stored review, or `review` itself when nothing joined.
    */
   async joinSentGates(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     review: GateReview
   ): Promise<GateReview> {
@@ -439,7 +439,7 @@ export class GateEnforcementAuthority {
    * @returns null without side effects when no gate applies to the node.
    */
   async openDetachedReview(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     node: { readonly nodeId: string; readonly stepNumber: number },
     gateIds: string[],

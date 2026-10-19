@@ -12,7 +12,7 @@ import {
 } from './execution-metrics.js';
 import { buildRootSpanAttributes } from './execution-telemetry.js';
 import { formatStageOrderViolations, validateStageOrder } from './validate-stage-order.js';
-import { ExecutionContext } from '../context/index.js';
+import { PromptRequestContext } from '../context/index.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
@@ -42,7 +42,7 @@ export interface PipelinePorts {
   metricsProvider: () => MetricsCollector | undefined;
   hookRegistry?: HookRegistryPort;
   /**
-   * Assigned onto every ExecutionContext before the first stage runs. Built once
+   * Assigned onto every PromptRequestContext before the first stage runs. Built once
    * by `PipelineBuilder` — it depends only on construction-time services, so it
    * has no reason to be rebuilt per request.
    */
@@ -114,7 +114,7 @@ export class PromptExecutionPipeline {
    * last record would stay `working` forever. This catch is the pipeline's single error
    * boundary, so it is the one place that sees every failure.
    */
-  private emitFailureRecord(context: ExecutionContext, failure: Error): void {
+  private emitFailureRecord(context: PromptRequestContext, failure: Error): void {
     const store = this.executionRecordStore;
     const session = context.sessionContext;
     if (store === undefined || session === undefined) return;
@@ -156,7 +156,10 @@ export class PromptExecutionPipeline {
    * A transition that fails is logged, not thrown: this runs inside the error boundary, and the
    * failure the caller must see is the one that brought it here.
    */
-  private async endRunOfFailedStartCall(context: ExecutionContext, failure: Error): Promise<void> {
+  private async endRunOfFailedStartCall(
+    context: PromptRequestContext,
+    failure: Error
+  ): Promise<void> {
     const decision = context.state.session.lifecycleDecision;
     const sessionId = context.sessionContext?.sessionId;
     if (
@@ -188,7 +191,10 @@ export class PromptExecutionPipeline {
    * owns this because it wrote the record, and because it is the one point every reply passes: a
    * stage that sets a response early skips the formatting stage.
    */
-  private reportPreviousFailure(context: ExecutionContext, watermark: string | undefined): void {
+  private reportPreviousFailure(
+    context: PromptRequestContext,
+    watermark: string | undefined
+  ): void {
     const response = context.response;
     const sessionId = context.sessionContext?.sessionId ?? context.getSessionId();
     if (
@@ -250,7 +256,7 @@ export class PromptExecutionPipeline {
    * else it owns. A call with no run adopts nothing; stage 02's cleanup removes its gates when
    * the response is set.
    */
-  private adoptCallGatesIntoRun(context: ExecutionContext): void {
+  private adoptCallGatesIntoRun(context: PromptRequestContext): void {
     const sessionId = context.sessionContext?.sessionId;
     if (sessionId === undefined || this.temporaryGateRegistry === undefined) return;
     this.temporaryGateRegistry.adoptIntoRun(
@@ -269,7 +275,7 @@ export class PromptExecutionPipeline {
    * call can open exists — stage 16 advances before stage 19 grades the answer that did it and
    * stage 20 renders — so the store's close guard sees them; `transitionRunStatus` decides.
    */
-  private async completeFinishedRun(context: ExecutionContext): Promise<void> {
+  private async completeFinishedRun(context: PromptRequestContext): Promise<void> {
     const sessionId = context.sessionContext?.sessionId;
     if (sessionId === undefined || this.chainSessionStore === undefined) return;
     await this.chainSessionStore.completeHeldRun(sessionId);
@@ -279,7 +285,7 @@ export class PromptExecutionPipeline {
    * Execute the configured pipeline for the given MCP request.
    */
   async execute(mcpRequest: McpToolRequest): Promise<ToolResponse> {
-    const context = new ExecutionContext(mcpRequest, this.logger);
+    const context = new PromptRequestContext(mcpRequest, this.logger);
     if (this.gateEnforcement !== undefined) {
       context.gateEnforcement = this.gateEnforcement;
     }
@@ -296,7 +302,7 @@ export class PromptExecutionPipeline {
   }
 
   private async executePipelineStages(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     rootSpan?: Span
   ): Promise<ToolResponse> {
     this.logger.info('[Pipeline] Starting execution', {
@@ -383,7 +389,7 @@ export class PromptExecutionPipeline {
    * @returns the name of the stage that short-circuited, or undefined if every stage ran.
    */
   private async runStages(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     stageMetrics: StageMetricSummary[]
   ): Promise<string | undefined> {
     let previousState = this.captureContextState(context);
@@ -420,7 +426,7 @@ export class PromptExecutionPipeline {
   private async runStage(
     stage: PipelineStage,
     index: number,
-    context: ExecutionContext
+    context: PromptRequestContext
   ): Promise<StageRunResult> {
     const startTime = Date.now();
     const memoryBefore = process.memoryUsage();
@@ -500,7 +506,7 @@ export class PromptExecutionPipeline {
     });
   }
 
-  private captureContextState(context: ExecutionContext): ContextStateSnapshot {
+  private captureContextState(context: PromptRequestContext): ContextStateSnapshot {
     return {
       parsedCommand: Boolean(context.parsedCommand),
       executionPlan: Boolean(context.executionPlan),
@@ -534,7 +540,7 @@ export class PromptExecutionPipeline {
     }
   }
 
-  private async runLifecycleCleanupHandlers(context: ExecutionContext): Promise<void> {
+  private async runLifecycleCleanupHandlers(context: PromptRequestContext): Promise<void> {
     const handlers = context.state.lifecycle.cleanupHandlers;
     if (!Array.isArray(handlers)) {
       return;
@@ -558,7 +564,7 @@ export class PromptExecutionPipeline {
     return `cmd_${randomUUID()}`;
   }
 
-  private recordPipelineStageMetric(attempt: StageAttempt, context: ExecutionContext): void {
+  private recordPipelineStageMetric(attempt: StageAttempt, context: PromptRequestContext): void {
     const metrics = this.getMetricsCollector();
     if (!metrics) {
       return;
@@ -567,7 +573,10 @@ export class PromptExecutionPipeline {
     metrics.recordPipelineStage(buildStageMetric(attempt, context));
   }
 
-  private recordCommandExecutionMetric(context: ExecutionContext, outcome: CommandOutcome): void {
+  private recordCommandExecutionMetric(
+    context: PromptRequestContext,
+    outcome: CommandOutcome
+  ): void {
     const metrics = this.getMetricsCollector();
     if (!metrics) {
       return;
@@ -587,7 +596,7 @@ export class PromptExecutionPipeline {
 
   // ===== Phase 1.3b: Hook Emissions =====
 
-  private buildHookContext(context: ExecutionContext): PipelineHookContext {
+  private buildHookContext(context: PromptRequestContext): PipelineHookContext {
     return {
       executionId: context.state.lifecycle.metricId ?? 'unknown',
       executionType: context.isChainExecution() ? 'chain' : 'single',
@@ -598,7 +607,7 @@ export class PromptExecutionPipeline {
     };
   }
 
-  private async emitBeforeStage(stageName: string, context: ExecutionContext): Promise<void> {
+  private async emitBeforeStage(stageName: string, context: PromptRequestContext): Promise<void> {
     if (this.hookRegistry === undefined) return;
     try {
       await this.hookRegistry.emitBeforeStage(stageName, this.buildHookContext(context));
@@ -607,7 +616,7 @@ export class PromptExecutionPipeline {
     }
   }
 
-  private async emitAfterStage(stageName: string, context: ExecutionContext): Promise<void> {
+  private async emitAfterStage(stageName: string, context: PromptRequestContext): Promise<void> {
     if (this.hookRegistry === undefined) return;
     try {
       await this.hookRegistry.emitAfterStage(stageName, this.buildHookContext(context));
@@ -619,7 +628,7 @@ export class PromptExecutionPipeline {
   private async emitStageError(
     stageName: string,
     stageError: Error,
-    context: ExecutionContext
+    context: PromptRequestContext
   ): Promise<void> {
     if (this.hookRegistry === undefined) return;
     try {
@@ -631,7 +640,7 @@ export class PromptExecutionPipeline {
 
   // ===== Phase 1.4: OTel Span Instrumentation =====
 
-  private startRootSpan(context: ExecutionContext): Span | undefined {
+  private startRootSpan(context: PromptRequestContext): Span | undefined {
     // OTel global API: returns a real tracer when the SDK is registered, a no-op
     // tracer otherwise. No DI needed — TelemetryRuntimeImpl.start() registers the
     // global provider.
@@ -673,7 +682,7 @@ export class PromptExecutionPipeline {
   private enrichRootSpan(
     span: Span | undefined,
     execution: {
-      context: ExecutionContext;
+      context: PromptRequestContext;
       stageMetrics: readonly StageMetricSummary[];
       pipelineStart: number;
       errorType?: string;
@@ -728,7 +737,7 @@ interface StageRunResult {
 }
 
 interface RootSpanOutcome {
-  readonly context: ExecutionContext;
+  readonly context: PromptRequestContext;
   readonly stageMetrics: readonly StageMetricSummary[];
   readonly pipelineStart: number;
   readonly status: MetricStatus;

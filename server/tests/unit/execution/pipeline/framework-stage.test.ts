@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { FrameworkResolutionStage } from '../../../../src/engine/execution/pipeline/stages/12-framework-stage.js';
 
 import type { FrameworkManager } from '../../../../src/engine/frameworks/framework-manager.js';
@@ -75,7 +75,7 @@ describe('FrameworkResolutionStage', () => {
   test('skips resolution when framework system is disabled', async () => {
     frameworkEnabled.mockReturnValue(false);
 
-    const context = new ExecutionContext({ command: '>>demo' } as any);
+    const context = new PromptRequestContext({ command: '>>demo' } as any);
     context.executionPlan = {
       strategy: 'prompt',
       gates: [],
@@ -104,7 +104,7 @@ describe('FrameworkResolutionStage', () => {
   });
 
   test('resolves framework context for single prompts when required', async () => {
-    const context = new ExecutionContext({ command: '>>demo' } as any);
+    const context = new PromptRequestContext({ command: '>>demo' } as any);
     const convertedPrompt = createConvertedPrompt();
     context.executionPlan = {
       strategy: 'prompt',
@@ -137,7 +137,7 @@ describe('FrameworkResolutionStage', () => {
   });
 
   test('applies frameworks to chain steps that require framework gates', async () => {
-    const context = new ExecutionContext({ command: '>>chain' } as any);
+    const context = new PromptRequestContext({ command: '>>chain' } as any);
     const stepOnePrompt = createConvertedPrompt({ id: 'first' });
     const stepTwoPrompt = createConvertedPrompt({ id: 'second' });
 
@@ -200,7 +200,7 @@ describe('FrameworkResolutionStage', () => {
   });
 
   test('passes framework overrides through userPreference when provided', async () => {
-    const context = new ExecutionContext({ command: '>>demo' } as any);
+    const context = new PromptRequestContext({ command: '>>demo' } as any);
     const convertedPrompt = createConvertedPrompt();
     context.executionPlan = {
       strategy: 'prompt',
@@ -243,7 +243,7 @@ describe('FrameworkResolutionStage', () => {
   });
 
   test('propagates errors from the framework manager', async () => {
-    const context = new ExecutionContext({ command: '>>demo' } as any);
+    const context = new PromptRequestContext({ command: '>>demo' } as any);
     context.executionPlan = {
       strategy: 'prompt',
       gates: [],
@@ -300,7 +300,7 @@ describe('FrameworkResolutionStage', () => {
     });
 
     test('no framework configured and nothing requires one — skips', async () => {
-      const context = new ExecutionContext({ command: '>>demo' } as any);
+      const context = new PromptRequestContext({ command: '>>demo' } as any);
       context.executionPlan = {
         strategy: 'single',
         gates: [],
@@ -316,7 +316,7 @@ describe('FrameworkResolutionStage', () => {
     });
 
     test('no framework configured but the plan requires one — resolves', async () => {
-      const context = new ExecutionContext({ command: '>>demo' } as any);
+      const context = new PromptRequestContext({ command: '>>demo' } as any);
       context.executionPlan = {
         strategy: 'single',
         gates: [],
@@ -332,7 +332,7 @@ describe('FrameworkResolutionStage', () => {
     });
 
     test('no framework configured but an inline framework gate requires one — resolves', async () => {
-      const context = new ExecutionContext({ command: '>>demo' } as any);
+      const context = new PromptRequestContext({ command: '>>demo' } as any);
       context.executionPlan = {
         strategy: 'single',
         gates: [],
@@ -350,7 +350,7 @@ describe('FrameworkResolutionStage', () => {
     });
 
     test('a non-framework inline gate does not require one — skips', async () => {
-      const context = new ExecutionContext({ command: '>>demo' } as any);
+      const context = new PromptRequestContext({ command: '>>demo' } as any);
       context.executionPlan = {
         strategy: 'single',
         gates: [],
@@ -365,7 +365,7 @@ describe('FrameworkResolutionStage', () => {
     });
 
     test('chain whose steps require nothing — skips', async () => {
-      const context = new ExecutionContext({ command: '>>chain' } as any);
+      const context = new PromptRequestContext({ command: '>>chain' } as any);
       context.executionPlan = {
         strategy: 'chain',
         gates: [],
@@ -410,7 +410,7 @@ describe('FrameworkResolutionStage', () => {
      * `decision.shouldApply` alone carries the derivation even though nothing else requires one.
      */
     test('@ operator applies a framework even when nothing requires one — resolves', async () => {
-      const context = new ExecutionContext({ command: '>>demo' } as any);
+      const context = new PromptRequestContext({ command: '>>demo' } as any);
       context.executionPlan = {
         strategy: 'single',
         gates: [],
@@ -442,7 +442,7 @@ describe('FrameworkResolutionStage', () => {
      * depends on it.
      */
     test('honours a decision already cached by an earlier stage', async () => {
-      const context = new ExecutionContext({ command: '>>demo' } as any);
+      const context = new PromptRequestContext({ command: '>>demo' } as any);
       context.executionPlan = {
         strategy: 'single',
         gates: [],
@@ -465,7 +465,7 @@ describe('FrameworkResolutionStage', () => {
 
   describe('framework context recording', () => {
     test('records the framework context for a single prompt', async () => {
-      const context = new ExecutionContext({ command: '>>demo' } as any);
+      const context = new PromptRequestContext({ command: '>>demo' } as any);
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = {
         strategy: 'prompt',
@@ -497,7 +497,7 @@ describe('FrameworkResolutionStage', () => {
     });
 
     test('records the framework context for a chain, leaving injection to later stages', async () => {
-      const context = new ExecutionContext({ command: '>>chain' } as any);
+      const context = new PromptRequestContext({ command: '>>chain' } as any);
       const stepOnePrompt = createConvertedPrompt({ id: 'first' });
 
       context.executionPlan = {
@@ -549,7 +549,7 @@ describe('FrameworkResolutionStage', () => {
     test('applies framework override even when framework system is disabled', async () => {
       frameworkEnabled.mockReturnValue(false);
 
-      const context = new ExecutionContext({ command: '@SCAMPER >>demo' } as any);
+      const context = new PromptRequestContext({ command: '@SCAMPER >>demo' } as any);
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = {
         strategy: 'prompt',
@@ -598,7 +598,7 @@ describe('FrameworkResolutionStage', () => {
     test('skips framework resolution when system disabled and no override provided', async () => {
       frameworkEnabled.mockReturnValue(false);
 
-      const context = new ExecutionContext({ command: '>>demo' } as any);
+      const context = new PromptRequestContext({ command: '>>demo' } as any);
       context.executionPlan = {
         strategy: 'prompt',
         gates: [],
@@ -627,7 +627,7 @@ describe('FrameworkResolutionStage', () => {
     });
 
     test('framework override with @operator becomes the user preference', async () => {
-      const context = new ExecutionContext({ command: '@ReACT >>demo' } as any);
+      const context = new PromptRequestContext({ command: '@ReACT >>demo' } as any);
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = {
         strategy: 'prompt',

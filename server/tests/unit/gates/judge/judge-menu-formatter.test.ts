@@ -3,7 +3,7 @@ import { describe, expect, test } from '@jest/globals';
 
 import { JudgeMenuFormatter } from '../../../../src/engine/gates/judge/judge-menu-formatter.js';
 
-import type { ExecutionContext } from '../../../../src/engine/execution/context/index.js';
+import type { PromptRequestContext } from '../../../../src/engine/execution/context/index.js';
 
 /**
  * Stage 10 (`JudgeSelection`) renders this menu and returns before stage 12 (`FrameworkResolution`)
@@ -19,14 +19,14 @@ const DEFAULT_INTRO =
 
 const EMPTY_MENU = { styles: [], frameworks: [], gates: [] };
 
-const createContext = (frameworkContext?: unknown): ExecutionContext =>
+const createContext = (frameworkContext?: unknown): PromptRequestContext =>
   ({
     mcpRequest: { command: '%judge analyze this' },
     parsedCommand: undefined,
     frameworkContext,
-  }) as unknown as ExecutionContext;
+  }) as unknown as PromptRequestContext;
 
-const render = (formatter: JudgeMenuFormatter, context: ExecutionContext): string => {
+const render = (formatter: JudgeMenuFormatter, context: PromptRequestContext): string => {
   const response = formatter.buildJudgeResponse(EMPTY_MENU, context);
   return response.content[0]?.text ?? '';
 };

@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { StepCaptureService } from '../../../../src/engine/execution/capture/step-capture-service.js';
 import { GateEnforcementAuthority } from '../../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import {
@@ -128,7 +128,7 @@ function fixture(kind: 'gate' | 'detached', polarity: 'PASS' | 'FAIL', body?: st
     getPendingShellVerification: jest.fn(() => undefined),
   };
   const service = store as unknown as ChainSessionService;
-  const context = new ExecutionContext(
+  const context = new PromptRequestContext(
     {
       gate_verdict: submission(held, polarity),
       ...(body !== undefined ? { user_response: body } : {}),
@@ -280,7 +280,7 @@ describe('semantic response target admission before direct grading', () => {
     expect(renewed?.semanticContext?.attemptId).not.toBe('attempt-a');
     expect(renewed?.semanticContext?.target).toBeUndefined();
     f.store.getStepState.mockReturnValue({ state: 'completed', isPlaceholder: false });
-    const captureContext = new ExecutionContext({ user_response: 'Replacement B' }, logger);
+    const captureContext = new PromptRequestContext({ user_response: 'Replacement B' }, logger);
     captureContext.gateEnforcement = new GateEnforcementAuthority(
       f.service,
       logger,

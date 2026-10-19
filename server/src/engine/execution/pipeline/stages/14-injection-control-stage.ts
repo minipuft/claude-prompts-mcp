@@ -13,7 +13,7 @@ import {
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 import type { ChainStepPrompt } from '../../operators/types.js';
 
 import { parseStepForNode } from '#shared/utils/node-order.js';
@@ -68,7 +68,7 @@ export class InjectionControlStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     // NO blueprint-restored skip. The sibling stages that skip on restore cache a one-time
@@ -109,7 +109,7 @@ export class InjectionControlStage extends BasePipelineStage {
    * criteria onto the step 2 render, and deciding it for the rendered step would drop them. A
    * call that did not move stands where it was, and deciding again gives the same answer.
    */
-  redecideAt(context: ExecutionContext, position: InjectionPosition): void {
+  redecideAt(context: PromptRequestContext, position: InjectionPosition): void {
     const answeredGateGuidance = context.state.injection.gateGuidance;
     // Gate guidance is not decided again: a decision for the rendered step had no reader (R172).
     const injectionState = this.decideFor(context, position, RENDERED_STEP_TYPES);
@@ -129,7 +129,7 @@ export class InjectionControlStage extends BasePipelineStage {
    * authoritative source every downstream stage reads.
    */
   private decideFor(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     position: InjectionPosition,
     types: readonly InjectionType[] = INJECTION_TYPES
   ): ReturnType<InjectionDecisionService['decideAll']> {
@@ -161,7 +161,7 @@ export class InjectionControlStage extends BasePipelineStage {
    * Build the decision input from execution context, for the given run position.
    */
   private buildDecisionInput(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     position: InjectionPosition,
     types: readonly InjectionType[],
     sessionOverrides?: Partial<Record<InjectionType, boolean>>
@@ -239,7 +239,7 @@ export class InjectionControlStage extends BasePipelineStage {
    * Undefined when no walk ran or the position has no parse-time step (an inserted node).
    */
   private gatedRenderOrdinal(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     position: InjectionPosition
   ): number | undefined {
     const gated = context.state.gates.gatedStepNumbers;
@@ -254,7 +254,7 @@ export class InjectionControlStage extends BasePipelineStage {
    * Build a map of gate IDs to their current status.
    */
   private buildGateStatusMap(
-    context: ExecutionContext
+    context: PromptRequestContext
   ): Map<string, 'pass' | 'fail' | 'pending'> | undefined {
     const gateStatuses = new Map<string, 'pass' | 'fail' | 'pending'>();
 
@@ -286,7 +286,7 @@ export class InjectionControlStage extends BasePipelineStage {
   /**
    * Get the category ID from the context.
    */
-  private getCategoryId(context: ExecutionContext): string | undefined {
+  private getCategoryId(context: PromptRequestContext): string | undefined {
     // Try to get from converted prompt
     if (context.parsedCommand?.convertedPrompt?.category) {
       return context.parsedCommand.convertedPrompt.category;
@@ -311,7 +311,7 @@ export class InjectionControlStage extends BasePipelineStage {
    * prompt tier is meant to express. Mirrors how `getStepType` indexes the step list.
    */
   private getPromptInjection(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     position: InjectionPosition
   ): PromptInjectionConfig | undefined {
     if (context.hasChainCommand()) {
@@ -334,7 +334,7 @@ export class InjectionControlStage extends BasePipelineStage {
    * silent misattribution rather than a missing declaration.
    */
   private resolveCurrentChainStep(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     position: InjectionPosition
   ): ChainStepPrompt | undefined {
     return parseStepForNode(
@@ -348,7 +348,10 @@ export class InjectionControlStage extends BasePipelineStage {
    * Get the step type from the context.
    * Step type can be defined in step metadata.
    */
-  private getStepType(context: ExecutionContext, position: InjectionPosition): string | undefined {
+  private getStepType(
+    context: PromptRequestContext,
+    position: InjectionPosition
+  ): string | undefined {
     if (!context.hasChainCommand()) {
       return undefined;
     }

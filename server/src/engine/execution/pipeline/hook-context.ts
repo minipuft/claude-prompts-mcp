@@ -1,7 +1,7 @@
 // @lifecycle canonical - Builds the read-only context handed to hook consumers.
 
 import type { PipelineHookContext } from '#shared/types/index.js';
-import type { ExecutionContext } from '../context/index.js';
+import type { PromptRequestContext } from '../context/index.js';
 
 /**
  * Project the live execution state onto the read-only shape a hook consumer sees.
@@ -12,7 +12,7 @@ import type { ExecutionContext } from '../context/index.js';
  * drift without anything failing. A consumer that groups two events by `executionId` needs
  * them to have been derived the same way.
  */
-export function buildPipelineHookContext(context: ExecutionContext): PipelineHookContext {
+export function buildPipelineHookContext(context: PromptRequestContext): PipelineHookContext {
   const executionId =
     context.sessionContext?.sessionId ??
     context.state.session.executionScopeId ??

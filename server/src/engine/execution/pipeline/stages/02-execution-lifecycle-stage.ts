@@ -5,7 +5,7 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { TemporaryGateRegistry } from '../../../gates/core/temporary-gate-registry.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 import type { CleanupHandler } from '../../context/internal-state.js';
 
 /**
@@ -27,7 +27,7 @@ export class ExecutionLifecycleStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     const scopeId = this.resolveScopeId(context);
@@ -43,14 +43,14 @@ export class ExecutionLifecycleStage extends BasePipelineStage {
     this.logExit({ scopeId });
   }
 
-  private ensureCleanupHandlers(context: ExecutionContext): CleanupHandler[] {
+  private ensureCleanupHandlers(context: PromptRequestContext): CleanupHandler[] {
     if (!Array.isArray(context.state.lifecycle.cleanupHandlers)) {
       context.state.lifecycle.cleanupHandlers = [];
     }
     return context.state.lifecycle.cleanupHandlers;
   }
 
-  private resolveScopeId(context: ExecutionContext): string {
+  private resolveScopeId(context: PromptRequestContext): string {
     return (
       context.state.session.resumeSessionId ??
       context.mcpRequest.chain_id ??

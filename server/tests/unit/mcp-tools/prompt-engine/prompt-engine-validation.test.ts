@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { StepCaptureService } from '../../../../src/engine/execution/capture/step-capture-service.js';
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { UNKNOWN_INTERRUPT_GATE_ID } from '../../../../src/engine/execution/pipeline/decisions/index.js';
 import { SqliteEngine } from '../../../../src/infra/database/sqlite-engine.js';
 
@@ -1099,7 +1099,7 @@ describe('PromptEngine Validation', () => {
       const append = jest.fn();
       const service = new StepCaptureService(store(), mockLogger, { append } as never);
       const session = store().getSession(RUN)!;
-      const context = new ExecutionContext({ chain_id: CHAIN }, mockLogger);
+      const context = new PromptRequestContext({ chain_id: CHAIN }, mockLogger);
       context.state.gates.verdictDetection = {
         verdict: 'PASS',
         source: 'gate_verdict',

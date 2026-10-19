@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { GateEnforcementAuthority } from '../../../../src/engine/execution/pipeline/decisions/index.js';
 import { SessionManagementStage } from '../../../../src/engine/execution/pipeline/stages/13-session-stage.js';
 
@@ -8,7 +8,7 @@ import type { ChainSession, ChainSessionService } from '../../../../src/modules/
 import type {
   ExecutionPlan,
   ParsedCommand,
-} from '../../../../src/engine/execution/context/execution-context.js';
+} from '../../../../src/engine/execution/context/prompt-request-context.js';
 
 const createLogger = () => ({
   info: jest.fn(),
@@ -102,7 +102,7 @@ describe('SessionManagementStage', () => {
   });
 
   test('creates a new session when none exists', async () => {
-    const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
+    const context = new PromptRequestContext({ command: '>>chain_prompt' } as any);
     context.executionPlan = createExecutionPlan({ gates: ['gate-alpha'] });
     context.parsedCommand = createParsedCommand();
 
@@ -147,7 +147,7 @@ describe('SessionManagementStage', () => {
     manager.hasActiveSession.mockImplementation((id) => id === 'sess-active');
     manager.getSession.mockReturnValue(existingSession);
 
-    const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
+    const context = new PromptRequestContext({ command: '>>chain_prompt' } as any);
     context.state.session.resumeSessionId = 'sess-active';
     context.executionPlan = createExecutionPlan();
     context.parsedCommand = createParsedCommand();
@@ -181,7 +181,7 @@ describe('SessionManagementStage', () => {
 
     manager.getSessionByChainIdentifier.mockReturnValue(existingSession);
 
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>chain_prompt',
       chain_id: 'chain-chain_prompt#5',
     } as any);
@@ -220,7 +220,7 @@ describe('SessionManagementStage', () => {
 
     manager.getRunHistory.mockReturnValue([existingSession.chainId]);
 
-    const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
+    const context = new PromptRequestContext({ command: '>>chain_prompt' } as any);
     context.executionPlan = createExecutionPlan();
     context.parsedCommand = createParsedCommand();
 
@@ -249,7 +249,10 @@ describe('SessionManagementStage', () => {
     manager.hasActiveSession.mockReturnValue(true);
     manager.getSession.mockReturnValue(existingSession);
 
-    const context = new ExecutionContext({ command: '>>chain_prompt', force_restart: true } as any);
+    const context = new PromptRequestContext({
+      command: '>>chain_prompt',
+      force_restart: true,
+    } as any);
     context.executionPlan = createExecutionPlan();
     context.parsedCommand = createParsedCommand();
 
@@ -263,7 +266,7 @@ describe('SessionManagementStage', () => {
   test('creates upfront pending gate review when blocking gates present', async () => {
     // Gate reviews are created upfront during session creation for chains with blocking gates
     // This enables enforcement: chains pause until gate_verdict is submitted
-    const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
+    const context = new PromptRequestContext({ command: '>>chain_prompt' } as any);
     context.executionPlan = createExecutionPlan({ gates: ['gate-alpha'] });
     context.parsedCommand = createParsedCommand();
     context.gateInstructions = 'Review these gates carefully.';
@@ -301,7 +304,7 @@ describe('SessionManagementStage', () => {
   });
 
   test('creates session with pending review when gates present and authority available', async () => {
-    const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
+    const context = new PromptRequestContext({ command: '>>chain_prompt' } as any);
     context.executionPlan = createExecutionPlan({ gates: ['gate-alpha'] });
     context.parsedCommand = createParsedCommand();
 
@@ -333,7 +336,7 @@ describe('SessionManagementStage', () => {
   // green, and their expectations are unchanged.
 
   test('scopes the pending review to reviewGateIds when the enhancement stage published one', async () => {
-    const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
+    const context = new PromptRequestContext({ command: '>>chain_prompt' } as any);
     context.executionPlan = createExecutionPlan({ gates: ['gate-alpha'] });
     context.parsedCommand = createParsedCommand();
 
@@ -360,7 +363,7 @@ describe('SessionManagementStage', () => {
     // `hasBlockingGates` is run-wide (`totalGatesApplied > 0`), so it is still true on a step
     // whose own gate list is empty. Before scoping, that step blocked on gates bound to other
     // nodes; the empty scope is what stops it.
-    const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
+    const context = new PromptRequestContext({ command: '>>chain_prompt' } as any);
     context.executionPlan = createExecutionPlan({ gates: ['gate-alpha'] });
     context.parsedCommand = createParsedCommand();
 
@@ -409,7 +412,7 @@ describe('SessionManagementStage', () => {
     test.each(['single', 'chain'] as const)(
       'a chain prompt parsed %s with no projected steps throws by name',
       async (commandType) => {
-        const context = new ExecutionContext({ command: '>>chain_prompt' } as any);
+        const context = new PromptRequestContext({ command: '>>chain_prompt' } as any);
         context.executionPlan = createExecutionPlan();
         context.parsedCommand = unprojected(commandType);
 
@@ -421,7 +424,7 @@ describe('SessionManagementStage', () => {
     );
 
     test('control: a genuine single prompt still counts one step', async () => {
-      const context = new ExecutionContext({ command: '>>single_prompt' } as any);
+      const context = new PromptRequestContext({ command: '>>single_prompt' } as any);
       context.executionPlan = createExecutionPlan({ strategy: 'single' });
       const { steps: _steps, ...rest } = createParsedCommand();
       context.parsedCommand = {

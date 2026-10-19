@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { PromptGuidanceStage } from '../../../../src/engine/execution/pipeline/stages/15-prompt-guidance-stage.js';
 
 import type { PromptGuidanceService } from '../../../../src/engine/frameworks/prompt-guidance/index.js';
@@ -81,7 +81,7 @@ describe('PromptGuidanceStage', () => {
   });
 
   test('skips when execution plan does not require frameworks', async () => {
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.executionPlan = createExecutionPlan({ requiresFramework: false });
 
     await stage.execute(context);
@@ -90,7 +90,7 @@ describe('PromptGuidanceStage', () => {
   });
 
   test('applies guidance to single prompts and replaces converted prompt', async () => {
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     const convertedPrompt = createConvertedPrompt();
     context.executionPlan = createExecutionPlan();
     context.parsedCommand = {
@@ -120,7 +120,7 @@ describe('PromptGuidanceStage', () => {
   });
 
   test('applies guidance only to chain steps requiring frameworks', async () => {
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.executionPlan = createExecutionPlan({
       strategy: 'chain',
       requiresSession: true,
@@ -167,7 +167,7 @@ describe('PromptGuidanceStage', () => {
 
   describe('System prompt duplication prevention', () => {
     test('skips system prompt injection when the system message already applies a framework', async () => {
-      const context = new ExecutionContext({ command: '@CAGEERF >>demo' });
+      const context = new PromptRequestContext({ command: '@CAGEERF >>demo' });
       const convertedPrompt = createConvertedPrompt({
         systemMessage: 'Apply the C.A.G.E.E.R.F framework systematically, as authored.',
       });
@@ -194,7 +194,7 @@ describe('PromptGuidanceStage', () => {
     });
 
     test('includes system prompt injection for a single prompt: this stage is its only builder', async () => {
-      const context = new ExecutionContext({ command: '>>demo' });
+      const context = new PromptRequestContext({ command: '>>demo' });
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = createExecutionPlan();
       context.parsedCommand = {
@@ -220,7 +220,7 @@ describe('PromptGuidanceStage', () => {
     });
 
     test('prevents duplication for a chain step whose system message already applies a framework', async () => {
-      const context = new ExecutionContext({ command: '@ReACT >>chain' });
+      const context = new PromptRequestContext({ command: '@ReACT >>chain' });
       context.executionPlan = createExecutionPlan({
         strategy: 'chain',
         requiresSession: true,
@@ -263,7 +263,7 @@ describe('PromptGuidanceStage', () => {
     });
 
     test('passes framework override from @operator to prompt guidance service', async () => {
-      const context = new ExecutionContext({ command: '@SCAMPER >>demo' });
+      const context = new PromptRequestContext({ command: '@SCAMPER >>demo' });
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = createExecutionPlan({
         frameworkOverride: 'SCAMPER',
@@ -298,7 +298,7 @@ describe('PromptGuidanceStage', () => {
 
   describe('Two-phase client-driven judge selection', () => {
     test('skips when judgePhaseTriggered (pipeline returning early)', async () => {
-      const context = new ExecutionContext({ command: '>>demo', guided: true });
+      const context = new PromptRequestContext({ command: '>>demo', guided: true });
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = createExecutionPlan({ requiresFramework: true });
       context.parsedCommand = {
@@ -316,7 +316,7 @@ describe('PromptGuidanceStage', () => {
     });
 
     test('applies style enhancement to single prompt system message', async () => {
-      const context = new ExecutionContext({ command: '>>demo' });
+      const context = new PromptRequestContext({ command: '>>demo' });
       const convertedPrompt = createConvertedPrompt({
         systemMessage: 'You are a helpful assistant.',
       });
@@ -354,7 +354,7 @@ describe('PromptGuidanceStage', () => {
     });
 
     test('applies style enhancement to chain steps', async () => {
-      const context = new ExecutionContext({ command: '>>chain' });
+      const context = new PromptRequestContext({ command: '>>chain' });
       context.executionPlan = createExecutionPlan({
         strategy: 'chain',
         requiresSession: true,
@@ -417,7 +417,7 @@ describe('PromptGuidanceStage', () => {
     });
 
     test('applies style enhancement from the style JudgeSelectionStage selected', async () => {
-      const context = new ExecutionContext({ command: '>>demo' });
+      const context = new PromptRequestContext({ command: '>>demo' });
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = createExecutionPlan({ requiresFramework: true });
       context.parsedCommand = {
@@ -436,7 +436,7 @@ describe('PromptGuidanceStage', () => {
     });
 
     test('handles unknown style gracefully', async () => {
-      const context = new ExecutionContext({ command: '>>demo' });
+      const context = new PromptRequestContext({ command: '>>demo' });
       const convertedPrompt = createConvertedPrompt({
         systemMessage: 'Original system message',
       });

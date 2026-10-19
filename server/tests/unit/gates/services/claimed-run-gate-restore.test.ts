@@ -6,7 +6,7 @@
  */
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 import { InlineGateProcessor } from '../../../../src/engine/gates/services/inline-gate-processor.js';
 import { TemporaryGateRegistrar } from '../../../../src/engine/gates/services/temporary-gate-registrar.js';
@@ -64,8 +64,8 @@ const gatedChain = (): ParsedCommand =>
 const restoredOn = (
   started: ParsedCommand,
   runId: string
-): { context: ExecutionContext; parsed: ParsedCommand } => {
-  const context = new ExecutionContext({ chain_id: 'chain-sv_chain#1', user_response: 'out' });
+): { context: PromptRequestContext; parsed: ParsedCommand } => {
+  const context = new PromptRequestContext({ chain_id: 'chain-sv_chain#1', user_response: 'out' });
   context.state.session.resumeSessionId = runId;
   context.state.session.isBlueprintRestored = true;
   return { context, parsed: JSON.parse(JSON.stringify(started)) as ParsedCommand };
@@ -74,7 +74,7 @@ const restoredOn = (
 async function startRun(registry: TemporaryGateRegistry): Promise<ParsedCommand> {
   const processor = new InlineGateProcessor(registry, resolver, logger(), runGateStore());
   const started = gatedChain();
-  await processor.processInlineGates(new ExecutionContext({ command: 'start' }), started);
+  await processor.processInlineGates(new PromptRequestContext({ command: 'start' }), started);
   return started;
 }
 
@@ -206,7 +206,7 @@ describe('InlineGateProcessor.restoreRunGates', () => {
       ];
     }
     await new InlineGateProcessor(first, resolver, logger(), runGateStore()).processInlineGates(
-      new ExecutionContext({ command: 'start' }),
+      new PromptRequestContext({ command: 'start' }),
       started
     );
     const own = started.steps?.[0]?.inlineGateIds?.at(-1) ?? '';
@@ -355,7 +355,7 @@ describe('restoreRunGates marks its run used before anything registers', () => {
     const processor = new InlineGateProcessor(registry, resolver, logger(), runGateStore());
     const started = gatedChain();
     const result = await processor.processInlineGates(
-      new ExecutionContext({ command: 'start' }),
+      new PromptRequestContext({ command: 'start' }),
       started
     );
     registry.adoptIntoRun('run-idle', result.createdIds);

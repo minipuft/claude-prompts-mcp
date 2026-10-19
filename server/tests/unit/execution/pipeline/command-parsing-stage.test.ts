@@ -2,7 +2,7 @@ import { describe, expect, jest, test } from '@jest/globals';
 
 import { ArgumentParser } from '../../../../src/engine/execution/parsers/argument-parser.js';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { CommandParsingStage } from '../../../../src/engine/execution/pipeline/stages/04-parsing-stage.js';
 
 import type { ArgumentParsingResult } from '../../../../src/engine/execution/parsers/argument-parser.js';
@@ -85,7 +85,7 @@ describe('CommandParsingStage', () => {
       createMockSymbolicCommandBuilder()
     );
 
-    const context = new ExecutionContext({ command: '>>demo_prompt name="World"' });
+    const context = new PromptRequestContext({ command: '>>demo_prompt name="World"' });
     await stage.execute(context);
 
     expect(context.parsedCommand?.promptId).toBe('demo_prompt');
@@ -140,7 +140,7 @@ describe('CommandParsingStage', () => {
       mode: 'typed',
       note: String.raw`C:\art\refs and "quotes"`,
     };
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>art_prompt mode="inline"',
       options: { mode: 'legacy', note: 'legacy' },
       inputs,
@@ -258,7 +258,7 @@ describe('CommandParsingStage', () => {
       mockBuilder
     );
 
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>demo_prompt input="World" :: "Use emojis"',
     });
     await stage.execute(context);
@@ -382,7 +382,7 @@ describe('CommandParsingStage', () => {
       mockBuilder
     );
 
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>step_one name="Alpha" :: "Gate A" --> >>step_two topic="Z" :: "Gate B"',
     });
     await stage.execute(context);
@@ -459,7 +459,7 @@ describe('CommandParsingStage', () => {
       createMockSymbolicCommandBuilder()
     );
 
-    const context = new ExecutionContext({ command: '>>workflow feature="flow"' });
+    const context = new PromptRequestContext({ command: '>>workflow feature="flow"' });
     await stage.execute(context);
 
     expect(context.parsedCommand?.commandType).toBe('chain');
@@ -522,7 +522,7 @@ describe('CommandParsingStage optional typed authoring inputs', () => {
         logger,
         createMockSymbolicCommandBuilder()
       );
-      const context = new ExecutionContext({ command: '>>create_prompt', inputs });
+      const context = new PromptRequestContext({ command: '>>create_prompt', inputs });
       context.state.normalization.requestInputs = inputs;
       await expect(stage.execute(context)).resolves.toBeUndefined();
       expect(context.getPromptArgs()).toEqual(inputs);

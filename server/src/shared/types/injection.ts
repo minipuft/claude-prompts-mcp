@@ -123,7 +123,7 @@ export interface InjectionTypeConfig {
 
 /**
  * Input data for making an injection decision.
- * Decoupled from ExecutionContext for testability.
+ * Decoupled from PromptRequestContext for testability.
  */
 export interface InjectionDecisionInput {
   /** The type of injection being decided. */

@@ -22,7 +22,7 @@ import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 
 /**
  * Supported auto-execute tool types.
@@ -93,7 +93,7 @@ export class ScriptAutoExecuteStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     const scriptResults = context.state.scripts?.results;

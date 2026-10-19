@@ -37,7 +37,7 @@ export interface StepVisibilityProjection {
 }
 
 /**
- * Inputs to {@link decideVisibility}. Deliberately plain data, not `ExecutionContext` or any
+ * Inputs to {@link decideVisibility}. Deliberately plain data, not `PromptRequestContext` or any
  * pipeline/chain type — matches the sibling decision modules (`mutation/mutation-policy.ts`,
  * `gates/enforcement-mode.ts`, `injection/injection-decision-service.ts`).
  */

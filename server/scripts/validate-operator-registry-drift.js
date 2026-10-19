@@ -69,7 +69,9 @@ function checkRoutingAllowlist(operator, source) {
  * is being removed.
  */
 function checkCtaSymbol(operator, source) {
-  const body = source.match(/resolveFrameworkToken\(context: ExecutionContext\)[\s\S]*?\n {2}\}/);
+  const body = source.match(
+    /resolveFrameworkToken\(context: PromptRequestContext\)[\s\S]*?\n {2}\}/
+  );
   if (!body) return [`${SITES.cta}: resolveFrameworkToken not found (moved or renamed?)`];
 
   const rendered = [...body[0].matchAll(/`(.)\$\{/g)].map((m) => m[1]);

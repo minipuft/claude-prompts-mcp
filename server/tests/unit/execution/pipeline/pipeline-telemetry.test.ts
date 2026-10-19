@@ -6,7 +6,7 @@ import { trace, SpanStatusCode } from '@opentelemetry/api';
 
 import { PromptExecutionPipeline } from '../../../../src/engine/execution/pipeline/prompt-execution-pipeline.js';
 
-import type { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import type { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import type { PipelineStage } from '../../../../src/engine/execution/pipeline/stage.js';
 import type {
   Logger,
@@ -28,7 +28,7 @@ const createLogger = (): Logger => ({
 
 const createStage = (
   name: string,
-  onExecute?: (context: ExecutionContext) => void | Promise<void>
+  onExecute?: (context: PromptRequestContext) => void | Promise<void>
 ): PipelineStage => ({
   name,
   execute: async (context) => {

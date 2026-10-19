@@ -61,7 +61,7 @@ import { compileWorkflowIR } from '../../../src/modules/workflow-ir/compiler.js'
 import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.js';
 import { COMMAND_SOURCE_EXCLUSIVITY_MESSAGE } from '../../../src/engine/execution/validation/schemas.js';
 
-import type { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import type { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import type { PipelineStage } from '../../../src/engine/execution/pipeline/stage.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
@@ -199,7 +199,7 @@ const buildPipeline = (
       return {
         name,
         provides: ['executionPlan'],
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           if (!context.parsedCommand) return;
           context.executionPlan = {
             strategy: 'chain',
@@ -215,7 +215,7 @@ const buildPipeline = (
     if (name === 'ResponseFormatting') {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.setResponse({
             content: [{ type: 'text', text: 'run started' }],
             isError: false,

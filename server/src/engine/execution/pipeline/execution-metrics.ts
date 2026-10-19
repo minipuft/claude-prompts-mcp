@@ -19,7 +19,7 @@ import type {
   PipelineStageMetric,
   PipelineStageStatus,
 } from '#shared/types/index.js';
-import type { ExecutionContext } from '../context/index.js';
+import type { PromptRequestContext } from '../context/index.js';
 
 /**
  * What one stage did, as observed by the loop that ran it.
@@ -78,7 +78,7 @@ export function summarizeStageAttempt(attempt: StageAttempt): StageMetricSummary
  */
 export function buildStageMetric(
   attempt: StageAttempt,
-  context: ExecutionContext
+  context: PromptRequestContext
 ): PipelineStageMetric {
   const summary = summarizeStageAttempt(attempt);
   const sessionId = context.getSessionId();
@@ -113,7 +113,7 @@ export function buildStageMetric(
 
 /** Build the per-command payload for `MetricsCollector.recordCommandExecutionMetric`. */
 export function buildCommandMetric(
-  context: ExecutionContext,
+  context: PromptRequestContext,
   outcome: CommandOutcome
 ): CommandExecutionMetric {
   const sessionId = context.getSessionId();
@@ -151,7 +151,7 @@ export function buildCommandMetric(
  * before planning still gets a metric, and the field is not optional.
  */
 export function resolveExecutionMode(
-  context: ExecutionContext
+  context: PromptRequestContext
 ): CommandExecutionMetric['executionMode'] {
   if (context.isChainExecution()) {
     return 'chain';
@@ -165,7 +165,7 @@ export function resolveExecutionMode(
   return 'single';
 }
 
-function buildCommandMetricMetadata(context: ExecutionContext): Record<string, unknown> {
+function buildCommandMetricMetadata(context: PromptRequestContext): Record<string, unknown> {
   return {
     strategy: context.executionPlan?.strategy,
     category: context.executionPlan?.category,

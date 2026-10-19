@@ -1,7 +1,7 @@
 // @lifecycle canonical - Unit tests for B.91: selection and render ask with the same category.
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { GateEnhancementService } from '../../../../src/engine/gates/services/gate-enhancement-service.js';
 import { GateMetricsRecorder } from '../../../../src/engine/gates/services/gate-metrics-recorder.js';
 
@@ -107,7 +107,7 @@ const enhance = async (args: {
     createLogger()
   );
 
-  const context = new ExecutionContext({ command: '>>demo' } as never);
+  const context = new PromptRequestContext({ command: '>>demo' } as never);
   context.executionPlan = {
     strategy: 'single',
     gates: [],

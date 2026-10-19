@@ -15,7 +15,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { GateBody } from './gate-body-merge.js';
 import type { GateReferenceResolver } from './gate-reference-resolver.js';
 import type { RunStepView, RunStepViewProvider } from './run-step-view.js';
-import type { ExecutionContext } from '../../execution/context/index.js';
+import type { PromptRequestContext } from '../../execution/context/index.js';
 import type { TemporaryGateInput } from '../../execution/types.js';
 import type {
   TemporaryGateDefinition,
@@ -118,7 +118,7 @@ export class TemporaryGateRegistrar {
    * Register temporary gates from the unified `gates` parameter on the execution context.
    * Returns IDs of created temporary gates and resolved canonical gates.
    */
-  async registerTemporaryGates(context: ExecutionContext): Promise<RegisteredGateResult> {
+  async registerTemporaryGates(context: PromptRequestContext): Promise<RegisteredGateResult> {
     this.logger.debug('[TemporaryGateRegistrar] registerTemporaryGates - parsedCommand structure', {
       hasOperators: Boolean(context.parsedCommand?.operators),
       format: context.parsedCommand?.format,
@@ -358,7 +358,7 @@ export class TemporaryGateRegistrar {
    * joins it (R154, `GateEnforcementAuthority.joinSentGates`), and so does a gate sent with no
    * verdict while that review awaits one (R173); a node the run has passed stays refused.
    */
-  unreachableStepTargets(context: ExecutionContext): StepTargetRefusal[] {
+  unreachableStepTargets(context: PromptRequestContext): StepTargetRefusal[] {
     const view = this.resolveRunView(context);
     if (view === undefined || view.complete === true || context.mcpRequest.force_restart === true) {
       return [];
@@ -396,7 +396,7 @@ export class TemporaryGateRegistrar {
    * gate), and a claimed run's recorded gates, accepted when the run started (R11.13).
    */
   async invalidRequestGates(
-    context: ExecutionContext
+    context: PromptRequestContext
   ): Promise<Array<{ readonly detail: string }>> {
     const recorded = this.recordedRequestGates(context);
     // The run declared its recorded gates when it started; a re-send of one is that gate.
@@ -419,7 +419,7 @@ export class TemporaryGateRegistrar {
    * count them: a claimed run's recorded gates, handed back to the same channel when the run
    * started, are the run's, not this call's (R11.13).
    */
-  ownRequestGates(context: ExecutionContext): readonly unknown[] {
+  ownRequestGates(context: PromptRequestContext): readonly unknown[] {
     const gates: readonly unknown[] = context.state.gates.requestedOverrides?.gates ?? [];
     const recorded = this.recordedRequestGates(context);
     return gates.filter((gate) => !recorded.has(gate));
@@ -431,7 +431,7 @@ export class TemporaryGateRegistrar {
    * declares an id adds it to `declared` for the entries after it.
    */
   private async requestGateProblem(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     gate: unknown,
     declared: string[]
   ): Promise<string | undefined> {
@@ -452,7 +452,7 @@ export class TemporaryGateRegistrar {
    * judged as new requests; an entry the client sends on the same call is. Empty on every other
    * call.
    */
-  private recordedRequestGates(context: ExecutionContext): ReadonlySet<unknown> {
+  private recordedRequestGates(context: PromptRequestContext): ReadonlySet<unknown> {
     return context.state.session.isBlueprintRestored === true
       ? new Set<unknown>(context.parsedCommand?.requestGates ?? [])
       : new Set<unknown>();
@@ -460,7 +460,7 @@ export class TemporaryGateRegistrar {
 
   /** Whether `id` names a gate this run holds, or one declared earlier (recorded or this call). */
   private isHeldOrDeclared(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     id: string,
     declared: readonly string[]
   ): boolean {
@@ -482,7 +482,7 @@ export class TemporaryGateRegistrar {
    * the gates the client sent, so a restored run's recorded gates are not judged here; a gate
    * sending the canonical id alone is a reference to that gate and is not refused.
    */
-  canonicalIdCollisions(context: ExecutionContext): Array<{ readonly detail: string }> {
+  canonicalIdCollisions(context: PromptRequestContext): Array<{ readonly detail: string }> {
     const registry = this.temporaryGateRegistry;
     if (registry === undefined) return [];
     return (context.mcpRequest.gates ?? []).flatMap((gate) => {
@@ -498,7 +498,7 @@ export class TemporaryGateRegistrar {
    * The request gates the run this call resumes already owns. Empty on the call that starts a
    * run: the session does not exist yet, and that call's own `gates` are the run's.
    */
-  private resolveRunRequestGateIds(context: ExecutionContext): string[] {
+  private resolveRunRequestGateIds(context: PromptRequestContext): string[] {
     const sessionId = this.resolveRunId(context);
     if (sessionId === undefined || this.temporaryGateRegistry === undefined) {
       return [];
@@ -516,13 +516,13 @@ export class TemporaryGateRegistrar {
    * `context.getSessionId()` is not populated until the session stage (13) resolves the resume
    * target, so the request's own `chain_id` is the only run handle available this early.
    */
-  private resolveRunNodeIds(context: ExecutionContext): readonly string[] | undefined {
+  private resolveRunNodeIds(context: PromptRequestContext): readonly string[] | undefined {
     const view = this.resolveRunView(context);
     return view !== undefined && view.nodeIds.length > 0 ? view.nodeIds : undefined;
   }
 
   /** The run the request's chain id names, or undefined when this call has none to ask about. */
-  private resolveRunView(context: ExecutionContext): RunStepView | undefined {
+  private resolveRunView(context: PromptRequestContext): RunStepView | undefined {
     if (this.runStepViewProvider === undefined) {
       return undefined;
     }
@@ -537,7 +537,7 @@ export class TemporaryGateRegistrar {
    * otherwise read off the run the request's chain id names. Undefined on the call that starts a
    * run.
    */
-  private resolveRunId(context: ExecutionContext): string | undefined {
+  private resolveRunId(context: PromptRequestContext): string | undefined {
     return context.getSessionId() ?? this.resolveRunView(context)?.sessionId;
   }
 
@@ -552,7 +552,7 @@ export class TemporaryGateRegistrar {
    * that registered nothing when its run started registers nothing now (R11.13).
    */
   private requestGateDisposition(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     rawGate: RawGateInput,
     gateId: string | null,
     isRecorded: boolean,
@@ -809,7 +809,7 @@ export class TemporaryGateRegistrar {
    * not take a prompt out of service.
    */
   registerInlineGateDefinitions(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     prompts: ReadonlyArray<InlineDefinitionCarrier | undefined>,
     /**
      * Whether inline definitions execute this release. The check lives here rather than at the
@@ -853,7 +853,7 @@ export class TemporaryGateRegistrar {
    * containment, and the same held-id reuse on a resume (P6.107) as a step prompt's definitions.
    */
   registerStepGateDefinitions(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     definitions: ReadonlyArray<StepGateDefinition>,
     enabled: boolean,
     remap: Map<string, string> = new Map()
@@ -893,7 +893,7 @@ export class TemporaryGateRegistrar {
 
   /** Register one prompt's definitions. Returns the canonical ids that were created. */
   private registerPromptInlineDefinitions(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     prompt: InlineDefinitionCarrier | undefined,
     /** Ids this call already registered for earlier prompts. */
     earlierIds: readonly string[],
@@ -938,7 +938,7 @@ export class TemporaryGateRegistrar {
    * gate its prompt declared (R11.8).
    */
   private registerOneInlineDefinition(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     registry: TemporaryGateRegistry,
     definition: GateBody,
     source: { promptId: string | undefined; thisCall: readonly string[] }
@@ -995,7 +995,7 @@ export class TemporaryGateRegistrar {
    * The registry's run index answers; undefined means this run holds no such gate.
    */
   private resolveHeldForThisRun(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     declaredId: string,
     thisCall: readonly string[]
   ): string | undefined {
@@ -1069,8 +1069,8 @@ function readInlineScope(definition: GateBody): InlineScope {
  * lands under `chain:execution` for that call only: the run files it under `chain:<chainId>` when
  * it adopts the call's gates (`TemporaryGateRegistry.adoptIntoRun`, P6.164).
  */
-function inlineScopeId(context: ExecutionContext, scope: InlineScope): string {
-  // `getSessionId` is a plain method on ExecutionContext, so no optional call — the older
+function inlineScopeId(context: PromptRequestContext, scope: InlineScope): string {
+  // `getSessionId` is a plain method on PromptRequestContext, so no optional call — the older
   // `getSessionId?.()` spelling elsewhere in this file predates the rule that flags it.
   if (scope === 'chain') {
     return context.mcpRequest.chain_id ?? context.getSessionId() ?? 'execution';

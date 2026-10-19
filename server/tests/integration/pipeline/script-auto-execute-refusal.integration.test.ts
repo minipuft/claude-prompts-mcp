@@ -21,7 +21,7 @@ import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { ScriptAutoExecuteStage } from '../../../src/engine/execution/pipeline/stages/09-script-auto-execute-stage.js';
 import { createScriptExecutor } from '../../../src/modules/automation/execution/script-executor.js';
 import { describeUndeclaredParameterRefusal } from '../../../src/mcp/tools/shared/undeclared-parameters.js';
@@ -85,7 +85,7 @@ async function driveStage(
   );
   expect(executed.success).toBe(true);
 
-  const context = new ExecutionContext(
+  const context = new PromptRequestContext(
     { tool: 'prompt_engine', command: `>>${tool.id}`, args: {} } as McpToolRequest,
     logger()
   );

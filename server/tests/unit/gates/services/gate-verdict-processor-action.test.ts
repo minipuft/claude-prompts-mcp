@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { GateVerdictProcessor } from '../../../../src/engine/gates/services/gate-verdict-processor.js';
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ChainSession, ChainSessionService } from '../../../../src/shared/types/index.js';
@@ -59,7 +59,7 @@ const sessionWith = (phase: 'exhausted' | 'awaiting-verdict', kind: 'gate' | 'de
 
 /** Real admission getters, with the exhausted review's existing action flags. */
 const createContext = () => {
-  const context = new ExecutionContext({ chain_id: 'chain-review#1' }, createLogger());
+  const context = new PromptRequestContext({ chain_id: 'chain-review#1' }, createLogger());
   context.state.gates.retryLimitExceeded = true;
   context.state.gates.awaitingUserChoice = true;
   context.state.gates.retryExhaustedGateIds = ['some-gate'];

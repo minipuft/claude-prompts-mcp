@@ -1,6 +1,6 @@
 // @lifecycle canonical - Pure derivation of telemetry payloads from pipeline execution data.
 import type { PipelineStageType } from '#shared/types/index.js';
-import type { ExecutionContext } from '../context/index.js';
+import type { PromptRequestContext } from '../context/index.js';
 import type { Attributes } from '@opentelemetry/api';
 
 /** Per-stage timing and memory sample collected while the pipeline runs. */
@@ -52,7 +52,7 @@ export function resolveStageType(stageName: string): PipelineStageType {
 }
 
 export interface RootSpanAttributeInput {
-  context: ExecutionContext;
+  context: PromptRequestContext;
   /** One entry per stage that started, in execution order. */
   stageMetrics: readonly StageMetricSummary[];
   /** Every stage the pipeline registered, in execution order. */
@@ -103,7 +103,7 @@ function buildPerformanceAttributes({
   };
 }
 
-function buildGateAttributes(context: ExecutionContext): Attributes {
+function buildGateAttributes(context: PromptRequestContext): Attributes {
   const gateState = context.state.gates;
   const allGateIds = [
     ...gateState.temporaryGateIds,
@@ -136,7 +136,7 @@ function buildGateAttributes(context: ExecutionContext): Attributes {
  * `'default'` — which is the query this attribute exists to answer: "was the key that actually
  * scoped this request's state store real, or a fallback?"
  */
-function buildExecutionAttributes(context: ExecutionContext): Attributes {
+function buildExecutionAttributes(context: PromptRequestContext): Attributes {
   return {
     'cpm.chain.is_chain': context.isChainExecution(),
     'cpm.chain.step_index': context.sessionContext?.currentStep ?? 0,

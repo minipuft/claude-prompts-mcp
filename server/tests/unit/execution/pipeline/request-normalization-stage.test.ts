@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { RequestNormalizationStage } from '../../../../src/engine/execution/pipeline/stages/01-request-normalization-stage.js';
 
 const createLogger = () => ({
@@ -18,7 +18,7 @@ const createResponse = () => ({
 describe('RequestNormalizationStage', () => {
   test('returns error when command and resume identifiers are missing', async () => {
     const stage = new RequestNormalizationStage(null, null, createLogger());
-    const context = new ExecutionContext({});
+    const context = new PromptRequestContext({});
 
     await stage.execute(context);
 
@@ -28,7 +28,7 @@ describe('RequestNormalizationStage', () => {
 
   test('flags conflicting force_restart and chain_id options', async () => {
     const stage = new RequestNormalizationStage(null, null, createLogger());
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>demo',
       chain_id: 'chain-demo',
       force_restart: true,
@@ -46,7 +46,7 @@ describe('RequestNormalizationStage', () => {
       tryHandleCommand: jest.fn().mockResolvedValue(chainResponse),
     };
     const stage = new RequestNormalizationStage(handler as any, null, createLogger());
-    const context = new ExecutionContext({ command: 'validate chain research' });
+    const context = new PromptRequestContext({ command: 'validate chain research' });
 
     await stage.execute(context);
 
@@ -58,7 +58,7 @@ describe('RequestNormalizationStage', () => {
     const routedResponse = createResponse();
     const router = jest.fn().mockResolvedValue(routedResponse);
     const stage = new RequestNormalizationStage(null, router, createLogger());
-    const context = new ExecutionContext({ command: 'help' });
+    const context = new PromptRequestContext({ command: 'help' });
 
     await stage.execute(context);
 
@@ -76,7 +76,7 @@ describe('RequestNormalizationStage', () => {
 
   test('normalizes unified gates parameter with all specification types', async () => {
     const stage = new RequestNormalizationStage(null, null, createLogger());
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>demo',
       gates: [
         'toxicity', // String ID
@@ -104,7 +104,7 @@ describe('RequestNormalizationStage', () => {
 
   test('captures unified gates parameter in metadata', async () => {
     const stage = new RequestNormalizationStage(null, null, createLogger());
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>demo',
       gates: [
         'code-quality',
@@ -126,7 +126,7 @@ describe('RequestNormalizationStage', () => {
 
   test('handles empty gates parameter correctly', async () => {
     const stage = new RequestNormalizationStage(null, null, createLogger());
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>demo',
       gates: [],
     });
@@ -140,7 +140,7 @@ describe('RequestNormalizationStage', () => {
 
   test('allows chain_id without command for resume-only mode', async () => {
     const stage = new RequestNormalizationStage(null, null, createLogger());
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       chain_id: 'chain-demo#1',
       user_response: 'Step 1 result',
     });
@@ -153,7 +153,7 @@ describe('RequestNormalizationStage', () => {
 
   test('allows chain_id with gate review response', async () => {
     const stage = new RequestNormalizationStage(null, null, createLogger());
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       chain_id: 'chain-demo#1',
       user_response: 'GATE_REVIEW: PASS - All criteria met',
     });
@@ -167,7 +167,7 @@ describe('RequestNormalizationStage', () => {
   describe('typed argument transport', () => {
     test('keeps options and inputs out of command-string grammar', async () => {
       const stage = new RequestNormalizationStage(null, null, createLogger());
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>demo mode:"inline"',
         options: { theme: "artist's note", mode: 'legacy' },
         inputs: {
@@ -194,7 +194,7 @@ describe('RequestNormalizationStage', () => {
 
   test('error message explains both execution and resume modes clearly', async () => {
     const stage = new RequestNormalizationStage(null, null, createLogger());
-    const context = new ExecutionContext({});
+    const context = new PromptRequestContext({});
 
     await stage.execute(context);
 

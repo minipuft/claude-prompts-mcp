@@ -24,7 +24,7 @@ import { ScriptExecutionStage } from '../../../src/engine/execution/pipeline/sta
 import { ToolDetectionService } from '../../../src/modules/automation/detection/tool-detection-service.js';
 import { ToolTriggerFilter } from '../../../src/modules/automation/execution/tool-trigger-filter.js';
 import { resetDefaultPendingConfirmationTracker } from '../../../src/modules/automation/execution/pending-confirmation-tracker.js';
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 
 import type { ScriptExecutor } from '../../../src/modules/automation/execution/script-executor.js';
 import type {
@@ -150,7 +150,7 @@ describe('Script Auto-Approve Flow Integration', () => {
       };
       mockScriptExecutor.execute.mockResolvedValue(validResult);
 
-      const context = new ExecutionContext(createMockRequest());
+      const context = new PromptRequestContext(createMockRequest());
       context.parsedCommand = {
         promptId: 'test_prompt',
         rawArgs: 'data:"test value"',
@@ -209,7 +209,7 @@ describe('Script Auto-Approve Flow Integration', () => {
       };
       mockScriptExecutor.execute.mockResolvedValue(invalidResult);
 
-      const context = new ExecutionContext(createMockRequest());
+      const context = new PromptRequestContext(createMockRequest());
       context.parsedCommand = {
         promptId: 'test_prompt',
         rawArgs: 'data:"test value"',
@@ -269,7 +269,7 @@ describe('Script Auto-Approve Flow Integration', () => {
       };
       mockScriptExecutor.execute.mockResolvedValue(warningResult);
 
-      const context = new ExecutionContext(createMockRequest());
+      const context = new PromptRequestContext(createMockRequest());
       context.parsedCommand = {
         promptId: 'test_prompt',
         rawArgs: 'data:"test value"',
@@ -329,7 +329,7 @@ describe('Script Auto-Approve Flow Integration', () => {
       };
       mockScriptExecutor.execute.mockResolvedValue(validResult);
 
-      const context = new ExecutionContext(createMockRequest());
+      const context = new PromptRequestContext(createMockRequest());
       context.parsedCommand = {
         promptId: 'test_prompt',
         rawArgs: 'data:"test" input:"value"',

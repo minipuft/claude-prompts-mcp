@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ShellVerificationStage } from '../../../../src/engine/execution/pipeline/stages/17-shell-verification-stage.js';
 import { SqliteEngine } from '../../../../src/infra/database/index.js';
 import { ChainSessionStore } from '../../../../src/modules/chains/manager.js';
@@ -83,7 +83,7 @@ describe('ShellVerificationStage', () => {
       createLogger()
     );
 
-    const context = new ExecutionContext({ command: '>>chain', user_response: 'fixed code' });
+    const context = new PromptRequestContext({ command: '>>chain', user_response: 'fixed code' });
 
     context.state.gates.pendingShellVerification = {
       gateId: 'gate-shell-test-suite',
@@ -113,7 +113,7 @@ describe('ShellVerificationStage', () => {
       createLogger()
     );
 
-    const context = new ExecutionContext({ command: '>>chain', user_response: 'fixed code' });
+    const context = new PromptRequestContext({ command: '>>chain', user_response: 'fixed code' });
 
     context.state.gates.pendingShellVerification = {
       gateId: 'shell-verify-inline',
@@ -142,7 +142,7 @@ describe('ShellVerificationStage', () => {
       createLogger()
     );
 
-    const context = new ExecutionContext({ command: '>>chain', user_response: 'attempt fix' });
+    const context = new PromptRequestContext({ command: '>>chain', user_response: 'attempt fix' });
 
     context.state.gates.pendingShellVerification = {
       gateId: 'gate-shell-test-suite',
@@ -172,7 +172,7 @@ describe('ShellVerificationStage', () => {
       createLogger()
     );
 
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     // No pendingShellVerification set
 
     await stage.execute(context);
@@ -201,7 +201,7 @@ describe('ShellVerificationStage', () => {
         createAdvanceOwner(),
         createLogger()
       );
-      const context = new ExecutionContext({ command: '>>chain :: verify:"npm test"' });
+      const context = new PromptRequestContext({ command: '>>chain :: verify:"npm test"' });
       context.state.session.resumeSessionId = 'test-session';
       context.state.gates.pendingShellVerification = inlineCheck();
 
@@ -228,7 +228,7 @@ describe('ShellVerificationStage', () => {
         createAdvanceOwner(),
         createLogger()
       );
-      const armed = new ExecutionContext({ chain_id: 'chain-x#1' });
+      const armed = new PromptRequestContext({ chain_id: 'chain-x#1' });
       armed.state.session.resumeSessionId = 'uuid-a';
       armed.state.identity.continuityScopeId = 'scope-a';
       const loopCheck = { ...inlineCheck(), shellVerify: { command: 'npm test', loop: true } };
@@ -238,7 +238,7 @@ describe('ShellVerificationStage', () => {
         { runSessionId: 'uuid-a', chainId: 'chain-x#1', scope: { continuityScopeId: 'scope-a' } },
         loopCheck
       );
-      const orphan = new ExecutionContext({ chain_id: 'chain-x#1' });
+      const orphan = new PromptRequestContext({ chain_id: 'chain-x#1' });
       orphan.state.gates.pendingShellVerification = loopCheck;
       await expect(stage.execute(orphan)).rejects.toThrow('no workflow run identity');
       expect(stateManager.writeWorkflowState).toHaveBeenCalledTimes(1);
@@ -255,7 +255,7 @@ describe('ShellVerificationStage', () => {
         createAdvanceOwner(),
         createLogger()
       );
-      const context = new ExecutionContext({ chain_id: 'chain-test#1', user_response: 'done' });
+      const context = new PromptRequestContext({ chain_id: 'chain-test#1', user_response: 'done' });
       context.state.session.resumeSessionId = 'test-session';
       // The run captured this call's answer, so there is a step to grade
       context.state.session.capturedStep = { nodeId: 'node-1', ordinal: 1 };
@@ -280,7 +280,7 @@ describe('ShellVerificationStage', () => {
         createAdvanceOwner(),
         createLogger()
       );
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>chain :: verify:"npm test"',
         user_response: 'an answer sent with the command',
       });
@@ -333,7 +333,7 @@ describe('ShellVerificationStage', () => {
       command: 'npm test',
     };
     const replyCall = (args: Record<string, unknown>) => {
-      const context = new ExecutionContext({ chain_id: 'chain-test#1', ...args });
+      const context = new PromptRequestContext({ chain_id: 'chain-test#1', ...args });
       context.state.session.resumeSessionId = 'test-session';
       return context;
     };
@@ -502,7 +502,10 @@ describe('ShellVerificationStage', () => {
         createAdvanceOwner(),
         createLogger()
       );
-      const context = new ExecutionContext({ chain_id: 'chain-test#1', user_response: 'fixed' });
+      const context = new PromptRequestContext({
+        chain_id: 'chain-test#1',
+        user_response: 'fixed',
+      });
       context.state.session.resumeSessionId = 'test-session';
       context.state.gates.pendingShellVerification = {
         gateId: 'shell-verify-inline',
@@ -571,7 +574,10 @@ describe('ShellVerificationStage', () => {
         advanceOwner,
         createLogger()
       );
-      const context = new ExecutionContext({ chain_id: 'chain-test#1', user_response: 'step 2' });
+      const context = new PromptRequestContext({
+        chain_id: 'chain-test#1',
+        user_response: 'step 2',
+      });
       context.state.session.resumeSessionId = 'test-session';
       context.state.session.capturedStep = { nodeId: 'node-2', ordinal: 2 };
       context.state.gates.pendingShellVerification = {
@@ -637,7 +643,10 @@ describe('ShellVerificationStage', () => {
         advanceOwner,
         createLogger()
       );
-      const context = new ExecutionContext({ chain_id: 'chain-test#1', user_response: 'fixed' });
+      const context = new PromptRequestContext({
+        chain_id: 'chain-test#1',
+        user_response: 'fixed',
+      });
       context.state.session.resumeSessionId = 'test-session';
       context.state.gates.pendingShellVerification = {
         gateId: 'shell-verify-inline',
@@ -711,7 +720,7 @@ describe('ShellVerificationStage', () => {
 
   describe('gate_action handling', () => {
     const createEscalatedContext = (gateAction: 'retry' | 'skip') => {
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>chain',
         chain_id: 'chain-test#1',
         gate_action: gateAction,
@@ -895,7 +904,7 @@ describe('ShellVerificationStage', () => {
         createLogger()
       );
 
-      const context = new ExecutionContext({ command: '>>chain', user_response: 'fixed code' });
+      const context = new PromptRequestContext({ command: '>>chain', user_response: 'fixed code' });
       context.state.session.resumeSessionId = 'test-session';
       context.state.gates.pendingShellVerification = {
         gateId: 'shell-verify-inline',
@@ -930,7 +939,7 @@ describe('ShellVerificationStage', () => {
         createLogger()
       );
 
-      const context = new ExecutionContext({ command: '>>chain', user_response: 'fixed code' });
+      const context = new PromptRequestContext({ command: '>>chain', user_response: 'fixed code' });
       context.state.session.resumeSessionId = 'test-session';
       context.state.session.capturedStep = { nodeId: 'node-1', ordinal: 1 };
       context.state.gates.pendingShellVerification = {
@@ -963,7 +972,10 @@ describe('ShellVerificationStage', () => {
         createLogger()
       );
 
-      const context = new ExecutionContext({ command: '>>chain', user_response: 'attempt fix' });
+      const context = new PromptRequestContext({
+        command: '>>chain',
+        user_response: 'attempt fix',
+      });
       context.state.session.resumeSessionId = 'test-session';
       context.state.session.capturedStep = { nodeId: 'node-1', ordinal: 1 };
       context.state.gates.pendingShellVerification = {
@@ -1034,7 +1046,7 @@ describe('ShellVerificationStage', () => {
         createAdvanceOwner(),
         createLogger()
       );
-      const context = new ExecutionContext({ chain_id: run.chainId });
+      const context = new PromptRequestContext({ chain_id: run.chainId });
       context.state.session.resumeSessionId = 'uuid-live';
       context.state.identity.continuityScopeId = 'cwd';
       context.state.identity.context = { organizationId: 'cwd', workspaceId: 'cwd' } as never;

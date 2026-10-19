@@ -29,7 +29,7 @@ import { validateWorkflowIR } from '../../../src/modules/workflow-ir/validator.j
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { CommandParsingStage } from '../../../src/engine/execution/pipeline/stages/04-parsing-stage.js';
 import { OperatorValidationStage } from '../../../src/engine/execution/pipeline/stages/06-operator-validation-stage.js';
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
@@ -268,7 +268,7 @@ describe('Delegation Operator (==>) Flow', () => {
         { stepNumber: 2, promptId: 'summarize', args: {} },
       ];
 
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>research topic:"test" --> >>summarize',
       });
       context.parsedCommand = {
@@ -323,7 +323,7 @@ describe('Delegation Operator (==>) Flow', () => {
         ...(index === 1 ? { subagentModel: 'fast' as const } : {}),
       }));
 
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>research topic:"test" --> >>summarize --> >>review',
       });
       context.parsedCommand = {
@@ -387,7 +387,7 @@ describe('Delegation Operator (==>) Flow', () => {
         ...(index === 1 ? { subagentModel: 'heavy' as const } : {}),
       }));
 
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>research topic:"test" --> >>summarize --> >>review',
       });
       context.parsedCommand = {
@@ -554,7 +554,7 @@ describe('Delegation Operator (==>) Flow', () => {
     ];
 
     /** Drive real stage 04 over a bare `>>id` command — no operators, no `==>`. */
-    const parseDirectly = async (command: string): Promise<ExecutionContext> => {
+    const parseDirectly = async (command: string): Promise<PromptRequestContext> => {
       const parsing = createParsingSystem(mockLogger);
       const stage04 = new CommandParsingStage(
         parsing.commandParser,
@@ -567,12 +567,12 @@ describe('Delegation Operator (==>) Flow', () => {
           retargetGates,
         })
       );
-      const context = new ExecutionContext({ command });
+      const context = new PromptRequestContext({ command });
       await stage04.execute(context);
       return context;
     };
 
-    const runStage06 = async (context: ExecutionContext): Promise<void> => {
+    const runStage06 = async (context: PromptRequestContext): Promise<void> => {
       await new OperatorValidationStage(null, mockLogger).execute(context);
     };
 

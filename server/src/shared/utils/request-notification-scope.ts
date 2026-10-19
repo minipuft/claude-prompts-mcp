@@ -19,7 +19,7 @@
  *
  * WHY AN ASYNC CONTEXT AND NOT A PARAMETER. The six events are raised four layers below the tool
  * callback, by three services that do not share one carrier: `GateVerdictProcessor` and
- * `StepCaptureService` hold an `ExecutionContext`, `ChainSessionStore.announceRunTerminal` holds
+ * `StepCaptureService` hold an `PromptRequestContext`, `ChainSessionStore.announceRunTerminal` holds
  * only a `ChainSession`, and `FrameworkStateStore.announceFrameworkChanged` holds neither. Making
  * the sink a parameter means widening `advanceStep`, `transitionRunStatus`, `cancelChain` and
  * `switchFramework` plus their port declarations — four public contracts widened to carry a value

@@ -5,7 +5,7 @@ import type { FrameworkDecision } from '../types.js';
 
 /**
  * Input data required for framework decision.
- * This interface decouples the authority from ExecutionContext.
+ * This interface decouples the authority from PromptRequestContext.
  */
 export interface FrameworkDecisionInput {
   /** Execution modifiers from parsing/planning */

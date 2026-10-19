@@ -13,7 +13,7 @@ import type {
   SessionBlueprint,
   ToolResponse,
 } from '#shared/types/index.js';
-import type { ExecutionContext, ParsedCommand, SessionContext } from '../../context/index.js';
+import type { PromptRequestContext, ParsedCommand, SessionContext } from '../../context/index.js';
 import type { ExecutionPlan } from '../../types.js';
 
 import { isRunComplete } from '#shared/types/chain-session.js';
@@ -42,7 +42,7 @@ export class SessionManagementStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     if (!context.requireExecutionPlan().requiresSession) {
@@ -192,7 +192,7 @@ export class SessionManagementStage extends BasePipelineStage {
    * when the call was answered. (A request gate targeting a step the run has passed is refused
    * earlier, by the gate registrar at stage 11, R65.)
    */
-  private answerWithoutResuming(context: ExecutionContext, session: ChainSession): boolean {
+  private answerWithoutResuming(context: PromptRequestContext, session: ChainSession): boolean {
     if (!isRunComplete(session)) return false;
     context.setResponse(this.buildAlreadyCompleteResponse(session));
     context.state.session.lifecycleDecision = 'resume-completed';
@@ -230,7 +230,7 @@ export class SessionManagementStage extends BasePipelineStage {
    * and no review already exists. Delegates to GateEnforcementAuthority.
    */
   private async createPendingGateReviewIfNeeded(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionContext: SessionContext
   ): Promise<void> {
     // Skip if no blocking gates or review already exists
@@ -276,14 +276,14 @@ export class SessionManagementStage extends BasePipelineStage {
     });
   }
 
-  private createSessionId(context: ExecutionContext): string {
+  private createSessionId(context: PromptRequestContext): string {
     if (context.executionPlan?.gates.length) {
       return `review-${context.parsedCommand?.promptId}-${Date.now()}`;
     }
     return randomUUID();
   }
 
-  private getBaseChainId(context: ExecutionContext): string {
+  private getBaseChainId(context: PromptRequestContext): string {
     const requestedChainId = context.mcpRequest.chain_id ?? context.state.session.resumeChainId;
     if (typeof requestedChainId === 'string' && requestedChainId.length > 0) {
       return stripRunNumber(requestedChainId);
@@ -317,7 +317,7 @@ export class SessionManagementStage extends BasePipelineStage {
    * (P6.74). Every source that names a chain prompt projects its steps before this stage, so
    * reaching here without them means a new source skipped the projection.
    */
-  private getTotalSteps(context: ExecutionContext): number {
+  private getTotalSteps(context: PromptRequestContext): number {
     // Use type guard for type-safe access to chain steps
     if (context.hasChainCommand()) {
       return context.parsedCommand.steps.length;
@@ -342,7 +342,7 @@ export class SessionManagementStage extends BasePipelineStage {
    * which builder.
    */
   private buildChainNodes(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     chainId: string,
     totalSteps: number
   ): ChainNode[] | undefined {
@@ -391,7 +391,7 @@ export class SessionManagementStage extends BasePipelineStage {
     return isRunComplete(session);
   }
 
-  private buildSessionBlueprint(context: ExecutionContext): SessionBlueprint | undefined {
+  private buildSessionBlueprint(context: PromptRequestContext): SessionBlueprint | undefined {
     if (!context.parsedCommand) {
       return undefined;
     }

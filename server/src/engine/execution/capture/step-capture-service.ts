@@ -16,7 +16,7 @@ import type {
   McpNotificationEmitterPort,
 } from '#shared/types/index.js';
 import type { DeferredAdvance } from '../../gates/services/gate-verdict-processor.js';
-import type { ExecutionContext, SessionContext } from '../context/index.js';
+import type { PromptRequestContext, SessionContext } from '../context/index.js';
 import type { ChainStepPrompt } from '../operators/types.js';
 
 import { isConversationPaused, RunOperationRefusedError } from '#shared/types/chain-session.js';
@@ -150,7 +150,7 @@ export class StepCaptureService {
    * past a step is announced (R25) — so a capture a review holds announces nothing.
    */
   async captureStep(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     session: ChainSession,
     sessionContext: SessionContext,
@@ -235,7 +235,7 @@ export class StepCaptureService {
    * rather than completed — the store's completion guard decides that, not this method.
    */
   async passDetachedNode(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     session: ChainSession,
     sessionContext: SessionContext,
@@ -270,7 +270,7 @@ export class StepCaptureService {
    * that has not been answered.
    */
   async recordDetachedReport(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     session: ChainSession,
     target: StepTarget,
@@ -321,7 +321,7 @@ export class StepCaptureService {
   }
 
   private async captureRealResponse(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     chainId: string,
     target: StepTarget,
@@ -367,7 +367,7 @@ export class StepCaptureService {
 
   /** Refuse retargeting before any output mutation; only renewal may replace a semantic target. */
   private reviewForCapture(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     nodeId: string,
     response: string
@@ -392,7 +392,7 @@ export class StepCaptureService {
 
   /** Only persisted capture content enters the existing binding authority. */
   private async bindCapturedReview(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     review: GateReview | undefined,
     response: string
@@ -417,7 +417,7 @@ export class StepCaptureService {
    * second layer around that.
    */
   private async announceStepComplete(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     chainId: string,
     target: StepTarget,
     responseContent: string
@@ -471,7 +471,7 @@ export class StepCaptureService {
    * rewriting this one (P4.86).
    */
   private ledgerCapturedStep(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     chainId: string,
     target: StepTarget,
@@ -531,7 +531,7 @@ export class StepCaptureService {
 
   /** Persist authorized bypass custody before a caller may advance or complete the held run. */
   ledgerSubmittedReviewAction(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     session: ChainSession
   ): void {
@@ -596,7 +596,7 @@ export class StepCaptureService {
    * submitter, which is what `input_required` says.
    */
   ledgerSubmittedVerdict(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     session: ChainSession
   ): void {
@@ -650,7 +650,7 @@ export class StepCaptureService {
    * next planned step's names and that step's own answer under the step after it (P6.176).
    */
   private getStepOutputMapping(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     target: StepTarget
   ): Record<string, string> | undefined {
@@ -670,7 +670,7 @@ export class StepCaptureService {
    * Replace an existing placeholder with a real response and optionally advance.
    */
   private async replaceplaceholderWithReal(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     session: ChainSession,
     sessionContext: SessionContext,
@@ -700,7 +700,7 @@ export class StepCaptureService {
    * Capture a real response for a step that has no existing state, and optionally advance.
    */
   private async captureRealAndAdvance(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     session: ChainSession,
     target: StepTarget,
@@ -726,7 +726,7 @@ export class StepCaptureService {
    * only when the answered review graded the captured node) leaves nothing to return.
    */
   private advanceUnlessHeld(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     target: StepTarget,
     passClearedThisCall: boolean
@@ -754,7 +754,7 @@ export class StepCaptureService {
   }
 
   private syncSessionContext(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     sessionContext: SessionContext
   ): void {
@@ -777,7 +777,7 @@ export class StepCaptureService {
 
 /** Existing step-completion boundary, with the processor's injected IO ports passed explicitly. */
 export async function announceAdvancedStep(input: {
-  readonly context: ExecutionContext;
+  readonly context: PromptRequestContext;
   readonly session: ChainSession;
   readonly advance: DeferredAdvance;
   readonly chainSessionStore: ChainSessionService;
@@ -855,7 +855,7 @@ export function reviewHolding(session: ChainSession, nodeId: string): GateReview
  * ordinal only when they carry no node ids (`parseStepForNode`).
  */
 export function recordedStep(
-  context: ExecutionContext,
+  context: PromptRequestContext,
   session: ChainSession | undefined,
   nodeId: string | undefined,
   ordinal: number

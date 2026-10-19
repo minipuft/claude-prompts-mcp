@@ -12,7 +12,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { FrameworkManager } from '../../../frameworks/framework-manager.js';
 import type { FrameworkExecutionContext } from '../../../frameworks/types/index.js';
 import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 import type { FrameworkDecision, FrameworkDecisionInput } from '../decisions/index.js';
 
 /**
@@ -65,7 +65,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
     }
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     // Load fresh framework gate IDs for this request (prevents stale cache after hot-reload)
@@ -166,7 +166,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
    * Build decision input from context for FrameworkDecisionAuthority.
    * This extracts all relevant data for the centralized framework decision.
    */
-  private buildDecisionInput(context: ExecutionContext): FrameworkDecisionInput {
+  private buildDecisionInput(context: PromptRequestContext): FrameworkDecisionInput {
     const decisionInput: FrameworkDecisionInput = {};
 
     const modifiers = context.executionPlan?.modifiers;
@@ -193,7 +193,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
    * @param authorityFrameworkId - Framework ID from FrameworkDecisionAuthority (already resolved)
    */
   private resolveSinglePromptFramework(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     authorityFrameworkId?: string
   ): Record<string, unknown> {
     const prompt = context.requireConvertedPrompt();
@@ -276,7 +276,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
   }
 
   private resolveChainFrameworks(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     frameworkGateIds: ReadonlySet<string>,
     authorityFrameworkId?: string,
     authoritySource?: FrameworkDecision['source']

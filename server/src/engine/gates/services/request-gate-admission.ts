@@ -12,7 +12,7 @@
  *      entry, one under a canonical gate's id, and on a resume one targeting a step the run can no
  *      longer reach, are each refused by entry.
  *
- * The modifiers read here are the call's own (`ExecutionContext.getExecutionModifiers`): the
+ * The modifiers read here are the call's own (`PromptRequestContext.getExecutionModifiers`): the
  * planner's default `%clean` for a script-tool prompt is decided later, at stage 07, and is not
  * applied to a call that requested a gate (`callerRequestedGates`), so it never needs a refusal.
  */
@@ -27,7 +27,7 @@ import type { GateSystemSettings } from '#shared/types/index.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { GateSuppression } from './gate-suppression-refusal.js';
 import type { TemporaryGateRegistrar } from './temporary-gate-registrar.js';
-import type { ExecutionContext } from '../../execution/context/index.js';
+import type { PromptRequestContext } from '../../execution/context/index.js';
 
 type GateSystemSettingsProvider = () => GateSystemSettings | undefined;
 /** The runtime gate switch (`system_control gates`), read for a request's scope. */
@@ -40,7 +40,7 @@ type GateSystemSwitch = (scope: StateStoreOptions | undefined) => boolean;
  */
 export function callerRequestedGates(
   registrar: TemporaryGateRegistrar,
-  context: ExecutionContext
+  context: PromptRequestContext
 ): string[] {
   return requestedGateAddresses({
     requestGates: registrar.ownRequestGates(context),
@@ -70,7 +70,7 @@ export class RequestGateAdmission {
   ) {}
 
   /** The call's gate requests the server will not run as sent; empty admits the call. */
-  async refusals(context: ExecutionContext): Promise<WorkflowRejection[]> {
+  async refusals(context: PromptRequestContext): Promise<WorkflowRejection[]> {
     const suppression = resolveGateSuppression({
       configEnabled: this.gatesConfigProvider()?.enabled !== false,
       runtimeEnabled: () => this.gateSystemEnabled(context.getScopeOptions()),

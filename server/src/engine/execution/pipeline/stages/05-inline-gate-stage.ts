@@ -6,7 +6,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { WorkflowRejection } from '#modules/workflow-ir/types.js';
 import type { InlineGateProcessor } from '../../../gates/services/inline-gate-processor.js';
 import type { RequestGateAdmission } from '../../../gates/services/request-gate-admission.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 
 /**
  * Pipeline Stage 05: Inline Gate Extraction
@@ -32,7 +32,7 @@ export class InlineGateExtractionStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     const parsedCommand = context.parsedCommand;
@@ -103,7 +103,7 @@ export class InlineGateExtractionStage extends BasePipelineStage {
   }
 
   /** Answer the call with `refusals` in the shared rejection shape; false when there are none. */
-  private refuse(context: ExecutionContext, refusals: readonly WorkflowRejection[]): boolean {
+  private refuse(context: PromptRequestContext, refusals: readonly WorkflowRejection[]): boolean {
     if (refusals.length === 0) return false;
     context.diagnostics.warn(this.name, 'Gate request refused', { count: refusals.length });
     context.setResponse(
