@@ -3,8 +3,14 @@
  * Framework Manager Types
  */
 
+import type {
+  FrameworkGate,
+  TemplateSuggestion,
+} from '#engine/frameworks/definitions/framework-schema.js';
 import type { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import type { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
+import type { ExecutionStep, ProcessingStep } from '#engine/frameworks/types/framework-types.js';
+import type { ExecutionTypeEnhancements } from '#engine/frameworks/utils/step-generator.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
 
@@ -39,58 +45,6 @@ export interface PhaseDefinition {
 // ============================================================================
 
 /**
- * Framework-specific quality gate with validation criteria
- */
-export interface FrameworkGate {
-  id: string;
-  name: string;
-  description: string;
-  frameworkArea: string;
-  priority: 'high' | 'medium' | 'low';
-  validationCriteria: string[];
-}
-
-/**
- * Processing step used in template processing
- */
-export interface ProcessingStep {
-  id: string;
-  name: string;
-  description: string;
-  frameworkBasis: string;
-  order: number;
-  required: boolean;
-  /** Header marker for section detection (e.g., "## Context") */
-  marker?: string;
-  /** Deterministic phase guards evaluated against the section under this marker */
-  guards?: Record<string, unknown>;
-}
-
-/**
- * Execution step with dependencies and expected output
- */
-export interface ExecutionStep {
-  id: string;
-  name: string;
-  action: string;
-  frameworkPhase: string;
-  dependencies: string[];
-  expected_output: string;
-}
-
-/**
- * Template suggestion for prompt enhancement
- */
-export interface TemplateSuggestion {
-  section: 'system' | 'user';
-  type: 'addition' | 'structure' | 'modification';
-  description: string;
-  content: string;
-  frameworkJustification: string;
-  impact: 'high' | 'medium' | 'low';
-}
-
-/**
  * Framework elements for prompt creation guidance
  */
 export interface FrameworkElements {
@@ -108,16 +62,6 @@ export interface ArgumentSuggestion {
   description: string;
   frameworkReason: string;
   examples: string[];
-}
-
-/**
- * Execution type-specific step enhancements
- */
-export interface ExecutionTypeEnhancements {
-  chain?: {
-    advancedChain?: Record<string, string[]>;
-    simpleChain?: Record<string, string[]>;
-  };
 }
 
 /**

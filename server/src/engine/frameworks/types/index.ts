@@ -36,7 +36,6 @@ export type {
   FrameworkHealth,
   PromptGuidanceAnalytics,
   PromptGuidanceConfig,
-  PromptGuidanceResult,
   SystemPromptInjectionConfig,
   SystemPromptInjectionResult,
   TemplateProcessingGuidance,

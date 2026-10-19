@@ -188,7 +188,7 @@ export interface ExecutionStep {
   name: string;
   action: string;
   frameworkPhase: string;
-  dependencies: string[];
+  dependencies?: string[];
   expected_output: string;
 }
 

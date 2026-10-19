@@ -7,12 +7,7 @@
  * guidance system that enhances MCP prompts with framework-specific improvements.
  */
 
-import type {
-  FrameworkDefinition,
-  FrameworkEnhancement,
-  ProcessingGuidance,
-} from './framework-types.js';
-import type { ConvertedPrompt } from '../../execution/types.js';
+import type { FrameworkDefinition, ProcessingGuidance } from './framework-types.js';
 
 /**
  * System prompt injection configuration
@@ -71,28 +66,6 @@ export interface PromptGuidanceConfig {
     persistState: boolean;
     trackSwitches: boolean;
     maxHistoryEntries: number;
-  };
-}
-
-/**
- * Comprehensive prompt guidance result
- */
-export interface PromptGuidanceResult {
-  /** Original prompt before guidance was applied */
-  originalPrompt: ConvertedPrompt;
-  /** Enhanced prompt with all guidance applied */
-  enhancedPrompt: ConvertedPrompt;
-  /** System prompt injection result */
-  systemPromptInjection: SystemPromptInjectionResult | null;
-  /** Applied framework enhancement */
-  frameworkEnhancement: FrameworkEnhancement | null;
-  /** Guidance metadata */
-  metadata: {
-    guidanceTime: Date;
-    activeFrameworkType: string;
-    totalEnhancements: number;
-    confidenceScore: number;
-    processingTime: number;
   };
 }
 
