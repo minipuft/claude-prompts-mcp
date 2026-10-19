@@ -8,12 +8,18 @@
 - **R3** S1/S2 (sending `tools` replaces the bound list; a dropped tool's folder stays) is intended and tested (`unset-verb.test.ts:375-391`, #262), but documented only on `tool_operation`. Fork: intended-but-undocumented → row C documents it on `tools` and in the reply. No behavior change.
 - **R4** S4 (re-wrapping at 80 columns) is the documented cost of the whole-document path (`CHANGELOG.md:457`). Row A keeps list-length edits off that path, so it stops for this case; no global width change (width 0 would match 30 of 106 bundled files against 63 at 80).
 
+- **R5 (row A concerns)** (1) The reload check that sends a scalar edit to the whole-document path when its text would reload as another type stays: before it, a string `'5'` written into an unquoted value landed as the number 5, a silent value change; correct value over untouched bytes. (2) Comment ownership follows the yaml library: a comment between items leaves with the item below it; one above the first item stays with the list. Owner may override. (3) Same-length lists whose paired items change shape still re-render; aligning them changes today's position semantics and is out of scope.
+
 ## Deviations
 
 - **DEV-B-1** Row B writes a supplied `schema` to the tool's declared `schemaFile` (default `schema.json`) rather than always `schema.json`, so the schema lands where the loader reads it. Accepted.
 - **DEV-B-2** Row B merged `origin/main` (#502) into its branch before editing, on planner instruction, so the `formatJsonDocument` call is resolved and tested there.
 
+- **DEV-A-1** Row A edits at the yaml token layer (the Document API re-renders the whole document, which fails the untouched-bytes measure); the Document API remains the fallback with item-level node edits. Accepted.
+
 ## Findings
+
+- **Row A** Edits that still re-render the whole document: adding or removing a key, a value changing kind, a multi-line string replacing a scalar, type-changing scalar text, same-length lists with reshaped items, emptying a root list, flow lists with a trailing comma or `key: value` items, alias lists.
 
 - **Row B** A resend no longer forces `enabled: true`: an authored `enabled: false` survives (it was silently re-enabled before). Row C's changelog names it. An unparseable existing `tool.yaml` is treated as absent and rewritten.
 
