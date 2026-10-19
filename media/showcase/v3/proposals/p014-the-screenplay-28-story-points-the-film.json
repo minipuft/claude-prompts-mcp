@@ -1,0 +1,21 @@
+{
+  "id": "p014",
+  "kind": "change",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "the-frame",
+    "frame": 740
+  },
+  "title": "The screenplay: 28 story points the film validates toward",
+  "text": "The owner watched animatic 04 and saw arms waving and nothing happening. Every probe was green because no probe asks whether anything changes on screen. v3/screenplay.json is the director's draft: 28 story points with stable ids (sp-1.1 to sp-8.3), each naming the action, what the character wants, the turn, which beat-sheet state flips after it, what the audience sees, the colour key and emitter, the register, and a measure line a probe can check (a prop that appears, a position that moves, a garment that changes). Keys, blocking, light and probes bind to the ids; a story probe refuses a story point whose before and after differ only in the figure layer. v3/screenplay.md is rendered from it for reading. Three asks are carried inside it (first drawn object, number of gates, world colour rows).",
+  "references": [
+    "elmo-world",
+    "spirited-away-shoes",
+    "kyle-baker-timing"
+  ],
+  "before": "beats-v2.json: eight beats with actions and state flips that nothing binds to or measures; beat 4 posed as six body keys with no heap, no frame carried in, no nudge",
+  "after": "screenplay.json is the target: every key, blocking action and emitter names its story point; probe-story checks each story point changes the world, not only the figure; the bible's script lane shows the active story point",
+  "status": "open",
+  "ruling": null
+}

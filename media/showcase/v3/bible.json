@@ -34,10 +34,11 @@
     "v3/proposals/p011-the-eye-trace-is-red-in-beat-4-and-the-s.json",
     "v3/proposals/p012-home-settle-the-structure-stands-small-u.json",
     "v3/proposals/p013-beat-4-staging-the-frame-is-the-subject.json",
+    "v3/proposals/p014-the-screenplay-28-story-points-the-film.json",
     "v3/materials.json",
     "v3/materials.schema.json"
   ],
-  "inputsHash": "cb7070835fe69b1b087cfb411dc9414029507695a605e4a093b832069f8573ec",
+  "inputsHash": "05268acd63ef6d96691078ef86fa8fce0e8bc609cf903b67a79ee984bdb8f1e9",
   "tracks": [
     {
       "name": "pacing",
@@ -5413,10 +5414,10 @@
             "id": "p007",
             "title": "The eye trace follows what the light pushes, not the emitter",
             "kind": "owner-ask",
-            "status": "open",
+            "status": "ruled",
             "from": "director",
             "date": "2026-10-19",
-            "ruling": null,
+            "ruling": "D100",
             "anchor": {
               "beat": "everything-at-once",
               "frame": 200
@@ -5630,10 +5631,10 @@
             "id": "p012",
             "title": "Home-settle: the structure stands small under the frame, which keeps the frame clear and weakens the last picture",
             "kind": "change",
-            "status": "open",
+            "status": "ruled",
             "from": "director",
             "date": "2026-10-19",
-            "ruling": null,
+            "ruling": "D102",
             "anchor": {
               "beat": "home-settle",
               "frame": 1800
@@ -5671,10 +5672,10 @@
             "id": "p013",
             "title": "Beat 4 staging: the frame is the subject, but the figure fills the stage",
             "kind": "owner-ask",
-            "status": "open",
+            "status": "ruled",
             "from": "director",
             "date": "2026-10-19",
-            "ruling": null,
+            "ruling": "D101",
             "anchor": {
               "beat": "the-frame",
               "frame": 900
@@ -5717,6 +5718,76 @@
             "before": "beat 4 staged with the figure at full stage height and the frame small at top right; eye trace 270 of 300 frames off the frame",
             "after": "beat 4 restaged wide: the frame large, the figure small against it, the field narrowing to the frame (D91, D99)",
             "file": "v3/proposals/p013-beat-4-staging-the-frame-is-the-subject.json"
+          }
+        },
+        {
+          "start": 740,
+          "end": 741,
+          "beat": "the-frame",
+          "label": "p014 The screenplay: 28 story points the film validates toward",
+          "data": {
+            "id": "p014",
+            "title": "The screenplay: 28 story points the film validates toward",
+            "kind": "change",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "the-frame",
+              "frame": 740
+            },
+            "text": "The owner watched animatic 04 and saw arms waving and nothing happening. Every probe was green because no probe asks whether anything changes on screen. v3/screenplay.json is the director's draft: 28 story points with stable ids (sp-1.1 to sp-8.3), each naming the action, what the character wants, the turn, which beat-sheet state flips after it, what the audience sees, the colour key and emitter, the register, and a measure line a probe can check (a prop that appears, a position that moves, a garment that changes). Keys, blocking, light and probes bind to the ids; a story probe refuses a story point whose before and after differ only in the figure layer. v3/screenplay.md is rendered from it for reading. Three asks are carried inside it (first drawn object, number of gates, world colour rows).",
+            "references": [
+              {
+                "id": "elmo-world",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Elmo's World (Sesame Street, 1998–)",
+                "borrow": [
+                  "a world that wants to play with the child: furniture, door and window answer when addressed",
+                  "the crayon-drawn room as a warm field, lines that wobble because a child drew them",
+                  "failures are met with delight, never shame"
+                ],
+                "governs": [
+                  "D88",
+                  "C14"
+                ]
+              },
+              {
+                "id": "spirited-away-shoes",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Spirited Away (2001): Chihiro taps her heel into her shoe",
+                "borrow": [
+                  "one unneeded gesture that proves the body is real",
+                  "the pause before a step through a threshold (beat 4, the frame)"
+                ],
+                "governs": [
+                  "D92",
+                  "D89"
+                ]
+              },
+              {
+                "id": "kyle-baker-timing",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Kyle Baker: the Looney Tunes shorts and the comics' panel timing",
+                "borrow": [
+                  "rubbery anticipation into a hard stop",
+                  "a face that commits to one expression per drawing",
+                  "comic timing by the length of the hold, not the speed of the move"
+                ],
+                "governs": [
+                  "D88",
+                  "D92",
+                  "C28"
+                ]
+              }
+            ],
+            "before": "beats-v2.json: eight beats with actions and state flips that nothing binds to or measures; beat 4 posed as six body keys with no heap, no frame carried in, no nudge",
+            "after": "screenplay.json is the target: every key, blocking action and emitter names its story point; probe-story checks each story point changes the world, not only the figure; the bible's script lane shows the active story point",
+            "file": "v3/proposals/p014-the-screenplay-28-story-points-the-film.json"
           }
         }
       ]
@@ -5794,6 +5865,60 @@
               "p001"
             ],
             "text": "adopt the six-step beat-4 action, slump, turn, rise, step, threshold, through, with the cloak heap left in frame and Codex's nudge as the beat's gag, because the remembered image is the frame rise and the body must read as real before it goes through (ref spirited-away-shoes) (closes p001)"
+          }
+        },
+        {
+          "start": 180,
+          "end": 420,
+          "beat": "everything-at-once",
+          "label": "D100",
+          "data": {
+            "id": "D100",
+            "ids": [
+              "D100"
+            ],
+            "who": "owner",
+            "date": "2026-10-19",
+            "closes": [
+              "p007"
+            ],
+            "text": "retarget the eye-trace probe per beat to what the beat's light pushes, the emitter only where the beat names it because motivated (ref kyle-baker-timing) (closes p007) (closes p007)"
+          }
+        },
+        {
+          "start": 630,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "D101",
+          "data": {
+            "id": "D101",
+            "ids": [
+              "D101"
+            ],
+            "who": "owner",
+            "date": "2026-10-19",
+            "closes": [
+              "p013"
+            ],
+            "text": "restage beat 4 wide with the frame large near centre and the figure small against it because wonder (ref totoro-lived-in) (closes p013) (closes p013)"
+          }
+        },
+        {
+          "start": 1650,
+          "end": 1950,
+          "beat": "home-settle",
+          "label": "D102",
+          "data": {
+            "id": "D102",
+            "ids": [
+              "D102"
+            ],
+            "who": "owner",
+            "date": "2026-10-19",
+            "closes": [
+              "p012"
+            ],
+            "text": "keep the home-settle structure small under the frame because settled (ref totoro-lived-in) (closes p012) (closes p012)"
           }
         }
       ]

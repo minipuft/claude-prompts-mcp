@@ -1022,5 +1022,70 @@
     "refs": [
       "spirited-away-shoes"
     ]
+  },
+  {
+    "id": "D100",
+    "ids": [
+      "D100"
+    ],
+    "who": "owner",
+    "date": "2026-10-19",
+    "closes": [
+      "p007"
+    ],
+    "text": "retarget the eye-trace probe per beat to what the beat's light pushes, the emitter only where the beat names it because motivated (ref kyle-baker-timing) (closes p007) (closes p007)",
+    "raw": "- D100, owner, 2026-10-19: retarget the eye-trace probe per beat to what the beat's light pushes, the emitter only where the beat names it because motivated (ref kyle-baker-timing) (closes p007) (closes p007)",
+    "form": false,
+    "verb": null,
+    "object": null,
+    "value": null,
+    "intent": null,
+    "reason": null,
+    "ref": null,
+    "refs": []
+  },
+  {
+    "id": "D101",
+    "ids": [
+      "D101"
+    ],
+    "who": "owner",
+    "date": "2026-10-19",
+    "closes": [
+      "p013"
+    ],
+    "text": "restage beat 4 wide with the frame large near centre and the figure small against it because wonder (ref totoro-lived-in) (closes p013) (closes p013)",
+    "raw": "- D101, owner, 2026-10-19: restage beat 4 wide with the frame large near centre and the figure small against it because wonder (ref totoro-lived-in) (closes p013) (closes p013)",
+    "form": false,
+    "verb": null,
+    "object": null,
+    "value": null,
+    "intent": null,
+    "reason": null,
+    "ref": null,
+    "refs": []
+  },
+  {
+    "id": "D102",
+    "ids": [
+      "D102"
+    ],
+    "who": "owner",
+    "date": "2026-10-19",
+    "closes": [
+      "p012"
+    ],
+    "text": "keep the home-settle structure small under the frame because settled (ref totoro-lived-in) (closes p012) (closes p012)",
+    "raw": "- D102, owner, 2026-10-19: keep the home-settle structure small under the frame because settled (ref totoro-lived-in) (closes p012) (closes p012)",
+    "form": true,
+    "verb": "keep",
+    "object": "the home-settle structure small under the frame",
+    "value": "",
+    "intent": "settled",
+    "reason": null,
+    "ref": "totoro-lived-in",
+    "refs": [
+      "totoro-lived-in"
+    ]
   }
 ]

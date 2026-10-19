@@ -21,6 +21,6 @@
     "medium"
   ],
   "default": "wide",
-  "status": "open",
-  "ruling": null
+  "status": "ruled",
+  "ruling": "D101"
 }

@@ -21,6 +21,6 @@
     "push"
   ],
   "default": "push",
-  "status": "open",
-  "ruling": null
+  "status": "ruled",
+  "ruling": "D100"
 }

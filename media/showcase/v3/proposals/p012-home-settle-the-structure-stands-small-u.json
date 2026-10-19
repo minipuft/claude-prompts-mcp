@@ -14,6 +14,6 @@
   ],
   "before": "structure x1.2 over the frame; frame hidden",
   "after": "structure x0.5 under the frame; frame clear; the ending small",
-  "status": "open",
-  "ruling": null
+  "status": "ruled",
+  "ruling": "D102"
 }

@@ -65,6 +65,9 @@ The v3 briefs reached a consistent human, the official Codex and Clawd identitie
 - D97, owner, 2026-10-18: adopt the material contract v3/materials.json with the twelve properties, the Verlet secondaries solver, the bench and the follow-through probe on the pose gate, because weight and follow-through are derived from declared numbers rather than re-reasoned per pose (ref totoro-lived-in) (closes p002)
 - D98, owner, 2026-10-18: adopt light as one cached signed-distance shader layer with soft shadows and one bounce, quantised by the existing stipple, reading occluder, albedo and shadow class from the materials, with an occlusion control on the render probes, because light stays a volume and no engine is adopted (ref seuss-no-one-youer) (closes p003)
 - D99, owner, 2026-10-18: adopt the six-step beat-4 action, slump, turn, rise, step, threshold, through, with the cloak heap left in frame and Codex's nudge as the beat's gag, because the remembered image is the frame rise and the body must read as real before it goes through (ref spirited-away-shoes) (closes p001)
+- D100, owner, 2026-10-19: retarget the eye-trace probe per beat to what the beat's light pushes, the emitter only where the beat names it because motivated (ref kyle-baker-timing) (closes p007) (closes p007)
+- D101, owner, 2026-10-19: restage beat 4 wide with the frame large near centre and the figure small against it because wonder (ref totoro-lived-in) (closes p013) (closes p013)
+- D102, owner, 2026-10-19: keep the home-settle structure small under the frame because settled (ref totoro-lived-in) (closes p012) (closes p012)
 
 ## Craft baseline: pose-to-pose, consolidated into sheets (D72)
 
