@@ -96,6 +96,11 @@ details summary{cursor:pointer;color:#aaa}
 .ctl{margin:10px 0 0 104px}
 .ctl input[type=range]{width:100%;margin:0;accent-color:#f0b35a}
 .ctl output{display:block;color:#ccc;font-variant-numeric:tabular-nums;margin-top:2px}
+.player{display:flex;align-items:center;gap:6px;margin:0 0 6px 104px;flex-wrap:wrap}
+.player button{background:#2a2a2a;color:#eee;border:1px solid #555;border-radius:5px;min-width:34px;padding:4px 8px;font:inherit;font-size:13px;cursor:pointer;font-variant-numeric:tabular-nums}
+.player button:hover{border-color:#f0b35a}.player button.on{background:#f0b35a;color:#111;border-color:#f0b35a}
+.player .sep{width:1px;height:22px;background:#444;margin:0 4px}.player .pk{color:#aaa;font-size:12px;margin-left:6px}.player select{background:#2a2a2a;color:#eee;border:1px solid #555;border-radius:5px;padding:3px 6px;font:inherit;font-size:12px}
+.player .twos{display:inline-block;width:10px;height:10px;border-radius:50%;background:#444;margin-left:4px;vertical-align:middle}.player .twos.draw{background:#f0b35a}
 .flags{background:var(--panel);border-radius:8px;padding:8px 16px;border-left:6px solid var(--gag)}
 .flags li{color:#ff9d8f;margin:3px 0}.flags li b{color:var(--gag)}
 .cards{display:grid;gap:14px}
@@ -155,6 +160,14 @@ footer{margin-top:30px;color:#777;font-size:12px;border-top:1px solid #2a2a2a;pa
     <div class="axis" id="axis"></div>
     <div id="lanes"></div>
     <div class="cursor" id="cursor"></div>
+  </div>
+  <div class="player" id="player" aria-label="player">
+    <button id="pStart" title="start (Home)">⏮</button><button id="pPrevBeat" title="previous beat (PageUp)">⏪</button><button id="pPrevKey" title="previous key ([)">◀|</button><button id="pBack" title="one frame back (←), one second with Shift">◀</button>
+    <button id="pPlay" title="play / pause (Space)" style="min-width:58px">▶ play</button>
+    <button id="pFwd" title="one frame forward (→), one second with Shift">▶</button><button id="pNextKey" title="next key (])">|▶</button><button id="pNextBeat" title="next beat (PageDown)">⏩</button><button id="pEnd" title="end (End)">⏭</button>
+    <span class="sep"></span><button id="pLoop" title="loop the beat under the cursor (L)">loop beat</button>
+    <select id="pSpeed" title="speed"><option value="1">1×</option><option value="0.5">½×</option><option value="0.25">¼×</option><option value="2">2×</option></select>
+    <span class="pk" id="pKey"></span><span class="twos" id="pTwos" title="amber when the drawing changes on this frame (twos)"></span>
   </div>
   <div class="ctl"><input type="range" id="range" min="0" step="1" value="0" aria-label="frame cursor"><output id="out"></output><div id="dragnote"></div></div>
 </div>
@@ -276,12 +289,21 @@ footer{margin-top:30px;color:#777;font-size:12px;border-top:1px solid #2a2a2a;pa
 
   // ---- cursor, readout, animatic ----
   var range = $('range'); range.max = D - 1;
-  function setFrame(f) {
+  function showFrameImage(f) {
+    var img = $('anim'), name = 'element-' + ('0000' + f).slice(-4) + '.png';
+    if (V.animBase) { img.style.display = ''; img.alt = 'animatic frame ' + f; img.src = V.animBase + '/' + name; $('animcap').textContent = V.animBase + '/' + name; }
+    else { img.style.display = 'none'; $('animcap').textContent = 'no animatic frames next to this page'; }
+  }
+  function keyAt(f) { var k = itemsAt(track('keys'), f)[0]; return k ? k.label + '@' + k.start + (k.data && k.data.hold ? ' hold ' + k.data.hold : '') : 'no key'; }
+  function setFrame(f, light) {
     f = Math.max(0, Math.min(D - 1, f | 0));
     CUR = f;
     range.value = f;
     $('cursor').style.left = pct(f + 0.5);
     $('out').textContent = 'frame ' + f + ' · ' + seconds(f);
+    $('pKey').textContent = keyAt(f);
+    $('pTwos').className = 'twos' + (f % 2 === 0 ? ' draw' : '');
+    if (light) { showFrameImage(f); return; }
     var beat = itemsAt(track('pacing'), f)[0];
     var look = itemsAt(track('look'), f);
     var h = '<h3>Frame ' + f + ' · ' + seconds(f) + (beat ? ' · beat ' + esc(beat.beat) : '') + '</h3>' +
@@ -297,11 +319,72 @@ footer{margin-top:30px;color:#777;font-size:12px;border-top:1px solid #2a2a2a;pa
     });
     $('readout').innerHTML = h;
     if (EDIT.on) wireReadout();
-    var img = $('anim'), name = 'element-' + ('0000' + f).slice(-4) + '.png';
-    if (V.animBase) { img.style.display = ''; img.alt = 'animatic frame ' + f; img.src = V.animBase + '/' + name; $('animcap').textContent = V.animBase + '/' + name; }
-    else { img.style.display = 'none'; $('animcap').textContent = 'no animatic frames next to this page'; }
+    showFrameImage(f);
     try { history.replaceState(null, '', '#' + f); } catch (e) {}
   }
+
+  // ---- player: play, pause, step, keys, beats, loop; frames are the PNG sequence preloaded a little ahead ----
+  var PLAY = {on: false, loop: false, speed: 1, acc: 0, last: 0, raf: 0, cache: {}, order: []};
+  var FPS = B.fps || 30;
+  function preload(f) {
+    for (var i = f; i < Math.min(D, f + 48); i++) {
+      if (PLAY.cache[i] || !V.animBase) continue;
+      var im = new Image(); im.src = V.animBase + '/element-' + ('0000' + i).slice(-4) + '.png';
+      PLAY.cache[i] = im; PLAY.order.push(i);
+      if (PLAY.order.length > 240) delete PLAY.cache[PLAY.order.shift()];
+    }
+  }
+  function beatAt(f) { return itemsAt(track('pacing'), f)[0]; }
+  function tick(now) {
+    if (!PLAY.on) return;
+    if (!PLAY.last) PLAY.last = now;
+    PLAY.acc += (now - PLAY.last) * PLAY.speed; PLAY.last = now;
+    var step = 1000 / FPS, n = 0;
+    while (PLAY.acc >= step) { PLAY.acc -= step; n++; }
+    if (n) {
+      var f = CUR + n, b = beatAt(CUR);
+      if (PLAY.loop && b && f >= b.end) f = b.start + ((f - b.start) % (b.end - b.start));
+      if (f >= D) { f = D - 1; pause(); setFrame(f); return; }
+      preload(f);
+      setFrame(f, true);
+    }
+    PLAY.raf = requestAnimationFrame(tick);
+  }
+  function play() { if (PLAY.on) return; if (CUR >= D - 1 && !PLAY.loop) setFrame(0, true); PLAY.on = true; PLAY.last = 0; PLAY.acc = 0; $('pPlay').textContent = '❚❚ pause'; $('pPlay').classList.add('on'); preload(CUR); PLAY.raf = requestAnimationFrame(tick); }
+  function pause() { if (!PLAY.on) return; PLAY.on = false; cancelAnimationFrame(PLAY.raf); $('pPlay').textContent = '▶ play'; $('pPlay').classList.remove('on'); setFrame(CUR); }
+  function jumpKey(dir) {
+    var ks = track('keys').items.map(function (k) { return k.start; }).sort(function (a, b) { return a - b; });
+    var t = dir > 0 ? ks.filter(function (k) { return k > CUR; })[0] : ks.filter(function (k) { return k < CUR; }).pop();
+    if (t !== undefined) { pause(); setFrame(t); }
+  }
+  function jumpBeat(dir) {
+    var bs = track('pacing').items, b = beatAt(CUR), i = bs.indexOf(b);
+    var t = dir > 0 ? bs[i + 1] : (CUR > b.start + 2 ? b : bs[i - 1]);
+    if (t) { pause(); setFrame(t.start); }
+  }
+  $('pPlay').addEventListener('click', function () { PLAY.on ? pause() : play(); });
+  $('pBack').addEventListener('click', function (e) { pause(); setFrame(CUR - (e.shiftKey ? FPS : 1)); });
+  $('pFwd').addEventListener('click', function (e) { pause(); setFrame(CUR + (e.shiftKey ? FPS : 1)); });
+  $('pPrevKey').addEventListener('click', function () { jumpKey(-1); });
+  $('pNextKey').addEventListener('click', function () { jumpKey(1); });
+  $('pPrevBeat').addEventListener('click', function () { jumpBeat(-1); });
+  $('pNextBeat').addEventListener('click', function () { jumpBeat(1); });
+  $('pStart').addEventListener('click', function () { pause(); setFrame(0); });
+  $('pEnd').addEventListener('click', function () { pause(); setFrame(D - 1); });
+  $('pLoop').addEventListener('click', function () { PLAY.loop = !PLAY.loop; $('pLoop').classList.toggle('on', PLAY.loop); });
+  $('pSpeed').addEventListener('change', function () { PLAY.speed = Number($('pSpeed').value); });
+  range.addEventListener('pointerdown', pause);
+  document.addEventListener('keydown', function (e) {
+    var tag = (e.target && e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) return;
+    if (e.key === ' ') { e.preventDefault(); PLAY.on ? pause() : play(); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); pause(); setFrame(CUR - (e.shiftKey ? FPS : 1)); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); pause(); setFrame(CUR + (e.shiftKey ? FPS : 1)); }
+    else if (e.key === '[') jumpKey(-1); else if (e.key === ']') jumpKey(1);
+    else if (e.key === 'PageUp') { e.preventDefault(); jumpBeat(-1); } else if (e.key === 'PageDown') { e.preventDefault(); jumpBeat(1); }
+    else if (e.key === 'Home') { e.preventDefault(); pause(); setFrame(0); } else if (e.key === 'End') { e.preventDefault(); pause(); setFrame(D - 1); }
+    else if (e.key === 'l' || e.key === 'L') $('pLoop').click();
+  });
   $('anim').addEventListener('error', function () { $('animcap').textContent += ' · this frame is not rendered'; this.removeAttribute('src'); });
   range.addEventListener('input', function () { setFrame(Number(range.value)); });
 

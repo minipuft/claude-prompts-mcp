@@ -10,6 +10,12 @@ Open it with `npm run bible:serve` from `media/showcase`, then `http://127.0.0.1
 - Flags, in coral under the lanes, are what the compiler found: a beat with no keys, a beat held for over ninety percent of its length, keys with no breakdowns, a plot ask still open, a stale sheet.
 - The footer carries the bible's hash. The probe refuses a page whose hash is not the file's.
 
+## Playing
+
+[![the player bar](bible-01/11-player.png)](bible-01/11-player.png)
+
+The bar under the lanes plays the animatic frames at the film's rate: play and pause (Space), one frame back or forward (arrow keys, a second with Shift), previous and next key (`[` and `]`), previous and next beat (Page Up and Page Down), start and end (Home and End), loop the beat under the cursor (L), and a speed menu. The readout names the key held at the cursor and the dot turns amber on the frames a drawing changes, so twos read at a glance. Measured headless: 44 frames in 1.5 s of play; a looped 4 s beat stayed inside its range after 11 s.
+
 ## Editing
 
 [![edit mode](bible-01/02-edit-mode-crossing.png)](bible-01/02-edit-mode-crossing.png)
