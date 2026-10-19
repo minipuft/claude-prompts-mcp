@@ -29,6 +29,8 @@ tags: []
 
 ## Deviations
 
+- **DEV-T1-5** Row 5's baseline is `{_comment, names}` without the siblings' `schemaVersion`/`generatedAt` envelope, and it has no `:baseline` npm script (regeneration is `--update-baseline`, as its failure messages print). Accepted: the brief specified that shape.
+
 - **DEV-T1-4** Row 3 fixed two stale table names outside the section it was given (`overview.md` ≈344 `framework_state`, ≈847 `argument_history`), because its own check covered the whole file. Accepted.
 
 - **DEV-T1-2** Row 2 also renamed the class's test file (`execution-context.test.ts` → `prompt-request-context.test.ts`) and moved its typecheck-tests baseline key (332 → 332). Accepted: the brief's "its file" reads naturally as covering the test named after it.
@@ -37,6 +39,9 @@ tags: []
 - **DEV-T1-1** Row 1 committed a shorter subject than briefed: the brief's was 106 characters, over commitlint `header-max-length` 100. Briefs now check subject length before sending.
 
 ## Findings
+
+- Row 5: `validate:suite-membership` re-derives a step's `reads` from string literals, so a message naming an npm command reads as `spawn`. The new script avoids the literal text. Recorded for the row 4 brief.
+- Row 5: the 37 remaining homonyms (`ToolParameter` ×5, `ToolCommand` ×4, `ResourceType` ×4, …) are cleanup candidates. The stale-entry failure forces each rename to shrink the baseline.
 
 - Row 2b: `StepWalkResolutionSettings` now declares the four walk settings that `ChainStepEnhancementInput` and `internal-state.ts` `chainWalkSettings` also declare (three declarations, kept in agreement only by structural typing). Not cut: outside the objective.
 - Row 2b: measure max-lines with ESLint's own count (`wc -l` says 1550 where ESLint says 1002): `npx eslint --rule '{"max-lines":["warn",{"max":1,"skipBlankLines":true,"skipComments":true}]}' <file>`.
