@@ -40,7 +40,7 @@
     },
     "tools": {
       "type": "array",
-      "description": "[Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout. Element shape is not constrained at this boundary — it is validated against the script tool schema when written.",
+      "description": "[Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout. An entry of any other shape is refused before anything is written.",
       "items": {}
     },
     "gate_configuration": {
