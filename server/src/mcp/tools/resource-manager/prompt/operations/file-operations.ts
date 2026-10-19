@@ -31,6 +31,7 @@ import {
   ResourceVerificationService,
 } from '#modules/resources/services/index.js';
 import { safeWriteFile } from '#shared/utils/file-transactions.js';
+import { formatJsonDocument } from '#shared/utils/json-document-format.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { slugifyCategoryDirectory } from '#shared/utils/resource-ids.js';
 import {
@@ -1238,7 +1239,7 @@ export class FileOperations {
       if (tool.schema !== undefined) {
         files.push({
           relativePath: `${toolDir}/schema.json`,
-          content: JSON.stringify(tool.schema, null, 2),
+          content: formatJsonDocument(tool.schema),
         });
       }
       files.push({ relativePath: `${toolDir}/${scriptFilename}`, content: tool.script });
