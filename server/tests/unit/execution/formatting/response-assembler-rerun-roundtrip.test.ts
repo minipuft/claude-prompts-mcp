@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../../src/engine/execution/formatting/response-assembler.js';
 import {
   ArgumentParser,
@@ -59,7 +59,7 @@ const stage = new CommandParsingStage(
 );
 
 async function parse(command: string): Promise<ParsedCommand> {
-  const context = new ExecutionContext({ command });
+  const context = new PromptRequestContext({ command });
   await stage.execute(context);
   if (context.parsedCommand === undefined) throw new Error(`no parse for ${command}`);
   return context.parsedCommand;
@@ -67,12 +67,12 @@ async function parse(command: string): Promise<ParsedCommand> {
 
 /** The `Re-run:` invocation the assembler renders for a parsed single-prompt command. */
 function rerunOf(parsedCommand: ParsedCommand): string {
-  const context = new ExecutionContext({ command: 'unused' });
+  const context = new PromptRequestContext({ command: 'unused' });
   context.parsedCommand = parsedCommand;
   const prompt = parsedCommand.convertedPrompt;
   if (prompt === undefined) throw new Error('a single-prompt command resolves its prompt');
   const assembler = new ResponseAssembler() as unknown as {
-    buildInvocationString: (c: ExecutionContext, p: ConvertedPrompt) => string;
+    buildInvocationString: (c: PromptRequestContext, p: ConvertedPrompt) => string;
   };
   return assembler.buildInvocationString(context, prompt);
 }
@@ -131,7 +131,7 @@ describe('P6.178: the Re-run line re-parses to the command that produced it', ()
 
 /** The reply that completes a run parsed from `parsedCommand`, standing on `currentNodeId`. */
 function completionReply(parsedCommand: ParsedCommand, currentNodeId: string | null): string {
-  const context = new ExecutionContext({ command: 'unused' });
+  const context = new PromptRequestContext({ command: 'unused' });
   context.parsedCommand = parsedCommand;
   context.executionResults = {
     content: 'final output',
@@ -206,7 +206,7 @@ describe('P6.186: a completed run re-runs as the command that started it, or not
   });
 
   test('positive control: a single prompt still renders its Re-run line', async () => {
-    const context = new ExecutionContext({ command: 'unused' });
+    const context = new PromptRequestContext({ command: 'unused' });
     context.parsedCommand = await parse('>>sv_a topic:"x"');
     context.executionResults = { content: 'out', metadata: {}, generatedAt: Date.now() };
     const reply = new ResponseAssembler().formatSinglePromptResponse(context, {} as never);

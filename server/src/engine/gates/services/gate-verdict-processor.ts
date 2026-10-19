@@ -63,7 +63,7 @@ import type {
 } from '#shared/types/index.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { SemanticGateSummaryFacts } from './gate-verdict-summary.js';
-import type { ExecutionContext, SessionContext } from '../../execution/context/index.js';
+import type { PromptRequestContext, SessionContext } from '../../execution/context/index.js';
 import type { HandoffEvidenceMode } from '../../execution/delegation/handoff-contract.js';
 import type { ReviewEvent } from '../../execution/pipeline/decisions/gates/review-lifecycle.js';
 import type { SemanticTargetAdmission } from '../../execution/pipeline/decisions/gates/semantic-review-context.js';
@@ -234,7 +234,7 @@ export class GateVerdictProcessor {
 
   /** Target admission precedes resume routing, unknown observations and direct verdict grading. */
   admitSemanticTargetResponse(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     options: {
       currentStepAtStart?: number;
@@ -275,7 +275,7 @@ export class GateVerdictProcessor {
    * @returns the refusal sentence when nothing was recorded; otherwise the outcome and counter.
    */
   async processDetachedReviewVerdict(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     nodeId: string
   ): Promise<DetachedReviewVerdictResult> {
@@ -330,7 +330,7 @@ export class GateVerdictProcessor {
    * Run-level abort is consumed by the executor before review routing and needs no node.
    */
   async processDetachedReviewAction(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     nodeId: string,
     action: GateAction | InterruptResolutionAction
@@ -364,7 +364,7 @@ export class GateVerdictProcessor {
    * @returns the reopened review, or `null` when the review did not accept a replacement.
    */
   async applyReplacementReport(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     nodeId: string,
     output: string
@@ -408,7 +408,7 @@ export class GateVerdictProcessor {
    *   `RemainderProcessor` both take.
    */
   async resolveUnknownInterrupt(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     action: InterruptResolutionAction,
     sessionContext: SessionContext,
@@ -491,7 +491,7 @@ export class GateVerdictProcessor {
    * @returns the advance a skip decided; the pipeline exits early after every action.
    */
   async handleGateAction(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     gateAction: GateAction,
     sessionContext: SessionContext
@@ -547,7 +547,7 @@ export class GateVerdictProcessor {
    * @returns true when the call was refused and its response is set.
    */
   refusesInBudgetAction(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     gateAction: GateAction
   ): boolean {
@@ -575,7 +575,7 @@ export class GateVerdictProcessor {
    * @returns true when the call was refused and its response is set.
    */
   refusesUnheldAction(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     gateAction: GateAction
   ): boolean {
@@ -598,7 +598,7 @@ export class GateVerdictProcessor {
    * failed, and the run moves past it anyway.
    */
   private async announceAdvancedStep(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     advance: DeferredAdvance
   ): Promise<void> {
@@ -629,7 +629,7 @@ export class GateVerdictProcessor {
    * nothing and ends the call with the sentence the submitter reads.
    */
   async processReviewVerdict(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     sessionContext: SessionContext,
     userResponse: string | undefined,
@@ -722,7 +722,7 @@ export class GateVerdictProcessor {
    * no review, and is refused outright when its review grades a node with no captured output.
    */
   private async answerVerdict(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     verdict: ParsedGateVerdict,
     hasResponse: boolean,
@@ -773,7 +773,7 @@ export class GateVerdictProcessor {
    * exhausted it naming no gate (P6.76, R38).
    */
   private gatelessStepOrdinal(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     trailerNodeId: string | undefined
   ): number | undefined {
@@ -792,7 +792,7 @@ export class GateVerdictProcessor {
    * (`answerVerdict`), and a PASS with no answer keeps its refusal (R19).
    */
   private passGradesNothing(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     verdict: ParsedGateVerdict,
     hasResponse: boolean,
@@ -837,7 +837,7 @@ export class GateVerdictProcessor {
    * the review itself is persisted here, from what the transition returned.
    */
   private async answerReview(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     entry: ReviewEntry
   ): Promise<ReviewAnswer> {
@@ -1014,7 +1014,7 @@ export class GateVerdictProcessor {
 
   /** Apply lifecycle intent through the existing authority before announcing or persisting it. */
   private applyReviewAttemptIntent(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     advance: ReturnType<typeof advanceReview>
   ): ReturnType<typeof advanceReview> {
     if (advance.renewAttempt !== true || advance.review === null) return advance;
@@ -1046,7 +1046,7 @@ export class GateVerdictProcessor {
    * them.
    */
   private async resolveFailEnforcement(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     review: GateReview,
     failedGateIds: readonly string[]
   ): Promise<EnforcementMode> {
@@ -1083,7 +1083,10 @@ export class GateVerdictProcessor {
    * A check armed for the next answer (no node yet) holds only the capture it will grade — the
    * answer captured on this call — so a review it was left to still moves its step (P6.53).
    */
-  async applyDeferredAdvance(context: ExecutionContext, advance: DeferredAdvance): Promise<void> {
+  async applyDeferredAdvance(
+    context: PromptRequestContext,
+    advance: DeferredAdvance
+  ): Promise<void> {
     const check = this.chainSessionStore.getPendingShellVerification(advance.sessionId);
     if (
       check !== undefined &&
@@ -1140,7 +1143,7 @@ export class GateVerdictProcessor {
    * throw outside `emitGateEvents`' own catch became an unhandled rejection nothing reported.
    */
   private async handleBlockingFail(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     advance: AppliedAdvance & { readonly review: GateReview },
     verdictPayload: { rationale: string }
   ): Promise<void> {
@@ -1163,7 +1166,7 @@ export class GateVerdictProcessor {
 
   /** An exhausting FAIL flags the retry limit and announces `retryExhausted`, in any mode. */
   private async flagExhaustion(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     advance: AppliedAdvance,
     rationale: string
   ): Promise<void> {
@@ -1195,7 +1198,7 @@ export class GateVerdictProcessor {
    * (R26): it advances nothing (R19, P6.35), and past the budget it exhausts as a blocking one.
    */
   private async handleNonBlockingFail(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     answer: Extract<ReviewAnswer, { kind: 'answered' }>,
     verdictPayload: { rationale: string }
@@ -1237,7 +1240,7 @@ export class GateVerdictProcessor {
    * and tool facts before publishing request state for response and capture consumers.
    */
   private readPerGateVerdicts(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     verdict: ParsedGateVerdict,
     review: GateReview
   ): GateVerdictSummary[] {
@@ -1254,7 +1257,7 @@ export class GateVerdictProcessor {
    * Parse a gate verdict using the authority (preferred) or contract fallback.
    */
   private parseVerdict(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     raw: McpToolRequest['gate_verdict'],
     source: 'gate_verdict'
   ): ParsedGateVerdict | null {
@@ -1262,7 +1265,7 @@ export class GateVerdictProcessor {
   }
 
   private recordVerdictDetection(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     verdictPayload: ParsedGateVerdict,
     outcome: string,
     nodeId: string
@@ -1274,7 +1277,7 @@ export class GateVerdictProcessor {
    * Emit gate events via hooks and notifications.
    */
   private async emitGateEvents(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     event: 'passed' | 'failed' | 'retryExhausted' | 'responseBlocked',
     gateIds: string[],
     reason?: string,
@@ -1341,6 +1344,6 @@ export class GateVerdictProcessor {
  * path that writes no step scope) — the set stage 13 opens the step's review with. A review this
  * call's verdict opens grades the same gates, so its warning and events name them (P6.75).
  */
-function stepReviewGateIds(context: ExecutionContext): string[] {
+function stepReviewGateIds(context: PromptRequestContext): string[] {
   return [...(context.state.gates.reviewGateIds ?? context.state.gates.accumulatedGateIds ?? [])];
 }

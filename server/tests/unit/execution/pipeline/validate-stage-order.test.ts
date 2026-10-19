@@ -12,7 +12,7 @@ import {
   validateStageOrder,
 } from '../../../../src/engine/execution/pipeline/validate-stage-order.js';
 
-import type { ExecutionContext } from '../../../../src/engine/execution/context/index.js';
+import type { PromptRequestContext } from '../../../../src/engine/execution/context/index.js';
 import type { PipelineStage } from '../../../../src/engine/execution/pipeline/stage.js';
 
 interface StageSpec {
@@ -25,7 +25,7 @@ const stage = (spec: StageSpec): PipelineStage => ({
   name: spec.name,
   ...(spec.provides ? { provides: spec.provides } : {}),
   ...(spec.requires ? { requires: spec.requires } : {}),
-  execute: async (_context: ExecutionContext): Promise<void> => undefined,
+  execute: async (_context: PromptRequestContext): Promise<void> => undefined,
 });
 
 /** The three invariants seeded on the real pipeline, in their correct order. */

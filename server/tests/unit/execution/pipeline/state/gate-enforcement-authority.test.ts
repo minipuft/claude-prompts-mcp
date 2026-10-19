@@ -13,7 +13,7 @@ import {
   resolveFrozenReviewDefinition,
   physicalReviewDefinitionIndex,
 } from '../../../../../src/engine/execution/pipeline/decisions/gates/frozen-review-definitions.js';
-import { ExecutionContext } from '../../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../../src/engine/execution/context/prompt-request-context.js';
 import { GateLoader } from '../../../../../src/engine/gates/core/gate-loader.js';
 import { GatePassCriteriaSchema } from '../../../../../src/engine/gates/core/gate-schema.js';
 import { parseGateVerdict } from '../../../../../src/engine/gates/core/gate-verdict-contract.js';
@@ -407,7 +407,7 @@ describe('GateEnforcementAuthority', () => {
       expect(Reflect.set(snapshot.definition, 'guidance', 'Reinterpreted')).toBe(false);
       expect(await owner.resolveReviewEnforcement(review, [])).toBe('advisory');
       definitions.push(liveGate('g2'));
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         gate_verdict: { overall: 'FAIL', rationale: 'Retry' },
       });
       context.state.gates.temporaryGateIds = ['g2'];

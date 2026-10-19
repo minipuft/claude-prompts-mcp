@@ -87,12 +87,9 @@ export interface ArgumentParsingResult {
 /**
  * Execution context for argument processing
  */
-export interface ExecutionContext {
-  conversationHistory?: Array<{ role: string; content: string; timestamp?: string }>;
+export interface ArgumentContext {
   environmentVars?: Record<string, string>;
   promptDefaults?: Record<string, string | number | boolean | null>;
-  userSession?: Record<string, string | number | boolean | null>;
-  systemContext?: Record<string, string | number | boolean | null>;
 }
 
 /**
@@ -104,7 +101,7 @@ interface ProcessingStrategy {
   process: (
     rawArgs: string,
     promptData: PromptDefinition,
-    context: ExecutionContext
+    context: ArgumentContext
   ) => ArgumentParsingResult;
 }
 
@@ -147,7 +144,7 @@ export class ArgumentParser {
   async parseArguments(
     rawArgs: string,
     promptData: PromptDefinition,
-    context: ExecutionContext = {}
+    context: ArgumentContext = {}
   ): Promise<ArgumentParsingResult> {
     this.logger.debug(
       `Processing arguments for prompt "${promptData.id}": "${rawArgs.substring(0, 100)}..."`
@@ -216,7 +213,7 @@ export class ArgumentParser {
       process: (
         rawArgs: string,
         promptData: PromptDefinition,
-        _context: ExecutionContext
+        _context: ArgumentContext
       ): ArgumentParsingResult => {
         const parseResult = safeJsonParse(rawArgs);
         if (!parseResult.success || !parseResult.data) {
@@ -283,7 +280,7 @@ export class ArgumentParser {
       process: (
         rawArgs: string,
         promptData: PromptDefinition,
-        context: ExecutionContext
+        context: ArgumentContext
       ): ArgumentParsingResult => {
         const processedArgs: Record<string, string | number | boolean | null> = {};
         const typeCoercions: Array<{ arg: string; from: string; to: string }> = [];
@@ -384,7 +381,7 @@ export class ArgumentParser {
       process: (
         rawArgs: string,
         promptData: PromptDefinition,
-        context: ExecutionContext
+        context: ArgumentContext
       ): ArgumentParsingResult => {
         const processedArgs: Record<string, string | number | boolean | null> = {};
         const appliedDefaults: string[] = [];
@@ -437,7 +434,7 @@ export class ArgumentParser {
       process: (
         rawArgs: string,
         promptData: PromptDefinition,
-        context: ExecutionContext
+        context: ArgumentContext
       ): ArgumentParsingResult => {
         const processedArgs: Record<string, string | number | boolean | null> = {};
         const appliedDefaults: string[] = [];
@@ -498,7 +495,7 @@ export class ArgumentParser {
     processedArgs: Record<string, string | number | boolean | null>,
     appliedDefaults: string[],
     contextSources: Record<string, string>,
-    context: ExecutionContext
+    context: ArgumentContext
   ): void {
     // Simple strategy: Unstructured content goes to first argument
     // Priority: first required arg > first arg
@@ -554,7 +551,7 @@ export class ArgumentParser {
    */
   private resolveContextualDefault(
     arg: PromptArgument,
-    context: ExecutionContext
+    context: ArgumentContext
   ): { value: any; source: string } {
     // Clean priority order - no guessing
     const strategies = [
@@ -758,7 +755,7 @@ export class ArgumentParser {
   private async enrichResult(
     result: ArgumentParsingResult,
     promptData: PromptDefinition,
-    _context: ExecutionContext
+    _context: ArgumentContext
   ): Promise<ArgumentParsingResult> {
     // Check if prompt has validation rules that need enforcement
     const hasValidationRules = promptData.arguments.some(

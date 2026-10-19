@@ -6,7 +6,7 @@
  */
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import {
   composeStructuralReview,
   PHASE_GUARD_GATE_ID,
@@ -123,7 +123,7 @@ async function execute(open: GateReview) {
     setPendingGateReview: setPending,
     setReview,
   } as unknown as ChainSessionService;
-  const context = new ExecutionContext({
+  const context = new PromptRequestContext({
     command: '>>fixture',
     user_response: 'missing the declared section',
   });

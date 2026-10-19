@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../../src/engine/execution/formatting/response-assembler.js';
 
 import type { DeclaredSection } from '../../../../src/engine/frameworks/declared-sections.js';
@@ -59,8 +59,8 @@ function createContext(overrides: {
   declinesFramework?: boolean;
   /** A command modifier that suppresses the framework (`%clean`). */
   cleanModifier?: boolean;
-}): ExecutionContext {
-  const context = new ExecutionContext({ command: `>>${basePrompt.id}` });
+}): PromptRequestContext {
+  const context = new PromptRequestContext({ command: `>>${basePrompt.id}` });
 
   context.executionResults = {
     content: 'Test output content',

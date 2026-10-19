@@ -6,7 +6,7 @@
  */
 import { describe, test, expect, beforeEach } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ArgumentParser } from '../../../../src/engine/execution/parsers/argument-parser.js';
 import { UnifiedCommandParser } from '../../../../src/engine/execution/parsers/command-parser.js';
 import { SymbolicCommandBuilder } from '../../../../src/engine/execution/parsers/symbolic-command-builder.js';
@@ -94,7 +94,7 @@ describe('CommandParsingStage - commandType Integration', () => {
 
   describe('Simple command parsing', () => {
     test('assigns commandType: single for single prompts', async () => {
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>single_test input=test',
       });
 
@@ -107,7 +107,7 @@ describe('CommandParsingStage - commandType Integration', () => {
     });
 
     test('updates commandType to chain for prompts with chainSteps', async () => {
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>chain_test',
       });
 
@@ -121,7 +121,7 @@ describe('CommandParsingStage - commandType Integration', () => {
     });
 
     test('round-trips byte-identical when no step declares visibility (negative control, P5 Tier 1)', async () => {
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>chain_test',
       });
 
@@ -135,7 +135,7 @@ describe('CommandParsingStage - commandType Integration', () => {
     // `normalizeChainSteps` are covered in tests/unit/prompts; a field carried at fewer than all
     // three is silently dead (P6-F7), so this is where the projection is measured.
     test('projects step-declared args over the run arguments, for that step only', async () => {
-      const context = new ExecutionContext({ command: '>>budget_chain' });
+      const context = new PromptRequestContext({ command: '>>budget_chain' });
 
       await stage.execute(context);
 
@@ -146,7 +146,7 @@ describe('CommandParsingStage - commandType Integration', () => {
     });
 
     test('projects a chain-declared budget onto the same field an IR submission sets', async () => {
-      const context = new ExecutionContext({ command: '>>budget_chain' });
+      const context = new PromptRequestContext({ command: '>>budget_chain' });
 
       await stage.execute(context);
 
@@ -160,7 +160,7 @@ describe('CommandParsingStage - commandType Integration', () => {
     });
 
     test('leaves budget absent for a chain that declares none (negative control)', async () => {
-      const context = new ExecutionContext({ command: '>>chain_test' });
+      const context = new PromptRequestContext({ command: '>>chain_test' });
 
       await stage.execute(context);
 
@@ -170,7 +170,7 @@ describe('CommandParsingStage - commandType Integration', () => {
 
   describe('Symbolic command parsing', () => {
     test('assigns commandType: chain for chain operator (-->)', async () => {
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>single_test input --> single_test input',
       });
 
@@ -182,7 +182,7 @@ describe('CommandParsingStage - commandType Integration', () => {
     });
 
     test('assigns commandType: single for single symbolic prompt without chain operator', async () => {
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>single_test input :: "quality check"',
       });
 
@@ -197,7 +197,7 @@ describe('CommandParsingStage - commandType Integration', () => {
     // the same function the direct path calls. Before the fix both commands parsed `single` with
     // no steps, and every "step" rendered the chain prompt's own template.
     const parse = async (command: string) => {
-      const context = new ExecutionContext({ command });
+      const context = new PromptRequestContext({ command });
       await stage.execute(context);
       return context.parsedCommand!;
     };
@@ -255,7 +255,7 @@ describe('CommandParsingStage - commandType Integration', () => {
 
   describe('isChainExecution() integration', () => {
     test('returns true for commandType: chain', async () => {
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>chain_test',
       });
 
@@ -265,7 +265,7 @@ describe('CommandParsingStage - commandType Integration', () => {
     });
 
     test('returns false for commandType: single', async () => {
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>single_test input=test',
       });
 
@@ -275,7 +275,7 @@ describe('CommandParsingStage - commandType Integration', () => {
     });
 
     test('returns true for symbolic chain operator', async () => {
-      const context = new ExecutionContext({
+      const context = new PromptRequestContext({
         command: '>>single_test input --> single_test input',
       });
 

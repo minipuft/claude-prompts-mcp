@@ -95,7 +95,7 @@ import * as path from 'node:path';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { ChainOperatorExecutor } from '../../../src/engine/execution/operators/chain-operator-executor.js';
 import { BRIEF_END, BRIEF_START } from '../../../src/engine/execution/delegation/brief.js';
@@ -357,7 +357,7 @@ const buildPipeline = (options: {
       return {
         name,
         provides: ['executionPlan'],
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           if (!context.parsedCommand) return;
           context.executionPlan = {
             strategy: 'chain',

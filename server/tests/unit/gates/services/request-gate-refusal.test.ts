@@ -13,7 +13,7 @@
  */
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 import { InlineGateProcessor } from '../../../../src/engine/gates/services/inline-gate-processor.js';
 import { TemporaryGateRegistrar } from '../../../../src/engine/gates/services/temporary-gate-registrar.js';
@@ -38,8 +38,8 @@ const newRegistry = (): TemporaryGateRegistry =>
   new TemporaryGateRegistry(logger(), { isCanonicalGateId: (id) => id === 'code-quality' });
 
 /** A call of the run `runId` (undefined: the call that starts a run) carrying request `gates`. */
-const callOf = (gates: unknown[], runId?: string): ExecutionContext => {
-  const context = new ExecutionContext({ command: '>>demo' });
+const callOf = (gates: unknown[], runId?: string): PromptRequestContext => {
+  const context = new PromptRequestContext({ command: '>>demo' });
   context.state.gates.requestedOverrides = { gates };
   if (runId !== undefined) context.state.session.resumeSessionId = runId;
   return context;
@@ -185,7 +185,7 @@ describe('a claimed run resumes with the request gates it recorded (R11.13)', ()
       steps: [{ stepNumber: 1, promptId: 'demo', args: {} }],
       requestGates: recorded(),
     } as unknown as ParsedCommand;
-    const context = new ExecutionContext({ chain_id: 'chain-demo#1', user_response: 'out' });
+    const context = new PromptRequestContext({ chain_id: 'chain-demo#1', user_response: 'out' });
     context.state.session.resumeSessionId = 'run-1';
     context.state.session.isBlueprintRestored = true;
     context.parsedCommand = parsed;

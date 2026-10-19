@@ -12,7 +12,7 @@
  */
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 import { TemporaryGateRegistrar } from '../../../../src/engine/gates/services/temporary-gate-registrar.js';
 
@@ -89,7 +89,7 @@ describe('TemporaryGateRegistry at capacity', () => {
   test("a resumed run's request gate survives a full registry and still reaches its review set", async () => {
     const { registry } = clockedRegistry();
     const registrar = new TemporaryGateRegistrar(registry, undefined, createLogger() as never);
-    const start = new ExecutionContext({ command: '>>demo' });
+    const start = new PromptRequestContext({ command: '>>demo' });
     start.state.gates.requestedOverrides = {
       gates: [{ id: 'cites', criteria: ['Cites a source'] }],
     };
@@ -97,13 +97,13 @@ describe('TemporaryGateRegistry at capacity', () => {
     registry.adoptIntoRun('run-1', started.temporaryGateIds);
     for (let i = 1; i < MAX; i += 1) registry.createTemporaryGate(gate(`u${i}`), 'other-call');
 
-    const resume = new ExecutionContext({ command: '>>demo' });
+    const resume = new PromptRequestContext({ command: '>>demo' });
     resume.state.session.resumeSessionId = 'run-1';
     resume.state.gates.requestedOverrides = { gates: [{ id: 'tone', criteria: ['Neutral'] }] };
 
     await expect(registrar.registerTemporaryGates(resume)).rejects.toThrow(/registry is full/);
     // The refusal fails the call; the run's own gate is untouched and still answers its review.
-    const next = new ExecutionContext({ command: '>>demo' });
+    const next = new PromptRequestContext({ command: '>>demo' });
     next.state.session.resumeSessionId = 'run-1';
     expect((await registrar.registerTemporaryGates(next)).temporaryGateIds).toEqual(['cites']);
     expect(registry.getTemporaryGate('cites')?.pass_criteria).toEqual(['Cites a source']);

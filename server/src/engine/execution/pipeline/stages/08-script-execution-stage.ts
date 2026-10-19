@@ -34,7 +34,7 @@ import type {
   ScriptExecutionResult,
   ToolDetectionMatch,
 } from '#shared/types/index.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 
 import { interpretScriptValidationOutput } from '#shared/utils/script-validation-output.js';
 
@@ -61,7 +61,7 @@ export class ScriptExecutionStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     // Get converted prompt with script tools
@@ -205,7 +205,7 @@ export class ScriptExecutionStage extends BasePipelineStage {
    * Execute tools that are ready for execution.
    */
   private async executeReadyTools(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     matches: ToolDetectionMatch[],
     tools: LoadedScriptTool[],
     results: Map<string, ScriptExecutionResult>
@@ -247,7 +247,7 @@ export class ScriptExecutionStage extends BasePipelineStage {
    * Thin wrapper that delegates to ScriptExecutor service.
    */
   private async executeScriptTool(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     tool: LoadedScriptTool,
     inputs: Record<string, unknown>
   ): Promise<ScriptExecutionResult> {

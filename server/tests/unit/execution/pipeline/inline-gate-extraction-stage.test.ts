@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { InlineGateExtractionStage } from '../../../../src/engine/execution/pipeline/stages/05-inline-gate-stage.js';
 import { InlineGateProcessor } from '../../../../src/engine/gates/services/inline-gate-processor.js';
 import { RequestGateAdmission } from '../../../../src/engine/gates/services/request-gate-admission.js';
@@ -87,7 +87,7 @@ describe('InlineGateExtractionStage', () => {
     const { resolver } = createResolver();
     const stage = createStage(registry, resolver);
 
-    const context = new ExecutionContext({ command: '>>demo :: "Be concise"' });
+    const context = new PromptRequestContext({ command: '>>demo :: "Be concise"' });
     context.parsedCommand = {
       promptId: 'demo',
       rawArgs: '',
@@ -125,7 +125,7 @@ describe('InlineGateExtractionStage', () => {
     });
     const stage = createStage(registry, resolver);
 
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.parsedCommand = {
       promptId: 'chain',
       rawArgs: '',
@@ -181,7 +181,7 @@ describe('InlineGateExtractionStage', () => {
     const { resolver, resolve } = createResolver();
     const stage = createStage(registry, resolver);
 
-    const context = new ExecutionContext({ command: '>>demo :: custom_quality_gate' });
+    const context = new PromptRequestContext({ command: '>>demo :: custom_quality_gate' });
     context.parsedCommand = {
       promptId: 'demo',
       rawArgs: '',
@@ -209,7 +209,7 @@ describe('InlineGateExtractionStage', () => {
     const { resolver } = createResolver();
     const stage = createStage(registry, resolver);
 
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.state.gates.requestedOverrides = {
       gates: ['toxicity', 'code-quality'],
     };
@@ -238,7 +238,7 @@ describe('InlineGateExtractionStage', () => {
     const { resolver } = createResolver();
     const stage = createStage(registry, resolver);
 
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.state.gates.requestedOverrides = {
       gates: [{ name: 'red-team', description: 'Confirm exfil path' }],
     };
@@ -267,7 +267,7 @@ describe('InlineGateExtractionStage', () => {
     const { resolver } = createResolver();
     const stage = createStage(registry, resolver);
 
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.state.gates.requestedOverrides = {
       gates: [{ id: 'gdpr-check', criteria: ['no PII'], severity: 'high' }],
     };
@@ -297,7 +297,7 @@ describe('InlineGateExtractionStage', () => {
     const { resolver } = createResolver();
     const stage = createStage(registry, resolver);
 
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.state.gates.requestedOverrides = {
       gates: [
         'toxicity', // String ID
@@ -337,7 +337,7 @@ describe('InlineGateExtractionStage', () => {
     const { resolver } = createResolver();
     const stage = createStage(registry, resolver);
 
-    const context = new ExecutionContext({ command: '>>demo :: security:"no secrets"' });
+    const context = new PromptRequestContext({ command: '>>demo :: security:"no secrets"' });
     context.parsedCommand = {
       promptId: 'demo',
       rawArgs: '',
@@ -376,7 +376,7 @@ describe('InlineGateExtractionStage', () => {
     const { resolver } = createResolver();
     const stage = createStage(registry, resolver);
 
-    const context = new ExecutionContext({ command: '>>demo :: verify:"npm test"' });
+    const context = new PromptRequestContext({ command: '>>demo :: verify:"npm test"' });
     context.parsedCommand = {
       promptId: 'demo',
       rawArgs: '',
@@ -421,7 +421,7 @@ describe('InlineGateExtractionStage', () => {
     const { resolver } = createResolver();
     const stage = createStage(registry, resolver);
 
-    const context = new ExecutionContext({ command: '>>demo :: verify:"test"' });
+    const context = new PromptRequestContext({ command: '>>demo :: verify:"test"' });
     context.parsedCommand = {
       promptId: 'demo',
       rawArgs: '',
@@ -469,7 +469,7 @@ describe('an inline gate the client requested is refused or registered, never dr
     namedInlineGates?: Array<{ gateId: string; criteria: string[] }>;
     steps?: Array<{ nodeId?: string; inlineGateCriteria: string[] }>;
   }) => {
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.parsedCommand = {
       promptId: 'demo',
       rawArgs: '',
@@ -500,7 +500,7 @@ describe('an inline gate the client requested is refused or registered, never dr
     return context;
   };
 
-  const run = async (context: ExecutionContext) => {
+  const run = async (context: PromptRequestContext) => {
     const { registry, createTemporaryGate } = createRegistry();
     await createStage(registry, createResolver().resolver).execute(context);
     return { createTemporaryGate, text: (context.response?.content[0] as { text: string })?.text };
@@ -601,7 +601,7 @@ describe('a request gate whose registration throws fails the call (R11.8)', () =
       resolveDeclared: jest.fn(),
       getRunGates: jest.fn(() => []),
     } as unknown as TemporaryGateRegistry;
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.state.gates.requestedOverrides = {
       gates: [{ id: 'rg-1', name: 'rg-1', criteria: ['REQUEST'] }],
     };
@@ -620,8 +620,8 @@ describe("stage 05 refuses the call's own gate requests before anything register
   const callWith = (
     gates: unknown[],
     extra: { modifiers?: { clean?: boolean }; operators?: unknown[] } = {}
-  ): ExecutionContext => {
-    const context = new ExecutionContext({ command: '>>demo', gates: gates as never });
+  ): PromptRequestContext => {
+    const context = new PromptRequestContext({ command: '>>demo', gates: gates as never });
     context.state.gates.requestedOverrides = { gates };
     context.parsedCommand = {
       promptId: 'demo',
@@ -642,7 +642,7 @@ describe("stage 05 refuses the call's own gate requests before anything register
     };
     return context;
   };
-  const textOf = (context: ExecutionContext): string =>
+  const textOf = (context: PromptRequestContext): string =>
     (context.response?.content[0] as { text: string } | undefined)?.text ?? '';
 
   test('a blank request gate refuses the call by entry, and no inline gate registers', async () => {

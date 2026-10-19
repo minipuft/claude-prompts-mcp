@@ -1,6 +1,6 @@
 const DEFAULT_FORBIDDEN_PATTERNS = ['legacy/', '/legacy/', '@legacy/', 'legacy-'];
 const DEFAULT_CONTEXT_DEEP_IMPORTS = [
-  'execution/context/execution-context',
+  'execution/context/prompt-request-context',
   'execution/context/context-types',
 ];
 const ZERO_WIDTH_JOINER = 0x200d;

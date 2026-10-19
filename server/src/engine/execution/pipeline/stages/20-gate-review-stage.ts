@@ -36,14 +36,14 @@ import type { GateDefinitionProvider } from '../../../gates/core/gate-loader.js'
 import type { JudgeReviewMetadata } from '../../../gates/core/review-utils.js';
 import type { ScriptToolRuntimeProvider } from '../../../gates/services/script-tool-criterion-runner.js';
 import type { ShellVerifyExecutor } from '../../../gates/shell/shell-verify-executor.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 import type { ChainOperatorExecutor } from '../../operators/chain-operator-executor.js';
 import type { ChainStepRenderResult } from '../../operators/types.js';
 
 type GatesConfigProvider = () => GatesConfig | undefined;
 
 /** Legacy tool I/O treats an empty canonical response as absent; the request carrier is untouched. */
-function toolResponseBody(context: ExecutionContext): string | undefined {
+function toolResponseBody(context: PromptRequestContext): string | undefined {
   const response = context.mcpRequest.user_response;
   return response === '' ? undefined : response;
 }
@@ -128,8 +128,8 @@ export class GateReviewStage extends BasePipelineStage {
    * a row from stage 18, and appending again would add a duplicate `working` row per gate retry.
    */
   private ledgerFirstRenderedStep(
-    context: ExecutionContext,
-    session: NonNullable<ExecutionContext['sessionContext']>
+    context: PromptRequestContext,
+    session: NonNullable<PromptRequestContext['sessionContext']>
   ): void {
     if (this.collaborators.executionRecordStore == null) return;
 
@@ -260,7 +260,7 @@ export class GateReviewStage extends BasePipelineStage {
    * deliberately suppressed).
    */
   private resolveCarriedRender(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     review: Pick<GateReview, 'nodeId'>,
     run: { state: { currentNodeId: string | null } } | undefined
   ): string {
@@ -272,7 +272,7 @@ export class GateReviewStage extends BasePipelineStage {
     return typeof rendered === 'string' && rendered.trim().length > 0 ? rendered : '';
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     const sessionContext = context.sessionContext;

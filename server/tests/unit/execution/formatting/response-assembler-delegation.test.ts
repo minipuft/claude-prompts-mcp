@@ -1,6 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../../src/engine/execution/formatting/response-assembler.js';
 
 /**
@@ -18,7 +18,7 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
 
   /** Identity context fixture for a client profile. */
   function setClientProfile(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     clientFamily: string,
     clientId: string,
     delegationProfile: string
@@ -46,7 +46,7 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
   }
 
   test('emits a one-line advisory when next step has delegated flag (parsed steps)', () => {
-    const context = new ExecutionContext({ command: 'noop' });
+    const context = new PromptRequestContext({ command: 'noop' });
     context.sessionContext = {
       sessionId: 'sess-1',
       chainId: 'chain-deleg#1',
@@ -81,7 +81,7 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
   });
 
   test('emits the advisory from StepExecutionStage metadata when available', () => {
-    const context = new ExecutionContext({ command: 'noop' });
+    const context = new PromptRequestContext({ command: 'noop' });
     context.sessionContext = {
       sessionId: 'sess-2',
       chainId: 'chain-meta#1',
@@ -108,7 +108,7 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
   });
 
   test('codex client profile selects the codex handoff footer for a delegated CURRENT step', () => {
-    const context = new ExecutionContext({ command: 'noop' });
+    const context = new PromptRequestContext({ command: 'noop' });
     context.sessionContext = {
       sessionId: 'sess-codex',
       chainId: 'chain-codex#1',
@@ -136,7 +136,7 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
   });
 
   test('gemini client profile selects the gemini handoff footer for a delegated CURRENT step', () => {
-    const context = new ExecutionContext({ command: 'noop' });
+    const context = new PromptRequestContext({ command: 'noop' });
     context.sessionContext = {
       sessionId: 'sess-gemini',
       chainId: 'chain-gemini#1',
@@ -162,7 +162,7 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
   });
 
   test('cursor client profile selects the experimental cursor footer for a delegated CURRENT step', () => {
-    const context = new ExecutionContext({ command: 'noop' });
+    const context = new PromptRequestContext({ command: 'noop' });
     context.sessionContext = {
       sessionId: 'sess-cursor',
       chainId: 'chain-cursor#1',
@@ -188,7 +188,7 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
   });
 
   test('does not inject advisory or handoff when no delegation detected', () => {
-    const context = new ExecutionContext({ command: 'noop' });
+    const context = new PromptRequestContext({ command: 'noop' });
     context.sessionContext = {
       sessionId: 'sess-3',
       chainId: 'chain-no-deleg#1',
@@ -217,7 +217,7 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
   });
 
   test('advisory coexists with gate instructions in output', () => {
-    const context = new ExecutionContext({ command: 'noop' });
+    const context = new PromptRequestContext({ command: 'noop' });
     context.sessionContext = {
       sessionId: 'sess-4',
       chainId: 'chain-gates-deleg#1',
@@ -263,7 +263,7 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
 
     // Case 1 (S7 flip): NEXT-step delegation no longer wins the footer — the gate review line
     // renders, because this response carries no brief to hand off.
-    const nextDelegated = new ExecutionContext({ command: 'noop' });
+    const nextDelegated = new PromptRequestContext({ command: 'noop' });
     nextDelegated.sessionContext = {
       sessionId: 'sess-5',
       chainId: 'chain-both#1',
@@ -290,7 +290,7 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
     expect(nextFooter).toContain('gate_verdict');
 
     // Case 2: CURRENT-step delegation wins the footer — this response carries the brief.
-    const currentDelegated = new ExecutionContext({ command: 'noop' });
+    const currentDelegated = new PromptRequestContext({ command: 'noop' });
     currentDelegated.sessionContext = {
       sessionId: 'sess-6',
       chainId: 'chain-both#2',
@@ -327,8 +327,8 @@ describe('ResponseAssembler – delegation detection from parsed steps', () => {
 describe('ResponseAssembler – S10: gate-review response delegation advisory', () => {
   const assembler = new ResponseAssembler();
 
-  function makeGateReviewContext(options: { nextDelegated: boolean }): ExecutionContext {
-    const context = new ExecutionContext({ command: 'noop' });
+  function makeGateReviewContext(options: { nextDelegated: boolean }): PromptRequestContext {
+    const context = new PromptRequestContext({ command: 'noop' });
     context.sessionContext = {
       sessionId: 'sess-s10',
       chainId: 'chain-s10#1',

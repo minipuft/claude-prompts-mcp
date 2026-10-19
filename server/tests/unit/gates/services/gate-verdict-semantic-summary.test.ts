@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { StepCaptureService } from '../../../../src/engine/execution/capture/step-capture-service.js';
 import { GateEnforcementAuthority } from '../../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import {
@@ -145,7 +145,7 @@ function fixture(
       stepStates: new Map(),
     },
   } as unknown as ChainSession;
-  const context = new ExecutionContext(
+  const context = new PromptRequestContext(
     {
       gate_verdict: submission,
       ...(options.body !== undefined ? { user_response: options.body } : {}),

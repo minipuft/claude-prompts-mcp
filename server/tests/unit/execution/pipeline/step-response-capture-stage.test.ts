@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { StepCaptureService } from '../../../../src/engine/execution/capture/step-capture-service.js';
 import {
   UnknownObservationProcessor,
@@ -152,7 +152,7 @@ const runWithObservations = async (
   observations: UnknownObservation[]
 ): Promise<void> => {
   const stage = createStage(harness.manager);
-  const context = new ExecutionContext({
+  const context = new PromptRequestContext({
     command: '>>chain',
     user_response: 'step one output',
     observations,
@@ -187,7 +187,7 @@ describe('StepResponseCaptureStage', () => {
     const { manager } = createSessionManager();
     const stage = createStage(manager);
 
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.sessionContext = {
       sessionId: 'sess-1',
       isChainExecution: false,
@@ -225,7 +225,7 @@ describe('StepResponseCaptureStage', () => {
       },
     });
 
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>chain',
       gate_verdict: { overall: 'PASS', rationale: 'confirmed upstream' },
     });
@@ -291,7 +291,7 @@ describe('StepResponseCaptureStage', () => {
       },
     });
 
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>chain',
       user_response: 'GATE_REVIEW: FAIL - needs red-team pass', // Verdict-like text in user_response
     });
@@ -337,7 +337,7 @@ describe('StepResponseCaptureStage', () => {
       state: { currentNodeId: 'n2', nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }] },
     });
 
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.sessionContext = {
       sessionId: 'sess-1',
       chainId: 'chain-1',
@@ -388,7 +388,7 @@ describe('StepResponseCaptureStage', () => {
       isPlaceholder: true,
     });
 
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>chain',
       user_response: 'Here is my follow-up output',
     });
@@ -432,7 +432,7 @@ describe('StepResponseCaptureStage', () => {
     const observations = [
       { type: 'unknown_discovered' as const, id: 'cache-ttl', statement: 'TTL undecided' },
     ];
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>chain',
       user_response: 'step two output',
       observations,
@@ -467,7 +467,7 @@ describe('StepResponseCaptureStage', () => {
       state: { currentNodeId: 'n2', nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }] },
     });
 
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>chain',
       user_response: 'step two output',
       observations: [
@@ -655,7 +655,7 @@ describe('StepResponseCaptureStage — adaptive mutation (P4)', () => {
 
     // The retry: same run, same open unknown in the ledger, no observations on the call.
     const stage = createStage(harness.manager);
-    const retry = new ExecutionContext({
+    const retry = new PromptRequestContext({
       command: '>>chain',
       gate_verdict: { overall: 'FAIL', rationale: 'try again' },
     });
@@ -706,7 +706,7 @@ describe('StepResponseCaptureStage — adaptive mutation (P4)', () => {
     ]);
 
     const stage = createStage(harness.manager);
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>chain',
       user_response: 'step one output',
       observations: [discovered('cache-ttl', 'TTL undecided', true)],
@@ -757,8 +757,8 @@ describe('resolveDeclaredPauseOnBlocking — blueprint readback (row 1.3, hop 4 
  * is exactly how an enforcement default goes missing without a test failing.
  */
 describe('handoff evidence mode from the collaborators bag', () => {
-  const delegatedContext = (): ExecutionContext => {
-    const context = new ExecutionContext({
+  const delegatedContext = (): PromptRequestContext => {
+    const context = new PromptRequestContext({
       command: '>>chain',
       chain_id: 'chain-1',
       user_response: 'prose only, no HANDOFF RESULT trailer',

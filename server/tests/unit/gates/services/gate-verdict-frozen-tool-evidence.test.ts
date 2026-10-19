@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, jest, test } from '@jest/globals';
 import ts from 'typescript';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { GateEnforcementAuthority } from '../../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import {
   bindSemanticReviewTarget,
@@ -129,7 +129,7 @@ function fixture(
     recordGateReviewOutcome: jest.fn(async () => undefined),
   };
   const service = store as unknown as ChainSessionService;
-  const context = new ExecutionContext(
+  const context = new PromptRequestContext(
     { chain_id: 'chain-1', gate_verdict: verdict, user_response: 'Unrelated current-node carrier' },
     noopLogger
   );

@@ -32,7 +32,7 @@ import { fileURLToPath } from 'node:url';
 import { RemainderProcessor } from '../../../src/engine/execution/capture/remainder-processor.js';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { BRIEF_START, BRIEF_END } from '../../../src/engine/execution/delegation/brief.js';
 import { resolveDeclaredSections } from '../../../src/engine/frameworks/declared-sections.js';
 import {
@@ -397,7 +397,7 @@ const buildPipeline = (options: {
     if (name === 'FrameworkResolution' && options.phaseGuards === true) {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           // What stage 12 publishes on a run whose framework resolved. Stage 19 reads `.id` off
           // exactly this, and the render reads the same id off each step's own frameworkContext.
           context.frameworkContext = guardFrameworkContext as never;
@@ -408,7 +408,7 @@ const buildPipeline = (options: {
     if (name === 'CommandParsing') {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           // The live path: a resume never re-parses — stage 04 restores the persisted blueprint.
           if (context.mcpRequest.chain_id) {
             new ChainBlueprintResolver(sessionStore, logger).restoreFromBlueprint(context);
@@ -429,7 +429,7 @@ const buildPipeline = (options: {
       return {
         name,
         provides: ['executionPlan'],
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.executionPlan = {
             strategy: 'chain',
             gates: [GATE_ID],
@@ -444,7 +444,7 @@ const buildPipeline = (options: {
     if (name === 'GateEnhancement') {
       return {
         name,
-        execute: async (context: ExecutionContext) => {
+        execute: async (context: PromptRequestContext) => {
           context.state.gates.hasBlockingGates = true;
           context.state.gates.accumulatedGateIds = [GATE_ID];
           context.state.gates.enforcementMode = options.gateMode ?? 'blocking';

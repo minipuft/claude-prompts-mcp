@@ -1,6 +1,6 @@
 // @lifecycle canonical - Base interface for execution pipeline stages.
 import type { Logger } from '#infra/logging/index.js';
-import type { ExecutionContext } from '../context/index.js';
+import type { PromptRequestContext } from '../context/index.js';
 
 /**
  * Contract for all pipeline stages.
@@ -28,9 +28,9 @@ export interface PipelineStage {
   readonly requires?: readonly string[];
 
   /**
-   * Execute the stage using the shared ExecutionContext.
+   * Execute the stage using the shared PromptRequestContext.
    */
-  execute(context: ExecutionContext): Promise<void>;
+  execute(context: PromptRequestContext): Promise<void>;
 }
 
 /**
@@ -45,12 +45,12 @@ export abstract class BasePipelineStage implements PipelineStage {
     }
   }
 
-  abstract execute(context: ExecutionContext): Promise<void>;
+  abstract execute(context: PromptRequestContext): Promise<void>;
 
   /**
    * Helper to log stage entry with consistent metadata.
    */
-  protected logEntry(context: ExecutionContext, metadata: Record<string, unknown> = {}): void {
+  protected logEntry(context: PromptRequestContext, metadata: Record<string, unknown> = {}): void {
     const commandLabel = context.mcpRequest.command ?? '<response-only>';
     this.logger.debug(`[${this.name}] Starting`, {
       command: commandLabel,

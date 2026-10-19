@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ExecutionPlanningStage } from '../../../../src/engine/execution/pipeline/stages/07-planning-stage.js';
 
-import type { ExecutionPlan } from '../../../../src/engine/execution/context/execution-context.js';
+import type { ExecutionPlan } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import type { ExecutionPlanner } from '../../../../src/engine/execution/planning/execution-planner.js';
 import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';
 
@@ -39,7 +39,7 @@ const createParsedCommand = () => ({
 describe('ExecutionPlanningStage', () => {
   let planner: jest.Mocked<ExecutionPlanner>;
   let frameworkEnabled: jest.Mock<boolean, []>;
-  let gatesRequested: jest.Mock<(context: ExecutionContext) => boolean>;
+  let gatesRequested: jest.Mock<(context: PromptRequestContext) => boolean>;
   let stage: ExecutionPlanningStage;
 
   beforeEach(() => {
@@ -48,12 +48,12 @@ describe('ExecutionPlanningStage', () => {
       createChainPlan: jest.fn(),
     } as unknown as jest.Mocked<ExecutionPlanner>;
     frameworkEnabled = jest.fn().mockReturnValue(true);
-    gatesRequested = jest.fn<(context: ExecutionContext) => boolean>().mockReturnValue(false);
+    gatesRequested = jest.fn<(context: PromptRequestContext) => boolean>().mockReturnValue(false);
     stage = new ExecutionPlanningStage(planner, frameworkEnabled, gatesRequested, createLogger());
   });
 
   test('plans chain executions and aggregates step gates', async () => {
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.parsedCommand = {
       ...createParsedCommand(),
       commandType: 'chain',
@@ -123,7 +123,7 @@ describe('ExecutionPlanningStage', () => {
   });
 
   test('plans single prompts and forwards gate overrides', async () => {
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>prompt',
       gates: [
         'technical-accuracy',
@@ -165,7 +165,7 @@ describe('ExecutionPlanningStage', () => {
   });
 
   test('throws when parsed command lacks converted prompt and steps', async () => {
-    const context = new ExecutionContext({ command: '>>oops' });
+    const context = new PromptRequestContext({ command: '>>oops' });
     await expect(stage.execute(context)).rejects.toThrow(
       'Parsed command requires either convertedPrompt or steps.'
     );
@@ -173,7 +173,7 @@ describe('ExecutionPlanningStage', () => {
   });
 
   test('tells the planner when the call requested a gate', async () => {
-    const context = new ExecutionContext({ command: '>>prompt :: "cite"' });
+    const context = new PromptRequestContext({ command: '>>prompt :: "cite"' });
     context.parsedCommand = {
       ...createParsedCommand(),
       commandType: 'single',
@@ -194,7 +194,7 @@ describe('ExecutionPlanningStage', () => {
   });
 
   test('forwards unified gates parameter to planner', async () => {
-    const context = new ExecutionContext({ command: '>>prompt' });
+    const context = new PromptRequestContext({ command: '>>prompt' });
     context.state.gates.requestedOverrides = {
       gates: ['toxicity', 'code-quality'],
     };
@@ -228,7 +228,7 @@ describe('ExecutionPlanningStage', () => {
   });
 
   test('forwards unified gates parameter with mixed specification types', async () => {
-    const context = new ExecutionContext({ command: '>>prompt' });
+    const context = new PromptRequestContext({ command: '>>prompt' });
     context.state.gates.requestedOverrides = {
       gates: [
         'toxicity',

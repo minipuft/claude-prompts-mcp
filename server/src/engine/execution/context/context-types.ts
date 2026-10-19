@@ -2,7 +2,7 @@
 /**
  * Execution Context Type Definitions
  *
- * Contains interfaces used by ExecutionContext for pipeline state management.
+ * Contains interfaces used by PromptRequestContext for pipeline state management.
  * Separated from the class implementation to enable clean imports without
  * circular dependencies.
  */

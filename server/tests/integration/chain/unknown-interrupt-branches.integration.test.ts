@@ -34,7 +34,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { RemainderProcessor } from '../../../src/engine/execution/capture/remainder-processor.js';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
-import { ExecutionContext } from '../../../src/engine/execution/context/index.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/index.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { UNKNOWN_INTERRUPT_GATE_ID } from '../../../src/engine/execution/pipeline/decisions/index.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
@@ -179,8 +179,8 @@ describe('row 4.1 — the three branches of a blocking-unknown interrupt', () =>
     );
   };
 
-  const context = (request: Partial<McpToolRequest>): ExecutionContext => {
-    const built = new ExecutionContext({ chain_id: 'chain-branch#1', ...request });
+  const context = (request: Partial<McpToolRequest>): PromptRequestContext => {
+    const built = new PromptRequestContext({ chain_id: 'chain-branch#1', ...request });
     built.sessionContext = {
       sessionId: SESSION,
       chainId: 'chain-branch#1',

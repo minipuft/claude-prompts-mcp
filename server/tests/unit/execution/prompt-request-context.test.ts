@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { FrameworkDecisionAuthority } from '../../../src/engine/execution/pipeline/decisions/index.js';
 import { DiagnosticAccumulator } from '../../../src/engine/execution/pipeline/state/accumulators/diagnostic-accumulator.js';
 import { GateAccumulator } from '../../../src/engine/execution/pipeline/state/accumulators/gate-accumulator.js';
@@ -22,13 +22,13 @@ const mockLogger = {
 const samplePrompt: ConvertedPrompt = {
   id: 'demo',
   name: 'Demo Prompt',
-  description: 'Used for execution-context tests',
+  description: 'Used for prompt-request-context tests',
   category: 'test',
   userMessageTemplate: 'Hello {{name}}',
   arguments: [],
 };
 
-describe('ExecutionContext helpers', () => {
+describe('PromptRequestContext helpers', () => {
   test('getGateVerdict retains a rich Unicode report and reviewer object intact', () => {
     const targetDigest = hashBytes('A😀e\u0301 Z');
     const submission: GateVerdictSubmission = {
@@ -68,7 +68,7 @@ describe('ExecutionContext helpers', () => {
       ],
     };
     const before = structuredClone(submission);
-    const context = new ExecutionContext({ ...baseRequest, gate_verdict: submission });
+    const context = new PromptRequestContext({ ...baseRequest, gate_verdict: submission });
 
     expect(context.getGateVerdict()).toBe(submission);
     expect(context.getGateVerdict()).toEqual(before);
@@ -79,36 +79,36 @@ describe('ExecutionContext helpers', () => {
     'getGateVerdict retains an ordinary structured %s',
     (overall) => {
       const submission: GateVerdictSubmission = { overall, rationale: 'Reviewed' };
-      const context = new ExecutionContext({ ...baseRequest, gate_verdict: submission });
+      const context = new PromptRequestContext({ ...baseRequest, gate_verdict: submission });
 
       expect(context.getGateVerdict()).toBe(submission);
     }
   );
 
   test('getGateVerdict answers undefined when no verdict was sent', () => {
-    const context = new ExecutionContext({ ...baseRequest });
+    const context = new PromptRequestContext({ ...baseRequest });
 
     expect(context.getGateVerdict()).toBeUndefined();
   });
 
   test('getSessionId prefers resume metadata value', () => {
-    const context = new ExecutionContext({ ...baseRequest, chain_id: 'chain-demo' });
+    const context = new PromptRequestContext({ ...baseRequest, chain_id: 'chain-demo' });
     context.state.session.resumeSessionId = 'metadata-session';
     context.sessionContext = { sessionId: 'context-session', isChainExecution: false } as any;
     expect(context.getSessionId()).toBe('metadata-session');
   });
 
   test('getSessionId falls back to session context', () => {
-    const context = new ExecutionContext(baseRequest);
+    const context = new PromptRequestContext(baseRequest);
     context.sessionContext = { sessionId: 'context-session', isChainExecution: true };
     expect(context.getSessionId()).toBe('context-session');
   });
 
   test('isChainExecution inspects execution plan and parsed command', () => {
-    const context = new ExecutionContext(baseRequest);
+    const context = new PromptRequestContext(baseRequest);
     expect(context.isChainExecution()).toBe(false);
 
-    const chainResumeContext = new ExecutionContext({ chain_id: 'chain-demo' });
+    const chainResumeContext = new PromptRequestContext({ chain_id: 'chain-demo' });
     expect(chainResumeContext.isChainExecution()).toBe(true);
 
     context.executionPlan = {
@@ -119,7 +119,7 @@ describe('ExecutionContext helpers', () => {
     };
     expect(context.isChainExecution()).toBe(true);
 
-    const chainContext = new ExecutionContext(baseRequest);
+    const chainContext = new PromptRequestContext(baseRequest);
     chainContext.parsedCommand = {
       promptId: 'chain',
       rawArgs: '',
@@ -138,7 +138,7 @@ describe('ExecutionContext helpers', () => {
   });
 
   test('hasSinglePromptCommand type guard', () => {
-    const context = new ExecutionContext(baseRequest);
+    const context = new PromptRequestContext(baseRequest);
     context.parsedCommand = {
       promptId: 'demo',
       rawArgs: '',
@@ -161,7 +161,7 @@ describe('ExecutionContext helpers', () => {
   });
 
   test('hasChainCommand type guard', () => {
-    const context = new ExecutionContext(baseRequest);
+    const context = new PromptRequestContext(baseRequest);
     context.parsedCommand = {
       promptId: 'demo',
       rawArgs: '',
@@ -184,27 +184,27 @@ describe('ExecutionContext helpers', () => {
   });
 });
 
-describe('ExecutionContext pipeline state management', () => {
+describe('PromptRequestContext pipeline state management', () => {
   test('initializes GateAccumulator', () => {
-    const context = new ExecutionContext(baseRequest);
+    const context = new PromptRequestContext(baseRequest);
     expect(context.gates).toBeInstanceOf(GateAccumulator);
     expect(context.gates.size).toBe(0);
   });
 
   test('initializes DiagnosticAccumulator', () => {
-    const context = new ExecutionContext(baseRequest);
+    const context = new PromptRequestContext(baseRequest);
     expect(context.diagnostics).toBeInstanceOf(DiagnosticAccumulator);
     expect(context.diagnostics.size).toBe(0);
   });
 
   test('initializes FrameworkDecisionAuthority', () => {
-    const context = new ExecutionContext(baseRequest);
+    const context = new PromptRequestContext(baseRequest);
     expect(context.frameworkAuthority).toBeInstanceOf(FrameworkDecisionAuthority);
     expect(context.frameworkAuthority.getCachedDecision()).toBeNull();
   });
 
   test('accepts optional logger for state management', () => {
-    const context = new ExecutionContext(baseRequest, mockLogger as any);
+    const context = new PromptRequestContext(baseRequest, mockLogger as any);
 
     // Add a gate to trigger logging
     context.gates.add('test-gate', 'registry-auto');
@@ -214,7 +214,7 @@ describe('ExecutionContext pipeline state management', () => {
   });
 
   test('gates accumulator deduplicates with priority', () => {
-    const context = new ExecutionContext(baseRequest);
+    const context = new PromptRequestContext(baseRequest);
 
     // Add from low priority source
     context.gates.add('test-gate', 'registry-auto'); // priority 20
@@ -234,7 +234,7 @@ describe('ExecutionContext pipeline state management', () => {
   });
 
   test('diagnostics accumulator collects across stages', () => {
-    const context = new ExecutionContext(baseRequest, mockLogger as any);
+    const context = new PromptRequestContext(baseRequest, mockLogger as any);
 
     context.diagnostics.info('Stage1', 'Info message');
     context.diagnostics.warn('Stage2', 'Warning message');
@@ -250,7 +250,7 @@ describe('ExecutionContext pipeline state management', () => {
   });
 
   test('framework authority caches decision', () => {
-    const context = new ExecutionContext(baseRequest);
+    const context = new PromptRequestContext(baseRequest);
 
     // Set up execution plan with modifiers
     context.executionPlan = {
@@ -279,7 +279,7 @@ describe('ExecutionContext pipeline state management', () => {
   });
 
   test('framework authority respects priority chain', () => {
-    const context = new ExecutionContext(baseRequest);
+    const context = new PromptRequestContext(baseRequest);
 
     // Test operator override takes precedence
     const decision = context.frameworkAuthority.decide({
@@ -293,7 +293,7 @@ describe('ExecutionContext pipeline state management', () => {
   });
 
   test('state management objects are readonly', () => {
-    const context = new ExecutionContext(baseRequest);
+    const context = new PromptRequestContext(baseRequest);
 
     // These should be readonly - TypeScript would catch reassignment
     // Runtime check that they exist

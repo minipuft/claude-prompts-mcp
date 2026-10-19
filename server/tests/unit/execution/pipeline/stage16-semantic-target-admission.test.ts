@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { StepCaptureService } from '../../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../../src/engine/execution/capture/unknown-observation-processor.js';
 import { StepResponseCaptureStage } from '../../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
@@ -125,7 +125,7 @@ function fixture(body: string | undefined, polarity: 'PASS' | 'FAIL' = 'FAIL') {
     updateSessionState: jest.fn(async () => true),
   };
   const service = store as unknown as ChainSessionService;
-  const context = new ExecutionContext(
+  const context = new PromptRequestContext(
     {
       command: '>>chain',
       gate_verdict: verdict,
@@ -297,7 +297,7 @@ describe('Stage16 admits semantic target before effectful resume phases', () => 
   });
   test('action-only request does not acquire semantic verdict admission', async () => {
     const f = fixture('Different B');
-    const actionContext = new ExecutionContext(
+    const actionContext = new PromptRequestContext(
       {
         user_response: 'Different B',
         gate_action: 'retry',

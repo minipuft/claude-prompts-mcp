@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { createSymbolicCommandParser } from '../../../src/engine/execution/parsers/symbolic-operator-parser.js';
 import { JudgeSelectionStage } from '../../../src/engine/execution/pipeline/stages/10-judge-selection-stage.js';
 
@@ -57,7 +57,7 @@ describe('Judge selection re-entry via inline operators', () => {
     const detection = parser.detectOperators(JUDGE_REPLY);
     const plan = parser.generateExecutionPlan(detection, 'demo', '');
 
-    const context = new ExecutionContext({ command: JUDGE_REPLY });
+    const context = new PromptRequestContext({ command: JUDGE_REPLY });
     const decision = context.frameworkAuthority.decide({
       ...(plan.frameworkOverride !== undefined && { operatorOverride: plan.frameworkOverride }),
       globalActiveFramework: 'ReACT',
@@ -71,7 +71,7 @@ describe('Judge selection re-entry via inline operators', () => {
   });
 
   test('gate selection lands in the accumulator at inline-operator, outranking lower sources', () => {
-    const context = new ExecutionContext({ command: JUDGE_REPLY });
+    const context = new PromptRequestContext({ command: JUDGE_REPLY });
 
     // A gate the registry auto-selected, then the same gate chosen at the judge menu.
     context.gates.add('code-quality', 'registry-auto');
@@ -91,7 +91,7 @@ describe('Judge selection re-entry via inline operators', () => {
       logger
     );
 
-    const context = new ExecutionContext({ command: JUDGE_REPLY });
+    const context = new PromptRequestContext({ command: JUDGE_REPLY });
     context.parsedCommand = {
       commandType: 'single',
       styleSelection: 'Analytical',

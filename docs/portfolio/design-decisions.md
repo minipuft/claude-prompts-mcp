@@ -163,15 +163,9 @@ Users don't read documentation—they explore interactively. The prompts teach t
 
 ## 4. State Management Philosophy
 
-### Ephemeral vs Persistent State
+### Per-Request State vs State That Outlives a Request
 
-| Type          | Lifecycle                 | Storage                | Use Case                             |
-| ------------- | ------------------------- | ---------------------- | ------------------------------------ |
-| **Ephemeral** | Dies after request        | `ExecutionContext`     | Pipeline state, intermediate results |
-| **Session**   | Survives session requests | `chain-sessions.json`  | Chain step progress, gate reviews    |
-| **Global**    | Survives restarts         | `runtime-state/*.json` | Framework selection, system config   |
-
-**Key Insight**: The most common state bug is storing cross-request state in `ExecutionContext`. Use session managers for persistence.
+The most common state bug is storing cross-request state on the per-request `PromptRequestContext`: it is discarded when the response is sent, so the next request reads nothing. State that must outlive a request goes through the session and state stores; [the architecture overview](../architecture/overview.md) §What State Outlives a Request lists each lifetime and where it lives.
 
 ### Centralized Accumulators
 

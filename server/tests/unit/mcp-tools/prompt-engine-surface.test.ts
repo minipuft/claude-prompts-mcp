@@ -1,7 +1,7 @@
 import { describe, expect, test } from '@jest/globals';
 import { z } from 'zod/v4';
 
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { McpToolRequestValidator } from '../../../src/engine/execution/validation/request-validator.js';
 import { isChainId } from '../../../src/shared/utils/chain-id-codec.js';
@@ -45,7 +45,7 @@ describe('chain reference formatter and admission boundaries', () => {
     'chain-Team-Legacy/Child_Name/9deep#01',
     'chain-9legacy#0',
   ])('admits the exact formatter-emitted identity %s in every surface state', (raw) => {
-    const context = new ExecutionContext({ chain_id: raw });
+    const context = new PromptRequestContext({ chain_id: raw });
     context.sessionContext = {
       sessionId: 'session-reference-boundary',
       chainId: raw,

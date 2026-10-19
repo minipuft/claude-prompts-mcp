@@ -1,6 +1,6 @@
 import { describe, expect, jest, test, beforeEach } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import {
   PhaseGuardVerificationStage,
   PHASE_GUARD_GATE_ID,
@@ -26,12 +26,12 @@ const createMcpRequest = (command = '>>test', user_response?: string) => ({
   ...(user_response !== undefined ? { user_response } : {}),
 });
 
-function createContext(mcpRequest = createMcpRequest()): ExecutionContext {
-  return new ExecutionContext(mcpRequest, createLogger());
+function createContext(mcpRequest = createMcpRequest()): PromptRequestContext {
+  return new PromptRequestContext(mcpRequest, createLogger());
 }
 
 /** Attach a minimal session context so phase guards can operate (requires chain session). */
-function withSession(ctx: ExecutionContext, sessionId = 'session-1'): ExecutionContext {
+function withSession(ctx: PromptRequestContext, sessionId = 'session-1'): PromptRequestContext {
   ctx.sessionContext = {
     sessionId,
     isChainExecution: true,

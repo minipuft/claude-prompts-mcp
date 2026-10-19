@@ -3,12 +3,12 @@
  * Context System Export Module
  *
  * Centralizes all execution context infrastructure exports:
- * - ExecutionContext: Pipeline state carrier
+ * - PromptRequestContext: Pipeline state carrier
  * - Context types: Interfaces for pipeline state
  */
 
-// ExecutionContext - primary pipeline state carrier
-export { ExecutionContext } from './execution-context.js';
+// PromptRequestContext - primary pipeline state carrier
+export { PromptRequestContext } from './prompt-request-context.js';
 
 // Context types - interfaces for pipeline state
 export type {

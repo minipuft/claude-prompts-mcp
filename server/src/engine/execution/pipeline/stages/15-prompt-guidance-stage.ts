@@ -10,7 +10,7 @@ import type {
   ServicePromptGuidanceResult,
 } from '../../../frameworks/prompt-guidance/index.js';
 import type { FrameworkSelection } from '../../../frameworks/types/index.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 import type { ConvertedPrompt } from '../../types.js';
 import type { FrameworkDecisionInput } from '../decisions/index.js';
 
@@ -41,7 +41,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     // Skip if session blueprint restored (resuming a chain). The selected style's guidance text is
@@ -108,7 +108,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
    * JudgeSelectionStage sets clientSelectedStyle from the `#style` operator;
    * symbolic operators also set context.parsedCommand.executionPlan.styleSelection.
    */
-  private hasClientSelections(context: ExecutionContext): boolean {
+  private hasClientSelections(context: PromptRequestContext): boolean {
     const operatorStyle = context.parsedCommand?.executionPlan?.styleSelection;
     return Boolean(context.state.framework.clientSelectedStyle || operatorStyle);
   }
@@ -122,7 +122,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
    * 1. Operator-based style (#analytical in command)
    * 2. Client-selected style (from judge phase)
    */
-  private applyClientSelections(context: ExecutionContext): void {
+  private applyClientSelections(context: PromptRequestContext): void {
     const clientStyle = context.state.framework.clientSelectedStyle;
     const operatorStyle = context.parsedCommand?.executionPlan?.styleSelection;
 
@@ -142,7 +142,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
    * On a resume, record the run's selected style guidance text for the step render, applying
    * nothing: whether it renders is the rendered step's style decision, read by the renderer.
    */
-  private recordSelectedStyleGuidance(context: ExecutionContext): void {
+  private recordSelectedStyleGuidance(context: PromptRequestContext): void {
     const style =
       context.parsedCommand?.executionPlan?.styleSelection ??
       context.state.framework.clientSelectedStyle;
@@ -156,7 +156,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
   /**
    * Apply style enhancement to the prompt based on selected style.
    */
-  private applyStyleEnhancement(context: ExecutionContext, style: string): void {
+  private applyStyleEnhancement(context: PromptRequestContext, style: string): void {
     const styleDecision = context.state.injection?.styleGuidance;
     if (styleDecision?.inject === false) {
       this.logger.debug('[PromptGuidanceStage] Style guidance injection suppressed by decision', {
@@ -224,7 +224,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
    * guidance block names the same framework. The run-wide choice applies only to a step stage 12
    * gave no context.
    */
-  private async applyGuidanceToChain(context: ExecutionContext): Promise<number> {
+  private async applyGuidanceToChain(context: PromptRequestContext): Promise<number> {
     const steps = context.requireChainSteps();
     const runFramework = this.getFrameworkOverride(context);
     let applied = 0;
@@ -262,7 +262,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
 
   private async applyGuidance(
     prompt: ConvertedPrompt,
-    context: ExecutionContext,
+    context: PromptRequestContext,
     promptId: string = prompt.id,
     frameworkOverride: FrameworkSelection | undefined = this.getFrameworkOverride(context)
   ): Promise<ServicePromptGuidanceResult | null> {
@@ -300,7 +300,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
   }
 
   private recordGuidanceResult(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     promptId: string,
     result: ServicePromptGuidanceResult
   ): void {
@@ -308,7 +308,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
     store[promptId] = result;
   }
 
-  private getGuidanceStore(context: ExecutionContext): GuidanceStore {
+  private getGuidanceStore(context: PromptRequestContext): GuidanceStore {
     if (context.state.framework.guidanceResults === undefined) {
       context.state.framework.guidanceResults = {};
     }
@@ -320,7 +320,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
    * Get framework override using the centralized FrameworkDecisionAuthority.
    * This ensures consistent framework resolution across all pipeline stages.
    */
-  private getFrameworkOverride(context: ExecutionContext): FrameworkSelection | undefined {
+  private getFrameworkOverride(context: PromptRequestContext): FrameworkSelection | undefined {
     const decisionInput = this.buildDecisionInput(context);
     const frameworkId = context.frameworkAuthority.getFrameworkId(decisionInput);
     return frameworkId;
@@ -329,7 +329,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
   /**
    * Build decision input from context for FrameworkDecisionAuthority.
    */
-  private buildDecisionInput(context: ExecutionContext): FrameworkDecisionInput {
+  private buildDecisionInput(context: PromptRequestContext): FrameworkDecisionInput {
     const decisionInput: FrameworkDecisionInput = {};
 
     const modifiers = context.executionPlan?.modifiers;

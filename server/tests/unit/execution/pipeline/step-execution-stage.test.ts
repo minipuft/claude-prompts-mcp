@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { StepExecutionStage } from '../../../../src/engine/execution/pipeline/stages/18-execution-stage.js';
 
 import type { ChainSessionService } from '../../../../src/modules/chains/types.js';
@@ -78,7 +78,7 @@ describe('StepExecutionStage', () => {
       ...samplePrompt,
       systemMessage: 'You are operating under the FWS2 Probe framework for demo.',
     };
-    const context = new ExecutionContext({ command: '>>demo topic="AI"' });
+    const context = new PromptRequestContext({ command: '>>demo topic="AI"' });
     context.executionPlan = {
       strategy: 'prompt',
       gates: ['quality'],
@@ -113,7 +113,7 @@ describe('StepExecutionStage', () => {
       systemMessage: 'Apply the C.A.G.E.E.R.F framework systematically before answering.',
     };
 
-    const context = new ExecutionContext({ command: '>>demo topic="AI"' });
+    const context = new PromptRequestContext({ command: '>>demo topic="AI"' });
     context.executionPlan = {
       strategy: 'prompt',
       gates: [],
@@ -141,7 +141,7 @@ describe('StepExecutionStage', () => {
     const { sessionManager } = createSessionManager(runState('n2'));
     const stage = new StepExecutionStage(chainExecutor, sessionManager, createLogger());
 
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.executionPlan = {
       strategy: 'chain',
       gates: ['quality'],
@@ -200,7 +200,7 @@ describe('StepExecutionStage', () => {
 
     // Simulates: single prompt with gateConfiguration, after gate_verdict PASS
     // advanceStep() moved currentStep from 1 → 2, totalSteps is 1
-    const context = new ExecutionContext({ command: '>>demo topic="AI"' });
+    const context = new PromptRequestContext({ command: '>>demo topic="AI"' });
     context.executionPlan = {
       strategy: 'prompt',
       gates: ['workflow-preflight'],
@@ -234,7 +234,7 @@ describe('StepExecutionStage', () => {
     const stage = new StepExecutionStage(chainExecutor, sessionManager, createLogger());
 
     // currentStep=1, totalSteps=1 → still needs to execute (not past total)
-    const context = new ExecutionContext({ command: '>>demo topic="AI"' });
+    const context = new PromptRequestContext({ command: '>>demo topic="AI"' });
     context.executionPlan = {
       strategy: 'prompt',
       gates: ['workflow-preflight'],
@@ -267,7 +267,7 @@ describe('StepExecutionStage', () => {
     const { sessionManager } = createSessionManager(runState(null, 'completed'));
     const stage = new StepExecutionStage(chainExecutor, sessionManager, createLogger());
 
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.executionPlan = {
       strategy: 'chain',
       gates: ['quality'],
@@ -336,7 +336,7 @@ describe('StepExecutionStage', () => {
       const { sessionManager } = createSessionManager(runState('n1'));
       const stage = new StepExecutionStage(chainExecutor, sessionManager, createLogger());
 
-      const context = new ExecutionContext({ command: '>>demo topic="AI"' });
+      const context = new PromptRequestContext({ command: '>>demo topic="AI"' });
       context.executionPlan = sessionPlan('prompt');
       context.sessionContext = {
         sessionId: 'sess-review',
@@ -363,7 +363,7 @@ describe('StepExecutionStage', () => {
       const { sessionManager } = createSessionManager(runState('n1'));
       const stage = new StepExecutionStage(chainExecutor, sessionManager, createLogger());
 
-      const context = new ExecutionContext({ command: '>>chain' });
+      const context = new PromptRequestContext({ command: '>>chain' });
       context.executionPlan = sessionPlan('chain');
       context.sessionContext = {
         sessionId: 'sess-review',

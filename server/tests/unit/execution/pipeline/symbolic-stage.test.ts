@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { InlineGateExtractionStage } from '../../../../src/engine/execution/pipeline/stages/05-inline-gate-stage.js';
 import { OperatorValidationStage } from '../../../../src/engine/execution/pipeline/stages/06-operator-validation-stage.js';
 import { SessionManagementStage } from '../../../../src/engine/execution/pipeline/stages/13-session-stage.js';
@@ -13,7 +13,7 @@ import type { ChainSessionStore } from '../../../../src/modules/chains/manager.j
 import type {
   ExecutionPlan,
   ParsedCommand,
-} from '../../../../src/engine/execution/context/execution-context.js';
+} from '../../../../src/engine/execution/context/prompt-request-context.js';
 import type { ChainStepPrompt } from '../../../../src/engine/execution/operators/chain-operator-executor.js';
 import type { FrameworkManager } from '../../../../src/engine/frameworks/framework-manager.js';
 import type { FrameworkDefinition } from '../../../../src/engine/frameworks/types/index.js';
@@ -207,7 +207,7 @@ const createSessionManager = (): jest.Mocked<ChainSessionStore> =>
 describe('Symbolic pipeline coverage', () => {
   test('inline gate and operator validation stages normalize symbolic metadata', async () => {
     const logger = createLogger();
-    const context = new ExecutionContext({ command: 'symbolic chain' }, logger);
+    const context = new PromptRequestContext({ command: 'symbolic chain' }, logger);
     context.state.session.executionScopeId = 'exec-scope';
     context.parsedCommand = buildParsedCommand();
 
@@ -280,7 +280,7 @@ describe('Symbolic pipeline coverage', () => {
     const sessionStage = new SessionManagementStage(manager, logger);
     const dateSpy = jest.spyOn(Date, 'now').mockReturnValue(1700000000000);
 
-    const context = new ExecutionContext({ command: 'symbolic chain' });
+    const context = new PromptRequestContext({ command: 'symbolic chain' });
     context.parsedCommand = buildParsedCommand();
     context.parsedCommand.inlineGateIds = ['inline_command_gate'];
     const steps = context.parsedCommand.steps!;

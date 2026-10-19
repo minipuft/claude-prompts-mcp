@@ -12,7 +12,7 @@
  */
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 import { TemporaryGateRegistrar } from '../../../../src/engine/gates/services/temporary-gate-registrar.js';
 
@@ -27,8 +27,8 @@ const logger = (): Logger & { warn: jest.Mock } =>
   }) as never;
 
 /** A call of the run `sessionId` (undefined: the call that starts a run). */
-const callOf = (sessionId: string | undefined, gates: unknown[] = []): ExecutionContext => {
-  const context = new ExecutionContext({ command: '>>demo' });
+const callOf = (sessionId: string | undefined, gates: unknown[] = []): PromptRequestContext => {
+  const context = new PromptRequestContext({ command: '>>demo' });
   context.state.gates.requestedOverrides = { gates };
   if (sessionId !== undefined) context.state.session.resumeSessionId = sessionId;
   return context;
@@ -205,8 +205,8 @@ describe('an untargeted chain request gate stays bound to its first step (P6.114
     sessionId: string | undefined,
     currentStep: number,
     gates: unknown[]
-  ): ExecutionContext => {
-    const context = new ExecutionContext({ command: '>>demo' });
+  ): PromptRequestContext => {
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.state.gates.requestedOverrides = { gates };
     context.parsedCommand = {
       commandType: 'chain',

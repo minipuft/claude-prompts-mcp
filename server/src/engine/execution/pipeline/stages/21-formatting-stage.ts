@@ -14,7 +14,7 @@ import type {
 } from '#shared/types/chain-execution.js';
 import type { ChainSessionService } from '#shared/types/chain-session.js';
 import type { ResponseFormatterPort } from '#shared/types/index.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 import type { SinglePromptFormattingContext } from '../../formatting/formatting-context.js';
 import type { ResponseAssembler } from '../../formatting/response-assembler.js';
 
@@ -49,7 +49,7 @@ export class ResponseFormattingStage extends BasePipelineStage {
     super(logger);
   }
 
-  private emitChainTerminalRecord(context: ExecutionContext): void {
+  private emitChainTerminalRecord(context: PromptRequestContext): void {
     if (this.executionRecordStore === null) return;
     const session = context.sessionContext;
     if (session === undefined) return;
@@ -83,7 +83,7 @@ export class ResponseFormattingStage extends BasePipelineStage {
     });
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     if (context.response) {
@@ -176,7 +176,7 @@ export class ResponseFormattingStage extends BasePipelineStage {
    * test harnesses wiring only a formatter) — the caller then keeps the position-derived
    * value rather than reporting a confident zero.
    */
-  private countExecutedSteps(context: ExecutionContext): number | undefined {
+  private countExecutedSteps(context: PromptRequestContext): number | undefined {
     const sessionId = context.sessionContext?.sessionId;
     if (this.chainSessionStore === null || sessionId === undefined) {
       return undefined;
@@ -189,7 +189,7 @@ export class ResponseFormattingStage extends BasePipelineStage {
    * Build the FormatterExecutionContext from pipeline state.
    * This is orchestration-level context wiring, not domain logic.
    */
-  private buildFormatterContext(context: ExecutionContext): FormatterExecutionContext {
+  private buildFormatterContext(context: PromptRequestContext): FormatterExecutionContext {
     const executionType = context.executionPlan?.strategy ?? 'single';
     const sessionContext = context.sessionContext;
 
@@ -252,7 +252,7 @@ export class ResponseFormattingStage extends BasePipelineStage {
  * not produce a record.
  */
 function resolveTerminalStatus(
-  context: ExecutionContext,
+  context: PromptRequestContext,
   runStatus?: ChainRunStatus
 ): StepLifecycle | undefined {
   // Completion can precede its latch; a known unsuccessful terminal outcome cannot become success.

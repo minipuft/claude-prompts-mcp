@@ -13,7 +13,7 @@ import {
   selectToolReviewGateIds,
 } from '../../../../../src/engine/execution/pipeline/decisions/gates/structural-review-composition.js';
 
-import { ExecutionContext } from '../../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../../src/engine/execution/context/prompt-request-context.js';
 import {
   bindSemanticReviewTarget,
   resolvePinnedSemanticContext,
@@ -166,7 +166,7 @@ function stageFixture(
     () => undefined,
     { shellVerifyExecutor: shell }
   );
-  const context = new ExecutionContext(
+  const context = new PromptRequestContext(
     { command: '>>draft', ...(options.body !== undefined ? { user_response: options.body } : {}) },
     logger
   );

@@ -5,7 +5,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { ConfigManager } from '#shared/types/index.js';
 import type { JudgeMenuFormatter } from '../../../gates/judge/judge-menu-formatter.js';
 import type { JudgeResourceCollector } from '../../../gates/judge/judge-resource-collector.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 
 /**
  * Pipeline Stage 10: Judge Selection (Two-Phase Client-Driven Flow)
@@ -39,7 +39,7 @@ export class JudgeSelectionStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     if (context.state.session.isBlueprintRestored) {
@@ -90,7 +90,7 @@ export class JudgeSelectionStage extends BasePipelineStage {
     }
   }
 
-  private applyInlineStyleSelection(context: ExecutionContext): boolean {
+  private applyInlineStyleSelection(context: PromptRequestContext): boolean {
     const styleFromCommand =
       context.parsedCommand?.styleSelection ?? context.parsedCommand?.executionPlan?.styleSelection;
 
@@ -110,7 +110,7 @@ export class JudgeSelectionStage extends BasePipelineStage {
     return true;
   }
 
-  private shouldTriggerJudgePhase(context: ExecutionContext): boolean {
+  private shouldTriggerJudgePhase(context: PromptRequestContext): boolean {
     const modifiers = context.getExecutionModifiers();
     return modifiers?.judge === true;
   }

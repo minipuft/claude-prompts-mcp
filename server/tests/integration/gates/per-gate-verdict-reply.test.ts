@@ -6,7 +6,7 @@
  * string describing response blocking rather than the gate. The per-gate detail the submission
  * carried was parsed, round-trip tested, and read by nothing.
  *
- * Composed from the production units rather than mocks — a real `ExecutionContext`, the real
+ * Composed from the production units rather than mocks — a real `PromptRequestContext`, the real
  * `GateEnforcementAuthority` (parse + `index → gateId` join), the real `GateVerdictProcessor`
  * (which writes request state) and the real `ResponseAssembler` (which renders it). Each is
  * unit-tested on its own; what this asserts is that the four agree.
@@ -22,7 +22,7 @@
 
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
@@ -71,9 +71,9 @@ const session = {
  * Submit a rendered verdict through the real processor and return the context it wrote to —
  * the same object the assembler then reads.
  */
-async function submit(verdict: GateVerdictSubmission): Promise<ExecutionContext> {
+async function submit(verdict: GateVerdictSubmission): Promise<PromptRequestContext> {
   const store = createStore();
-  const context = new ExecutionContext({ chain_id: 'chain-demo', gate_verdict: verdict });
+  const context = new PromptRequestContext({ chain_id: 'chain-demo', gate_verdict: verdict });
   context.gateEnforcement = new GateEnforcementAuthority(store, createLogger(), undefined, () => ({
     evaluation: {},
   }));
@@ -189,7 +189,7 @@ describe('a FAIL reply names the gates the reviewer failed', () => {
     });
     const withoutDetail = await submit({ overall: 'FAIL', rationale: 'unmet' });
 
-    const render = (context: ExecutionContext) =>
+    const render = (context: PromptRequestContext) =>
       assembler.formatChainResponse(context, { isChainFormatting: true } as never);
 
     expect(render(withDetail)).toContain('Gates you marked FAIL');

@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../../src/engine/execution/formatting/response-assembler.js';
 import { ResponseFormattingStage } from '../../../../src/engine/execution/pipeline/stages/21-formatting-stage.js';
 import { ResponseFormatter } from '../../../../src/mcp/tools/prompt-engine/processors/response-formatter.js';
@@ -24,7 +24,7 @@ describe('ResponseFormattingStage', () => {
     const formatter = new ResponseFormatter(createLogger());
     const stage = new ResponseFormattingStage(formatter, new ResponseAssembler(), createLogger());
 
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.executionPlan = {
       strategy: 'chain',
       gates: [],
@@ -69,7 +69,7 @@ describe('ResponseFormattingStage', () => {
     const formatter = new ResponseFormatter(createLogger());
     const stage = new ResponseFormattingStage(formatter, new ResponseAssembler(), createLogger());
 
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.executionPlan = {
       strategy: 'chain',
       gates: [],
@@ -102,7 +102,7 @@ describe('ResponseFormattingStage', () => {
     const formatter = new ResponseFormatter(createLogger());
     const stage = new ResponseFormattingStage(formatter, new ResponseAssembler(), createLogger());
 
-    const context = new ExecutionContext({ command: '>>prompt' });
+    const context = new PromptRequestContext({ command: '>>prompt' });
     context.executionPlan = {
       strategy: 'prompt',
       gates: [],
@@ -159,8 +159,8 @@ describe('ResponseFormattingStage — stepsExecuted', () => {
     return { port, captured };
   };
 
-  const chainContext = (): ExecutionContext => {
-    const context = new ExecutionContext({ command: '>>chain' });
+  const chainContext = (): PromptRequestContext => {
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.executionPlan = {
       strategy: 'chain',
       gates: [],
@@ -228,7 +228,7 @@ describe('ResponseFormattingStage terminal records', () => {
   };
 
   const runStage = async (
-    mutate: (context: ExecutionContext) => void,
+    mutate: (context: PromptRequestContext) => void,
     store?: ExecutionRecordStore,
     sessions?: ChainSessionService
   ): Promise<void> => {
@@ -240,7 +240,7 @@ describe('ResponseFormattingStage terminal records', () => {
       sessions ?? null
     );
 
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.executionPlan = {
       strategy: 'chain',
       gates: [],

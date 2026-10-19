@@ -1,6 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../../src/engine/execution/formatting/response-assembler.js';
 
 import type {
@@ -61,8 +61,8 @@ function createSinglePromptContext(overrides: {
   };
   frameworkDecision?: { source: string; frameworkId: string };
   executionPlanOverrides?: Record<string, unknown>;
-}): ExecutionContext {
-  const context = new ExecutionContext({ command: `>>${overrides.promptId ?? 'test-prompt'}` });
+}): PromptRequestContext {
+  const context = new PromptRequestContext({ command: `>>${overrides.promptId ?? 'test-prompt'}` });
 
   context.executionResults = {
     content: 'Test output content',

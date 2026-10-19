@@ -4,7 +4,7 @@ import { PromptExecutionPipeline } from '../../../../src/engine/execution/pipeli
 
 import { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 
-import type { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import type { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import type { PipelinePorts } from '../../../../src/engine/execution/pipeline/prompt-execution-pipeline.js';
 import type { PipelineStage } from '../../../../src/engine/execution/pipeline/stage.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
@@ -45,7 +45,7 @@ const createLogger = (): Logger => ({
 
 const createStage = (
   name: StageName,
-  onExecute?: (context: ExecutionContext) => void | Promise<void>
+  onExecute?: (context: PromptRequestContext) => void | Promise<void>
 ): PipelineStage => ({
   name,
   execute: async (context) => {
@@ -166,7 +166,7 @@ describe('PromptExecutionPipeline orchestration', () => {
 
     const frameworkStage = {
       name: 'FrameworkResolution',
-      execute: jest.fn(async (context: ExecutionContext) => {
+      execute: jest.fn(async (context: PromptRequestContext) => {
         context.frameworkContext = { framework: 'CAGEERF' } as any;
       }),
     };

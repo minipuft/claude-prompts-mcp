@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { GateEnhancementStage } from '../../../../src/engine/execution/pipeline/stages/11-gate-enhancement-stage.js';
 import { GateDefinitionSchema } from '../../../../src/engine/gates/core/gate-schema.js';
 import { TemporaryGateRegistry as TemporaryGateRegistryImpl } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
@@ -181,7 +181,7 @@ describe('GateEnhancementStage', () => {
       gatesConfigProvider: () => baseGatesConfig,
     });
 
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>demo',
       gates: [
         {
@@ -245,7 +245,7 @@ describe('GateEnhancementStage', () => {
       gatesConfigProvider: () => ({ ...baseGatesConfig, enableFrameworkGates: false }),
     });
 
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.executionPlan = {
       strategy: 'prompt',
       gates: ['framework-compliance', 'quality'],
@@ -272,7 +272,7 @@ describe('GateEnhancementStage', () => {
       gatesConfigProvider: () => ({ ...baseGatesConfig, enabled: false }),
     });
 
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.executionPlan = {
       strategy: 'prompt',
       gates: ['quality'],
@@ -296,8 +296,8 @@ describe('GateEnhancementStage', () => {
    * does, read for the request's own scope. Before, only the config flag was read, so a chain
    * started with the switch off still selected gates and opened a review nothing could close.
    */
-  const runtimeSwitchContext = (): ExecutionContext => {
-    const context = new ExecutionContext({ command: '>>demo' });
+  const runtimeSwitchContext = (): PromptRequestContext => {
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.executionPlan = {
       strategy: 'prompt',
       gates: ['quality'],
@@ -405,7 +405,7 @@ describe('GateEnhancementStage', () => {
       userMessageTemplate: 'Step two',
     };
 
-    const context = new ExecutionContext({ command: '>>chain' });
+    const context = new PromptRequestContext({ command: '>>chain' });
     context.executionPlan = {
       strategy: 'chain',
       gates: [],
@@ -461,7 +461,7 @@ describe('GateEnhancementStage', () => {
       gatesConfigProvider: () => baseGatesConfig,
     });
 
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>demo',
       gates: ['quality-check', 'code-quality'], // String gates in unified parameter
     });
@@ -509,7 +509,7 @@ describe('GateEnhancementStage', () => {
       gatesConfigProvider: () => baseGatesConfig,
     });
 
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>step1 --> >>step2 --> >>step3',
       gates: [{ name: 'Step 2 Only', target_step_number: 2, criteria: ['Check step 2'] }],
     } as any);
@@ -590,7 +590,7 @@ describe('GateEnhancementStage', () => {
       gatesConfigProvider: () => baseGatesConfig,
     });
 
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>step1 --> >>step2 --> >>step3',
       gates: [{ name: 'Steps 1 and 3', apply_to_steps: [1, 3], criteria: ['Check steps'] }],
     } as any);
@@ -671,7 +671,7 @@ describe('GateEnhancementStage', () => {
       gatesConfigProvider: () => baseGatesConfig,
     });
 
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       command: '>>step1 --> >>step2',
       gates: [{ name: 'All Steps', criteria: ['Check all'] }],
     } as any);
@@ -744,7 +744,7 @@ describe('GateEnhancementStage', () => {
       temporaryRegistry: tempGateRegistry,
     });
 
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.state.gates.requestedOverrides = {
       gates: [
         'toxicity', // String ID → inline criteria
@@ -805,7 +805,7 @@ describe('GateEnhancementStage', () => {
       gatesConfigProvider: () => baseGatesConfig,
     });
 
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.executionPlan = {
       strategy: 'single',
       gates: ['code-quality', 'research-quality'], // From prompt config
@@ -857,7 +857,7 @@ describe('GateEnhancementStage', () => {
       gateManagerProvider: () => mockGateManager,
     });
 
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
 
     // Set up normalized gates in metadata
     context.state.gates.requestedOverrides = {
@@ -931,7 +931,7 @@ describe('GateEnhancementStage', () => {
       gateManagerProvider: () => mockGateManager,
     });
 
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.executionPlan = {
       strategy: 'single',
       gates: [],
@@ -987,7 +987,7 @@ describe('GateEnhancementStage', () => {
       gateManagerProvider: () => mockGateManager,
     });
 
-    const context = new ExecutionContext({ command: '>>demo' });
+    const context = new PromptRequestContext({ command: '>>demo' });
     context.executionPlan = {
       strategy: 'single',
       gates: [],
@@ -1010,8 +1010,8 @@ describe('GateEnhancementStage', () => {
 
 // A request gate that cannot register is refused at stage 05 (inline-gate-extraction-stage.test).
 describe('GateEnhancementStage registers a request gate stage 05 admitted', () => {
-  const singlePromptCall = (gates: unknown[]): ExecutionContext => {
-    const context = new ExecutionContext({ command: '>>demo', gates: gates as never });
+  const singlePromptCall = (gates: unknown[]): PromptRequestContext => {
+    const context = new PromptRequestContext({ command: '>>demo', gates: gates as never });
     context.state.gates.requestedOverrides = { gates };
     context.executionPlan = {
       strategy: 'single',

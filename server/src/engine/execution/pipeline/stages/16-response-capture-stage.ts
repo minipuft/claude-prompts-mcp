@@ -57,7 +57,7 @@ import type {
 } from '../../capture/remainder-processor.js';
 import type { StepCaptureService } from '../../capture/step-capture-service.js';
 import type { UnknownObservationProcessor } from '../../capture/unknown-observation-processor.js';
-import type { ExecutionContext, SessionContext } from '../../context/index.js';
+import type { PromptRequestContext, SessionContext } from '../../context/index.js';
 import type { DetachedNodeFacts } from '../../delegation/detached.js';
 import type { HandoffEvidence, HandoffEvidenceMode } from '../../delegation/handoff-contract.js';
 import type { ChainStepPrompt } from '../../operators/types.js';
@@ -175,23 +175,23 @@ export class StepResponseCaptureStage extends BasePipelineStage {
       readonly remainderProcessor?: RemainderProcessor;
       readonly handoffEvidenceMode?: () => HandoffEvidenceMode;
       readonly gradeLateReport?: (
-        context: ExecutionContext,
+        context: PromptRequestContext,
         sessionId: string,
         node: DetachedNodeFacts,
         review: GateReview | null,
         recordedOutput: string
       ) => Promise<GateReview | null>;
       readonly redecideInjection?: (
-        context: ExecutionContext,
+        context: PromptRequestContext,
         position: { readonly currentStep: number; readonly currentNodeId: string }
       ) => void;
-      readonly gradeAnswer?: (context: ExecutionContext) => AnswerGrade;
+      readonly gradeAnswer?: (context: PromptRequestContext) => AnswerGrade;
     } = {}
   ) {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     if (context.sessionContext === undefined) {
@@ -345,7 +345,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * @returns true when the call was answered and the stage must stop.
    */
   private async answerReviewAction(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     sessionContext: SessionContext
   ): Promise<boolean> {
@@ -391,7 +391,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * only hands it that review and re-reads the run when it changed.
    */
   private async joinSentGates(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession
   ): Promise<ChainSession> {
     const nodeId = session.state.currentNodeId;
@@ -420,7 +420,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * the verdict path refuses it by name rather than answering some other review.
    */
   private resolveVerdictTrailer(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     currentNodeIdAtStart: string | null,
     currentStepAtStart: number
   ): string | undefined {
@@ -453,7 +453,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * (R170), so the run stays on it whatever the verdict decided.
    */
   private async settleVerdict(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     session: NonNullable<ReturnType<ChainSessionService['getSession']>>,
     result: VerdictProcessingResult,
@@ -490,7 +490,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * @returns `false` when a response was set and the pipeline must stop.
    */
   private async runResumeAdmission(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionContext: SessionContext,
     session: ChainSession,
     currentNodeIdAtStart: string | null,
@@ -559,7 +559,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * (the review FAILed, R10.2) records over the first result and re-opens the same review.
    */
   private async landDetachedReport(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     node: DetachedNodeFacts,
     reply: string,
@@ -650,7 +650,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * processor owns what the answer means; nothing here reads or moves the current step.
    */
   private async answerDetachedReview(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     session: ChainSession,
     node: DetachedNodeFacts,
     kind: 'review-verdict' | 'review-action'
@@ -718,7 +718,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * is past the parse array, was never checked at all (P6.157).
    */
   private resolveResumeStep(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     currentNodeIdAtStart: string | null,
     currentStepAtStart: number
   ): ChainStepPrompt | undefined {
@@ -757,7 +757,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * @returns `false` when a refusal response was set and the pipeline must stop.
    */
   private runHandoffEvidencePhase(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     currentNodeIdAtStart: string | null,
     currentStepAtStart: number
   ): boolean {
@@ -812,7 +812,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * @returns `false` when a refusal response was set and the pipeline must stop.
    */
   private async runUnknownsPhase(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     sessionContext: SessionContext,
     currentNodeIdAtStart: string | null
@@ -861,7 +861,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * review. A review already answered keeps its gates — its attempts were graded against them.
    */
   private async reviewInsertedNodeAfterRemainder(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     sessionContext: SessionContext
   ): Promise<void> {
@@ -908,7 +908,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * the injection decision, after the review, so it reads the review the rendered step carries.
    */
   private async ensurePostAdvanceReview(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     heldNodeId?: string
   ): Promise<void> {
     this.remeasureInterrupt(context);
@@ -929,7 +929,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * @returns the node the run must stay on, or undefined when nothing holds it (no grader wired,
    *   nothing graded, the answer passed, `warn` mode, or no captured node).
    */
-  private gradeAnswer(context: ExecutionContext): string | undefined {
+  private gradeAnswer(context: PromptRequestContext): string | undefined {
     const grade = this.collaborators.gradeAnswer?.(context);
     return grade?.kind === 'evaluated' ? grade.holdsNodeId : undefined;
   }
@@ -938,7 +938,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * Hand stage 14 the node the run stands on AFTER the advance, so the injection decision is the
    * rendered step's (R144). A run standing on no node renders no step, and keeps the decision.
    */
-  private redecideInjection(context: ExecutionContext): void {
+  private redecideInjection(context: PromptRequestContext): void {
     const redecide = this.collaborators.redecideInjection;
     const sessionId = context.sessionContext?.sessionId;
     if (redecide === undefined || sessionId === undefined) {
@@ -962,7 +962,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * already excluded it. Re-deciding here gives both one meaning: the nodes after the rendered one.
    * A call that did not advance stands where it did, and re-deciding changes nothing.
    */
-  private remeasureInterrupt(context: ExecutionContext): void {
+  private remeasureInterrupt(context: PromptRequestContext): void {
     const raised = context.state.session.chainInterrupt;
     const sessionId = context.sessionContext?.sessionId;
     const session =
@@ -989,7 +989,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    *   (persistence) propagate untouched.
    */
   private async applyObservations(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     nodeId: string
   ): Promise<ObservationOutcome> {
@@ -1027,7 +1027,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * insert its investigation step is still a valid run.
    */
   private async applyMutation(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     outcome: {
       readonly ledger: readonly UnknownLedgerEntry[];
@@ -1090,13 +1090,13 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    *
    * Thin: entitlement, IR validation and the store write all belong to {@link RemainderProcessor};
    * this method owns the session lookup and the absent-collaborator case. The processor is
-   * optional so an `ExecutionContext`-less harness need not construct the Workflow IR port — and
+   * optional so an `PromptRequestContext`-less harness need not construct the Workflow IR port — and
    * absent, a submitted remainder is REFUSED rather than ignored. A silent drop here would be the
    * argument-allowlist failure again: typechecked at every layer, dead on the wire, and reported
    * as success.
    */
   private async applyRemainder(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string
   ): Promise<RemainderApplication> {
     const submission = context.mcpRequest.remainder;
@@ -1124,7 +1124,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * @returns `false` when the pipeline must stop because a refusal response was set.
    */
   private async resolveInterrupt(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     sessionContext: SessionContext,
     remainder: RemainderApplication
@@ -1162,7 +1162,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * structure, per the pipeline-state rule.
    */
   private async raiseInterrupt(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     insertedThisCall: boolean,
     heldAnswer = false
@@ -1252,7 +1252,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    */
   private resolveEffectivePause(
     sessionId: string,
-    scopeOptions: ReturnType<ExecutionContext['getScopeOptions']>,
+    scopeOptions: ReturnType<PromptRequestContext['getScopeOptions']>,
     insertedThisCall: boolean,
     alreadyHolding: boolean
   ): boolean {
@@ -1308,9 +1308,9 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * node and a skip targets a strictly-ahead node, so both leave the run standing where it was.
    */
   private refreshTotals(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
-    scopeOptions: ReturnType<ExecutionContext['getScopeOptions']>
+    scopeOptions: ReturnType<PromptRequestContext['getScopeOptions']>
   ): void {
     const session = this.chainSessionStore.getSession(sessionId, scopeOptions);
     if (session === undefined || context.sessionContext === undefined) {
@@ -1335,7 +1335,7 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    * Important for gate reviews where session state may have changed.
    */
   private alignSessionContext(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionContext: SessionContext,
     session: NonNullable<ReturnType<ChainSessionService['getSession']>>,
     currentStepAtStart: number

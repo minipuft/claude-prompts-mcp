@@ -40,7 +40,7 @@ import type {
   GateVerdictProcessor,
 } from '../../../gates/services/gate-verdict-processor.js';
 import type { WorkflowVerifyIdentity } from '../../../gates/shell/types.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 
 import { formatAttempt } from '#shared/utils/attempt-number.js';
 import {
@@ -73,7 +73,7 @@ export class ShellVerificationStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     let pending = context.state.gates.pendingShellVerification;
@@ -161,7 +161,7 @@ export class ShellVerificationStage extends BasePipelineStage {
    * (no answer was captured yet), and the loop's Stop-hook state written.
    */
   private async armOnRender(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     pending: PendingShellVerification
   ): Promise<void> {
     if (pending.shellVerify.loop === true) {
@@ -177,7 +177,7 @@ export class ShellVerificationStage extends BasePipelineStage {
    * Handle verification success - clear state and proceed.
    */
   private async handleVerificationPassed(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     pending: PendingShellVerification
   ): Promise<void> {
     const { shellVerify } = pending;
@@ -209,7 +209,7 @@ export class ShellVerificationStage extends BasePipelineStage {
    * Handle verification failure - bounce-back or escalate.
    */
   private async handleVerificationFailed(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     result: Awaited<ReturnType<ShellVerifyExecutor['execute']>>,
     pending: PendingShellVerification
   ): Promise<void> {
@@ -244,7 +244,7 @@ export class ShellVerificationStage extends BasePipelineStage {
    * loop state.
    */
   private renderFeedback(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     result: Awaited<ReturnType<ShellVerifyExecutor['execute']>>,
     pending: PendingShellVerification
   ): void {
@@ -275,7 +275,7 @@ export class ShellVerificationStage extends BasePipelineStage {
    * call is not also applied to the check, which keeps holding the step.
    */
   private reviewAnsweredAction(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     gateAction: string | undefined,
     pending: PendingShellVerification
   ): boolean {
@@ -291,7 +291,10 @@ export class ShellVerificationStage extends BasePipelineStage {
    * A skip that answered the step's review leaves the check holding the step: say so, rather than
    * render the held step again as if nothing were pending. Renders only.
    */
-  private renderStillPending(context: ExecutionContext, pending: PendingShellVerification): void {
+  private renderStillPending(
+    context: PromptRequestContext,
+    pending: PendingShellVerification
+  ): void {
     const chainId = context.getRequestedChainId() ?? context.state.session.resumeChainId;
     const resumeHint =
       chainId !== undefined
@@ -308,7 +311,7 @@ export class ShellVerificationStage extends BasePipelineStage {
   }
 
   /** Release this run's loop row under the identity abort cleanup uses; a row it cannot claim fails. */
-  private async releaseLoopState(context: ExecutionContext): Promise<void> {
+  private async releaseLoopState(context: PromptRequestContext): Promise<void> {
     const { runSessionId, chainId } = workflowRunKey(context);
     const outcome = await this.stateManager.releaseRunState(chainId, runSessionId);
     if (outcome === 'foreign' || outcome === 'unbound') {
@@ -320,7 +323,7 @@ export class ShellVerificationStage extends BasePipelineStage {
    * Restore pendingShellVerification from the chain session (for response-only resume).
    * On resume, InlineGateExtractionStage is skipped so the ephemeral context has no pending state.
    */
-  private restoreFromSession(context: ExecutionContext): PendingShellVerification | undefined {
+  private restoreFromSession(context: PromptRequestContext): PendingShellVerification | undefined {
     const sessionId = context.getSessionId();
     if (!sessionId) return undefined;
 
@@ -348,7 +351,7 @@ export class ShellVerificationStage extends BasePipelineStage {
    * Save pending state to session for cross-request persistence.
    */
   private async saveToSession(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     pending: PendingShellVerification
   ): Promise<void> {
     // The node it holds open: the step captured on this call, else the node an earlier save
@@ -358,7 +361,7 @@ export class ShellVerificationStage extends BasePipelineStage {
 
   /** Persist the check as holding `nodeId`; `undefined` holds nothing until a capture names one. */
   private async writeSnapshot(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     pending: PendingShellVerification,
     nodeId: string | undefined
   ): Promise<void> {
@@ -389,7 +392,7 @@ export class ShellVerificationStage extends BasePipelineStage {
    * render, or a re-armed check before the next step is answered — has nothing to grade. A
    * single prompt with no run grades the answer the call carries.
    */
-  private hasAnswerToGrade(context: ExecutionContext): boolean {
+  private hasAnswerToGrade(context: PromptRequestContext): boolean {
     return runSessionId(context) === undefined || this.heldNodeId(context) !== undefined;
   }
 
@@ -398,7 +401,7 @@ export class ShellVerificationStage extends BasePipelineStage {
    * `gate_action` decided while the check held it (P6.54), else the capture's own.
    */
   private heldAdvanceReason(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     nodeId: string | undefined
   ): DeferredAdvance['reason'] {
     const sessionId = runSessionId(context);
@@ -410,7 +413,7 @@ export class ShellVerificationStage extends BasePipelineStage {
   }
 
   /** The step this check holds: the one captured on this call, else the one an earlier save named. */
-  private heldNodeId(context: ExecutionContext): string | undefined {
+  private heldNodeId(context: PromptRequestContext): string | undefined {
     const sessionId = runSessionId(context);
     return (
       context.state.session.capturedStep?.nodeId ??
@@ -426,7 +429,7 @@ export class ShellVerificationStage extends BasePipelineStage {
    * holds — its own, or an earlier node's (R14, `reviewHolding`, P6.53) — is left to that review.
    */
   private async releaseHeldStep(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     nodeId: string | undefined,
     reason: DeferredAdvance['reason']
   ): Promise<'released' | 'left-to-review' | 'none'> {
@@ -450,7 +453,7 @@ export class ShellVerificationStage extends BasePipelineStage {
    * cleared.
    */
   private async rearmForNextStep(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     pending: PendingShellVerification,
     releasedNodeId: string | undefined,
     release: 'released' | 'left-to-review' | 'none'
@@ -482,7 +485,7 @@ export class ShellVerificationStage extends BasePipelineStage {
    * nothing to skip past and is refused by name. A single prompt has no run: skip there only
    * clears the check, as it always has.
    */
-  private refusesSkip(context: ExecutionContext): boolean {
+  private refusesSkip(context: PromptRequestContext): boolean {
     if (runSessionId(context) === undefined || this.heldNodeId(context) !== undefined) return false;
     const step = context.sessionContext?.currentStep ?? 1;
     context.setResponse({
@@ -501,7 +504,7 @@ export class ShellVerificationStage extends BasePipelineStage {
   /**
    * Clear pending state from session (on pass, skip, or escalation).
    */
-  private async clearFromSession(context: ExecutionContext): Promise<void> {
+  private async clearFromSession(context: PromptRequestContext): Promise<void> {
     const sessionId = context.getSessionId();
     if (!sessionId) return;
     await this.chainSessionService.clearPendingShellVerification(sessionId);
@@ -511,7 +514,7 @@ export class ShellVerificationStage extends BasePipelineStage {
    * Handle gate_action user decision (retry/skip).
    */
   private async handleGateAction(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     gateAction: string,
     pending: PendingShellVerification
   ): Promise<void> {
@@ -565,13 +568,13 @@ export class ShellVerificationStage extends BasePipelineStage {
 }
 
 /** The run's session id, or `undefined` for a single prompt, which has no run. */
-function runSessionId(context: ExecutionContext): string | undefined {
+function runSessionId(context: PromptRequestContext): string | undefined {
   const sessionId = context.getSessionId();
   return sessionId === undefined || sessionId.length === 0 ? undefined : sessionId;
 }
 
 /** Every loop write, rearm and release keys by the run UUID; no run, refused. */
-function workflowRunKey(context: ExecutionContext): Omit<WorkflowVerifyIdentity, 'scope'> {
+function workflowRunKey(context: PromptRequestContext): Omit<WorkflowVerifyIdentity, 'scope'> {
   const sessionId = runSessionId(context);
   if (sessionId === undefined) {
     throw new Error('Verify loop refused: this call has no workflow run identity');
@@ -588,7 +591,7 @@ function workflowRunKey(context: ExecutionContext): Omit<WorkflowVerifyIdentity,
  * workspace while the run's is stored as given, and the Stop hook compares scopes exactly.
  */
 function workflowIdentity(
-  context: ExecutionContext,
+  context: PromptRequestContext,
   sessions: ChainSessionService
 ): WorkflowVerifyIdentity {
   const stored = sessions.getConversationControlScope(

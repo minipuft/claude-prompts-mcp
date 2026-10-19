@@ -12,7 +12,7 @@
  */
 import { describe, expect, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ArgumentParser } from '../../../../src/engine/execution/parsers/argument-parser.js';
 import { UnifiedCommandParser } from '../../../../src/engine/execution/parsers/command-parser.js';
 import { SymbolicCommandBuilder } from '../../../../src/engine/execution/parsers/symbolic-command-builder.js';
@@ -41,7 +41,7 @@ describe('P6.128: command beside a non-append chain_id', () => {
         retargetGates,
       })
     );
-    const context = new ExecutionContext(REQUEST as never);
+    const context = new PromptRequestContext(REQUEST as never);
     await stage.execute(context);
 
     expect(context.response?.isError).toBe(true);

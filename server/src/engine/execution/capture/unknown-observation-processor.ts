@@ -5,7 +5,7 @@ import type {
   UnknownLedgerEntry,
   UnknownObservation,
 } from '#shared/types/chain-session.js';
-import type { ExecutionContext } from '../context/index.js';
+import type { PromptRequestContext } from '../context/index.js';
 
 import { ValidationError } from '#shared/utils/index.js';
 
@@ -187,7 +187,7 @@ export class UnknownObservationProcessor {
    *   reach the pipeline error boundary unchanged.
    */
   async applyObservations(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     nodeId: string,
     observations: readonly UnknownObservation[]

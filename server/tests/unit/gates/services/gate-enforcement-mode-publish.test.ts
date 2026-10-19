@@ -1,7 +1,7 @@
 // @lifecycle canonical - Pins P4.137: stage 11 publishes the mode the applying gates declare.
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { GateEnhancementStage } from '../../../../src/engine/execution/pipeline/stages/11-gate-enhancement-stage.js';
 import { GateEnhancementService } from '../../../../src/engine/gates/services/gate-enhancement-service.js';
 import { GateMetricsRecorder } from '../../../../src/engine/gates/services/gate-metrics-recorder.js';
@@ -133,7 +133,7 @@ async function chainState(options: {
   otherStepGateSpecs?: Array<Record<string, unknown>>;
 }) {
   const gateSpecs = options.otherStepGateSpecs ?? [];
-  const context = new ExecutionContext({ chain_id: 'chain-em#1', gates: gateSpecs } as never);
+  const context = new PromptRequestContext({ chain_id: 'chain-em#1', gates: gateSpecs } as never);
   context.state.gates.requestedOverrides = { gates: gateSpecs };
   context.executionPlan = {
     strategy: 'chain',
@@ -163,7 +163,7 @@ async function chainState(options: {
 
 /** The mode stage 11 publishes for a single prompt carrying `gates`. */
 async function singleMode(gates: string[]): Promise<Mode | undefined> {
-  const context = new ExecutionContext({ command: '>>demo' } as never);
+  const context = new PromptRequestContext({ command: '>>demo' } as never);
   context.executionPlan = {
     strategy: 'prompt',
     gates,

@@ -573,7 +573,7 @@ export type PendingGateReview = Omit<GateReview, 'nodeId' | 'kind' | 'phase'> &
 
 /**
  * Serializable snapshot of pending shell verification state persisted to chain sessions.
- * Enables bounce-back resume across MCP requests (ephemeral ExecutionContext loses this state).
+ * Enables bounce-back resume across MCP requests (ephemeral PromptRequestContext loses this state).
  * Mirrors engine-layer PendingShellVerification without importing engine types.
  */
 export interface PendingShellVerificationSnapshot {

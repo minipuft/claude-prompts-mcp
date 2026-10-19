@@ -6,7 +6,7 @@ import type {
   RequestClientProfileHint,
   RequestIdentityResolverOptions,
 } from '#shared/utils/request-identity-resolver.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 
 import { resolveRequestIdentityContext } from '#shared/utils/request-identity-resolver.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
@@ -78,7 +78,7 @@ export class IdentityResolutionStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     const sdkExtra = context.mcpRequest._extra ?? undefined;

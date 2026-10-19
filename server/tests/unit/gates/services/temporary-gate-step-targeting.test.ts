@@ -1,7 +1,7 @@
 // @lifecycle canonical - Unit tests for chain step targeting on temporary gates (P3 Tier 3 row 16).
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { GateEnhancementStage } from '../../../../src/engine/execution/pipeline/stages/11-gate-enhancement-stage.js';
 import { GateEnhancementService } from '../../../../src/engine/gates/services/gate-enhancement-service.js';
 import { GateMetricsRecorder } from '../../../../src/engine/gates/services/gate-metrics-recorder.js';
@@ -188,7 +188,10 @@ const selectStepsFor = async (
   );
 
   const steps = NODE_IDS.map((nodeId, index) => stepPrompt(nodeId, index + 1));
-  const context = new ExecutionContext({ chain_id: 'chain-demo#1', gates: [gateSpec] } as never);
+  const context = new PromptRequestContext({
+    chain_id: 'chain-demo#1',
+    gates: [gateSpec],
+  } as never);
   context.state.gates.requestedOverrides = { gates: [gateSpec] };
   context.executionPlan = {
     strategy: 'chain',

@@ -16,7 +16,7 @@ import type {
   ResolvedGate,
 } from './gate-set-resolver.js';
 import type { RunStepView } from './run-step-view.js';
-import type { ExecutionContext } from '../../execution/context/index.js';
+import type { PromptRequestContext } from '../../execution/context/index.js';
 import type { ChainStepPrompt } from '../../execution/operators/types.js';
 
 import { parseStepForNode } from '#shared/utils/node-order.js';
@@ -78,7 +78,7 @@ type TemporaryGateTargetCheck = (
  */
 export async function chainPromptGates(
   resolver: Pick<GateSetResolver, 'resolve'>,
-  context: ExecutionContext,
+  context: PromptRequestContext,
   steps: readonly ChainStepPrompt[],
   runStepView: RunStepView | undefined,
   frameworkGateIds: ReadonlySet<string>
@@ -212,7 +212,7 @@ function finalWalkedStep(
  * are no chain prompt's own, and an accepted one no step binds would reach every step.
  */
 function chainPromptResolutionInput(
-  context: ExecutionContext,
+  context: PromptRequestContext,
   frameworkGateIds: ReadonlySet<string>
 ): GateResolutionInput | undefined {
   const prompt = context.parsedCommand?.convertedPrompt;

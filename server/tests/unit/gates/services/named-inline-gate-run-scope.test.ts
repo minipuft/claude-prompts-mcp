@@ -11,7 +11,7 @@
  */
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { TemporaryGateRegistry } from '../../../../src/engine/gates/core/temporary-gate-registry.js';
 import { InlineGateProcessor } from '../../../../src/engine/gates/services/inline-gate-processor.js';
 
@@ -92,9 +92,9 @@ describe('InlineGateProcessor: two runs declaring one named gate id', () => {
     });
 
     const first = foldedChain('CRIT-ONE');
-    await processor.processInlineGates(new ExecutionContext({ command: 'run 1' }), first);
+    await processor.processInlineGates(new PromptRequestContext({ command: 'run 1' }), first);
     const second = foldedChain('CRIT-TWO');
-    await processor.processInlineGates(new ExecutionContext({ command: 'run 2' }), second);
+    await processor.processInlineGates(new PromptRequestContext({ command: 'run 2' }), second);
 
     expect(first.steps?.map((step) => step.inlineGateIds)).toEqual([
       ['sv-block', 'g97'],
@@ -145,7 +145,7 @@ describe('InlineGateProcessor: one name declared in two segments', () => {
       remapRunGates: async () => undefined,
     });
     const command = twoSegments('g110#2');
-    await processor.processInlineGates(new ExecutionContext({ command: 'run' }), command);
+    await processor.processInlineGates(new PromptRequestContext({ command: 'run' }), command);
 
     expect(command.steps?.map((step) => step.inlineGateIds)).toEqual([['g110'], ['g110-2']]);
     expect(registry.getTemporaryGate('g110')?.pass_criteria).toEqual(['ONE']);
@@ -158,7 +158,7 @@ describe('InlineGateProcessor: one name declared in two segments', () => {
       remapRunGates: async () => undefined,
     });
     const command = twoSegments('g110');
-    await processor.processInlineGates(new ExecutionContext({ command: 'run' }), command);
+    await processor.processInlineGates(new PromptRequestContext({ command: 'run' }), command);
 
     expect(command.steps?.map((step) => step.inlineGateIds)).toEqual([['g110'], ['g110']]);
   });
@@ -173,8 +173,8 @@ describe('InlineGateProcessor: one name declared in two segments', () => {
  * is pinned here, on a context carrying the run id, rather than driven.
  */
 describe('InlineGateProcessor: a run parsing its command again', () => {
-  const resumeOf = (runId: string): ExecutionContext => {
-    const context = new ExecutionContext({ command: 'again' });
+  const resumeOf = (runId: string): PromptRequestContext => {
+    const context = new PromptRequestContext({ command: 'again' });
     context.state.session.resumeSessionId = runId;
     return context;
   };
@@ -184,7 +184,7 @@ describe('InlineGateProcessor: a run parsing its command again', () => {
     const processor = new InlineGateProcessor(registry, inlineResolver, logger(), {
       remapRunGates: async () => undefined,
     });
-    const started = new ExecutionContext({ command: 'start' });
+    const started = new PromptRequestContext({ command: 'start' });
     await processor.processInlineGates(started, foldedChain('CRIT-ONE'));
     registry.adoptIntoRun('run-1', ['g97']);
 
@@ -204,7 +204,10 @@ describe('InlineGateProcessor: a run parsing its command again', () => {
     const processor = new InlineGateProcessor(registry, inlineResolver, logger(), {
       remapRunGates: async () => undefined,
     });
-    await processor.processInlineGates(new ExecutionContext({ command: 'a' }), foldedChain('ONE'));
+    await processor.processInlineGates(
+      new PromptRequestContext({ command: 'a' }),
+      foldedChain('ONE')
+    );
     registry.adoptIntoRun('run-1', ['g97']);
 
     const other = foldedChain('TWO');
@@ -240,7 +243,7 @@ describe('InlineGateProcessor: a run parsing its command again', () => {
           { stepNumber: 2, promptId: 'sv_b', args: {}, inlineGateCriteria: ['g110#2'] },
         ],
       }) as unknown as ParsedCommand;
-    await processor.processInlineGates(new ExecutionContext({ command: 'a' }), twoSegments());
+    await processor.processInlineGates(new PromptRequestContext({ command: 'a' }), twoSegments());
     registry.adoptIntoRun('run-1', ['g110', 'g110-2']);
 
     const again = twoSegments();

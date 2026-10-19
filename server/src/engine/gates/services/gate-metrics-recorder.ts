@@ -1,6 +1,6 @@
 // @lifecycle canonical - Records gate usage metrics for analytics.
 import type { MetricsCollector, GateUsageMetric } from '#shared/types/index.js';
-import type { ExecutionContext } from '../../execution/context/index.js';
+import type { PromptRequestContext } from '../../execution/context/index.js';
 
 /**
  * Records gate usage metrics for the analytics system.
@@ -14,7 +14,7 @@ export class GateMetricsRecorder {
   constructor(private readonly metricsProvider: () => MetricsCollector | undefined) {}
 
   recordGateUsageMetrics(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     gateIds: string[],
     instructionLength?: number
   ): void {

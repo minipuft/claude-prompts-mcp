@@ -1,7 +1,7 @@
 // @lifecycle canonical - Unit tests for per-step gate REVIEW scoping (P5 Tier 4, closes P4-F3).
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../../src/engine/execution/formatting/response-assembler.js';
 import { GateEnhancementStage } from '../../../../src/engine/execution/pipeline/stages/11-gate-enhancement-stage.js';
 import { GateEnhancementService } from '../../../../src/engine/gates/services/gate-enhancement-service.js';
@@ -203,7 +203,7 @@ const reviewGatesFor = async (options: {
           registry.createTemporaryGate(held);
           return held;
         });
-  const context = new ExecutionContext({ chain_id: 'chain-demo#1', gates: sent } as never);
+  const context = new PromptRequestContext({ chain_id: 'chain-demo#1', gates: sent } as never);
   context.state.gates.requestedOverrides = { gates: sent };
   context.executionPlan = {
     strategy: 'chain',
@@ -439,7 +439,7 @@ describe('gate review scoping (P4-F3)', () => {
       review?: string[];
       pendingReview?: PendingGateReview;
     }): string => {
-      const context = new ExecutionContext({ command: '>>test-prompt' } as never);
+      const context = new PromptRequestContext({ command: '>>test-prompt' } as never);
       context.executionResults = { content: 'out', metadata: {}, generatedAt: 0 } as never;
       context.executionPlan = {
         strategy: 'single',
@@ -578,7 +578,7 @@ describe('gate review scoping (P4-F3)', () => {
       hasBlockingGates?: boolean;
       gateEnforcement?: ReturnType<typeof buildAuthority>;
     }) => {
-      const context = new ExecutionContext({ chain_id: 'chain-demo#1' } as never);
+      const context = new PromptRequestContext({ chain_id: 'chain-demo#1' } as never);
       context.state.gates.hasBlockingGates = options.hasBlockingGates ?? true;
       context.state.gates.accumulatedGateIds = options.accumulatedGateIds;
       if (options.gateEnforcement !== undefined) {
@@ -779,7 +779,7 @@ describe('gate review scoping (P4-F3)', () => {
         createLogger() as never,
         undefined
       );
-    const withNodeGate = (context: ExecutionContext, gateId: string) => {
+    const withNodeGate = (context: PromptRequestContext, gateId: string) => {
       context.parsedCommand = {
         steps: [
           { stepNumber: 1, nodeId: 'draft-outline', promptId: 'outline' },

@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { CommandParsingStage } from '../../../src/engine/execution/pipeline/stages/04-parsing-stage.js';
 import { GateSetResolver } from '../../../src/engine/gates/services/gate-set-resolver.js';
 import { ChainStepSchema } from '../../../src/modules/prompts/prompt-schema.js';
@@ -104,7 +104,9 @@ describe('stripper 2 — normalizeChainSteps (yaml-prompt-loader)', () => {
 });
 
 describe('stripper 3 — the stage-04 projection onto ChainStepPrompt', () => {
-  async function parseChain(chainSteps: ConvertedPrompt['chainSteps']): Promise<ExecutionContext> {
+  async function parseChain(
+    chainSteps: ConvertedPrompt['chainSteps']
+  ): Promise<PromptRequestContext> {
     const chainPrompt: ConvertedPrompt = {
       id: 'gated_chain',
       name: 'Gated Chain',
@@ -154,7 +156,7 @@ describe('stripper 3 — the stage-04 projection onto ChainStepPrompt', () => {
       } as unknown as SymbolicCommandBuilder
     );
 
-    const context = new ExecutionContext({ command: '>>gated_chain' });
+    const context = new PromptRequestContext({ command: '>>gated_chain' });
     await stage.execute(context);
     return context;
   }

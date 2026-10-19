@@ -1,6 +1,6 @@
 import { describe, expect, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../../src/engine/execution/formatting/response-assembler.js';
 
 import type { ChainStepPrompt } from '../../../../src/engine/execution/operators/types.js';
@@ -24,8 +24,11 @@ import type {
 
 const assembler = new ResponseAssembler();
 
-const buildContext = (steps: ChainStepPrompt[], gateInstructions?: string): ExecutionContext => {
-  const context = new ExecutionContext({ command: 'noop' });
+const buildContext = (
+  steps: ChainStepPrompt[],
+  gateInstructions?: string
+): PromptRequestContext => {
+  const context = new PromptRequestContext({ command: 'noop' });
   context.sessionContext = {
     sessionId: 'sess-vis',
     chainId: 'chain-vis#1',
@@ -116,8 +119,8 @@ describe('ResponseAssembler advisory – P6-F1 node-addressed step resolution', 
   const mutatedContext = (
     chainSteps: ChainStepPrompt[],
     currentNodeId: string
-  ): ExecutionContext => {
-    const context = new ExecutionContext({ command: 'noop' });
+  ): PromptRequestContext => {
+    const context = new PromptRequestContext({ command: 'noop' });
     context.sessionContext = {
       sessionId: 'sess-p6f1',
       chainId: 'chain-p6f1#1',

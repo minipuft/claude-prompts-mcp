@@ -116,6 +116,15 @@ export const SUITE = [
       'CHECKED both ways — a finding absent from the baseline fails naming file:line, and a baseline entry no longer found (deleted or now called) fails as stale. Positive control 2026-09-16: the live scan named ResourceIndexer.getValidStyles and getValidFrameworks before P4.46 deleted them; the self-test holds a one-caller twin, a same-named method on another class, a structural port, an implemented interface and a generic one. UNCHECKED and known — computed access (`obj[name]()`) and string-dispatched entry points read as unreached (false findings, never false silence)',
   },
   {
+    // Beside the dead-code ratchets because a same-name type is how a dead type reads as used: a
+    // search for one type's consumers returns another's (ExecutionContext was three unrelated types).
+    script: 'validate:type-name-homonyms',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways — a homonym absent from the baseline fails naming every file:line, and a baseline entry that is no longer a homonym fails as stale. The self-test fabricates a tree holding a cross-file pair, a same-file pair, a node_modules twin and a non-.ts twin, and proves the refusal (fewer than 200 definitions reads as a broken walk, never as 0 homonyms). UNCHECKED and known — re-exports, `export { X }` lists, non-exported and indented definitions are not seen (false silence, never false alarm)',
+  },
+  {
     // Beside the method ratchet because it covers the other half of the same family: a
     // module-level exported FUNCTION nobody calls. No baseline — unlike an owner API kept for a
     // dynamic caller, a parse half with no reader has no legitimate steady state.
@@ -320,6 +329,13 @@ export const SUITE = [
     reads: ['file', 'walk'],
     converse:
       'NOT checked — a stage class renamed consistently in both the code and the doc passes, and a stage whose behavior changed passes: the check reads names, order and counts, never the row descriptions or what a stage does',
+  },
+  {
+    script: 'validate:table-map-docs',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'NOT checked — the Owner column of the Map, retention and readers are prose the check never reads, a table renamed consistently in the contracts and the docs passes, and a retired name written other than as an exact backticked identifier is not seen',
   },
   {
     script: 'validate:conformance-coverage',

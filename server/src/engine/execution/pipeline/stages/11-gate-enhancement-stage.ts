@@ -14,7 +14,7 @@ import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { GateEnhancementService } from '../../../gates/services/gate-enhancement-service.js';
 import type { GateSuppression } from '../../../gates/services/gate-suppression-refusal.js';
 import type { TemporaryGateRegistrar } from '../../../gates/services/temporary-gate-registrar.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 
 type GateSystemSettingsProvider = () => GateSystemSettings | undefined;
 /** The runtime gate switch (`system_control gates`), read for a request's scope. */
@@ -49,14 +49,14 @@ export class GateEnhancementStage extends BasePipelineStage {
     logger: Logger,
     private readonly gateSystemEnabled: GateSystemSwitch,
     private readonly remapInlineDefinitions: (
-      context: ExecutionContext,
+      context: PromptRequestContext,
       registered: ReadonlyMap<string, string>
     ) => Promise<void>
   ) {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     if (!this.enhancementService.isAvailable()) {
@@ -139,7 +139,7 @@ export class GateEnhancementStage extends BasePipelineStage {
    * that did. Stage 05 refuses the second for every switch, so a refusal here means a switch
    * changed after it — and a script may have run.
    */
-  private skipOrRefuse(context: ExecutionContext, suppression: GateSuppression): void {
+  private skipOrRefuse(context: PromptRequestContext, suppression: GateSuppression): void {
     const requested = callerRequestedGates(this.registrar, context);
     if (requested.length === 0) {
       this.logExit({ skipped: SKIP_REASONS[suppression.kind] });

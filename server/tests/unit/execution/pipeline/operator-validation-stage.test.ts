@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { OperatorValidationStage } from '../../../../src/engine/execution/pipeline/stages/06-operator-validation-stage.js';
 
 import type { FrameworkValidator } from '../../../../src/engine/frameworks/framework-validator.js';
@@ -18,7 +18,7 @@ describe('OperatorValidationStage', () => {
     const validator = { validateAndNormalize: jest.fn() } as unknown as FrameworkValidator;
     const logger = createLogger();
     const stage = new OperatorValidationStage(validator, logger);
-    const context = new ExecutionContext({ command: '>>demo' }, logger);
+    const context = new PromptRequestContext({ command: '>>demo' }, logger);
     context.parsedCommand = {
       promptId: 'demo',
       rawArgs: '',
@@ -60,7 +60,7 @@ describe('OperatorValidationStage', () => {
       promptDelegation = false
     ) => {
       const stage = new OperatorValidationStage(null, createLogger());
-      const context = new ExecutionContext({ command: '>>a --> >>b --> >>c' });
+      const context = new PromptRequestContext({ command: '>>a --> >>b --> >>c' });
       context.parsedCommand = {
         promptId: 'a',
         rawArgs: '',
@@ -172,7 +172,7 @@ describe('OperatorValidationStage', () => {
     const logger = createLogger();
     const stage = new OperatorValidationStage(validator, logger);
 
-    const context = new ExecutionContext({ command: '@cageerf >>demo' }, logger);
+    const context = new PromptRequestContext({ command: '@cageerf >>demo' }, logger);
     context.parsedCommand = {
       promptId: 'demo',
       rawArgs: '',

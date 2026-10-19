@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 import { ToolTriggerFilter } from '../../../../src/modules/automation/execution/tool-trigger-filter.js';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ScriptExecutionStage } from '../../../../src/engine/execution/pipeline/stages/08-script-execution-stage.js';
 
 import type { Logger } from '../../../../src/infra/logging/index.js';
@@ -107,7 +107,7 @@ describe('ScriptExecutionStage', () => {
 
   describe('execute', () => {
     test('skips when no script tools available', async () => {
-      const context = new ExecutionContext({ command: '>>test' });
+      const context = new PromptRequestContext({ command: '>>test' });
       context.parsedCommand = {
         promptId: 'test',
         rawArgs: '',
@@ -139,7 +139,7 @@ describe('ScriptExecutionStage', () => {
 
     test('skips when no tools match', async () => {
       const tool = createBaseTool('my-tool');
-      const context = new ExecutionContext({ command: '>>test' });
+      const context = new PromptRequestContext({ command: '>>test' });
       context.parsedCommand = {
         promptId: 'test',
         rawArgs: '',
@@ -179,7 +179,7 @@ describe('ScriptExecutionStage', () => {
       });
       const match = createToolMatch('validator');
 
-      const context = new ExecutionContext({ command: '>>test' });
+      const context = new PromptRequestContext({ command: '>>test' });
       context.parsedCommand = {
         promptId: 'test',
         rawArgs: '',
@@ -225,7 +225,7 @@ describe('ScriptExecutionStage', () => {
       });
       const match = createToolMatch('validator');
 
-      const context = new ExecutionContext({ command: '>>test' });
+      const context = new PromptRequestContext({ command: '>>test' });
       context.parsedCommand = {
         promptId: 'test',
         rawArgs: '',
@@ -275,7 +275,7 @@ describe('ScriptExecutionStage', () => {
       });
       const match = createToolMatch('validator');
 
-      const context = new ExecutionContext({ command: '>>test' });
+      const context = new PromptRequestContext({ command: '>>test' });
       context.parsedCommand = {
         promptId: 'test',
         rawArgs: '',
@@ -325,7 +325,7 @@ describe('ScriptExecutionStage', () => {
       });
       const match = createToolMatch('validator');
 
-      const context = new ExecutionContext({ command: '>>test' });
+      const context = new PromptRequestContext({ command: '>>test' });
       context.parsedCommand = {
         promptId: 'test',
         rawArgs: '',
@@ -378,7 +378,7 @@ describe('ScriptExecutionStage', () => {
       });
       const match = createToolMatch('validator');
 
-      const context = new ExecutionContext({ command: '>>test' });
+      const context = new PromptRequestContext({ command: '>>test' });
       context.parsedCommand = {
         promptId: 'test',
         rawArgs: '',
@@ -436,7 +436,7 @@ describe('ScriptExecutionStage', () => {
       const autoMatch = createToolMatch('auto-tool');
       const normalMatch = createToolMatch('normal-tool');
 
-      const context = new ExecutionContext({ command: '>>test' });
+      const context = new PromptRequestContext({ command: '>>test' });
       context.parsedCommand = {
         promptId: 'test',
         rawArgs: '',
@@ -496,7 +496,7 @@ describe('ScriptExecutionStage', () => {
       });
       const match = createToolMatch('normal-tool');
 
-      const context = new ExecutionContext({ command: '>>test' });
+      const context = new PromptRequestContext({ command: '>>test' });
       context.parsedCommand = {
         promptId: 'test',
         rawArgs: '',
@@ -544,7 +544,7 @@ describe('ScriptExecutionStage', () => {
       });
       const match = createToolMatch('validator');
 
-      const context = new ExecutionContext({ command: '>>test' });
+      const context = new PromptRequestContext({ command: '>>test' });
       context.parsedCommand = {
         promptId: 'test',
         rawArgs: '',
@@ -596,7 +596,7 @@ describe('ScriptExecutionStage', () => {
       });
       const match = createToolMatch('validator');
 
-      const context = new ExecutionContext({ command: '>>test' });
+      const context = new PromptRequestContext({ command: '>>test' });
       context.parsedCommand = {
         promptId: 'test',
         rawArgs: '',
@@ -649,7 +649,7 @@ describe('ScriptExecutionStage', () => {
       });
       const match = createToolMatch('validator');
 
-      const context = new ExecutionContext({ command: '>>test' });
+      const context = new PromptRequestContext({ command: '>>test' });
       context.parsedCommand = {
         promptId: 'test',
         rawArgs: '',

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import { ExecutionPlanner } from '../../../../src/engine/execution/planning/execution-planner.js';
 
-import type { ParsedCommand } from '../../../../src/engine/execution/context/execution-context.js';
+import type { ParsedCommand } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import type { Logger } from '../../../../src/infra/logging/index.js';
 import type { ConvertedPrompt } from '../../../../src/shared/types/index.js';
 

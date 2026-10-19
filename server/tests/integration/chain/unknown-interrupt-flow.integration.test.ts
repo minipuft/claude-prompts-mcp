@@ -18,7 +18,7 @@ import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globa
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { RemainderProcessor } from '../../../src/engine/execution/capture/remainder-processor.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
-import { ExecutionContext } from '../../../src/engine/execution/context/index.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/index.js';
 import { ResponseAssembler } from '../../../src/engine/execution/formatting/response-assembler.js';
 import { UNKNOWN_INTERRUPT_GATE_ID } from '../../../src/engine/execution/pipeline/decisions/index.js';
 import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline/stages/16-response-capture-stage.js';
@@ -106,8 +106,8 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
     );
   };
 
-  const buildContext = (request: Partial<McpToolRequest>): ExecutionContext => {
-    const context = new ExecutionContext({ chain_id: 'chain-demo#1', ...request });
+  const buildContext = (request: Partial<McpToolRequest>): PromptRequestContext => {
+    const context = new PromptRequestContext({ chain_id: 'chain-demo#1', ...request });
     context.sessionContext = {
       sessionId: 'sess-1',
       chainId: 'chain-demo#1',
@@ -129,7 +129,7 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
   };
 
   /** Drive one call that declares the blocking unknown. */
-  const declareBlockingUnknown = async (): Promise<ExecutionContext> => {
+  const declareBlockingUnknown = async (): Promise<PromptRequestContext> => {
     const context = buildContext({ observations: [BLOCKING_DISCOVERY] });
     await buildStage().execute(context);
     return context;
@@ -457,8 +457,8 @@ describe('mid-chain blocking-unknown interrupt (rows 2.1-2.3)', () => {
 // ---- row 2.4 ---------------------------------------------------------------------------
 
 describe('interrupt rendering: text section and structuredContent (row 2.4)', () => {
-  const buildChainContext = (): ExecutionContext => {
-    const context = new ExecutionContext({ chain_id: 'chain-demo#1' });
+  const buildChainContext = (): PromptRequestContext => {
+    const context = new PromptRequestContext({ chain_id: 'chain-demo#1' });
     context.executionPlan = { strategy: 'chain', gates: [] } as never;
     context.sessionContext = {
       sessionId: 'sess-1',

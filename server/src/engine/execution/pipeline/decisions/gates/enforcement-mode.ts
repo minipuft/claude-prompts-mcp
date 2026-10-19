@@ -34,7 +34,7 @@ function strictest(modes: readonly EnforcementMode[]): EnforcementMode {
  * 4. **`blocking`**: an unstated mode means "not yet relaxed", not "relax".
  *
  * This is a pure function rather than a method on `GateEnforcementAuthority` because the
- * authority is optional on `ExecutionContext`. Reaching it through `context.gateEnforcement?.`
+ * authority is optional on `PromptRequestContext`. Reaching it through `context.gateEnforcement?.`
  * would silently yield `undefined` wherever the authority is unwired, turning a missing
  * dependency into a changed enforcement decision.
  *

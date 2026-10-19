@@ -1,7 +1,7 @@
 // @lifecycle canonical - Formats resource menus and judge responses for Claude.
 import type { ToolResponse } from '#shared/types/index.js';
 import type { ResourceMenu } from './judge-resource-collector.js';
-import type { ExecutionContext } from '../../execution/context/index.js';
+import type { PromptRequestContext } from '../../execution/context/index.js';
 
 /**
  * Context about operators already specified in the command.
@@ -25,7 +25,7 @@ export class JudgeMenuFormatter {
   /**
    * Build the complete judge response with resource menu and selection instructions.
    */
-  buildJudgeResponse(resources: ResourceMenu, context: ExecutionContext): ToolResponse {
+  buildJudgeResponse(resources: ResourceMenu, context: PromptRequestContext): ToolResponse {
     const operatorContext = this.getOperatorContext(context);
     const menu = this.formatResourceMenuForClaude(resources, operatorContext);
     const cleanCommand = this.getCleanCommandForDisplay(context);
@@ -116,7 +116,7 @@ export class JudgeMenuFormatter {
   /**
    * Extract operator context from the parsed command.
    */
-  getOperatorContext(context: ExecutionContext): OperatorContext {
+  getOperatorContext(context: PromptRequestContext): OperatorContext {
     const parsedCommand = context.parsedCommand;
 
     const frameworkOverride = parsedCommand?.executionPlan?.frameworkOverride;
@@ -208,7 +208,7 @@ export class JudgeMenuFormatter {
     return `\n### Already Specified\n${parts.join('\n')}\n`;
   }
 
-  private getCleanCommandForDisplay(context: ExecutionContext): string {
+  private getCleanCommandForDisplay(context: PromptRequestContext): string {
     const command = context.mcpRequest?.command ?? '';
 
     let clean = command.replace(/^%[a-z]+\s+/i, '');

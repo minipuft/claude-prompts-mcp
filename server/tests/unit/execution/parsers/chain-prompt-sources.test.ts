@@ -30,7 +30,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ArgumentParser } from '../../../../src/engine/execution/parsers/argument-parser.js';
 import { ChainBlueprintResolver } from '../../../../src/engine/execution/parsers/chain-blueprint-resolver.js';
 import { projectChainPromptSteps } from '../../../../src/engine/execution/parsers/chain-step-projection.js';
@@ -134,13 +134,13 @@ async function refusalFrom(
   request: Record<string, unknown>,
   through: CommandParsingStage = stage
 ): Promise<string | undefined> {
-  const context = new ExecutionContext(request as never);
+  const context = new PromptRequestContext(request as never);
   await through.execute(context);
   return context.response?.content.map((part) => ('text' in part ? part.text : '')).join('\n');
 }
 
 async function parse(request: Record<string, unknown>): Promise<ParsedCommand> {
-  const context = new ExecutionContext(request as never);
+  const context = new PromptRequestContext(request as never);
   await stage.execute(context);
   if (context.parsedCommand === undefined) {
     throw new Error(`no parsed command for ${JSON.stringify(request)}`);
@@ -553,7 +553,7 @@ describe('P6.124: every source carrying a request gate checks its target', () =>
     request: Record<string, unknown>,
     through: CommandParsingStage = stage
   ): Promise<string | undefined> {
-    const context = new ExecutionContext(request as never);
+    const context = new PromptRequestContext(request as never);
     if (Array.isArray(request['gates'])) {
       context.state.gates.requestedOverrides = { gates: [...(request['gates'] as unknown[])] };
     }
@@ -654,7 +654,7 @@ describe('P6.124: every source carrying a request gate checks its target', () =>
         },
       })
     );
-    const context = new ExecutionContext({
+    const context = new PromptRequestContext({
       chain_id: 'chain-sv_chain#1',
       user_response: 'out',
     } as never);

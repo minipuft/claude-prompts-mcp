@@ -18,7 +18,7 @@ import { StepResponseCaptureStage } from '../../../src/engine/execution/pipeline
 import { GateVerdictProcessor } from '../../../src/engine/gates/services/gate-verdict-processor.js';
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
-import { ExecutionContext } from '../../../src/engine/execution/context/index.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/index.js';
 import type { ChainSessionService } from '../../../src/shared/types/chain-session.js';
 import type {
   GateFailedNotification,
@@ -117,7 +117,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       chain_id: sessionId,
       gate_verdict: { overall: 'PASS', rationale: 'All criteria met' },
     } as McpToolRequest;
-    const context = new ExecutionContext(request, noopLogger);
+    const context = new PromptRequestContext(request, noopLogger);
     context.sessionContext = {
       sessionId,
       isChainExecution: true,
@@ -157,7 +157,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       chain_id: sessionId,
       gate_verdict: { overall: 'FAIL', rationale: 'Missing test coverage' },
     } as McpToolRequest;
-    const context = new ExecutionContext(request, noopLogger);
+    const context = new PromptRequestContext(request, noopLogger);
     context.sessionContext = {
       sessionId,
       isChainExecution: true,
@@ -205,7 +205,7 @@ describe('ResponseCaptureStage Hook Emission', () => {
       chain_id: sessionId,
       gate_verdict: { overall: 'FAIL', rationale: 'Still missing coverage' },
     } as McpToolRequest;
-    const context = new ExecutionContext(request, noopLogger);
+    const context = new PromptRequestContext(request, noopLogger);
     context.sessionContext = {
       sessionId,
       isChainExecution: true,
@@ -315,7 +315,7 @@ describe('gate events reach a port-only collaborator', () => {
       noopLogger
     );
 
-    const context = new ExecutionContext(
+    const context = new PromptRequestContext(
       {
         chain_id: sessionId,
         gate_verdict: { overall: 'FAIL', rationale: 'Missing test coverage' },

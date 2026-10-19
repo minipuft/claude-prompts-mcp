@@ -16,7 +16,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { SqliteStateStore } from '../../../src/infra/database/stores/sqlite-store.js';
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { ChainSessionStore } from '../../../src/modules/chains/manager.js';
 import { DirectChainRunRegistry } from '../../../src/modules/chains/run-registry.js';
 import { ArgumentHistoryTracker } from '../../../src/modules/text-refs/argument-history-tracker.js';
@@ -56,14 +56,14 @@ describe('Tenant Isolation', () => {
     }
   });
 
-  describe('ExecutionContext continuity scope support', () => {
+  describe('PromptRequestContext continuity scope support', () => {
     // getContinuityScopeId()/setContinuityScopeId() were deleted at P4.52: zero production
     // callers, and their only test coverage was this describe block testing itself. The
     // duplicate `state.scope` field they wrote was deleted at P4.70 — `execution-telemetry.ts`
     // now reads `state.identity.context?.identitySource` for the `cpm.scope.source` attribute,
     // so `state.identity`'s default shape is what stays worth asserting.
     test('tenant state is initialized in pipeline state', () => {
-      const ctx = new ExecutionContext({ command: 'test' }, logger);
+      const ctx = new PromptRequestContext({ command: 'test' }, logger);
 
       expect(ctx.state.identity).toBeDefined();
       expect(ctx.state.identity.continuityScopeId).toBe('default');

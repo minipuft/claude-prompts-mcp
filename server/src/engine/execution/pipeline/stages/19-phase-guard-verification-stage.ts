@@ -44,7 +44,7 @@ import type { ChainSessionService } from '#shared/types/chain-session.js';
 import type { PhaseGuardsConfig } from '#shared/types/core-config.js';
 import type { FrameworkGuideProvider } from '../../../frameworks/declared-sections.js';
 import type { AnswerGrade } from '../../../frameworks/phase-guards/index.js';
-import type { ExecutionContext } from '../../context/index.js';
+import type { PromptRequestContext } from '../../context/index.js';
 
 import { isRunComplete } from '#shared/types/chain-session.js';
 
@@ -75,7 +75,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     super(logger);
   }
 
-  async execute(context: ExecutionContext): Promise<void> {
+  async execute(context: PromptRequestContext): Promise<void> {
     this.logEntry(context);
 
     // The grade stage 16 took before it decided the advance, when it took one (R170): this stage
@@ -189,7 +189,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    * graded by {@link execute} itself. The evaluation is `evaluatePhaseGuards`, a pure function of
    * the phase-guards module; this method only decides which phases may block and over what text.
    */
-  gradeAnswer(context: ExecutionContext): AnswerGrade {
+  gradeAnswer(context: PromptRequestContext): AnswerGrade {
     const grade = this.takeGrade(context);
     context.state.gates.answerGrade = grade;
     if (grade.kind === 'evaluated') {
@@ -202,7 +202,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
     return grade;
   }
 
-  private takeGrade(context: ExecutionContext): AnswerGrade {
+  private takeGrade(context: PromptRequestContext): AnswerGrade {
     // 1. Get phase guard config — skip if mode is "off"
     const config = this.configProvider();
     if (config.mode === 'off') {
@@ -287,7 +287,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    * summary, merges nothing.
    */
   private async mergePassSummary(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     review: GateReview | undefined,
     result: ReturnType<typeof evaluatePhaseGuards>
@@ -321,7 +321,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    * GateReviewStage through the context.
    */
   private async persistStructuralReview(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     review: PendingGateReview & { nodeId: string }
   ): Promise<void> {
@@ -348,7 +348,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    * @returns the node's review after grading; null when none is open.
    */
   async gradeLateReport(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     sessionId: string,
     node: { readonly nodeId: string; readonly stepNumber: number },
     review: GateReview | null,
@@ -426,7 +426,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    * review holds open, so it is re-read where its input just changed — otherwise one reply says
    * both "complete" and "awaiting your verdict".
    */
-  private relatchRunCompletion(context: ExecutionContext, sessionId: string): void {
+  private relatchRunCompletion(context: PromptRequestContext, sessionId: string): void {
     if (context.state.session.chainComplete !== true) return;
     const run = this.chainSessionStore.getSession(sessionId, context.getScopeOptions());
     context.state.session.chainComplete = run !== undefined && isRunComplete(run);
@@ -439,7 +439,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    * On chain continuation: FrameworkResolutionStage skips (blueprint-restored) → fall back to
    * FrameworkDecisionAuthority which was populated by GateEnhancementStage.
    */
-  private resolveFrameworkId(context: ExecutionContext): string | undefined {
+  private resolveFrameworkId(context: PromptRequestContext): string | undefined {
     const fromContext = context.frameworkContext?.selectedFramework?.id;
     if (fromContext) return fromContext;
 
@@ -451,7 +451,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    * declared (6c above). The rest are advisory and only logged.
    */
   private resolveBlockingPhases<P extends { section_header?: string | undefined }>(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     phases: readonly P[],
     gradedNodeId: string | undefined
   ): P[] {
@@ -485,7 +485,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    * contributes nothing to it. An empty set means nothing was recorded, which blocks nothing.
    */
   private resolveDeclaredHeaders(
-    context: ExecutionContext,
+    context: PromptRequestContext,
     gradedNodeId: string | undefined
   ): Set<string> {
     const headers = new Set<string>();
@@ -536,7 +536,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    * the node it grades, R8); stamping a guess instead would grade a step nobody answered.
    */
   private resolveReviewedStepIdentity(
-    context: ExecutionContext
+    context: PromptRequestContext
   ): { stepNumber: number; nodeId: string } | undefined {
     const captured = context.state.session.capturedStep;
     if (captured === undefined) return undefined;
@@ -550,7 +550,7 @@ export class PhaseGuardVerificationStage extends BasePipelineStage {
    * from the previous turn. This is what guards should validate (did the
    * LLM follow framework phases?), NOT the rendered template from StepExecutionStage.
    */
-  private extractOutputText(context: ExecutionContext): string | undefined {
+  private extractOutputText(context: PromptRequestContext): string | undefined {
     const userResponse = context.mcpRequest.user_response?.trim();
     if (typeof userResponse === 'string' && userResponse.length > 0) return userResponse;
     return undefined;

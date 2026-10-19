@@ -28,7 +28,7 @@ import {
   createSemanticReviewContext,
   resolvePinnedSemanticContext,
 } from '../../../../src/engine/execution/pipeline/decisions/gates/semantic-review-context.js';
-import { ExecutionContext } from '../../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { evaluateSemanticEvaluation } from '../../../../src/engine/gates/core/semantic-evaluation.js';
 import { PHASE_GUARD_GATE_ID } from '../../../../src/engine/execution/pipeline/decisions/gates/structural-review-composition.js';
 import { canonicalJson, hashBytes } from '../../../../src/shared/utils/hash.js';
@@ -101,7 +101,7 @@ function createEmitters(sequence: string[]) {
 }
 
 function createContext() {
-  const context = new ExecutionContext(
+  const context = new PromptRequestContext(
     {
       chain_id: 'chain-test#1',
       gate_verdict: { overall: 'FAIL', rationale: 'it did not hold' },
@@ -192,7 +192,7 @@ function custodyFixture(kind: 'ordinary' | 'detached', verdict: McpToolRequest['
   const authority = new GateEnforcementAuthority(service, logger, undefined, () => ({
     evaluation: {},
   }));
-  const context = new ExecutionContext(
+  const context = new PromptRequestContext(
     { chain_id: 'chain-review#1', gate_verdict: verdict },
     logger
   );

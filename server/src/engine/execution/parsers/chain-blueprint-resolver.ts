@@ -1,7 +1,7 @@
 // @lifecycle canonical - Restores chain session blueprints for response-only execution.
 import type { Logger } from '#infra/logging/index.js';
 import type { ChainSessionService, SessionBlueprint } from '#shared/types/index.js';
-import type { ExecutionContext, ParsedCommand } from '../context/index.js';
+import type { PromptRequestContext, ParsedCommand } from '../context/index.js';
 import type { ExecutionPlan } from '../types.js';
 
 /**
@@ -25,7 +25,7 @@ export class ChainBlueprintResolver {
    * Looks up blueprint by sessionId first, then falls back to chain_id lookup.
    * Deep-clones all restored data to prevent cross-request mutation.
    */
-  restoreFromBlueprint(context: ExecutionContext): void {
+  restoreFromBlueprint(context: PromptRequestContext): void {
     let sessionId = context.getSessionId();
     const scopeOptions = context.getScopeOptions();
     let blueprint = sessionId

@@ -16,7 +16,7 @@ import path from 'node:path';
 
 import { StepCaptureService } from '../../../src/engine/execution/capture/step-capture-service.js';
 import { UnknownObservationProcessor } from '../../../src/engine/execution/capture/unknown-observation-processor.js';
-import { ExecutionContext } from '../../../src/engine/execution/context/execution-context.js';
+import { PromptRequestContext } from '../../../src/engine/execution/context/prompt-request-context.js';
 import { GateEnforcementAuthority } from '../../../src/engine/execution/pipeline/decisions/gates/gate-enforcement-authority.js';
 import {
   composeStructuralReview,
@@ -181,7 +181,7 @@ function retainedVerdict(review: GateReview): GateVerdictSubmission {
 }
 
 function reviewContext(f: ReviewFixture, userResponse?: string, verdict?: GateVerdictSubmission) {
-  const context = new ExecutionContext(
+  const context = new PromptRequestContext(
     {
       chain_id: 'review-chain#1',
       ...(userResponse !== undefined ? { user_response: userResponse } : {}),
@@ -341,7 +341,7 @@ describe('authorized bypass ledger custody (real SQLite)', () => {
           kind === 'detached'
             ? detachedContext(f, 'HANDOFF RESULT\nnode: reviewed-node')
             : reviewContext(f);
-        const actionContext = new ExecutionContext(
+        const actionContext = new PromptRequestContext(
           { ...context.mcpRequest, gate_action: 'skip' },
           f.logger
         );
@@ -421,7 +421,10 @@ describe('authorized bypass ledger custody (real SQLite)', () => {
           attemptCount: phase === 'exhausted' ? 3 : 0,
         });
         const base = reviewContext(f);
-        const context = new ExecutionContext({ ...base.mcpRequest, gate_action: 'skip' }, f.logger);
+        const context = new PromptRequestContext(
+          { ...base.mcpRequest, gate_action: 'skip' },
+          f.logger
+        );
         context.state.identity.continuityScopeId = REVIEW_SCOPE.continuityScopeId;
         context.sessionContext = base.sessionContext;
         context.gateEnforcement = f.authority();
@@ -454,7 +457,10 @@ describe('authorized bypass ledger custody (real SQLite)', () => {
         metadata: { receipt: 'original' },
       });
       const base = reviewContext(f);
-      const context = new ExecutionContext({ ...base.mcpRequest, gate_action: 'skip' }, f.logger);
+      const context = new PromptRequestContext(
+        { ...base.mcpRequest, gate_action: 'skip' },
+        f.logger
+      );
       context.state.identity.continuityScopeId = REVIEW_SCOPE.continuityScopeId;
       context.sessionContext = base.sessionContext;
       context.gateEnforcement = f.authority();
@@ -495,7 +501,10 @@ describe('authorized bypass ledger custody (real SQLite)', () => {
       await f.store.completeStep('review-session', 'reviewed-node');
       await f.store.setReview('review-session', { ...review, phase: 'exhausted', attemptCount: 3 });
       const base = reviewContext(f);
-      const context = new ExecutionContext({ ...base.mcpRequest, gate_action: 'skip' }, f.logger);
+      const context = new PromptRequestContext(
+        { ...base.mcpRequest, gate_action: 'skip' },
+        f.logger
+      );
       context.state.identity.continuityScopeId = REVIEW_SCOPE.continuityScopeId;
       context.sessionContext = base.sessionContext;
       context.gateEnforcement = f.authority();
@@ -832,7 +841,7 @@ describe('issued review capture and cold custody (real SQLite)', () => {
       const replacement = 'Fresh detached answer 😀\nHANDOFF RESULT\nnode: reviewed-node';
       const grader = jest.fn(
         async (
-          _context: ExecutionContext,
+          _context: PromptRequestContext,
           sessionId: string,
           _node: unknown,
           review: GateReview | null
