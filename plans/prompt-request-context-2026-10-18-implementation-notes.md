@@ -27,4 +27,8 @@ tags: []
 
 ## Deviations
 
+- **DEV-T1-1** Row 1 committed a shorter subject than briefed: the brief's was 106 characters, over commitlint `header-max-length` 100. Briefs now check subject length before sending.
+
 ## Findings
+
+- Row 1: no ratchet moved. Knip never counted the deleted interfaces, so knip stayed at 1049.
