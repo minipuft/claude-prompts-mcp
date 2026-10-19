@@ -10,7 +10,7 @@
  */
 
 import type { GateValidationInfo, McpErrorCode, ToolResponse } from '#shared/types/index.js';
-import type { ErrorContext } from '../types/shared-types.js';
+import type { ErrorContext } from '#shared/utils/errorHandling.js';
 
 /**
  * Metadata for creating structured responses

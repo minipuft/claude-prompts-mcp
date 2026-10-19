@@ -18,7 +18,7 @@ import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { CategoryManager } from '#modules/prompts/category-manager.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { ConfigManager, Logger, ToolResponse } from '#shared/types/index.js';
-import type { ResourceManagerInput } from '../tools/resource-manager/core/types.js';
+import type { UnparsedResourceManagerInput } from '../tools/schemas/resource-manager.schema.js';
 
 import { createCategoryManager } from '#modules/prompts/category-manager.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
@@ -366,7 +366,7 @@ export class ApiRouter {
       const promptArgs = req.body['arguments'];
       const gateConfiguration = req.body['gateConfiguration'] ?? req.body['gate_configuration'];
 
-      const actionArgs: ResourceManagerInput = {
+      const actionArgs: UnparsedResourceManagerInput = {
         resource_type: 'prompt',
         action: 'update',
         id,
@@ -418,7 +418,7 @@ export class ApiRouter {
         return;
       }
 
-      const actionArgs: ResourceManagerInput = {
+      const actionArgs: UnparsedResourceManagerInput = {
         resource_type: 'prompt',
         action: 'delete',
         id,
@@ -524,7 +524,7 @@ export class ApiRouter {
     this.updateData(result.promptsData, result.categories, result.convertedPrompts);
   }
 
-  private async runResourceManagerAction(args: ResourceManagerInput): Promise<ToolResponse> {
+  private async runResourceManagerAction(args: Record<string, unknown>): Promise<ToolResponse> {
     if (!this.mcpToolsManager) {
       throw new Error('MCP Tools Manager not available');
     }
@@ -532,7 +532,7 @@ export class ApiRouter {
     if (!handler) {
       throw new Error('Resource manager handler not available');
     }
-    return handler(args as unknown as Record<string, unknown>, {});
+    return handler(args, {});
   }
 
   private extractToolResponseMessage(response: ToolResponse): string {

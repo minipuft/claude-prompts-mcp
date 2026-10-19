@@ -11,14 +11,15 @@
  *
  * WHY CONFIG IS NOT A `ResourceType`. It is keyed `resource_type='config'`, `resource_id='config'`
  * in `version_history` — a bare `TEXT` column with no CHECK, so no schema bump, exactly as
- * `'category'` was at P4.7 — and that literal widens ONE of this repo's five `ResourceType`
- * homonyms, `version-history-types.ts`. It deliberately does not widen the other four:
+ * `'category'` was at P4.7 — and that literal widens only `HistoryResourceType`
+ * (`version-history-types.ts`). It deliberately does not widen `ResourceType`
+ * (`modules/versioning/types.ts`), which carries two roles config must stay out of:
  *
- *   - `mcp/tools/resource-manager/core/types.ts` is the PUBLISHED union. Config is read-only over
- *     MCP since #312 and stays so; `resource_manager` learns nothing here and neither does
+ *   - It is the PUBLISHED union `resource_manager` routes on. Config is read-only over MCP since
+ *     #312 and stays so; `resource_manager` learns nothing here and neither does
  *     `system_control config`. R53's "`cpm` can restore one" is satisfied entirely on the CLI.
- *   - `modules/versioning/types.ts` keys `ENTRY_FILENAME` in `shared/utils/resource-file-set.ts`
- *     and the four `SnapshotContract`s. Config has no resource root, no entry-filename rule and no
+ *   - It keys `ENTRY_FILENAME` in `shared/utils/resource-file-set.ts` and the four
+ *     `SnapshotContract`s. Config has no resource root, no entry-filename rule and no
  *     loader, so a `config:` entry there would be a fake filename publishing an enumeration that
  *     cannot run.
  *

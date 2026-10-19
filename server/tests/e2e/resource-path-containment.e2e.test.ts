@@ -336,7 +336,7 @@ describe('a caller-supplied segment cannot steer a write out of the resources ro
         name: 'Traversal Framework',
         description: 'traversal probe',
         system_prompt_guidance: 'You are a probe.',
-        phases: [{ id: 'one', name: 'One', description: 'first', order: 1 }],
+        phases: [{ id: 'one', name: 'One', description: 'first' }],
         framework_gates: [
           { id: 'probe-gate', name: 'Probe Gate', description: 'd', priority: 'medium' },
         ],
@@ -357,7 +357,7 @@ describe('a caller-supplied segment cannot steer a write out of the resources ro
         name: 'Benign Framework',
         description: 'benign control',
         system_prompt_guidance: 'You are a probe.',
-        phases: [{ id: 'one', name: 'One', description: 'first', order: 1 }],
+        phases: [{ id: 'one', name: 'One', description: 'first' }],
         framework_gates: [
           { id: 'probe-gate', name: 'Probe Gate', description: 'd', priority: 'medium' },
         ],

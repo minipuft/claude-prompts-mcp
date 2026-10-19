@@ -9,6 +9,7 @@
  */
 
 import type { VersionEntry, HistoryFile } from '#modules/versioning/types.js';
+import type { StoredResourceType } from '#shared/types/version-history.js';
 
 import { DEFAULT_VERSIONING_CONFIG } from '#shared/types/core-config.js';
 
@@ -25,11 +26,15 @@ export const DEFAULT_MAX_VERSIONS = DEFAULT_VERSIONING_CONFIG.maxVersions;
 /**
  * What a `version_history` row of this surface can be ABOUT.
  *
- * One of five same-named unions in this repo with four different memberships, so be precise about
- * which one this is: it types `HistoryRowRequest.resource_type`, which is the value bound into
- * every statement in `version-history-rows.ts`. It is not the published `resource_type` of
- * `resource_manager` (`mcp/tools/resource-manager/core/types.ts`), and it is not the versioning
- * domain's own (`modules/versioning/types.ts`, which carries `category` and no `style`).
+ * It types `HistoryRowRequest.resource_type`, which is the value bound into every statement in
+ * `version-history-rows.ts`. Derived from {@link StoredResourceType}, the column's whole
+ * vocabulary, so `cpm` cannot be typed to read or write a value the column never holds. It is not
+ * `ResourceType` (`modules/versioning/types.ts`), the versioning domain's union that
+ * `resource_manager` routes on, which carries `category` and no `config`.
+ *
+ * `'category'` is excluded on purpose (ruling R14a): `cpm` has no category resource, and it does
+ * not read the category history the server writes. `style` is not here because nothing writes a
+ * style row; `cpm` refuses a style history request by name before it reaches this type.
  *
  * `'config'` joined at O.9 (owner ruling R53), and it is deliberately the ONLY union that gained
  * it. `version_history.resource_type` is a bare `TEXT NOT NULL` with no CHECK, so there is no
@@ -39,7 +44,7 @@ export const DEFAULT_MAX_VERSIONS = DEFAULT_VERSIONING_CONFIG.maxVersions;
  * `ENTRY_FILENAME` table and publish an enumeration that cannot exist. Config is checkpointed by
  * `cli-shared/config-checkpoint.ts`, which states the whole argument.
  */
-export type ResourceType = 'prompt' | 'gate' | 'framework' | 'style' | 'config';
+export type HistoryResourceType = Exclude<StoredResourceType, 'category'>;
 
 /**
  * Which rows an operation acts on, and the per-call facts a row records.
@@ -51,7 +56,7 @@ export type ResourceType = 'prompt' | 'gate' | 'framework' | 'style' | 'config';
  * so it has a resource to name and no action to dispatch.
  */
 export interface HistoryRowRequest {
-  resource_type: ResourceType;
+  resource_type: HistoryResourceType;
   resource_id: string;
   max_versions?: number;
   created_at?: string;

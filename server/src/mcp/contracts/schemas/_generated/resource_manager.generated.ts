@@ -1,5 +1,5 @@
 // Auto-generated from tooling/contracts/*.json. Do not edit manually.
-export interface ToolParameter {
+interface ToolParameter {
   name: string;
   type: string;
   description: string;
@@ -14,7 +14,7 @@ export interface ToolParameter {
   resolvesPendingRun?: boolean; // True when supplying this param resolves a run pending a review (failed gate or unknown interrupt)
 }
 
-export interface ToolCommand {
+interface ToolCommand {
   id: string;
   summary: string;
   parameters?: string[];
@@ -359,9 +359,9 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'tools',
-    type: 'array<unknown>',
+    type: 'array<object>',
     description:
-      '[Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout. Element shape is not constrained at this boundary — it is validated against the script tool schema when written.',
+      '[Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout. An entry of any other shape is refused before anything is written.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -545,7 +545,8 @@ export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'activation',
     type: 'object',
-    description: '[Gate] Activation rules: prompt_categories, frameworks, explicit_request.',
+    description:
+      '[Gate] Activation rules: prompt_categories, framework_context (framework ids), explicit_request (boolean), artifacts (artifact kinds).',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -553,7 +554,8 @@ export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'retry_config',
     type: 'object',
-    description: '[Gate] Retry configuration: max_attempts, improvement_hints.',
+    description:
+      '[Gate] Retry configuration: max_attempts (positive integer), improvement_hints and preserve_context (booleans).',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -577,9 +579,9 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'phases',
-    type: 'array<unknown>',
+    type: 'array<object>',
     description:
-      '[Framework] Phase definitions: id, name, description, prompts. The advanced fields this description used to fold in are declared as their own parameters below. Element shape is not constrained at this boundary; the framework loader rejects a malformed entry when phases.yaml is read back.',
+      '[Framework] Phase definitions: id and name (required), description, prompts. The advanced fields are declared as their own parameters below.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -595,7 +597,8 @@ export const resource_managerParameters: ToolParameter[] = [
   {
     name: 'tool_descriptions',
     type: 'object',
-    description: '[Framework] Tool description overlays when active.',
+    description:
+      '[Framework] Tool description overlays when active, keyed by tool name: a string, or description plus parameters (name to text).',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
@@ -674,7 +677,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'execution_type_enhancements',
     type: 'object',
     description:
-      '[Framework] Per-execution-type step overlays (chain vs single), written to phases.yaml.',
+      '[Framework] Per-execution-type step overlays, written to phases.yaml: chain.advancedChain and chain.simpleChain, each mapping a step name to its lines.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,

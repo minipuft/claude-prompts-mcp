@@ -16,7 +16,7 @@ import {
 import { DEFAULT_EXECUTION_CONFIG } from '../../../../src/modules/automation/types.js';
 import type {
   LoadedScriptTool,
-  ExecutionConfig,
+  AutomationExecutionConfig,
 } from '../../../../src/modules/automation/types.js';
 
 describe('ToolDetectionService', () => {
@@ -200,7 +200,7 @@ describe('ToolDetectionService', () => {
   describe('execution config and trigger types', () => {
     const createToolWithExecution = (
       id: string,
-      execution: Partial<ExecutionConfig>
+      execution: Partial<AutomationExecutionConfig>
     ): LoadedScriptTool => ({
       id,
       name: `Tool ${id}`,

@@ -20,7 +20,12 @@ import {
   type GateDefinitionLoaderConfig,
 } from '../core/gate-definition-loader.js';
 
-import type { GateGuide, GateSource, GateGuideEntry, GateRegistryStats } from '../types/index.js';
+import type {
+  GateGuide,
+  GateGuideSource,
+  GateGuideEntry,
+  GateRegistryStats,
+} from '../types/index.js';
 
 import { Logger } from '#infra/logging/index.js';
 
@@ -124,7 +129,7 @@ export class GateRegistry {
   async registerGuide(
     guide: GateGuide,
     isBuiltIn: boolean = false,
-    source: GateSource = 'custom'
+    source: GateGuideSource = 'custom'
   ): Promise<boolean> {
     const startTime = performance.now();
 
@@ -285,7 +290,7 @@ export class GateRegistry {
    */
   getRegistryStats(): GateRegistryStats {
     let totalLoadTime = 0;
-    const bySource: Record<GateSource, number> = {
+    const bySource: Record<GateGuideSource, number> = {
       'yaml-runtime': 0,
       custom: 0,
       temporary: 0,

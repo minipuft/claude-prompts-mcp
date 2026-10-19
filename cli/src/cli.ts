@@ -233,7 +233,7 @@ Examples:
 
 Usage: cpm history <type> <id> [options]
 
-Types: prompt, gate, framework, style (singular or plural)
+Types: prompt, gate, framework (singular or plural)
 
 Displays the SQLite-backed version log for a resource.
 
@@ -250,7 +250,7 @@ Examples:
 
 Usage: cpm compare <type> <id> <from> <to> [options]
 
-Types: prompt, gate, framework, style (singular or plural)
+Types: prompt, gate, framework (singular or plural)
 
 Shows differences between two version snapshots from SQLite history.
 
@@ -266,7 +266,7 @@ Examples:
 
 Usage: cpm rollback <type> <id> <version> [options]
 
-Types: prompt, gate, framework, style (singular or plural)
+Types: prompt, gate, framework (singular or plural)
 
 Saves current state as a new version, then restores the target version.
 

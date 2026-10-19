@@ -16,12 +16,12 @@ import {
 } from './types.js';
 import { describePreviewRefusal } from '../../shared/preview-action.js';
 
+import type { ResourceType } from '#modules/versioning/types.js';
 import type { Logger, ToolResponse } from '#shared/types/index.js';
 import type {
   ResourceManagerInput,
   ResourceManagerDependencies,
   PromptResourceHandlerPort,
-  ResourceType,
   ResourceAction,
   ActionValidationResult,
 } from './types.js';
@@ -331,41 +331,11 @@ export class ResourceManagerRouter {
     if (args.description) gateArgs.description = args.description;
     if (args.subject) gateArgs.subject = args.subject;
     if (args.guidance) gateArgs.guidance = args.guidance;
-    if (args.pass_criteria !== undefined) {
-      // A bare string only ever existed to populate `required_patterns`, which is gone
-      // (B9: never had an evaluator). The MCP schema now rejects bare strings at the
-      // boundary (`gatePassCriteriaSchema`, resource-manager.schema.ts), so this filter is
-      // type-level safety only — it should never drop a value a validated caller sent.
-      const normalizedPassCriteria: NonNullable<GateManagerInput['pass_criteria']> = (
-        args.pass_criteria ?? []
-      ).filter(
-        (criteria): criteria is NonNullable<GateManagerInput['pass_criteria']>[number] =>
-          typeof criteria !== 'string'
-      );
-      gateArgs.pass_criteria = normalizedPassCriteria;
-    }
+    if (args.pass_criteria !== undefined) gateArgs.pass_criteria = args.pass_criteria;
     if (args.activation) {
       gateArgs.activation = args.activation;
     }
-    if (args.retry_config !== undefined) {
-      const retryConfig: NonNullable<GateManagerInput['retry_config']> = {};
-
-      if (args.retry_config.max_attempts !== undefined) {
-        retryConfig.max_attempts = args.retry_config.max_attempts;
-      }
-
-      if (args.retry_config.improvement_hints !== undefined) {
-        const improvementHints = args.retry_config.improvement_hints;
-        retryConfig.improvement_hints =
-          typeof improvementHints === 'boolean' ? improvementHints : improvementHints.length > 0;
-      }
-
-      if (args.retry_config.preserve_context !== undefined) {
-        retryConfig.preserve_context = args.retry_config.preserve_context;
-      }
-
-      gateArgs.retry_config = retryConfig;
-    }
+    if (args.retry_config !== undefined) gateArgs.retry_config = args.retry_config;
     if (args.enabled_only !== undefined) {
       gateArgs.enabled_only = args.enabled_only;
     }
@@ -423,16 +393,13 @@ export class ResourceManagerRouter {
       frameworkArgs.system_prompt_guidance = args.system_prompt_guidance;
     }
     if (args.phases !== undefined) {
-      const normalizedPhases: NonNullable<FrameworkManagerInput['phases']> = (args.phases ?? [])
-        .filter((phase) => Boolean(phase?.id && phase?.name))
-        .map((phase) => ({
-          id: phase.id,
-          name: phase.name,
-          description: phase.description ?? '',
-          ...(phase.prompts ? { prompts: phase.prompts } : {}),
-        }));
-
-      frameworkArgs.phases = normalizedPhases;
+      // The schema requires `id` and `name`; an omitted description is written as ''.
+      frameworkArgs.phases = args.phases.map((phase) => ({
+        id: phase.id,
+        name: phase.name,
+        description: phase.description ?? '',
+        ...(phase.prompts !== undefined ? { prompts: phase.prompts } : {}),
+      }));
     }
     if (args.gates) {
       frameworkArgs.gates = args.gates;
@@ -440,7 +407,7 @@ export class ResourceManagerRouter {
     if (args.tool_descriptions !== undefined) {
       const normalizedDescriptions: NonNullable<FrameworkManagerInput['tool_descriptions']> = {};
 
-      for (const [toolId, value] of Object.entries(args.tool_descriptions ?? {})) {
+      for (const [toolId, value] of Object.entries(args.tool_descriptions)) {
         if (typeof value === 'string') {
           normalizedDescriptions[toolId] = { description: value };
           continue;

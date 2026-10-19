@@ -58,12 +58,7 @@ import { DEFAULT_MAX_VERSIONS } from './version-history-types.js';
 
 import type { ResourceMutationTarget } from '#modules/resources/services/resource-mutation-transaction.js';
 import type { RestorePlan } from '#modules/versioning/restore-plan.js';
-import type {
-  VersionEntry,
-  HistoryFile,
-  RollbackResult,
-  ResourceType as VersioningResourceType,
-} from '#modules/versioning/types.js';
+import type { VersionEntry, HistoryFile, RollbackResult } from '#modules/versioning/types.js';
 import type {
   ResourceFileSet,
   ResourceLocationResult,
@@ -73,10 +68,12 @@ import type {
   HistoryRequest,
   HistoryResponse,
   HistoryRowRequest,
-  ResourceType,
+  HistoryResourceType,
 } from './version-history-types.js';
 
 import {
+  isByteRestorable,
+  notByteRestorableReason,
   resolveByteRestore,
   restoreTargets,
   writeRestoredFiles,
@@ -94,7 +91,7 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
  * this was deleted once every caller could pass the ref instead.
  */
 export interface HistoryResourceRef {
-  resourceType: ResourceType;
+  resourceType: HistoryResourceType;
   resourceId: string;
   /**
    * The tenant this resource's rows live under, when the caller can resolve it exactly.
@@ -634,7 +631,8 @@ export interface RollbackRestore {
  * `selectVersion` reads the ENTRY columns a history listing needs and deliberately not the row id
  * or its tree columns, so those are read here rather than widening a projection every other caller
  * would then carry. A row with no tree, or a caller that gave no location, is `projection-only` —
- * the answer every `cpm rollback` gave before schema v29.
+ * the answer every `cpm rollback` gave before schema v29. So is a type with no resource file set
+ * (`config`, whose rollback is `config-restore.ts`'s), refused by name before any row is read.
  */
 async function resolveCliByteRestore(
   db: DatabaseSync,
@@ -642,6 +640,10 @@ async function resolveCliByteRestore(
   request: HistoryRowRequest,
   input: { targetVersion: number; location?: ResourceLocationResult }
 ): Promise<Awaited<ReturnType<typeof resolveByteRestore>>> {
+  const resourceType = request.resource_type;
+  if (!isByteRestorable(resourceType)) {
+    return { status: 'projection-only', reason: notByteRestorableReason(resourceType) };
+  }
   if (input.location === undefined) {
     return { status: 'projection-only', reason: 'no resource location was supplied' };
   }
@@ -672,7 +674,7 @@ async function resolveCliByteRestore(
   return resolveByteRestore({
     db: asObjectStoreDatabase(db),
     tenantId,
-    resourceType: request.resource_type as VersioningResourceType,
+    resourceType,
     resourceId: request.resource_id,
     version: input.targetVersion,
     versionRowId: Number(row.id),

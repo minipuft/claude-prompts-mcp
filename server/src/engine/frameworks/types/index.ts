@@ -9,7 +9,7 @@
 
 // Framework guide types
 export type {
-  ExecutionStep,
+  FrameworkExecutionStep,
   FrameworkDefinition,
   FrameworkExecutionContext,
   FrameworkSelection,
@@ -36,7 +36,6 @@ export type {
   FrameworkHealth,
   PromptGuidanceAnalytics,
   PromptGuidanceConfig,
-  PromptGuidanceResult,
   SystemPromptInjectionConfig,
   SystemPromptInjectionResult,
   TemplateProcessingGuidance,

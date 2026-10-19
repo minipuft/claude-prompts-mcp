@@ -8,7 +8,7 @@ import {
 } from './parser-utils.js';
 import {
   type ChainOperator,
-  type ChainStep,
+  type SymbolicChainStep,
   type ExecutionStep,
   type FrameworkOperator,
   type GateOperator,
@@ -585,7 +585,7 @@ export class SymbolicCommandParser {
     // Named gates seen so far, by name, across segments in order (P6.110): the Nth segment
     // declaring a name binds the Nth gate registered under it, not the last.
     const namedOccurrences = new Map<string, number>();
-    const steps: ChainStep[] = splitResults.map((result, index) => {
+    const steps: SymbolicChainStep[] = splitResults.map((result, index) => {
       // Clean operators from individual steps before validation
       // This allows syntax like: @CAGEERF >>step1 --> %lean @ReACT >>step2
       // Note: Operators still apply at execution-level, not per-step

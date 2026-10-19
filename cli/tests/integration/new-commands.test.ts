@@ -175,6 +175,20 @@ describe('cpm delete', () => {
     expect(existsSync(dir)).toBe(false);
   });
 
+  // A style records no history, which skips the history half of a delete, never the files.
+  it('still deletes a style, which has no history to take with it', () => {
+    const dir = join(tmpWs, 'resources/styles/test-style');
+    expect(existsSync(dir)).toBe(true);
+
+    const { exitCode, stdout } = run([
+      'delete', 'style', 'test-style',
+      '--force', '--workspace', tmpWs,
+    ]);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("Deleted style 'test-style'");
+    expect(existsSync(dir)).toBe(false);
+  });
+
   it('errors when resource not found', () => {
     const { exitCode } = run([
       'delete', 'prompt', 'nonexistent',
@@ -244,6 +258,16 @@ describe('cpm history', () => {
     expect(stdout).toContain('No version history');
     rmSync(emptyWs, { recursive: true, force: true });
   });
+
+  // R14: no style row is ever written, so an empty answer read as "nothing recorded yet".
+  it('refuses a style by name instead of reporting an empty history', () => {
+    const { stderr, exitCode } = run([
+      'history', 'style', 'test-style',
+      '--workspace', tmpWs,
+    ]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('style resources are not versioned');
+  });
 });
 
 describe('cpm compare', () => {
@@ -260,6 +284,15 @@ describe('cpm compare', () => {
 
   afterEach(() => {
     if (existsSync(tmpWs)) rmSync(tmpWs, { recursive: true, force: true });
+  });
+
+  it('refuses a style by name instead of comparing two empty versions', () => {
+    const { stderr, exitCode } = run([
+      'compare', 'style', 'test-style', '1', '2',
+      '--workspace', tmpWs,
+    ]);
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('style resources are not versioned');
   });
 
   it('compares two versions', () => {

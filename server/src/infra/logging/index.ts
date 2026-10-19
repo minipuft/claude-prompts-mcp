@@ -8,7 +8,7 @@ import { appendFile, writeFile } from 'node:fs/promises';
 
 import type { Logger } from '#shared/types/index.js';
 
-import { LogLevel, TransportType } from '#shared/types/index.js';
+import { LogLevel } from '#shared/types/index.js';
 
 // Logger interface is defined in shared/types/ (Layer 0) for cross-layer access.
 // Re-exported here for backward compatibility.
@@ -216,7 +216,7 @@ export class EnhancedLogger implements Logger {
 
     // STDIO, outside CI: stdout stays the protocol channel; stderr is free. ERROR/WARN always
     // reach it; INFO/DEBUG are gated on enableDebug so a clean start stays quiet.
-    if (!this.isCI && this.transport === TransportType.STDIO) {
+    if (!this.isCI && this.transport === 'stdio') {
       this.logStdioLevel(level, message, args);
       return;
     }
@@ -224,7 +224,7 @@ export class EnhancedLogger implements Logger {
     // Only a non-STDIO transport prints past this point — including a CI+STDIO level (INFO, or
     // DEBUG with enableDebug) that reached here unhandled above, which is why CI+STDIO INFO
     // never prints.
-    if (this.transport !== TransportType.STDIO) {
+    if (this.transport !== 'stdio') {
       this.logNonStdioLevel(level, message, args);
     }
   }
@@ -471,7 +471,7 @@ export function getDefaultLoggerConfig(
 
   return {
     logFile: overrides.logFile,
-    transport: overrides.transport ?? TransportType.STDIO,
+    transport: overrides.transport ?? 'stdio',
     enableDebug: overrides.enableDebug ?? false,
     configuredLevel: overrides.configuredLevel ?? 'info',
   };
@@ -482,7 +482,7 @@ export function getDefaultLoggerConfig(
  * Now supports verbosity control via command-line flags
  */
 export function createSimpleLogger(transport: string = 'stdio'): Logger {
-  const enableConsole = transport !== TransportType.STDIO;
+  const enableConsole = transport !== 'stdio';
 
   // Check command-line flags for verbosity control
   const args = process.argv.slice(2);

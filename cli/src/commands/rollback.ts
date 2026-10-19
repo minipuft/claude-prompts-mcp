@@ -3,13 +3,15 @@ import {
   resolveConfiguredMaxVersions,
   rollbackVersion,
   validateResourceFile,
-  type ResourceValidationResult,
 } from '@cli-shared/index.js';
 import { declaredResourceId } from '@cli-shared/resource-operations.js';
 // Directly, not through the `cli-shared` barrel: the barrel is what every other command imports,
 // and adding one more never-server-consumed re-export to it is knip debt with no reader.
 import { projectResourceSnapshot } from '@cli-shared/resource-snapshot.js';
-import { exemptPreExistingUnloadableGates } from '@modules/resources/services/resource-verification-service.js';
+import {
+  exemptPreExistingUnloadableGates,
+  type ResourceVerificationResult,
+} from '@modules/resources/services/resource-verification-service.js';
 import { describeRestorePlan } from '@modules/versioning/restore-plan.js';
 import { resourceFileSet } from '@shared/utils/resource-file-set.js';
 import { serializeYamlPreservingSource } from '@shared/utils/yaml/yaml-document-writer.js';
@@ -20,7 +22,13 @@ import {
   printMutationWarnings,
   printValidationFailure,
 } from '../lib/resource-validation.js';
-import { TYPE_MAP, TYPE_CONFIG, singularName, isVersionedType } from '../lib/types.js';
+import {
+  TYPE_MAP,
+  TYPE_CONFIG,
+  singularName,
+  isVersionedType,
+  notVersionedMessage,
+} from '../lib/types.js';
 
 interface RollbackOptions {
   workspace?: string;
@@ -42,7 +50,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
 
   if (!type) {
     console.error(
-      `Usage: cpm rollback <prompt|gate|framework|style> <id> <version>\n` +
+      `Usage: cpm rollback <prompt|gate|framework> <id> <version>\n` +
         (options.type ? `Unknown type: ${options.type}` : 'Resource type is required.'),
     );
     return 1;
@@ -50,7 +58,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
 
   if (!options.id || !options.version) {
     console.error(
-      'Usage: cpm rollback <prompt|gate|framework|style> <id> <version>\nResource ID and target version are required.',
+      'Usage: cpm rollback <prompt|gate|framework> <id> <version>\nResource ID and target version are required.',
     );
     return 1;
   }
@@ -84,9 +92,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   // ResourceType with no version rows, and casting it into a union that does not contain it turned
   // an unsupported operation into a confusing "version not found".
   if (!isVersionedType(type)) {
-    console.error(
-      `${singularName(type)} resources are not versioned — nothing records version history for them.`,
-    );
+    console.error(notVersionedMessage(type));
     return 1;
   }
   const resourceType = singularName(type) as 'prompt' | 'gate' | 'framework';
@@ -138,7 +144,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   const priorVerdict = validate
     ? validateResourceFile(type, declaredResourceId(match), yamlPath)
     : undefined;
-  let restoreVerdict: ResourceValidationResult | undefined;
+  let restoreVerdict: ResourceVerificationResult | undefined;
   const verifyRestore = (): void => {
     if (priorVerdict === undefined) return;
     restoreVerdict = exemptPreExistingUnloadableGates(

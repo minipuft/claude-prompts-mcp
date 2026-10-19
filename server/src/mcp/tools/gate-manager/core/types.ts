@@ -9,6 +9,7 @@ import type { JudgeEvaluationConfig } from '#engine/gates/judge/types.js';
 import type { SemanticCriterionInput } from '#shared/types/gate-evaluation.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
+import type { ResourceManagerInput } from '../../schemas/resource-manager.schema.js';
 
 /**
  * Gate manager action identifiers
@@ -70,16 +71,17 @@ export interface GateManagerInput {
   calibration_suite_id?: string;
   guidance?: string;
   /**
-   * The gate schema's write-side shape — what a caller supplies when building a criterion.
-   * min_length/required_patterns/keyword_count/regex_patterns are absent because the loader refuses them at load.
+   * The gate file's criterion shapes, plus what the tool schema accepts: the tool schema leaves a
+   * legacy criterion's `type` optional where the loader requires it, so a criterion without one
+   * is refused only when the written `gate.yaml` is read back.
    */
-  /** Staged semantic authoring shape only; live resource validation still refuses that branch. */
-  pass_criteria?: Array<GatePassCriteriaYaml | SemanticCriterionInput>;
-  activation?: {
-    prompt_categories?: string[];
-    frameworks?: string[];
-    explicit_request?: boolean;
-  };
+  pass_criteria?: Array<
+    | GatePassCriteriaYaml
+    | SemanticCriterionInput
+    | NonNullable<ResourceManagerInput['pass_criteria']>[number]
+  >;
+  /** The keys gate activation reads; `framework_context` restricts a gate to frameworks. */
+  activation?: ResourceManagerInput['activation'];
   retry_config?: {
     max_attempts?: number;
     improvement_hints?: boolean;

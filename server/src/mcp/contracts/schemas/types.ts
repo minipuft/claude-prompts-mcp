@@ -53,8 +53,6 @@ export const commandDescriptorSchema = z.object({
   notes: z.array(z.string()).optional(),
 });
 
-export type CommandDescriptor = z.infer<typeof commandDescriptorSchema>;
-
 /**
  * Tool-level description metadata for MCP registration.
  * This is the SSOT for tool descriptions - generates tool-descriptions.contracts.json.
@@ -66,8 +64,6 @@ export const toolDescriptionSchema = z.object({
   /** Pattern-matched examples that help LLMs recognize when to invoke this tool */
   triggerExamples: z.array(z.string()).optional(),
 });
-
-export type ToolDescription = z.infer<typeof toolDescriptionSchema>;
 
 export const toolContractSchema = z.object({
   tool: z.string().min(1),

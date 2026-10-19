@@ -6,7 +6,7 @@ import {
 } from '../../skills-sync.js';
 import { ActionHandler } from '../core/action-handler-base.js';
 
-import type { ResourceType } from '#modules/skills-sync/service.js';
+import type { SkillsSyncResourceType } from '#modules/skills-sync/service.js';
 import type { ToolResponse } from '#shared/types/index.js';
 
 /**
@@ -20,7 +20,7 @@ interface SkillsSyncActionArgs {
   operation?: string;
   client?: string;
   scope?: 'user' | 'project';
-  resource_type?: ResourceType;
+  resource_type?: SkillsSyncResourceType;
   id?: string;
   prune?: boolean;
   output?: string;

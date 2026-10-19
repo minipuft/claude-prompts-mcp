@@ -38,7 +38,7 @@ import {
   describeParameterRefusal,
 } from '../../../src/mcp/tools/resource-manager/core/parameter-ownership.js';
 
-import type { ResourceType } from '../../../src/mcp/tools/resource-manager/core/types.js';
+import type { ResourceType } from '../../../src/modules/versioning/types.js';
 
 const FIXTURES_PATH = path.join(
   path.dirname(fileURLToPath(import.meta.url)),

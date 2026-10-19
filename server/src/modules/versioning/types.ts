@@ -3,18 +3,25 @@
 // VersioningConfig and DEFAULT_VERSIONING_CONFIG are defined in shared/types/ (Layer 0).
 // Import directly from shared/types/index.js — no re-export shim.
 
+import type { StoredResourceType } from '#shared/types/version-history.js';
+
 /**
  * The resource types `version_history` records.
  *
  * Exported here rather than declared privately in the service because the snapshot contract is
  * keyed on it and the tool layer implements that contract — a second local declaration would be a
- * homonym, and a filter written against the wrong one is not type-detectable.
+ * homonym, and a filter written against the wrong one is not type-detectable. `resource_manager`
+ * routes on this same union and imports it from here.
  *
  * `'category'` joined at P4.7. `version_history.resource_type` is a bare `TEXT NOT NULL` with no
  * CHECK constraint, so the column needed no schema bump and no existing row changes meaning — the
  * widening is in this type and in the contracts keyed on it.
+ *
+ * Derived from {@link StoredResourceType}, the column's whole vocabulary, minus `'config'` (owner
+ * ruling R53): config rows exist, but this union is what `resource_manager` routes on, and
+ * widening it would advertise a config write surface over MCP, where config is read-only.
  */
-export type ResourceType = 'prompt' | 'gate' | 'framework' | 'category';
+export type ResourceType = Exclude<StoredResourceType, 'config'>;
 
 /**
  * A single version entry in the history

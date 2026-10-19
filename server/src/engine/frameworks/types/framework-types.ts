@@ -139,7 +139,7 @@ export interface ProcessingGuidance {
  */
 export interface StepGuidance {
   // Framework-specific step sequence
-  stepSequence: ExecutionStep[];
+  stepSequence: FrameworkExecutionStep[];
 }
 
 /**
@@ -183,12 +183,12 @@ export interface ProcessingStep {
   };
 }
 
-export interface ExecutionStep {
+export interface FrameworkExecutionStep {
   id: string;
   name: string;
   action: string;
   frameworkPhase: string;
-  dependencies: string[];
+  dependencies?: string[];
   expected_output: string;
 }
 

@@ -9,7 +9,7 @@
 export {
   DEFAULT_EXECUTION_CONFIG,
   type ConfirmationRequired,
-  type ExecutionConfig,
+  type AutomationExecutionConfig,
   type ToolTriggerFilterResult,
   type JSONSchemaDefinition,
   type LoadedScriptTool,

@@ -22,16 +22,13 @@ export {
 export {
   PromptGuidanceService,
   createPromptGuidanceService,
+  type PromptGuidanceResult,
   type PromptGuidanceServiceConfig,
 } from './service.js';
-
-// Service-specific types (to avoid conflicts with types/index.js)
-export type { PromptGuidanceResult as ServicePromptGuidanceResult } from './service.js';
 
 // Re-export relevant types from the types system
 export type {
   PromptGuidanceConfig,
-  PromptGuidanceResult,
   SystemPromptInjectionResult,
   TemplateProcessingGuidance,
 } from '../types/index.js';

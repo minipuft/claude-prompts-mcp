@@ -58,9 +58,6 @@ export interface PromptGuidanceResult {
   };
 }
 
-// Alias for backward compatibility
-export type ServicePromptGuidanceResult = PromptGuidanceResult;
-
 /**
  * Prompt Guidance Service
  *

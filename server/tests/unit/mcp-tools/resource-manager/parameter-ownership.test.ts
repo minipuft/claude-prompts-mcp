@@ -21,10 +21,8 @@ import { resourceManagerInputSchema } from '../../../../src/mcp/tools/schemas/re
 import { MockLogger } from '../../../helpers/test-helpers.js';
 
 import type { ResourceManagerRouter } from '../../../../src/mcp/tools/resource-manager/core/router.js';
-import type {
-  ResourceManagerInput,
-  ResourceType,
-} from '../../../../src/mcp/tools/resource-manager/core/types.js';
+import type { ResourceManagerInput } from '../../../../src/mcp/tools/resource-manager/core/types.js';
+import type { ResourceType } from '../../../../src/modules/versioning/types.js';
 import type { ToolResponse } from '../../../../src/shared/types/index.js';
 
 const RESOURCE_TYPES: readonly ResourceType[] = ['prompt', 'gate', 'framework', 'category'];

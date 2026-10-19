@@ -151,7 +151,11 @@
         "contextualHints": ["Probe only"]
       },
       "execution_type_enhancements": {
-        "chain": "Carry ground facts between steps."
+        "chain": {
+          "simpleChain": {
+            "phase_one": ["Carry ground facts between steps."]
+          }
+        }
       }
     }
   },
@@ -170,7 +174,7 @@
         }
       ],
       "retry_config": {
-        "maxRetries": 1
+        "max_attempts": 1
       },
       "activation": {
         "artifacts": ["plan"]

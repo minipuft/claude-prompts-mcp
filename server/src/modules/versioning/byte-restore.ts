@@ -32,6 +32,7 @@ import { planRestore } from './restore-plan.js';
 
 import type { ObjectStoreDatabase } from '#cli-shared/object-store.js';
 import type { ResourceMutationTarget } from '#modules/resources/services/resource-mutation-transaction.js';
+import type { FileBackedResourceType, StoredResourceType } from '#shared/types/version-history.js';
 import type {
   ResourceFileSet,
   ResourceLocationResult,
@@ -44,6 +45,35 @@ import type { ResourceType } from './types.js';
 import { loadVersionTree, readResourceTree } from '#cli-shared/object-store.js';
 import { ResourceMutationTransaction } from '#modules/resources/services/resource-mutation-transaction.js';
 import { resourceFileSet } from '#shared/utils/resource-file-set.js';
+
+/**
+ * Which stored types have files a byte restore could put back. Keyed on every value the column
+ * holds, so a type added to {@link StoredResourceType} fails to compile here until someone decides.
+ * `config` is `false`: its one file is restored by `cli-shared/config-restore.ts`, and
+ * `resourceFileSet` has no entry filename for it.
+ */
+const BYTE_RESTORABLE: Readonly<Record<StoredResourceType, boolean>> = {
+  prompt: true,
+  gate: true,
+  framework: true,
+  category: true,
+  config: false,
+};
+
+/**
+ * Whether a `version_history.resource_type` value can be restored byte for byte.
+ *
+ * The narrowing a caller holding a wider union needs before {@link resolveByteRestore}, in place of
+ * a cast: `cpm`'s `HistoryResourceType` carries `config`, which this module cannot enumerate.
+ */
+export function isByteRestorable(type: StoredResourceType): type is FileBackedResourceType {
+  return BYTE_RESTORABLE[type];
+}
+
+/** The `projection-only` reason a type {@link isByteRestorable} refuses is reported with. */
+export function notByteRestorableReason(type: StoredResourceType): string {
+  return `a ${type} has no resource file set, so it cannot be restored byte for byte`;
+}
 
 /** Whether a version's files can be put back byte for byte, and if so, what doing it would do. */
 export type ByteRestoreAvailability =

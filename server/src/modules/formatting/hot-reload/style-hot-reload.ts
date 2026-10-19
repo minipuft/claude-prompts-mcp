@@ -8,13 +8,8 @@
  * @see GateHotReloadCoordinator for the pattern this follows
  */
 
-import type { Logger } from '#shared/types/index.js';
+import type { FileChangeOperation, Logger } from '#shared/types/index.js';
 import type { StyleDefinitionLoader, StyleDefinitionYaml } from '../core/index.js';
-
-/**
- * File change operation types for hot reload events
- */
-export type FileChangeOperation = 'added' | 'modified' | 'removed';
 
 /**
  * Hot reload event for styles
