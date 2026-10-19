@@ -16,7 +16,6 @@ import {
   EnhancedLogger,
   flushLogger,
 } from '../../../../src/infra/logging/index.js';
-import { TransportType } from '../../../../src/shared/types/index.js';
 
 const LINE_COUNT = 200;
 
@@ -34,7 +33,7 @@ describe('EnhancedLogger file writes', () => {
   });
 
   it('holds every line logged before flush() resolves, in call order', async () => {
-    const logger = new EnhancedLogger({ logFile, transport: TransportType.STDIO });
+    const logger = new EnhancedLogger({ logFile, transport: 'stdio' });
     await logger.initLogFile();
 
     for (let i = 0; i < LINE_COUNT; i++) {
@@ -54,7 +53,7 @@ describe('EnhancedLogger file writes', () => {
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
     try {
       const missing = path.join(dir, 'absent-dir', 'mcp-server.log');
-      const logger = new EnhancedLogger({ logFile: missing, transport: TransportType.STDIO });
+      const logger = new EnhancedLogger({ logFile: missing, transport: 'stdio' });
       logger.info('lost');
       await logger.flush();
 
@@ -67,7 +66,7 @@ describe('EnhancedLogger file writes', () => {
   });
 
   it('formats a line when it is logged, not when its write runs', async () => {
-    const logger = new EnhancedLogger({ logFile, transport: TransportType.STDIO });
+    const logger = new EnhancedLogger({ logFile, transport: 'stdio' });
     await logger.initLogFile();
     const state = { phase: 'before' };
 
@@ -114,7 +113,7 @@ describe('EnhancedLogger write backlog', () => {
       await import('../../../../src/infra/logging/index.js');
 
     const logFile = path.join(dir, 'mcp-server.log');
-    const logger = new CountedLogger({ logFile, transport: TransportType.STDIO });
+    const logger = new CountedLogger({ logFile, transport: 'stdio' });
     await logger.initLogFile();
 
     for (let i = 0; i < BURST_LINES; i++) {
@@ -135,7 +134,7 @@ describe('EnhancedLogger write backlog', () => {
 
 describe('flushLogger', () => {
   it('stops waiting at the timeout when a write never settles', async () => {
-    const logger = new EnhancedLogger({ logFile: '/dev/null', transport: TransportType.STDIO });
+    const logger = new EnhancedLogger({ logFile: '/dev/null', transport: 'stdio' });
     jest.spyOn(logger, 'flush').mockReturnValue(new Promise<void>(() => undefined));
 
     const started = Date.now();

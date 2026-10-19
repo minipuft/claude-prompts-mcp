@@ -226,10 +226,6 @@ export enum LogLevel {
   ERROR = 'ERROR',
 }
 
-export enum TransportType {
-  STDIO = 'stdio',
-}
-
 export enum StepStatus {
   PENDING = 'pending',
   RUNNING = 'running',
