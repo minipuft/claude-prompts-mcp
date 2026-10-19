@@ -15,8 +15,10 @@ tags: []
 - **R4 (argument context)** Rename to `ArgumentContext`. Drop `conversationHistory` (written `[]`, never read), `systemContext` (written `{}`, never read) and `userSession` (never written, never read). Keep `environmentVars` and `promptDefaults`, which are read once each. Measured with `rg` on main `728bb169`; the worker re-measures before dropping.
 - **R5 (docs SSOT)** `sqlite-persistence.md` §The Map is the single table map. The overview's state section describes three lifetimes and links to the Map rather than repeating table names, because a restated table list is exactly what drifted (four retired table names plus `runtime-state/*.json`). The validator guards the Map, not the overview.
 - **R6 (homonym ratchet)** Predicate: `^export (declare )?(interface|type|class|enum|abstract class) <Name>` in `server/src/**/*.ts`. A name with ≥2 definitions is a homonym. The baseline is the sorted NAME list, so a new homonym fails even when another one is removed in the same change. A baseline entry that is no longer duplicated also fails, which forces the baseline down. 38 names on main `728bb169`; `ExecutionContext` leaves after rows 1–2.
-- **R7 (branch mode)** `branch_mode: shared-tree` in worktree `claude-prompts-mcp-request-context`, branch `refactor/prompt-request-context`. Each worker commits only the paths its row names. Rows 3 and 5 may run concurrently (disjoint paths); all other rows run serially.
+- **R7 (branch mode)** `branch_mode: shared-tree` (workers commit their explicit paths on the initiative branch, per DEV-T1-3) in worktree `claude-prompts-mcp-request-context`, branch `refactor/prompt-request-context`. Each worker commits only the paths its row names. Rows 3 and 5 may run concurrently (disjoint paths); all other rows run serially.
 - **R8 (baselines)** When a row moves an eslint/knip/typecheck-tests ratchet baseline (a renamed file re-keys entries; a deleted dead export lowers knip), the worker regenerates only the affected entries and reports the authored count against the measured one.
+
+- **R9 (max-lines, after row 2)** The longer name wraps one signature in `gate-enhancement-service.ts` and takes the file from 999 to 1002 lines, over the 1000 max-lines limit (`lint:ratchet` warnings 1 → 2). Ruled: move a cohesive responsibility out (new row 2b). Rejected: raising the ratchet baseline, because the ratchet exists to stop that; and compacting lines, because that games the size measure while the file keeps every responsibility it had. It serves this slice's objective (the rename cannot land without it), which satisfies R192.
 
 ## Measured inputs (main `728bb169`, 2026-10-18)
 
@@ -27,8 +29,15 @@ tags: []
 
 ## Deviations
 
+- **DEV-T1-2** Row 2 also renamed the class's test file (`execution-context.test.ts` → `prompt-request-context.test.ts`) and moved its typecheck-tests baseline key (332 → 332). Accepted: the brief's "its file" reads naturally as covering the test named after it.
+- **DEV-T1-3** R7 says shared-tree with the planner committing, but the briefs tell workers to commit their own paths. The briefs win: R7 now reads "workers commit explicit paths on the initiative branch".
+
 - **DEV-T1-1** Row 1 committed a shorter subject than briefed: the brief's was 106 characters, over commitlint `header-max-length` 100. Briefs now check subject length before sending.
 
 ## Findings
+
+- Row 2: ts-morph `SourceFile.move` under NodeNext rewrote 84 import specifiers without their `.js` extension (33 typecheck errors). The worker restored them with a count-checked script. Any future ts-morph move in this repo needs `rg` over the rewritten specifiers afterwards.
+- Row 2: `validate:category-enumerations` reads `git ls-files`, so an unstaged move reads as ENOENT on the old path. Stage moves before `validate:all`.
+- Row 2: the drift validator's stale regex fails loudly ("resolveFrameworkToken not found"), not silently as the plan's measured inputs claimed. The worker showed it with a positive control.
 
 - Row 1: no ratchet moved. Knip never counted the deleted interfaces, so knip stayed at 1049.
