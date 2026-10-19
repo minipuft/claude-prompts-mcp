@@ -1,0 +1,30 @@
+{
+  "id": "p004",
+  "kind": "change",
+  "from": "director",
+  "date": "2026-10-18",
+  "anchor": {
+    "beat": "arrival"
+  },
+  "title": "A direction vocabulary: one skill, referenced by the prompts, enforced by a gate",
+  "text": "Stylistic intent is controlled by making every property value, ruling and interview question carry a word from one controlled vocabulary of cinematography and direction, and by recording which reference led to which change. The vocabulary is a skill (project-agnostic, like the animation chains), kept as a machine-readable JSON with a generated reference table; the prompts reference the skill and never restate it; a gate probe refuses a ruling, proposal, pose sheet facet or material value whose intent word is outside the vocabulary. The interview and the rulings take one fixed form each.",
+  "references": [
+    "samurai-jack-holds",
+    "elmo-world"
+  ],
+  "before": {
+    "note": "rulings are free prose (D35-D95 use mixed words: 'reverent', 'floods', 'Turrell blue', 'gentle gag'); interview questions are written fresh each round; the board's facets are a vocabulary for references only; material values would be bare numbers with no intent attached; a change's reason lives in the commit message"
+  },
+  "after": {
+    "skill": "~/.claude/skills/animation-direction (exported to clients through skills-sync): SKILL.md = the interview protocol and the ruling form; references/vocabulary.json = the controlled terms by domain (shot size, angle, move, staging, timing, acting register, light role and quality, material intent, transition), each with a one-line definition and the lane or property it governs; references/vocabulary.md generated from the JSON",
+    "project": "media/showcase/v3/vocabulary-overrides.json: the film's own words (register names, the hue-pair names, the worlds) layered over the skill's terms, the way card-schema.json overrides the inspiration facets",
+    "prompts": "animation_* and showcase_* system messages gain one line: 'Use the animation-direction vocabulary (skill reference vocabulary.json); an intent word outside it is refused.' No prompt restates the terms",
+    "gate": "animation-vocabulary (shell_verify probe-vocabulary.py with a control): reads proposals, rulings.json, pose sheet facets and materials.json; every intent word resolves; a planted word 'vibey' is refused",
+    "rulingForm": "D<N>, <who>, <date>: <verb> <object> <value> because <intent word> (ref <card id>) (closes p<NNN>) — parsed by compile-bible into rulings.json fields verb/object/value/intent/ref",
+    "interviewForm": "one question per turn: situation (what the page shows at a frame) · the options as vocabulary words · the default · what lane or property it changes · the reference card; the director files it as a proposal of kind owner-ask and the owner rules it on the page",
+    "materials": "every property value carries an intent word from the material domain (snap, float, weighted, drape, crisp, soft) and a reference; presets per acting register (warm-playful, reverent, focused) so a register ruling sets a whole family of values; the bench prints the intent word beside the measured curve",
+    "ledger": "eagle_board.py apply already records reference -> contract change; the same ledger entry is written for a material or ruling change, so 'what led to what' is one query"
+  },
+  "status": "open",
+  "ruling": null
+}
