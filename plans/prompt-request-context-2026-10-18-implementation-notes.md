@@ -38,6 +38,9 @@ tags: []
 
 ## Findings
 
+- Row 2b: `StepWalkResolutionSettings` now declares the four walk settings that `ChainStepEnhancementInput` and `internal-state.ts` `chainWalkSettings` also declare (three declarations, kept in agreement only by structural typing). Not cut: outside the objective.
+- Row 2b: measure max-lines with ESLint's own count (`wc -l` says 1550 where ESLint says 1002): `npx eslint --rule '{"max-lines":["warn",{"max":1,"skipBlankLines":true,"skipComments":true}]}' <file>`.
+
 - Row 3: the old anti-pattern examples called `chainSessionStore.isRetryLimitExceeded`, which does not exist, and recommended `setPendingGateReview`, which is `@deprecated`. Both are replaced. Nothing checks method names in doc snippets; not cut as a row (outside this slice's objective, R192).
 - Row 3 follow-up, measured by the planner: after the row, retired table names appear in docs and handbooks only as history (`sqlite-persistence.md:14`). `CLAUDE.md` §Runtime State is another hand-kept table list. Row 4 also guards that list and the retired names.
 
