@@ -13,7 +13,7 @@ import { indexerResourceRoots } from './resource-roots.js';
 
 import {
   locateSkillsSyncPackageRoot,
-  type ResourceType,
+  type SkillsSyncResourceType,
   type SkillsSyncPaths,
 } from '#modules/skills-sync/service.js';
 
@@ -31,7 +31,7 @@ export function resolveSkillsSyncPaths(
   })
 ): SkillsSyncPaths {
   const indexed = indexerResourceRoots(pathResolver);
-  const sourceRootsOf = (type: ResourceType): readonly string[] => {
+  const sourceRootsOf = (type: SkillsSyncResourceType): readonly string[] => {
     const roots = indexed[type];
     if (roots === undefined) {
       throw new Error(`No ${type} source roots were resolved from ${pathResolver.getWorkspace()}`);

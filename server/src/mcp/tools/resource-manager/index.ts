@@ -7,7 +7,6 @@
  */
 export { ResourceManagerRouter, createResourceManagerRouter } from './core/router.js';
 export type {
-  ResourceType,
   ResourceAction,
   ResourceManagerInput,
   ResourceManagerDependencies,

@@ -1,8 +1,9 @@
-import { formatValidationIssues, type ResourceValidationResult } from '@cli-shared/index.js';
+import { formatValidationIssues } from "@cli-shared/index.js";
+import type { ResourceVerificationResult } from "@modules/resources/services/resource-verification-service.js";
 
-import { output, icons } from './output.js';
+import { output, icons } from "./output.js";
 
-function toIssueLines(result: ResourceValidationResult): string[] {
+function toIssueLines(result: ResourceVerificationResult): string[] {
   const lines: string[] = [];
   for (const issue of result.errors) {
     lines.push(`- error [${issue.code}] ${issue.path}: ${issue.message}`);
@@ -14,7 +15,7 @@ function toIssueLines(result: ResourceValidationResult): string[] {
 }
 
 export function printValidationFailure(
-  validation: ResourceValidationResult,
+  validation: ResourceVerificationResult,
   options: {
     json: boolean;
     action: string;
@@ -44,7 +45,7 @@ export function printValidationFailure(
     console.error(`  ${line}`);
   }
   if (options.rolledBack) {
-    console.error('  rollback: previous files restored');
+    console.error("  rollback: previous files restored");
   }
 }
 
@@ -52,11 +53,16 @@ export function printValidationFailure(
  * A successful mutation's warnings, formatted the way `cpm validate` formats an entry's issues
  * (R124). A mutation run with `--no-validate` carries no verdict and so reports none.
  */
-export function mutationWarnings(validation: ResourceValidationResult | undefined): string[] {
-  return validation === undefined ? [] : formatValidationIssues(validation.warnings);
+export function mutationWarnings(
+  validation: ResourceVerificationResult | undefined,
+): string[] {
+  return validation === undefined
+    ? []
+    : formatValidationIssues(validation.warnings);
 }
 
 /** Print a successful mutation's warnings in the lines `cpm validate` prints an entry's warnings. */
 export function printMutationWarnings(warnings: string[]): void {
-  for (const warning of warnings) console.error(`    ${icons.warn()}  ${warning}`);
+  for (const warning of warnings)
+    console.error(`    ${icons.warn()}  ${warning}`);
 }

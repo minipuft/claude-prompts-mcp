@@ -27,10 +27,10 @@ import { resolveTenantId } from '../../src/cli-shared/version-history-scope.js';
 import { resolveStateDbPath } from '../../src/cli-shared/version-history-location.js';
 
 import type { LoadedTree } from '../../src/cli-shared/object-store.js';
-// TWO `ResourceType`s exist and they are not the same union: `cli-shared`'s adds `style` and
+// `HistoryResourceType` is not versioning's `ResourceType`: it adds `style` and
 // `config`, which `version_history` holds rows for and the resource tools do not author. The
 // row writer's union is the one to take here — the retired export took it too.
-import type { ResourceType } from '../../src/cli-shared/version-history-types.js';
+import type { HistoryResourceType } from '../../src/cli-shared/version-history-types.js';
 import type { SaveVersionResult } from '../../src/modules/versioning/types.js';
 
 /** The same options the retired `cli-shared` export took, so call sites moved unchanged. */
@@ -51,7 +51,7 @@ export interface TestSaveVersionOptions {
  */
 export function saveVersion(
   resourceDir: string,
-  resourceType: ResourceType,
+  resourceType: HistoryResourceType,
   resourceId: string,
   snapshot: Record<string, unknown>,
   options?: TestSaveVersionOptions

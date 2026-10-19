@@ -27,7 +27,7 @@ import type {
   ToolDetectionMatch,
   ToolMatchReason,
   JSONSchemaDefinition,
-  ExecutionConfig,
+  AutomationExecutionConfig,
 } from '../types.js';
 
 import { extractExplicitToolRequests } from '#shared/utils/explicit-tool-requests.js';
@@ -136,7 +136,7 @@ export class ToolDetectionService implements ToolDetectionServicePort {
   /**
    * Get execution config with defaults applied.
    */
-  private getExecutionConfig(tool: LoadedScriptTool): ExecutionConfig {
+  private getExecutionConfig(tool: LoadedScriptTool): AutomationExecutionConfig {
     return {
       ...DEFAULT_EXECUTION_CONFIG,
       ...tool.execution,
@@ -160,7 +160,7 @@ export class ToolDetectionService implements ToolDetectionServicePort {
     _input: string,
     args: Record<string, unknown>,
     tool: LoadedScriptTool,
-    execution: ExecutionConfig,
+    execution: AutomationExecutionConfig,
     isExplicit: boolean
   ): ToolDetectionMatch | null {
     const { trigger, strict } = execution;

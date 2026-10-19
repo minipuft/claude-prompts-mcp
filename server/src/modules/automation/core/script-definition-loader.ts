@@ -42,7 +42,7 @@ import type {
   ScriptToolLoadFailure,
   ScriptToolLoadReport,
   JSONSchemaDefinition,
-  ExecutionConfig,
+  AutomationExecutionConfig,
 } from '../types.js';
 
 import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
@@ -462,7 +462,9 @@ export class ScriptToolDefinitionLoader {
    * @param yamlConfig - Execution config from YAML (may be undefined or partial)
    * @returns Complete execution config with defaults
    */
-  private resolveExecutionConfig(yamlConfig: ScriptToolYaml['execution']): ExecutionConfig {
+  private resolveExecutionConfig(
+    yamlConfig: ScriptToolYaml['execution']
+  ): AutomationExecutionConfig {
     if (!yamlConfig) {
       return { ...DEFAULT_EXECUTION_CONFIG };
     }
@@ -470,8 +472,8 @@ export class ScriptToolDefinitionLoader {
     // The Zod schema transforms 'parameter_match' -> 'schema_match' and logs deprecation warning
     // So yamlConfig.trigger is already transformed if it was 'parameter_match'
     let trigger = yamlConfig.trigger ?? DEFAULT_EXECUTION_CONFIG.trigger;
-    // Final fallback is `true`, not `false`. `ExecutionConfig.confirm` is optional, so this
-    // branch is reachable the moment `DEFAULT_EXECUTION_CONFIG.confirm` is left unset -- and
+    // Final fallback is `true`, not `false`. `AutomationExecutionConfig.confirm` is optional, so
+    // this branch is reachable the moment `DEFAULT_EXECUTION_CONFIG.confirm` is left unset -- and
     // it used to resolve to `false`, silently contradicting that constant's own "Confirmation
     // is required by default (secure by default)" and the schema's `.default(true)`. A script
     // tool runs an author-supplied file through an interpreter, so an unspecified confirmation
@@ -490,7 +492,7 @@ export class ScriptToolDefinitionLoader {
     }
 
     // Build config with new schema (no mode field)
-    const config: ExecutionConfig = {
+    const config: AutomationExecutionConfig = {
       trigger,
       confirm,
       strict: yamlConfig.strict ?? DEFAULT_EXECUTION_CONFIG.strict,

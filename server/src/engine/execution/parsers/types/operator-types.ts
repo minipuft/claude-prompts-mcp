@@ -8,11 +8,11 @@ import type { ExecutionModifiers } from '../../types.js';
  */
 export interface ChainOperator {
   type: 'chain';
-  steps: ChainStep[];
+  steps: SymbolicChainStep[];
   contextPropagation: 'automatic' | 'manual';
 }
 
-export interface ChainStep {
+export interface SymbolicChainStep {
   promptId: string;
   args: string;
   position: number;

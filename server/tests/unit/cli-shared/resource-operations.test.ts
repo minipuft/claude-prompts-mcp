@@ -16,7 +16,7 @@ import {
 } from '../../../src/cli-shared/resource-operations.js';
 import { loadHistory } from '../../../src/cli-shared/version-history.js';
 import { saveVersion } from '../../helpers/version-history-writer.js';
-import type { ResourceValidationResult } from '../../../src/cli-shared/resource-validation.js';
+import type { ResourceVerificationResult } from '../../../src/modules/resources/services/resource-verification-service.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';
 
 describe('resource-operations', () => {
@@ -66,7 +66,7 @@ describe('resource-operations', () => {
         ].join('\n')
       );
 
-      const forcedFailure: ResourceValidationResult = {
+      const forcedFailure: ResourceVerificationResult = {
         valid: false,
         resourceType: 'styles',
         resourceId: 'style-b',

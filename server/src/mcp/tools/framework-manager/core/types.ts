@@ -9,7 +9,10 @@ import type {
 } from '#engine/frameworks/definitions/framework-schema.js';
 import type { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import type { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
-import type { ExecutionStep, ProcessingStep } from '#engine/frameworks/types/framework-types.js';
+import type {
+  FrameworkExecutionStep,
+  ProcessingStep,
+} from '#engine/frameworks/types/framework-types.js';
 import type { ExecutionTypeEnhancements } from '#engine/frameworks/utils/step-generator.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
@@ -139,7 +142,7 @@ export interface FrameworkManagerInput {
 
   // Advanced phases fields
   processing_steps?: ProcessingStep[];
-  execution_steps?: ExecutionStep[];
+  execution_steps?: FrameworkExecutionStep[];
   execution_type_enhancements?: ExecutionTypeEnhancements;
   template_enhancements?: TemplateEnhancements;
   execution_flow?: ExecutionFlow;
@@ -224,7 +227,7 @@ export interface FrameworkCreationData {
 
   // Advanced phases fields
   processing_steps?: ProcessingStep[];
-  execution_steps?: ExecutionStep[];
+  execution_steps?: FrameworkExecutionStep[];
   execution_type_enhancements?: ExecutionTypeEnhancements;
   template_enhancements?: TemplateEnhancements;
   execution_flow?: ExecutionFlow;

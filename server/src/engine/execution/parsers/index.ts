@@ -52,7 +52,7 @@ export type { PromptData } from '#shared/types/index.js';
 export type { PromptArgument } from '#shared/types/index.js';
 export type { ConvertedPrompt } from '../types.js';
 
-export type { ValidationResult, ValidationError, ValidationWarning } from '../types.js';
+export type { ValidationResult, ValidationErrorDetail, ValidationWarning } from '../types.js';
 
 import { ArgumentParser, createArgumentParser } from './argument-parser.js';
 import { UnifiedCommandParser, createUnifiedCommandParser } from './command-parser.js';

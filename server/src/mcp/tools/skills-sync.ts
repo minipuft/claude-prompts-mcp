@@ -10,7 +10,7 @@ import {
   getSkillsSyncConfigPath,
   listSupportedSkillsSyncClients,
   runSkillsSyncCommand,
-  type ResourceType,
+  type SkillsSyncResourceType,
   type SkillsSyncOutput,
   type SkillsSyncPaths,
   type SkillsSyncRunReport,
@@ -35,7 +35,7 @@ export interface SkillsSyncInput {
   operation: SkillsSyncOperation;
   client?: string;
   scope?: 'user' | 'project';
-  resource_type?: ResourceType;
+  resource_type?: SkillsSyncResourceType;
   id?: string;
   prune?: boolean;
   output?: string;

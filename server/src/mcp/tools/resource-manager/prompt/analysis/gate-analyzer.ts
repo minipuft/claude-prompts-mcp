@@ -8,7 +8,7 @@
 
 import { PromptAnalyzer } from './prompt-analyzer.js';
 
-import type { ConvertedPrompt, TemporaryGateDefinition } from '#engine/execution/types.js';
+import type { ConvertedPrompt, TemporaryGateDraft } from '#engine/execution/types.js';
 import type { Logger } from '#shared/types/index.js';
 import type { PromptResourceDependencies } from '../core/types.js';
 
@@ -21,7 +21,7 @@ export interface GateAnalysisResult {
   /** Recommended persistent gates */
   recommendedGates: string[];
   /** Suggested temporary gates */
-  suggestedTemporaryGates: TemporaryGateDefinition[];
+  suggestedTemporaryGates: TemporaryGateDraft[];
   /** Analysis reasoning */
   reasoning: string[];
   /** Confidence score (0.0-1.0) */
@@ -31,7 +31,7 @@ export interface GateAnalysisResult {
     include?: string[];
     exclude?: string[];
     framework_gates?: boolean;
-    inline_gate_definitions?: TemporaryGateDefinition[];
+    inline_gate_definitions?: TemporaryGateDraft[];
   };
 }
 
@@ -239,8 +239,8 @@ export class GateAnalyzer {
       complexity: 'low' | 'medium' | 'high';
     },
     contentAnalysis: any
-  ): TemporaryGateDefinition[] {
-    const temporaryGates: TemporaryGateDefinition[] = [];
+  ): TemporaryGateDraft[] {
+    const temporaryGates: TemporaryGateDraft[] = [];
 
     // Data accuracy temporary gate
     if (contentAnalysis.hasDataRequirements) {
@@ -310,7 +310,7 @@ export class GateAnalyzer {
     },
     contentAnalysis: any,
     recommendedGates: string[],
-    temporaryGates: TemporaryGateDefinition[]
+    temporaryGates: TemporaryGateDraft[]
   ): string[] {
     const reasoning: string[] = [];
 
@@ -346,7 +346,7 @@ export class GateAnalyzer {
    */
   private generateGateConfigurationPreview(
     recommendedGates: string[],
-    temporaryGates: TemporaryGateDefinition[]
+    temporaryGates: TemporaryGateDraft[]
   ): any {
     const preview: any = {};
 

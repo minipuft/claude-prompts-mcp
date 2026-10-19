@@ -12,7 +12,7 @@ import type {
   ProcessingGuidance,
   StepGuidance,
   ProcessingStep,
-  ExecutionStep,
+  FrameworkExecutionStep,
 } from '../types/framework-types.js';
 
 /**
@@ -103,11 +103,11 @@ export function generateProcessingSteps(steps: ProcessingStepDefinition[]): Proc
 }
 
 /**
- * Converts execution step definitions to ExecutionStep format
+ * Converts execution step definitions to FrameworkExecutionStep format
  * @param steps - Execution step definitions from YAML
- * @returns Array of ExecutionStep objects
+ * @returns Array of FrameworkExecutionStep objects
  */
-export function generateExecutionSteps(steps: ExecutionStepDefinition[]): ExecutionStep[] {
+export function generateExecutionSteps(steps: ExecutionStepDefinition[]): FrameworkExecutionStep[] {
   return steps.map((step) => ({
     id: step.id,
     name: step.name,

@@ -75,7 +75,7 @@ export interface ConvertedPrompt {
     include?: string[];
     exclude?: string[];
     framework_gates?: boolean;
-    inline_gate_definitions?: TemporaryGateDefinition[];
+    inline_gate_definitions?: TemporaryGateDraft[];
   };
   /**
    * Prompt-level injection control, carried from the prompt's own YAML. Read by the injection
@@ -246,7 +246,7 @@ export interface TemplateContext {
 /**
  * Validation error detail structure
  */
-export interface ValidationError {
+export interface ValidationErrorDetail {
   field: string;
   message: string;
   code: string;
@@ -273,7 +273,7 @@ export interface ValidationResult {
   /** Alternative field name for gate validation compatibility */
   passed?: boolean;
   /** Detailed validation errors */
-  errors?: ValidationError[];
+  errors?: ValidationErrorDetail[];
   /** Validation warnings */
   warnings?: ValidationWarning[];
   /** Sanitized arguments for simple validation */
@@ -321,9 +321,11 @@ export interface ValidationCheck {
 }
 
 /**
- * Temporary gate definition for enhanced configuration
+ * A temporary gate before registration: `id` is optional and there is no `created_at` yet.
+ * The stored record the registry keeps is `TemporaryGateDefinition`
+ * (`gates/core/temporary-gate-registry.ts`).
  */
-export interface TemporaryGateDefinition {
+export interface TemporaryGateDraft {
   /** Unique identifier (will be auto-generated if not provided) */
   id?: string;
   /** Human-readable name */

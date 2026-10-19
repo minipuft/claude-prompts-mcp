@@ -142,7 +142,6 @@ export {
   formatValidationIssues,
   type ResourceValidationType,
   type ResourceValidationIssue,
-  type ResourceValidationResult,
 } from './resource-validation.js';
 
 // ── Resource operations (structural mutations) ──────────────────────────────

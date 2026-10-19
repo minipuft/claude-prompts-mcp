@@ -148,11 +148,11 @@ export interface SkillsSyncPaths {
   /** The `config.jsonc`/`config.json` the server reads: `--config` or `MCP_CONFIG_PATH`, else the workspace's, else the package's. */
   serverConfigPath: string;
   /** Every directory that contributes definitions of a type, lowest precedence first. */
-  sourceRoots: Readonly<Record<ResourceType, readonly string[]>>;
+  sourceRoots: Readonly<Record<SkillsSyncResourceType, readonly string[]>>;
   /** The directory a new resource of a type is written to. */
-  writeRoots: Readonly<Record<ResourceType, string>>;
+  writeRoots: Readonly<Record<SkillsSyncResourceType, string>>;
   /** The package's own directory for a type, which a package update replaces. */
-  bundledRoots: Readonly<Record<ResourceType, string>>;
+  bundledRoots: Readonly<Record<SkillsSyncResourceType, string>>;
 }
 
 /**
@@ -208,7 +208,7 @@ async function resolveHarnessCovers(paths: SkillsSyncPaths): Promise<readonly st
 
 // ─── Section 1: Types ──────────────────────────────────────────────────────
 
-export type ResourceType = 'prompt' | 'gate' | 'framework' | 'style';
+export type SkillsSyncResourceType = 'prompt' | 'gate' | 'framework' | 'style';
 
 interface IRArgument {
   name: string;
@@ -272,7 +272,7 @@ export interface SkillIR {
   id: string;
   name: string;
   description: string;
-  resourceType: ResourceType;
+  resourceType: SkillsSyncResourceType;
   category: string | null;
   enabled: boolean;
 
@@ -430,7 +430,7 @@ interface StyleYaml {
 }
 
 /** The resource types whose guidance is read from their own definition, not from a prompt message. */
-type GuidanceBearingType = Exclude<ResourceType, 'prompt'>;
+type GuidanceBearingType = Exclude<SkillsSyncResourceType, 'prompt'>;
 
 /** The `framework.yaml` field a framework's guidance is served from. */
 const FRAMEWORK_GUIDANCE_FIELD = 'systemPromptGuidance' as const;
@@ -469,7 +469,7 @@ interface OutputFile {
 
 interface SyncManifestEntry {
   resourceId: string;
-  resourceType: ResourceType;
+  resourceType: SkillsSyncResourceType;
   sourceHash: string;
   outputHash: string;
   outputFiles: string[];
@@ -483,7 +483,7 @@ export interface SkillsSyncOptions {
   command: string;
   client?: string;
   scope?: 'user' | 'project';
-  resourceType?: ResourceType;
+  resourceType?: SkillsSyncResourceType;
   id?: string;
   prune?: boolean;
   output?: string;
@@ -1320,7 +1320,7 @@ async function loadStyleIR(styleDir: string): Promise<SkillIR> {
 }
 
 interface LoadFilters {
-  resourceType?: ResourceType;
+  resourceType?: SkillsSyncResourceType;
   id?: string;
 }
 
@@ -1377,7 +1377,7 @@ async function collectPromptDirs(
  * report, so a run (and its `--json` output) cannot read as clean while a resource was skipped.
  */
 function recordSkippedResource(
-  kind: ResourceType,
+  kind: SkillsSyncResourceType,
   id: string,
   error: unknown,
   output: SkillsSyncOutput | undefined,
@@ -3197,7 +3197,7 @@ function loadManifestEntries(
   for (const row of rows) {
     map.set(row.resource_key, {
       resourceId: row.resource_id,
-      resourceType: row.resource_type as ResourceType,
+      resourceType: row.resource_type as SkillsSyncResourceType,
       sourceHash: row.source_hash,
       outputHash: row.output_hash,
       outputFiles: JSON.parse(row.output_files) as string[],
@@ -4935,7 +4935,7 @@ export function parseSkillsSyncArgs(argv: string[]): SkillsSyncOptions {
       command: positionals[0] ?? 'help',
       client: values.client,
       scope: values.scope as 'user' | 'project' | undefined,
-      resourceType: values['resource-type'] as ResourceType | undefined,
+      resourceType: values['resource-type'] as SkillsSyncResourceType | undefined,
       id: values.id,
       prune: values['no-prune'] ? false : values.prune,
       output: values.output,
