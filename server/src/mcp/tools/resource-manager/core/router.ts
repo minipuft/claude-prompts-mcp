@@ -335,25 +335,7 @@ export class ResourceManagerRouter {
     if (args.activation) {
       gateArgs.activation = args.activation;
     }
-    if (args.retry_config !== undefined) {
-      const retryConfig: NonNullable<GateManagerInput['retry_config']> = {};
-
-      if (args.retry_config.max_attempts !== undefined) {
-        retryConfig.max_attempts = args.retry_config.max_attempts;
-      }
-
-      if (args.retry_config.improvement_hints !== undefined) {
-        const improvementHints = args.retry_config.improvement_hints;
-        retryConfig.improvement_hints =
-          typeof improvementHints === 'boolean' ? improvementHints : improvementHints.length > 0;
-      }
-
-      if (args.retry_config.preserve_context !== undefined) {
-        retryConfig.preserve_context = args.retry_config.preserve_context;
-      }
-
-      gateArgs.retry_config = retryConfig;
-    }
+    if (args.retry_config !== undefined) gateArgs.retry_config = args.retry_config;
     if (args.enabled_only !== undefined) {
       gateArgs.enabled_only = args.enabled_only;
     }
@@ -411,16 +393,13 @@ export class ResourceManagerRouter {
       frameworkArgs.system_prompt_guidance = args.system_prompt_guidance;
     }
     if (args.phases !== undefined) {
-      const normalizedPhases: NonNullable<FrameworkManagerInput['phases']> = (args.phases ?? [])
-        .filter((phase) => Boolean(phase?.id && phase?.name))
-        .map((phase) => ({
-          id: phase.id,
-          name: phase.name,
-          description: phase.description ?? '',
-          ...(phase.prompts ? { prompts: phase.prompts } : {}),
-        }));
-
-      frameworkArgs.phases = normalizedPhases;
+      // The schema requires `id` and `name`; an omitted description is written as ''.
+      frameworkArgs.phases = args.phases.map((phase) => ({
+        id: phase.id,
+        name: phase.name,
+        description: phase.description ?? '',
+        ...(phase.prompts !== undefined ? { prompts: phase.prompts } : {}),
+      }));
     }
     if (args.gates) {
       frameworkArgs.gates = args.gates;
@@ -428,7 +407,7 @@ export class ResourceManagerRouter {
     if (args.tool_descriptions !== undefined) {
       const normalizedDescriptions: NonNullable<FrameworkManagerInput['tool_descriptions']> = {};
 
-      for (const [toolId, value] of Object.entries(args.tool_descriptions ?? {})) {
+      for (const [toolId, value] of Object.entries(args.tool_descriptions)) {
         if (typeof value === 'string') {
           normalizedDescriptions[toolId] = { description: value };
           continue;

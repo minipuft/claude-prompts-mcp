@@ -935,5 +935,24 @@ export const resourceManagerInputSchema = z
   })
   .passthrough();
 
-/** Inferred input type */
-export type ResourceManagerInput = z.infer<typeof resourceManagerInputSchema>;
+/**
+ * The declared keys of an object type, without the `[key: string]: unknown` index signature that
+ * `z.infer` adds for a `.passthrough()` object. Kept, that signature turns every `Omit<…>` over the
+ * type into `{ [key: string]: unknown }` and every declared field it omits into a guess.
+ */
+type DeclaredFields<T> = {
+  [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K];
+};
+
+/**
+ * A parsed `resource_manager` call: the type the router, its handlers and processors receive.
+ *
+ * Both entry points parse before the router sees a call (the MCP SDK for a registered call,
+ * `getResourceManagerHandler` for the in-process and HTTP callers), so this is the only shape
+ * that reaches it. The undeclared keys `.passthrough()` lets through are refused by name before
+ * dispatch (`describeParameterRefusal`), so no reader is meant to see one.
+ */
+export type ResourceManagerInput = DeclaredFields<z.infer<typeof resourceManagerInputSchema>>;
+
+/** A `resource_manager` call as a caller sends it, before the schema parses it. */
+export type UnparsedResourceManagerInput = z.input<typeof resourceManagerInputSchema>;

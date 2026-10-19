@@ -37,7 +37,7 @@ import {
   type PromptEngineInput,
   type SystemControlInput,
   type ToolSurfaceState,
-  type ResourceManagerInput as ResourceManagerSchemaInput,
+  type ResourceManagerInput,
 } from './schemas/index.js';
 import { deriveStructuredMessage } from './shared/structured-message.js';
 import {
@@ -68,7 +68,6 @@ import type {
 } from '#shared/types/index.js';
 import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
 import type { FrameworkManagerDependencies } from './framework-manager/core/types.js';
-import type { ResourceManagerInput } from './resource-manager/core/types.js';
 import type { Implementation } from '@modelcontextprotocol/server';
 
 import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
@@ -876,7 +875,7 @@ export class McpToolRouter {
           isError: true,
         };
       }
-      return router.handleAction(parsed.data as ResourceManagerInput, context);
+      return router.handleAction(parsed.data, context);
     };
   }
 
@@ -1226,7 +1225,7 @@ export class McpToolRouter {
             openWorldHint: false,
           },
         },
-        withRequestNotifications(async (args: ResourceManagerSchemaInput, extra: unknown) => {
+        withRequestNotifications(async (args: ResourceManagerInput, extra: unknown) => {
           try {
             const router = this.resourceManagerRouter;
             if (router == null) {
@@ -1235,10 +1234,10 @@ export class McpToolRouter {
                 isError: true,
               };
             }
-            // Cast to ResourceManagerInput — the schema is `.passthrough()` so an undeclared key
-            // survives to the router, which refuses it; the router's own type is the narrow one.
+            // The schema is `.passthrough()`, so an undeclared key survives to the router, which
+            // refuses it by name before dispatch.
             const toolResponse = await router.handleAction(
-              args as ResourceManagerInput,
+              args,
               (this.enrichExtraWithClientInfo(extra) ?? {}) as Record<string, unknown>
             );
             const structuredContent = deriveStructuredMessage(toolResponse);
