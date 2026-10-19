@@ -2,13 +2,8 @@
 import { z, type ZodTypeAny } from 'zod/v4';
 
 import type { PromptArgument } from '#shared/types/index.js';
+import type { SchemaValidationIssue } from '#shared/utils/errorHandling.js';
 import type { ConvertedPrompt } from '../types.js';
-
-export interface SchemaValidationIssue {
-  argument: string;
-  message: string;
-  code?: string;
-}
 
 export interface SchemaValidationResult {
   success: boolean;
