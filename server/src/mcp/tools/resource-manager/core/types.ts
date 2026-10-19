@@ -6,6 +6,8 @@
  * that routes to prompt, gate, and framework handlers.
  */
 
+import type { ExecutionStep } from '#engine/frameworks/types/framework-types.js';
+import type { ExecutionTypeEnhancements } from '#engine/frameworks/utils/step-generator.js';
 import type {
   ArgumentValidationYaml,
   PromptInjectionConfigYaml,
@@ -19,8 +21,6 @@ import type {
   FrameworkElements,
   ArgumentSuggestion,
   ProcessingStep,
-  ExecutionStep,
-  ExecutionTypeEnhancements,
   TemplateEnhancements,
   ExecutionFlow,
   QualityIndicators,

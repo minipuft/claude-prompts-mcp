@@ -6,15 +6,15 @@ import { BasePipelineStage } from '../stage.js';
 import type { Logger } from '#infra/logging/index.js';
 import type { StyleManagerPort } from '#shared/types/index.js';
 import type {
+  PromptGuidanceResult,
   PromptGuidanceService,
-  ServicePromptGuidanceResult,
 } from '../../../frameworks/prompt-guidance/index.js';
 import type { FrameworkSelection } from '../../../frameworks/types/index.js';
 import type { PromptRequestContext } from '../../context/index.js';
 import type { ConvertedPrompt } from '../../types.js';
 import type { FrameworkDecisionInput } from '../decisions/index.js';
 
-type GuidanceStore = Record<string, ServicePromptGuidanceResult>;
+type GuidanceStore = Record<string, PromptGuidanceResult>;
 
 /**
  * Pipeline Stage 15: Prompt Guidance
@@ -265,7 +265,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
     context: PromptRequestContext,
     promptId: string = prompt.id,
     frameworkOverride: FrameworkSelection | undefined = this.getFrameworkOverride(context)
-  ): Promise<ServicePromptGuidanceResult | null> {
+  ): Promise<PromptGuidanceResult | null> {
     try {
       // Use injection decision from InjectionControlStage (now runs BEFORE this stage)
       // InjectionControlStage populates context.state.injection with clear boolean semantics:
@@ -302,7 +302,7 @@ export class PromptGuidanceStage extends BasePipelineStage {
   private recordGuidanceResult(
     context: PromptRequestContext,
     promptId: string,
-    result: ServicePromptGuidanceResult
+    result: PromptGuidanceResult
   ): void {
     const store = this.getGuidanceStore(context);
     store[promptId] = result;

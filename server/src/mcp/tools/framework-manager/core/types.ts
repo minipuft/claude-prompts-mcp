@@ -5,6 +5,8 @@
 
 import type { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import type { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
+import type { ExecutionStep } from '#engine/frameworks/types/framework-types.js';
+import type { ExecutionTypeEnhancements } from '#engine/frameworks/utils/step-generator.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
 
@@ -67,18 +69,6 @@ export interface ProcessingStep {
 }
 
 /**
- * Execution step with dependencies and expected output
- */
-export interface ExecutionStep {
-  id: string;
-  name: string;
-  action: string;
-  frameworkPhase: string;
-  dependencies: string[];
-  expected_output: string;
-}
-
-/**
  * Template suggestion for prompt enhancement
  */
 export interface TemplateSuggestion {
@@ -108,16 +98,6 @@ export interface ArgumentSuggestion {
   description: string;
   frameworkReason: string;
   examples: string[];
-}
-
-/**
- * Execution type-specific step enhancements
- */
-export interface ExecutionTypeEnhancements {
-  chain?: {
-    advancedChain?: Record<string, string[]>;
-    simpleChain?: Record<string, string[]>;
-  };
 }
 
 /**

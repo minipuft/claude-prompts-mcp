@@ -9,7 +9,7 @@
 
 import type { ProcessingStepDefinition } from './step-generator.js';
 import type {
-  FrameworkGateDefinition as CanonicalGateDefinition,
+  FrameworkGateDefinition,
   TemplateSuggestionDefinition,
 } from '../definitions/framework-definition-types.js';
 import type {
@@ -18,10 +18,6 @@ import type {
   QualityGate,
   ProcessingStep,
 } from '../types/framework-types.js';
-
-// Re-export canonical types with local aliases for backwards compatibility
-export type FrameworkGateDefinition = CanonicalGateDefinition;
-export type TemplateSuggestion = TemplateSuggestionDefinition;
 
 // Re-export for consumers that import from this module
 export type { ProcessingStepDefinition } from './step-generator.js';
@@ -34,7 +30,7 @@ export interface FrameworkDefinitionForEnhancement {
   /** Framework type discriminator (e.g. 'CAGEERF', 'ReACT') */
   type: string;
   systemPromptGuidance: string;
-  templateSuggestions?: TemplateSuggestion[];
+  templateSuggestions?: TemplateSuggestionDefinition[];
   frameworkGates?: FrameworkGateDefinition[];
   phases?: {
     processingSteps?: ProcessingStepDefinition[];
@@ -47,7 +43,7 @@ export interface FrameworkDefinitionForEnhancement {
  * @returns Array of TemplateEnhancement objects
  */
 export function convertTemplateSuggestions(
-  suggestions: TemplateSuggestion[]
+  suggestions: TemplateSuggestionDefinition[]
 ): TemplateEnhancement[] {
   return suggestions.map((suggestion) => ({
     section: suggestion.section,
