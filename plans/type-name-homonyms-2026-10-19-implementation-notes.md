@@ -50,6 +50,9 @@ tags: []
 
 ## Findings
 
+- Row 3: `framework-definition-types.ts` (`FrameworkGateDefinition`, `TemplateSuggestionDefinition`) and `step-generator.ts` (`ExecutionStepDefinition`, `ProcessingStepDefinition`) are stricter or near-copy twins under DIFFERENT names: the same schema drift, invisible to a name-keyed ratchet. Not a homonym, so it is outside this plan; a follow-up candidate.
+- Row 3: under load average ~57, `composition-root.integration.test.ts` failed 78 tests on 60 s `beforeAll` timeouts; the re-run on the same diff passed. Load-induced, not a regression. Briefs should run `eslint <touched files>` before the whole-project ratchet (seconds vs many minutes).
+
 - Row 4: load average on this box reached 35–43 on 9 cores with 3 workers and 2 other sessions. A whole-project `lint:ratchet` took >10 min and was killed once at the background limit. Run ratchets in the foreground, one at a time.
 
 - Row 3: the left-over probe state (three pairs merged) typechecked clean; it was restored before the row committed. `step-gate`-style near-twins under different names (`ExecutionStepDefinition`, `ProcessingStepDefinition` in step-generator) are invisible to the homonym ratchet; out of scope. `template-enhancer.ts:27` re-exports `ProcessingStepDefinition` as a second import path; unchecked.
