@@ -33,7 +33,7 @@ import { parseYamlOrThrow } from '../../../src/shared/utils/yaml/yaml-parser.js'
 import type { VersioningConfig, HistoryFile } from '../../../src/modules/versioning/types.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 
-/** Subset of the resource-manager `ResourceType` union that this workflow versions. */
+/** Subset of the versioning `ResourceType` union that this workflow versions. */
 type VersionedResourceType = 'prompt' | 'gate' | 'framework';
 import type { VersioningConfigProvider } from '../../../src/modules/versioning/version-history-service.js';
 import type { PromptResourceContext } from '../../../src/mcp/tools/resource-manager/prompt/core/context.js';

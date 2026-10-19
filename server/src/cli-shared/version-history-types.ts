@@ -25,11 +25,10 @@ export const DEFAULT_MAX_VERSIONS = DEFAULT_VERSIONING_CONFIG.maxVersions;
 /**
  * What a `version_history` row of this surface can be ABOUT.
  *
- * One of five same-named unions in this repo with four different memberships, so be precise about
- * which one this is: it types `HistoryRowRequest.resource_type`, which is the value bound into
- * every statement in `version-history-rows.ts`. It is not the published `resource_type` of
- * `resource_manager` (`mcp/tools/resource-manager/core/types.ts`), and it is not the versioning
- * domain's own (`modules/versioning/types.ts`, which carries `category` and no `style`).
+ * It types `HistoryRowRequest.resource_type`, which is the value bound into every statement in
+ * `version-history-rows.ts`. It is not `ResourceType` (`modules/versioning/types.ts`), the
+ * versioning domain's union that `resource_manager` also routes on, which carries `category` and
+ * no `style`.
  *
  * `'config'` joined at O.9 (owner ruling R53), and it is deliberately the ONLY union that gained
  * it. `version_history.resource_type` is a bare `TEXT NOT NULL` with no CHECK, so there is no
