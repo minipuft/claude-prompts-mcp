@@ -40,6 +40,7 @@ import type { RunStepView, RunStepViewProvider } from './run-step-view.js';
 import type { RegisteredGateResult, StepGateDefinition } from './temporary-gate-registrar.js';
 import type { PromptRequestContext, SessionContext } from '../../execution/context/index.js';
 import type { ChainStepPrompt } from '../../execution/operators/types.js';
+import type { PromptLookup } from '../../execution/parsers/symbolic-command-builder.js';
 import type { FrameworkDecisionInput } from '../../execution/pipeline/decisions/index.js';
 import type { GateSource } from '../../execution/pipeline/state/types.js';
 import type { ConvertedPrompt, ExecutionModifiers } from '../../execution/types.js';
@@ -51,9 +52,6 @@ import type { TemporaryGateRegistry } from '../core/temporary-gate-registry.js';
 import type { GateManager } from '../gate-manager.js';
 
 import { mintNodeIds } from '#shared/utils/node-order.js';
-
-/** Resolves a prompt id to its converted prompt; undefined when no such prompt is loaded. */
-export type PromptLookup = (promptId: string) => ConvertedPrompt | undefined;
 
 /**
  * Every prompt in this execution that may carry inline gate definitions.
