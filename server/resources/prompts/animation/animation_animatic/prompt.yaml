@@ -93,5 +93,6 @@ chainSteps:
       output_root: output_root
     inlineGateIds:
       - handoff-artifacts
+      - animation-bible
     id: evidence
     stepName: File and Feed Back

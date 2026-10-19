@@ -115,6 +115,8 @@ chainSteps:
       output_root: output_root
     id: evidence
     stepName: File and Feed Back
+    inlineGateIds:
+      - animation-bible
 budget:
   pauseOnBlocking: true
 artifacts:

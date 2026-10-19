@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """Bible contract (D94): v3/bible.json covers the timeline, its proposals sit inside their beats and close properly, and the page shows the bible it was built from.
 
-usage: probe-bible.py <bible.json> [--page out/bible.html] [--proposals v3/proposals] [--timeline v3/timeline.json] [--root <showcase root>]
+usage: probe-bible.py <bible.json> [--page out/bible.html] [--proposals v3/proposals] [--timeline v3/timeline.json] [--spec v3/creative-spec.md] [--rulings v3/rulings.json] [--root <showcase root>]
 Checks: every per-beat track (pacing, script, blocking, camera, light, colour-script, look) covers frame 0 to the timeline's duration with no gap and nothing past it,
 and the pacing items are the timeline's beats; every proposal file has an item and every item a file, each anchored inside the frame range of its beat (a frame anchor
 inside the beat, a beat range on beats the timeline has); a proposal with status ruled names a D-number ruling, and its kind is one of the five; the page footer's
 hash prefix and the hash the page carries equal the bible's inputsHash; the inputsHash equals the hash of the declared inputs' bytes today (a stale bible is refused);
-no flag says an input disagrees with another (stale xsheet or timeline, an unresolved reference, a script section without a beat).
+no flag says an input disagrees with another (stale xsheet or timeline, an unresolved reference, a script section without a beat); every ruling bullet in the spec has an
+entry in the rulings mirror (v3/rulings.json) whose raw bullet equals the spec's; every D-number a proposal's `ruling` names is a ruling in the spec.
 Control first: a copy of the bible with the last pacing item dropped, one with a proposal anchored at frame 5 of beat the-frame, one with a ruled proposal and no
-ruling, one page whose footer hash differs, one bible whose inputsHash is not the hash of its inputs and one carrying a stale flag must each be refused by the check
-that names it. Exit 0 pass, 1 refusal (named in plain words), 2 a control that did not trip or an unreadable input.
+ruling, one page whose footer hash differs, one bible whose inputsHash is not the hash of its inputs, one carrying a stale flag, a rulings mirror with one spec ruling deleted and a proposal whose ruling
+names a D-number the spec lacks must each be refused by the check that names it. Exit 0 pass, 1 refusal (named in plain words), 2 a control that did not trip or an unreadable input.
 """
 import argparse, copy, hashlib, json, os, re, sys
 
 KINDS = ("change", "inspiration", "eureka", "owner-ask", "finding")
 DENSE = ("pacing", "script", "blocking", "camera", "light", "colour-script", "look")
+BULLET = re.compile(r"^- (D\d+(?:/D\d+)*)")
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 
@@ -106,11 +108,34 @@ def check_flags(b, tl, **_):
     return True, f"{len(b['flags'])} flag(s), none says an input disagrees with another"
 
 
+def spec_rulings(spec):
+    """{first D-number: raw bullet} and the set of every D-number a bullet header names."""
+    bullets = [ln for ln in spec.split("\n") if BULLET.match(ln)]
+    return {BULLET.match(ln).group(1).split("/")[0]: ln for ln in bullets}, {d for ln in bullets for d in BULLET.match(ln).group(1).split("/")}
+
+
+def check_mirror(b, tl, rulings=None, spec=None, **_):
+    by_spec, _all = spec_rulings(spec)
+    mirror = {r["id"]: r for r in rulings}
+    p = [f"ruling {d} is in the spec and has no entry in the rulings mirror" for d in by_spec if d not in mirror]
+    p += [f"the rulings mirror has {d}, which the spec does not carry" for d in mirror if d not in by_spec]
+    p += [f"the rulings mirror entry {d} is not the spec's bullet (re-run compile-bible.mjs)" for d, r in mirror.items() if d in by_spec and r.get("raw") != by_spec[d]]
+    return not p, "; ".join(p[:3]) + (f" (+{len(p) - 3} more)" if len(p) > 3 else "") if p else f"{len(by_spec)} spec ruling(s) each mirrored with the spec's own bullet"
+
+
+def check_proposal_rulings(b, tl, proposals, spec=None, **_):
+    _by, known = spec_rulings(spec)
+    seen = [(it["data"]["id"], it["data"].get("ruling"), "the bible") for it in track(b, "proposals")["items"]] + [(pid, r.get("ruling"), "its file") for pid, r in sorted(proposals.items())]
+    p = [f"proposal {pid} names ruling {ruling!r} in {where}, which the spec's rulings list does not carry" for pid, ruling, where in seen if ruling and not set(re.findall(r"D\d+", str(ruling))) <= known]
+    return not p, "; ".join(p) if p else f"{sum(1 for _i, r, _w in seen if r)} ruling name(s) on proposals, each a ruling in the spec"
+
+
 CHECKS = [("tracks cover the timeline", check_coverage), ("proposals inside their beats", check_anchors), ("rulings close properly", check_rulings),
-          ("page shows this bible", check_page), ("bible matches its inputs", check_hash), ("inputs agree", check_flags)]
+          ("page shows this bible", check_page), ("bible matches its inputs", check_hash), ("inputs agree", check_flags),
+          ("rulings mirror the spec", check_mirror), ("proposal rulings exist in the spec", check_proposal_rulings)]
 
 
-def planted(b, proposals, page, tl):
+def planted(b, proposals, page, tl, rulings, spec):
     out = {}
     x = copy.deepcopy(b); track(x, "pacing")["items"].pop(); out["tracks not covering the duration"] = ("tracks cover the timeline", dict(b=x, proposals=proposals, page=page))
     x, pr = copy.deepcopy(b), copy.deepcopy(proposals)
@@ -129,6 +154,10 @@ def planted(b, proposals, page, tl):
     out["inputsHash is not the hash of the inputs"] = ("bible matches its inputs", dict(b=x, proposals=proposals, page=page))
     x = copy.deepcopy(b); x["flags"].append({"beat": "x", "text": "xsheet stale: planted"})
     out["a stale-input flag"] = ("inputs agree", dict(b=x, proposals=proposals, page=page))
+    pr = copy.deepcopy(proposals) or {"p000": {"id": "p000", "kind": "change", "status": "open", "ruling": None}}
+    pr[sorted(pr)[0]]["ruling"] = "D9999"
+    out["a proposal naming a ruling the spec lacks"] = ("proposal rulings exist in the spec", dict(b=b, proposals=pr, page=page))
+    out["a spec ruling with no mirror entry"] = ("rulings mirror the spec", dict(b=b, proposals=proposals, page=page, rulings=[r for r in rulings if r["id"] != rulings[-1]["id"]]))
     return out
 
 
@@ -143,9 +172,14 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("bible"); ap.add_argument("--page"); ap.add_argument("--proposals", default=os.path.join(DEFAULT_ROOT, "v3", "proposals"))
     ap.add_argument("--timeline", default=os.path.join(DEFAULT_ROOT, "v3", "timeline.json")); ap.add_argument("--root", default=DEFAULT_ROOT)
+    ap.add_argument("--spec", default=os.path.join(DEFAULT_ROOT, "v3", "creative-spec.md")); ap.add_argument("--rulings", default=os.path.join(DEFAULT_ROOT, "v3", "rulings.json"))
     a = ap.parse_args()
     b, tl = load(a.bible, "the bible"), load(a.timeline, "the timeline")
     if b.get("schema") != "showcase.bible.1": print(f"refused: {a.bible} has schema {b.get('schema')!r}, this probe reads showcase.bible.1"); sys.exit(2)
+    rulings = load(a.rulings, "the rulings mirror")
+    try: spec = open(a.spec, encoding="utf8").read()
+    except OSError as e: print(f"refused: cannot read the spec {a.spec}: {e}"); sys.exit(2)
+    if not rulings or not spec_rulings(spec)[0]: print("refused: the spec or the rulings mirror carries no ruling, so the mirror check could observe nothing"); sys.exit(2)
     proposals = {}
     if os.path.isdir(a.proposals):
         for f in sorted(os.listdir(a.proposals)):
@@ -157,8 +191,8 @@ def main():
     checks = dict(CHECKS)
     # control: each planted fault must be refused by the check that names it
     res, bad = [], []
-    for name, (check, kw) in planted(b, proposals, page, tl).items():
-        ok, text = checks[check](kw["b"], tl, proposals=kw["proposals"], page=kw["page"], root=a.root)
+    for name, (check, kw) in planted(b, proposals, page, tl, rulings, spec).items():
+        ok, text = checks[check](kw["b"], tl, proposals=kw["proposals"], page=kw["page"], root=a.root, rulings=kw.get("rulings", rulings), spec=spec)
         res.append(f"planted {name} -> {'refused' if not ok else 'NOT REFUSED'}")
         if ok: bad.append(name)
     print("control: " + "; ".join(res), flush=True)
@@ -166,13 +200,13 @@ def main():
         print("refused: the probe did not refuse " + ", ".join(bad) + ", so a pass from it would mean nothing"); sys.exit(2)
     failed = []
     for name, fn in CHECKS:
-        ok, text = fn(b, tl, proposals=proposals, page=page, root=a.root)
+        ok, text = fn(b, tl, proposals=proposals, page=page, root=a.root, rulings=rulings, spec=spec)
         print(f"  {'ok  ' if ok else 'FAIL'} {name}: {text}", flush=True)
         if not ok: failed.append((name, text))
     if failed:
         print("refused: " + "; ".join(f"{n}: {t}" for n, t in failed)); sys.exit(1)
     n = sum(len(t["items"]) for t in b["tracks"])
-    print(f"pass: bible {b['inputsHash'][:12]} covers {b['duration']} frames in {len(b['tracks'])} tracks ({n} items), {len(proposals)} proposal(s) sit inside their beats, and {'the page shows this bible' if page else 'no page was given'}")
+    print(f"pass: bible {b['inputsHash'][:12]} covers {b['duration']} frames in {len(b['tracks'])} tracks ({n} items), {len(proposals)} proposal(s) sit inside their beats, {len(rulings)} ruling(s) mirrored, and {'the page shows this bible' if page else 'no page was given'}")
 
 
 if __name__ == "__main__": main()
