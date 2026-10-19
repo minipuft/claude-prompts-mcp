@@ -1,7 +1,13 @@
 import { loadHistory, formatHistoryTable } from '@cli-shared/index.js';
 import { resolveWorkspace, findResource } from '../lib/workspace.js';
 import { output } from '../lib/output.js';
-import { TYPE_MAP, historyRef, singularName } from '../lib/types.js';
+import {
+  TYPE_MAP,
+  historyRef,
+  isVersionedType,
+  notVersionedMessage,
+  singularName,
+} from '../lib/types.js';
 
 interface HistoryOptions {
   workspace?: string;
@@ -19,6 +25,12 @@ export async function history(options: HistoryOptions): Promise<number> {
       `Usage: cpm history <prompt|gate|framework|style> <id>\n` +
         (options.type ? `Unknown type: ${options.type}` : 'Resource type is required.'),
     );
+    return 1;
+  }
+
+  // Refused by name, not answered with an empty history: no style row is ever written.
+  if (!isVersionedType(type)) {
+    console.error(notVersionedMessage(type));
     return 1;
   }
 

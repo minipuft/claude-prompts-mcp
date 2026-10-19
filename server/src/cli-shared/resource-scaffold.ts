@@ -406,17 +406,20 @@ function cleanupCreatedDir(
  *
  * `ref` names the history to delete: the resource's type and the id it is served under. The rows of
  * every id below it go too, so deleting a chain directory takes its steps' history with its steps.
+ * `null` is a resource type that records no history (a style): there are no rows to delete.
  */
 export function deleteResourceDir(
   resourceDir: string,
-  ref: HistoryResourceRef
+  ref: HistoryResourceRef | null
 ): { success: boolean; error?: string } {
   try {
     if (!existsSync(resourceDir)) {
       return { success: false, error: `Directory does not exist: ${resourceDir}` };
     }
 
-    deleteVersionRows(resourceDir, ref);
+    if (ref !== null) {
+      deleteVersionRows(resourceDir, ref);
+    }
     rmSync(resourceDir, { recursive: true, force: true });
     return { success: true };
   } catch (error) {
@@ -435,7 +438,7 @@ export function deleteResourceDir(
  */
 export function deleteResource(
   location: ResourceLocation,
-  ref: HistoryResourceRef
+  ref: HistoryResourceRef | null
 ): { success: boolean; error?: string } {
   if (location.form === 'dir') {
     return deleteResourceDir(location.dir, ref);
@@ -444,7 +447,9 @@ export function deleteResource(
     if (!existsSync(location.file)) {
       return { success: false, error: `File does not exist: ${location.file}` };
     }
-    deleteVersionRows(location.file, ref);
+    if (ref !== null) {
+      deleteVersionRows(location.file, ref);
+    }
     rmSync(location.file);
     return { success: true };
   } catch (error) {

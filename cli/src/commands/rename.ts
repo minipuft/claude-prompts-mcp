@@ -6,7 +6,7 @@ import {
   scanReferences,
 } from '../lib/workspace.js';
 import { output, icons, color } from '../lib/output.js';
-import { TYPE_MAP, historyRef, singularName } from '../lib/types.js';
+import { TYPE_MAP, historyRef, isVersionedType, singularName } from '../lib/types.js';
 import {
   mutationWarnings,
   printMutationWarnings,
@@ -88,8 +88,10 @@ export async function rename(options: RenameOptions): Promise<number> {
 
   // History follows only a rename that stuck: one that validation rolled back returned above with
   // its files where they were, and its rows must still be where the files are. Keyed by the
-  // composite id, so a chain's steps (`chain/step`) move with it.
-  renameHistoryResource(result.newPath!, historyRef(type, match.id), options.newId!);
+  // composite id, so a chain's steps (`chain/step`) move with it. A style has no rows to move.
+  if (isVersionedType(type)) {
+    renameHistoryResource(result.newPath!, historyRef(type, match.id), options.newId!);
+  }
 
   const refs = scanReferences(workspace, options.oldId!);
   const warnings = mutationWarnings(mutation.validation);

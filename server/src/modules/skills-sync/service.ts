@@ -3495,11 +3495,15 @@ async function exportCommand(
       // Load version history for the resource
       const firstSourcePath = primarySourcePath(ir);
       // The path only locates state.db; the rows are the IR's own type and id. Read from the
-      // path, a gate under any directory named `prompts` was looked up as a prompt.
-      const history = loadHistory(path.dirname(firstSourcePath), {
-        resourceType: ir.resourceType,
-        resourceId: ir.id,
-      });
+      // path, a gate under any directory named `prompts` was looked up as a prompt. A style has no
+      // history to load: nothing writes a style row (`StoredResourceType`).
+      const history =
+        ir.resourceType === 'style'
+          ? null
+          : loadHistory(path.dirname(firstSourcePath), {
+              resourceType: ir.resourceType,
+              resourceId: ir.id,
+            });
 
       manifestEntries.set(resourceKey, {
         resourceId: ir.id,
@@ -3864,11 +3868,15 @@ async function syncCommand(
 
       const firstSourcePath = primarySourcePath(ir);
       // The path only locates state.db; the rows are the IR's own type and id. Read from the
-      // path, a gate under any directory named `prompts` was looked up as a prompt.
-      const history = loadHistory(path.dirname(firstSourcePath), {
-        resourceType: ir.resourceType,
-        resourceId: ir.id,
-      });
+      // path, a gate under any directory named `prompts` was looked up as a prompt. A style has no
+      // history to load: nothing writes a style row (`StoredResourceType`).
+      const history =
+        ir.resourceType === 'style'
+          ? null
+          : loadHistory(path.dirname(firstSourcePath), {
+              resourceType: ir.resourceType,
+              resourceId: ir.id,
+            });
 
       manifestEntries.set(resourceKey, {
         resourceId: ir.id,
