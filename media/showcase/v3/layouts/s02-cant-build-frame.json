@@ -8,6 +8,18 @@
     "move": "pan right",
     "ledBy": "the stalk sliding back along the ground toward Clawd, then the frame's left bar as it rises"
   },
+  "cameraPose": {
+    "span": [
+      690,
+      895
+    ],
+    "start": {},
+    "end": {
+      "x": 690,
+      "y": 360,
+      "zoom": 1
+    }
+  },
   "hue": {
     "radiance": "#17263a",
     "accent": "#457ca4"

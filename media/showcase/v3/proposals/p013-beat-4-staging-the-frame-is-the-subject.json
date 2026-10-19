@@ -1,0 +1,20 @@
+{
+  "id": "p013",
+  "kind": "owner-ask",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "the-frame",
+    "frame": 900
+  },
+  "title": "Beat 4 staging: the frame is the subject, but the figure fills the stage",
+  "text": "D91 says beat 4's light narrows the field to the frame, lit from inside. On the animatic the human and Codex use 674 of the stage's 720 px of height and the frame sits small at top right; the camera now keeps feet and Codex in picture (p010) but no camera move can make the frame the subject while the figure is this large, and a zoom below 1 shows black outside the stage. Options in the vocabulary: 'wide' restages beat 4 so the frame is large and near centre and the figure stands further off, small against it, the field narrowing to the frame as ruled; 'medium' keeps the present figure scale and lets the frame read as a small lit object the figure walks into. Default: wide.",
+  "references": [
+    "totoro-lived-in",
+    "samurai-jack-holds"
+  ],
+  "before": "beat 4 staged with the figure at full stage height and the frame small at top right; eye trace 270 of 300 frames off the frame",
+  "after": "beat 4 restaged wide: the frame large, the figure small against it, the field narrowing to the frame (D91, D99)",
+  "status": "open",
+  "ruling": null
+}

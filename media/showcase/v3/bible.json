@@ -33,10 +33,11 @@
     "v3/proposals/p010-the-beat-4-camera-cuts-off-the-humans-fe.json",
     "v3/proposals/p011-the-eye-trace-is-red-in-beat-4-and-the-s.json",
     "v3/proposals/p012-home-settle-the-structure-stands-small-u.json",
+    "v3/proposals/p013-beat-4-staging-the-frame-is-the-subject.json",
     "v3/materials.json",
     "v3/materials.schema.json"
   ],
-  "inputsHash": "df4b9a2419ded81418cab4557161d1bf594d57806a91391aa73b02b556f37a35",
+  "inputsHash": "27ef100cdf477e279c3b4e82ff66aba1414ddd02cefb292cb679a5e5c6dd70ca",
   "tracks": [
     {
       "name": "pacing",
@@ -696,7 +697,7 @@
         },
         {
           "start": 630,
-          "end": 631,
+          "end": 691,
           "beat": "the-frame",
           "label": "zoom 1 at (640, 360)",
           "data": {
@@ -710,914 +711,14 @@
           }
         },
         {
-          "start": 631,
-          "end": 632,
-          "beat": "the-frame",
-          "label": "zoom 1 at (640.007, 359.994)",
-          "data": {
-            "pose": {
-              "x": 640.007,
-              "y": 359.994,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 632,
-          "end": 633,
-          "beat": "the-frame",
-          "label": "zoom 1 at (640.028, 359.975)",
-          "data": {
-            "pose": {
-              "x": 640.028,
-              "y": 359.975,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 633,
-          "end": 634,
-          "beat": "the-frame",
-          "label": "zoom 1 at (640.062, 359.944)",
-          "data": {
-            "pose": {
-              "x": 640.062,
-              "y": 359.944,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 634,
-          "end": 635,
-          "beat": "the-frame",
-          "label": "zoom 1 at (640.11, 359.901)",
-          "data": {
-            "pose": {
-              "x": 640.11,
-              "y": 359.901,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 635,
-          "end": 636,
-          "beat": "the-frame",
-          "label": "zoom 1 at (640.172, 359.846)",
-          "data": {
-            "pose": {
-              "x": 640.172,
-              "y": 359.846,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 636,
-          "end": 637,
-          "beat": "the-frame",
-          "label": "zoom 1 at (640.247, 359.779)",
-          "data": {
-            "pose": {
-              "x": 640.247,
-              "y": 359.779,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 637,
-          "end": 638,
-          "beat": "the-frame",
-          "label": "zoom 1 at (640.336, 359.7)",
-          "data": {
-            "pose": {
-              "x": 640.336,
-              "y": 359.7,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 638,
-          "end": 639,
-          "beat": "the-frame",
-          "label": "zoom 1 at (640.437, 359.609)",
-          "data": {
-            "pose": {
-              "x": 640.437,
-              "y": 359.609,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 639,
-          "end": 640,
-          "beat": "the-frame",
-          "label": "zoom 1 at (640.552, 359.507)",
-          "data": {
-            "pose": {
-              "x": 640.552,
-              "y": 359.507,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 640,
-          "end": 641,
-          "beat": "the-frame",
-          "label": "zoom 1 at (640.68, 359.393)",
-          "data": {
-            "pose": {
-              "x": 640.68,
-              "y": 359.393,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 641,
-          "end": 642,
-          "beat": "the-frame",
-          "label": "zoom 1 at (640.82, 359.267)",
-          "data": {
-            "pose": {
-              "x": 640.82,
-              "y": 359.267,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 642,
-          "end": 643,
-          "beat": "the-frame",
-          "label": "zoom 1 at (640.974, 359.13)",
-          "data": {
-            "pose": {
-              "x": 640.974,
-              "y": 359.13,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 643,
-          "end": 644,
-          "beat": "the-frame",
-          "label": "zoom 1 at (641.14, 358.982)",
-          "data": {
-            "pose": {
-              "x": 641.14,
-              "y": 358.982,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 644,
-          "end": 645,
-          "beat": "the-frame",
-          "label": "zoom 1 at (641.318, 358.822)",
-          "data": {
-            "pose": {
-              "x": 641.318,
-              "y": 358.822,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 645,
-          "end": 646,
-          "beat": "the-frame",
-          "label": "zoom 1 at (641.509, 358.651)",
-          "data": {
-            "pose": {
-              "x": 641.509,
-              "y": 358.651,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 646,
-          "end": 647,
-          "beat": "the-frame",
-          "label": "zoom 1 at (641.713, 358.47)",
-          "data": {
-            "pose": {
-              "x": 641.713,
-              "y": 358.47,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 647,
-          "end": 648,
-          "beat": "the-frame",
-          "label": "zoom 1 at (641.929, 358.277)",
-          "data": {
-            "pose": {
-              "x": 641.929,
-              "y": 358.277,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 648,
-          "end": 649,
-          "beat": "the-frame",
-          "label": "zoom 1 at (642.157, 358.073)",
-          "data": {
-            "pose": {
-              "x": 642.157,
-              "y": 358.073,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 649,
-          "end": 650,
-          "beat": "the-frame",
-          "label": "zoom 1 at (642.397, 357.859)",
-          "data": {
-            "pose": {
-              "x": 642.397,
-              "y": 357.859,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 650,
-          "end": 651,
-          "beat": "the-frame",
-          "label": "zoom 1 at (642.648, 357.634)",
-          "data": {
-            "pose": {
-              "x": 642.648,
-              "y": 357.634,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 651,
-          "end": 652,
-          "beat": "the-frame",
-          "label": "zoom 1 at (642.912, 357.398)",
-          "data": {
-            "pose": {
-              "x": 642.912,
-              "y": 357.398,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 652,
-          "end": 653,
-          "beat": "the-frame",
-          "label": "zoom 1 at (643.188, 357.152)",
-          "data": {
-            "pose": {
-              "x": 643.188,
-              "y": 357.152,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 653,
-          "end": 654,
-          "beat": "the-frame",
-          "label": "zoom 1 at (643.475, 356.896)",
-          "data": {
-            "pose": {
-              "x": 643.475,
-              "y": 356.896,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 654,
-          "end": 655,
-          "beat": "the-frame",
-          "label": "zoom 1 at (643.773, 356.629)",
-          "data": {
-            "pose": {
-              "x": 643.773,
-              "y": 356.629,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 655,
-          "end": 656,
-          "beat": "the-frame",
-          "label": "zoom 1 at (644.083, 356.352)",
-          "data": {
-            "pose": {
-              "x": 644.083,
-              "y": 356.352,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 656,
-          "end": 657,
-          "beat": "the-frame",
-          "label": "zoom 1 at (644.405, 356.065)",
-          "data": {
-            "pose": {
-              "x": 644.405,
-              "y": 356.065,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 657,
-          "end": 658,
-          "beat": "the-frame",
-          "label": "zoom 1 at (644.737, 355.768)",
-          "data": {
-            "pose": {
-              "x": 644.737,
-              "y": 355.768,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 658,
-          "end": 659,
-          "beat": "the-frame",
-          "label": "zoom 1 at (645.081, 355.461)",
-          "data": {
-            "pose": {
-              "x": 645.081,
-              "y": 355.461,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 659,
-          "end": 660,
-          "beat": "the-frame",
-          "label": "zoom 1 at (645.436, 355.144)",
-          "data": {
-            "pose": {
-              "x": 645.436,
-              "y": 355.144,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 660,
-          "end": 661,
-          "beat": "the-frame",
-          "label": "zoom 1 at (645.801, 354.817)",
-          "data": {
-            "pose": {
-              "x": 645.801,
-              "y": 354.817,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 661,
-          "end": 662,
-          "beat": "the-frame",
-          "label": "zoom 1 at (646.177, 354.481)",
-          "data": {
-            "pose": {
-              "x": 646.177,
-              "y": 354.481,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 662,
-          "end": 663,
-          "beat": "the-frame",
-          "label": "zoom 1 at (646.564, 354.135)",
-          "data": {
-            "pose": {
-              "x": 646.564,
-              "y": 354.135,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 663,
-          "end": 664,
-          "beat": "the-frame",
-          "label": "zoom 1 at (646.962, 353.78)",
-          "data": {
-            "pose": {
-              "x": 646.962,
-              "y": 353.78,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 664,
-          "end": 665,
-          "beat": "the-frame",
-          "label": "zoom 1 at (647.37, 353.416)",
-          "data": {
-            "pose": {
-              "x": 647.37,
-              "y": 353.416,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 665,
-          "end": 666,
-          "beat": "the-frame",
-          "label": "zoom 1 at (647.789, 353.042)",
-          "data": {
-            "pose": {
-              "x": 647.789,
-              "y": 353.042,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 666,
-          "end": 667,
-          "beat": "the-frame",
-          "label": "zoom 1 at (648.217, 352.659)",
-          "data": {
-            "pose": {
-              "x": 648.217,
-              "y": 352.659,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 667,
-          "end": 668,
-          "beat": "the-frame",
-          "label": "zoom 1 at (648.656, 352.267)",
-          "data": {
-            "pose": {
-              "x": 648.656,
-              "y": 352.267,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 668,
-          "end": 669,
-          "beat": "the-frame",
-          "label": "zoom 1 at (649.105, 351.866)",
-          "data": {
-            "pose": {
-              "x": 649.105,
-              "y": 351.866,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 669,
-          "end": 670,
-          "beat": "the-frame",
-          "label": "zoom 1 at (649.564, 351.456)",
-          "data": {
-            "pose": {
-              "x": 649.564,
-              "y": 351.456,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 670,
-          "end": 671,
-          "beat": "the-frame",
-          "label": "zoom 1 at (650.032, 351.037)",
-          "data": {
-            "pose": {
-              "x": 650.032,
-              "y": 351.037,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 671,
-          "end": 672,
-          "beat": "the-frame",
-          "label": "zoom 1 at (650.511, 350.61)",
-          "data": {
-            "pose": {
-              "x": 650.511,
-              "y": 350.61,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 672,
-          "end": 673,
-          "beat": "the-frame",
-          "label": "zoom 1 at (650.999, 350.174)",
-          "data": {
-            "pose": {
-              "x": 650.999,
-              "y": 350.174,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 673,
-          "end": 674,
-          "beat": "the-frame",
-          "label": "zoom 1 at (651.497, 349.729)",
-          "data": {
-            "pose": {
-              "x": 651.497,
-              "y": 349.729,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 674,
-          "end": 675,
-          "beat": "the-frame",
-          "label": "zoom 1 at (652.003, 349.276)",
-          "data": {
-            "pose": {
-              "x": 652.003,
-              "y": 349.276,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 675,
-          "end": 676,
-          "beat": "the-frame",
-          "label": "zoom 1 at (652.52, 348.815)",
-          "data": {
-            "pose": {
-              "x": 652.52,
-              "y": 348.815,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 676,
-          "end": 677,
-          "beat": "the-frame",
-          "label": "zoom 1 at (653.045, 348.346)",
-          "data": {
-            "pose": {
-              "x": 653.045,
-              "y": 348.346,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 677,
-          "end": 678,
-          "beat": "the-frame",
-          "label": "zoom 1 at (653.58, 347.868)",
-          "data": {
-            "pose": {
-              "x": 653.58,
-              "y": 347.868,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 678,
-          "end": 679,
-          "beat": "the-frame",
-          "label": "zoom 1 at (654.123, 347.382)",
-          "data": {
-            "pose": {
-              "x": 654.123,
-              "y": 347.382,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 679,
-          "end": 680,
-          "beat": "the-frame",
-          "label": "zoom 1 at (654.676, 346.889)",
-          "data": {
-            "pose": {
-              "x": 654.676,
-              "y": 346.889,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 680,
-          "end": 681,
-          "beat": "the-frame",
-          "label": "zoom 1 at (655.237, 346.387)",
-          "data": {
-            "pose": {
-              "x": 655.237,
-              "y": 346.387,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 681,
-          "end": 682,
-          "beat": "the-frame",
-          "label": "zoom 1 at (655.807, 345.878)",
-          "data": {
-            "pose": {
-              "x": 655.807,
-              "y": 345.878,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 682,
-          "end": 683,
-          "beat": "the-frame",
-          "label": "zoom 1 at (656.386, 345.361)",
-          "data": {
-            "pose": {
-              "x": 656.386,
-              "y": 345.361,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 683,
-          "end": 684,
-          "beat": "the-frame",
-          "label": "zoom 1 at (656.973, 344.837)",
-          "data": {
-            "pose": {
-              "x": 656.973,
-              "y": 344.837,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 684,
-          "end": 685,
-          "beat": "the-frame",
-          "label": "zoom 1 at (657.568, 344.305)",
-          "data": {
-            "pose": {
-              "x": 657.568,
-              "y": 344.305,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 685,
-          "end": 686,
-          "beat": "the-frame",
-          "label": "zoom 1 at (658.172, 343.766)",
-          "data": {
-            "pose": {
-              "x": 658.172,
-              "y": 343.766,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 686,
-          "end": 687,
-          "beat": "the-frame",
-          "label": "zoom 1 at (658.784, 343.219)",
-          "data": {
-            "pose": {
-              "x": 658.784,
-              "y": 343.219,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 687,
-          "end": 688,
-          "beat": "the-frame",
-          "label": "zoom 1 at (659.403, 342.665)",
-          "data": {
-            "pose": {
-              "x": 659.403,
-              "y": 342.665,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 688,
-          "end": 689,
-          "beat": "the-frame",
-          "label": "zoom 1 at (660.031, 342.104)",
-          "data": {
-            "pose": {
-              "x": 660.031,
-              "y": 342.104,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 689,
-          "end": 690,
-          "beat": "the-frame",
-          "label": "zoom 1 at (660.667, 341.537)",
-          "data": {
-            "pose": {
-              "x": 660.667,
-              "y": 341.537,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
-          "start": 690,
-          "end": 691,
-          "beat": "the-frame",
-          "label": "zoom 1 at (661.31, 340.962)",
-          "data": {
-            "pose": {
-              "x": 661.31,
-              "y": 340.962,
-              "zoom": 1,
-              "rot": 0
-            },
-            "description": "the raised frame at frame right; push toward its interior"
-          }
-        },
-        {
           "start": 691,
           "end": 692,
           "beat": "the-frame",
-          "label": "zoom 1 at (661.961, 340.38)",
+          "label": "zoom 1 at (640.004, 360)",
           "data": {
             "pose": {
-              "x": 661.961,
-              "y": 340.38,
+              "x": 640.004,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1628,11 +729,11 @@
           "start": 692,
           "end": 693,
           "beat": "the-frame",
-          "label": "zoom 1 at (662.62, 339.792)",
+          "label": "zoom 1 at (640.014, 360)",
           "data": {
             "pose": {
-              "x": 662.62,
-              "y": 339.792,
+              "x": 640.014,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1643,11 +744,11 @@
           "start": 693,
           "end": 694,
           "beat": "the-frame",
-          "label": "zoom 1 at (663.286, 339.197)",
+          "label": "zoom 1 at (640.032, 360)",
           "data": {
             "pose": {
-              "x": 663.286,
-              "y": 339.197,
+              "x": 640.032,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1658,11 +759,11 @@
           "start": 694,
           "end": 695,
           "beat": "the-frame",
-          "label": "zoom 1 at (663.959, 338.595)",
+          "label": "zoom 1 at (640.056, 360)",
           "data": {
             "pose": {
-              "x": 663.959,
-              "y": 338.595,
+              "x": 640.056,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1673,11 +774,11 @@
           "start": 695,
           "end": 696,
           "beat": "the-frame",
-          "label": "zoom 1 at (664.639, 337.988)",
+          "label": "zoom 1 at (640.088, 360)",
           "data": {
             "pose": {
-              "x": 664.639,
-              "y": 337.988,
+              "x": 640.088,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1688,11 +789,11 @@
           "start": 696,
           "end": 697,
           "beat": "the-frame",
-          "label": "zoom 1 at (665.327, 337.373)",
+          "label": "zoom 1 at (640.126, 360)",
           "data": {
             "pose": {
-              "x": 665.327,
-              "y": 337.373,
+              "x": 640.126,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1703,11 +804,11 @@
           "start": 697,
           "end": 698,
           "beat": "the-frame",
-          "label": "zoom 1 at (666.022, 336.753)",
+          "label": "zoom 1 at (640.171, 360)",
           "data": {
             "pose": {
-              "x": 666.022,
-              "y": 336.753,
+              "x": 640.171,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1718,11 +819,11 @@
           "start": 698,
           "end": 699,
           "beat": "the-frame",
-          "label": "zoom 1 at (666.723, 336.126)",
+          "label": "zoom 1 at (640.222, 360)",
           "data": {
             "pose": {
-              "x": 666.723,
-              "y": 336.126,
+              "x": 640.222,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1733,11 +834,11 @@
           "start": 699,
           "end": 700,
           "beat": "the-frame",
-          "label": "zoom 1 at (667.431, 335.493)",
+          "label": "zoom 1 at (640.281, 360)",
           "data": {
             "pose": {
-              "x": 667.431,
-              "y": 335.493,
+              "x": 640.281,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1748,11 +849,11 @@
           "start": 700,
           "end": 701,
           "beat": "the-frame",
-          "label": "zoom 1 at (668.146, 334.855)",
+          "label": "zoom 1 at (640.345, 360)",
           "data": {
             "pose": {
-              "x": 668.146,
-              "y": 334.855,
+              "x": 640.345,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1763,11 +864,11 @@
           "start": 701,
           "end": 702,
           "beat": "the-frame",
-          "label": "zoom 1 at (668.868, 334.21)",
+          "label": "zoom 1 at (640.416, 360)",
           "data": {
             "pose": {
-              "x": 668.868,
-              "y": 334.21,
+              "x": 640.416,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1778,11 +879,11 @@
           "start": 702,
           "end": 703,
           "beat": "the-frame",
-          "label": "zoom 1 at (669.596, 333.56)",
+          "label": "zoom 1 at (640.494, 360)",
           "data": {
             "pose": {
-              "x": 669.596,
-              "y": 333.56,
+              "x": 640.494,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1793,11 +894,11 @@
           "start": 703,
           "end": 704,
           "beat": "the-frame",
-          "label": "zoom 1 at (670.33, 332.904)",
+          "label": "zoom 1 at (640.578, 360)",
           "data": {
             "pose": {
-              "x": 670.33,
-              "y": 332.904,
+              "x": 640.578,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1808,11 +909,11 @@
           "start": 704,
           "end": 705,
           "beat": "the-frame",
-          "label": "zoom 1 at (671.071, 332.242)",
+          "label": "zoom 1 at (640.668, 360)",
           "data": {
             "pose": {
-              "x": 671.071,
-              "y": 332.242,
+              "x": 640.668,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1823,11 +924,11 @@
           "start": 705,
           "end": 706,
           "beat": "the-frame",
-          "label": "zoom 1 at (671.817, 331.575)",
+          "label": "zoom 1 at (640.764, 360)",
           "data": {
             "pose": {
-              "x": 671.817,
-              "y": 331.575,
+              "x": 640.764,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1838,11 +939,11 @@
           "start": 706,
           "end": 707,
           "beat": "the-frame",
-          "label": "zoom 1 at (672.57, 330.902)",
+          "label": "zoom 1 at (640.866, 360)",
           "data": {
             "pose": {
-              "x": 672.57,
-              "y": 330.902,
+              "x": 640.866,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1853,11 +954,11 @@
           "start": 707,
           "end": 708,
           "beat": "the-frame",
-          "label": "zoom 1 at (673.329, 330.224)",
+          "label": "zoom 1 at (640.975, 360)",
           "data": {
             "pose": {
-              "x": 673.329,
-              "y": 330.224,
+              "x": 640.975,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1868,11 +969,11 @@
           "start": 708,
           "end": 709,
           "beat": "the-frame",
-          "label": "zoom 1 at (674.094, 329.541)",
+          "label": "zoom 1 at (641.089, 360)",
           "data": {
             "pose": {
-              "x": 674.094,
-              "y": 329.541,
+              "x": 641.089,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1883,11 +984,11 @@
           "start": 709,
           "end": 710,
           "beat": "the-frame",
-          "label": "zoom 1 at (674.864, 328.853)",
+          "label": "zoom 1 at (641.209, 360)",
           "data": {
             "pose": {
-              "x": 674.864,
-              "y": 328.853,
+              "x": 641.209,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1898,11 +999,11 @@
           "start": 710,
           "end": 711,
           "beat": "the-frame",
-          "label": "zoom 1 at (675.64, 328.16)",
+          "label": "zoom 1 at (641.335, 360)",
           "data": {
             "pose": {
-              "x": 675.64,
-              "y": 328.16,
+              "x": 641.335,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1913,11 +1014,11 @@
           "start": 711,
           "end": 712,
           "beat": "the-frame",
-          "label": "zoom 1 at (676.421, 327.462)",
+          "label": "zoom 1 at (641.467, 360)",
           "data": {
             "pose": {
-              "x": 676.421,
-              "y": 327.462,
+              "x": 641.467,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1928,11 +1029,11 @@
           "start": 712,
           "end": 713,
           "beat": "the-frame",
-          "label": "zoom 1 at (677.208, 326.759)",
+          "label": "zoom 1 at (641.604, 360)",
           "data": {
             "pose": {
-              "x": 677.208,
-              "y": 326.759,
+              "x": 641.604,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1943,11 +1044,11 @@
           "start": 713,
           "end": 714,
           "beat": "the-frame",
-          "label": "zoom 1 at (678.001, 326.051)",
+          "label": "zoom 1 at (641.747, 360)",
           "data": {
             "pose": {
-              "x": 678.001,
-              "y": 326.051,
+              "x": 641.747,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1958,11 +1059,11 @@
           "start": 714,
           "end": 715,
           "beat": "the-frame",
-          "label": "zoom 1 at (678.798, 325.339)",
+          "label": "zoom 1 at (641.895, 360)",
           "data": {
             "pose": {
-              "x": 678.798,
-              "y": 325.339,
+              "x": 641.895,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1973,11 +1074,11 @@
           "start": 715,
           "end": 716,
           "beat": "the-frame",
-          "label": "zoom 1 at (679.6, 324.622)",
+          "label": "zoom 1 at (642.049, 360)",
           "data": {
             "pose": {
-              "x": 679.6,
-              "y": 324.622,
+              "x": 642.049,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -1988,11 +1089,11 @@
           "start": 716,
           "end": 717,
           "beat": "the-frame",
-          "label": "zoom 1 at (680.408, 323.9)",
+          "label": "zoom 1 at (642.209, 360)",
           "data": {
             "pose": {
-              "x": 680.408,
-              "y": 323.9,
+              "x": 642.209,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2003,11 +1104,11 @@
           "start": 717,
           "end": 718,
           "beat": "the-frame",
-          "label": "zoom 1 at (681.22, 323.174)",
+          "label": "zoom 1 at (642.374, 360)",
           "data": {
             "pose": {
-              "x": 681.22,
-              "y": 323.174,
+              "x": 642.374,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2018,11 +1119,11 @@
           "start": 718,
           "end": 719,
           "beat": "the-frame",
-          "label": "zoom 1 at (682.038, 322.444)",
+          "label": "zoom 1 at (642.544, 360)",
           "data": {
             "pose": {
-              "x": 682.038,
-              "y": 322.444,
+              "x": 642.544,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2033,11 +1134,11 @@
           "start": 719,
           "end": 720,
           "beat": "the-frame",
-          "label": "zoom 1 at (682.86, 321.71)",
+          "label": "zoom 1 at (642.719, 360)",
           "data": {
             "pose": {
-              "x": 682.86,
-              "y": 321.71,
+              "x": 642.719,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2048,11 +1149,11 @@
           "start": 720,
           "end": 721,
           "beat": "the-frame",
-          "label": "zoom 1 at (683.686, 320.972)",
+          "label": "zoom 1 at (642.899, 360)",
           "data": {
             "pose": {
-              "x": 683.686,
-              "y": 320.972,
+              "x": 642.899,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2063,11 +1164,11 @@
           "start": 721,
           "end": 722,
           "beat": "the-frame",
-          "label": "zoom 1 at (684.517, 320.229)",
+          "label": "zoom 1 at (643.084, 360)",
           "data": {
             "pose": {
-              "x": 684.517,
-              "y": 320.229,
+              "x": 643.084,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2078,11 +1179,11 @@
           "start": 722,
           "end": 723,
           "beat": "the-frame",
-          "label": "zoom 1 at (685.352, 319.483)",
+          "label": "zoom 1 at (643.275, 360)",
           "data": {
             "pose": {
-              "x": 685.352,
-              "y": 319.483,
+              "x": 643.275,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2093,11 +1194,11 @@
           "start": 723,
           "end": 724,
           "beat": "the-frame",
-          "label": "zoom 1 at (686.192, 318.733)",
+          "label": "zoom 1 at (643.47, 360)",
           "data": {
             "pose": {
-              "x": 686.192,
-              "y": 318.733,
+              "x": 643.47,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2108,11 +1209,11 @@
           "start": 724,
           "end": 725,
           "beat": "the-frame",
-          "label": "zoom 1 at (687.036, 317.979)",
+          "label": "zoom 1 at (643.67, 360)",
           "data": {
             "pose": {
-              "x": 687.036,
-              "y": 317.979,
+              "x": 643.67,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2123,11 +1224,11 @@
           "start": 725,
           "end": 726,
           "beat": "the-frame",
-          "label": "zoom 1 at (687.883, 317.222)",
+          "label": "zoom 1 at (643.875, 360)",
           "data": {
             "pose": {
-              "x": 687.883,
-              "y": 317.222,
+              "x": 643.875,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2138,11 +1239,11 @@
           "start": 726,
           "end": 727,
           "beat": "the-frame",
-          "label": "zoom 1 at (688.735, 316.461)",
+          "label": "zoom 1 at (644.084, 360)",
           "data": {
             "pose": {
-              "x": 688.735,
-              "y": 316.461,
+              "x": 644.084,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2153,11 +1254,11 @@
           "start": 727,
           "end": 728,
           "beat": "the-frame",
-          "label": "zoom 1 at (689.591, 315.697)",
+          "label": "zoom 1 at (644.298, 360)",
           "data": {
             "pose": {
-              "x": 689.591,
-              "y": 315.697,
+              "x": 644.298,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2168,11 +1269,11 @@
           "start": 728,
           "end": 729,
           "beat": "the-frame",
-          "label": "zoom 1 at (690.45, 314.929)",
+          "label": "zoom 1 at (644.517, 360)",
           "data": {
             "pose": {
-              "x": 690.45,
-              "y": 314.929,
+              "x": 644.517,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2183,11 +1284,11 @@
           "start": 729,
           "end": 730,
           "beat": "the-frame",
-          "label": "zoom 1 at (691.313, 314.158)",
+          "label": "zoom 1 at (644.74, 360)",
           "data": {
             "pose": {
-              "x": 691.313,
-              "y": 314.158,
+              "x": 644.74,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2198,11 +1299,11 @@
           "start": 730,
           "end": 731,
           "beat": "the-frame",
-          "label": "zoom 1 at (692.179, 313.384)",
+          "label": "zoom 1 at (644.968, 360)",
           "data": {
             "pose": {
-              "x": 692.179,
-              "y": 313.384,
+              "x": 644.968,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2213,11 +1314,11 @@
           "start": 731,
           "end": 732,
           "beat": "the-frame",
-          "label": "zoom 1 at (693.049, 312.607)",
+          "label": "zoom 1 at (645.2, 360)",
           "data": {
             "pose": {
-              "x": 693.049,
-              "y": 312.607,
+              "x": 645.2,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2228,11 +1329,11 @@
           "start": 732,
           "end": 733,
           "beat": "the-frame",
-          "label": "zoom 1 at (693.923, 311.827)",
+          "label": "zoom 1 at (645.436, 360)",
           "data": {
             "pose": {
-              "x": 693.923,
-              "y": 311.827,
+              "x": 645.436,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2243,11 +1344,11 @@
           "start": 733,
           "end": 734,
           "beat": "the-frame",
-          "label": "zoom 1 at (694.799, 311.044)",
+          "label": "zoom 1 at (645.677, 360)",
           "data": {
             "pose": {
-              "x": 694.799,
-              "y": 311.044,
+              "x": 645.677,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2258,11 +1359,11 @@
           "start": 734,
           "end": 735,
           "beat": "the-frame",
-          "label": "zoom 1 at (695.678, 310.258)",
+          "label": "zoom 1 at (645.921, 360)",
           "data": {
             "pose": {
-              "x": 695.678,
-              "y": 310.258,
+              "x": 645.921,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2273,11 +1374,11 @@
           "start": 735,
           "end": 736,
           "beat": "the-frame",
-          "label": "zoom 1 at (696.561, 309.469)",
+          "label": "zoom 1 at (646.17, 360)",
           "data": {
             "pose": {
-              "x": 696.561,
-              "y": 309.469,
+              "x": 646.17,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2288,11 +1389,11 @@
           "start": 736,
           "end": 737,
           "beat": "the-frame",
-          "label": "zoom 1 at (697.446, 308.678)",
+          "label": "zoom 1 at (646.423, 360)",
           "data": {
             "pose": {
-              "x": 697.446,
-              "y": 308.678,
+              "x": 646.423,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2303,11 +1404,11 @@
           "start": 737,
           "end": 738,
           "beat": "the-frame",
-          "label": "zoom 1 at (698.335, 307.885)",
+          "label": "zoom 1 at (646.679, 360)",
           "data": {
             "pose": {
-              "x": 698.335,
-              "y": 307.885,
+              "x": 646.679,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2318,11 +1419,11 @@
           "start": 738,
           "end": 739,
           "beat": "the-frame",
-          "label": "zoom 1 at (699.225, 307.089)",
+          "label": "zoom 1 at (646.94, 360)",
           "data": {
             "pose": {
-              "x": 699.225,
-              "y": 307.089,
+              "x": 646.94,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2333,11 +1434,11 @@
           "start": 739,
           "end": 740,
           "beat": "the-frame",
-          "label": "zoom 1 at (700.119, 306.291)",
+          "label": "zoom 1 at (647.204, 360)",
           "data": {
             "pose": {
-              "x": 700.119,
-              "y": 306.291,
+              "x": 647.204,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2348,11 +1449,11 @@
           "start": 740,
           "end": 741,
           "beat": "the-frame",
-          "label": "zoom 1 at (701.015, 305.49)",
+          "label": "zoom 1 at (647.472, 360)",
           "data": {
             "pose": {
-              "x": 701.015,
-              "y": 305.49,
+              "x": 647.472,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2363,11 +1464,11 @@
           "start": 741,
           "end": 742,
           "beat": "the-frame",
-          "label": "zoom 1 at (701.913, 304.688)",
+          "label": "zoom 1 at (647.744, 360)",
           "data": {
             "pose": {
-              "x": 701.913,
-              "y": 304.688,
+              "x": 647.744,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2378,11 +1479,11 @@
           "start": 742,
           "end": 743,
           "beat": "the-frame",
-          "label": "zoom 1 at (702.814, 303.883)",
+          "label": "zoom 1 at (648.019, 360)",
           "data": {
             "pose": {
-              "x": 702.814,
-              "y": 303.883,
+              "x": 648.019,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2393,11 +1494,11 @@
           "start": 743,
           "end": 744,
           "beat": "the-frame",
-          "label": "zoom 1 at (703.716, 303.077)",
+          "label": "zoom 1 at (648.298, 360)",
           "data": {
             "pose": {
-              "x": 703.716,
-              "y": 303.077,
+              "x": 648.298,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2408,11 +1509,11 @@
           "start": 744,
           "end": 745,
           "beat": "the-frame",
-          "label": "zoom 1 at (704.621, 302.269)",
+          "label": "zoom 1 at (648.58, 360)",
           "data": {
             "pose": {
-              "x": 704.621,
-              "y": 302.269,
+              "x": 648.58,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2423,11 +1524,11 @@
           "start": 745,
           "end": 746,
           "beat": "the-frame",
-          "label": "zoom 1 at (705.528, 301.458)",
+          "label": "zoom 1 at (648.866, 360)",
           "data": {
             "pose": {
-              "x": 705.528,
-              "y": 301.458,
+              "x": 648.866,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2438,11 +1539,11 @@
           "start": 746,
           "end": 747,
           "beat": "the-frame",
-          "label": "zoom 1 at (706.437, 300.647)",
+          "label": "zoom 1 at (649.155, 360)",
           "data": {
             "pose": {
-              "x": 706.437,
-              "y": 300.647,
+              "x": 649.155,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2453,11 +1554,11 @@
           "start": 747,
           "end": 748,
           "beat": "the-frame",
-          "label": "zoom 1 at (707.347, 299.834)",
+          "label": "zoom 1 at (649.447, 360)",
           "data": {
             "pose": {
-              "x": 707.347,
-              "y": 299.834,
+              "x": 649.447,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2468,11 +1569,11 @@
           "start": 748,
           "end": 749,
           "beat": "the-frame",
-          "label": "zoom 1 at (708.259, 299.019)",
+          "label": "zoom 1 at (649.742, 360)",
           "data": {
             "pose": {
-              "x": 708.259,
-              "y": 299.019,
+              "x": 649.742,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2483,11 +1584,11 @@
           "start": 749,
           "end": 750,
           "beat": "the-frame",
-          "label": "zoom 1 at (709.172, 298.203)",
+          "label": "zoom 1 at (650.041, 360)",
           "data": {
             "pose": {
-              "x": 709.172,
-              "y": 298.203,
+              "x": 650.041,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2498,11 +1599,11 @@
           "start": 750,
           "end": 751,
           "beat": "the-frame",
-          "label": "zoom 1 at (710.087, 297.385)",
+          "label": "zoom 1 at (650.342, 360)",
           "data": {
             "pose": {
-              "x": 710.087,
-              "y": 297.385,
+              "x": 650.342,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2513,11 +1614,11 @@
           "start": 751,
           "end": 752,
           "beat": "the-frame",
-          "label": "zoom 1 at (711.003, 296.567)",
+          "label": "zoom 1 at (650.647, 360)",
           "data": {
             "pose": {
-              "x": 711.003,
-              "y": 296.567,
+              "x": 650.647,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2528,11 +1629,11 @@
           "start": 752,
           "end": 753,
           "beat": "the-frame",
-          "label": "zoom 1 at (711.921, 295.747)",
+          "label": "zoom 1 at (650.954, 360)",
           "data": {
             "pose": {
-              "x": 711.921,
-              "y": 295.747,
+              "x": 650.954,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2543,11 +1644,11 @@
           "start": 753,
           "end": 754,
           "beat": "the-frame",
-          "label": "zoom 1 at (712.839, 294.927)",
+          "label": "zoom 1 at (651.264, 360)",
           "data": {
             "pose": {
-              "x": 712.839,
-              "y": 294.927,
+              "x": 651.264,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2558,11 +1659,11 @@
           "start": 754,
           "end": 755,
           "beat": "the-frame",
-          "label": "zoom 1 at (713.759, 294.105)",
+          "label": "zoom 1 at (651.577, 360)",
           "data": {
             "pose": {
-              "x": 713.759,
-              "y": 294.105,
+              "x": 651.577,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2573,11 +1674,11 @@
           "start": 755,
           "end": 756,
           "beat": "the-frame",
-          "label": "zoom 1 at (714.679, 293.283)",
+          "label": "zoom 1 at (651.893, 360)",
           "data": {
             "pose": {
-              "x": 714.679,
-              "y": 293.283,
+              "x": 651.893,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2588,11 +1689,11 @@
           "start": 756,
           "end": 757,
           "beat": "the-frame",
-          "label": "zoom 1 at (715.6, 292.46)",
+          "label": "zoom 1 at (652.211, 360)",
           "data": {
             "pose": {
-              "x": 715.6,
-              "y": 292.46,
+              "x": 652.211,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2603,11 +1704,11 @@
           "start": 757,
           "end": 758,
           "beat": "the-frame",
-          "label": "zoom 1 at (716.522, 291.636)",
+          "label": "zoom 1 at (652.532, 360)",
           "data": {
             "pose": {
-              "x": 716.522,
-              "y": 291.636,
+              "x": 652.532,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2618,11 +1719,11 @@
           "start": 758,
           "end": 759,
           "beat": "the-frame",
-          "label": "zoom 1 at (717.445, 290.812)",
+          "label": "zoom 1 at (652.855, 360)",
           "data": {
             "pose": {
-              "x": 717.445,
-              "y": 290.812,
+              "x": 652.855,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2633,11 +1734,11 @@
           "start": 759,
           "end": 760,
           "beat": "the-frame",
-          "label": "zoom 1 at (718.368, 289.988)",
+          "label": "zoom 1 at (653.18, 360)",
           "data": {
             "pose": {
-              "x": 718.368,
-              "y": 289.988,
+              "x": 653.18,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2648,11 +1749,11 @@
           "start": 760,
           "end": 761,
           "beat": "the-frame",
-          "label": "zoom 1 at (719.291, 289.163)",
+          "label": "zoom 1 at (653.508, 360)",
           "data": {
             "pose": {
-              "x": 719.291,
-              "y": 289.163,
+              "x": 653.508,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2663,11 +1764,11 @@
           "start": 761,
           "end": 762,
           "beat": "the-frame",
-          "label": "zoom 1 at (720.214, 288.338)",
+          "label": "zoom 1 at (653.838, 360)",
           "data": {
             "pose": {
-              "x": 720.214,
-              "y": 288.338,
+              "x": 653.838,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2678,11 +1779,11 @@
           "start": 762,
           "end": 763,
           "beat": "the-frame",
-          "label": "zoom 1 at (721.138, 287.513)",
+          "label": "zoom 1 at (654.171, 360)",
           "data": {
             "pose": {
-              "x": 721.138,
-              "y": 287.513,
+              "x": 654.171,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2693,11 +1794,11 @@
           "start": 763,
           "end": 764,
           "beat": "the-frame",
-          "label": "zoom 1 at (722.062, 286.687)",
+          "label": "zoom 1 at (654.505, 360)",
           "data": {
             "pose": {
-              "x": 722.062,
-              "y": 286.687,
+              "x": 654.505,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2708,11 +1809,11 @@
           "start": 764,
           "end": 765,
           "beat": "the-frame",
-          "label": "zoom 1 at (722.986, 285.862)",
+          "label": "zoom 1 at (654.842, 360)",
           "data": {
             "pose": {
-              "x": 722.986,
-              "y": 285.862,
+              "x": 654.842,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2723,11 +1824,11 @@
           "start": 765,
           "end": 766,
           "beat": "the-frame",
-          "label": "zoom 1 at (723.909, 285.037)",
+          "label": "zoom 1 at (655.18, 360)",
           "data": {
             "pose": {
-              "x": 723.909,
-              "y": 285.037,
+              "x": 655.18,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2738,11 +1839,11 @@
           "start": 766,
           "end": 767,
           "beat": "the-frame",
-          "label": "zoom 1 at (724.832, 284.212)",
+          "label": "zoom 1 at (655.521, 360)",
           "data": {
             "pose": {
-              "x": 724.832,
-              "y": 284.212,
+              "x": 655.521,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2753,11 +1854,11 @@
           "start": 767,
           "end": 768,
           "beat": "the-frame",
-          "label": "zoom 1 at (725.755, 283.388)",
+          "label": "zoom 1 at (655.863, 360)",
           "data": {
             "pose": {
-              "x": 725.755,
-              "y": 283.388,
+              "x": 655.863,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2768,11 +1869,11 @@
           "start": 768,
           "end": 769,
           "beat": "the-frame",
-          "label": "zoom 1 at (726.678, 282.564)",
+          "label": "zoom 1 at (656.207, 360)",
           "data": {
             "pose": {
-              "x": 726.678,
-              "y": 282.564,
+              "x": 656.207,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2783,11 +1884,11 @@
           "start": 769,
           "end": 770,
           "beat": "the-frame",
-          "label": "zoom 1 at (727.6, 281.74)",
+          "label": "zoom 1 at (656.553, 360)",
           "data": {
             "pose": {
-              "x": 727.6,
-              "y": 281.74,
+              "x": 656.553,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2798,11 +1899,11 @@
           "start": 770,
           "end": 771,
           "beat": "the-frame",
-          "label": "zoom 1 at (728.521, 280.917)",
+          "label": "zoom 1 at (656.901, 360)",
           "data": {
             "pose": {
-              "x": 728.521,
-              "y": 280.917,
+              "x": 656.901,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2813,11 +1914,11 @@
           "start": 771,
           "end": 772,
           "beat": "the-frame",
-          "label": "zoom 1 at (729.441, 280.095)",
+          "label": "zoom 1 at (657.25, 360)",
           "data": {
             "pose": {
-              "x": 729.441,
-              "y": 280.095,
+              "x": 657.25,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2828,11 +1929,11 @@
           "start": 772,
           "end": 773,
           "beat": "the-frame",
-          "label": "zoom 1 at (730.361, 279.273)",
+          "label": "zoom 1 at (657.6, 360)",
           "data": {
             "pose": {
-              "x": 730.361,
-              "y": 279.273,
+              "x": 657.6,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2843,11 +1944,11 @@
           "start": 773,
           "end": 774,
           "beat": "the-frame",
-          "label": "zoom 1 at (731.279, 278.453)",
+          "label": "zoom 1 at (657.952, 360)",
           "data": {
             "pose": {
-              "x": 731.279,
-              "y": 278.453,
+              "x": 657.952,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2858,11 +1959,11 @@
           "start": 774,
           "end": 775,
           "beat": "the-frame",
-          "label": "zoom 1 at (732.197, 277.633)",
+          "label": "zoom 1 at (658.305, 360)",
           "data": {
             "pose": {
-              "x": 732.197,
-              "y": 277.633,
+              "x": 658.305,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2873,11 +1974,11 @@
           "start": 775,
           "end": 776,
           "beat": "the-frame",
-          "label": "zoom 1 at (733.113, 276.815)",
+          "label": "zoom 1 at (658.66, 360)",
           "data": {
             "pose": {
-              "x": 733.113,
-              "y": 276.815,
+              "x": 658.66,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2888,11 +1989,11 @@
           "start": 776,
           "end": 777,
           "beat": "the-frame",
-          "label": "zoom 1 at (734.028, 275.997)",
+          "label": "zoom 1 at (659.016, 360)",
           "data": {
             "pose": {
-              "x": 734.028,
-              "y": 275.997,
+              "x": 659.016,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2903,11 +2004,11 @@
           "start": 777,
           "end": 778,
           "beat": "the-frame",
-          "label": "zoom 1 at (734.941, 275.181)",
+          "label": "zoom 1 at (659.372, 360)",
           "data": {
             "pose": {
-              "x": 734.941,
-              "y": 275.181,
+              "x": 659.372,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2918,11 +2019,11 @@
           "start": 778,
           "end": 779,
           "beat": "the-frame",
-          "label": "zoom 1 at (735.853, 274.366)",
+          "label": "zoom 1 at (659.731, 360)",
           "data": {
             "pose": {
-              "x": 735.853,
-              "y": 274.366,
+              "x": 659.731,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2933,11 +2034,11 @@
           "start": 779,
           "end": 780,
           "beat": "the-frame",
-          "label": "zoom 1 at (736.763, 273.553)",
+          "label": "zoom 1 at (660.09, 360)",
           "data": {
             "pose": {
-              "x": 736.763,
-              "y": 273.553,
+              "x": 660.09,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2948,11 +2049,11 @@
           "start": 780,
           "end": 781,
           "beat": "the-frame",
-          "label": "zoom 1 at (737.672, 272.742)",
+          "label": "zoom 1 at (660.45, 360)",
           "data": {
             "pose": {
-              "x": 737.672,
-              "y": 272.742,
+              "x": 660.45,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2963,11 +2064,11 @@
           "start": 781,
           "end": 782,
           "beat": "the-frame",
-          "label": "zoom 1 at (738.579, 271.931)",
+          "label": "zoom 1 at (660.81, 360)",
           "data": {
             "pose": {
-              "x": 738.579,
-              "y": 271.931,
+              "x": 660.81,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2978,11 +2079,11 @@
           "start": 782,
           "end": 783,
           "beat": "the-frame",
-          "label": "zoom 1 at (739.484, 271.123)",
+          "label": "zoom 1 at (661.172, 360)",
           "data": {
             "pose": {
-              "x": 739.484,
-              "y": 271.123,
+              "x": 661.172,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -2993,11 +2094,11 @@
           "start": 783,
           "end": 784,
           "beat": "the-frame",
-          "label": "zoom 1 at (740.386, 270.317)",
+          "label": "zoom 1 at (661.534, 360)",
           "data": {
             "pose": {
-              "x": 740.386,
-              "y": 270.317,
+              "x": 661.534,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3008,11 +2109,11 @@
           "start": 784,
           "end": 785,
           "beat": "the-frame",
-          "label": "zoom 1 at (741.287, 269.512)",
+          "label": "zoom 1 at (661.897, 360)",
           "data": {
             "pose": {
-              "x": 741.287,
-              "y": 269.512,
+              "x": 661.897,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3023,11 +2124,11 @@
           "start": 785,
           "end": 786,
           "beat": "the-frame",
-          "label": "zoom 1 at (742.185, 268.71)",
+          "label": "zoom 1 at (662.261, 360)",
           "data": {
             "pose": {
-              "x": 742.185,
-              "y": 268.71,
+              "x": 662.261,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3038,11 +2139,11 @@
           "start": 786,
           "end": 787,
           "beat": "the-frame",
-          "label": "zoom 1 at (743.081, 267.909)",
+          "label": "zoom 1 at (662.625, 360)",
           "data": {
             "pose": {
-              "x": 743.081,
-              "y": 267.909,
+              "x": 662.625,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3053,11 +2154,11 @@
           "start": 787,
           "end": 788,
           "beat": "the-frame",
-          "label": "zoom 1 at (743.975, 267.111)",
+          "label": "zoom 1 at (662.99, 360)",
           "data": {
             "pose": {
-              "x": 743.975,
-              "y": 267.111,
+              "x": 662.99,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3068,11 +2169,11 @@
           "start": 788,
           "end": 789,
           "beat": "the-frame",
-          "label": "zoom 1 at (744.865, 266.315)",
+          "label": "zoom 1 at (663.355, 360)",
           "data": {
             "pose": {
-              "x": 744.865,
-              "y": 266.315,
+              "x": 663.355,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3083,11 +2184,11 @@
           "start": 789,
           "end": 790,
           "beat": "the-frame",
-          "label": "zoom 1 at (745.754, 265.522)",
+          "label": "zoom 1 at (663.72, 360)",
           "data": {
             "pose": {
-              "x": 745.754,
-              "y": 265.522,
+              "x": 663.72,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3098,11 +2199,11 @@
           "start": 790,
           "end": 791,
           "beat": "the-frame",
-          "label": "zoom 1 at (746.639, 264.731)",
+          "label": "zoom 1 at (664.086, 360)",
           "data": {
             "pose": {
-              "x": 746.639,
-              "y": 264.731,
+              "x": 664.086,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3113,11 +2214,11 @@
           "start": 791,
           "end": 792,
           "beat": "the-frame",
-          "label": "zoom 1 at (747.522, 263.942)",
+          "label": "zoom 1 at (664.451, 360)",
           "data": {
             "pose": {
-              "x": 747.522,
-              "y": 263.942,
+              "x": 664.451,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3128,11 +2229,11 @@
           "start": 792,
           "end": 793,
           "beat": "the-frame",
-          "label": "zoom 1 at (748.401, 263.156)",
+          "label": "zoom 1 at (664.817, 360)",
           "data": {
             "pose": {
-              "x": 748.401,
-              "y": 263.156,
+              "x": 664.817,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3143,11 +2244,11 @@
           "start": 793,
           "end": 794,
           "beat": "the-frame",
-          "label": "zoom 1 at (749.277, 262.373)",
+          "label": "zoom 1 at (665.183, 360)",
           "data": {
             "pose": {
-              "x": 749.277,
-              "y": 262.373,
+              "x": 665.183,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3158,11 +2259,11 @@
           "start": 794,
           "end": 795,
           "beat": "the-frame",
-          "label": "zoom 1 at (750.151, 261.593)",
+          "label": "zoom 1 at (665.549, 360)",
           "data": {
             "pose": {
-              "x": 750.151,
-              "y": 261.593,
+              "x": 665.549,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3173,11 +2274,11 @@
           "start": 795,
           "end": 796,
           "beat": "the-frame",
-          "label": "zoom 1 at (751.021, 260.816)",
+          "label": "zoom 1 at (665.914, 360)",
           "data": {
             "pose": {
-              "x": 751.021,
-              "y": 260.816,
+              "x": 665.914,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3188,11 +2289,11 @@
           "start": 796,
           "end": 797,
           "beat": "the-frame",
-          "label": "zoom 1 at (751.887, 260.042)",
+          "label": "zoom 1 at (666.28, 360)",
           "data": {
             "pose": {
-              "x": 751.887,
-              "y": 260.042,
+              "x": 666.28,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3203,11 +2304,11 @@
           "start": 797,
           "end": 798,
           "beat": "the-frame",
-          "label": "zoom 1 at (752.75, 259.271)",
+          "label": "zoom 1 at (666.645, 360)",
           "data": {
             "pose": {
-              "x": 752.75,
-              "y": 259.271,
+              "x": 666.645,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3218,11 +2319,11 @@
           "start": 798,
           "end": 799,
           "beat": "the-frame",
-          "label": "zoom 1 at (753.609, 258.503)",
+          "label": "zoom 1 at (667.01, 360)",
           "data": {
             "pose": {
-              "x": 753.609,
-              "y": 258.503,
+              "x": 667.01,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3233,11 +2334,11 @@
           "start": 799,
           "end": 800,
           "beat": "the-frame",
-          "label": "zoom 1 at (754.465, 257.739)",
+          "label": "zoom 1 at (667.375, 360)",
           "data": {
             "pose": {
-              "x": 754.465,
-              "y": 257.739,
+              "x": 667.375,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3248,11 +2349,11 @@
           "start": 800,
           "end": 801,
           "beat": "the-frame",
-          "label": "zoom 1 at (755.317, 256.978)",
+          "label": "zoom 1 at (667.739, 360)",
           "data": {
             "pose": {
-              "x": 755.317,
-              "y": 256.978,
+              "x": 667.739,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3263,11 +2364,11 @@
           "start": 801,
           "end": 802,
           "beat": "the-frame",
-          "label": "zoom 1 at (756.164, 256.221)",
+          "label": "zoom 1 at (668.103, 360)",
           "data": {
             "pose": {
-              "x": 756.164,
-              "y": 256.221,
+              "x": 668.103,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3278,11 +2379,11 @@
           "start": 802,
           "end": 803,
           "beat": "the-frame",
-          "label": "zoom 1 at (757.008, 255.467)",
+          "label": "zoom 1 at (668.466, 360)",
           "data": {
             "pose": {
-              "x": 757.008,
-              "y": 255.467,
+              "x": 668.466,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3293,11 +2394,11 @@
           "start": 803,
           "end": 804,
           "beat": "the-frame",
-          "label": "zoom 1 at (757.848, 254.717)",
+          "label": "zoom 1 at (668.828, 360)",
           "data": {
             "pose": {
-              "x": 757.848,
-              "y": 254.717,
+              "x": 668.828,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3308,11 +2409,11 @@
           "start": 804,
           "end": 805,
           "beat": "the-frame",
-          "label": "zoom 1 at (758.683, 253.971)",
+          "label": "zoom 1 at (669.19, 360)",
           "data": {
             "pose": {
-              "x": 758.683,
-              "y": 253.971,
+              "x": 669.19,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3323,11 +2424,11 @@
           "start": 805,
           "end": 806,
           "beat": "the-frame",
-          "label": "zoom 1 at (759.514, 253.228)",
+          "label": "zoom 1 at (669.55, 360)",
           "data": {
             "pose": {
-              "x": 759.514,
-              "y": 253.228,
+              "x": 669.55,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3338,11 +2439,11 @@
           "start": 806,
           "end": 807,
           "beat": "the-frame",
-          "label": "zoom 1 at (760.34, 252.49)",
+          "label": "zoom 1 at (669.91, 360)",
           "data": {
             "pose": {
-              "x": 760.34,
-              "y": 252.49,
+              "x": 669.91,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3353,11 +2454,11 @@
           "start": 807,
           "end": 808,
           "beat": "the-frame",
-          "label": "zoom 1 at (761.162, 251.756)",
+          "label": "zoom 1 at (670.269, 360)",
           "data": {
             "pose": {
-              "x": 761.162,
-              "y": 251.756,
+              "x": 670.269,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3368,11 +2469,11 @@
           "start": 808,
           "end": 809,
           "beat": "the-frame",
-          "label": "zoom 1 at (761.98, 251.026)",
+          "label": "zoom 1 at (670.628, 360)",
           "data": {
             "pose": {
-              "x": 761.98,
-              "y": 251.026,
+              "x": 670.628,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3383,11 +2484,11 @@
           "start": 809,
           "end": 810,
           "beat": "the-frame",
-          "label": "zoom 1 at (762.792, 250.3)",
+          "label": "zoom 1 at (670.984, 360)",
           "data": {
             "pose": {
-              "x": 762.792,
-              "y": 250.3,
+              "x": 670.984,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3398,11 +2499,11 @@
           "start": 810,
           "end": 811,
           "beat": "the-frame",
-          "label": "zoom 1 at (763.6, 249.578)",
+          "label": "zoom 1 at (671.34, 360)",
           "data": {
             "pose": {
-              "x": 763.6,
-              "y": 249.578,
+              "x": 671.34,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3413,11 +2514,11 @@
           "start": 811,
           "end": 812,
           "beat": "the-frame",
-          "label": "zoom 1 at (764.402, 248.861)",
+          "label": "zoom 1 at (671.695, 360)",
           "data": {
             "pose": {
-              "x": 764.402,
-              "y": 248.861,
+              "x": 671.695,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3428,11 +2529,11 @@
           "start": 812,
           "end": 813,
           "beat": "the-frame",
-          "label": "zoom 1 at (765.199, 248.149)",
+          "label": "zoom 1 at (672.048, 360)",
           "data": {
             "pose": {
-              "x": 765.199,
-              "y": 248.149,
+              "x": 672.048,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3443,11 +2544,11 @@
           "start": 813,
           "end": 814,
           "beat": "the-frame",
-          "label": "zoom 1 at (765.992, 247.441)",
+          "label": "zoom 1 at (672.4, 360)",
           "data": {
             "pose": {
-              "x": 765.992,
-              "y": 247.441,
+              "x": 672.4,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3458,11 +2559,11 @@
           "start": 814,
           "end": 815,
           "beat": "the-frame",
-          "label": "zoom 1 at (766.779, 246.738)",
+          "label": "zoom 1 at (672.75, 360)",
           "data": {
             "pose": {
-              "x": 766.779,
-              "y": 246.738,
+              "x": 672.75,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3473,11 +2574,11 @@
           "start": 815,
           "end": 816,
           "beat": "the-frame",
-          "label": "zoom 1 at (767.56, 246.04)",
+          "label": "zoom 1 at (673.099, 360)",
           "data": {
             "pose": {
-              "x": 767.56,
-              "y": 246.04,
+              "x": 673.099,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3488,11 +2589,11 @@
           "start": 816,
           "end": 817,
           "beat": "the-frame",
-          "label": "zoom 1 at (768.336, 245.347)",
+          "label": "zoom 1 at (673.447, 360)",
           "data": {
             "pose": {
-              "x": 768.336,
-              "y": 245.347,
+              "x": 673.447,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3503,11 +2604,11 @@
           "start": 817,
           "end": 818,
           "beat": "the-frame",
-          "label": "zoom 1 at (769.106, 244.659)",
+          "label": "zoom 1 at (673.793, 360)",
           "data": {
             "pose": {
-              "x": 769.106,
-              "y": 244.659,
+              "x": 673.793,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3518,11 +2619,11 @@
           "start": 818,
           "end": 819,
           "beat": "the-frame",
-          "label": "zoom 1 at (769.871, 243.976)",
+          "label": "zoom 1 at (674.137, 360)",
           "data": {
             "pose": {
-              "x": 769.871,
-              "y": 243.976,
+              "x": 674.137,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3533,11 +2634,11 @@
           "start": 819,
           "end": 820,
           "beat": "the-frame",
-          "label": "zoom 1 at (770.63, 243.298)",
+          "label": "zoom 1 at (674.479, 360)",
           "data": {
             "pose": {
-              "x": 770.63,
-              "y": 243.298,
+              "x": 674.479,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3548,11 +2649,11 @@
           "start": 820,
           "end": 821,
           "beat": "the-frame",
-          "label": "zoom 1 at (771.383, 242.625)",
+          "label": "zoom 1 at (674.82, 360)",
           "data": {
             "pose": {
-              "x": 771.383,
-              "y": 242.625,
+              "x": 674.82,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3563,11 +2664,11 @@
           "start": 821,
           "end": 822,
           "beat": "the-frame",
-          "label": "zoom 1 at (772.129, 241.958)",
+          "label": "zoom 1 at (675.158, 360)",
           "data": {
             "pose": {
-              "x": 772.129,
-              "y": 241.958,
+              "x": 675.158,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3578,11 +2679,11 @@
           "start": 822,
           "end": 823,
           "beat": "the-frame",
-          "label": "zoom 1 at (772.87, 241.296)",
+          "label": "zoom 1 at (675.495, 360)",
           "data": {
             "pose": {
-              "x": 772.87,
-              "y": 241.296,
+              "x": 675.495,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3593,11 +2694,11 @@
           "start": 823,
           "end": 824,
           "beat": "the-frame",
-          "label": "zoom 1 at (773.604, 240.64)",
+          "label": "zoom 1 at (675.829, 360)",
           "data": {
             "pose": {
-              "x": 773.604,
-              "y": 240.64,
+              "x": 675.829,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3608,11 +2709,11 @@
           "start": 824,
           "end": 825,
           "beat": "the-frame",
-          "label": "zoom 1 at (774.332, 239.99)",
+          "label": "zoom 1 at (676.162, 360)",
           "data": {
             "pose": {
-              "x": 774.332,
-              "y": 239.99,
+              "x": 676.162,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3623,11 +2724,11 @@
           "start": 825,
           "end": 826,
           "beat": "the-frame",
-          "label": "zoom 1 at (775.054, 239.345)",
+          "label": "zoom 1 at (676.492, 360)",
           "data": {
             "pose": {
-              "x": 775.054,
-              "y": 239.345,
+              "x": 676.492,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3638,11 +2739,11 @@
           "start": 826,
           "end": 827,
           "beat": "the-frame",
-          "label": "zoom 1 at (775.769, 238.707)",
+          "label": "zoom 1 at (676.82, 360)",
           "data": {
             "pose": {
-              "x": 775.769,
-              "y": 238.707,
+              "x": 676.82,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3653,11 +2754,11 @@
           "start": 827,
           "end": 828,
           "beat": "the-frame",
-          "label": "zoom 1 at (776.477, 238.074)",
+          "label": "zoom 1 at (677.145, 360)",
           "data": {
             "pose": {
-              "x": 776.477,
-              "y": 238.074,
+              "x": 677.145,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3668,11 +2769,11 @@
           "start": 828,
           "end": 829,
           "beat": "the-frame",
-          "label": "zoom 1 at (777.178, 237.447)",
+          "label": "zoom 1 at (677.468, 360)",
           "data": {
             "pose": {
-              "x": 777.178,
-              "y": 237.447,
+              "x": 677.468,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3683,11 +2784,11 @@
           "start": 829,
           "end": 830,
           "beat": "the-frame",
-          "label": "zoom 1 at (777.873, 236.827)",
+          "label": "zoom 1 at (677.789, 360)",
           "data": {
             "pose": {
-              "x": 777.873,
-              "y": 236.827,
+              "x": 677.789,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3698,11 +2799,11 @@
           "start": 830,
           "end": 831,
           "beat": "the-frame",
-          "label": "zoom 1 at (778.561, 236.212)",
+          "label": "zoom 1 at (678.107, 360)",
           "data": {
             "pose": {
-              "x": 778.561,
-              "y": 236.212,
+              "x": 678.107,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3713,11 +2814,11 @@
           "start": 831,
           "end": 832,
           "beat": "the-frame",
-          "label": "zoom 1 at (779.241, 235.605)",
+          "label": "zoom 1 at (678.423, 360)",
           "data": {
             "pose": {
-              "x": 779.241,
-              "y": 235.605,
+              "x": 678.423,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3728,11 +2829,11 @@
           "start": 832,
           "end": 833,
           "beat": "the-frame",
-          "label": "zoom 1 at (779.914, 235.003)",
+          "label": "zoom 1 at (678.736, 360)",
           "data": {
             "pose": {
-              "x": 779.914,
-              "y": 235.003,
+              "x": 678.736,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3743,11 +2844,11 @@
           "start": 833,
           "end": 834,
           "beat": "the-frame",
-          "label": "zoom 1 at (780.58, 234.408)",
+          "label": "zoom 1 at (679.046, 360)",
           "data": {
             "pose": {
-              "x": 780.58,
-              "y": 234.408,
+              "x": 679.046,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3758,11 +2859,11 @@
           "start": 834,
           "end": 835,
           "beat": "the-frame",
-          "label": "zoom 1 at (781.239, 233.82)",
+          "label": "zoom 1 at (679.353, 360)",
           "data": {
             "pose": {
-              "x": 781.239,
-              "y": 233.82,
+              "x": 679.353,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3773,11 +2874,11 @@
           "start": 835,
           "end": 836,
           "beat": "the-frame",
-          "label": "zoom 1 at (781.89, 233.238)",
+          "label": "zoom 1 at (679.658, 360)",
           "data": {
             "pose": {
-              "x": 781.89,
-              "y": 233.238,
+              "x": 679.658,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3788,11 +2889,11 @@
           "start": 836,
           "end": 837,
           "beat": "the-frame",
-          "label": "zoom 1 at (782.533, 232.663)",
+          "label": "zoom 1 at (679.959, 360)",
           "data": {
             "pose": {
-              "x": 782.533,
-              "y": 232.663,
+              "x": 679.959,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3803,11 +2904,11 @@
           "start": 837,
           "end": 838,
           "beat": "the-frame",
-          "label": "zoom 1 at (783.169, 232.096)",
+          "label": "zoom 1 at (680.258, 360)",
           "data": {
             "pose": {
-              "x": 783.169,
-              "y": 232.096,
+              "x": 680.258,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3818,11 +2919,11 @@
           "start": 838,
           "end": 839,
           "beat": "the-frame",
-          "label": "zoom 1 at (783.797, 231.535)",
+          "label": "zoom 1 at (680.553, 360)",
           "data": {
             "pose": {
-              "x": 783.797,
-              "y": 231.535,
+              "x": 680.553,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3833,11 +2934,11 @@
           "start": 839,
           "end": 840,
           "beat": "the-frame",
-          "label": "zoom 1 at (784.416, 230.981)",
+          "label": "zoom 1 at (680.845, 360)",
           "data": {
             "pose": {
-              "x": 784.416,
-              "y": 230.981,
+              "x": 680.845,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3848,11 +2949,11 @@
           "start": 840,
           "end": 841,
           "beat": "the-frame",
-          "label": "zoom 1 at (785.028, 230.434)",
+          "label": "zoom 1 at (681.134, 360)",
           "data": {
             "pose": {
-              "x": 785.028,
-              "y": 230.434,
+              "x": 681.134,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3863,11 +2964,11 @@
           "start": 841,
           "end": 842,
           "beat": "the-frame",
-          "label": "zoom 1 at (785.632, 229.895)",
+          "label": "zoom 1 at (681.42, 360)",
           "data": {
             "pose": {
-              "x": 785.632,
-              "y": 229.895,
+              "x": 681.42,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3878,11 +2979,11 @@
           "start": 842,
           "end": 843,
           "beat": "the-frame",
-          "label": "zoom 1 at (786.227, 229.363)",
+          "label": "zoom 1 at (681.702, 360)",
           "data": {
             "pose": {
-              "x": 786.227,
-              "y": 229.363,
+              "x": 681.702,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3893,11 +2994,11 @@
           "start": 843,
           "end": 844,
           "beat": "the-frame",
-          "label": "zoom 1 at (786.814, 228.839)",
+          "label": "zoom 1 at (681.981, 360)",
           "data": {
             "pose": {
-              "x": 786.814,
-              "y": 228.839,
+              "x": 681.981,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3908,11 +3009,11 @@
           "start": 844,
           "end": 845,
           "beat": "the-frame",
-          "label": "zoom 1 at (787.393, 228.322)",
+          "label": "zoom 1 at (682.256, 360)",
           "data": {
             "pose": {
-              "x": 787.393,
-              "y": 228.322,
+              "x": 682.256,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3923,11 +3024,11 @@
           "start": 845,
           "end": 846,
           "beat": "the-frame",
-          "label": "zoom 1 at (787.963, 227.813)",
+          "label": "zoom 1 at (682.528, 360)",
           "data": {
             "pose": {
-              "x": 787.963,
-              "y": 227.813,
+              "x": 682.528,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3938,11 +3039,11 @@
           "start": 846,
           "end": 847,
           "beat": "the-frame",
-          "label": "zoom 1 at (788.524, 227.311)",
+          "label": "zoom 1 at (682.796, 360)",
           "data": {
             "pose": {
-              "x": 788.524,
-              "y": 227.311,
+              "x": 682.796,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3953,11 +3054,11 @@
           "start": 847,
           "end": 848,
           "beat": "the-frame",
-          "label": "zoom 1 at (789.077, 226.818)",
+          "label": "zoom 1 at (683.06, 360)",
           "data": {
             "pose": {
-              "x": 789.077,
-              "y": 226.818,
+              "x": 683.06,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3968,11 +3069,11 @@
           "start": 848,
           "end": 849,
           "beat": "the-frame",
-          "label": "zoom 1 at (789.62, 226.332)",
+          "label": "zoom 1 at (683.321, 360)",
           "data": {
             "pose": {
-              "x": 789.62,
-              "y": 226.332,
+              "x": 683.321,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3983,11 +3084,11 @@
           "start": 849,
           "end": 850,
           "beat": "the-frame",
-          "label": "zoom 1 at (790.155, 225.854)",
+          "label": "zoom 1 at (683.577, 360)",
           "data": {
             "pose": {
-              "x": 790.155,
-              "y": 225.854,
+              "x": 683.577,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -3998,11 +3099,11 @@
           "start": 850,
           "end": 851,
           "beat": "the-frame",
-          "label": "zoom 1 at (790.68, 225.385)",
+          "label": "zoom 1 at (683.83, 360)",
           "data": {
             "pose": {
-              "x": 790.68,
-              "y": 225.385,
+              "x": 683.83,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4013,11 +3114,11 @@
           "start": 851,
           "end": 852,
           "beat": "the-frame",
-          "label": "zoom 1 at (791.197, 224.924)",
+          "label": "zoom 1 at (684.079, 360)",
           "data": {
             "pose": {
-              "x": 791.197,
-              "y": 224.924,
+              "x": 684.079,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4028,11 +3129,11 @@
           "start": 852,
           "end": 853,
           "beat": "the-frame",
-          "label": "zoom 1 at (791.703, 224.471)",
+          "label": "zoom 1 at (684.323, 360)",
           "data": {
             "pose": {
-              "x": 791.703,
-              "y": 224.471,
+              "x": 684.323,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4043,11 +3144,11 @@
           "start": 853,
           "end": 854,
           "beat": "the-frame",
-          "label": "zoom 1 at (792.201, 224.026)",
+          "label": "zoom 1 at (684.564, 360)",
           "data": {
             "pose": {
-              "x": 792.201,
-              "y": 224.026,
+              "x": 684.564,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4058,11 +3159,11 @@
           "start": 854,
           "end": 855,
           "beat": "the-frame",
-          "label": "zoom 1 at (792.689, 223.59)",
+          "label": "zoom 1 at (684.8, 360)",
           "data": {
             "pose": {
-              "x": 792.689,
-              "y": 223.59,
+              "x": 684.8,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4073,11 +3174,11 @@
           "start": 855,
           "end": 856,
           "beat": "the-frame",
-          "label": "zoom 1 at (793.168, 223.163)",
+          "label": "zoom 1 at (685.032, 360)",
           "data": {
             "pose": {
-              "x": 793.168,
-              "y": 223.163,
+              "x": 685.032,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4088,11 +3189,11 @@
           "start": 856,
           "end": 857,
           "beat": "the-frame",
-          "label": "zoom 1 at (793.636, 222.744)",
+          "label": "zoom 1 at (685.26, 360)",
           "data": {
             "pose": {
-              "x": 793.636,
-              "y": 222.744,
+              "x": 685.26,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4103,11 +3204,11 @@
           "start": 857,
           "end": 858,
           "beat": "the-frame",
-          "label": "zoom 1 at (794.095, 222.334)",
+          "label": "zoom 1 at (685.483, 360)",
           "data": {
             "pose": {
-              "x": 794.095,
-              "y": 222.334,
+              "x": 685.483,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4118,11 +3219,11 @@
           "start": 858,
           "end": 859,
           "beat": "the-frame",
-          "label": "zoom 1 at (794.544, 221.933)",
+          "label": "zoom 1 at (685.702, 360)",
           "data": {
             "pose": {
-              "x": 794.544,
-              "y": 221.933,
+              "x": 685.702,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4133,11 +3234,11 @@
           "start": 859,
           "end": 860,
           "beat": "the-frame",
-          "label": "zoom 1 at (794.983, 221.541)",
+          "label": "zoom 1 at (685.916, 360)",
           "data": {
             "pose": {
-              "x": 794.983,
-              "y": 221.541,
+              "x": 685.916,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4148,11 +3249,11 @@
           "start": 860,
           "end": 861,
           "beat": "the-frame",
-          "label": "zoom 1 at (795.411, 221.158)",
+          "label": "zoom 1 at (686.125, 360)",
           "data": {
             "pose": {
-              "x": 795.411,
-              "y": 221.158,
+              "x": 686.125,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4163,11 +3264,11 @@
           "start": 861,
           "end": 862,
           "beat": "the-frame",
-          "label": "zoom 1 at (795.83, 220.784)",
+          "label": "zoom 1 at (686.33, 360)",
           "data": {
             "pose": {
-              "x": 795.83,
-              "y": 220.784,
+              "x": 686.33,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4178,11 +3279,11 @@
           "start": 862,
           "end": 863,
           "beat": "the-frame",
-          "label": "zoom 1 at (796.238, 220.42)",
+          "label": "zoom 1 at (686.53, 360)",
           "data": {
             "pose": {
-              "x": 796.238,
-              "y": 220.42,
+              "x": 686.53,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4193,11 +3294,11 @@
           "start": 863,
           "end": 864,
           "beat": "the-frame",
-          "label": "zoom 1 at (796.636, 220.065)",
+          "label": "zoom 1 at (686.725, 360)",
           "data": {
             "pose": {
-              "x": 796.636,
-              "y": 220.065,
+              "x": 686.725,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4208,11 +3309,11 @@
           "start": 864,
           "end": 865,
           "beat": "the-frame",
-          "label": "zoom 1 at (797.023, 219.719)",
+          "label": "zoom 1 at (686.916, 360)",
           "data": {
             "pose": {
-              "x": 797.023,
-              "y": 219.719,
+              "x": 686.916,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4223,11 +3324,11 @@
           "start": 865,
           "end": 866,
           "beat": "the-frame",
-          "label": "zoom 1 at (797.399, 219.383)",
+          "label": "zoom 1 at (687.101, 360)",
           "data": {
             "pose": {
-              "x": 797.399,
-              "y": 219.383,
+              "x": 687.101,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4238,11 +3339,11 @@
           "start": 866,
           "end": 867,
           "beat": "the-frame",
-          "label": "zoom 1 at (797.764, 219.056)",
+          "label": "zoom 1 at (687.281, 360)",
           "data": {
             "pose": {
-              "x": 797.764,
-              "y": 219.056,
+              "x": 687.281,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4253,11 +3354,11 @@
           "start": 867,
           "end": 868,
           "beat": "the-frame",
-          "label": "zoom 1 at (798.119, 218.739)",
+          "label": "zoom 1 at (687.456, 360)",
           "data": {
             "pose": {
-              "x": 798.119,
-              "y": 218.739,
+              "x": 687.456,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4268,11 +3369,11 @@
           "start": 868,
           "end": 869,
           "beat": "the-frame",
-          "label": "zoom 1 at (798.463, 218.432)",
+          "label": "zoom 1 at (687.626, 360)",
           "data": {
             "pose": {
-              "x": 798.463,
-              "y": 218.432,
+              "x": 687.626,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4283,11 +3384,11 @@
           "start": 869,
           "end": 870,
           "beat": "the-frame",
-          "label": "zoom 1 at (798.795, 218.135)",
+          "label": "zoom 1 at (687.791, 360)",
           "data": {
             "pose": {
-              "x": 798.795,
-              "y": 218.135,
+              "x": 687.791,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4298,11 +3399,11 @@
           "start": 870,
           "end": 871,
           "beat": "the-frame",
-          "label": "zoom 1 at (799.117, 217.848)",
+          "label": "zoom 1 at (687.951, 360)",
           "data": {
             "pose": {
-              "x": 799.117,
-              "y": 217.848,
+              "x": 687.951,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4313,11 +3414,11 @@
           "start": 871,
           "end": 872,
           "beat": "the-frame",
-          "label": "zoom 1 at (799.427, 217.571)",
+          "label": "zoom 1 at (688.105, 360)",
           "data": {
             "pose": {
-              "x": 799.427,
-              "y": 217.571,
+              "x": 688.105,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4328,11 +3429,11 @@
           "start": 872,
           "end": 873,
           "beat": "the-frame",
-          "label": "zoom 1 at (799.725, 217.304)",
+          "label": "zoom 1 at (688.253, 360)",
           "data": {
             "pose": {
-              "x": 799.725,
-              "y": 217.304,
+              "x": 688.253,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4343,11 +3444,11 @@
           "start": 873,
           "end": 874,
           "beat": "the-frame",
-          "label": "zoom 1 at (800.012, 217.048)",
+          "label": "zoom 1 at (688.396, 360)",
           "data": {
             "pose": {
-              "x": 800.012,
-              "y": 217.048,
+              "x": 688.396,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4358,11 +3459,11 @@
           "start": 874,
           "end": 875,
           "beat": "the-frame",
-          "label": "zoom 1 at (800.288, 216.802)",
+          "label": "zoom 1 at (688.533, 360)",
           "data": {
             "pose": {
-              "x": 800.288,
-              "y": 216.802,
+              "x": 688.533,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4373,11 +3474,11 @@
           "start": 875,
           "end": 876,
           "beat": "the-frame",
-          "label": "zoom 1 at (800.552, 216.566)",
+          "label": "zoom 1 at (688.665, 360)",
           "data": {
             "pose": {
-              "x": 800.552,
-              "y": 216.566,
+              "x": 688.665,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4388,11 +3489,11 @@
           "start": 876,
           "end": 877,
           "beat": "the-frame",
-          "label": "zoom 1 at (800.803, 216.341)",
+          "label": "zoom 1 at (688.791, 360)",
           "data": {
             "pose": {
-              "x": 800.803,
-              "y": 216.341,
+              "x": 688.791,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4403,11 +3504,11 @@
           "start": 877,
           "end": 878,
           "beat": "the-frame",
-          "label": "zoom 1 at (801.043, 216.127)",
+          "label": "zoom 1 at (688.911, 360)",
           "data": {
             "pose": {
-              "x": 801.043,
-              "y": 216.127,
+              "x": 688.911,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4418,11 +3519,11 @@
           "start": 878,
           "end": 879,
           "beat": "the-frame",
-          "label": "zoom 1 at (801.271, 215.923)",
+          "label": "zoom 1 at (689.025, 360)",
           "data": {
             "pose": {
-              "x": 801.271,
-              "y": 215.923,
+              "x": 689.025,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4433,11 +3534,11 @@
           "start": 879,
           "end": 880,
           "beat": "the-frame",
-          "label": "zoom 1 at (801.487, 215.73)",
+          "label": "zoom 1 at (689.134, 360)",
           "data": {
             "pose": {
-              "x": 801.487,
-              "y": 215.73,
+              "x": 689.134,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4448,11 +3549,11 @@
           "start": 880,
           "end": 881,
           "beat": "the-frame",
-          "label": "zoom 1 at (801.691, 215.549)",
+          "label": "zoom 1 at (689.236, 360)",
           "data": {
             "pose": {
-              "x": 801.691,
-              "y": 215.549,
+              "x": 689.236,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4463,11 +3564,11 @@
           "start": 881,
           "end": 882,
           "beat": "the-frame",
-          "label": "zoom 1 at (801.882, 215.378)",
+          "label": "zoom 1 at (689.332, 360)",
           "data": {
             "pose": {
-              "x": 801.882,
-              "y": 215.378,
+              "x": 689.332,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4478,11 +3579,11 @@
           "start": 882,
           "end": 883,
           "beat": "the-frame",
-          "label": "zoom 1 at (802.06, 215.218)",
+          "label": "zoom 1 at (689.422, 360)",
           "data": {
             "pose": {
-              "x": 802.06,
-              "y": 215.218,
+              "x": 689.422,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4493,11 +3594,11 @@
           "start": 883,
           "end": 884,
           "beat": "the-frame",
-          "label": "zoom 1 at (802.226, 215.07)",
+          "label": "zoom 1 at (689.506, 360)",
           "data": {
             "pose": {
-              "x": 802.226,
-              "y": 215.07,
+              "x": 689.506,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4508,11 +3609,11 @@
           "start": 884,
           "end": 885,
           "beat": "the-frame",
-          "label": "zoom 1 at (802.38, 214.933)",
+          "label": "zoom 1 at (689.584, 360)",
           "data": {
             "pose": {
-              "x": 802.38,
-              "y": 214.933,
+              "x": 689.584,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4523,11 +3624,11 @@
           "start": 885,
           "end": 886,
           "beat": "the-frame",
-          "label": "zoom 1 at (802.52, 214.807)",
+          "label": "zoom 1 at (689.655, 360)",
           "data": {
             "pose": {
-              "x": 802.52,
-              "y": 214.807,
+              "x": 689.655,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4538,11 +3639,11 @@
           "start": 886,
           "end": 887,
           "beat": "the-frame",
-          "label": "zoom 1 at (802.648, 214.693)",
+          "label": "zoom 1 at (689.719, 360)",
           "data": {
             "pose": {
-              "x": 802.648,
-              "y": 214.693,
+              "x": 689.719,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4553,11 +3654,11 @@
           "start": 887,
           "end": 888,
           "beat": "the-frame",
-          "label": "zoom 1 at (802.763, 214.591)",
+          "label": "zoom 1 at (689.778, 360)",
           "data": {
             "pose": {
-              "x": 802.763,
-              "y": 214.591,
+              "x": 689.778,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4568,11 +3669,11 @@
           "start": 888,
           "end": 889,
           "beat": "the-frame",
-          "label": "zoom 1 at (802.864, 214.5)",
+          "label": "zoom 1 at (689.829, 360)",
           "data": {
             "pose": {
-              "x": 802.864,
-              "y": 214.5,
+              "x": 689.829,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4583,11 +3684,11 @@
           "start": 889,
           "end": 890,
           "beat": "the-frame",
-          "label": "zoom 1 at (802.953, 214.421)",
+          "label": "zoom 1 at (689.874, 360)",
           "data": {
             "pose": {
-              "x": 802.953,
-              "y": 214.421,
+              "x": 689.874,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4598,11 +3699,11 @@
           "start": 890,
           "end": 891,
           "beat": "the-frame",
-          "label": "zoom 1 at (803.028, 214.354)",
+          "label": "zoom 1 at (689.912, 360)",
           "data": {
             "pose": {
-              "x": 803.028,
-              "y": 214.354,
+              "x": 689.912,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4613,11 +3714,11 @@
           "start": 891,
           "end": 892,
           "beat": "the-frame",
-          "label": "zoom 1 at (803.09, 214.299)",
+          "label": "zoom 1 at (689.944, 360)",
           "data": {
             "pose": {
-              "x": 803.09,
-              "y": 214.299,
+              "x": 689.944,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4628,11 +3729,11 @@
           "start": 892,
           "end": 893,
           "beat": "the-frame",
-          "label": "zoom 1 at (803.138, 214.256)",
+          "label": "zoom 1 at (689.968, 360)",
           "data": {
             "pose": {
-              "x": 803.138,
-              "y": 214.256,
+              "x": 689.968,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4643,11 +3744,11 @@
           "start": 893,
           "end": 894,
           "beat": "the-frame",
-          "label": "zoom 1 at (803.172, 214.225)",
+          "label": "zoom 1 at (689.986, 360)",
           "data": {
             "pose": {
-              "x": 803.172,
-              "y": 214.225,
+              "x": 689.986,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4658,11 +3759,11 @@
           "start": 894,
           "end": 895,
           "beat": "the-frame",
-          "label": "zoom 1 at (803.193, 214.206)",
+          "label": "zoom 1 at (689.996, 360)",
           "data": {
             "pose": {
-              "x": 803.193,
-              "y": 214.206,
+              "x": 689.996,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4673,11 +3774,11 @@
           "start": 895,
           "end": 896,
           "beat": "the-frame",
-          "label": "zoom 1 at (803.2, 214.2)",
+          "label": "zoom 1 at (690, 360)",
           "data": {
             "pose": {
-              "x": 803.2,
-              "y": 214.2,
+              "x": 690,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4688,11 +3789,11 @@
           "start": 896,
           "end": 897,
           "beat": "the-frame",
-          "label": "zoom 1 at (796.104, 220.539)",
+          "label": "zoom 1 at (687.826, 360)",
           "data": {
             "pose": {
-              "x": 796.104,
-              "y": 220.539,
+              "x": 687.826,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4703,11 +3804,11 @@
           "start": 897,
           "end": 898,
           "beat": "the-frame",
-          "label": "zoom 1 at (789.009, 226.878)",
+          "label": "zoom 1 at (685.652, 360)",
           "data": {
             "pose": {
-              "x": 789.009,
-              "y": 226.878,
+              "x": 685.652,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4718,11 +3819,11 @@
           "start": 898,
           "end": 899,
           "beat": "the-frame",
-          "label": "zoom 1 at (781.913, 233.217)",
+          "label": "zoom 1 at (683.478, 360)",
           "data": {
             "pose": {
-              "x": 781.913,
-              "y": 233.217,
+              "x": 683.478,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4733,11 +3834,11 @@
           "start": 899,
           "end": 900,
           "beat": "the-frame",
-          "label": "zoom 1 at (774.817, 239.557)",
+          "label": "zoom 1 at (681.304, 360)",
           "data": {
             "pose": {
-              "x": 774.817,
-              "y": 239.557,
+              "x": 681.304,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4748,11 +3849,11 @@
           "start": 900,
           "end": 901,
           "beat": "the-frame",
-          "label": "zoom 1 at (767.722, 245.896)",
+          "label": "zoom 1 at (679.13, 360)",
           "data": {
             "pose": {
-              "x": 767.722,
-              "y": 245.896,
+              "x": 679.13,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4763,11 +3864,11 @@
           "start": 901,
           "end": 902,
           "beat": "the-frame",
-          "label": "zoom 1 at (760.626, 252.235)",
+          "label": "zoom 1 at (676.957, 360)",
           "data": {
             "pose": {
-              "x": 760.626,
-              "y": 252.235,
+              "x": 676.957,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4778,11 +3879,11 @@
           "start": 902,
           "end": 903,
           "beat": "the-frame",
-          "label": "zoom 1 at (753.53, 258.574)",
+          "label": "zoom 1 at (674.783, 360)",
           "data": {
             "pose": {
-              "x": 753.53,
-              "y": 258.574,
+              "x": 674.783,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4793,11 +3894,11 @@
           "start": 903,
           "end": 904,
           "beat": "the-frame",
-          "label": "zoom 1 at (746.435, 264.913)",
+          "label": "zoom 1 at (672.609, 360)",
           "data": {
             "pose": {
-              "x": 746.435,
-              "y": 264.913,
+              "x": 672.609,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4808,11 +3909,11 @@
           "start": 904,
           "end": 905,
           "beat": "the-frame",
-          "label": "zoom 1 at (739.339, 271.252)",
+          "label": "zoom 1 at (670.435, 360)",
           "data": {
             "pose": {
-              "x": 739.339,
-              "y": 271.252,
+              "x": 670.435,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4823,11 +3924,11 @@
           "start": 905,
           "end": 906,
           "beat": "the-frame",
-          "label": "zoom 1 at (732.243, 277.591)",
+          "label": "zoom 1 at (668.261, 360)",
           "data": {
             "pose": {
-              "x": 732.243,
-              "y": 277.591,
+              "x": 668.261,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4838,11 +3939,11 @@
           "start": 906,
           "end": 907,
           "beat": "the-frame",
-          "label": "zoom 1 at (725.148, 283.93)",
+          "label": "zoom 1 at (666.087, 360)",
           "data": {
             "pose": {
-              "x": 725.148,
-              "y": 283.93,
+              "x": 666.087,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4853,11 +3954,11 @@
           "start": 907,
           "end": 908,
           "beat": "the-frame",
-          "label": "zoom 1 at (718.052, 290.27)",
+          "label": "zoom 1 at (663.913, 360)",
           "data": {
             "pose": {
-              "x": 718.052,
-              "y": 290.27,
+              "x": 663.913,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4868,11 +3969,11 @@
           "start": 908,
           "end": 909,
           "beat": "the-frame",
-          "label": "zoom 1 at (710.957, 296.609)",
+          "label": "zoom 1 at (661.739, 360)",
           "data": {
             "pose": {
-              "x": 710.957,
-              "y": 296.609,
+              "x": 661.739,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4883,11 +3984,11 @@
           "start": 909,
           "end": 910,
           "beat": "the-frame",
-          "label": "zoom 1 at (703.861, 302.948)",
+          "label": "zoom 1 at (659.565, 360)",
           "data": {
             "pose": {
-              "x": 703.861,
-              "y": 302.948,
+              "x": 659.565,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4898,11 +3999,11 @@
           "start": 910,
           "end": 911,
           "beat": "the-frame",
-          "label": "zoom 1 at (696.765, 309.287)",
+          "label": "zoom 1 at (657.391, 360)",
           "data": {
             "pose": {
-              "x": 696.765,
-              "y": 309.287,
+              "x": 657.391,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4913,11 +4014,11 @@
           "start": 911,
           "end": 912,
           "beat": "the-frame",
-          "label": "zoom 1 at (689.67, 315.626)",
+          "label": "zoom 1 at (655.217, 360)",
           "data": {
             "pose": {
-              "x": 689.67,
-              "y": 315.626,
+              "x": 655.217,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4928,11 +4029,11 @@
           "start": 912,
           "end": 913,
           "beat": "the-frame",
-          "label": "zoom 1 at (682.574, 321.965)",
+          "label": "zoom 1 at (653.043, 360)",
           "data": {
             "pose": {
-              "x": 682.574,
-              "y": 321.965,
+              "x": 653.043,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4943,11 +4044,11 @@
           "start": 913,
           "end": 914,
           "beat": "the-frame",
-          "label": "zoom 1 at (675.478, 328.304)",
+          "label": "zoom 1 at (650.87, 360)",
           "data": {
             "pose": {
-              "x": 675.478,
-              "y": 328.304,
+              "x": 650.87,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4958,11 +4059,11 @@
           "start": 914,
           "end": 915,
           "beat": "the-frame",
-          "label": "zoom 1 at (668.383, 334.643)",
+          "label": "zoom 1 at (648.696, 360)",
           "data": {
             "pose": {
-              "x": 668.383,
-              "y": 334.643,
+              "x": 648.696,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4973,11 +4074,11 @@
           "start": 915,
           "end": 916,
           "beat": "the-frame",
-          "label": "zoom 1 at (661.287, 340.983)",
+          "label": "zoom 1 at (646.522, 360)",
           "data": {
             "pose": {
-              "x": 661.287,
-              "y": 340.983,
+              "x": 646.522,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -4988,11 +4089,11 @@
           "start": 916,
           "end": 917,
           "beat": "the-frame",
-          "label": "zoom 1 at (654.191, 347.322)",
+          "label": "zoom 1 at (644.348, 360)",
           "data": {
             "pose": {
-              "x": 654.191,
-              "y": 347.322,
+              "x": 644.348,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -5003,11 +4104,11 @@
           "start": 917,
           "end": 918,
           "beat": "the-frame",
-          "label": "zoom 1 at (647.096, 353.661)",
+          "label": "zoom 1 at (642.174, 360)",
           "data": {
             "pose": {
-              "x": 647.096,
-              "y": 353.661,
+              "x": 642.174,
+              "y": 360,
               "zoom": 1,
               "rot": 0
             },
@@ -5241,7 +4342,7 @@
           "label": "step",
           "data": {
             "hold": 14,
-            "breakdowns": 6
+            "breakdowns": 5
           }
         },
         {
@@ -6404,10 +5505,10 @@
           "start": 630,
           "end": 631,
           "beat": "the-frame",
-          "label": "p009 Beat 4 plays slump, rise and threshold for 36 frames, the ruled holds are 26, 20 and 24",
+          "label": "p009 Beat 4 played slump, rise and threshold for 36 frames, the ruled holds are 26, 20 and 24",
           "data": {
             "id": "p009",
-            "title": "Beat 4 plays slump, rise and threshold for 36 frames, the ruled holds are 26, 20 and 24",
+            "title": "Beat 4 played slump, rise and threshold for 36 frames, the ruled holds are 26, 20 and 24",
             "kind": "finding",
             "status": "open",
             "from": "director",
@@ -6417,7 +5518,7 @@
               "beat": "the-frame",
               "frame": 630
             },
-            "text": "Animatic 04 plays beat 4 from the six D99 keys. The hold-band check refuses it: 'hold of 36 frames at 630-665, 740-775 and 840-875 is over 27 and no key declares it' (out/animatic-04-probe-all.txt). The sheet rules those three holds at 26, 20 and 24 frames, but the first drawing of each move lands 10 frames after the ruled hold ends, because drawings sit 4 frames apart and a move has six, so the viewer sees each pose for 36 frames. This is the second TASTE question of study s02-01 (default: keep the drawings), and with that default the animatic cannot pass the band. Three ways out, none taken here: widen the moves so the ruled holds are what is on screen; keep the drawings and rule the three holds at 36 with the key declaring each; or start each move's first drawing sooner. Which one is the owner's.",
+            "text": "Animatic 04 played beat 4 from the six D99 keys and the hold-band check refused it: 'hold of 36 frames at 630-665, 740-775 and 840-875 is over 27 and no key declares it' (quoted in v3/studies/animatic-04.md; the first render's frames are kept as out/animatic-fig-seq-04a and out/animatic-seq-04a). The first drawing of each move landed 10 frames after the ruled hold ended, so the viewer saw slump, rise and threshold for 36 frames, not 26, 20 and 24.\n\nDone 2026-10-19, the hold wins. In v3/poses/s02-the-frame.json (breakdown frames only; the keys, their solved joints and the joints of every kept drawing are unchanged, so every keysHash and the plates stand) each move's first drawing now lands on the frame its key's hold ends: 656, 706, 760, 814 and 864. The exposure sheet (v3/xsheet.json) holds slump, turn, rise, step, threshold and through for exactly 26, 16, 20, 14, 24 and 30 frames.\n\nThe 4-frame spacing could not be kept on any of the five moves. They run 34, 34, 40, 26 and 36 frames from the end of a hold to the next key; six drawings of at most 4 frames cover 24, and the hold-band check (C28) calls a drawing held 5 to 10 frames a hold under 11. So each move opens with one hold-length drawing, the coil, held 16, 14, 20, 12 and 16 frames (the anticipation, and for turn -> rise a new anticipation at -0.10 because a first drawing 26 % along the chord failed the joints-only ease check); the rest of the move is drawn on fours, its last drawing 2 to 4 frames before the next key. To keep the arcs and the cloak's response inside their checks: turn -> rise lost its 0.74 passing; step -> threshold lost its 0.26 and 0.40 passings for one 0.30 passing on 826 (the heel tap stays on 828 and its settle on 836); slump -> turn ends on 688, two frames before the turn key (a layout ending on 686 read the cloak settling 20 frames after a step against 14 declared).\n\nCost: five more holds and five more pops (a held drawing against a key's hold with no drawing between): the animatic's hold-band lists 34 holds and 15 pops against 29 and 10, and the pose gate's per-shot form, which runs hold-band with --no-pops, would refuse the five. Open for the owner: the coil is the check's only door. A 34-frame move could instead run 8 drawings (C28 allows 3 to 6), or draw on sixes (the check calls a 6-frame drawing a hold under 11); either changes the rubric, not this sheet.",
             "references": [
               {
                 "id": "samurai-jack-holds",
@@ -6436,8 +5537,8 @@
                 ]
               }
             ],
-            "before": "slump, rise and threshold on screen 36 frames (ruled 26, 20, 24); hold-band FAIL on those three holds",
-            "after": "the held pose on screen for the frames its key declares, or the key declaring the frames it is on screen",
+            "before": "slump, rise and threshold on screen 36 frames (ruled 26, 20, 24); hold-band FAIL on those three holds; 29 holds, 10 pops",
+            "after": "every key on screen exactly its D99 frames (26, 16, 20, 14, 24, 30); hold-band pass (34 holds, 12 moves of 3-6 drawings, 15 pops); probe-all --contract pass; followthrough pass on the shot's and the animatic's joints; five moves open with a held drawing of 12 to 20 frames",
             "file": "v3/proposals/p009-beat-4-plays-slump-rise-and-threshold-fo.json"
           }
         },
@@ -6445,10 +5546,10 @@
           "start": 800,
           "end": 801,
           "beat": "the-frame",
-          "label": "p010 The beat 4 camera cuts off the human's feet from frame 733 and Codex from 780",
+          "label": "p010 The beat 4 camera cut off the human's feet from frame 733 and Codex from 780",
           "data": {
             "id": "p010",
-            "title": "The beat 4 camera cuts off the human's feet from frame 733 and Codex from 780",
+            "title": "The beat 4 camera cut off the human's feet from frame 733 and Codex from 780",
             "kind": "finding",
             "status": "open",
             "from": "director",
@@ -6458,7 +5559,7 @@
               "beat": "the-frame",
               "frame": 800
             },
-            "text": "With the six D99 keys played, the figure layer touches the bottom edge of the frame on 166 frames of beat 4, from 733 to 906 (out/animatic-fig-seq measured for ink within 2 px of an edge; cant-build and home-settle: none). The s02 layout camera pans up and right across the beat, ending centred (802, 215) in stage pixels at frame 880, a move written for the earlier three-key figure; her ankles are at stage y 571 to 598 in the six keys and the frame's bottom edge sits at stage y 575 there. Codex, who the ledger says joins Clawd at the frame, stays at frame left and is half out of the picture by 780. The pose sheet notes that how small the human is in the frame at 'through' is the camera's job; the camera does not yet do it. Options: pull the camera back and down toward the end of the beat, or hold the layout and move the figure up; Codex's walk to the frame is its own staging question.",
+            "text": "With the six D99 keys played, the figure layer touched the bottom edge of the picture on 166 frames of beat 4, from 733 to 906 (ink within 2 px of an edge on out/animatic-fig-seq-04a), and Codex was half out of the picture by 780. The layout carried no camera numbers, so cameraFromLayout derived the move from the emitter's travel: from the locked pose on 630 to (803, 215) at zoom 1 on 895, a pan up and right written for the earlier three-key figure.\n\nDone 2026-10-19: v3/layouts/s02-cant-build-frame.json carries `cameraPose` (span 690 to 895; start the locked pose; end x 690, y 360, zoom 1): a pan right of 50 stage px, the layout's own move word, that begins as the body turns toward the light and arrives where the crossing starts; the layout's camera words are unchanged. Measured on the re-render (out/animatic-fig-seq, out/animatic-seq): figure ink within 2 px of an edge on 0 of 300 frames of beat 4 (166 before); the figure's lowest ink is picture row 669 of 719 (50 px clear), its highest row 18; Codex lies at picture x 39 to 247 and y 482 to 691 on all 265 frames from 630 to 894, 39 px from the left edge at its closest (frame 879) and 28 px above the bottom; the frame, stage x 910 to 1190, is inside the picture on every frame with its centre 50 px nearer the middle of the picture at the end (x 1000, from 1050).\n\nThe move is that small because the stage allows no more. The figure and Codex use 674 of the stage's 720 px of height (the hair reaches stage y 17 on 814 to 825, Codex's bottom is at y 691), so a push or any pan up or down cuts one of them; Codex's left edge (x 89) and the frame's right edge (x 1190) leave 100 px of width. A push toward the lit frame, which the figure's 'through' key small in its light would need, takes Codex or the figure moved in the blocking, which is staging and was not changed here; a zoom below 1 shows the black outside the stage and was not tried. The eye trace does not change with it (270 of 300 frames of beat 4 over 3 %, 24.9 % at 700 and 21.5 % at 780, was 23.7 %): the brightest region is on Clawd, which is p011.",
             "references": [
               {
                 "id": "spirited-away-shoes",
@@ -6475,8 +5576,8 @@
                 ]
               }
             ],
-            "before": "figure cut by the bottom edge on 166 of 300 frames of beat 4; Codex half out at 780",
-            "after": "the whole human inside the frame through the step and the threshold; the through key small in the picture",
+            "before": "figure cut by the bottom edge on 166 of 300 frames of beat 4 (733 to 906); Codex half out at 780",
+            "after": "figure and Codex inside the picture on all 300 frames of beat 4 (0 frames touching an edge; Codex 39 px from the left edge at closest); the through key small in the picture is not done, it needs the blocking moved",
             "file": "v3/proposals/p010-the-beat-4-camera-cuts-off-the-humans-fe.json"
           }
         },
@@ -6559,6 +5660,63 @@
             "before": "structure x1.2 over the frame; frame hidden",
             "after": "structure x0.5 under the frame; frame clear; the ending small",
             "file": "v3/proposals/p012-home-settle-the-structure-stands-small-u.json"
+          }
+        },
+        {
+          "start": 900,
+          "end": 901,
+          "beat": "the-frame",
+          "label": "p013 Beat 4 staging: the frame is the subject, but the figure fills the stage",
+          "data": {
+            "id": "p013",
+            "title": "Beat 4 staging: the frame is the subject, but the figure fills the stage",
+            "kind": "owner-ask",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "the-frame",
+              "frame": 900
+            },
+            "text": "D91 says beat 4's light narrows the field to the frame, lit from inside. On the animatic the human and Codex use 674 of the stage's 720 px of height and the frame sits small at top right; the camera now keeps feet and Codex in picture (p010) but no camera move can make the frame the subject while the figure is this large, and a zoom below 1 shows black outside the stage. Options in the vocabulary: 'wide' restages beat 4 so the frame is large and near centre and the figure stands further off, small against it, the field narrowing to the frame as ruled; 'medium' keeps the present figure scale and lets the frame read as a small lit object the figure walks into. Default: wide.",
+            "references": [
+              {
+                "id": "totoro-lived-in",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "My Neighbor Totoro (1988): Mei's shoes, the rotting pillar, the acorns",
+                "borrow": [
+                  "the details only a child would notice: a shoe left askew, a pillar that crumbles when pushed, acorns on the floor",
+                  "weight on contact: a body lands, settles, then the cloth settles after",
+                  "a world that is lived in before the story touches it"
+                ],
+                "governs": [
+                  "D92",
+                  "C14",
+                  "C31"
+                ]
+              },
+              {
+                "id": "samurai-jack-holds",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Samurai Jack (2001–2017): holds, snaps, the silent episode",
+                "borrow": [
+                  "long held poses that are compositions, then one snap",
+                  "silence carried by staging and light alone",
+                  "wide flat planes of colour as the field"
+                ],
+                "governs": [
+                  "D92",
+                  "C28",
+                  "C31"
+                ]
+              }
+            ],
+            "before": "beat 4 staged with the figure at full stage height and the frame small at top right; eye trace 270 of 300 frames off the frame",
+            "after": "beat 4 restaged wide: the frame large, the figure small against it, the field narrowing to the frame (D91, D99)",
+            "file": "v3/proposals/p013-beat-4-staging-the-frame-is-the-subject.json"
           }
         }
       ]
