@@ -533,7 +533,7 @@ async function main(): Promise<void> {
       .join(' | ');
     const tsContent = [
       '// Auto-generated from tooling/contracts/*.json. Do not edit manually.',
-      'export interface ToolParameter {',
+      'interface ToolParameter {',
       '  name: string;',
       '  type: string;',
       '  description: string;',
@@ -548,7 +548,7 @@ async function main(): Promise<void> {
       '  resolvesPendingRun?: boolean; // True when supplying this param resolves a run pending a review (failed gate or unknown interrupt)',
       '}',
       '',
-      'export interface ToolCommand {',
+      'interface ToolCommand {',
       '  id: string;',
       '  summary: string;',
       '  parameters?: string[];',
