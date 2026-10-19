@@ -353,53 +353,6 @@ export type PromptResourceAction =
   | ({ action: 'list' } & Pick<BasePromptResourceArgs, 'filter' | 'format'>)
   | ({ action: 'inspect'; id: string } & Pick<BasePromptResourceArgs, 'detail' | 'format'>);
 
-/**
- * Prompt Engine argument types
- */
-export interface PromptEngineArgs {
-  command: string;
-  force_restart?: boolean;
-  options?: ExecutionOptions;
-  inputs?: Record<string, unknown>;
-}
-
-/**
- * Execution options with proper typing
- */
-export interface ExecutionOptions {
-  /**
-   * Framework to apply. Accepts any registered framework ID.
-   * Use frameworkManager.listFrameworks() to see available options.
-   */
-  framework?: string;
-  llmValidation?: boolean;
-  retryCount?: number;
-  debugMode?: boolean;
-  stepConfirmation?: boolean;
-  context?: ExecutionContext;
-}
-
-/**
- * Execution context
- */
-export interface ExecutionContext {
-  sessionId?: string;
-  previousResults?: Record<string, unknown>;
-  userPreferences?: {
-    outputFormat?: 'compact' | 'detailed' | 'json' | 'markdown';
-    verboseMode?: boolean;
-    autoExecution?: boolean;
-  };
-  systemState?: {
-    activeFramework?: string;
-    memoryUsage?: {
-      heapUsed: number;
-      heapTotal: number;
-      external: number;
-    };
-  };
-}
-
 // ============================================================================
 // REPLACEMENT TYPES FOR Record<string, any>
 // ============================================================================

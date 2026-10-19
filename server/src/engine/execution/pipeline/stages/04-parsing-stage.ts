@@ -9,10 +9,7 @@ import type { Logger } from '#infra/logging/index.js';
 // ChainSessionService no longer needed — blueprint resolution delegated to ChainBlueprintResolver
 import type { WorkflowIR, WorkflowRejection } from '#modules/workflow-ir/types.js';
 import type { ExecutionContext, ParsedCommand } from '../../context/index.js';
-import type {
-  ArgumentParser,
-  ExecutionContext as ArgumentExecutionContext,
-} from '../../parsers/argument-parser.js';
+import type { ArgumentParser, ArgumentContext } from '../../parsers/argument-parser.js';
 import type { ChainBlueprintResolver } from '../../parsers/chain-blueprint-resolver.js';
 import type { UnifiedCommandParser } from '../../parsers/command-parser.js';
 import type { SymbolicCommandBuilder } from '../../parsers/symbolic-command-builder.js';
@@ -372,12 +369,10 @@ export class CommandParsingStage extends BasePipelineStage {
     return undefined;
   }
 
-  private createArgumentContext(): ArgumentExecutionContext {
+  private createArgumentContext(): ArgumentContext {
     return {
-      conversationHistory: [],
       environmentVars: process.env as Record<string, string>,
       promptDefaults: {},
-      systemContext: {},
     };
   }
 }

@@ -20,7 +20,7 @@ export {
   ArgumentParser,
   createArgumentParser,
   type ArgumentParsingResult,
-  type ExecutionContext,
+  type ArgumentContext,
 } from './argument-parser.js';
 
 export {

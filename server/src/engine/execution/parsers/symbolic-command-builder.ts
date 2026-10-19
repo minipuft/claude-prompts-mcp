@@ -12,10 +12,7 @@ import type {
   WorkflowNode,
   WorkflowRejection,
 } from '#modules/workflow-ir/types.js';
-import type {
-  ExecutionContext as ArgumentExecutionContext,
-  ArgumentParser,
-} from './argument-parser.js';
+import type { ArgumentContext, ArgumentParser } from './argument-parser.js';
 import type { ShellVerifyGate } from '../../gates/shell/types.js';
 import type { ParsedCommand } from '../context/index.js';
 import type { ConvertedPrompt } from '../types.js';
@@ -607,12 +604,10 @@ export class SymbolicCommandBuilder {
     return defaults;
   }
 
-  private createArgumentContext(): ArgumentExecutionContext {
+  private createArgumentContext(): ArgumentContext {
     return {
-      conversationHistory: [],
       environmentVars: process.env as Record<string, string>,
       promptDefaults: {},
-      systemContext: {},
     };
   }
 
