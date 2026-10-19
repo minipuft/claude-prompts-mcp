@@ -22,7 +22,7 @@ export async function history(options: HistoryOptions): Promise<number> {
 
   if (!type) {
     console.error(
-      `Usage: cpm history <prompt|gate|framework|style> <id>\n` +
+      `Usage: cpm history <prompt|gate|framework> <id>\n` +
         (options.type ? `Unknown type: ${options.type}` : 'Resource type is required.'),
     );
     return 1;
@@ -35,7 +35,7 @@ export async function history(options: HistoryOptions): Promise<number> {
   }
 
   if (!options.id) {
-    console.error('Usage: cpm history <prompt|gate|framework|style> <id>\nResource ID is required.');
+    console.error('Usage: cpm history <prompt|gate|framework> <id>\nResource ID is required.');
     return 1;
   }
 

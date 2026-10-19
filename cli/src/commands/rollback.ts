@@ -50,7 +50,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
 
   if (!type) {
     console.error(
-      `Usage: cpm rollback <prompt|gate|framework|style> <id> <version>\n` +
+      `Usage: cpm rollback <prompt|gate|framework> <id> <version>\n` +
         (options.type ? `Unknown type: ${options.type}` : 'Resource type is required.'),
     );
     return 1;
@@ -58,7 +58,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
 
   if (!options.id || !options.version) {
     console.error(
-      'Usage: cpm rollback <prompt|gate|framework|style> <id> <version>\nResource ID and target version are required.',
+      'Usage: cpm rollback <prompt|gate|framework> <id> <version>\nResource ID and target version are required.',
     );
     return 1;
   }
