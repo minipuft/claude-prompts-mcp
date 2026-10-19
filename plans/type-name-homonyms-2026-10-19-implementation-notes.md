@@ -34,6 +34,8 @@ tags: []
 - **R7 (ts-morph)** Build the Project from `tsconfig.test.json`. After any `move` or `rename`, `rg` the touched specifiers for a missing `.js` and restore it. Measure files near ESLint `max-lines` 1000 before renaming. Stage moves before running `validate:all`.
 - **R8 (baselines)** Rows 1–7 do not touch `.type-name-homonyms-baseline.json`; its stale entries are expected until row 8. A row that moves the knip or typecheck-tests ratchet reports the counts before → after and regenerates only that baseline.
 
+- **R9 (row 3 concerns, 2026-10-19)** Merge `ProcessingStep`, `FrameworkGate` and `TemplateSuggestion` onto the engine / Zod-inferred types, because those match the runtime schemas in `src/mcp/tools/schemas/` (`processingStepSchema`, `frameworkGateSchema`, `templateSuggestionSchema`). The tool-layer copies promised fields as required, and `marker`, that the schema does not enforce or accept. Same logic: `ExecutionStep.dependencies` becomes optional to match `executionStepSchema`, and its readers handle the absence with `?? []` (no non-null assertion). This loosens types toward what the server already receives; it is not a tool-surface change.
+
 ## Measured inputs (origin/main `ee3986e2`, 2026-10-19)
 
 - 37 baseline names over 87 exported definitions. Reference counts per definition come from ts-morph `findReferencesAsNodes`, run over a snapshot of `server/src` + `server/tests`. The counts include barrel re-export sites, which R3 says are not consumers, so every count is re-measured by the row.
@@ -45,6 +47,8 @@ tags: []
 - **DEV-T1-2** All three running rows were stopped by a client crash, with uncommitted edits in their worktrees. They were resumed through their saved transcripts, and each re-read its own diff before continuing.
 
 ## Findings
+
+- Row 3: the left-over probe state (three pairs merged) typechecked clean; it was restored before the row committed. `step-gate`-style near-twins under different names (`ExecutionStepDefinition`, `ProcessingStepDefinition` in step-generator) are invisible to the homonym ratchet; out of scope. `template-enhancer.ts:27` re-exports `ProcessingStepDefinition` as a second import path; unchecked.
 
 - Row 1: `.husky/commit-msg` strips `Co-Authored-By: Claude` trailers on purpose (project policy), so briefs no longer ask for one.
 - Row 1: `shared-types.ts` survives only as a one-line re-export of `ErrorContext`, because `mcp/tools/shared/structured-response-builder.ts:13` imports it from there. Row 7 repoints that import and deletes the file. `ConfigError` in `errorHandling.ts` has 0 references; it is not a homonym, so it is out of scope.
