@@ -229,11 +229,6 @@ export function decidedPromptYamlKeys(
   return decided;
 }
 
-/**
- * "This call removes nothing" — the default for every write path except a tool `update` carrying
- * `unset` or `tool_operation`. Named rather than inlined so the signatures taking it read as
- * deliberately empty rather than accidentally unpassed.
- */
 /** The bound tool ids a `prompt.yaml` declares, as a plain string list. */
 function readToolIds(existingYaml: Record<string, unknown> | undefined): string[] {
   const declared = existingYaml?.['tools'];
@@ -242,6 +237,72 @@ function readToolIds(existingYaml: Record<string, unknown> | undefined): string[
     : [];
 }
 
+/**
+ * The ids a replacing `tools` list unbinds. An `add` keeps every prior binding and a `remove`
+ * names its own deletions, so only a non-empty list sent under `replace` can drop an id silently.
+ */
+function resolveUnboundToolIds(
+  priorToolIds: readonly string[],
+  suppliedToolIds: readonly string[],
+  writeIntent: PromptWriteIntent
+): string[] {
+  if (suppliedToolIds.length === 0 || writeIntent.toolBinding !== 'replace') return [];
+  return priorToolIds.filter(
+    (id) => !suppliedToolIds.includes(id) && !writeIntent.removedToolIds.includes(id)
+  );
+}
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * A prior `tool.yaml` as a mapping, or `undefined` when there is none to edit. A missing,
+ * unparseable or non-mapping file is written as a new tool would be: nothing in it can be kept.
+ */
+function parseToolYamlSource(source: string | undefined): Record<string, unknown> | undefined {
+  if (source === undefined) return undefined;
+  const parsed = parseYaml<unknown>(source);
+  return parsed.success && isPlainRecord(parsed.data) ? parsed.data : undefined;
+}
+
+/**
+ * The `tool.yaml` a `tools` entry asks for, laid over the file already on disk.
+ *
+ * Only what the caller supplied moves. An omitted optional field is not written at all — not
+ * restated as a default — so an existing tool keeps its own value and a new one takes the
+ * loader's. `id`, `name` and `script` are always written: the loader requires all three.
+ * `execution` is merged key by key, so a supplied `trigger` leaves an authored `confirm` and
+ * `confirmMessage` where they were. Pure.
+ */
+function overlaySuppliedToolFields(
+  existing: Record<string, unknown> | undefined,
+  tool: ToolDefinitionInput,
+  scriptFilename: string
+): Record<string, unknown> {
+  const document: Record<string, unknown> = { ...existing };
+  document['id'] = tool.id;
+  document['name'] = tool.name;
+  if (tool.description !== undefined) document['description'] = tool.description;
+  document['script'] = scriptFilename;
+  if (tool.runtime !== undefined) document['runtime'] = tool.runtime;
+  if (tool.timeout !== undefined) document['timeout'] = tool.timeout;
+
+  const execution: Record<string, unknown> = {};
+  if (tool.trigger !== undefined) execution['trigger'] = tool.trigger;
+  if (tool.confirm !== undefined) execution['confirm'] = tool.confirm;
+  if (tool.strict !== undefined) execution['strict'] = tool.strict;
+  if (Object.keys(execution).length > 0) {
+    const prior = existing?.['execution'];
+    document['execution'] = { ...(isPlainRecord(prior) ? prior : {}), ...execution };
+  }
+  return document;
+}
+
+/**
+ * "This call removes nothing" — the default for every write path except a tool `update` carrying
+ * `unset` or `tool_operation`. Named rather than inlined so the signatures taking it read as
+ * deliberately empty rather than accidentally unpassed.
+ */
 export const NO_WRITE_INTENT: PromptWriteIntent = {
   unsetKeys: new Set<string>(),
   toolBinding: 'replace',
@@ -287,8 +348,16 @@ interface PromptWritePlan {
   removesSystemMessage: boolean;
   /** Stub files for nested chain steps that have no directory yet. */
   scaffoldFiles: PlannedPromptFile[];
-  /** Script tool files, grouped so the writer can report each tool it created. */
-  toolFiles: Array<{ id: string; files: PlannedPromptFile[] }>;
+  /**
+   * Script tool files, grouped so the writer can report each tool it wrote. `existed` is true when
+   * the tool's `tool.yaml` was already on disk, so the report says Updated rather than Created.
+   */
+  toolFiles: Array<{ id: string; files: PlannedPromptFile[]; existed: boolean }>;
+  /**
+   * Tools a replacing `tools` list takes off the prompt's binding while leaving their folders on
+   * disk: bound before this write, absent from the list, and not named by `tool_operation:"remove"`.
+   */
+  unboundToolIds: readonly string[];
   /** Tools whose `tools/{id}/` directory this write deletes. */
   removedToolIds: readonly string[];
 }
@@ -423,8 +492,20 @@ export class FileOperations {
           const toolDir = path.join(promptDir, 'tools', tool.id);
           await fs.mkdir(toolDir, { recursive: true });
           affectedFiles.push(toolDir, ...(await this.writePlannedFiles(promptDir, tool.files)));
-          messages.push(`✅ Created tool '${tool.id}' in ${toolDir}`);
-          this.logger.info(`Created script tool '${tool.id}' for prompt '${promptId}'`);
+          const verb = tool.existed ? 'Updated' : 'Created';
+          messages.push(`✅ ${verb} tool '${tool.id}' in ${toolDir}`);
+          this.logger.info(`${verb} script tool '${tool.id}' for prompt '${promptId}'`);
+        }
+
+        // The list REPLACES the binding, so a tool it leaves out is unbound but not deleted. Said
+        // here because the caller cannot see it: their `tools` array named what to keep, and the
+        // reply is the only place the others are accounted for.
+        for (const toolId of plan.unboundToolIds) {
+          const toolDir = path.join(promptDir, 'tools', toolId);
+          messages.push(
+            `⚠️ Unbound tool '${toolId}': it was left out of \`tools\`, which replaces the list. ` +
+              `Its folder was kept at ${toolDir}; to delete it, send tool_operation:"remove", tool_ids:["${toolId}"], confirm:true.`
+          );
         }
 
         // P2.3. Inside the transaction, so a failed write rolls the deletions back with
@@ -619,13 +700,21 @@ export class FileOperations {
     // true, because there is no prior DIRECTORY whose untouched files this write can leave alone.
     const priorYamlPath = priorDir !== null ? path.join(priorDir, 'prompt.yaml') : fileSource;
 
-    const { files: promptFiles, removesSystemMessage } = await this.planPromptFiles(
+    const {
+      files: promptFiles,
+      removesSystemMessage,
+      priorToolIds,
+    } = await this.planPromptFiles(
       promptData,
       priorDir,
       priorYamlPath,
       suppliedKeysForWrite,
       writeIntent
     );
+
+    const toolFiles = Array.isArray(promptData.tools)
+      ? await this.planToolFiles(promptData.tools, promptDir, priorDir)
+      : [];
 
     return {
       promptsDir,
@@ -641,8 +730,13 @@ export class FileOperations {
       scaffoldFiles: Array.isArray(promptData.chainSteps)
         ? this.planChainStepScaffolds(promptDir, priorDir, promptId, promptData.chainSteps)
         : [],
-      toolFiles: Array.isArray(promptData.tools) ? this.planToolFiles(promptData.tools) : [],
+      toolFiles,
       removedToolIds: writeIntent.removedToolIds,
+      unboundToolIds: resolveUnboundToolIds(
+        priorToolIds,
+        toolFiles.map((tool) => tool.id),
+        writeIntent
+      ),
     };
   }
 
@@ -969,7 +1063,11 @@ export class FileOperations {
     priorYamlPath: string | null,
     suppliedKeys: ReadonlySet<string>,
     writeIntent: PromptWriteIntent
-  ): Promise<{ files: PlannedPromptFile[]; removesSystemMessage: boolean }> {
+  ): Promise<{
+    files: PlannedPromptFile[];
+    removesSystemMessage: boolean;
+    priorToolIds: string[];
+  }> {
     const { unsetKeys } = writeIntent;
 
     // Fix B write-scope narrowing (tier-b-settability-proposal §2): a directory with no prior
@@ -1063,7 +1161,7 @@ export class FileOperations {
       files.push({ relativePath: 'system-message.md', content: promptData.systemMessage });
     }
 
-    return { files, removesSystemMessage };
+    return { files, removesSystemMessage, priorToolIds: readToolIds(existingYaml) };
   }
 
   /**
@@ -1203,48 +1301,78 @@ export class FileOperations {
   }
 
   /**
-   * Build the files each script tool gets. Pure — the writer applies them.
+   * Build the files each script tool gets. Reads the prior `tool.yaml`; the writer applies them.
    *
    * - `tools/{toolId}/tool.yaml` - Tool configuration
-   * - `tools/{toolId}/schema.json` - Input schema (if provided)
-   * - `tools/{toolId}/script.{ext}` - Script file
+   * - `tools/{toolId}/{schemaFile}` - Input schema (if provided; `schema.json` unless declared)
+   * - `tools/{toolId}/{script}` - Script file
+   *
+   * A tool that already exists is EDITED, not regenerated: its `tool.yaml` is the base, only the
+   * fields this call supplied move, and the file is written through
+   * `serializeYamlPreservingSource` so comments, key order and every key the input does not model
+   * (`env`, `schemaFile`, `confirmMessage`, ...) survive byte for byte. A new tool's `tool.yaml`
+   * carries only what was supplied plus the keys the loader requires, so the loader's own
+   * defaults apply — above all `confirm`, which defaults to TRUE (`script-schema.ts`); this writer
+   * used to restate it as `false`, so a tool created without it ran with no approval.
    */
-  private planToolFiles(
-    tools: readonly ToolDefinitionInput[]
-  ): Array<{ id: string; files: PlannedPromptFile[] }> {
-    return tools.map((tool) => {
+  private async planToolFiles(
+    tools: readonly ToolDefinitionInput[],
+    promptDir: string,
+    priorDir: string | null
+  ): Promise<PromptWritePlan['toolFiles']> {
+    const planned: PromptWritePlan['toolFiles'] = [];
+    for (const tool of tools) {
       const toolDir = `tools/${tool.id}`;
-      const scriptFilename = this.getScriptFilename(tool.runtime);
-      const toolYaml: Record<string, unknown> = {
-        id: tool.id,
-        name: tool.name,
-        description: tool.description ?? '',
-        script: scriptFilename,
-        runtime: tool.runtime ?? 'auto',
-        timeout: tool.timeout ?? 30000,
-        enabled: true,
-        execution: {
-          trigger: tool.trigger ?? 'schema_match',
-          confirm: tool.confirm ?? false,
-          strict: tool.strict ?? false,
-        },
-      };
+      // Contained the way the removal path is, before anything is read or planned under it.
+      resolveContainedPath(promptDir, 'tools', tool.id);
+      const priorSource =
+        priorDir !== null
+          ? await readYamlSource(resolveContainedPath(priorDir, 'tools', tool.id, 'tool.yaml'))
+          : undefined;
+      const existing = parseToolYamlSource(priorSource);
+      const scriptFilename = this.resolveToolScriptFilename(tool, existing);
+      const schemaFilename =
+        typeof existing?.['schemaFile'] === 'string' ? existing['schemaFile'] : 'schema.json';
+      // Both names can come from a hand-authored file, so both are held inside the tool's folder.
+      resolveContainedPath(promptDir, 'tools', tool.id, scriptFilename);
+      resolveContainedPath(promptDir, 'tools', tool.id, schemaFilename);
 
       const files: PlannedPromptFile[] = [
         {
           relativePath: `${toolDir}/tool.yaml`,
-          content: serializeYaml(toolYaml, { sortKeys: false }),
+          content: serializeYamlPreservingSource(
+            overlaySuppliedToolFields(existing, tool, scriptFilename),
+            existing !== undefined ? priorSource : undefined
+          ).content,
         },
       ];
       if (tool.schema !== undefined) {
         files.push({
-          relativePath: `${toolDir}/schema.json`,
+          relativePath: `${toolDir}/${schemaFilename}`,
           content: formatJsonDocument(tool.schema),
         });
       }
       files.push({ relativePath: `${toolDir}/${scriptFilename}`, content: tool.script });
-      return { id: tool.id, files };
-    });
+      planned.push({ id: tool.id, files, existed: priorSource !== undefined });
+    }
+    return planned;
+  }
+
+  /**
+   * The file the tool's script is written to. An existing tool keeps the name its `tool.yaml`
+   * declares unless this call supplies a different `runtime`, which names the file the way a new
+   * tool's runtime does.
+   */
+  private resolveToolScriptFilename(
+    tool: ToolDefinitionInput,
+    existing: Record<string, unknown> | undefined
+  ): string {
+    const declared = existing?.['script'];
+    const keepsDeclared =
+      typeof declared === 'string' &&
+      declared.length > 0 &&
+      (tool.runtime === undefined || tool.runtime === existing?.['runtime']);
+    return keepsDeclared ? declared : this.getScriptFilename(tool.runtime);
   }
 
   /**

@@ -391,6 +391,57 @@ describe('tool_operation (P2.3)', () => {
     expect(existsSync(toolDir('beta'))).toBe(true);
   });
 
+  it('the reply names a tool the list left out, says its folder was kept, and reads a resent tool as Updated', async () => {
+    const result = await operations.updatePromptImplementation(
+      {
+        id: 'tooled',
+        name: 'tooled',
+        category: 'general',
+        description: 'Has tools.',
+        tools: [TOOLS[0]],
+      },
+      new Set(['tools']),
+      undefined,
+      { unsetKeys: new Set(), toolBinding: 'replace', removedToolIds: [] }
+    );
+
+    expect(result.message).toContain(`Unbound tool 'beta'`);
+    expect(result.message).toContain('Its folder was kept');
+    expect(result.message).toContain('tool_operation:"remove"');
+    // The sent tool already had a folder, so it is edited, not created.
+    expect(result.message).toContain(`Updated tool 'alpha'`);
+    expect(result.message).not.toContain(`Created tool 'alpha'`);
+    // The tool that was kept out of the list is not reported as unbound.
+    expect(result.message).not.toContain(`Unbound tool 'alpha'`);
+  });
+
+  it('a new tool reads as Created, and an add or a remove reports nothing as unbound', async () => {
+    const gamma = { id: 'gamma', name: 'Gamma', script: 'print("g")', runtime: 'python' as const };
+    const added = await operations.updatePromptImplementation(
+      {
+        id: 'tooled',
+        name: 'tooled',
+        category: 'general',
+        description: 'Has tools.',
+        tools: [gamma],
+      },
+      new Set(['tools']),
+      undefined,
+      { unsetKeys: new Set(), toolBinding: 'add', removedToolIds: [] }
+    );
+    expect(added.message).toContain(`Created tool 'gamma'`);
+    expect(added.message).not.toContain('Unbound tool');
+
+    const removed = await operations.updatePromptImplementation(
+      { id: 'tooled', name: 'tooled', category: 'general', description: 'Has tools.' },
+      new Set(['tools']),
+      undefined,
+      { unsetKeys: new Set(), toolBinding: 'replace', removedToolIds: ['beta'] }
+    );
+    expect(removed.message).toContain(`Removed tool 'beta'`);
+    expect(removed.message).not.toContain('Unbound tool');
+  });
+
   it('an explicit remove unbinds AND deletes the directory', async () => {
     await operations.updatePromptImplementation(
       { id: 'tooled', name: 'tooled', category: 'general', description: 'Has tools.' },

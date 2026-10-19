@@ -7,8 +7,10 @@
  *
  * Comment-preservation strategy:
  *   - rename, move, toggle: regex replacement on raw file content (preserves all YAML comments)
- *   - linkGate: serializeYamlPreservingSource (the user adds structural content, so it takes the
- *     writer's document tier: comments and key order survive, layout around the edit may shift)
+ *   - linkGate: serializeYamlPreservingSource (an entry added to or removed from an existing
+ *     `include` list is edited on the source tokens, so only that entry's lines change; creating
+ *     or deleting the `gateConfiguration` key takes the writer's document tier: comments and key
+ *     order survive, layout around the edit may shift)
  *
  * Pure functions using only node:fs and node:path + cli-shared YAML utils.
  */
@@ -576,9 +578,11 @@ export function toggleEnabled(yamlPath: string): ToggleResult {
  * Add or remove a gate from a prompt's gateConfiguration.include array.
  *
  * Writes through the same source-preserving serializer the MCP writers use, so a prompt a person
- * commented keeps those comments when `cpm` edits it. Adding or removing a list entry changes the
- * file's structure, so this lands on the document tier: comments survive, and a long scalar this
- * edit did not name may be re-wrapped.
+ * commented keeps those comments when `cpm` edits it. Adding or removing an entry of an existing
+ * `include` list is a list-length edit, made on the source tokens: only that entry's lines change.
+ * Creating `gateConfiguration` (first link) or deleting it (last link removed) adds or removes a
+ * key, which lands on the document tier: comments survive, and a long scalar this edit did not
+ * name may be re-wrapped.
  */
 export function linkGate(yamlPath: string, gateId: string, remove = false): LinkGateResult {
   try {
