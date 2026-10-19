@@ -84,7 +84,9 @@ code{background:#222;padding:0 4px;border-radius:3px}
 details summary{cursor:pointer;color:#aaa}
 .laneWrap{background:var(--panel);border-radius:8px;padding:10px 14px 12px}
 .area{position:relative;margin-left:104px}
-.axis{position:relative;height:22px;border-bottom:1px solid #444;margin-bottom:4px;cursor:crosshair}
+.axis{position:relative;height:44px;border-bottom:1px solid #444;margin-bottom:4px;cursor:crosshair}
+.spm{position:absolute;top:22px;height:11px;border-left:1px solid #f0b35a;padding-left:2px;font-size:9px;line-height:11px;color:#f0b35a;white-space:nowrap;pointer-events:none}.spm.lo{top:33px}
+.activesp{margin:0 0 8px;padding:6px 10px;background:#241d12;border-left:4px solid #f0b35a;border-radius:4px}.activesp b{color:#f0b35a}.activesp small{color:#998}.activesp div{margin-top:2px;color:#ddd;font-size:13px}
 .tick{position:absolute;top:0;height:22px;border-left:1px solid #555;padding-left:3px;font-size:11px;color:#888;white-space:nowrap;pointer-events:none}
 .lane{position:relative;height:30px;margin:3px 0;background:#141414;cursor:crosshair}
 .lane.tall{height:46px}
@@ -103,7 +105,7 @@ details summary{cursor:pointer;color:#aaa}
 .pin i{display:block;width:16px;height:16px;margin:2px auto 0;transform:rotate(45deg);border:2px solid #111;background:var(--c,#f0b35a)}
 .pinrange{position:absolute;top:13px;height:4px;background:var(--c,#f0b35a);opacity:.45;pointer-events:none}
 .cursor{position:absolute;top:0;bottom:0;width:2px;background:#fff;pointer-events:none;z-index:5;box-shadow:0 0 6px #fff8}
-.bline{position:absolute;top:22px;bottom:0;border-left:1px dashed #333;pointer-events:none}
+.bline{position:absolute;top:44px;bottom:0;border-left:1px dashed #333;pointer-events:none}
 .ctl{margin:10px 0 0 104px}
 .ctl input[type=range]{width:100%;margin:0;accent-color:#f0b35a}
 .ctl output{display:block;color:#ccc;font-variant-numeric:tabular-nums;margin-top:2px}
@@ -252,6 +254,10 @@ footer{margin-top:30px;color:#777;font-size:12px;border-top:1px solid #2a2a2a;pa
   for (var f = 0; f < D; f += step) {
     var tk = document.createElement('div'); tk.className = 'tick'; tk.style.left = pct(f); tk.textContent = f + ' · ' + (f / FPS) + 's'; axis.appendChild(tk);
   }
+  track('script').items.forEach(function (it, i) {
+    var m = document.createElement('div'); m.className = 'spm' + (i % 2 ? ' lo' : ''); m.style.left = pct(it.start);
+    m.textContent = it.data.id; m.title = it.data.pipelineId + ' ' + it.data.slug + ' (frame ' + it.start + ')'; axis.appendChild(m);
+  });
   track('pacing').items.forEach(function (it) {
     if (it.start === 0) return;
     var l = document.createElement('div'); l.className = 'bline'; l.style.left = pct(it.start); $('area').appendChild(l);
@@ -287,11 +293,13 @@ footer{margin-top:30px;color:#777;font-size:12px;border-top:1px solid #2a2a2a;pa
       s.title = it.label + ' (' + it.start + '–' + it.end + ')';
       if (t.name === 'pacing') { s.className += ' ' + regClass(it.data.register); s.textContent = it.label + ' · ' + it.data.seconds + ' s'; }
       else if (t.name === 'colour-script') {
-        var a = it.data.radiance, b = it.data.accent;
+        var sw = []; it.data.parts.forEach(function (pt) { sw = sw.concat(pt.swatches); });
         s.className += ' pair';
-        if (a && b) s.style.background = 'linear-gradient(to right,' + a + ' 50%,' + b + ' 50%)';
-        s.innerHTML = '<span>' + esc(it.beat) + ' ' + esc(a || '') + ' ' + esc(b || '') + '</span>';
+        if (sw.length) s.style.background = 'linear-gradient(to right,' + sw.map(function (c, k) { return c + ' ' + (100 * k / sw.length) + '% ' + (100 * (k + 1) / sw.length) + '%'; }).join(',') + ')';
+        s.title = it.label + ' (' + it.start + '–' + it.end + ') · ' + it.data.parts.map(function (pt) { return pt.key + ' ' + pt.swatches.join(' ') ; }).join(' → ');
+        s.innerHTML = '<span>' + esc(it.data.storyPoint.replace('sp-', '')) + '</span>';
       }
+      else if (t.name === 'script') { s.className += ' key'; s.textContent = it.data.id.replace('sp-', '') + ' ' + it.data.slug; }
       else if (t.name === 'look' && it.data.crossing) { s.className += ' cross'; s.textContent = it.label; }
       else if (t.name === 'keys') { s.className += ' key'; s.textContent = it.label; }
       else s.textContent = it.label;
@@ -329,7 +337,9 @@ footer{margin-top:30px;color:#777;font-size:12px;border-top:1px solid #2a2a2a;pa
     if (light) { showFrameImage(f); return; }
     var beat = itemsAt(track('pacing'), f)[0];
     var look = itemsAt(track('look'), f);
-    var h = '<h3>Frame ' + f + ' · ' + seconds(f) + (beat ? ' · beat ' + esc(beat.beat) : '') + '</h3>' +
+    var spi = itemsAt(track('script'), f)[0];
+    var spLine = spi ? '<div class="activesp"><b>' + esc(spi.data.pipelineId) + '</b> ' + esc(spi.data.slug) + ' <small>frame ' + spi.data.frame + ' · ' + esc(spi.data.register) + ' · colour ' + esc(spi.data.colour) + '</small><div>' + esc(spi.data.sees) + '</div></div>' : '';
+    var h = '<h3>Frame ' + f + ' · ' + seconds(f) + (beat ? ' · beat ' + esc(beat.beat) : '') + '</h3>' + spLine +
       (EDIT.on ? '<div class="acts"><button class="eb go" id="btnPropose">propose here</button><button class="eb go" id="btnInsp">file inspiration</button></div>' : '');
     B.tracks.forEach(function (t) {
       var hits = itemsAt(t, f);

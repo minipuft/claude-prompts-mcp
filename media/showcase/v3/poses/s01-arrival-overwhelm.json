@@ -12,6 +12,7 @@
   "keys": [
     {
       "name": "rest-on-lid",
+      "storyPoint": "sp-1.1",
       "frame": 0,
       "hold": 26,
       "moment": "Upright behind the box, weight even, forearms resting on the lid's near edge, chin down, eyes on the lid.",
@@ -210,6 +211,7 @@
     },
     {
       "name": "lift",
+      "storyPoint": "sp-1.2",
       "frame": 66,
       "hold": 26,
       "moment": "Arms rise to chest height pulling the lid, torso straightens and leans a little back, chin lifts.",
@@ -306,6 +308,7 @@
     },
     {
       "name": "awe",
+      "storyPoint": "sp-1.3",
       "frame": 104,
       "hold": 26,
       "moment": "One step back, arms drop open and low, palms out, head tipped back to follow the rising bubble.",
@@ -502,6 +505,7 @@
     },
     {
       "name": "joy-a",
+      "storyPoint": "sp-2.1",
       "frame": 190,
       "hold": 22,
       "moment": "Arms flung up and out, back arched, hips pushed to the left, face up: the burst after the pop.",
@@ -599,6 +603,7 @@
     },
     {
       "name": "joy-b",
+      "storyPoint": "sp-2.2",
       "frame": 228,
       "hold": 20,
       "moment": "The same joy turned the other way: hips to the right, arms swapped, the hair swoop swinging across (the turn).",
@@ -696,6 +701,7 @@
     },
     {
       "name": "shrink",
+      "storyPoint": "sp-2.3",
       "frame": 272,
       "hold": 148,
       "moment": "Knees bent, back rounded, chin to chest, forearms crossed over the head: small and covering, joy overrun by the field.",

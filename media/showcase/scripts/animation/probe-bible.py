@@ -8,10 +8,11 @@ inside the beat, a beat range on beats the timeline has); a proposal with status
 hash prefix and the hash the page carries equal the bible's inputsHash; the inputsHash equals the hash of the declared inputs' bytes today (a stale bible is refused);
 no flag says an input disagrees with another (stale xsheet or timeline, an unresolved reference, a script section without a beat); every ruling bullet in the spec has an
 entry in the rulings mirror (v3/rulings.json) whose raw bullet equals the spec's; every D-number a proposal's `ruling` names is a ruling in the spec; when v3/materials.json exists the bible
-carries it unchanged as `materials` and probe-materials.py's checks (shape, ranges, intents, refs, cross-rules) pass on it.
+carries it unchanged as `materials` and probe-materials.py's checks (shape, ranges, intents, refs, cross-rules) pass on it; and the script and colour-script lanes are the screenplay's (v3/screenplay.json): every story point
+is an item of the script lane at its frame, ending where the next begins, carrying its id and its pipeline id `<shot>/<sp-id>`, and every colour key of every story point is drawn on the colour-script lane (each part of `a -> b` has a hex swatch).
 Control first: a copy of the bible with the last pacing item dropped, one with a proposal anchored at frame 5 of beat the-frame, one with a ruled proposal and no
 ruling, one page whose footer hash differs, one bible whose inputsHash is not the hash of its inputs, one carrying a stale flag, a rulings mirror with one spec ruling deleted and a proposal whose ruling
-names a D-number the spec lacks, and (with materials) a cloth whose stiffness is 1 must each be refused by the check that names it. Exit 0 pass, 1 refusal (named in plain words), 2 a control that did not trip or an unreadable input.
+names a D-number the spec lacks, and (with materials) a cloth whose stiffness is 1, a script lane missing a story point, a script item with the wrong pipeline id and a colour-script item with nothing drawn must each be refused by the check that names it. Exit 0 pass, 1 refusal (named in plain words), 2 a control that did not trip or an unreadable input.
 """
 import argparse, copy, hashlib, importlib.util, json, os, re, sys
 
@@ -104,7 +105,7 @@ def check_hash(b, tl, root=DEFAULT_ROOT, **_):
 
 
 def check_flags(b, tl, **_):
-    bad = [f for f in b["flags"] if re.search(r"stale|is on neither|names no beat|has no section|no blocking file|has no entry|does not have", f["text"])]
+    bad = [f for f in b["flags"] if re.search(r"stale|is on neither|names no beat|has no section|no blocking file|has no entry|does not have|has no shot|is not declared in colour_keys|and its frame", f["text"])]
     if bad: return False, "; ".join(f"{f['beat']}: {f['text']}" for f in bad[:3]) + (f" (+{len(bad) - 3} more)" if len(bad) > 3 else "")
     return True, f"{len(b['flags'])} flag(s), none says an input disagrees with another"
 
@@ -151,9 +152,37 @@ def check_materials(b, tl, root=DEFAULT_ROOT, **_):
     return True, f"the bible carries {len(b['materials'])} materials as the file declares them, each in range with its intent word and the cross-rules holding"
 
 
+def check_script_lane(b, tl, root=DEFAULT_ROOT, **_):
+    file = os.path.join(root, "v3", "screenplay.json")
+    if not os.path.exists(file): return False, "v3/screenplay.json does not exist: the script lane has nothing to be checked against"
+    d = load(file, "the screenplay"); sps, dur = d["story_points"], b["duration"]
+    if "v3/screenplay.json" not in b["generatedFrom"]: return False, "the bible does not declare v3/screenplay.json among its inputs"
+    script = {i["data"]["id"]: i for i in (track(b, "script") or {"items": []})["items"] if "id" in i.get("data", {})}
+    colour = {i["data"]["storyPoint"]: i for i in (track(b, "colour-script") or {"items": []})["items"] if "storyPoint" in i.get("data", {})}
+    p = []
+    for k, sp in enumerate(sps):
+        end = sps[k + 1]["frame"] if k + 1 < len(sps) else dur
+        pid = f"{(sp.get('shot') or '?').split('-')[0]}/{sp['id']}"
+        it = script.get(sp["id"])
+        if it is None: p.append(f"the script lane has no item for story point {sp['id']} (frame {sp['frame']})"); continue
+        if (it["start"], it["end"]) != (sp["frame"], end): p.append(f"script item {sp['id']} runs {it['start']}-{it['end']}, the screenplay says {sp['frame']}-{end}")
+        if it["data"].get("pipelineId") != pid: p.append(f"script item {sp['id']} has pipeline id {it['data'].get('pipelineId')!r}, the screenplay's shot gives {pid!r}")
+        ci = colour.get(sp["id"])
+        if ci is None: p.append(f"the colour-script lane has no item for story point {sp['id']}"); continue
+        if (ci["start"], ci["end"]) != (sp["frame"], end): p.append(f"colour-script item {sp['id']} runs {ci['start']}-{ci['end']}, the screenplay says {sp['frame']}-{end}")
+        want = [x.strip() for x in re.split(r"\u2192|->", sp["colour"])]
+        got = ci["data"].get("parts") or []
+        if [g.get("key") for g in got] != want: p.append(f"colour-script item {sp['id']} draws {[g.get('key') for g in got]}, the story point's colour key is {want}")
+        for g in got:
+            if not g.get("swatches") or not all(re.fullmatch(r"#[0-9a-fA-F]{6}", str(c)) for c in g["swatches"]): p.append(f"colour key {g.get('key')!r} of {sp['id']} is not drawn: no hex swatch on its colour-script item")
+    extra = sorted(set(script) - {sp["id"] for sp in sps})
+    if extra: p.append(f"the script lane has item(s) for story point(s) the screenplay does not have: {', '.join(extra)}")
+    return not p, "; ".join(p[:3]) + (f" (+{len(p) - 3} more)" if len(p) > 3 else "") if p else f"{len(sps)} story points are {len(script)} script items at their frames with their pipeline ids, and each colour key is drawn on {len(colour)} colour-script items"
+
+
 CHECKS = [("tracks cover the timeline", check_coverage), ("proposals inside their beats", check_anchors), ("rulings close properly", check_rulings),
           ("page shows this bible", check_page), ("bible matches its inputs", check_hash), ("inputs agree", check_flags),
-          ("rulings mirror the spec", check_mirror), ("proposal rulings exist in the spec", check_proposal_rulings), ("materials in range", check_materials)]
+          ("rulings mirror the spec", check_mirror), ("proposal rulings exist in the spec", check_proposal_rulings), ("materials in range", check_materials), ("script lane is the screenplay", check_script_lane)]
 
 
 def planted(b, proposals, page, tl, rulings, spec):
@@ -179,6 +208,12 @@ def planted(b, proposals, page, tl, rulings, spec):
     pr[sorted(pr)[0]]["ruling"] = "D9999"
     out["a proposal naming a ruling the spec lacks"] = ("proposal rulings exist in the spec", dict(b=b, proposals=pr, page=page))
     out["a spec ruling with no mirror entry"] = ("rulings mirror the spec", dict(b=b, proposals=proposals, page=page, rulings=[r for r in rulings if r["id"] != rulings[-1]["id"]]))
+    x = copy.deepcopy(b); sc = track(x, "script"); sc["items"] = [i for i in sc["items"] if i["data"].get("id") != "sp-4.3"]
+    out["a script lane without story point sp-4.3"] = ("script lane is the screenplay", dict(b=x, proposals=proposals, page=page))
+    x = copy.deepcopy(b); track(x, "script")["items"][0]["data"]["pipelineId"] = "s99/sp-1.1"
+    out["a script item with the wrong pipeline id"] = ("script lane is the screenplay", dict(b=x, proposals=proposals, page=page))
+    x = copy.deepcopy(b); track(x, "colour-script")["items"][0]["data"]["parts"][0]["swatches"] = []
+    out["a colour-script item with nothing drawn"] = ("script lane is the screenplay", dict(b=x, proposals=proposals, page=page))
     if "materials" in b:
         x = copy.deepcopy(b); x["materials"]["cloth"]["stiffness"]["value"] = 1
         out["cloth stiffness 1 in the materials block"] = ("materials in range", dict(b=x, proposals=proposals, page=page))

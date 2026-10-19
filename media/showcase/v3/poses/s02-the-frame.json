@@ -12,6 +12,7 @@
   "keys": [
     {
       "name": "slump",
+      "storyPoint": "sp-4.1",
       "frame": 630,
       "hold": 26,
       "moment": "Still bent from the failed joins, the cloak heavy on the shoulders and the light lost on the floor: a held low point.",
@@ -104,6 +105,7 @@
     },
     {
       "name": "turn",
+      "storyPoint": "sp-4.2",
       "frame": 690,
       "hold": 16,
       "moment": "A small sink away from the frame, then the shoulders and head turn toward its light.",
@@ -197,6 +199,7 @@
     },
     {
       "name": "rise",
+      "storyPoint": "sp-4.3",
       "frame": 740,
       "hold": 20,
       "moment": "Stands up out of the cloak, deliberately plumb for the instant she is upright, because the body must land and settle before the cloth does.",
@@ -289,6 +292,7 @@
     },
     {
       "name": "step",
+      "storyPoint": "sp-4.4",
       "frame": 800,
       "hold": 14,
       "moment": "One step toward the frame, the weight travelling onto the lead foot as it lands.",
@@ -382,6 +386,7 @@
     },
     {
       "name": "threshold",
+      "storyPoint": "sp-4.5",
       "frame": 840,
       "hold": 24,
       "moment": "The pause at the frame's edge on one foot, the other heel lifted, stiff and plumb because the body is about to do the gesture no one needs.",
@@ -474,6 +479,7 @@
     },
     {
       "name": "through",
+      "storyPoint": "sp-4.6",
       "frame": 900,
       "hold": 30,
       "moment": "Goes through alone, small in the frame's light, one soft S and no more.",

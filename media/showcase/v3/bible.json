@@ -19,7 +19,10 @@
     "v3/blocking/the-frame.json",
     "v3/references/board.json",
     "v3/references/owner/picks.json",
-    "v3/script.md",
+    "v3/screenplay.json",
+    "v3/worlds/crayon.json",
+    "v3/worlds/line.json",
+    "v3/worlds/shaded.json",
     "v3/creative-spec.md",
     "v3/proposals/p001-beat4-action.json",
     "v3/proposals/p002-materials-as-a-contract-not-a-3d-engine.json",
@@ -38,7 +41,7 @@
     "v3/materials.json",
     "v3/materials.schema.json"
   ],
-  "inputsHash": "05268acd63ef6d96691078ef86fa8fce0e8bc609cf903b67a79ee984bdb8f1e9",
+  "inputsHash": "f9709cdf0e1ec681c1237697bbdc7d5c174b6bdb65c526265a447f4181823a8d",
   "tracks": [
     {
       "name": "pacing",
@@ -230,127 +233,673 @@
       "items": [
         {
           "start": 0,
-          "end": 180,
+          "end": 60,
           "beat": "arrival",
-          "label": "1. Arrival",
+          "label": "s01/sp-1.1 SETTLED",
           "data": {
-            "heading": "1. Arrival",
-            "headingRange": "0–180",
-            "headingRangeMatchesTimeline": true,
-            "sharedWith": [],
-            "notes": [
-              "2026-10-14, shot run s01-01: measured range 0–180 on the 65 s ledger (`v3/timeline.json`); the 0–150 above was the 40 s spine's provisional range. Study: `v3/studies/s01-01.md`. 2026-10-15, run s01-02: range unchanged (0–180); study `v3/studies/s01-02.md`."
-            ],
-            "prose": "*2026-10-14, shot run s01-01: measured range 0–180 on the 65 s ledger (`v3/timeline.json`); the 0–150 above was the 40 s spine's provisional range. Study: `v3/studies/s01-01.md`. 2026-10-15, run s01-02: range unchanged (0–180); study `v3/studies/s01-02.md`.*\n\nSettled state. Mark and title held top-left. Codex, the box, Clawd, and the human behind the box. One emitter: the box seam. Hold 60. The human lifts the lid (one move). The seam light lags, then a bubble swells from the box over 40 frames with the gadget dim inside; the companions lean in (staggered 4). Hold 20 on the bubble."
+            "id": "sp-1.1",
+            "pipelineId": "s01/sp-1.1",
+            "shot": "s01-arrival-overwhelm",
+            "slug": "SETTLED",
+            "frame": 0,
+            "action": "A closed box. The only light is the seam of its lid. The human stands behind it in the heavy cloak, hands hidden in the sleeves. Codex left, Clawd right, both still.",
+            "sees": "poster frame; one emitter; three silhouettes and a box",
+            "want": "to know what is inside",
+            "turn": "nothing yet: the seam asks",
+            "after": [],
+            "colour": "blue",
+            "register": "warm, inviting",
+            "emitter": "box seam",
+            "measure": "lid angle 0; cloak covers both hands; emitter count 1"
           }
         },
         {
-          "start": 180,
-          "end": 420,
+          "start": 60,
+          "end": 110,
+          "beat": "arrival",
+          "label": "s01/sp-1.2 LIFT",
+          "data": {
+            "id": "sp-1.2",
+            "pipelineId": "s01/sp-1.2",
+            "shot": "s01-arrival-overwhelm",
+            "slug": "LIFT",
+            "frame": 60,
+            "action": "The human lifts the lid in one move. The sleeves slide back: the first time we see hands. The seam light lags behind the lid, then spills.",
+            "sees": "the lid rises; two hands appear; the light widens a beat late",
+            "want": "open it",
+            "turn": "the box opens",
+            "after": [
+              "box.open"
+            ],
+            "colour": "blue",
+            "register": "curiosity",
+            "emitter": "box seam",
+            "measure": "lid angle from 0 to open; hands visible after, not before; light area grows after the lid, lag ≥ 4 frames"
+          }
+        },
+        {
+          "start": 110,
+          "end": 186,
+          "beat": "arrival",
+          "label": "s01/sp-1.3 SWELL",
+          "data": {
+            "id": "sp-1.3",
+            "pipelineId": "s01/sp-1.3",
+            "shot": "s01-arrival-overwhelm",
+            "slug": "SWELL",
+            "frame": 110,
+            "action": "A glass bubble swells out of the box with the gadget dim inside it. Codex, then Clawd, lean in, staggered by four.",
+            "sees": "a bubble grows over 40 frames; two heads tilt toward it one after the other",
+            "want": "see",
+            "turn": "capability appears, behind glass",
+            "after": [
+              "gadget.visible"
+            ],
+            "colour": "blue",
+            "register": "curiosity",
+            "emitter": "box seam → gadget",
+            "measure": "bubble radius grows; gadget present inside; codex lean precedes clawd lean by 4"
+          }
+        },
+        {
+          "start": 186,
+          "end": 230,
           "beat": "everything-at-once",
-          "label": "2. Everything at once",
+          "label": "s01/sp-2.1 POP",
           "data": {
-            "heading": "2. Everything at once",
-            "headingRange": "180–420",
-            "headingRangeMatchesTimeline": true,
-            "sharedWith": [],
-            "notes": [
-              "2026-10-14, shot run s01-01: measured range 180–420 on the 65 s ledger; the 150–330 above was provisional. The camera's widen runs 150–210 across the seam between the two beats. 2026-10-15, run s01-02: range unchanged (180–420); the widen now ends at zoom 0.6."
+            "id": "sp-2.1",
+            "pipelineId": "s01/sp-2.1",
+            "shot": "s01-arrival-overwhelm",
+            "slug": "POP",
+            "frame": 186,
+            "action": "The bubble pops. One frame of smear. The light arrives first, the glass second: the gadget stands free with its dial wide.",
+            "sees": "the bubble vanishes; the whole field goes blue",
+            "want": "",
+            "turn": "the glass is gone; nothing bounds it",
+            "after": [
+              "bubble.gone"
             ],
-            "prose": "*2026-10-14, shot run s01-01: measured range 180–420 on the 65 s ledger; the 150–330 above was provisional. The camera's widen runs 150–210 across the seam between the two beats. 2026-10-15, run s01-02: range unchanged (180–420); the widen now ends at zoom 0.6.*\n\nThe bubble pops: one frame of smear, then the overwhelm state arrives through the lag chain, light first, glass second. The gadget stands free, dial wide. It projects: stalks shoot up across the field, arches drop in, rings spin out, patches tile outward, beads scatter. Each arrives on twos, staggered 3, until nothing is staggered anymore and everything arrives at once (the one permitted violation of law 1, as the point of the beat). Codex's glyph flickers; Clawd's eyes narrow. The frame fills toward the maximalist painting. Hold 12 at full."
+            "colour": "blue",
+            "register": "delight",
+            "emitter": "gadget dial",
+            "measure": "bubble absent after; field hue area jumps"
           }
         },
         {
-          "start": 420,
+          "start": 230,
+          "end": 330,
+          "beat": "everything-at-once",
+          "label": "s01/sp-2.2 FLOOD",
+          "data": {
+            "id": "sp-2.2",
+            "pipelineId": "s01/sp-2.2",
+            "shot": "s01-arrival-overwhelm",
+            "slug": "FLOOD",
+            "frame": 230,
+            "action": "The gadget projects: stalks shoot up, arches drop in, rings spin out, patches tile, beads scatter, each on twos, staggered. The human turns with joy, arms open: the one full arm-open in the film, and it is earned.",
+            "sees": "pieces arrive one after another around the trio; the human spins once",
+            "want": "all of it",
+            "turn": "delight",
+            "after": [
+              "pieces.count"
+            ],
+            "colour": "blue",
+            "register": "delight",
+            "emitter": "gadget dial",
+            "measure": "piece count rises from 0; human turns ≥ 90°; arrivals staggered ≥ 3 frames until sp-2.3"
+          }
+        },
+        {
+          "start": 330,
+          "end": 430,
+          "beat": "everything-at-once",
+          "label": "s01/sp-2.3 TOO MUCH",
+          "data": {
+            "id": "sp-2.3",
+            "pipelineId": "s01/sp-2.3",
+            "shot": "s01-arrival-overwhelm",
+            "slug": "TOO MUCH",
+            "frame": 330,
+            "action": "Nothing is staggered any more; everything arrives at once. Codex catches a piece out of the air. A stalk shoves Clawd sideways. The human pulls the cloak back around and shrinks.",
+            "sees": "the human gets smaller in the frame as the pieces get bigger; Clawd is displaced; Codex holds a piece",
+            "want": "make it stop",
+            "turn": "delight tips to overwhelm",
+            "after": [
+              "human.small"
+            ],
+            "colour": "blue",
+            "register": "overwhelm",
+            "emitter": "gadget dial",
+            "measure": "human silhouette height falls ≥ 15 %; clawd x moves ≥ 40 px; codex holds a prop; ≥ 6 arrivals on one frame"
+          }
+        },
+        {
+          "start": 430,
+          "end": 500,
+          "beat": "cant-build",
+          "label": "s02/sp-3.1 REACH",
+          "data": {
+            "id": "sp-3.1",
+            "pipelineId": "s02/sp-3.1",
+            "shot": "s02-cant-build-frame",
+            "slug": "REACH",
+            "frame": 430,
+            "action": "The human reaches for a stalk to plant it on a patch. Anticipation, action, contact: no pulse. The stalk slides back the way it came.",
+            "sees": "a hand closes on a stalk; the stalk returns to where it was",
+            "want": "build something",
+            "turn": "the join refuses",
+            "after": [],
+            "colour": "steel",
+            "register": "frustration kept kind",
+            "emitter": "gadget dial",
+            "measure": "hand reaches stalk (contact); stalk returns to its start within 20 frames; no seam pulse"
+          }
+        },
+        {
+          "start": 500,
+          "end": 580,
+          "beat": "cant-build",
+          "label": "s02/sp-3.2 STACK",
+          "data": {
+            "id": "sp-3.2",
+            "pipelineId": "s02/sp-3.2",
+            "shot": "s02-cant-build-frame",
+            "slug": "STACK",
+            "frame": 500,
+            "action": "Both hands now. The human stacks three patches. They collapse, staggered by three, each a settle with no hold. Codex winces small at frame left.",
+            "sees": "three pieces go up, three come down",
+            "want": "build anything",
+            "turn": "it falls",
+            "after": [
+              "stack.collapsed"
+            ],
+            "colour": "steel",
+            "register": "gentle gag",
+            "emitter": "gadget dial, lost",
+            "measure": "three props rise then fall; falls staggered 3; codex boil variant held"
+          }
+        },
+        {
+          "start": 580,
           "end": 630,
           "beat": "cant-build",
-          "label": "3. Can't build",
+          "label": "s02/sp-3.3 LOST",
           "data": {
-            "heading": "3. Can't build",
-            "headingRange": "330–480",
-            "headingRangeMatchesTimeline": false,
-            "sharedWith": [],
-            "notes": [],
-            "prose": "The human reaches for a stalk and a patch: anticipation, action, contact. The join fails: no pulse, the stalk slides back. Second try with an arch: the arch stays dark, the piece returns. A stack of patches collapses (three pieces, staggered 3, each a settle with no hold). The radiance goes noisy, grain up, the single emitter lost among projections. The companions wince (one boil variant held). Hold 16 on the mess."
+            "id": "sp-3.3",
+            "pipelineId": "s02/sp-3.3",
+            "shot": "s02-cant-build-frame",
+            "slug": "LOST",
+            "frame": 580,
+            "action": "The dial's light is lost in the grain. The human sits down in the mess. Clawd looks at the human, then leaves frame right.",
+            "sees": "grain up; the human low; Clawd exits",
+            "want": "",
+            "turn": "Clawd decides something",
+            "after": [
+              "gadget.held",
+              "grain",
+              "clawd.offstage"
+            ],
+            "colour": "steel",
+            "register": "frustration kept kind",
+            "emitter": "none readable",
+            "measure": "grain high; human height at its lowest; clawd absent from frame after"
           }
         },
         {
           "start": 630,
-          "end": 930,
+          "end": 690,
           "beat": "the-frame",
-          "label": "4. The frame",
+          "label": "s02/sp-4.1 SLUMP",
           "data": {
-            "heading": "4. The frame",
-            "headingRange": "480–600",
-            "headingRangeMatchesTimeline": false,
-            "sharedWith": [],
-            "notes": [],
-            "prose": "Clawd raises the frame (the pass-08 move, entering from the hand's side). Through it: the environment already assembled, rings, arches, stalks, patches, string, refracted and diffused, someplace else. Outside the frame the projections dim through the lag; inside, the emitter narrows to one piece. Hold 20 on the view through the frame. The human looks from the mess to the frame."
+            "id": "sp-4.1",
+            "pipelineId": "s02/sp-4.1",
+            "shot": "s02-cant-build-frame",
+            "slug": "SLUMP",
+            "frame": 630,
+            "action": "Hold. The human slumped among the fallen pieces, the cloak pooled. Codex small at left. Clawd gone.",
+            "sees": "stillness in the mess",
+            "want": "",
+            "turn": "",
+            "after": [],
+            "colour": "steel",
+            "register": "reverent",
+            "emitter": "none readable",
+            "measure": "hold 26; no prop moves"
           }
         },
         {
-          "start": 930,
-          "end": 1230,
+          "start": 690,
+          "end": 740,
+          "beat": "the-frame",
+          "label": "s02/sp-4.2 TURN",
+          "data": {
+            "id": "sp-4.2",
+            "pipelineId": "s02/sp-4.2",
+            "shot": "s02-cant-build-frame",
+            "slug": "TURN",
+            "frame": 690,
+            "action": "Clawd re-enters from the right holding the frame up with both arms. Its interior lights: the crayon world is inside it, refracted. The human's head turns to it first, then the body.",
+            "sees": "Clawd carries a lit rectangle in; the human turns",
+            "want": "to see what that is",
+            "turn": "a bounded light appears",
+            "after": [
+              "emitter",
+              "clawd.onstage",
+              "frame.lit"
+            ],
+            "colour": "steel",
+            "register": "wonder",
+            "emitter": "frame interior",
+            "measure": "frame prop enters; frame interior is the brightest region; human head turn precedes torso by ≥ 4"
+          }
+        },
+        {
+          "start": 740,
+          "end": 800,
+          "beat": "the-frame",
+          "label": "s02/sp-4.3 RISE",
+          "data": {
+            "id": "sp-4.3",
+            "pipelineId": "s02/sp-4.3",
+            "shot": "s02-cant-build-frame",
+            "slug": "RISE",
+            "frame": 740,
+            "action": "The human rises. The cloak slides off and falls to a heap that stays. The Swoop is revealed hands first.",
+            "sees": "a dark heap on the floor that was not there; a lighter figure",
+            "want": "go to it",
+            "turn": "the heavy thing comes off",
+            "after": [
+              "human.garment",
+              "heap.present"
+            ],
+            "colour": "steel",
+            "register": "wonder",
+            "emitter": "frame interior",
+            "measure": "cloak prop on floor after, absent before; figure silhouette changes garment; heap stays to 1950"
+          }
+        },
+        {
+          "start": 800,
+          "end": 840,
+          "beat": "the-frame",
+          "label": "s02/sp-4.4 STEP",
+          "data": {
+            "id": "sp-4.4",
+            "pipelineId": "s02/sp-4.4",
+            "shot": "s02-cant-build-frame",
+            "slug": "STEP",
+            "frame": 800,
+            "action": "The human steps toward the frame. Codex, passing, nudges the heap with a foot. It does not move much. That is the gag.",
+            "sees": "a step; a small kick; the heap shifts a little",
+            "want": "",
+            "turn": "",
+            "after": [
+              "codex.near_frame"
+            ],
+            "colour": "steel",
+            "register": "comic",
+            "emitter": "frame interior",
+            "measure": "human x moves toward frame ≥ 60 px; codex contact with heap; heap displacement 4–12 px"
+          }
+        },
+        {
+          "start": 840,
+          "end": 900,
+          "beat": "the-frame",
+          "label": "s02/sp-4.5 THRESHOLD",
+          "data": {
+            "id": "sp-4.5",
+            "pipelineId": "s02/sp-4.5",
+            "shot": "s02-cant-build-frame",
+            "slug": "THRESHOLD",
+            "frame": 840,
+            "action": "At the frame. One hand on its edge. The heel taps the floor at its base and settles. The human looks through.",
+            "sees": "contact with the frame; a heel tap",
+            "want": "to go through",
+            "turn": "a choice",
+            "after": [],
+            "colour": "steel",
+            "register": "reverent",
+            "emitter": "frame interior",
+            "measure": "hand within 8 px of frame edge; heel contact 828 settles 836; hold 24"
+          }
+        },
+        {
+          "start": 900,
+          "end": 940,
+          "beat": "the-frame",
+          "label": "s02/sp-4.6 THROUGH",
+          "data": {
+            "id": "sp-4.6",
+            "pipelineId": "s02/sp-4.6",
+            "shot": "s02-cant-build-frame",
+            "slug": "THROUGH",
+            "frame": 900,
+            "action": "The human steps through. The field narrows to the frame; everything outside it dims through the lag. Codex and Clawd follow.",
+            "sees": "the figure crosses the frame's plane; the outside goes dark",
+            "want": "",
+            "turn": "the world changes",
+            "after": [
+              "world"
+            ],
+            "colour": "steel → crayon",
+            "register": "wonder",
+            "emitter": "frame interior",
+            "measure": "human crosses frame x; outside luminance falls ≥ 50 %; next frame's field is paper"
+          }
+        },
+        {
+          "start": 940,
+          "end": 1010,
           "beat": "art-world",
-          "label": "5. Scaffold",
+          "label": "s03/sp-5.1 PAPER",
           "data": {
-            "heading": "5. Scaffold",
-            "headingRange": "600–1020",
-            "headingRangeMatchesTimeline": false,
-            "sharedWith": [
-              "crossing",
-              "programming-world"
+            "id": "sp-5.1",
+            "pipelineId": "s03/sp-5.1",
+            "shot": "s03-scaffold",
+            "slug": "PAPER",
+            "frame": 940,
+            "action": "A paper field. Crayon architecture: stacked arches as scribbles, stalks as waxy lines. Clawd hands the human a crayon.",
+            "sees": "white paper; a crayon changes hands",
+            "want": "",
+            "turn": "a tool is given",
+            "after": [
+              "field",
+              "human.holds_crayon"
             ],
-            "notes": [],
-            "prose": "One join at a time, each a seam pulse, each staggered after the previous settle:\n\n1. a patch lands (category);\n2. a stalk is planted on it (prompt), leaf opens;\n3. a second stalk, and a bead string joins them (chain);\n4. an arch drops over the string (gate); the first piece passes it, pulse at the keystone;\n5. a ring spins out around the whole (framework); the view gains a level of depth;\n6. a second patch joins at a soft seam; the workspace reshapes (D40).\n\nThe light state shifts from overwhelm toward scaffold through the lag over the whole beat. The gadget's dial closes to a point; its light now rims the structure instead of flooding it."
+            "colour": "crayon",
+            "register": "playful",
+            "emitter": "the crayon's own colour",
+            "measure": "field is paper; crayon prop moves from clawd to human"
           }
         },
         {
-          "start": 1230,
-          "end": 1350,
+          "start": 1010,
+          "end": 1110,
+          "beat": "art-world",
+          "label": "s03/sp-5.2 DRAW",
+          "data": {
+            "id": "sp-5.2",
+            "pipelineId": "s03/sp-5.2",
+            "shot": "s03-scaffold",
+            "slug": "DRAW",
+            "frame": 1010,
+            "action": "The human draws a stalk in the air in three strokes. The strokes stay where they are drawn.",
+            "sees": "three lines appear one after another in the air",
+            "want": "make one thing",
+            "turn": "",
+            "after": [
+              "strokes.count"
+            ],
+            "colour": "crayon",
+            "register": "playful",
+            "emitter": "the drawn line",
+            "measure": "three stroke props appear in order; each stroke staggered ≥ 6"
+          }
+        },
+        {
+          "start": 1110,
+          "end": 1200,
+          "beat": "art-world",
+          "label": "s03/sp-5.3 REAL",
+          "data": {
+            "id": "sp-5.3",
+            "pipelineId": "s03/sp-5.3",
+            "shot": "s03-scaffold",
+            "slug": "REAL",
+            "frame": 1110,
+            "action": "The drawing fills in and becomes a real stalk; its leaf opens. Codex keeps it from drifting off with one hand.",
+            "sees": "line becomes fill; a leaf opens; Codex steadies it",
+            "want": "",
+            "turn": "a drawing becomes a thing",
+            "after": [
+              "pieces.made_by_human"
+            ],
+            "colour": "crayon",
+            "register": "delight",
+            "emitter": "the leaf",
+            "measure": "stroke props replaced by a stalk prop; leaf opens over ≥ 8 frames; codex contact with stalk"
+          }
+        },
+        {
+          "start": 1200,
+          "end": 1240,
+          "beat": "art-world",
+          "label": "s03/sp-5.4 CARRY",
+          "data": {
+            "id": "sp-5.4",
+            "pipelineId": "s03/sp-5.4",
+            "shot": "s03-scaffold",
+            "slug": "CARRY",
+            "frame": 1200,
+            "action": "The human picks the stalk up and holds it like a lantern. Turns toward the edge of the paper, where the lines begin.",
+            "sees": "the piece in hand; a turn to the edge",
+            "want": "take it somewhere",
+            "turn": "",
+            "after": [
+              "human.holds_piece"
+            ],
+            "colour": "crayon",
+            "register": "curiosity",
+            "emitter": "the leaf",
+            "measure": "stalk prop attached to the human's hand; human faces frame right"
+          }
+        },
+        {
+          "start": 1240,
+          "end": 1300,
           "beat": "crossing",
-          "label": "5. Scaffold",
+          "label": "s03/sp-6.1 REDUCE",
           "data": {
-            "heading": "5. Scaffold",
-            "headingRange": "600–1020",
-            "headingRangeMatchesTimeline": false,
-            "sharedWith": [
-              "art-world",
-              "programming-world"
+            "id": "sp-6.1",
+            "pipelineId": "s03/sp-6.1",
+            "shot": "s03-scaffold",
+            "slug": "REDUCE",
+            "frame": 1240,
+            "action": "Everything reduces to pale contour lines, the figures included.",
+            "sees": "fills drain; only lines",
+            "want": "",
+            "turn": "",
+            "after": [
+              "world"
             ],
-            "notes": [],
-            "prose": "One join at a time, each a seam pulse, each staggered after the previous settle:\n\n1. a patch lands (category);\n2. a stalk is planted on it (prompt), leaf opens;\n3. a second stalk, and a bead string joins them (chain);\n4. an arch drops over the string (gate); the first piece passes it, pulse at the keystone;\n5. a ring spins out around the whole (framework); the view gains a level of depth;\n6. a second patch joins at a soft seam; the workspace reshapes (D40).\n\nThe light state shifts from overwhelm toward scaffold through the lag over the whole beat. The gadget's dial closes to a point; its light now rims the structure instead of flooding it."
+            "colour": "line",
+            "register": "focused",
+            "emitter": "the piece's lines",
+            "measure": "fill area falls ≥ 80 %; figure drawn as line"
           }
         },
         {
-          "start": 1350,
-          "end": 1650,
+          "start": 1300,
+          "end": 1360,
+          "beat": "crossing",
+          "label": "s03/sp-6.2 RE-ROUTE",
+          "data": {
+            "id": "sp-6.2",
+            "pipelineId": "s03/sp-6.2",
+            "shot": "s03-scaffold",
+            "slug": "RE-ROUTE",
+            "frame": 1300,
+            "action": "The lines re-route and connect: the stalk's lines reach the next world's grid. Codex steps past Clawd and takes the lead.",
+            "sees": "lines rewire; Codex passes Clawd",
+            "want": "",
+            "turn": "the guide changes",
+            "after": [
+              "guide.lead"
+            ],
+            "colour": "line",
+            "register": "focused",
+            "emitter": "the piece's lines",
+            "measure": "codex x passes clawd x; piece lines connect to grid (contact)"
+          }
+        },
+        {
+          "start": 1360,
+          "end": 1440,
           "beat": "programming-world",
-          "label": "5. Scaffold",
+          "label": "s03/sp-7.1 GRID",
           "data": {
-            "heading": "5. Scaffold",
-            "headingRange": "600–1020",
-            "headingRangeMatchesTimeline": false,
-            "sharedWith": [
-              "art-world",
-              "crossing"
+            "id": "sp-7.1",
+            "pipelineId": "s03/sp-7.1",
+            "shot": "s03-scaffold",
+            "slug": "GRID",
+            "frame": 1360,
+            "action": "Shaded architecture with emissive edges. Gates as rings. Codex points to one empty join.",
+            "sees": "a dark grid with lit edges; a pointing arm",
+            "want": "",
+            "turn": "a place to put it",
+            "after": [
+              "world"
             ],
-            "notes": [],
-            "prose": "One join at a time, each a seam pulse, each staggered after the previous settle:\n\n1. a patch lands (category);\n2. a stalk is planted on it (prompt), leaf opens;\n3. a second stalk, and a bead string joins them (chain);\n4. an arch drops over the string (gate); the first piece passes it, pulse at the keystone;\n5. a ring spins out around the whole (framework); the view gains a level of depth;\n6. a second patch joins at a soft seam; the workspace reshapes (D40).\n\nThe light state shifts from overwhelm toward scaffold through the lag over the whole beat. The gadget's dial closes to a point; its light now rims the structure instead of flooding it."
+            "colour": "shaded",
+            "register": "focused",
+            "emitter": "the empty join",
+            "measure": "field shaded; codex points (arm extended) at the join prop"
           }
         },
         {
-          "start": 1650,
+          "start": 1440,
+          "end": 1520,
+          "beat": "programming-world",
+          "label": "s03/sp-7.2 JOIN",
+          "data": {
+            "id": "sp-7.2",
+            "pipelineId": "s03/sp-7.2",
+            "shot": "s03-scaffold",
+            "slug": "JOIN",
+            "frame": 1440,
+            "action": "The human places the stalk against another piece. Contact. The join lights: a seam pulse at the keystone, the first one that has worked.",
+            "sees": "a piece set down; a pulse",
+            "want": "make it hold",
+            "turn": "it holds",
+            "after": [
+              "joins.lit"
+            ],
+            "colour": "shaded",
+            "register": "satisfaction",
+            "emitter": "the lit join",
+            "measure": "stalk prop contact with the join; seam pulse after contact, lag ≥ 4; join emitter lit after"
+          }
+        },
+        {
+          "start": 1520,
+          "end": 1620,
+          "beat": "programming-world",
+          "label": "s03/sp-7.3 RUN",
+          "data": {
+            "id": "sp-7.3",
+            "pipelineId": "s03/sp-7.3",
+            "shot": "s03-scaffold",
+            "slug": "RUN",
+            "frame": 1520,
+            "action": "The chain runs down the grid: three gates light in sequence, the third is the one the human made. Clawd watches from the edge.",
+            "sees": "three rings light one after another",
+            "want": "",
+            "turn": "the thing works",
+            "after": [
+              "chain.ran"
+            ],
+            "colour": "shaded",
+            "register": "satisfaction",
+            "emitter": "the running bead",
+            "measure": "three gate props lit in order, staggered ≥ 8; the third is the human's"
+          }
+        },
+        {
+          "start": 1620,
+          "end": 1660,
+          "beat": "programming-world",
+          "label": "s03/sp-7.4 RETURN",
+          "data": {
+            "id": "sp-7.4",
+            "pipelineId": "s03/sp-7.4",
+            "shot": "s03-scaffold",
+            "slug": "RETURN",
+            "frame": 1620,
+            "action": "The frame stands ahead, now a window with home inside it. The trio steps back through.",
+            "sees": "the frame as a window; three figures cross it",
+            "want": "",
+            "turn": "",
+            "after": [
+              "world"
+            ],
+            "colour": "shaded → coral",
+            "register": "contentment",
+            "emitter": "frame interior",
+            "measure": "frame prop present; three figures cross its x"
+          }
+        },
+        {
+          "start": 1660,
+          "end": 1760,
+          "beat": "home-settle",
+          "label": "s04/sp-8.1 STAND",
+          "data": {
+            "id": "sp-8.1",
+            "pipelineId": "s04/sp-8.1",
+            "shot": "s04-settle",
+            "slug": "STAND",
+            "frame": 1660,
+            "action": "Home. The structure stands small under the frame (D102) with the crayon piece and the lit joins inside it. The gadget rests inside, bright but bounded.",
+            "sees": "a built thing where the mess was; the heap still on the floor",
+            "want": "",
+            "turn": "",
+            "after": [
+              "hue",
+              "gadget.held"
+            ],
+            "colour": "coral",
+            "register": "contentment",
+            "emitter": "gadget, rimming the structure",
+            "measure": "structure prop present; gadget inside its bounds; heap prop still present; pieces outside the structure ≤ 2"
+          }
+        },
+        {
+          "start": 1760,
+          "end": 1860,
+          "beat": "home-settle",
+          "label": "s04/sp-8.2 SETTLE",
+          "data": {
+            "id": "sp-8.2",
+            "pipelineId": "s04/sp-8.2",
+            "shot": "s04-settle",
+            "slug": "SETTLE",
+            "frame": 1760,
+            "action": "The human sits on the patch. Codex settles left, Clawd right, each with one idle boil. The frame is set down against the structure.",
+            "sees": "three figures come to rest; the frame leans",
+            "want": "rest",
+            "turn": "",
+            "after": [
+              "human.seated"
+            ],
+            "colour": "coral",
+            "register": "settled",
+            "emitter": "gadget",
+            "measure": "human height falls to seated; codex and clawd each hold 1 boil variant; frame prop at rest against structure"
+          }
+        },
+        {
+          "start": 1860,
           "end": 1950,
           "beat": "home-settle",
-          "label": "6. Settle",
+          "label": "s04/sp-8.3 WINDOW",
           "data": {
-            "heading": "6. Settle",
-            "headingRange": "1020–1200",
-            "headingRangeMatchesTimeline": false,
-            "sharedWith": [],
-            "notes": [],
-            "prose": "The structure stands. The gadget rests inside it, bright but bounded. The human sits on the patch. Codex and Clawd each take one idle boil. The frame is set down against the structure and keeps showing depth. Hold 40. Title held: Claude Prompts. Frame 1199 is the second poster."
+            "id": "sp-8.3",
+            "pipelineId": "s04/sp-8.3",
+            "shot": "s04-settle",
+            "slug": "WINDOW",
+            "frame": 1860,
+            "action": "One last look through the frame, now a window. Title. Hold to the end.",
+            "sees": "a held picture; the title",
+            "want": "",
+            "turn": "",
+            "after": [
+              "title"
+            ],
+            "colour": "coral",
+            "register": "settled",
+            "emitter": "frame interior",
+            "measure": "hold ≥ 60; title mark visible; frame 1949 is the second poster"
           }
         }
       ]
@@ -389,7 +938,8 @@
                 1045,
                 382
               ],
-              "anchor": "box seam"
+              "anchor": "box seam",
+              "storyPoint": "sp-1.1"
             },
             "card": "eagle-lyio3is7tokub"
           }
@@ -425,7 +975,8 @@
                 1050,
                 350
               ],
-              "anchor": "gadget dial"
+              "anchor": "gadget dial",
+              "storyPoint": "sp-2.1"
             },
             "card": "seuss-no-one-youer"
           }
@@ -461,7 +1012,8 @@
                 411,
                 638
               ],
-              "anchor": "gadget dial, lost on the floor (the join)"
+              "anchor": "gadget dial, lost on the floor (the join)",
+              "storyPoint": "sp-3.3"
             },
             "card": "eagle-lxu2uuohr9v2c"
           }
@@ -497,7 +1049,8 @@
                 1060,
                 200
               ],
-              "anchor": "frame interior"
+              "anchor": "frame interior",
+              "storyPoint": "sp-4.2"
             },
             "card": "seuss-nested-frames"
           }
@@ -533,7 +1086,8 @@
                 1080,
                 390
               ],
-              "anchor": "join (the drawn piece as it fills)"
+              "anchor": "join (the drawn piece as it fills)",
+              "storyPoint": "sp-5.3"
             },
             "card": "seuss-cat-stairway"
           }
@@ -605,7 +1159,8 @@
                 325,
                 376
               ],
-              "anchor": "gates, first to last"
+              "anchor": "gates, first to last",
+              "storyPoint": "sp-7.2"
             },
             "card": "seuss-archbishop-katz"
           }
@@ -641,7 +1196,8 @@
                 1070,
                 400
               ],
-              "anchor": "gadget, rimming the structure"
+              "anchor": "gadget, rimming the structure",
+              "storyPoint": "sp-8.1"
             },
             "card": "seuss-green-cat-lights"
           }
@@ -4730,98 +5286,778 @@
       "items": [
         {
           "start": 0,
-          "end": 180,
+          "end": 60,
           "beat": "arrival",
-          "label": "#0a51fb / #fad204",
+          "label": "s01/sp-1.1 blue",
           "data": {
+            "storyPoint": "sp-1.1",
+            "colourKey": "blue",
+            "parts": [
+              {
+                "key": "blue",
+                "name": "Turrell blue",
+                "radiance": "#0a51fb",
+                "accent": "#fad204",
+                "field": null,
+                "swatches": [
+                  "#0a51fb",
+                  "#fad204"
+                ]
+              }
+            ],
             "radiance": "#0a51fb",
             "accent": "#fad204",
-            "midFrame": 90,
-            "animaticFrame": "out/animatic-seq/element-0090.png"
+            "midFrame": 30,
+            "animaticFrame": "out/animatic-seq/element-0030.png"
           }
         },
         {
-          "start": 180,
-          "end": 420,
+          "start": 60,
+          "end": 110,
+          "beat": "arrival",
+          "label": "s01/sp-1.2 blue",
+          "data": {
+            "storyPoint": "sp-1.2",
+            "colourKey": "blue",
+            "parts": [
+              {
+                "key": "blue",
+                "name": "Turrell blue",
+                "radiance": "#0a51fb",
+                "accent": "#fad204",
+                "field": null,
+                "swatches": [
+                  "#0a51fb",
+                  "#fad204"
+                ]
+              }
+            ],
+            "radiance": "#0a51fb",
+            "accent": "#fad204",
+            "midFrame": 85,
+            "animaticFrame": "out/animatic-seq/element-0085.png"
+          }
+        },
+        {
+          "start": 110,
+          "end": 186,
+          "beat": "arrival",
+          "label": "s01/sp-1.3 blue",
+          "data": {
+            "storyPoint": "sp-1.3",
+            "colourKey": "blue",
+            "parts": [
+              {
+                "key": "blue",
+                "name": "Turrell blue",
+                "radiance": "#0a51fb",
+                "accent": "#fad204",
+                "field": null,
+                "swatches": [
+                  "#0a51fb",
+                  "#fad204"
+                ]
+              }
+            ],
+            "radiance": "#0a51fb",
+            "accent": "#fad204",
+            "midFrame": 148,
+            "animaticFrame": "out/animatic-seq/element-0148.png"
+          }
+        },
+        {
+          "start": 186,
+          "end": 230,
           "beat": "everything-at-once",
-          "label": "#0a51fb / #fad204",
+          "label": "s01/sp-2.1 blue",
           "data": {
+            "storyPoint": "sp-2.1",
+            "colourKey": "blue",
+            "parts": [
+              {
+                "key": "blue",
+                "name": "Turrell blue",
+                "radiance": "#0a51fb",
+                "accent": "#fad204",
+                "field": null,
+                "swatches": [
+                  "#0a51fb",
+                  "#fad204"
+                ]
+              }
+            ],
             "radiance": "#0a51fb",
             "accent": "#fad204",
-            "midFrame": 300,
-            "animaticFrame": "out/animatic-seq/element-0300.png"
+            "midFrame": 208,
+            "animaticFrame": "out/animatic-seq/element-0208.png"
           }
         },
         {
-          "start": 420,
-          "end": 630,
-          "beat": "cant-build",
-          "label": "#17263a / #457ca4",
+          "start": 230,
+          "end": 330,
+          "beat": "everything-at-once",
+          "label": "s01/sp-2.2 blue",
           "data": {
+            "storyPoint": "sp-2.2",
+            "colourKey": "blue",
+            "parts": [
+              {
+                "key": "blue",
+                "name": "Turrell blue",
+                "radiance": "#0a51fb",
+                "accent": "#fad204",
+                "field": null,
+                "swatches": [
+                  "#0a51fb",
+                  "#fad204"
+                ]
+              }
+            ],
+            "radiance": "#0a51fb",
+            "accent": "#fad204",
+            "midFrame": 280,
+            "animaticFrame": "out/animatic-seq/element-0280.png"
+          }
+        },
+        {
+          "start": 330,
+          "end": 430,
+          "beat": "everything-at-once",
+          "label": "s01/sp-2.3 blue",
+          "data": {
+            "storyPoint": "sp-2.3",
+            "colourKey": "blue",
+            "parts": [
+              {
+                "key": "blue",
+                "name": "Turrell blue",
+                "radiance": "#0a51fb",
+                "accent": "#fad204",
+                "field": null,
+                "swatches": [
+                  "#0a51fb",
+                  "#fad204"
+                ]
+              }
+            ],
+            "radiance": "#0a51fb",
+            "accent": "#fad204",
+            "midFrame": 380,
+            "animaticFrame": "out/animatic-seq/element-0380.png"
+          }
+        },
+        {
+          "start": 430,
+          "end": 500,
+          "beat": "cant-build",
+          "label": "s02/sp-3.1 steel",
+          "data": {
+            "storyPoint": "sp-3.1",
+            "colourKey": "steel",
+            "parts": [
+              {
+                "key": "steel",
+                "name": "Styx steel",
+                "radiance": "#17263a",
+                "accent": "#457ca4",
+                "field": null,
+                "swatches": [
+                  "#17263a",
+                  "#457ca4"
+                ]
+              }
+            ],
             "radiance": "#17263a",
             "accent": "#457ca4",
-            "midFrame": 525,
-            "animaticFrame": "out/animatic-seq/element-0525.png"
+            "midFrame": 465,
+            "animaticFrame": "out/animatic-seq/element-0465.png"
+          }
+        },
+        {
+          "start": 500,
+          "end": 580,
+          "beat": "cant-build",
+          "label": "s02/sp-3.2 steel",
+          "data": {
+            "storyPoint": "sp-3.2",
+            "colourKey": "steel",
+            "parts": [
+              {
+                "key": "steel",
+                "name": "Styx steel",
+                "radiance": "#17263a",
+                "accent": "#457ca4",
+                "field": null,
+                "swatches": [
+                  "#17263a",
+                  "#457ca4"
+                ]
+              }
+            ],
+            "radiance": "#17263a",
+            "accent": "#457ca4",
+            "midFrame": 540,
+            "animaticFrame": "out/animatic-seq/element-0540.png"
+          }
+        },
+        {
+          "start": 580,
+          "end": 630,
+          "beat": "cant-build",
+          "label": "s02/sp-3.3 steel",
+          "data": {
+            "storyPoint": "sp-3.3",
+            "colourKey": "steel",
+            "parts": [
+              {
+                "key": "steel",
+                "name": "Styx steel",
+                "radiance": "#17263a",
+                "accent": "#457ca4",
+                "field": null,
+                "swatches": [
+                  "#17263a",
+                  "#457ca4"
+                ]
+              }
+            ],
+            "radiance": "#17263a",
+            "accent": "#457ca4",
+            "midFrame": 605,
+            "animaticFrame": "out/animatic-seq/element-0605.png"
           }
         },
         {
           "start": 630,
-          "end": 930,
+          "end": 690,
           "beat": "the-frame",
-          "label": "#17263a / #457ca4",
+          "label": "s02/sp-4.1 steel",
           "data": {
+            "storyPoint": "sp-4.1",
+            "colourKey": "steel",
+            "parts": [
+              {
+                "key": "steel",
+                "name": "Styx steel",
+                "radiance": "#17263a",
+                "accent": "#457ca4",
+                "field": null,
+                "swatches": [
+                  "#17263a",
+                  "#457ca4"
+                ]
+              }
+            ],
             "radiance": "#17263a",
             "accent": "#457ca4",
-            "midFrame": 780,
-            "animaticFrame": "out/animatic-seq/element-0780.png"
+            "midFrame": 660,
+            "animaticFrame": "out/animatic-seq/element-0660.png"
           }
         },
         {
-          "start": 930,
-          "end": 1230,
+          "start": 690,
+          "end": 740,
+          "beat": "the-frame",
+          "label": "s02/sp-4.2 steel",
+          "data": {
+            "storyPoint": "sp-4.2",
+            "colourKey": "steel",
+            "parts": [
+              {
+                "key": "steel",
+                "name": "Styx steel",
+                "radiance": "#17263a",
+                "accent": "#457ca4",
+                "field": null,
+                "swatches": [
+                  "#17263a",
+                  "#457ca4"
+                ]
+              }
+            ],
+            "radiance": "#17263a",
+            "accent": "#457ca4",
+            "midFrame": 715,
+            "animaticFrame": "out/animatic-seq/element-0715.png"
+          }
+        },
+        {
+          "start": 740,
+          "end": 800,
+          "beat": "the-frame",
+          "label": "s02/sp-4.3 steel",
+          "data": {
+            "storyPoint": "sp-4.3",
+            "colourKey": "steel",
+            "parts": [
+              {
+                "key": "steel",
+                "name": "Styx steel",
+                "radiance": "#17263a",
+                "accent": "#457ca4",
+                "field": null,
+                "swatches": [
+                  "#17263a",
+                  "#457ca4"
+                ]
+              }
+            ],
+            "radiance": "#17263a",
+            "accent": "#457ca4",
+            "midFrame": 770,
+            "animaticFrame": "out/animatic-seq/element-0770.png"
+          }
+        },
+        {
+          "start": 800,
+          "end": 840,
+          "beat": "the-frame",
+          "label": "s02/sp-4.4 steel",
+          "data": {
+            "storyPoint": "sp-4.4",
+            "colourKey": "steel",
+            "parts": [
+              {
+                "key": "steel",
+                "name": "Styx steel",
+                "radiance": "#17263a",
+                "accent": "#457ca4",
+                "field": null,
+                "swatches": [
+                  "#17263a",
+                  "#457ca4"
+                ]
+              }
+            ],
+            "radiance": "#17263a",
+            "accent": "#457ca4",
+            "midFrame": 820,
+            "animaticFrame": "out/animatic-seq/element-0820.png"
+          }
+        },
+        {
+          "start": 840,
+          "end": 900,
+          "beat": "the-frame",
+          "label": "s02/sp-4.5 steel",
+          "data": {
+            "storyPoint": "sp-4.5",
+            "colourKey": "steel",
+            "parts": [
+              {
+                "key": "steel",
+                "name": "Styx steel",
+                "radiance": "#17263a",
+                "accent": "#457ca4",
+                "field": null,
+                "swatches": [
+                  "#17263a",
+                  "#457ca4"
+                ]
+              }
+            ],
+            "radiance": "#17263a",
+            "accent": "#457ca4",
+            "midFrame": 870,
+            "animaticFrame": "out/animatic-seq/element-0870.png"
+          }
+        },
+        {
+          "start": 900,
+          "end": 940,
+          "beat": "the-frame",
+          "label": "s02/sp-4.6 steel → crayon",
+          "data": {
+            "storyPoint": "sp-4.6",
+            "colourKey": "steel → crayon",
+            "parts": [
+              {
+                "key": "steel",
+                "name": "Styx steel",
+                "radiance": "#17263a",
+                "accent": "#457ca4",
+                "field": null,
+                "swatches": [
+                  "#17263a",
+                  "#457ca4"
+                ]
+              },
+              {
+                "key": "crayon",
+                "name": "art world kit (world-kit-01)",
+                "radiance": "#e1750c",
+                "accent": null,
+                "field": "#f1dcbc",
+                "swatches": [
+                  "#f1dcbc",
+                  "#e1750c"
+                ]
+              }
+            ],
+            "radiance": "#17263a",
+            "accent": "#457ca4",
+            "midFrame": 920,
+            "animaticFrame": "out/animatic-seq/element-0920.png"
+          }
+        },
+        {
+          "start": 940,
+          "end": 1010,
           "beat": "art-world",
-          "label": "#e1750c / #fad204",
+          "label": "s03/sp-5.1 crayon",
           "data": {
+            "storyPoint": "sp-5.1",
+            "colourKey": "crayon",
+            "parts": [
+              {
+                "key": "crayon",
+                "name": "art world kit (world-kit-01)",
+                "radiance": "#e1750c",
+                "accent": null,
+                "field": "#f1dcbc",
+                "swatches": [
+                  "#f1dcbc",
+                  "#e1750c"
+                ]
+              }
+            ],
             "radiance": "#e1750c",
-            "accent": "#fad204",
-            "midFrame": 1080,
-            "animaticFrame": "out/animatic-seq/element-1080.png"
+            "accent": null,
+            "midFrame": 975,
+            "animaticFrame": "out/animatic-seq/element-0975.png"
           }
         },
         {
-          "start": 1230,
-          "end": 1350,
+          "start": 1010,
+          "end": 1110,
+          "beat": "art-world",
+          "label": "s03/sp-5.2 crayon",
+          "data": {
+            "storyPoint": "sp-5.2",
+            "colourKey": "crayon",
+            "parts": [
+              {
+                "key": "crayon",
+                "name": "art world kit (world-kit-01)",
+                "radiance": "#e1750c",
+                "accent": null,
+                "field": "#f1dcbc",
+                "swatches": [
+                  "#f1dcbc",
+                  "#e1750c"
+                ]
+              }
+            ],
+            "radiance": "#e1750c",
+            "accent": null,
+            "midFrame": 1060,
+            "animaticFrame": "out/animatic-seq/element-1060.png"
+          }
+        },
+        {
+          "start": 1110,
+          "end": 1200,
+          "beat": "art-world",
+          "label": "s03/sp-5.3 crayon",
+          "data": {
+            "storyPoint": "sp-5.3",
+            "colourKey": "crayon",
+            "parts": [
+              {
+                "key": "crayon",
+                "name": "art world kit (world-kit-01)",
+                "radiance": "#e1750c",
+                "accent": null,
+                "field": "#f1dcbc",
+                "swatches": [
+                  "#f1dcbc",
+                  "#e1750c"
+                ]
+              }
+            ],
+            "radiance": "#e1750c",
+            "accent": null,
+            "midFrame": 1155,
+            "animaticFrame": "out/animatic-seq/element-1155.png"
+          }
+        },
+        {
+          "start": 1200,
+          "end": 1240,
+          "beat": "art-world",
+          "label": "s03/sp-5.4 crayon",
+          "data": {
+            "storyPoint": "sp-5.4",
+            "colourKey": "crayon",
+            "parts": [
+              {
+                "key": "crayon",
+                "name": "art world kit (world-kit-01)",
+                "radiance": "#e1750c",
+                "accent": null,
+                "field": "#f1dcbc",
+                "swatches": [
+                  "#f1dcbc",
+                  "#e1750c"
+                ]
+              }
+            ],
+            "radiance": "#e1750c",
+            "accent": null,
+            "midFrame": 1220,
+            "animaticFrame": "out/animatic-seq/element-1220.png"
+          }
+        },
+        {
+          "start": 1240,
+          "end": 1300,
           "beat": "crossing",
-          "label": "#e1750c / #fad204",
+          "label": "s03/sp-6.1 line",
           "data": {
-            "radiance": "#e1750c",
-            "accent": "#fad204",
-            "midFrame": 1290,
-            "animaticFrame": "out/animatic-seq/element-1290.png"
+            "storyPoint": "sp-6.1",
+            "colourKey": "line",
+            "parts": [
+              {
+                "key": "line",
+                "name": "crossing, pale contour lines",
+                "radiance": null,
+                "accent": null,
+                "field": "#07060c",
+                "swatches": [
+                  "#07060c"
+                ]
+              }
+            ],
+            "radiance": null,
+            "accent": null,
+            "midFrame": 1270,
+            "animaticFrame": "out/animatic-seq/element-1270.png"
           }
         },
         {
-          "start": 1350,
-          "end": 1650,
+          "start": 1300,
+          "end": 1360,
+          "beat": "crossing",
+          "label": "s03/sp-6.2 line",
+          "data": {
+            "storyPoint": "sp-6.2",
+            "colourKey": "line",
+            "parts": [
+              {
+                "key": "line",
+                "name": "crossing, pale contour lines",
+                "radiance": null,
+                "accent": null,
+                "field": "#07060c",
+                "swatches": [
+                  "#07060c"
+                ]
+              }
+            ],
+            "radiance": null,
+            "accent": null,
+            "midFrame": 1330,
+            "animaticFrame": "out/animatic-seq/element-1330.png"
+          }
+        },
+        {
+          "start": 1360,
+          "end": 1440,
           "beat": "programming-world",
-          "label": "#17263a / #457ca4",
+          "label": "s03/sp-7.1 shaded",
           "data": {
-            "radiance": "#17263a",
-            "accent": "#457ca4",
-            "midFrame": 1500,
-            "animaticFrame": "out/animatic-seq/element-1500.png"
+            "storyPoint": "sp-7.1",
+            "colourKey": "shaded",
+            "parts": [
+              {
+                "key": "shaded",
+                "name": "programming world kit, emissive edges",
+                "radiance": "#56b0d4",
+                "accent": null,
+                "field": "#02050b",
+                "swatches": [
+                  "#02050b",
+                  "#56b0d4"
+                ]
+              }
+            ],
+            "radiance": "#56b0d4",
+            "accent": null,
+            "midFrame": 1400,
+            "animaticFrame": "out/animatic-seq/element-1400.png"
           }
         },
         {
-          "start": 1650,
-          "end": 1950,
-          "beat": "home-settle",
-          "label": "#a63a2e / #f8c496",
+          "start": 1440,
+          "end": 1520,
+          "beat": "programming-world",
+          "label": "s03/sp-7.2 shaded",
           "data": {
+            "storyPoint": "sp-7.2",
+            "colourKey": "shaded",
+            "parts": [
+              {
+                "key": "shaded",
+                "name": "programming world kit, emissive edges",
+                "radiance": "#56b0d4",
+                "accent": null,
+                "field": "#02050b",
+                "swatches": [
+                  "#02050b",
+                  "#56b0d4"
+                ]
+              }
+            ],
+            "radiance": "#56b0d4",
+            "accent": null,
+            "midFrame": 1480,
+            "animaticFrame": "out/animatic-seq/element-1480.png"
+          }
+        },
+        {
+          "start": 1520,
+          "end": 1620,
+          "beat": "programming-world",
+          "label": "s03/sp-7.3 shaded",
+          "data": {
+            "storyPoint": "sp-7.3",
+            "colourKey": "shaded",
+            "parts": [
+              {
+                "key": "shaded",
+                "name": "programming world kit, emissive edges",
+                "radiance": "#56b0d4",
+                "accent": null,
+                "field": "#02050b",
+                "swatches": [
+                  "#02050b",
+                  "#56b0d4"
+                ]
+              }
+            ],
+            "radiance": "#56b0d4",
+            "accent": null,
+            "midFrame": 1570,
+            "animaticFrame": "out/animatic-seq/element-1570.png"
+          }
+        },
+        {
+          "start": 1620,
+          "end": 1660,
+          "beat": "programming-world",
+          "label": "s03/sp-7.4 shaded → coral",
+          "data": {
+            "storyPoint": "sp-7.4",
+            "colourKey": "shaded → coral",
+            "parts": [
+              {
+                "key": "shaded",
+                "name": "programming world kit, emissive edges",
+                "radiance": "#56b0d4",
+                "accent": null,
+                "field": "#02050b",
+                "swatches": [
+                  "#02050b",
+                  "#56b0d4"
+                ]
+              },
+              {
+                "key": "coral",
+                "name": "Soup! coral",
+                "radiance": "#a63a2e",
+                "accent": "#f8c496",
+                "field": null,
+                "swatches": [
+                  "#a63a2e",
+                  "#f8c496"
+                ]
+              }
+            ],
+            "radiance": "#56b0d4",
+            "accent": null,
+            "midFrame": 1640,
+            "animaticFrame": "out/animatic-seq/element-1640.png"
+          }
+        },
+        {
+          "start": 1660,
+          "end": 1760,
+          "beat": "home-settle",
+          "label": "s04/sp-8.1 coral",
+          "data": {
+            "storyPoint": "sp-8.1",
+            "colourKey": "coral",
+            "parts": [
+              {
+                "key": "coral",
+                "name": "Soup! coral",
+                "radiance": "#a63a2e",
+                "accent": "#f8c496",
+                "field": null,
+                "swatches": [
+                  "#a63a2e",
+                  "#f8c496"
+                ]
+              }
+            ],
             "radiance": "#a63a2e",
             "accent": "#f8c496",
-            "midFrame": 1800,
-            "animaticFrame": "out/animatic-seq/element-1800.png"
+            "midFrame": 1710,
+            "animaticFrame": "out/animatic-seq/element-1710.png"
+          }
+        },
+        {
+          "start": 1760,
+          "end": 1860,
+          "beat": "home-settle",
+          "label": "s04/sp-8.2 coral",
+          "data": {
+            "storyPoint": "sp-8.2",
+            "colourKey": "coral",
+            "parts": [
+              {
+                "key": "coral",
+                "name": "Soup! coral",
+                "radiance": "#a63a2e",
+                "accent": "#f8c496",
+                "field": null,
+                "swatches": [
+                  "#a63a2e",
+                  "#f8c496"
+                ]
+              }
+            ],
+            "radiance": "#a63a2e",
+            "accent": "#f8c496",
+            "midFrame": 1810,
+            "animaticFrame": "out/animatic-seq/element-1810.png"
+          }
+        },
+        {
+          "start": 1860,
+          "end": 1950,
+          "beat": "home-settle",
+          "label": "s04/sp-8.3 coral",
+          "data": {
+            "storyPoint": "sp-8.3",
+            "colourKey": "coral",
+            "parts": [
+              {
+                "key": "coral",
+                "name": "Soup! coral",
+                "radiance": "#a63a2e",
+                "accent": "#f8c496",
+                "field": null,
+                "swatches": [
+                  "#a63a2e",
+                  "#f8c496"
+                ]
+              }
+            ],
+            "radiance": "#a63a2e",
+            "accent": "#f8c496",
+            "midFrame": 1905,
+            "animaticFrame": "out/animatic-seq/element-1905.png"
           }
         }
       ]

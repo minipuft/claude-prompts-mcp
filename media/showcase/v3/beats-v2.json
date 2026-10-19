@@ -36,19 +36,23 @@
    "actions": [
     {
      "actor": "human",
-     "does": "opens the box lid"
+     "does": "opens the box lid",
+     "storyPoint": "sp-1.2"
     },
     {
      "actor": "box",
-     "does": "lid lifts; the gadget rises on its bubble"
+     "does": "lid lifts; the gadget rises on its bubble",
+     "storyPoint": "sp-1.2"
     },
     {
      "actor": "codex",
-     "does": "leans in"
+     "does": "leans in",
+     "storyPoint": "sp-1.3"
     },
     {
      "actor": "clawd",
-     "does": "leans in"
+     "does": "leans in",
+     "storyPoint": "sp-1.3"
     }
    ],
    "effects": {
@@ -93,19 +97,23 @@
    "actions": [
     {
      "actor": "gadget",
-     "does": "projects every piece, structure and route around the trio"
+     "does": "projects every piece, structure and route around the trio",
+     "storyPoint": "sp-2.2"
     },
     {
      "actor": "human",
-     "does": "turns with joy, then shrinks"
+     "does": "turns with joy, then shrinks",
+     "storyPoint": "sp-2.2"
     },
     {
      "actor": "codex",
-     "does": "catches a piece"
+     "does": "catches a piece",
+     "storyPoint": "sp-2.3"
     },
     {
      "actor": "clawd",
-     "does": "is pushed by a stalk"
+     "does": "is pushed by a stalk",
+     "storyPoint": "sp-2.3"
     }
    ],
    "effects": {
@@ -151,15 +159,18 @@
    "actions": [
     {
      "actor": "human",
-     "does": "reaches for the stalk and misses; grabs pieces; a stack collapses"
+     "does": "reaches for the stalk and misses; grabs pieces; a stack collapses",
+     "storyPoint": "sp-3.1"
     },
     {
      "actor": "codex",
-     "does": "winces, small at frame left"
+     "does": "winces, small at frame left",
+     "storyPoint": "sp-3.2"
     },
     {
      "actor": "clawd",
-     "does": "winces, then goes to fetch the frame"
+     "does": "winces, then goes to fetch the frame",
+     "storyPoint": "sp-3.3"
     }
    ],
    "effects": {
@@ -210,19 +221,23 @@
    "actions": [
     {
      "actor": "clawd",
-     "does": "holds the frame up"
+     "does": "holds the frame up",
+     "storyPoint": "sp-4.2"
     },
     {
      "actor": "human",
-     "does": "turns to the frame; the cloak drops (D69); the Swoop is revealed hands first; looks through"
+     "does": "turns to the frame; the cloak drops (D69); the Swoop is revealed hands first; looks through",
+     "storyPoint": "sp-4.2"
     },
     {
      "actor": "codex",
-     "does": "joins Clawd at the frame"
+     "does": "joins Clawd at the frame",
+     "storyPoint": "sp-4.4"
     },
     {
      "actor": "frame",
-     "does": "interior lights: the crayon world visible inside, refracted (D45)"
+     "does": "interior lights: the crayon world visible inside, refracted (D45)",
+     "storyPoint": "sp-4.2"
     }
    ],
    "effects": {
@@ -274,19 +289,23 @@
    "actions": [
     {
      "actor": "clawd",
-     "does": "guides: hands the human a crayon (Clawd owns the art workflow)"
+     "does": "guides: hands the human a crayon (Clawd owns the art workflow)",
+     "storyPoint": "sp-5.1"
     },
     {
      "actor": "human",
-     "does": "draws one piece in the air; the drawing fills in and becomes a real piece (a prompt becoming a resource)"
+     "does": "draws one piece in the air; the drawing fills in and becomes a real piece (a prompt becoming a resource)",
+     "storyPoint": "sp-5.2"
     },
     {
      "actor": "codex",
-     "does": "watches, small, keeps the piece from drifting"
+     "does": "watches, small, keeps the piece from drifting",
+     "storyPoint": "sp-5.3"
     },
     {
      "actor": "world",
-     "does": "crayon architecture: stacked arches as paper scribbles, stalks as waxy lines"
+     "does": "crayon architecture: stacked arches as paper scribbles, stalks as waxy lines",
+     "storyPoint": "sp-5.1"
     }
    ],
    "effects": {
@@ -340,19 +359,23 @@
    "actions": [
     {
      "actor": "world",
-     "does": "everything reduces to pale contour lines; the lines re-route and connect (a chain being wired)"
+     "does": "everything reduces to pale contour lines; the lines re-route and connect (a chain being wired)",
+     "storyPoint": "sp-6.1"
     },
     {
      "actor": "human",
-     "does": "holds the drawn piece; its lines connect to the next world's grid"
+     "does": "holds the drawn piece; its lines connect to the next world's grid",
+     "storyPoint": "sp-6.2"
     },
     {
      "actor": "codex",
-     "does": "takes the lead (the programming workflow is his)"
+     "does": "takes the lead (the programming workflow is his)",
+     "storyPoint": "sp-6.2"
     },
     {
      "actor": "clawd",
-     "does": "follows"
+     "does": "follows",
+     "storyPoint": "sp-6.2"
     }
    ],
    "effects": {
@@ -398,19 +421,23 @@
    "actions": [
     {
      "actor": "codex",
-     "does": "guides: points to the join"
+     "does": "guides: points to the join",
+     "storyPoint": "sp-7.1"
     },
     {
      "actor": "human",
-     "does": "places the drawn piece against another; the join lights; the chain runs down the grid (a step passing a gate)"
+     "does": "places the drawn piece against another; the join lights; the chain runs down the grid (a step passing a gate)",
+     "storyPoint": "sp-7.2"
     },
     {
      "actor": "clawd",
-     "does": "watches from the edge"
+     "does": "watches from the edge",
+     "storyPoint": "sp-7.3"
     },
     {
      "actor": "world",
-     "does": "shaded architecture with emissive edges; gates as rings that light in sequence"
+     "does": "shaded architecture with emissive edges; gates as rings that light in sequence",
+     "storyPoint": "sp-7.3"
     }
    ],
    "effects": {
@@ -464,23 +491,28 @@
    "actions": [
     {
      "actor": "structure",
-     "does": "stands, the crayon piece and the lit joins inside it"
+     "does": "stands, the crayon piece and the lit joins inside it",
+     "storyPoint": "sp-8.1"
     },
     {
      "actor": "gadget",
-     "does": "rests inside, bright but bounded"
+     "does": "rests inside, bright but bounded",
+     "storyPoint": "sp-8.1"
     },
     {
      "actor": "human",
-     "does": "at ease; one last look through the frame, now a window"
+     "does": "at ease; one last look through the frame, now a window",
+     "storyPoint": "sp-8.2"
     },
     {
      "actor": "codex",
-     "does": "settles left"
+     "does": "settles left",
+     "storyPoint": "sp-8.2"
     },
     {
      "actor": "clawd",
-     "does": "settles right"
+     "does": "settles right",
+     "storyPoint": "sp-8.2"
     }
    ],
    "effects": {

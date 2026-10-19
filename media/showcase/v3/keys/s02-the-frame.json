@@ -6,6 +6,7 @@
  "keys": [
   {
    "name": "slump",
+   "storyPoint": "sp-4.1",
    "frame": 630,
    "hold": 26,
    "joints": {
@@ -283,6 +284,7 @@
   },
   {
    "name": "turn",
+   "storyPoint": "sp-4.2",
    "frame": 690,
    "hold": 16,
    "joints": {
@@ -560,6 +562,7 @@
   },
   {
    "name": "rise",
+   "storyPoint": "sp-4.3",
    "frame": 740,
    "hold": 20,
    "joints": {
@@ -837,6 +840,7 @@
   },
   {
    "name": "step",
+   "storyPoint": "sp-4.4",
    "frame": 800,
    "hold": 14,
    "joints": {
@@ -1114,6 +1118,7 @@
   },
   {
    "name": "threshold",
+   "storyPoint": "sp-4.5",
    "frame": 840,
    "hold": 24,
    "joints": {
@@ -1391,6 +1396,7 @@
   },
   {
    "name": "through",
+   "storyPoint": "sp-4.6",
    "frame": 900,
    "hold": 30,
    "joints": {

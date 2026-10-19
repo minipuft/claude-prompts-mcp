@@ -88,7 +88,8 @@
       1060,
       200
     ],
-    "anchor": "frame interior"
+    "anchor": "frame interior",
+    "storyPoint": "sp-4.2"
   },
   "card": "seuss-nested-frames",
   "cardNote": "provisional: board §1 world, \"Nested frames on black\" for the frame interior; the layout sheet may replace it",

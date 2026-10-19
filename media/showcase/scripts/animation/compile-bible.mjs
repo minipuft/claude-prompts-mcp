@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Compiles the production bible (D94): the film's pacing, script, blocking, camera, keys, light, colour script, look and proposals joined on
-// one frame axis. v3/bible.json is a projection of the files it declares in `generatedFrom`; it is copied, never edited.
+// one frame axis (the script and colour-script lanes are the screenplay's story points). v3/bible.json is a projection of the files it declares in `generatedFrom`; it is copied, never edited.
 // Shape (showcase.bible.1, OpenTimelineIO-shaped): {schema, fps, duration, generatedFrom, inputsHash, tracks:[{name, items:[{start,end,beat,label,data}]}], flags:[{beat,text}]}.
 // Extra keys: `revision` (the ledger's own revision string), `unanchored` (rulings that close no proposal: not timed, so not on a lane) and `materials` (v3/materials.json as it is: not timed either,
 // so a table under the flags rather than a lane; its schema is hashed with it because the schema owns the ranges the probe judges it by).
@@ -44,7 +44,10 @@ const inputs = [
   ...listJson('v3/blocking').map(abs),
   abs('v3/references/board.json'),
   abs('v3/references/owner/picks.json'),
-  abs('v3/script.md'),
+  abs('v3/screenplay.json'),
+  abs('v3/worlds/crayon.json'),
+  abs('v3/worlds/line.json'),
+  abs('v3/worlds/shaded.json'),
   specPath,
   ...listJson('v3/proposals').map(abs),
   abs('v3/materials.json'),
@@ -63,7 +66,8 @@ const xsheet = json(xsheetPath);
 const light = json(lightPath);
 const board = json(abs('v3/references/board.json'));
 const picks = json(abs('v3/references/owner/picks.json'));
-const script = bytes.get(abs('v3/script.md')).toString('utf8');
+const screenplay = json(abs('v3/screenplay.json'));
+const kitWorld = (kit) => json(abs(`v3/worlds/${kit}.json`));
 const specText = bytes.get(specPath).toString('utf8');
 const materials = json(abs('v3/materials.json'));
 const blockingFiles = listJson('v3/blocking').map((p) => json(abs(p)));
@@ -99,54 +103,38 @@ const pacing = beats.map((tb) => {
   };
 });
 
-// ---------- script ----------
-// script.md keeps the six beats of the first spine; a heading that names more than one ledger beat says so here (one place, no guessing).
-const HEADING_BEATS = {scaffold: ['art-world', 'crossing', 'programming-world'], settle: ['home-settle']};
-const slug = (s) => s.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-const sections = [];
-{
-  const re = /^###\s+(\d+)\.\s+(.+?)\s*(?:\((\d+)[–-](\d+)\))?(?:\s+·.*)?$/;
-  let cur = null;
-  for (const line of script.split('\n')) {
-    const m = re.exec(line);
-    if (line.startsWith('## ') && !line.startsWith('###')) cur = null;
-    if (line.startsWith('### ')) {
-      cur = m ? {number: Number(m[1]), name: m[2], range: m[3] ? [Number(m[3]), Number(m[4])] : null, lines: []} : null;
-      if (cur) sections.push(cur);
-      continue;
-    }
-    if (cur) cur.lines.push(line);
-  }
-}
-const sectionFor = (id) =>
-  sections.find((s) => (HEADING_BEATS[slug(s.name)] || [slug(s.name)]).includes(id)) || null;
-const scriptTrack = beats.map((tb) => {
-  const s = sectionFor(tb.id);
-  if (!s) {
-    flag(tb.id, 'script.md has no section for this beat');
-    return {start: tb.start, end: tb.end, beat: tb.id, label: 'no script section', data: {prose: '', notes: []}};
-  }
-  const body = s.lines.join('\n').trim();
-  const notes = body.split('\n').filter((l) => /^\*.*\*$/.test(l.trim())).map((l) => l.trim().replace(/^\*|\*$/g, ''));
-  const sharedWith = (HEADING_BEATS[slug(s.name)] || []).filter((id) => id !== tb.id);
+// ---------- script: one item per story point of v3/screenplay.json (p014), from its frame to the next one's ----------
+// The pipeline id is `<shot>/<sp-id>` (compile-screenplay.mjs writes each story point's shot into the json).
+const storyPoints = screenplay.story_points;
+const storyEnd = (i) => (i + 1 < storyPoints.length ? storyPoints[i + 1].frame : duration);
+const pipelineId = (p) => `${p.shot ? p.shot.split('-')[0] : '?'}/${p.id}`;
+const scriptTrack = storyPoints.map((p, i) => {
+  const tb = beatOfFrame(p.frame);
+  if (!tb || tb.id !== p.beat) flag(p.beat, `screenplay story point ${p.id} names beat ${p.beat} and its frame ${p.frame} is in ${tb ? tb.id : 'no beat'}`);
+  if (!p.shot) flag(p.beat, `screenplay story point ${p.id} has no shot; run compile-screenplay.mjs`);
   return {
-    start: tb.start,
-    end: tb.end,
-    beat: tb.id,
-    label: `${s.number}. ${s.name}`,
+    start: p.frame,
+    end: storyEnd(i),
+    beat: p.beat,
+    label: `${pipelineId(p)} ${p.slug}`,
     data: {
-      heading: `${s.number}. ${s.name}`,
-      headingRange: s.range ? s.range.join('–') : null,
-      headingRangeMatchesTimeline: s.range ? s.range[0] === tb.start && s.range[1] === tb.end : null,
-      sharedWith,
-      notes,
-      prose: body,
+      id: p.id,
+      pipelineId: pipelineId(p),
+      shot: p.shot ?? null,
+      slug: p.slug,
+      frame: p.frame,
+      action: p.action,
+      sees: p.sees,
+      want: p.want,
+      turn: p.turn,
+      after: p.after,
+      colour: p.colour,
+      register: p.register,
+      emitter: p.emitter,
+      measure: p.measure,
     },
   };
 });
-for (const s of sections) {
-  if (!beats.some((tb) => (HEADING_BEATS[slug(s.name)] || [slug(s.name)]).includes(tb.id))) flag(slug(s.name), `script.md section "${s.name}" names no beat on the timeline`);
-}
 
 // ---------- blocking ----------
 const blocking = beats.map((tb) => {
@@ -240,16 +228,37 @@ const lightTrack = beats.map((tb) => {
   };
 });
 const frameName = (f) => `element-${String(f).padStart(4, '0')}.png`;
-const colourScript = beats.map((tb) => {
-  const lt = light.beats[tb.id] || {};
-  const mid = Math.floor((tb.start + tb.end) / 2);
+// The colour script reads each story point's colour key (screenplay.colour_keys; `a → b` is two keys in order). A key with a hue pair draws it; a world-kit key draws its kit's field and radiance (v3/worlds/<kit>.json).
+const colourPart = (key) => {
+  const k = screenplay.colour_keys[key];
+  if (!k) {
+    flag('*', `screenplay colour key ${key} is not declared in colour_keys`);
+    return {key, name: '', radiance: null, accent: null, field: null, swatches: []};
+  }
+  if (k.hue) return {key, name: k.name, radiance: k.hue, accent: k.accent, field: null, swatches: [k.hue, k.accent]};
+  const w = kitWorld(k.kit);
+  const radiance = w.radiance?.on ? w.radiance.colour : null;
+  return {key, name: k.name, radiance, accent: null, field: w.field, swatches: [w.field, radiance].filter(Boolean)};
+};
+const colourScript = storyPoints.map((p, i) => {
+  const parts = p.colour.split(/\s*(?:→|->)\s*/).map(colourPart);
+  const end = storyEnd(i);
+  const mid = Math.floor((p.frame + end) / 2);
   const file = path.join(framesDir, frameName(mid));
   return {
-    start: tb.start,
-    end: tb.end,
-    beat: tb.id,
-    label: lt.pair ? `${lt.pair.radiance} / ${lt.pair.accent}` : 'no pair',
-    data: {radiance: lt.pair?.radiance ?? null, accent: lt.pair?.accent ?? null, midFrame: mid, animaticFrame: fs.existsSync(file) ? rel(file) : null},
+    start: p.frame,
+    end,
+    beat: p.beat,
+    label: `${pipelineId(p)} ${p.colour}`,
+    data: {
+      storyPoint: p.id,
+      colourKey: p.colour,
+      parts,
+      radiance: parts[0].radiance,
+      accent: parts[0].accent,
+      midFrame: mid,
+      animaticFrame: fs.existsSync(file) ? rel(file) : null,
+    },
   };
 });
 
