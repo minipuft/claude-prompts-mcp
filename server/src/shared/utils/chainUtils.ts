@@ -47,7 +47,7 @@ export function normalizeChainId(chainId: string): string {
 /**
  * ChainStep interface for utility functions
  */
-export interface ChainStep {
+interface ChainStep {
   promptId: string;
   stepName: string;
   executionType?: 'single' | 'chain';

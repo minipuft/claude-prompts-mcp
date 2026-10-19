@@ -199,27 +199,6 @@ export interface ExecutionStrategy {
 }
 
 /**
- * Execution engine statistics
- * Comprehensive performance and usage metrics
- */
-export interface ExecutionStats {
-  /** Total number of executions */
-  totalExecutions: number;
-  /** Number of prompt strategy executions */
-  promptExecutions: number;
-  /** Number of chain strategy executions */
-  chainExecutions: number;
-  /** Number of failed executions */
-  failedExecutions: number;
-  /** Average execution time in milliseconds */
-  averageExecutionTime: number;
-  /** Currently active executions */
-  activeExecutions: number;
-  /** Conversation manager statistics */
-  conversationStats: any;
-}
-
-/**
  * Performance metrics for ExecutionEngine monitoring
  * Provides detailed performance and health metrics
  */
