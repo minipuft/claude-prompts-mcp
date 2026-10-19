@@ -15,6 +15,12 @@
   ],
   "before": "beat 4 staged with the figure at full stage height and the frame small at top right; eye trace 270 of 300 frames off the frame",
   "after": "beat 4 restaged wide: the frame large, the figure small against it, the field narrowing to the frame (D91, D99)",
+  "intent": "wonder",
+  "options": [
+    "wide",
+    "medium"
+  ],
+  "default": "wide",
   "status": "open",
   "ruling": null
 }

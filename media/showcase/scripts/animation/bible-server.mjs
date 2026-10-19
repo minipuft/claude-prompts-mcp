@@ -186,6 +186,15 @@ const planProposal = (body, forceKind) => {
   const file = path.join(P.proposals, `${id}-${slug(body.title)}.json`);
   const record = {id, kind, from: body.from, date: today(), anchor: a.frame === undefined ? {beat: a.beat} : {beat: a.beat, frame: a.frame}, title: clean(body.title), text: body.text.trim(), references: refs};
   for (const k of ['before', 'after']) if (body[k] !== undefined && body[k] !== null && body[k] !== '') record[k] = body[k];
+  // The vocabulary gate (D96) requires an owner-ask to carry an intent word, at least two options and a default that is one of them; carry them through.
+  for (const k of ['intent', 'default']) if (isText(body[k], 60)) record[k] = clean(body[k]);
+  if (Array.isArray(body.options) && body.options.every((o) => isText(o, 60))) record.options = body.options.map(clean);
+  if (kind === 'owner-ask') {
+    const missing = ['intent', 'options', 'default'].filter((k) => !record[k]);
+    if (missing.length) throw bad(`an owner-ask carries intent, options (two or more) and default (the vocabulary gate refuses it otherwise): missing ${missing.join(', ')}`);
+    if (record.options.length < 2) throw bad('an owner-ask offers at least two options');
+    if (!record.options.includes(record.default)) throw bad('an owner-ask default must be one of its options');
+  }
   record.status = 'open';
   record.ruling = null;
   return {files: [file], apply: () => { fs.mkdirSync(P.proposals, {recursive: true}); fs.writeFileSync(file, JSON.stringify(record, null, 2) + '\n'); }, what: `proposal ${id}`, id, record, file};
