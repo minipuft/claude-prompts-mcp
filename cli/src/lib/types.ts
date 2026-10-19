@@ -75,16 +75,26 @@ export const TYPE_CONFIG: Record<
  */
 export const VERSIONED_TYPES = ['prompts', 'gates', 'frameworks'] as const;
 
-export function isVersionedType(
-  type: ResourceType
-): type is (typeof VERSIONED_TYPES)[number] {
+export type VersionedType = (typeof VERSIONED_TYPES)[number];
+
+export function isVersionedType(type: ResourceType): type is VersionedType {
   return (VERSIONED_TYPES as readonly ResourceType[]).includes(type);
+}
+
+/**
+ * The refusal every history command gives a type nothing versions, worded once.
+ *
+ * `history` and `compare` on a style used to answer "no version history" and an empty comparison,
+ * which reads as "nothing was recorded YET" about a type that can never have rows.
+ */
+export function notVersionedMessage(type: ResourceType): string {
+  return `${singularName(type)} resources are not versioned — nothing records version history for them.`;
 }
 
 /**
  * Singular display name for a resource type.
  */
-const SINGULAR: Record<ResourceType, HistoryResourceRef['resourceType']> = {
+const SINGULAR: Record<ResourceType, string> = {
   prompts: 'prompt',
   gates: 'gate',
   frameworks: 'framework',
@@ -95,12 +105,20 @@ export function singularName(type: ResourceType): string {
   return SINGULAR[type];
 }
 
+/** The `version_history.resource_type` value each versioned type's rows carry. */
+const HISTORY_TYPE: Record<VersionedType, HistoryResourceRef['resourceType']> = {
+  prompts: 'prompt',
+  gates: 'gate',
+  frameworks: 'framework',
+};
+
 /**
  * The `version_history` key for a resource: its singular type and the id it is served under.
  *
  * Passed to every history call so the id is the composite one the server records
- * (`chain/step`), not a guess from the path's last segment.
+ * (`chain/step`), not a guess from the path's last segment. Only a versioned type has one; a
+ * caller holding a style narrows with {@link isVersionedType} first.
  */
-export function historyRef(type: ResourceType, id: string): HistoryResourceRef {
-  return { resourceType: SINGULAR[type], resourceId: id };
+export function historyRef(type: VersionedType, id: string): HistoryResourceRef {
+  return { resourceType: HISTORY_TYPE[type], resourceId: id };
 }

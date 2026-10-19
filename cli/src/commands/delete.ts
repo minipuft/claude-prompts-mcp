@@ -2,7 +2,7 @@ import { resourceRoot } from '@cli-shared/resource-operations.js';
 import { deleteResource } from '@cli-shared/resource-scaffold.js';
 import { resolveWorkspace, findResource, scanReferences } from '../lib/workspace.js';
 import { output, icons, color } from '../lib/output.js';
-import { TYPE_MAP, historyRef, singularName } from '../lib/types.js';
+import { TYPE_MAP, historyRef, isVersionedType, singularName } from '../lib/types.js';
 
 interface DeleteOptions {
   workspace?: string;
@@ -55,7 +55,8 @@ export async function del(options: DeleteOptions): Promise<number> {
     return 1;
   }
 
-  const result = deleteResource(match, historyRef(type, match.id));
+  // A style's files go like any other resource's; it has no history rows to take with them.
+  const result = deleteResource(match, isVersionedType(type) ? historyRef(type, match.id) : null);
 
   if (!result.success) {
     const msg = result.error ?? 'Unknown error';

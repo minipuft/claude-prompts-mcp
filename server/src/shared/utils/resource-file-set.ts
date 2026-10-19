@@ -64,18 +64,18 @@ import {
 import { resourceEntryRoots } from './resource-root-lookup.js';
 import { parseYaml } from './yaml/yaml-parser.js';
 
-import type { ResourceType } from '#modules/versioning/types.js';
+import type { FileBackedResourceType } from '#shared/types/version-history.js';
 import type { Dirent } from 'node:fs';
 
 /**
  * The entry filename each resource type is addressed by.
  *
- * Keyed on the published `ResourceType` union (`modules/versioning/types.ts`) rather than on a
- * hand-written list, so a type added there fails to compile here instead of being silently
+ * Keyed on `FileBackedResourceType` (`shared/types/version-history.ts`), which is derived from the
+ * column's own vocabulary rather than hand-written, so a type added there fails to compile here instead of being silently
  * unenumerable. A single-file prompt is the one resource whose entry filename is not a constant —
  * it is `{id}.yaml`, and `isSingleFilePromptName` is what recognises it.
  */
-const ENTRY_FILENAME: Readonly<Record<ResourceType, string>> = {
+const ENTRY_FILENAME: Readonly<Record<FileBackedResourceType, string>> = {
   prompt: 'prompt.yaml',
   gate: 'gate.yaml',
   framework: 'framework.yaml',
@@ -115,7 +115,7 @@ export interface ResourceFileEntry {
 
 /** Every file that IS one resource, plus where it was found. */
 export interface ResourceFileSet {
-  resourceType: ResourceType;
+  resourceType: FileBackedResourceType;
   /** The directory `relativePath` is relative to. For a single-file prompt, its containing dir. */
   resourceRoot: string;
   /** The entry file this set was derived from. Always `files[0]`. */
@@ -126,7 +126,7 @@ export interface ResourceFileSet {
 }
 
 export interface ResourceFileSetOptions {
-  resourceType: ResourceType;
+  resourceType: FileBackedResourceType;
   /** Absolute path to the resource's entry FILE. */
   entryPath: string;
   /** The type's contributing roots. Omitted, `origin` is `unknown`. */
@@ -470,13 +470,13 @@ export async function resourceFileSet(options: ResourceFileSetOptions): Promise<
  * table `resourceFileSet` validates against. Two statements of "a gate is addressed by gate.yaml"
  * is how a locator comes to hand this function a path it then refuses.
  */
-export function resourceEntryFileName(resourceType: ResourceType): string {
+export function resourceEntryFileName(resourceType: FileBackedResourceType): string {
   return ENTRY_FILENAME[resourceType];
 }
 
 /** What {@link locateResourceEntry} is asked. */
 export interface ResourceEntryLookup {
-  resourceType: ResourceType;
+  resourceType: FileBackedResourceType;
   /** The id the resource is SERVED under — a nested chain step's id carries its own `/`. */
   resourceId: string;
   /** Contributing roots, highest precedence first (`ResourceRoots.lookupDirs`). */
@@ -558,7 +558,7 @@ async function categoryDirectories(root: string): Promise<string[]> {
  * implementation is built at the composition root, which is the remedy that rule names.
  */
 export interface ResourceFileLocatorPort {
-  locate(resourceType: ResourceType, resourceId: string): Promise<ResourceLocationResult>;
+  locate(resourceType: FileBackedResourceType, resourceId: string): Promise<ResourceLocationResult>;
 }
 
 /**
