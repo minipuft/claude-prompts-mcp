@@ -29,7 +29,7 @@ export type {
   LoadedGateDefinition,
   GateRetryConfig,
   // Registry types
-  GateSource,
+  GateGuideSource,
   GateGuideEntry,
   GateRegistryStats,
   // Selection types

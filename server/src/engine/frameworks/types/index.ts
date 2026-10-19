@@ -9,7 +9,7 @@
 
 // Framework guide types
 export type {
-  ExecutionStep,
+  FrameworkExecutionStep,
   FrameworkDefinition,
   FrameworkExecutionContext,
   FrameworkSelection,

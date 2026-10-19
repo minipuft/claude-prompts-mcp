@@ -16,12 +16,12 @@ import {
 } from './types.js';
 import { describePreviewRefusal } from '../../shared/preview-action.js';
 
+import type { ResourceType } from '#modules/versioning/types.js';
 import type { Logger, ToolResponse } from '#shared/types/index.js';
 import type {
   ResourceManagerInput,
   ResourceManagerDependencies,
   PromptResourceHandlerPort,
-  ResourceType,
   ResourceAction,
   ActionValidationResult,
 } from './types.js';

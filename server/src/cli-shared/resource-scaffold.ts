@@ -8,9 +8,10 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { type ResourceValidationResult, validateResourceFile } from './resource-validation.js';
+import { validateResourceFile } from './resource-validation.js';
 import { deleteVersionRows, type HistoryResourceRef } from './version-history.js';
 
+import type { ResourceVerificationResult } from '#modules/resources/services/resource-verification-service.js';
 import type { ResourceLocation } from './resource-operations.js';
 
 type ResourceType = 'prompts' | 'gates' | 'frameworks' | 'styles';
@@ -26,7 +27,7 @@ export interface CreateResourceResult {
   success: boolean;
   path?: string;
   error?: string;
-  validation?: ResourceValidationResult;
+  validation?: ResourceVerificationResult;
   rolledBack?: boolean;
 }
 

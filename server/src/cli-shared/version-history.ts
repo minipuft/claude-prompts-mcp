@@ -73,7 +73,7 @@ import type {
   HistoryRequest,
   HistoryResponse,
   HistoryRowRequest,
-  ResourceType,
+  HistoryResourceType,
 } from './version-history-types.js';
 
 import {
@@ -94,7 +94,7 @@ import { STATE_DB_WRITER_PRAGMAS } from '#shared/utils/runtime-state-location.js
  * this was deleted once every caller could pass the ref instead.
  */
 export interface HistoryResourceRef {
-  resourceType: ResourceType;
+  resourceType: HistoryResourceType;
   resourceId: string;
   /**
    * The tenant this resource's rows live under, when the caller can resolve it exactly.

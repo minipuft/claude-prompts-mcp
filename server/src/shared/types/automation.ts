@@ -84,7 +84,7 @@ export type TriggerType = 'schema_match' | 'explicit' | 'always' | 'never';
  *   confirmMessage: "Run expensive analysis on the dataset?"
  * ```
  */
-export interface ExecutionConfig {
+export interface AutomationExecutionConfig {
   /** Trigger type (default: 'schema_match') */
   trigger: TriggerType;
   /**
@@ -160,7 +160,7 @@ export interface ScriptToolDefinition {
   /** Whether this tool is enabled (default: true) */
   enabled?: boolean;
   /** Execution control configuration (mode, trigger, strict) */
-  execution?: ExecutionConfig;
+  execution?: AutomationExecutionConfig;
 }
 
 /**
@@ -401,7 +401,7 @@ export interface ConfirmationRequired {
  * Uses deterministic trigger system (not probabilistic confidence).
  * Confirmation is required by default (secure by default).
  */
-export const DEFAULT_EXECUTION_CONFIG: ExecutionConfig = {
+export const DEFAULT_EXECUTION_CONFIG: AutomationExecutionConfig = {
   trigger: 'schema_match',
   confirm: true,
   strict: false,

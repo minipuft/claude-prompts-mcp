@@ -23,7 +23,7 @@ import { resource_managerCommands } from '../../../contracts/schemas/_generated/
 import { resolveDispatchAction } from '../../shared/preview-action.js';
 import { describeUndeclaredParameterRefusal } from '../../shared/undeclared-parameters.js';
 
-import type { ResourceType } from './types.js';
+import type { ResourceType } from '#modules/versioning/types.js';
 
 /**
  * Parameters every route reads. Listed rather than implied, so the completeness check can say

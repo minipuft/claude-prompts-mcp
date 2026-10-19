@@ -27,13 +27,12 @@ import {
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 
-import {
-  type ResourceValidationResult,
-  type ResourceValidationType,
-  validateResourceFile,
-} from './resource-validation.js';
+import { type ResourceValidationType, validateResourceFile } from './resource-validation.js';
 
-import { exemptPreExistingUnloadableGates } from '#modules/resources/services/resource-verification-service.js';
+import {
+  exemptPreExistingUnloadableGates,
+  type ResourceVerificationResult,
+} from '#modules/resources/services/resource-verification-service.js';
 import { isExcludedCategoryDirectoryName } from '#shared/utils/prompt-layout.js';
 import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 import {
@@ -207,13 +206,13 @@ export interface ValidatedMutationOptions<TMutation extends ResourceMutationResu
     resourceType: ResourceValidationType,
     resourceId: string,
     filePath: string
-  ) => ResourceValidationResult;
+  ) => ResourceVerificationResult;
 }
 
 export interface ValidatedMutationResult<TMutation extends ResourceMutationResult> {
   success: boolean;
   operation: TMutation;
-  validation?: ResourceValidationResult;
+  validation?: ResourceVerificationResult;
   rolledBack?: boolean;
   error?: string;
 }
@@ -281,9 +280,9 @@ function validateMutationResult(
     resourceType: ResourceValidationType,
     resourceId: string,
     filePath: string
-  ) => ResourceValidationResult,
+  ) => ResourceVerificationResult,
   operation: ResourceMutationResult
-): ResourceValidationResult {
+): ResourceVerificationResult {
   const location = operation.moved ?? options.location;
   return validator(options.resourceType, declaredResourceId(location), location.file);
 }

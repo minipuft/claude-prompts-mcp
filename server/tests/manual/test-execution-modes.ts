@@ -7,7 +7,10 @@
 import { ToolDetectionService } from '../../src/modules/automation/detection/tool-detection-service.js';
 import { ToolTriggerFilter } from '../../src/modules/automation/execution/tool-trigger-filter.js';
 import { DEFAULT_EXECUTION_CONFIG } from '../../src/modules/automation/types.js';
-import type { LoadedScriptTool, ExecutionConfig } from '../../src/modules/automation/types.js';
+import type {
+  LoadedScriptTool,
+  AutomationExecutionConfig,
+} from '../../src/modules/automation/types.js';
 
 // Test fixtures matching actual prompts
 const wordCountTool: LoadedScriptTool = {

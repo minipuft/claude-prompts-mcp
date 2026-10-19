@@ -8,7 +8,6 @@ import {
 
 export type ResourceValidationType = Exclude<ResourceVerificationType, 'tools'>;
 export type ResourceValidationIssue = ResourceVerificationIssue;
-export type ResourceValidationResult = ResourceVerificationResult;
 
 const verificationService = new ResourceVerificationService();
 
@@ -23,7 +22,7 @@ export function validateResourceDocument(
   resourceId: string,
   filePath: string,
   data: unknown
-): ResourceValidationResult {
+): ResourceVerificationResult {
   return verificationService.validateDocument(resourceType, resourceId, filePath, data, CLI_CHECKS);
 }
 
@@ -31,7 +30,7 @@ export function validateResourceFile(
   resourceType: ResourceValidationType,
   resourceId: string,
   filePath: string
-): ResourceValidationResult {
+): ResourceVerificationResult {
   return verificationService.validateFile(resourceType, resourceId, filePath, CLI_CHECKS);
 }
 

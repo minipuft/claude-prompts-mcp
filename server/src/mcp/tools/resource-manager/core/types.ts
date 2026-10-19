@@ -10,12 +10,16 @@ import type {
   FrameworkGate,
   TemplateSuggestion,
 } from '#engine/frameworks/definitions/framework-schema.js';
-import type { ExecutionStep, ProcessingStep } from '#engine/frameworks/types/framework-types.js';
+import type {
+  FrameworkExecutionStep,
+  ProcessingStep,
+} from '#engine/frameworks/types/framework-types.js';
 import type { ExecutionTypeEnhancements } from '#engine/frameworks/utils/step-generator.js';
 import type {
   ArgumentValidationYaml,
   PromptInjectionConfigYaml,
 } from '#modules/prompts/prompt-schema.js';
+import type { ResourceType } from '#modules/versioning/types.js';
 import type { Logger, ToolResponse } from '#shared/types/index.js';
 import type { CategoryToolHandler } from '../../category-manager/index.js';
 import type {
@@ -58,15 +62,6 @@ export interface ToolDefinitionInput {
   /** Execution timeout in milliseconds */
   timeout?: number;
 }
-
-/**
- * Resource types supported by the unified manager.
- *
- * `'category'` joined at P4.7. A prompt category was directory-implied and its `category.yaml`
- * had zero writers in `src/`, so the only way to author one was by hand — which core principle 1
- * (MCP Tooling Only) forbids.
- */
-export type ResourceType = 'prompt' | 'gate' | 'framework' | 'category';
 
 /**
  * All possible actions across resource types
@@ -376,7 +371,7 @@ export interface ResourceManagerInput {
 
   // Advanced phases parameters
   processing_steps?: ProcessingStep[];
-  execution_steps?: ExecutionStep[];
+  execution_steps?: FrameworkExecutionStep[];
   execution_type_enhancements?: ExecutionTypeEnhancements;
   template_enhancements?: TemplateEnhancements;
   execution_flow?: ExecutionFlow;

@@ -39,7 +39,7 @@ export const DEFAULT_MAX_VERSIONS = DEFAULT_VERSIONING_CONFIG.maxVersions;
  * `ENTRY_FILENAME` table and publish an enumeration that cannot exist. Config is checkpointed by
  * `cli-shared/config-checkpoint.ts`, which states the whole argument.
  */
-export type ResourceType = 'prompt' | 'gate' | 'framework' | 'style' | 'config';
+export type HistoryResourceType = 'prompt' | 'gate' | 'framework' | 'style' | 'config';
 
 /**
  * Which rows an operation acts on, and the per-call facts a row records.
@@ -51,7 +51,7 @@ export type ResourceType = 'prompt' | 'gate' | 'framework' | 'style' | 'config';
  * so it has a resource to name and no action to dispatch.
  */
 export interface HistoryRowRequest {
-  resource_type: ResourceType;
+  resource_type: HistoryResourceType;
   resource_id: string;
   max_versions?: number;
   created_at?: string;

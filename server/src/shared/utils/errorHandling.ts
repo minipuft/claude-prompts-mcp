@@ -33,8 +33,8 @@ export interface ErrorContext {
   details?: any;
 }
 
-// Validation result types
-export interface ValidationResult {
+/** The validation detail a `ValidationError` can carry. */
+export interface ErrorValidationResult {
   valid: boolean;
   errors?: Array<{
     field: string;
@@ -119,13 +119,13 @@ export class ArgumentError extends BaseError {
 }
 
 export class ValidationError extends BaseError {
-  public readonly validationResult?: ValidationResult;
+  public readonly validationResult?: ErrorValidationResult;
   public readonly validationErrors?: string[]; // Keep for backwards compatibility
 
   constructor(
     message: string,
     validationErrorsOrContext?: string[] | ErrorContext,
-    validationResult?: ValidationResult
+    validationResult?: ErrorValidationResult
   ) {
     // Handle backwards compatibility with old constructor signature
     let context: ErrorContext = {};

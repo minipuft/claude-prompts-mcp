@@ -77,11 +77,8 @@ export interface DirectoryLoaderStats extends BaseLoaderStats {
 
 /**
  * Standard validation result structure for resource loaders
- *
- * Note: Named ResourceValidationResult to avoid conflict with
- * ValidationResult from errorHandling.ts
  */
-export interface ResourceValidationResult {
+interface ResourceValidationResult {
   /** Whether validation passed */
   valid: boolean;
   /** Validation errors (blocking issues) */

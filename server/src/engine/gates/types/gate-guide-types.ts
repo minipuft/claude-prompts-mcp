@@ -211,7 +211,7 @@ export interface GateGuide {
  * - 'custom': Programmatically registered custom gate
  * - 'temporary': Created via TemporaryGateRegistry for session scope
  */
-export type GateSource = 'yaml-runtime' | 'custom' | 'temporary';
+export type GateGuideSource = 'yaml-runtime' | 'custom' | 'temporary';
 
 /**
  * Registry entry for a gate guide, including metadata.
@@ -226,7 +226,7 @@ export interface GateGuideEntry {
   /** Whether this gate is currently enabled */
   enabled: boolean;
   /** How this guide was loaded */
-  source: GateSource;
+  source: GateGuideSource;
   /** Additional metadata */
   metadata: {
     /** Time taken to load this gate (ms) */
@@ -251,7 +251,7 @@ export interface GateRegistryStats {
   /** Number of custom gates */
   customGates: number;
   /** Gates by source type */
-  bySource: Record<GateSource, number>;
+  bySource: Record<GateGuideSource, number>;
   /** Gates by type (validation vs guidance) */
   byType: Record<'validation' | 'guidance', number>;
   /** Average load time (ms) */
