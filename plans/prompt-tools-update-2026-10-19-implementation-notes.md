@@ -10,7 +10,12 @@
 
 ## Deviations
 
+- **DEV-B-1** Row B writes a supplied `schema` to the tool's declared `schemaFile` (default `schema.json`) rather than always `schema.json`, so the schema lands where the loader reads it. Accepted.
+- **DEV-B-2** Row B merged `origin/main` (#502) into its branch before editing, on planner instruction, so the `formatJsonDocument` call is resolved and tested there.
+
 ## Findings
+
+- **Row B** A resend no longer forces `enabled: true`: an authored `enabled: false` survives (it was silently re-enabled before). Row C's changelog names it. An unparseable existing `tool.yaml` is treated as absent and rewritten.
 
 - **Row 1 diagnosis** S3: `yaml-document-writer.ts:135` recurses only into equal-length arrays; a length change records the whole list (`:147`) and takes `doc.setIn` + `doc.toString()` (`:253-255`), dropping inner comments (measured 5→1). S5: `planToolFiles` (`file-operations.ts:1211-1247`) rebuilds `tool.yaml` from 9 fields with `serializeYaml`, never reading the file: comments 20→0, key order changed, `confirm` flipped, `schemaFile`/`env`/`workingDir`/`confirmMessage`/`autoApproveOnValid`/… dropped. #343 moved every other writer to the comment-preserving one and missed this site.
 - The brief misstated two observations (wrapping direction; `tool.yaml` unchanged). A brief should carry the before/after file pair, not a reading of it.
