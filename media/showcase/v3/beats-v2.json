@@ -1,5 +1,5 @@
 {
- "revision": "beats-v2 · 2026-10-13 · D78 worlds and guides, D79 65 s · provisional until the plot asks are answered; beats.json (6 beats, 40 s) stays the composition's input until the shots are rebuilt · D88/D91 register and light_pushes per beat (planner defaults 2026-10-17)",
+ "revision": "beats-v2 · 2026-10-13 · D78 worlds and guides, D79 65 s · provisional until the plot asks are answered; beats.json (6 beats, 40 s) stays the composition's input until the shots are rebuilt · D88/D91 register and light_pushes per beat (planner defaults 2026-10-17) · D93 beat 4 = 10 s, worlds 10 s each (owner 2026-10-18)",
  "fps": 30,
  "durationInFrames": 1950,
  "fields": {
@@ -205,7 +205,7 @@
   {
    "id": "the-frame",
    "world": "home → portal",
-   "seconds": 6,
+   "seconds": 10,
    "camera": "the raised frame at frame right; push toward its interior",
    "actions": [
     {
@@ -269,7 +269,7 @@
   {
    "id": "art-world",
    "world": "crayon",
-   "seconds": 12,
+   "seconds": 10,
    "camera": "wide, flat, paper-like depth; a slow lateral drift along a drawn horizon",
    "actions": [
     {
@@ -393,7 +393,7 @@
   {
    "id": "programming-world",
    "world": "shaded",
-   "seconds": 12,
+   "seconds": 10,
    "camera": "three-quarter perspective, slow push along a lit grid line",
    "actions": [
     {

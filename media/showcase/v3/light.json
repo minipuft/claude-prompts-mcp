@@ -89,7 +89,7 @@
         "intensity": 0.9,
         "colour": "#d5e0ee",
         "on": 630,
-        "off": 808
+        "off": 928
       }
     },
     "art-world": {
@@ -111,8 +111,8 @@
         ],
         "intensity": 0.9,
         "colour": "#fbdab9",
-        "on": 810,
-        "off": 1170
+        "on": 930,
+        "off": 1230
       }
     },
     "crossing": {
@@ -142,7 +142,7 @@
         ],
         "intensity": 0.9,
         "colour": "#c5e4f0",
-        "on": 1290,
+        "on": 1350,
         "off": 1648
       }
     },
@@ -175,8 +175,8 @@
       "from": "the-frame",
       "to": "art-world",
       "frames": [
-        775,
-        845
+        895,
+        965
       ],
       "path": [
         "#d5e0ee",
@@ -190,8 +190,8 @@
       "from": "art-world",
       "to": "crossing",
       "frames": [
-        1135,
-        1205
+        1195,
+        1265
       ],
       "path": [
         "#fbdab9",
@@ -202,8 +202,8 @@
       "from": "crossing",
       "to": "programming-world",
       "frames": [
-        1255,
-        1325
+        1315,
+        1385
       ],
       "path": [
         "#fbdab9",

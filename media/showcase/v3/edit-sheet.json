@@ -1,5 +1,5 @@
 {
-  "revision": "edit-sheet · 2026-10-18 · animatic animatic-03 · D90",
+  "revision": "edit-sheet · 2026-10-19 · animatic animatic-03 · D90",
   "fps": 30,
   "durationInFrames": 1950,
   "seconds": 65,
@@ -223,10 +223,10 @@
       "id": "the-frame",
       "index": 3,
       "world": "home",
-      "seconds": 6,
+      "seconds": 10,
       "start": 630,
-      "end": 810,
-      "frames": 180,
+      "end": 930,
+      "frames": 300,
       "guide": "",
       "register": "reverent",
       "lightPushes": "wonder: the field narrows to the frame and the frame is lit from inside",
@@ -257,27 +257,27 @@
       "keys": [],
       "keyCount": 0,
       "breakdowns": 0,
-      "holdFrames": 145,
-      "holdShare": 81,
+      "holdFrames": 265,
+      "holdShare": 88,
       "longestHold": null,
       "flags": [
         "no keys: the figure is not posed in this beat"
       ],
       "frameAt": {
         "first": "animatic-seq/element-0630.png",
-        "mid": "animatic-seq/element-0720.png",
-        "last": "animatic-seq/element-0809.png"
+        "mid": "animatic-seq/element-0780.png",
+        "last": "animatic-seq/element-0929.png"
       },
-      "midFrame": 720
+      "midFrame": 780
     },
     {
       "id": "art-world",
       "index": 4,
       "world": "crayon",
-      "seconds": 12,
-      "start": 810,
-      "end": 1170,
-      "frames": 360,
+      "seconds": 10,
+      "start": 930,
+      "end": 1230,
+      "frames": 300,
       "guide": "clawd",
       "register": "playful",
       "lightPushes": "play: warm amber on paper, the drawing fills with light as it becomes real",
@@ -309,44 +309,44 @@
       ],
       "keys": [
         {
-          "frame": 810,
+          "frame": 930,
           "key": "rest",
           "hold": 24
         },
         {
-          "frame": 834,
+          "frame": 954,
           "key": "raise",
           "hold": null
         },
         {
-          "frame": 860,
+          "frame": 980,
           "key": "settle",
           "hold": null
         }
       ],
       "keyCount": 3,
       "breakdowns": 0,
-      "holdFrames": 290,
-      "holdShare": 81,
+      "holdFrames": 230,
+      "holdShare": 77,
       "longestHold": 24,
       "flags": [
         "no breakdowns between keys: straight inbetweens",
         "plot ask open"
       ],
       "frameAt": {
-        "first": "animatic-seq/element-0810.png",
-        "mid": "animatic-seq/element-0990.png",
-        "last": "animatic-seq/element-1169.png"
+        "first": "animatic-seq/element-0930.png",
+        "mid": "animatic-seq/element-1080.png",
+        "last": "animatic-seq/element-1229.png"
       },
-      "midFrame": 990
+      "midFrame": 1080
     },
     {
       "id": "crossing",
       "index": 5,
       "world": "line",
       "seconds": 4,
-      "start": 1170,
-      "end": 1290,
+      "start": 1230,
+      "end": 1350,
       "frames": 120,
       "guide": "codex",
       "register": "focused",
@@ -373,17 +373,17 @@
       ],
       "keys": [
         {
-          "frame": 1170,
+          "frame": 1230,
           "key": "rest",
           "hold": 24
         },
         {
-          "frame": 1194,
+          "frame": 1254,
           "key": "raise",
           "hold": null
         },
         {
-          "frame": 1220,
+          "frame": 1280,
           "key": "settle",
           "hold": null
         }
@@ -397,20 +397,20 @@
         "no breakdowns between keys: straight inbetweens"
       ],
       "frameAt": {
-        "first": "animatic-seq/element-1170.png",
-        "mid": "animatic-seq/element-1230.png",
-        "last": "animatic-seq/element-1289.png"
+        "first": "animatic-seq/element-1230.png",
+        "mid": "animatic-seq/element-1290.png",
+        "last": "animatic-seq/element-1349.png"
       },
-      "midFrame": 1230
+      "midFrame": 1290
     },
     {
       "id": "programming-world",
       "index": 6,
       "world": "shaded",
-      "seconds": 12,
-      "start": 1290,
+      "seconds": 10,
+      "start": 1350,
       "end": 1650,
-      "frames": 360,
+      "frames": 300,
       "guide": "codex",
       "register": "playful, satisfied",
       "lightPushes": "satisfaction: each gate lights in turn, the human's own gate last",
@@ -442,36 +442,36 @@
       ],
       "keys": [
         {
-          "frame": 1290,
+          "frame": 1350,
           "key": "rest",
           "hold": 24
         },
         {
-          "frame": 1314,
+          "frame": 1374,
           "key": "raise",
           "hold": null
         },
         {
-          "frame": 1340,
+          "frame": 1400,
           "key": "settle",
           "hold": null
         }
       ],
       "keyCount": 3,
       "breakdowns": 0,
-      "holdFrames": 290,
-      "holdShare": 81,
+      "holdFrames": 230,
+      "holdShare": 77,
       "longestHold": 24,
       "flags": [
         "no breakdowns between keys: straight inbetweens",
         "plot ask open"
       ],
       "frameAt": {
-        "first": "animatic-seq/element-1290.png",
-        "mid": "animatic-seq/element-1470.png",
+        "first": "animatic-seq/element-1350.png",
+        "mid": "animatic-seq/element-1500.png",
         "last": "animatic-seq/element-1649.png"
       },
-      "midFrame": 1470
+      "midFrame": 1500
     },
     {
       "id": "home-settle",
@@ -624,8 +624,8 @@
       "to": "art-world",
       "fromWorld": "home",
       "toWorld": "crayon",
-      "start": 775,
-      "end": 845,
+      "start": 895,
+      "end": 965,
       "length": 70,
       "split": [
         35,
@@ -637,8 +637,8 @@
       "to": "crossing",
       "fromWorld": "crayon",
       "toWorld": "line",
-      "start": 1135,
-      "end": 1205,
+      "start": 1195,
+      "end": 1265,
       "length": 70,
       "split": [
         35,
@@ -650,8 +650,8 @@
       "to": "programming-world",
       "fromWorld": "line",
       "toWorld": "shaded",
-      "start": 1255,
-      "end": 1325,
+      "start": 1315,
+      "end": 1385,
       "length": 70,
       "split": [
         35,

@@ -139,7 +139,7 @@
           "frame": 420,
           "holds": [
             420,
-            810
+            930
           ]
         },
         {
@@ -170,7 +170,7 @@
           "frame": 420,
           "holds": [
             420,
-            810
+            930
           ]
         }
       ]
@@ -179,8 +179,8 @@
       "id": "the-frame",
       "index": 3,
       "start": 630,
-      "end": 810,
-      "frames": 180,
+      "end": 930,
+      "frames": 300,
       "world": "home",
       "worldRaw": "home → portal",
       "camera": "the raised frame at frame right; push toward its interior",
@@ -195,8 +195,8 @@
       "transitionOut": "the human steps through alone; the guides follow (plot default 3); the push crosses the frame edge into beat 5, no cut",
       "crossingIn": null,
       "crossingOut": [
-        775,
-        845
+        895,
+        965
       ],
       "flips": [
         {
@@ -241,8 +241,8 @@
           },
           "frame": 630,
           "holds": [
-            810,
-            1170
+            930,
+            1230
           ]
         }
       ]
@@ -250,9 +250,9 @@
     {
       "id": "art-world",
       "index": 4,
-      "start": 810,
-      "end": 1170,
-      "frames": 360,
+      "start": 930,
+      "end": 1230,
+      "frames": 300,
       "world": "crayon",
       "worldRaw": "crayon",
       "camera": "wide, flat, paper-like depth; a slow lateral drift along a drawn horizon",
@@ -266,12 +266,12 @@
       "transitionIn": "refill from the frame's glass into crayon",
       "transitionOut": "the piece and the world reduce to their contour lines (the crossing, beat 6)",
       "crossingIn": [
-        775,
-        845
+        895,
+        965
       ],
       "crossingOut": [
-        1135,
-        1205
+        1195,
+        1265
       ],
       "flips": [
         {
@@ -284,10 +284,10 @@
             "fromBeat": "crossing",
             "toBeat": "crossing"
           },
-          "frame": 810,
+          "frame": 930,
           "holds": [
-            1170,
-            1290
+            1230,
+            1350
           ]
         },
         {
@@ -300,10 +300,10 @@
             "fromBeat": "art-world",
             "toBeat": "art-world"
           },
-          "frame": 810,
+          "frame": 930,
           "holds": [
-            810,
-            1170
+            930,
+            1230
           ]
         },
         {
@@ -314,9 +314,9 @@
             "kind": "permanent",
             "raw": "permanent"
           },
-          "frame": 810,
+          "frame": 930,
           "holds": [
-            810,
+            930,
             1950
           ]
         }
@@ -325,8 +325,8 @@
     {
       "id": "crossing",
       "index": 5,
-      "start": 1170,
-      "end": 1290,
+      "start": 1230,
+      "end": 1350,
       "frames": 120,
       "world": "line",
       "worldRaw": "line",
@@ -341,12 +341,12 @@
       "transitionIn": "reduce-to-lines",
       "transitionOut": "refill into the shaded world (beat 7)",
       "crossingIn": [
-        1135,
-        1205
+        1195,
+        1265
       ],
       "crossingOut": [
-        1255,
-        1325
+        1315,
+        1385
       ],
       "flips": [
         {
@@ -359,9 +359,9 @@
             "fromBeat": "programming-world",
             "toBeat": "programming-world"
           },
-          "frame": 1170,
+          "frame": 1230,
           "holds": [
-            1290,
+            1350,
             1650
           ]
         },
@@ -375,9 +375,9 @@
             "fromBeat": "crossing",
             "toBeat": "programming-world"
           },
-          "frame": 1170,
+          "frame": 1230,
           "holds": [
-            1170,
+            1230,
             1650
           ]
         }
@@ -386,9 +386,9 @@
     {
       "id": "programming-world",
       "index": 6,
-      "start": 1290,
+      "start": 1350,
       "end": 1650,
-      "frames": 360,
+      "frames": 300,
       "world": "shaded",
       "worldRaw": "shaded",
       "camera": "three-quarter perspective, slow push along a lit grid line",
@@ -402,8 +402,8 @@
       "transitionIn": "refill from lines into shaded forms",
       "transitionOut": "the structure's silhouette leads the pull back home (beat 8); the shaded world's lines fold into the Seuss stalks",
       "crossingIn": [
-        1255,
-        1325
+        1315,
+        1385
       ],
       "crossingOut": [
         1615,
@@ -420,7 +420,7 @@
             "fromBeat": "home-settle",
             "toBeat": "home-settle"
           },
-          "frame": 1290,
+          "frame": 1350,
           "holds": [
             1650,
             1950
@@ -434,9 +434,9 @@
             "kind": "permanent",
             "raw": "permanent"
           },
-          "frame": 1290,
+          "frame": 1350,
           "holds": [
-            1290,
+            1350,
             1950
           ]
         },
@@ -448,9 +448,9 @@
             "kind": "permanent",
             "raw": "permanent"
           },
-          "frame": 1290,
+          "frame": 1350,
           "holds": [
-            1290,
+            1350,
             1950
           ]
         }
@@ -532,8 +532,8 @@
       "to": "art-world",
       "fromWorld": "home",
       "toWorld": "crayon",
-      "start": 775,
-      "end": 845,
+      "start": 895,
+      "end": 965,
       "length": 70,
       "split": [
         35,
@@ -545,8 +545,8 @@
       "to": "crossing",
       "fromWorld": "crayon",
       "toWorld": "line",
-      "start": 1135,
-      "end": 1205,
+      "start": 1195,
+      "end": 1265,
       "length": 70,
       "split": [
         35,
@@ -558,8 +558,8 @@
       "to": "programming-world",
       "fromWorld": "line",
       "toWorld": "shaded",
-      "start": 1255,
-      "end": 1325,
+      "start": 1315,
+      "end": 1385,
       "length": 70,
       "split": [
         35,
