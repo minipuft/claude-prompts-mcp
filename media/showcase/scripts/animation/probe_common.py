@@ -465,13 +465,18 @@ def blocking_prop_rects(b):
     return add, carve
 
 
+def stage_box_px(shape, cam, x0, y0, x1, y1):
+    """(row0, row1, col0, col1) of a stage rectangle in frame pixels: the bounding box of its corners projected through the camera, clipped to the frame."""
+    H, W = shape[:2]; sc = W / STAGE[0]
+    pts = [project(cam, px, py) for px, py in ((x0, y0), (x1, y0), (x0, y1), (x1, y1))]
+    return (int(max(0, min(p[1] for p in pts) * sc)), int(min(H, max(p[1] for p in pts) * sc + 1)), int(max(0, min(p[0] for p in pts) * sc)), int(min(W, max(p[0] for p in pts) * sc + 1)))
+
+
 def prop_region_from_blocking(shape, cam, b):
     """Boolean mask (frame pixels) of where the beat's props are drawn, from the blocking (`blocking_prop_rects`), each crop padded by PROP_PAD stage px and projected through the camera as the
     bounding box of its corners; the lit gates' discs carved out."""
-    H, W = shape[:2]; sc = W / STAGE[0]; m = np.zeros((H, W), bool)
-    def box(x0, y0, x1, y1):
-        pts = [project(cam, px, py) for px, py in ((x0, y0), (x1, y0), (x0, y1), (x1, y1))]
-        return (int(max(0, min(p[1] for p in pts) * sc)), int(min(H, max(p[1] for p in pts) * sc + 1)), int(max(0, min(p[0] for p in pts) * sc)), int(min(W, max(p[0] for p in pts) * sc + 1)))
+    H, W = shape[:2]; m = np.zeros((H, W), bool)
+    box = lambda x0, y0, x1, y1: stage_box_px(shape, cam, x0, y0, x1, y1)
     add, carve = blocking_prop_rects(b)
     for x0, y0, x1, y1, bar in add:
         r0, r1, c0, c1 = box(x0 - PROP_PAD, y0 - PROP_PAD, x1 + PROP_PAD, y1 + PROP_PAD); m[r0:r1, c0:c1] = True
@@ -483,7 +488,38 @@ def prop_region_from_blocking(shape, cam, b):
     return m
 
 
+def cast_region_from_blocking(shape, cam, b, who):
+    """Mask (frame pixels) of the cast crops the eye is asked to find (`who`: "human" the human's crop, `figureCrop`; "trio" that and Codex's and Clawd's crops, `CAST_NATIVE`), each padded by PROP_PAD,
+    from the beat's blocking; None when the blocking lacks one of them."""
+    rects = []
+    fc = b.get("figureCrop")
+    if fc: rects.append((fc["x"], fc["y"], fc["x"] + fc["width"], fc["y"] + fc["height"]))
+    if who == "trio":
+        for name, ((x0, y0), (x1, y1)) in CAST_NATIVE.items():
+            c = b.get(name)
+            if c: s_ = c.get("scale", 1.0); rects.append((c["x"] + x0 * s_, c["y"] + y0 * s_, c["x"] + x1 * s_, c["y"] + y1 * s_))
+        if len(rects) < 3: return None
+    if not rects: return None
+    m = np.zeros(shape[:2], bool)
+    for x0, y0, x1, y1 in rects:
+        r0, r1, c0, c1 = stage_box_px(shape, cam, x0 - PROP_PAD, y0 - PROP_PAD, x1 + PROP_PAD, y1 + PROP_PAD); m[r0:r1, c0:c1] = True
+    return m
+
+
 _LAYER_INDEX = {}
+
+
+OCCLUDER_GROUP_ORDER = ("figure", "codex", "clawd", "gadget", "box", "pieces", "bubble")      # GROUP_ORDER of src/library/light/sdf.ts: a group's index is what the occluder mask's blue channel carries (byte // 32); change both or neither
+
+
+def cast_region_from_occluders(path, shape, who, grow=6):
+    """Mask (frame pixels) of the cast the eye is asked to find on a real shot's frame, from the occluder mask the light was drawn from (`light-sdf` input: alpha the solid, blue its group): "human" is the `figure`
+    group, "trio" adds `codex` and `clawd`; grown by `grow` px so a body and its outline are one region. Colour cannot find them: the flood is Codex's blue."""
+    from scipy import ndimage as ndi
+    im = Image.open(path).convert("RGBA")
+    if (im.size[1], im.size[0]) != tuple(shape[:2]): im = im.resize((shape[1], shape[0]), Image.NEAREST)
+    a = np.asarray(im); groups = a[..., 2] // 32; want = [OCCLUDER_GROUP_ORDER.index(g) for g in (("figure",) if who == "human" else ("figure", "codex", "clawd"))]
+    return ndi.binary_dilation((a[..., 3] > 127) & np.isin(groups, want), iterations=grow)
 
 
 def layer_prop_region(man, root, f, shape, grow=2):

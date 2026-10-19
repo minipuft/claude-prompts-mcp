@@ -323,6 +323,10 @@ def main():
         if tgt is None: refused_eye.setdefault(why, []).append(f); continue
         if tgt["kind"] == "none": continue
         prop_region = layer_prop_region(man, root, f, img.shape) if a.manifest else None
+        if tgt["kind"] in ("human", "trio"):
+            m, why = ET.cast_mask_for(tgt, img.shape, cam, None, os.path.join(mask_dir, occ_of[f] + ".png") if mask_dir else None)
+            if m is None: refused_eye.setdefault(f"{line!r} ({src}): {why}", []).append(f); continue
+            tgt = {**tgt, "mask": m}
         eye_hexes, eye_owned = (everywhere, owned) if prop_region is not None else (hexes, None)
         if base: d0 = ET.offset(load_rgb(base[f]), tgt, cam, 0.005, eye_hexes, BLUR_STAGE_PX, plate, eye_owned, prop_region)
         d = ET.offset(raw, tgt, cam, 0.005, eye_hexes, BLUR_STAGE_PX, plate, eye_owned, prop_region)

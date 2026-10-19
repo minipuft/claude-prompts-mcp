@@ -6,8 +6,8 @@ Method: per frame, drop every fixed fill (v3/roles.json, `npm run roles`: the id
 colours, each with its 28-RGB neighbourhood), box-blur what is left by luminance over --blur stage pixels (default 8: a REGION, not a pixel: the anti-aliased edge where a fill meets its
 neighbour is a bright speck one or two pixels across, which a light is not), take the brightest 0.5 % of the blurred map (ties kept), and measure the distance from its centroid to the frame's
 TARGET as a share of the frame width (0 inside a region target).
-THE TARGET (D100: what the beat's light pushes, the emitter only where the beat names it). The target of a frame is the `emitter` line of the story point whose span holds it (v3/screenplay.json:
-a point's span runs from its `frame` to the next point of the same beat, or the beat's end), else, before a beat's first point, the beat's own named emitter (`effects.emitter` of v3/beats-v2.json:
+THE TARGET (D100: what the beat's light pushes, the emitter only where the beat names it). The target of a frame is the `eye` line of the story point whose span holds it (v3/screenplay.json: what the eye
+should find when that is not the emitter), else its `emitter` line (a point's span runs from its `frame` to the next point of the same beat, or the beat's end), else, before a beat's first point, the beat's own named emitter (`effects.emitter` of v3/beats-v2.json:
 the structured line beside `light_pushes`, whose prose names a feeling and so names nothing a frame can be measured against). The line is matched by its longest prefix against this table, and what
 it resolves to must exist on the frame; a line outside the table, or whose source is missing, is REFUSED naming it (`targets resolve`), never passed:
   line starts with               resolves to                                                       measured as
@@ -15,6 +15,11 @@ it resolves to must exist on the frame; a line outside the table, or whose sourc
     gadget                         on the floor where the join is lost, rimming the structure)
   frame interior                 blocking `frame` of the frame's beat (v3/blocking/<beat>.json)     a region: 0 inside it, else the distance to its edge
   the empty join | the lit join  blocking `join` of the frame's beat                                 a point
+  the human                      the human's crop: blocking `figureCrop` (a real shot: the occluder     a region: 0 inside it, else the distance to its edge
+                                   mask's `figure` group)
+  the trio                       the union of the human's, Codex's and Clawd's crops (blocking             a region, as above
+                                   `figureCrop`, `codex`, `clawd` at their native size; a real shot: the
+                                   mask's `figure`, `codex` and `clawd` groups)
   none                           nothing: the story point says the light pushes nowhere readable     skipped and counted, by name
   anything else (the leaf, the drawn line, the piece's lines, the crayon's own colour, the running bead, ...): no role, prop or layer of the animatic draws it, so it cannot be measured: refused.
 The lamp is therefore the target only where a story point says "box seam", "gadget ..." (the xsheet emitter); where it says "frame interior" a lamp brighter than the interior FAILS.
@@ -36,12 +41,12 @@ from probe_common import *
 from fixtures import make
 
 
-TARGET_TABLE = (("box seam", "emitter"), ("gadget dial", "emitter"), ("gadget", "emitter"), ("frame interior", "frame"), ("the empty join", "join"), ("the lit join", "join"), ("none", "none"))
-"""(prefix of the screenplay's `emitter` line, kind): see the docstring for what each kind resolves to. The longest prefix wins, so 'gadget dial, lost' and 'gadget, rimming the structure' are both the lamp."""
+TARGET_TABLE = (("box seam", "emitter"), ("gadget dial", "emitter"), ("gadget", "emitter"), ("frame interior", "frame"), ("the empty join", "join"), ("the lit join", "join"), ("the human", "human"), ("the trio", "trio"), ("none", "none"))
+"""(prefix of the screenplay's `eye` or `emitter` line, kind): see the docstring for what each kind resolves to. The longest prefix wins, so 'gadget dial, lost' and 'gadget, rimming the structure' are both the lamp."""
 
 
 def table_kind(line):
-    """The kind a story point's emitter line resolves to (`TARGET_TABLE`), or None when no entry matches. A prefix matches whole words: 'none readable' is 'none', 'gadgetry' is not 'gadget'."""
+    """The kind a story point's `eye` or `emitter` line resolves to (`TARGET_TABLE`), or None when no entry matches. A prefix matches whole words: 'none readable' is 'none', 'gadgetry' is not 'gadget'."""
     t = (line or "").strip().lower(); best = None
     for pre, kind in TARGET_TABLE:
         if t.startswith(pre) and (len(t) == len(pre) or not t[len(pre)].isalnum()) and (best is None or len(pre) > len(best[0])): best = (pre, kind)
@@ -53,7 +58,7 @@ def story_target(f, beat_id, points, beats):
     mine = sorted((p for p in points if p.get("beat") == beat_id), key=lambda p: p["frame"]); hit = None
     for p in mine:
         if p["frame"] <= f: hit = p
-    if hit is not None: return hit.get("emitter"), f"story point {hit['id']}"
+    if hit is not None: return hit.get("eye") or hit.get("emitter"), f"story point {hit['id']}"
     b = next((b for b in beats if b.get("id") == beat_id), None)
     if b is None: return None, f"beat {beat_id!r} is not in the beats file"
     line = (b.get("effects") or {}).get("emitter")
@@ -65,6 +70,7 @@ def resolve_target(line, source, em, blocking):
     kind = table_kind(line)
     if kind is None: return None, f"{line!r} ({source}) is not in the target table: no role, prop or layer of the frame draws it"
     if kind == "none": return {"kind": "none"}, None
+    if kind in ("human", "trio"): return {"kind": kind}, None                                    # a region: the caller builds its mask from the blocking or the shot's occluder mask (`cast_mask_for`)
     if kind == "emitter":
         if not isinstance(em, dict) or em.get("x") is None: return {"kind": "emitter", "missing": True}, None
         return {"kind": "emitter", "x": em["x"], "y": em["y"]}, None
@@ -75,6 +81,13 @@ def resolve_target(line, source, em, blocking):
     jn = (blocking or {}).get("join")
     if not jn: return None, f"{line!r} ({source}) needs the beat's blocking `join`, which is absent"
     return {"kind": "join", "x": jn["x"], "y": jn["y"]}, None
+
+
+def cast_mask_for(tgt, shape, cam, blocking, occluder_path=None):
+    """The mask of a `the human` / `the trio` target, or (None, why): from the occluder mask the shot's light was drawn from when `occluder_path` is given, else from the blocking's crops."""
+    if occluder_path: return cast_region_from_occluders(occluder_path, shape, tgt["kind"]), None
+    m = cast_region_from_blocking(shape, cam, blocking, tgt["kind"]) if blocking else None
+    return (m, None) if m is not None else (None, "the beat's blocking lacks `figureCrop`" + (", `codex` or `clawd`" if tgt["kind"] == "trio" else "") + ", and no occluder mask names the cast")
 
 
 def centroid(img, share=0.005, hexes=None, blur=BLUR_STAGE_PX, masked=None):
@@ -88,11 +101,15 @@ def centroid(img, share=0.005, hexes=None, blur=BLUR_STAGE_PX, masked=None):
 
 def offset(img, em, cam, share=0.005, hexes=None, blur=BLUR_STAGE_PX, plate=None, owned=None, region=None):
     """Distance from the brightest unmasked region to the target (stage pixels, projected through `cam`), as a share of the frame width. `em` is a point ({"x", "y"}: the emitter or a join) or a
-    region ({"rect": (x, y, w, h)}: 0 inside it, else the distance to its nearest edge). `hexes` are the fixed colours, `plate` the human cutout's colours (masked only where the human is, see
+    region ({"rect": (x, y, w, h)} or {"mask": frame-sized bool}: 0 inside it, else the distance to its nearest edge). `hexes` are the fixed colours, `plate` the human cutout's colours (masked only where the human is, see
     `cast_mask`), `owned` the kit's and gadget's pale roles masked only inside `region`."""
     c = centroid(img, share, None, blur, cast_mask(img, cam, hexes, plate, owned=owned, region=region) if (hexes or plate or owned) else None)
     H, W = img.shape[:2]; s = W / STAGE[0]
     if c is None: return None
+    if "mask" in em:
+        from scipy import ndimage as ndi
+        cx, cy = min(max(int(round(c[0])), 0), W - 1), min(max(int(round(c[1])), 0), H - 1)
+        return 0.0 if em["mask"][cy, cx] else float(ndi.distance_transform_edt(~em["mask"])[cy, cx] / W)
     if "rect" in em:
         x, y, w, h = em["rect"]; pts = [project(cam, px, py) for px, py in ((x, y), (x + w, y), (x, y + h), (x + w, y + h))]
         x0, x1, y0, y1 = (min(p[0] for p in pts) * s, max(p[0] for p in pts) * s, min(p[1] for p in pts) * s, max(p[1] for p in pts) * s)
@@ -117,6 +134,14 @@ def controls(a, ctl):
     d_lamp_brighter = offset(both, {"rect": rect}, None, a.share, ctl, a.blur)
     d_interior = offset(inner(120), {"rect": rect}, None, a.share, ctl, a.blur)
     d_lamp_named = offset(both, {"x": lamp["x"], "y": lamp["y"]}, None, a.share, ctl, a.blur)
+    # D100 `eye`: a story point with eye "the human" is read before its emitter; the lamp brightest outside the human's crop FAILS, the human's own light passes, no `eye` is the lamp again
+    bl = {"figureCrop": {"x": 380, "y": 0, "width": 500, "height": 720}}; pts = [{"id": "sp-c", "beat": "b", "frame": 0, "emitter": "gadget dial", "eye": "the human"}, {"id": "sp-d", "beat": "d", "frame": 0, "emitter": "gadget dial"}]
+    lamp_o = {"x": 1000, "y": 300}; both_h = _blob(_blob(_field(), (lamp_o["x"] * S, lamp_o["y"] * S), 250, sigma=10.0), (640 * S, 400 * S), 120)
+    def eye_read(beat, frame_img):
+        line, src = story_target(0, beat, pts, []); tg, why = resolve_target(line, src, lamp_o, bl); m, _ = cast_mask_for(tg, frame_img.shape, None, bl)
+        return line, offset(frame_img, {"mask": m} if tg["kind"] in ("human", "trio") else tg, None, a.share, ctl, a.blur)
+    l_h, d_h_lamp = eye_read("b", both_h); l_d, d_d_lamp = eye_read("d", both_h); _, d_h_own = eye_read("b", _blob(_field(), (640 * S, 400 * S), 120))
+    trio_none = cast_region_from_blocking((make.H, make.W, 3), None, bl, "trio")
     # p007: a pale halo in the kit's colour is the lamp where no prop is, a fixed fill where the prop is
     halo, region = _halo_frame(); kit_pale = ["#d9e5e3"]; bare = [h for h in ctl if h not in kit_pale]
     d_all = offset(halo, make.emitter_at(10), None, a.share, bare + kit_pale, a.blur)                                   # masked everywhere: the halo is eaten
@@ -124,6 +149,7 @@ def controls(a, ctl):
     refused = resolve_target("the leaf", "story point sp-5.3", None, {})[1]; kind_ok = (table_kind("box seam, tiny"), table_kind("gadget, rimming the structure"), table_kind("none readable"), table_kind("gadgetry"), table_kind("the lit join, then each gate in sequence"))
     ok = (on is not None and on <= a.tolerance and off is not None and off > a.tolerance and raw > a.tolerance and moved > a.tolerance and sp <= a.tolerance and (a.blur == 0 or sp_raw > sp)
           and d_lamp_brighter > a.tolerance and d_interior <= a.tolerance and d_lamp_named <= a.tolerance
+          and l_h == "the human" and d_h_lamp > a.tolerance and d_h_own <= a.tolerance and l_d == "gadget dial" and d_d_lamp <= a.tolerance and trio_none is None
           and d_all > a.tolerance and d_reg <= a.tolerance and refused and "the leaf" in refused and kind_ok == ("emitter", "emitter", "none", None, "join"))
     return ok, (f"bright blob 10 % of the width off the emitter -> FAIL (offset {100 * off:.1f} % > {100 * a.tolerance:.0f} %); blob on the emitter -> pass ({100 * on:.1f} %); "
                 f"identity, garment and kit-contour patches brighter than the blob are ignored (read unmasked they would put the offset at {100 * raw:.0f} %); "
@@ -131,6 +157,8 @@ def controls(a, ctl):
                 f"120 lone white specks, brighter than the blob and a share of the 0.5 % ranked, are not a region: offset {100 * sp:.1f} % blurred, {100 * sp_raw:.1f} % unblurred; "
                 f"target the frame interior: a lamp brighter than the interior's light, outside it -> FAIL ({100 * d_lamp_brighter:.1f} %), the interior's light alone -> pass ({100 * d_interior:.1f} %), "
                 f"and the same frame against the lamp as the target -> pass ({100 * d_lamp_named:.1f} %), so the target is what is read; "
+                f"a story point with eye 'the human' (read before its emitter 'gadget dial'): the lamp brightest outside the human's crop -> FAIL ({100 * d_h_lamp:.1f} %), the human's own light -> pass ({100 * d_h_own:.1f} %), "
+                f"the same frame under a point with no eye (the lamp) -> pass ({100 * d_d_lamp:.1f} %), and a blocking without the cast's crops resolves no trio; "
                 f"a pale halo in the kit's colour: masked everywhere it is eaten -> FAIL ({100 * d_all:.1f} %), masked only inside the prop's crop it is found -> pass ({100 * d_reg:.1f} %); "
                 f"a line outside the table is refused by name ({refused[:48]}...)")
 
@@ -213,6 +241,10 @@ def main():
         if tgt.get("missing"): skipped += 1; continue
         if isinstance(em, dict) and em.get("strength", 1.0) < a.min_strength: fading += 1; continue
         cam = camera_of(xs, f); img = load_rgb(p)
+        if tgt["kind"] in ("human", "trio"):
+            m, why = cast_mask_for(tgt, img.shape, cam, blocking.get(bid) if bid in drawn_from else None)
+            if m is None: span_of(refused, f"{line!r} ({source}): {why}", f); continue
+            tgt = {**tgt, "mask": m}
         region = prop_region_from_blocking(img.shape, cam, blocking[bid]) if bid in drawn_from else None
         d = offset(img, tgt, cam, a.share, everywhere if region is not None else hexes_all, a.blur, plate, owned if region is not None else None, region)
         if d is None: skipped += 1; continue
