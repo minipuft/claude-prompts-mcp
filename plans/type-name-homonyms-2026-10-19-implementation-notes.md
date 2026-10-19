@@ -54,6 +54,9 @@ tags: []
 
 ## Deviations
 
+- **DEV-T1-4** R14 said the byte-restore guard admits only prompt, gate and framework. The server already byte-restores categories (`category-versioning-processor.ts:89` → `planByteRestore`), so the shared guard admits `category` too. At the cpm call site a category cannot arrive, because `HistoryResourceType` excludes it. R14 is superseded on this point. cpm `delete`/`rename` on a style still act on the files and skip a history step that touched 0 rows; refusing them would remove a working cpm command, and nobody asked for that.
+- **DEV-T1-5** Row 7's ts-morph rename reprinted `cli/src` files with double quotes (e.g. `rollback.ts:233` `kind: "file"`). That broke `cli-tree-parity.test.ts:478`, which pins the source text. Row 11 undoes it.
+
 - **DEV-T1-3** Row 7 renamed `ValidationResult` (errorHandling) to `ErrorValidationResult` instead of merging it. The engine superset references `ValidationCheck`, an engine type, so it cannot move down to shared; keeping the shared base would drop fields `argument-parser.ts:682` writes. Accepted (R4's fallback). Row 7 also edited 2 `cli/src` files that consumed the deleted `ResourceValidationResult` alias; accepted, and `cli` typecheck is clean.
 
 - **DEV-T1-1** R8 revised on 2026-10-19 after the client crash. Rows 1–7 commit NO ratchet baseline, because every row lowers the same counts and parallel commits to one JSON file conflict. Row 8 regenerates eslint, knip, typecheck-tests and homonyms once, on the merged tree. Row 2 had already committed a knip baseline (613 → 603 types); row 8's regeneration supersedes it.
