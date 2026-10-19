@@ -3,35 +3,32 @@ import {
   resolveConfiguredMaxVersions,
   rollbackVersion,
   validateResourceFile,
-} from "@cli-shared/index.js";
-import { declaredResourceId } from "@cli-shared/resource-operations.js";
+} from '@cli-shared/index.js';
+import { declaredResourceId } from '@cli-shared/resource-operations.js';
 // Directly, not through the `cli-shared` barrel: the barrel is what every other command imports,
 // and adding one more never-server-consumed re-export to it is knip debt with no reader.
-import { projectResourceSnapshot } from "@cli-shared/resource-snapshot.js";
+import { projectResourceSnapshot } from '@cli-shared/resource-snapshot.js';
 import {
   exemptPreExistingUnloadableGates,
   type ResourceVerificationResult,
-} from "@modules/resources/services/resource-verification-service.js";
-import { describeRestorePlan } from "@modules/versioning/restore-plan.js";
-import { resourceFileSet } from "@shared/utils/resource-file-set.js";
-import { serializeYamlPreservingSource } from "@shared/utils/yaml/yaml-document-writer.js";
-import {
-  resolveWorkspace,
-  resolveResourceDir,
-  findResource,
-} from "../lib/workspace.js";
-import { output } from "../lib/output.js";
+} from '@modules/resources/services/resource-verification-service.js';
+import { describeRestorePlan } from '@modules/versioning/restore-plan.js';
+import { resourceFileSet } from '@shared/utils/resource-file-set.js';
+import { serializeYamlPreservingSource } from '@shared/utils/yaml/yaml-document-writer.js';
+import { resolveWorkspace, resolveResourceDir, findResource } from '../lib/workspace.js';
+import { output } from '../lib/output.js';
 import {
   mutationWarnings,
   printMutationWarnings,
   printValidationFailure,
-} from "../lib/resource-validation.js";
+} from '../lib/resource-validation.js';
 import {
   TYPE_MAP,
   TYPE_CONFIG,
   singularName,
   isVersionedType,
-} from "../lib/types.js";
+  notVersionedMessage,
+} from '../lib/types.js';
 
 interface RollbackOptions {
   workspace?: string;
@@ -54,16 +51,14 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   if (!type) {
     console.error(
       `Usage: cpm rollback <prompt|gate|framework|style> <id> <version>\n` +
-        (options.type
-          ? `Unknown type: ${options.type}`
-          : "Resource type is required."),
+        (options.type ? `Unknown type: ${options.type}` : 'Resource type is required.'),
     );
     return 1;
   }
 
   if (!options.id || !options.version) {
     console.error(
-      "Usage: cpm rollback <prompt|gate|framework|style> <id> <version>\nResource ID and target version are required.",
+      'Usage: cpm rollback <prompt|gate|framework|style> <id> <version>\nResource ID and target version are required.',
     );
     return 1;
   }
@@ -71,7 +66,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   const targetVersion = parseInt(options.version, 10);
 
   if (isNaN(targetVersion) || targetVersion < 1) {
-    console.error("Version must be a positive integer.");
+    console.error('Version must be a positive integer.');
     return 1;
   }
 
@@ -97,12 +92,10 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   // ResourceType with no version rows, and casting it into a union that does not contain it turned
   // an unsupported operation into a confusing "version not found".
   if (!isVersionedType(type)) {
-    console.error(
-      `${singularName(type)} resources are not versioned — nothing records version history for them.`,
-    );
+    console.error(notVersionedMessage(type));
     return 1;
   }
-  const resourceType = singularName(type) as "prompt" | "gate" | "framework";
+  const resourceType = singularName(type) as 'prompt' | 'gate' | 'framework';
 
   // The state this rollback is about to REPLACE, projected exactly as `resource_manager` would
   // project it.
@@ -113,12 +106,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   // `{id,name,description,type,severity,guidanceFile}` where the server wrote
   // `{id,name,type,description,guidance}` with the markdown body inline, and EVERY `cpm rollback`
   // of a server-written gate therefore recorded a bridge row describing a change nobody made.
-  const priorState = await projectResourceSnapshot(
-    resourceType,
-    match.id,
-    yamlPath,
-    currentData,
-  );
+  const priorState = await projectResourceSnapshot(resourceType, match.id, yamlPath, currentData);
 
   // Write the restored snapshot back, MERGED over what is on disk rather than replacing it.
   //
@@ -164,9 +152,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
       validateResourceFile(type, declaredResourceId(match), yamlPath),
     );
     if (!restoreVerdict.valid) {
-      throw new Error(
-        "Rollback produced an invalid resource; restored the previous files.",
-      );
+      throw new Error('Rollback produced an invalid resource; restored the previous files.');
     }
   };
 
@@ -174,7 +160,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   const applyRestore = async (
     snapshot: Record<string, unknown>,
   ): Promise<Record<string, unknown>> => {
-    const { readFileSync, writeFileSync } = await import("node:fs");
+    const { readFileSync, writeFileSync } = await import('node:fs');
     const excluded = new Set(config.snapshotKeysNotInEntryFile ?? []);
     const renames = config.snapshotKeyToEntryKey ?? {};
     const restorable = Object.fromEntries(
@@ -195,9 +181,8 @@ export async function rollback(options: RollbackOptions): Promise<number> {
     const merged = { ...currentData, ...restorable };
     writeFileSync(
       yamlPath,
-      serializeYamlPreservingSource(merged, readFileSync(yamlPath, "utf8"))
-        .content,
-      "utf8",
+      serializeYamlPreservingSource(merged, readFileSync(yamlPath, 'utf8')).content,
+      'utf8',
     );
     verifyRestore();
 
@@ -205,9 +190,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
     // merge above leaves every key the snapshot does not carry at its current value, and it never
     // touches a companion file — a gate's `guidance.md` still holds whatever it held — so the
     // target snapshot is not what this write produced.
-    return (
-      await projectResourceSnapshot(resourceType, match.id, yamlPath, merged)
-    ).snapshot;
+    return (await projectResourceSnapshot(resourceType, match.id, yamlPath, merged)).snapshot;
   };
 
   // The workspace's own `versioning.maxVersions`, not the built-in 50: a rollback writes rows and
@@ -230,7 +213,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
           entryPath: match.file,
           roots,
         }),
-      targets: [{ path: yamlPath, kind: "file" }],
+      targets: [{ path: yamlPath, kind: 'file' }],
       apply: applyRestore,
       maxVersions: resolveConfiguredMaxVersions(workspace),
       // The byte path, when version N recorded one. Same shape the server's injected locator
@@ -244,27 +227,15 @@ export async function rollback(options: RollbackOptions): Promise<number> {
         // is cleared rather than left over: it is the merging path's report of snapshot keys the
         // entry file kept, and a byte restore has no such keys — every recorded file was replaced.
         verifyRestore();
-        const onDisk =
-          loadYamlFileSync<Record<string, unknown>>(yamlPath) ?? currentData;
+        const onDisk = loadYamlFileSync<Record<string, unknown>>(yamlPath) ?? currentData;
         notRestored.length = 0;
-        return (
-          await projectResourceSnapshot(
-            resourceType,
-            match.id,
-            yamlPath,
-            onDisk,
-          )
-        ).snapshot;
+        return (await projectResourceSnapshot(resourceType, match.id, yamlPath, onDisk)).snapshot;
       },
       ...(options.preview === true ? { preview: true } : {}),
     },
   );
 
-  if (
-    !result.success &&
-    restoreVerdict !== undefined &&
-    !restoreVerdict.valid
-  ) {
+  if (!result.success && restoreVerdict !== undefined && !restoreVerdict.valid) {
     printValidationFailure(restoreVerdict, {
       json: options.json,
       action: `rollback ${singularName(type)} '${options.id}' to v${targetVersion}`,
@@ -273,7 +244,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
     return 1;
   }
   if (!result.success) {
-    console.error(result.error ?? "Rollback failed.");
+    console.error(result.error ?? 'Rollback failed.');
     return 1;
   }
 
@@ -335,7 +306,7 @@ export async function rollback(options: RollbackOptions): Promise<number> {
   printMutationWarnings(warnings);
   if (notRestored.length > 0) {
     console.log(
-      `Version ${targetVersion} recorded no ${notRestored.join(", ")} — left at the current value.`,
+      `Version ${targetVersion} recorded no ${notRestored.join(', ')} — left at the current value.`,
     );
   }
   return 0;
