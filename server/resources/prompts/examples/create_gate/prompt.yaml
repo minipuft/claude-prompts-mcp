@@ -53,11 +53,11 @@ arguments:
     required: false
   - name: activation
     type: object
-    description: '[Gate] Activation rules: prompt_categories, frameworks, explicit_request.'
+    description: '[Gate] Activation rules: prompt_categories, framework_context (framework ids), explicit_request (boolean), artifacts (artifact kinds).'
     required: false
   - name: retry_config
     type: object
-    description: '[Gate] Retry configuration: max_attempts, improvement_hints.'
+    description: '[Gate] Retry configuration: max_attempts (positive integer), improvement_hints and preserve_context (booleans).'
     required: false
   - name: subject
     type: string

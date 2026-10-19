@@ -35,11 +35,11 @@
     },
     "activation": {
       "type": "object",
-      "description": "[Gate] Activation rules: prompt_categories, frameworks, explicit_request."
+      "description": "[Gate] Activation rules: prompt_categories, framework_context (framework ids), explicit_request (boolean), artifacts (artifact kinds)."
     },
     "retry_config": {
       "type": "object",
-      "description": "[Gate] Retry configuration: max_attempts, improvement_hints."
+      "description": "[Gate] Retry configuration: max_attempts (positive integer), improvement_hints and preserve_context (booleans)."
     },
     "subject": {
       "type": "string",

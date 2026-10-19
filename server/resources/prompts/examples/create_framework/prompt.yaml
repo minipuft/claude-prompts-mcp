@@ -24,10 +24,7 @@ arguments:
     required: false
   - name: phases
     type: array
-    description: '[Framework] Phase definitions: id, name, description, prompts. The
-      advanced fields this description used to fold in are declared as their own
-      parameters below. Element shape is not constrained at this boundary; the
-      framework loader rejects a malformed entry when phases.yaml is read back.'
+    description: '[Framework] Phase definitions: id and name (required), description, prompts. The advanced fields are declared as their own parameters below. An entry of any other shape is refused before anything is written.'
     required: false
   - name: gates
     type: object
@@ -35,7 +32,7 @@ arguments:
     required: false
   - name: tool_descriptions
     type: object
-    description: '[Framework] Tool description overlays when active.'
+    description: '[Framework] Tool description overlays when active, keyed by tool name: a string, or description plus parameters (name to text).'
     required: false
   - name: enabled
     type: boolean
@@ -87,8 +84,7 @@ arguments:
     required: false
   - name: execution_type_enhancements
     type: object
-    description: '[Framework] Per-execution-type step overlays (chain vs single),
-      written to phases.yaml.'
+    description: '[Framework] Per-execution-type step overlays, written to phases.yaml: chain.advancedChain and chain.simpleChain, each mapping a step name to its lines.'
     required: false
   - name: template_enhancements
     type: object
