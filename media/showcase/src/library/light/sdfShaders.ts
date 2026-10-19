@@ -55,7 +55,6 @@ uniform vec2 uEmitter;
 uniform float uSeat;
 uniform float uR0;
 uniform float uReach;
-uniform float uFloor;
 uniform float uGuard;
 uniform vec3 uDot;
 uniform vec3 uRadiance;
@@ -89,10 +88,11 @@ float groupAt(vec2 seed) { return floor(texelFetch(uMask, ivec2(floor(seed)), 0)
 float kOf(float c) { return c < 1.5 ? uShadowK.x : (c < 2.5 ? uShadowK.y : uShadowK.z); }
 float stippleOf(float c) { return c < 0.5 ? 1.0 : (c < 1.5 ? uStipplePx.x : (c < 2.5 ? uStipplePx.y : uStipplePx.z)); }
 
-// The volume: 1/(1+(d/r0)^2), clamped at the floor, cut to nothing at the reach.
+// The volume: the inverse square 1/(1+(d/r0)^2), less its value at the reach so it arrives at nothing there: highest at the lamp, falling with distance, no floor.
 float litAt(float d) {
   float f = 1.0 / (1.0 + (d * d) / (uR0 * uR0));
-  return clamp(f, uFloor, 1.0) * (1.0 - smoothstep(0.7 * uReach, uReach, d));
+  float ft = 1.0 / (1.0 + (uReach * uReach) / (uR0 * uR0));
+  return clamp((f - ft) / (1.0 - ft), 0.0, 1.0);
 }
 
 // Sphere-traced soft shadow toward the emitter: min(k * h / t) over the march, k from the class of the solid that sets the minimum. A hit returns 0. 'cls' is that solid's class (0: none in the way).

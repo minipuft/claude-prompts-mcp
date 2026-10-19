@@ -80,7 +80,7 @@ export const drawLightSdf = (canvas: HTMLCanvasElement, p: SdfP, mask: Uint8Arra
   const owner = ownerGroup(mask, u.emitter);
   const lightMat = material(LIGHT_FRAG, {
     uMask: {value: maskTex}, uSeeds: {value: null}, uNoise: {value: noiseTex}, uSize: {value: size},
-    uEmitter: {value: new THREE.Vector2(...u.emitter)}, uSeat: {value: u.emitterSeat}, uR0: {value: u.r0}, uReach: {value: u.reach}, uFloor: {value: u.floor}, uGuard: {value: SDF.guardPx},
+    uEmitter: {value: new THREE.Vector2(...u.emitter)}, uSeat: {value: u.emitterSeat}, uR0: {value: u.r0}, uReach: {value: u.reach}, uGuard: {value: SDF.guardPx},
     uDot: {value: new THREE.Vector3(...u.dot)}, uRadiance: {value: new THREE.Vector3(...u.radiance)}, uAccent: {value: new THREE.Vector3(...u.accent)},
     uGroupAccent: {value: u.groupAccent}, uOwner: {value: owner}, uOwnerSeat: {value: ownerSeatOf(GROUP_ORDER[owner], p.zoom)},
     uShadowK: {value: new THREE.Vector3(SDF.shadowK[1], SDF.shadowK[2], SDF.shadowK[3])}, uStipplePx: {value: new THREE.Vector3(SDF.stipplePx[1], SDF.stipplePx[2], SDF.stipplePx[3])},

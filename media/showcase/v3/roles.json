@@ -1,5 +1,5 @@
 {
-  "note": "Fixed fills: identity pigments never grade (C1/C2), the human's, kit and gadget roles are fixed per palette, not per beat, and each world's texture colours are the look track's, not the radiance. The frame probes mask a neighbourhood of each. Written by scripts/animation/compile-roles.mjs from src/library/tokens.ts; do not edit.",
+  "note": "Fixed fills: identity pigments never grade (C1/C2), the human's, kit and gadget roles are fixed per palette, not per beat, and each world's texture colours are the look track's, not the radiance. The frame probes mask a neighbourhood of each. Written by scripts/animation/compile-roles.mjs from src/library/tokens.ts (the settled palette and, in kit and gadget, the shot palette s01Turrell with the box tape and the title mark); do not edit.",
   "identity": {
     "codex": [
       "#4f7df2",
@@ -35,14 +35,47 @@
     "#56b0d4",
     "#142b3e",
     "#d9e5e3",
-    "#c8323a"
+    "#c8323a",
+    "#1f4fe8",
+    "#5b86ff",
+    "#0a2a9c",
+    "#dbe6ff",
+    "#fad204",
+    "#101c52",
+    "#182a78",
+    "#080d2c",
+    "#33489a",
+    "#fad204",
+    "#0b1030",
+    "#1d3bb0",
+    "#d7b710",
+    "#e1c94c",
+    "#fbdd43",
+    "#ebdb88",
+    "#fde982",
+    "#f5edc3",
+    "#fef4c0",
+    "#e5e7e6",
+    "#c5c7c7",
+    "#afb8b8",
+    "#969798",
+    "#858c8d",
+    "#66666a",
+    "#5b5f62",
+    "#37363b",
+    "#313337"
   ],
   "gadget": [
     "#d28a21",
     "#a45820",
     "#64341b",
     "#f2c56a",
-    "#56b0d4"
+    "#56b0d4",
+    "#2a5cf0",
+    "#0e3ccb",
+    "#0b2370",
+    "#e4ecff",
+    "#fad204"
   ],
   "worlds": {
     "crayon": [

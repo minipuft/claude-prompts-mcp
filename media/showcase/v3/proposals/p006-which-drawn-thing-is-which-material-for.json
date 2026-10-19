@@ -6,8 +6,8 @@
   "anchor": {
     "beat": "arrival"
   },
-  "title": "Which drawn thing is which material for the light, and the shot palette the eye-trace fills lack",
-  "text": "Two choices the rulings leave open. (1) materials.json has no entry for a character, so the light reads the human, the Codex and Clawd as `body` (albedo 0.3, stipple-2) and the box, the gadget and the kit's pieces as `box` (albedo 0.15, stipple-2); the human's cloak and hair are not told apart from her body yet (the parts rig draws one canvas), so the hair's soft stipple-1 and the cloth's albedo 0.25 do not show. The bubble is `glass` (transmissive) and is not in the occluder mask. A per-part split of the human, or a `cast` material for Clawd and Codex, would change what casts and what bounces. (2) probe-eyetrace masks the fixed fills of v3/roles.json, which is written from the settled palette and not from the shot's own (src/library/tokens.ts s01Turrell): on the unlit s01 frames the brightest non-fill pixels are already 5-8 % of the width from the seam on 17 of 69 sampled frames (the box's yellow ribbon is darker than the accent hex, the title mark is white), and the light layer moves the brightest region past the 3 % limit on 7 more (six at 3.3-3.7 % with the lid open, frames 72-132, and frame 222 at 6.6 %). Adding the shot palette to compile-roles.mjs would make C29 measure the light; until then probe-light.py reads the layer against the same frames without it.",
+  "title": "Which drawn thing is which material for the light",
+  "text": "Materials.json has no entry for a character, so the light layer reads the human, the Codex and Clawd as `body` (albedo 0.3, stipple-2) and the box, the gadget and the kit's pieces as `box` (albedo 0.15, stipple-2); the human's cloak and hair are not told apart from her body yet (the parts rig draws one canvas), so the hair's soft stipple-1 and the cloth's albedo 0.25 do not show. The bubble is `glass` (transmissive) and is not in the occluder mask. A per-part split of the human, or a `cast` material for Clawd and Codex, would change what casts and what bounces. (The other half of this proposal, the shot palette the eye-trace fills lacked, was ruled a measurement fix and is done: v3/roles.json now carries s01Turrell, the box's tape and the title lockup.)",
   "references": [
     "seuss-no-one-youer"
   ],
@@ -15,7 +15,7 @@
     "note": "roles.json lists the settled palette only; characters have no material"
   },
   "after": {
-    "note": "decide: a cast material and a per-part human split; compile-roles.mjs reads the shot palettes (s01Turrell)"
+    "note": "decide: a cast material for Clawd and the Codex, and whether the human is split per part (hair, cloth, body)"
   },
   "status": "open",
   "ruling": null

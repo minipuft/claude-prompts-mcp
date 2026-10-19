@@ -3,7 +3,7 @@
  * loads the pass module that imports this in node, and the shader and its driver (`sdfShaders.ts`, `sdfDraw.ts`) stay out of that bundle.
  *
  * The pipeline, per frame: (1) the `occluders` pass draws every solid thing flat in a code colour (below), the figure and the props through the camera; (2) a jump flood turns that mask into a signed-distance
- * field; (3) the `light-sdf` pass lights each pixel from the emitter through the field (falloff clamped at a floor, a soft shadow marched toward the emitter, one bounce off the lit edges) and quantises the result by a
+ * field; (3) the `light-sdf` pass lights each pixel from the emitter through the field (a falloff that is highest at the lamp, a soft shadow marched toward the emitter, one bounce off the lit edges) and quantises the result by a
  * fixed blue-noise threshold into dots. Output is dots or nothing, so the layer is two-peaked by construction and never a ramp (D48), and it is screen-blended over the picture the way the lamp's core is.
  */
 import {materialOf, type MaterialId, type ShadowClass} from '../animation/materials';
@@ -28,11 +28,13 @@ export const SDF = {
   ownerSeatPx: 140,
   /** The gadget IS the lamp (the dial is on its body): its whole body lets the dial's light out, so no distance limits it. */
   lampSeatPx: 4000,
-  /** The volume: density 1/(1+(d/r0)^2) with r0 = r0Px * (r0Base + r0Gain * intensity), clamped at `floor` inside the reach and cut to 0 at reach = reachBase + reachGain * intensity (stage px, times zoom). */
-  r0: {base: 110, gain: 140},
-  reach: {base: 380, gain: 320},
-  /** The least density a lit pixel inside the reach draws: the clamp of the falloff. The light script declares the emitter's luma floor (compile-light --floor, 200), which is what the dots are drawn at; it declares no density floor, so this is the first value. */
-  floor: 0.08,
+  /**
+   * The volume, from the lamp's own reach: the existing `light` layer draws the lamp's core as a radial gradient of radius R = (90 + 330 x intensity) x zoom stage px (`Core` in `ShotS01.tsx`); `v3/light.json` declares no radius or reach of its own.
+   * The dots' density is the inverse square 1/(1+(d/r0)^2) with r0 = R x `r0Share`, less its value at the reach (R x `reachShare`) so it arrives at nothing there: highest at the lamp and falling with distance, with no floor.
+   */
+  core: {base: 90, gain: 330},
+  r0Share: 0.5,
+  reachShare: 2.2,
   /** The field returns this share of the emitter's own level (colour x intensity, luma 200 at the light script's floor). At 1 the dense dots next to the lamp blur brighter (200) than its thin core (about 190 over the probe's 8 px box), and a shadow cutting the disc moves the brightest region off the emitter (measured on s01: frames 132-162, 0.2 % without the layer, 4.7-5.0 % with); at 0.6 the lamp owns most of the brightest pixels (0.45 measured worse: 40 of 69 frames within 3 % against 46), as C29 asks. */
   dotGain: 0.6,
   /** One bounce: the lit edge's density times albedo times `gain`, over `reachPx` of falloff, drawn at `luma` of the pair colour. */
@@ -105,13 +107,13 @@ const rgb = (hex: string): [number, number, number] => {
 /** The shader's uniforms for a drawing, in pixels of the buffer (origin bottom-left: the emitter's y is flipped from the frame's). Pure. */
 export const sdfUniforms = (p: SdfP) => {
   const i = Math.min(1, Math.max(0, p.intensity));
+  const R = (SDF.core.base + SDF.core.gain * i) * p.zoom;
   const dot = rgb(p.colour).map((c) => c * i * SDF.dotGain) as [number, number, number];
   return {
     emitter: [p.emitter.x, SDF_SIZE.height - p.emitter.y] as [number, number],
     emitterSeat: SDF.emitterSeatPx * p.zoom,
-    r0: (SDF.r0.base + SDF.r0.gain * i) * p.zoom,
-    reach: (SDF.reach.base + SDF.reach.gain * i) * p.zoom,
-    floor: SDF.floor,
+    r0: SDF.r0Share * R,
+    reach: SDF.reachShare * R,
     bounceLuma: SDF.bounce.luma * i,
     dot,
     radiance: rgb(p.pair.radiance),
