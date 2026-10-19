@@ -394,7 +394,7 @@ This means:
 
 ### gate_action Requires Chain Context
 
-The `gate_action` parameter (`retry`/`skip`/`abort`) only works within a chain session. Each non-chain MCP call creates a fresh `ExecutionContext`, so attempt counts reset. Use chain sessions for multi-attempt verification:
+The `gate_action` parameter (`retry`/`skip`/`abort`) only works within a chain session. Each non-chain MCP call creates a fresh `PromptRequestContext`, so attempt counts reset. Use chain sessions for multi-attempt verification:
 
 ```bash
 # Start a chain so verification state persists across calls

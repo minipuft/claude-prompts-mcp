@@ -52,8 +52,8 @@ flowchart LR
     end
 
     subgraph State
-        E1[Ephemeral<br/>ExecutionContext]
-        E2[Persistent<br/>runtime-state/]
+        E1[Per-request state<br/>PromptRequestContext]
+        E2[Persistent<br/>runtime-state/state.db]
     end
 
     A --> B --> Pipeline
@@ -82,7 +82,7 @@ The request path is MCP tool -> router/pipeline -> domain services -> persistenc
 
 The `PromptExecutionPipeline` is the architectural centerpiece. Every `prompt_engine` call:
 
-1. Creates fresh `ExecutionContext` (ephemeral state)
+1. Creates a fresh `PromptRequestContext`, which lives for this one request
 2. Flows through up to 21 stages sequentially
 3. Each stage reads/writes to context
 4. Services are called as needed by stages
@@ -341,7 +341,7 @@ Authentication and rate limiting run before body parsing or prompt lookup, respo
 #### Frameworks (`src/engine/frameworks/`)
 
 - **Manager**: Stateless orchestration, loads definitions from framework registry
-- **State Store**: Persists active framework to SQLite `framework_state` table
+- **State Store**: Persists active framework to the SQLite `kv_state` table (key `framework`)
 - **Guides**: CAGEERF, ReACT, 5W1H, SCAMPER, FOCUS, Liquescent implementations
 
 #### Gates (`src/engine/gates/`)
@@ -375,7 +375,7 @@ See [Telemetry & Observability Guide](../guides/telemetry-observability.md) for 
 
 - **Pipeline**: 21-stage sequential processing (see [Stage Execution Order](#stage-execution-order))
 - **Parsers**: Multi-format (symbolic `-->`, JSON, key=value)
-- **Context**: `ExecutionContext` with type guards for chain vs single execution
+- **Context**: `PromptRequestContext` with type guards for chain vs single execution
 - **Validation**: Request schema validation via generated Zod schemas
 
 ---
@@ -675,21 +675,23 @@ Pipeline stages are thin orchestrators (~60-210 lines). Domain logic lives in se
 
 ---
 
-### Ephemeral vs Persistent State
+### What State Outlives a Request
 
-Understanding which state survives across MCP requests is critical for cross-request features.
+Which state survives across MCP requests decides whether a cross-request feature works.
 
-#### State Lifecycle
+#### State Lifetimes
 
-| Category               | Lifecycle                        | Storage                | Access                     |
-| ---------------------- | -------------------------------- | ---------------------- | -------------------------- |
-| **Ephemeral**          | Dies after each request          | `ExecutionContext`     | `context.state.*`          |
-| **Session-Persistent** | Survives across session requests | `ChainSessionStore`    | `chainSessionStore.get*()` |
-| **Global-Persistent**  | Survives server restarts         | `runtime-state/*.json` | State managers             |
+| Lifetime        | Ends when                                                         | Lives in                                                                                                                                  | Read and written through                                  |
+| --------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Per request     | the response is sent                                              | `PromptRequestContext`                                                                                                                    | `context.state.*`, `context.gates`, `context.diagnostics` |
+| Per chain run   | the run finishes, or the server process that owns it exits        | `chain_runs` + `chain_run_nodes`; `chain_sessions` is a read-only copy rebuilt in the same transaction for the Python hooks               | `ChainSessionStore`                                       |
+| Across restarts | never, for durable tables; a `SCHEMA_VERSION` bump drops the rest | `kv_state` (one row per kind of state and workspace — keys `framework`, `gates`, `arg_history`, `resource_hashes`) and the durable tables | the state stores                                          |
 
-#### Ephemeral State (Per-Request)
+See [`sqlite-persistence.md`](sqlite-persistence.md) §The Map for every table's owner, posture and scope.
 
-Recreated fresh for every MCP tool call:
+#### Per-Request State
+
+A fresh `PromptRequestContext` is created for every MCP tool call and discarded when the response is sent:
 
 ```typescript
 // WRONG: Lost after response
@@ -701,32 +703,17 @@ if (context.state.gates.retryLimitExceeded) {
 }
 ```
 
-#### Session-Persistent State
+#### Per-Run State
 
-Survives across requests for the same session:
+State that must survive from one request of a chain run to the next goes through `ChainSessionStore`, which writes the run's rows to SQLite:
 
 ```typescript
-// CORRECT: Persists to SQLite chain_sessions table
-await chainSessionStore.setPendingGateReview(sessionId, review);
+// CORRECT: written to the run's rows, so it outlives this request
+await chainSessionStore.setReview(sessionId, review);
 
 // Next request: Works!
-const review = chainSessionStore.getReview(sessionId, nodeId);
+const saved = chainSessionStore.getReview(sessionId, nodeId);
 ```
-
-#### Global-Persistent State
-
-Survives server restarts. All state persisted in `runtime-state/state.db` (SQLite via `node:sqlite`).
-
-| State               | Store                    | SQLite Table                                                                                                          |
-| ------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| Framework selection | `FrameworkStateStore`    | `framework_state`                                                                                                     |
-| Gate system enabled | `GateStateStore`         | `gate_system_state`                                                                                                   |
-| Chain sessions      | `ChainSessionStore`      | `chain_sessions`                                                                                                      |
-| Chain run tracking  | `ChainRunRegistry`       | `chain_runs` + `chain_run_nodes` (one row per run + one row per node; replaces the retired `chain_run_registry` blob) |
-| Argument history    | `ArgumentHistoryTracker` | `argument_history`                                                                                                    |
-| Resource index      | `ResourceIndexer`        | `resource_index`                                                                                                      |
-| Resource hashes     | `ResourceIndexer`        | `resource_hash_cache`                                                                                                 |
-| Resource changes    | `ResourceChangeTracker`  | `resource_changes`                                                                                                    |
 
 #### State Flow Diagram
 
@@ -736,12 +723,12 @@ Request 1                          Request 2
 context.state = {}                 context.state = {}  ← Fresh!
     │                                  │
     ▼                                  ▼
-Set ephemeral flag                 Ephemeral flag is undefined
+Set per-request flag               Per-request flag is undefined
 context.state.X = true                 │
     │                                  ▼
-    ▼                              Read from session manager
-Save to session manager            chainSessionStore.get*(sessionId)
-chainSessionStore.set*(...)          │
+    ▼                              Read from the session store
+Save to the session store          chainSessionStore.getReview(sessionId, nodeId)
+chainSessionStore.setReview(...)       │
     │                                  ▼
     ▼                              State available!
 Response sent
@@ -754,13 +741,15 @@ Response sent
 // WRONG: Storing cross-request state in context
 context.state.gates.retryLimitExceeded = true; // Lost!
 
-// WRONG: Mixing ephemeral and persistent reads
-const fromContext = context.state.gates.enforcementMode; // Ephemeral
-const fromSession = chainSessionStore.getReview(sessionId, nodeId); // Persistent
+// WRONG: Mixing per-request and persisted reads
+const fromContext = context.state.gates.retryLimitExceeded; // Per request
+const fromSession = chainSessionStore.getReview(sessionId, nodeId); // Persisted
 // These may be out of sync!
 
 // CORRECT: Single source of truth
-const isExceeded = chainSessionStore.isRetryLimitExceeded(sessionId); // Always persistent
+const review = chainSessionStore.getReview(sessionId, nodeId);
+const isExceeded =
+  review !== undefined && review.attemptCount >= review.maxAttempts; // Always persisted
 ```
 
 ---
@@ -855,7 +844,7 @@ Two context systems serve different purposes:
 
 - **Purpose**: Execution arguments and step results for reproducibility
 - **Scope**: Execution sessions
-- **Storage**: SQLite (`argument_history` table)
+- **Storage**: SQLite (`kv_state` table, key `arg_history`)
 - **Use cases**: Gate reviews, debugging, step replay
 
 ```mermaid
