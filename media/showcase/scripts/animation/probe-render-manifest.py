@@ -4,7 +4,10 @@
 usage: probe-render-manifest.py <out/<shot>/render-manifest.json> [--json out]
        probe-render-manifest.py --all <out dir> [--json out]        every <out>/*/render-manifest.json
 Per manifest (written by `npm run render -- <shot>`, scripts/animation/render-cached.mjs):
-  layers    figure, props, world, light and camera are all there; a layer taken out of the manifest is named.
+  layers    figure, props, world, light, light-sdf and camera are all there; a layer taken out of the manifest is named.
+  light-sdf the light layer (D98) reads the figure and props layers and runs on a GPU path: its `layer:<name>` inputs are those layers' cacheKeys (what a drawing of theirs reads at draw time) and are hashed again from the
+            files on disk, so an edit under the figure or props names light-sdf stale as well; its `backend:name` input is the hash of the browser and WebGL renderer the render recorded (`backend` of the manifest and of the layer),
+            and a manifest whose backend was edited, or recorded no backend, is refused by name.
   inputs    every file or JSON subtree (`path#a.b`) a layer read is hashed again from the disk; a layer whose hash differs from the manifest's, or whose `inputsHash` is not the hash of its
             own inputs, is STALE, and the input that changed is named (a contract edited after the render).
   frames    every frame of the range has a row naming drawings its layers hold, and its composed file (out/<shot>-seq/element-NNN.png) exists with the hash the row recorded.
@@ -23,7 +26,7 @@ import argparse, copy, glob, hashlib, json, os, sys, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from probe_common import Probe, die
 
-REQUIRED = ["figure", "props", "world", "light", "camera"]
+REQUIRED = ["figure", "props", "world", "light", "light-sdf", "camera"]
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))      # media/showcase
 
 
@@ -53,6 +56,12 @@ def input_hash(spec, root):
 def inputs_hash(inputs): return sha256_bytes("\n".join(f"{k}={inputs[k]}" for k in sorted(inputs)).encode("utf-8"))
 
 
+def drawing_inputs_hash(layer, root):
+    """The cacheKey a layer's inputs give today: the files hashed again from the disk, the `code:` entry as recorded (the source closure is checked apart, under codeVersion), the projectionOnly ones left out."""
+    inputs = {k: (v if k.startswith(("code:", "backend:")) else input_hash(k, root)) for k, v in layer.get("inputs", {}).items() if not k.startswith("layer:")}
+    return inputs_hash({k: v for k, v in inputs.items() if k not in layer.get("projectionOnly", [])})
+
+
 def check_manifest(m, root, manifest_dir=None):
     """[(code, layer-or-frame, text)] for everything wrong with manifest `m` read against the files under `root`."""
     bad = []
@@ -61,7 +70,18 @@ def check_manifest(m, root, manifest_dir=None):
         if name not in layers: bad.append(("missing-layer", name, f"the {name} layer is not in the manifest"))
     for name, layer in layers.items():
         inputs = layer.get("inputs", {})
-        changed = [k for k in inputs if not k.startswith("code:") and input_hash(k, root) != inputs[k]]
+        changed = [k for k in inputs if not k.startswith(("code:", "layer:", "backend:")) and input_hash(k, root) != inputs[k]]
+        for k in inputs:
+            if k.startswith("layer:"):                          # a layer this one reads: its cacheKey today against the one recorded here and the one the manifest records for it
+                other = layers.get(k[6:])
+                if other is None: bad.append(("layer-input", name, f"the {name} layer reads {k[6:]}, which the manifest does not hold")); continue
+                if inputs[k] != other.get("cacheKey"): bad.append(("layer-input", name, f"the {name} layer's {k} is not the cacheKey the manifest records for the {k[6:]} layer: the manifest was edited or is damaged"))
+                elif drawing_inputs_hash(other, root) != inputs[k]: changed.append(k)
+            if k.startswith("backend:"):
+                rec = m.get("backend")
+                if not rec or not rec.get("name"): bad.append(("backend", name, f"the {name} layer depends on the backend and the manifest records none"))
+                elif sha256_bytes(rec["name"].encode("utf-8")) != inputs[k]: bad.append(("backend", name, f"the {name} layer's backend input is not the hash of the recorded backend ({rec['name'][:60]}...): the manifest was edited or is damaged"))
+                elif layer.get("backend") and layer["backend"].get("name") != rec["name"]: bad.append(("backend", name, f"the {name} layer records a different backend than the render did"))
         if inputs_hash(inputs) != layer.get("inputsHash"):
             bad.append(("inputs-hash", name, f"the {name} layer's inputsHash is not the hash of its own inputs: the manifest was edited or is damaged"))
         drawing = {k: v for k, v in inputs.items() if k not in layer.get("projectionOnly", [])}
@@ -121,7 +141,7 @@ def check_plan(m, conf, rows, lo, hi):
     for f in sorted(set(chosen) - compared): bad.append(("plan-frame", "confirm", f"frame {f} is in the plan and was never compared with the browser's"))
     for f, c in chosen.items():
         if not c.get("reasons"): bad.append(("plan-reason", "confirm", f"frame {f} is in the plan with no reason"))
-    layer_names = ("figure", "props", "world", "light")
+    layer_names = ("figure", "props", "world", "light", "light-sdf")
     cands = [f for f in range(lo + 1, hi) if f in rows and f - 1 in rows and any(rows[f]["layers"].get(l) != rows[f - 1]["layers"].get(l) for l in layer_names) and rows[f].get("magnification", 0) > plan["magnified"]]
     if plan.get("candidates") != len(cands):
         bad.append(("plan-candidates", "confirm", f"the plan counts {plan.get('candidates')} frames where a drawing changes above magnification {plan['magnified']}; the frame rows hold {len(cands)}"))
@@ -140,17 +160,19 @@ def fixture(tmp):
     with open(os.path.join(tmp, "v3", "keys.json"), "w") as f: json.dump({"keys": [1, 2]}, f)
     for n in range(4):
         with open(os.path.join(tmp, "out", "demo-seq", f"element-{n:03d}.png"), "wb") as f: f.write(f"frame-{n}".encode())
-    specs = {"figure": ["v3/keys.json", "v3/layout.json#staging"], "props": ["v3/layout.json#staging"], "world": ["v3/keys.json"], "light": ["v3/keys.json"], "camera": ["v3/layout.json#cameraPose"]}
+    specs = {"figure": ["v3/keys.json", "v3/layout.json#staging"], "props": ["v3/layout.json#staging"], "world": ["v3/keys.json"], "light": ["v3/keys.json"], "light-sdf": ["v3/keys.json"], "camera": ["v3/layout.json#cameraPose"]}
+    backend = {"name": "FixtureChrome/1 | FixtureGPU (planted)"}
     layers = {}
     for name, files in specs.items():
         inputs = {f: input_hash(f, tmp) for f in files}
         projection_only = ["v3/keys.json"] if name == "figure" else []
+        if name == "light-sdf": inputs["layer:figure"] = inputs_hash({k: v for k, v in layers["figure"]["inputs"].items() if k not in layers["figure"]["projectionOnly"]}); inputs["backend:name"] = sha256_bytes(backend["name"].encode("utf-8"))
         ids = ["props-a", "props-b", "props-c", "props-d"] if name == "props" else [f"{name}-a"]
-        layers[name] = {"inputs": inputs, "inputsHash": inputs_hash(inputs), "projectionOnly": projection_only, "cacheKey": inputs_hash({k: v for k, v in inputs.items() if k not in projection_only}), "drawings": [{"id": i, "frames": [0]} for i in ids]}
+        layers[name] = {"inputs": inputs, "inputsHash": inputs_hash(inputs), "projectionOnly": projection_only, "cacheKey": inputs_hash({k: v for k, v in inputs.items() if k not in projection_only}), "drawings": [{"id": i, "frames": [0]} for i in ids], **({"backend": backend} if name == "light-sdf" else {})}
     frames = [{"frame": n, "magnification": [0.5, 2.0, 2.0, 1.0][n], "layers": {k: (["props-" + "abcd"[n]] if k == "props" else [f"{k}-a"]) for k in specs}, "outputHash": sha256_bytes(f"frame-{n}".encode())} for n in range(4)]
     confirm_frames = [{"frame": n, "beyond": 3, "allowance": 92, "largest": 2} for n in (0, 1, 2)]
     plan = {"rule": "fixture", "cap": 40, "magnified": 1.5, "candidates": 2, "trimmed": False, "chosen": [{"frame": 0, "reasons": ["default"]}, {"frame": 1, "reasons": ["a drawing changes at magnification 2"]}, {"frame": 2, "reasons": ["a drawing changes at magnification 2"]}]}
-    return {"shot": "demo", "range": [0, 4], "layers": layers, "codeFiles": [], "codeVersion": "", "frames": frames, "confirm": {"tolerance": {"levels": 2, "share": 0.0001}, "plan": plan, "frames": confirm_frames}}
+    return {"shot": "demo", "range": [0, 4], "layers": layers, "codeFiles": [], "codeVersion": "", "backend": backend, "frames": frames, "confirm": {"tolerance": {"levels": 2, "share": 0.0001}, "plan": plan, "frames": confirm_frames}}
 
 
 def control(pr):
@@ -164,7 +186,7 @@ def control(pr):
         results["a camera value edited after the render"] = (any(c == "stale-layer" and n == "camera" for c, n, _ in edited) and not any(n in ("figure", "props") for c, n, _ in edited), "names camera only")
         with open(os.path.join(tmp, "v3", "layout.json"), "w") as f: json.dump({"cameraPose": {"end": {"zoom": 0.6}}, "staging": {"x": 2}}, f)
         staged = check_manifest(m, tmp)
-        results["the staging edited after the render"] = ({n for c, n, _ in staged if c == "stale-layer"} == {"figure", "props"}, "names figure and props, not camera")
+        results["the staging edited after the render"] = ({n for c, n, _ in staged if c == "stale-layer"} == {"figure", "props", "light-sdf"}, "names figure and props, and light-sdf through the figure it reads, not camera")
         with open(os.path.join(tmp, "v3", "layout.json"), "w") as f: json.dump({"cameraPose": {"end": {"zoom": 0.6}}, "staging": {"x": 1}}, f)
         gone = copy.deepcopy(m); del gone["layers"]["light"]
         results["the light layer removed"] = (any(c == "missing-layer" and n == "light" for c, n, _ in check_manifest(gone, tmp)), "names light")
@@ -180,6 +202,12 @@ def control(pr):
         results["a plan frame the browser never drew"] = (any(c == "plan-frame" for c, _, _ in check_manifest(unseen, tmp)), "names frame 3")
         inflated = copy.deepcopy(m); inflated["confirm"]["plan"]["candidates"] = 5
         results["a plan that counts candidates the rows do not hold"] = (any(c == "plan-candidates" for c, _, _ in check_manifest(inflated, tmp)), "names the count")
+        moved_backend = copy.deepcopy(m); moved_backend["backend"]["name"] = "OtherChrome/2 | OtherGPU"
+        results["a backend edited after the render"] = (any(c == "backend" and n == "light-sdf" for c, n, _ in check_manifest(moved_backend, tmp)), "names light-sdf")
+        no_backend = copy.deepcopy(m); del no_backend["backend"]
+        results["a light layer with no backend recorded"] = (any(c == "backend" and n == "light-sdf" for c, n, _ in check_manifest(no_backend, tmp)), "names light-sdf")
+        forged = copy.deepcopy(m); forged["layers"]["light-sdf"]["inputs"]["layer:figure"] = "0" * 64
+        results["a layer input that is not the layer's cacheKey"] = (any(c == "layer-input" and n == "light-sdf" for c, n, _ in check_manifest(forged, tmp)), "names light-sdf")
         planless = copy.deepcopy(m); del planless["confirm"]["plan"]
         results["a confirm block with no plan"] = (any(c == "no-plan" for c, _, _ in check_manifest(planless, tmp)), "names the missing plan")
         os.remove(os.path.join(tmp, "out", "demo-seq", "element-000.png"))

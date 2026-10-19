@@ -2,6 +2,7 @@
 """Runs every episode-tier frame probe and prints one line each: name, pass/fail, control. This is what the animation-animatic-probes gate runs.
 
 usage: probe-all.py --shots v3/poses --frames-root out --joints-root out [--xsheet-root out] [--json out]      (per-shot mode, below)
+       probe-all.py --contract v3/poses v3/keys v3/charts [--materials v3/materials.json]      (the gate of the pose step, below)
        probe-all.py <frames-dir> --timeline v3/timeline.json --xsheet v3/xsheet.json [--second-frames <dir> [--subset]] [--skip-determinism] [--partial] [--figure-frames <dir>] [--figure-line-frames <dir>] [--shot <id>] [--poses v3/poses/<shot>.json [--joints out/<shot>-joints.json]] [--json out]
 Probes: twos-ones, hold-band, screen-time, eye-trace, loop-closure, colour-continuity (frames mode; pairs from light.json beside the timeline when it
 exists, else shots.json) and determinism. Determinism needs a second render of the same frames (--second-frames; --subset when it is a sampled
@@ -9,6 +10,10 @@ re-render): without one it prints NOT RUN and the exit code is 2, because a prob
 purpose and prints SKIPPED. --figure-frames <dir> (the figure-only render, Animatic65Figure) hands the twos and hold probes the figure layer: crossing windows are no longer exempt for the figure's pose. --figure-line-frames <dir> (Animatic65FigureLine, the line phases' frames) hands the loop probe the figure as the line world draws it, on which it reads closure and clipping (its own line). --shot <id> hands every
 probe one shot's slice of the timeline (screen time, eye trace, colour and determinism read it too). --poses adds probe-inbetweens.py (arcs, spacing, overlap, moving holds, pixel ease) on the same frames, with the shot's joints dump
 (--joints, default out/<pose sheet name>-joints.json); without --poses nothing changes. Exit 0 when every probe passes, 1 when any fails, 2 when any could not run (input error or a control that did not trip).
+
+--contract POSES KEYS CHARTS: the gate of the pose step (animation-pose-contract), one line per probe: probe-poses.py --joints solved over the three directories, then for every pose sheet that has a secondary made of a
+material the joints the chart plays (`node scripts/animation/played-joints.mjs <shot>`, written to a scratch file) through probe-followthrough.py with --materials. A sheet with no secondary made of a material
+has hand-written lags only and is SKIPPED, and says so. Needs no frames. Exit 0 only when every probe passes, 1 when one fails, 2 when one could not run.
 
 --shots POSES_DIR: per-shot mode, the gate of the pose pass. For every POSES_DIR/<shot>.json it runs twos-ones, hold-band (with --no-pops) and inbetweens on <frames-root>/<shot>-figure-seq/
 with <joints-root>/<shot>-joints.json and <xsheet-root>/<shot>-xsheet.json (default: the frames root; the shot's own timeline is derived from that exposure sheet) and prints one line per probe per
@@ -73,6 +78,41 @@ def shots_mode(a):
     sys.exit(worst)
 
 
+def contract_mode(a):
+    """One line per probe (poses, then followthrough per shot): the pose step's gate."""
+    poses_dir, keys_dir, charts_dir = a.contract
+    for d in (poses_dir, keys_dir, charts_dir):
+        if not os.path.isdir(d): print(f"input error: {d} is not a directory"); sys.exit(2)
+    lines, worst, results = [], 0, []
+    def record(shot, name, code, res, stdout):
+        nonlocal worst
+        ctl = (res or {}).get("control", {}).get("text") if res else None
+        status = {0: "pass", 1: "FAIL"}.get(code, "ERROR")
+        lines.append(f"{shot} · {name} · {status} · control: {ctl or '(no control line: ' + (stdout.strip().splitlines() or ['no output'])[-1] + ')'}")
+        if code != 0: lines.extend(f"    {l.strip()}" for l in stdout.splitlines() if l.strip().startswith(("FAIL", "input error", "refused")))
+        worst = 2 if code == 2 or worst == 2 else max(worst, code); results.append({"shot": shot, "probe": name, "status": status, "code": code, "control": ctl})
+    code, res, out = run("probe-poses.py", [poses_dir, keys_dir, charts_dir, "--joints", "solved"])
+    record("all shots", "poses", code, res, out)
+    root = os.path.dirname(os.path.dirname(HERE))
+    for fn in sorted(f for f in os.listdir(poses_dir) if f.endswith(".json")):
+        shot = fn[:-5]; path = os.path.join(poses_dir, fn)
+        with open(path) as f: sheet = json.load(f)
+        if not any(c.get("material") for c in sheet.get("secondaries", [])):
+            lines.append(f"{shot} · followthrough · SKIPPED · no secondary made of a material: its lags are hand-written (lagDrawings)"); results.append({"shot": shot, "probe": "followthrough", "status": "SKIPPED"}); continue
+        with tempfile.TemporaryDirectory() as tmp:
+            dump = os.path.join(tmp, f"{shot}-joints.json")
+            r = subprocess.run(["node", os.path.join(HERE, "played-joints.mjs"), shot, "--out", dump], capture_output=True, text=True, cwd=root)
+            if r.returncode != 0: lines.append(f"{shot} · followthrough · ERROR · played-joints.mjs exit {r.returncode}: {(r.stderr or r.stdout).strip().splitlines()[-1][:200] if (r.stderr or r.stdout).strip() else ''}"); worst = 2; continue
+            code, res, out = run("probe-followthrough.py", [dump, "--materials", a.materials, "--poses", path])
+            record(shot, "followthrough", code, res, out)
+    print("\n".join(lines))
+    ok = sum(1 for r in results if r.get("code") == 0)
+    print(f"{'pass' if worst == 0 else 'FAIL' if worst == 1 else 'ERROR'}: probe-all --contract - {ok} of {sum(1 for r in results if 'code' in r)} probe runs passed, {sum(1 for r in results if r['status'] == 'SKIPPED')} shot(s) skipped")
+    if a.json:
+        with open(a.json, "w") as f: json.dump({"exit": worst, "probes": results}, f, indent=2)
+    sys.exit(worst)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("frames", nargs="?", default=None); ap.add_argument("--timeline", default="v3/timeline.json"); ap.add_argument("--xsheet", default=None)
@@ -82,7 +122,9 @@ def main():
     ap.add_argument("--poses", default=None, help="v3/poses/<shot>.json: also run probe-inbetweens on the frames"); ap.add_argument("--joints", default=None, help="out/<shot>-joints.json (default beside out/, named for the pose sheet)")
     ap.add_argument("--shots", default=None, metavar="POSES_DIR", help="per-shot mode: every pose sheet in this directory"); ap.add_argument("--frames-root", default="out"); ap.add_argument("--joints-root", default="out")
     ap.add_argument("--xsheet-root", default=None)
+    ap.add_argument("--contract", nargs=3, default=None, metavar=("POSES", "KEYS", "CHARTS"), help="the pose step's gate: probe-poses, then probe-followthrough per shot"); ap.add_argument("--materials", default="v3/materials.json")
     a = ap.parse_args()
+    if a.contract: return contract_mode(a)
     if a.shots: return shots_mode(a)
     if not a.frames: ap.error("give <frames-dir>, or --shots <poses-dir>")
     shot = ["--shot", a.shot] if a.shot else []

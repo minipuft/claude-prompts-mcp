@@ -14,10 +14,11 @@ the path of a joint is the pose before the move followed by one position per dra
   spacing  on a move of at least 4 drawings, the lead wrist's per-drawing distances ease: the first and the last are each smaller than the largest in the
            middle. All distances within 15 percent of each other is "even spacing".
   (a secondary that names the `side` the move leads with does not lag on it: its joints are the body's there, for the arcs, the overlap and the kinds)
-  overlap  each secondary's joints come within 10 percent of their end pose (of their travel) at least 2 x `lagDrawings` frames after the joints that belong to
+  (a secondary made of a `material` is counted on overlap and measured by probe-followthrough.py: its lag is the chain's, not a delay, and the arrival test below reads a delay)
+  overlap  each secondary's joints come within 10 percent of their end pose (of their travel) at least their lag (a material's declared `lagFrames`, else 2 x `lagDrawings`) frames after the joints that belong to
            no secondary do (frames: poseChartFrom delays the part that many, whatever length the move's own drawings have). Drawings are followed up to 8 frames into the next hold, because a part that trails arrives after the key; the end pose is the one at the end of that tail.
   moving holds  over a declared moving hold the ink centroid of the figure crop drifts: a net shift of at least 0.5 stage px, no step of 2 frames larger than driftPx x
-           (stage px per key px) + 0.5 px. The hold runs from the key's frame + 2 x the largest lagDrawings of any secondary (until then a secondary is still landing: overlap,
+           (stage px per key px) + 0.5 px. The hold runs from the key's frame + the longest lag of any secondary still following (a material's `lagFrames`, else 2 x `lagDrawings`) (until then a secondary is still landing: overlap,
            not a hold) to the first drawing of the move that leaves the key, or to the end of the drift (`over` frames), whichever comes first: once the figure has stopped drifting there is nothing left to measure, and a camera that zooms through the hold only adds inversion noise. Net shift, not change: redrawn contours (boil) change pixels and sum to nothing.
            Stage px per key px: --stage-per-key, else the pose sheet's layout `staging.human.standingHeightPx` over heightPx.
   pixel ease  the figure crop's changed pixels at each drawing of a move follow the same ease: first and last smaller than the largest in the middle
@@ -80,14 +81,14 @@ def drawings_in(rows, move):
 
 def active_secondaries(sheet, move):
     """The secondaries that lag on `move`: all but those whose `side` is the side the move leads with (they move with the body there; activeSecondaries in pose.ts)."""
-    return [c for c in sheet.get("secondaries", []) if not (c.get("side") and c["side"] == move["lead"])]
+    return [c for c in sheet.get("secondaries", []) if not (c.get("side") and c["side"] == move["lead"]) and secondary_follows(c, move["start"])]
 
 
 def kinds_of(sheet, move, frames_of, joint=None):
     """The declared kind of the drawing each path point shows: the kind of the last breakdown of this move on or before the frame the point's joint is showing, None for the pose before the move and
-    for the key itself and what follows it. A part that trails (a joint of a secondary) shows the pose of 2 x `lagDrawings` frames earlier, so at the key's frame it may still show the overshoot."""
+    for the key itself and what follows it. A part that trails (a joint of a secondary) shows the pose of its lag (a material's `lagFrames`, else 2 x `lagDrawings`) frames earlier, so at the key's frame it may still show the overshoot."""
     marks = sorted((b["frame"], b["kind"]) for b in sheet.get("breakdowns", []) if b["between"] == [move["from"], move["to"]])
-    lag = max([2 * c["lagDrawings"] for c in active_secondaries(sheet, move) if joint in c["joints"]], default=0)
+    lag = max([secondary_lag_frames(c) for c in active_secondaries(sheet, move) if joint in c["joints"]], default=0)
     return [None if f is None or f - lag >= move["end"] else next((k for fr, k in reversed(marks) if fr <= f - lag), None) for f in frames_of]
 
 
@@ -157,6 +158,8 @@ def analyse(sheet, rows, frames, xs, stage_per_key, crop_arg=None, thresh=24, mi
         # overlap
         total = len(ds)
         for c in act:
+            if c.get("material"):                                    # a part made of a material: its lag, settle and overshoot are measured against the material by probe-followthrough.py (the 10 percent arrival of this check reads a pure delay)
+                res["overlap"].append((f"{name} {c['name']}", True, f"secondary {c['name']} in the move {mv['from']} -> {mv['to']}: made of {c['material']}, its lag, settle and overshoot are measured by probe-followthrough.py")); continue
             settled = rows.get(mv["tailEnd"]) or ds[-1][1]          # the key's pose once its trailing parts have arrived
             sj = [j for j in c["joints"] if j in pose0]; ends = [settled[j] for j in sj]
             trav = [float(np.hypot(*(np.array(e) - np.array(pose0[j])))) for j, e in zip(sj, ends)]
@@ -166,7 +169,7 @@ def analyse(sheet, rows, frames, xs, stage_per_key, crop_arg=None, thresh=24, mi
             sa = arrival([path_of(pose0, ds, sj[i]) for i in keep], [ends[i] for i in keep], mv["start"], total, [trav[i] for i in keep])
             pends = [settled[j] for j in pj]
             pa = arrival([path_of(pose0, ds, j) for j in pj], pends, mv["start"], total, [float(np.hypot(*(np.array(e) - np.array(pose0[j]))))for j, e in zip(pj, pends)])
-            lag = 2 * c["lagDrawings"]                  # frames: lagDrawings is a count of drawings on twos (poseChartFrom delays the part lagDrawings x 2 frames), whatever the move's own drawings last
+            lag = secondary_lag_frames(c)               # frames: a material's declared lag, else lagDrawings x 2 (poseChartFrom delays the part that many frames), whatever the move's own drawings last
             fa, fs = (ds[pa - 1][0] if pa else None), (ds[sa - 1][0] if sa else None)
             ok = pa is not None and (sa is None or fs - fa >= lag)
             text = (f"secondary {c['name']} in the move {mv['from']} -> {mv['to']}: the body is within {int(ARRIVE * 100)}% of its end pose on frame {fa}, "
@@ -185,7 +188,7 @@ def analyse(sheet, rows, frames, xs, stage_per_key, crop_arg=None, thresh=24, mi
         img0 = load_rgb(frames[first]); box, s = crop_box_px(img0.shape, crop_arg)
         for h in sheet.get("movingHolds", []):
             key = next(k for k in sheet["keys"] if k["name"] == h["key"]); end = min(key["frame"] + h["over"], max(key["frame"] + (key.get("hold") or h["over"]), first_drawing_after(sheet, key)))
-            begin = key["frame"] + 2 * max([c["lagDrawings"] for c in sheet.get("secondaries", [])], default=0)   # the last secondary has landed: until then the figure moves as overlap
+            begin = key["frame"] + max([secondary_lag_frames(c) for c in sheet.get("secondaries", []) if secondary_follows(c, key["frame"])], default=0)   # the last secondary has landed: until then the figure moves as overlap
             fs = [f for f in range(begin, end, 2) if f in frames]          # the hold's own drawings: the frame the next move starts on is not one
             if len(fs) < 3: res["moving holds"].append((h["key"], False, f'moving hold on "{h["key"]}": frames {begin}-{end - 1} are not in the sequence')); continue
             cs = []

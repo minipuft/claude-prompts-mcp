@@ -25,10 +25,12 @@
     "v3/proposals/p002-materials-as-a-contract-not-a-3d-engine.json",
     "v3/proposals/p003-light-as-a-signed-distance-shader-layer.json",
     "v3/proposals/p004-a-direction-vocabulary-one-skill-referen.json",
+    "v3/proposals/p005-the-light-layers-first-numbers-shadow-so.json",
+    "v3/proposals/p006-which-drawn-thing-is-which-material-for.json",
     "v3/materials.json",
     "v3/materials.schema.json"
   ],
-  "inputsHash": "eb25d0ea2473048364db0df7156d55c8d6f909f45b1aa14301258f4021e8fd7f",
+  "inputsHash": "6c52ab421d989bba6939a8056b65ac3f300fc99afcd16562ced39fc97fec6cb7",
   "tracks": [
     {
       "name": "pacing",
@@ -6142,6 +6144,97 @@
               "ledger": "eagle_board.py apply already records reference -> contract change; the same ledger entry is written for a material or ruling change, so 'what led to what' is one query"
             },
             "file": "v3/proposals/p004-a-direction-vocabulary-one-skill-referen.json"
+          }
+        },
+        {
+          "start": 0,
+          "end": 180,
+          "beat": "arrival",
+          "label": "p005 The light layer's first numbers: shadow softness per class, bounce strength, the lit volume",
+          "data": {
+            "id": "p005",
+            "title": "The light layer's first numbers: shadow softness per class, bounce strength, the lit volume",
+            "kind": "change",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "arrival"
+            },
+            "text": "Row 8.6 built the light layer (D98) and the rulings name no numbers for it, so it ships with the contract's first values, all in src/library/light/sdf.ts: penumbra sharpness k of min(k*h/t) by shadow class stipple-1 soft 4, stipple-2 medium 12, stipple-3 hard 48 (none casts nothing), and the dot size of the shadow's own edge 1, 2 and 3 px; one bounce at gain 1.0 over 48 px of the lit edge, drawn at 0.5 of the pair colour and always under the direct dots; the lit volume as density 1/(1+(d/r0)^2) with r0 = 110 + 140 x intensity stage px, cut to nothing at a reach of 380 + 320 x intensity, floored at a density of 0.08 (the light script declares the emitter's luma floor, 200, not a density floor); the dots drawn at 0.6 of the emitter's colour times its intensity so the lamp stays the brightest thing; the solid the emitter sits in lets its light out within 140 stage px (the gadget, which is the lamp, entirely). On s01 every solid is stipple-2 (the cast is `body`, the box, gadget and kit pieces are `box`), so the three classes are not yet told apart on screen. Grade by eye on frames 0, 90 and 300 of v3/studies/light-01.md; a number you change is a one-line edit.",
+            "references": [
+              {
+                "id": "seuss-no-one-youer",
+                "kind": "board card",
+                "section": "1 · World architecture",
+                "title": "There Is No One Alive That Is You-er Than You",
+                "borrow": [
+                  "black field with one blue cloud as the only large light mass",
+                  "clock-stalks and curling stalks with flag leaves = the prompt object",
+                  "sparse colored stars, pale thin outlines"
+                ],
+                "governs": [
+                  "D50",
+                  "C5",
+                  "C8"
+                ]
+              }
+            ],
+            "before": {
+              "note": "light is the lamp's core and the feathered radiance mask; no occlusion, no shadow, no bounce"
+            },
+            "after": {
+              "files": [
+                "src/library/light/sdf.ts"
+              ],
+              "note": "soft/medium/hard shadows at k 4/12/48, bounce gain 1.0 at 0.5 luma, density floor 0.08, dot gain 0.6, owner seat 140 px; all first values"
+            },
+            "file": "v3/proposals/p005-the-light-layers-first-numbers-shadow-so.json"
+          }
+        },
+        {
+          "start": 0,
+          "end": 180,
+          "beat": "arrival",
+          "label": "p006 Which drawn thing is which material for the light, and the shot palette the eye-trace fills lack",
+          "data": {
+            "id": "p006",
+            "title": "Which drawn thing is which material for the light, and the shot palette the eye-trace fills lack",
+            "kind": "change",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "arrival"
+            },
+            "text": "Two choices the rulings leave open. (1) materials.json has no entry for a character, so the light reads the human, the Codex and Clawd as `body` (albedo 0.3, stipple-2) and the box, the gadget and the kit's pieces as `box` (albedo 0.15, stipple-2); the human's cloak and hair are not told apart from her body yet (the parts rig draws one canvas), so the hair's soft stipple-1 and the cloth's albedo 0.25 do not show. The bubble is `glass` (transmissive) and is not in the occluder mask. A per-part split of the human, or a `cast` material for Clawd and Codex, would change what casts and what bounces. (2) probe-eyetrace masks the fixed fills of v3/roles.json, which is written from the settled palette and not from the shot's own (src/library/tokens.ts s01Turrell): on the unlit s01 frames the brightest non-fill pixels are already 5-8 % of the width from the seam on 17 of 69 sampled frames (the box's yellow ribbon is darker than the accent hex, the title mark is white), and the light layer moves the brightest region past the 3 % limit on 7 more (six at 3.3-3.7 % with the lid open, frames 72-132, and frame 222 at 6.6 %). Adding the shot palette to compile-roles.mjs would make C29 measure the light; until then probe-light.py reads the layer against the same frames without it.",
+            "references": [
+              {
+                "id": "seuss-no-one-youer",
+                "kind": "board card",
+                "section": "1 · World architecture",
+                "title": "There Is No One Alive That Is You-er Than You",
+                "borrow": [
+                  "black field with one blue cloud as the only large light mass",
+                  "clock-stalks and curling stalks with flag leaves = the prompt object",
+                  "sparse colored stars, pale thin outlines"
+                ],
+                "governs": [
+                  "D50",
+                  "C5",
+                  "C8"
+                ]
+              }
+            ],
+            "before": {
+              "note": "roles.json lists the settled palette only; characters have no material"
+            },
+            "after": {
+              "note": "decide: a cast material and a per-part human split; compile-roles.mjs reads the shot palettes (s01Turrell)"
+            },
+            "file": "v3/proposals/p006-which-drawn-thing-is-which-material-for.json"
           }
         }
       ]

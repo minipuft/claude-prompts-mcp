@@ -19,6 +19,7 @@
     "animatic": "remotion render src/index.ts Animatic65 out/animatic-01.mp4 --codec=h264 --scale=0.5 --concurrency=4",
     "xsheet": "node scripts/animation/xsheet.mjs",
     "joints": "node scripts/animation/joints.mjs",
+    "played-joints": "node scripts/animation/played-joints.mjs",
     "check:pose": "node scripts/animation/check-pose.mjs",
     "solve-poses": "node scripts/animation/solve-poses.mjs",
     "plates": "node scripts/animation/plates-from-poses.mjs",

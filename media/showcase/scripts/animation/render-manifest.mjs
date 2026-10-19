@@ -8,6 +8,10 @@
 //           the browser rasterises the layers inside one camera transform from everything they hold, so a prop drawn apart from the motes beside it is not the prop the whole frame draws (measured)
 //   world   the title lockup (the beat's contracts and the mark)
 //   light   the lamp's core and the grain over the picture (chart, light contract, staging)
+//   light-sdf  the light as a signed-distance field (D98): the `occluders` pass draws every solid thing flat in its material's code colour, the `light-sdf` pass floods that mask into a distance field and lights the frame
+//           from the emitter (falloff, soft shadow, one bounce) as stipple dots, on the GPU. It reads the figure and props layers (the occluders are drawn from the same projections: `layer:figure` and `layer:props`
+//           in its inputs are those layers' cacheKeys, what a drawing of theirs reads at draw time), the light script, the material table, the shader source, and the BACKEND (`backend:name`: the browser's user agent
+//           and the WebGL renderer, recorded per render, because a shader's bytes are a function of the GPU path as well as of its inputs)
 //   camera  the pose of every frame (layout, chart span); it is baked into the drawings of every layer under it, so it is part of each drawing's id and has no drawings of its own
 //           (resampling a drawing made at the identity camera does not match the browser's own raster at any zoom but 1: scripts/animation/README.md "Render cache", Camera)
 // A drawing's id is the hash of its projection: two frames whose projection is the same JSON draw the same pixels. A layer's `inputsHash` is the hash of the files it reads (a
@@ -59,6 +63,12 @@ const SHOTS = {
       props: {files: [`v3/charts/${shot}.json`, 'v3/light.json', `v3/layouts/${shot}.json#staging`, 'v3/blocking/test-scene.json', 'v3/worlds/home.json', 'v3/blocking/arrival.json', 'v3/blocking/everything-at-once.json', 'v3/timeline.json']},
       world: {files: ['v3/blocking/test-scene.json', 'v3/worlds/home.json', 'v3/blocking/arrival.json', 'v3/blocking/everything-at-once.json', 'v3/timeline.json', 'public/mark-reversed.svg']},
       light: {files: [`v3/charts/${shot}.json`, 'v3/light.json', `v3/layouts/${shot}.json#staging`, 'v3/blocking/arrival.json#emitter', 'v3/blocking/everything-at-once.json#emitter']},
+      // the light as a signed-distance field: the occluder mask is drawn from the staging and the blocking (the figure and props layers' own draw-time inputs come in as `reads`), the light from the script, the materials and the shader
+      'light-sdf': {
+        files: [`v3/charts/${shot}.json`, 'v3/light.json', 'v3/materials.json', `v3/layouts/${shot}.json#staging`, 'v3/blocking/arrival.json', 'v3/blocking/everything-at-once.json', 'v3/timeline.json', 'src/library/light/sdfShaders.ts'],
+        reads: ['figure', 'props'],
+        backend: true,
+      },
       camera: {files: [`v3/layouts/${shot}.json#cameraPose`, `v3/layouts/${shot}.json#figure`, `v3/layouts/${shot}.json#emitter`, `v3/charts/${shot}.json#camera`]},
     }),
   },
@@ -78,11 +88,11 @@ const camOf = (c) => ({x: c.x, y: c.y, zoom: c.zoom, rot: c.rotation});
  * The manifest of `shot` before anything is rendered: layers with inputs and drawings (id, pass, frames), frames with their drawing ids, camera and parameters.
  * Everything the render fills in (output hashes, hit/miss, confirm) is left null/absent.
  */
-export const computeManifest = async (shot) => {
+export const computeManifest = async (shot, {backend} = {}) => {
   const cfg = SHOTS[shot];
   if (!cfg) throw new Error(`render-manifest: no renderer wiring for shot ${shot} (known: ${Object.keys(SHOTS).join(', ')})`);
   const mod = await loadTs(cfg.passes);
-  const {PASSES, PASS_LAYER, projectFrame, SHOT_FRAMES, magnifiedChangeOf} = mod;
+  const {PASSES, PASS_LAYER, PASS_INPUT, projectFrame, SHOT_FRAMES, magnifiedChangeOf} = mod;
   const [first, last] = SHOT_FRAMES;
   const closure = await sourceClosure(cfg.codeEntries);
   const declared = cfg.layers(shot);
@@ -92,25 +102,37 @@ export const computeManifest = async (shot) => {
   const code = Object.fromEntries(closure.code.map((f) => [f, inputHash(f)]));
   const codeVersion = hashInputs(code);
 
+  const recorded = backend ?? readRecordedBackend(shot);
   const layers = {};
   for (const [name, spec] of Object.entries(declared)) {
     const inputs = {...Object.fromEntries([...new Set(spec.files)].sort().map((f) => [f, inputHash(f)])), [`code:${codeVersion.slice(0, 16)}`]: codeVersion};
+    // a layer that reads other layers' drawings hashes what those drawings read at draw time (their cacheKey); a layer that is a shader hashes the backend it ran on
+    for (const other of spec.reads ?? []) inputs[`layer:${other}`] = layers[other].cacheKey;
+    if (spec.backend) inputs[BACKEND_INPUT] = backendHash(recorded);
     const projectionOnly = [...new Set(spec.projectionOnly ?? [])].filter((f) => f in inputs).sort();
     const drawingInputs = Object.fromEntries(Object.entries(inputs).filter(([k]) => !projectionOnly.includes(k)));
-    layers[name] = {inputs, inputsHash: hashInputs(inputs), projectionOnly, cacheKey: hashInputs(drawingInputs), drawings: [], projections: {}, outputHash: null, status: null};
+    layers[name] = {inputs, inputsHash: hashInputs(inputs), projectionOnly, cacheKey: hashInputs(drawingInputs), drawings: [], projections: {}, outputHash: null, status: null, ...(spec.backend ? {backend: recorded} : {})};
   }
   const byId = new Map();
   const frames = [];
   let previous = null;
   for (let frame = first; frame < last; frame++) {
     const {passes, params} = projectFrame(frame);
-    const row = {frame, layers: {figure: [], props: [], world: [], light: [], camera: []}, camera: camOf(passes.figure.camera), magnification: Math.round(magnifiedChangeOf(previous, passes) * 1e4) / 1e4, params};
+    const row = {frame, layers: {figure: [], props: [], world: [], light: [], 'light-sdf': [], camera: []}, camera: camOf(passes.figure.camera), magnification: Math.round(magnifiedChangeOf(previous, passes) * 1e4) / 1e4, params};
     previous = passes;
+    const idOf = {};
     for (const pass of PASSES) {
-      const p = passes[pass];
+      let p = passes[pass];
       if (!p) continue;
       const layer = PASS_LAYER[pass];
+      // a pass that reads another pass's drawing names it in its projection: its id changes when that drawing does, and only then
+      const input = PASS_INPUT[pass];
+      if (input) {
+        if (!idOf[input.pass]) throw new Error(`render-manifest: pass ${pass} reads ${input.pass}, which frame ${frame} does not draw`);
+        p = {...p, [input.as]: idOf[input.pass]};
+      }
       const id = `${pass}-${sha256(JSON.stringify(p)).slice(0, 12)}`;
+      idOf[pass] = id;
       row.layers[layer].push(id);
       let d = byId.get(id);
       if (!d) {
@@ -123,13 +145,36 @@ export const computeManifest = async (shot) => {
     }
     frames.push(row);
   }
-  return {shot, fps: 30, range: [first, last], codeVersion, codeFiles: closure.code, layers, frames, config: cfg};
+  return {shot, fps: 30, range: [first, last], codeVersion, codeFiles: closure.code, backend: recorded, layers, frames, config: cfg};
+};
+
+/** The input key a backend-dependent layer carries: its value is the hash of the backend's name (`backend.name`: user agent and WebGL renderer). */
+export const BACKEND_INPUT = 'backend:name';
+export const backendHash = (backend) => sha256(backend?.name ?? 'unrecorded');
+/** The backend the last render of `shot` recorded, or null (nothing rendered yet, or rendered before the light layer existed). */
+const readRecordedBackend = (shot) => {
+  const p = path.join(root, 'out', shot, 'render-manifest.json');
+  try { return JSON.parse(fs.readFileSync(p, 'utf8')).backend ?? null; } catch { return null; }
+};
+/** The manifest with the backend the browser reported: the layers that depend on it are hashed again (inputsHash, cacheKey), nothing else moves. */
+export const withBackend = (m, backend) => {
+  m.backend = backend;
+  for (const [name, spec] of Object.entries(m.config.layers(m.shot))) {
+    if (!spec.backend) continue;
+    const L = m.layers[name];
+    L.inputs[BACKEND_INPUT] = backendHash(backend);
+    L.backend = backend;
+    L.inputsHash = hashInputs(L.inputs);
+    L.cacheKey = hashInputs(Object.fromEntries(Object.entries(L.inputs).filter(([k]) => !L.projectionOnly.includes(k))));
+  }
+  return m;
 };
 
 /** The manifest as written: layers without their projections (the renderer's input, not part of the record) and without the wiring. */
 export const manifestDocument = (m, extra = {}) => ({
   shot: m.shot, fps: m.fps, range: m.range, codeVersion: m.codeVersion, codeFiles: m.codeFiles,
-  layers: Object.fromEntries(Object.entries(m.layers).map(([k, l]) => [k, {inputs: l.inputs, inputsHash: l.inputsHash, projectionOnly: l.projectionOnly, cacheKey: l.cacheKey, drawings: l.drawings, outputHash: l.outputHash, status: l.status, ...(l.counts ? {counts: l.counts} : {})}])),
+  backend: m.backend ?? null,
+  layers: Object.fromEntries(Object.entries(m.layers).map(([k, l]) => [k, {inputs: l.inputs, inputsHash: l.inputsHash, projectionOnly: l.projectionOnly, cacheKey: l.cacheKey, drawings: l.drawings, outputHash: l.outputHash, status: l.status, ...(l.counts ? {counts: l.counts} : {}), ...(l.backend ? {backend: l.backend} : {})}])),
   frames: m.frames, ...extra,
 });
 
@@ -151,6 +196,7 @@ const main = async () => {
   fs.writeFileSync(out, JSON.stringify(doc, null, 1) + '\n');
   console.log(`render manifest (inputs only, nothing rendered): ${path.relative(root, out)}`);
   for (const [k, l] of Object.entries(m.layers)) console.log(`  ${k.padEnd(7)} inputsHash ${l.inputsHash.slice(0, 12)}  ${String(l.drawings.length).padStart(4)} distinct drawings  (${Object.keys(l.inputs).length} inputs)`);
+  console.log(`  backend: ${m.backend ? m.backend.name : 'not recorded yet (the first render records it; layers that depend on it hash "unrecorded" until then)'}`);
   console.log(`  camera poses: ${distinctCameras(m.frames)} distinct over ${m.frames.length} frames; codeVersion ${m.codeVersion.slice(0, 12)} (${m.codeFiles.length} source files)`);
 };
 if (import.meta.url === `file://${process.argv[1]}`) await main();

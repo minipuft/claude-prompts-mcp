@@ -4,21 +4,24 @@ type: validation
 description: "Check-tier gate on the pose step: every chart key has a pose with
   a moment; the key sheet's spine fits the declared curve with a bow of at least
   6 % of height; limbs do not twin without a why; a weight foot is declared;
-  every key pair has a breakdown that is a pose; secondaries lag one to three
-  drawings; long holds move. On the pose step the spine fit and weight are
-  measured on the sheet's solved joints (the key sheet is drawn afterwards and
-  measures its own keys against the same declarations with --joints keys)."
+  every key pair has a breakdown that is a pose; long holds move; and every
+  secondary made of a material (D97) trails its primary by the material's lag,
+  settles after it and answers a step as the material declares. A secondary with
+  a hand-written lag and no material is not measured by the follow-through
+  probe, and a sheet that mixes the two is refused on the hand-written part. On
+  the pose step the spine fit and weight are measured on the sheet's solved
+  joints (the key sheet is drawn afterwards and measures its own keys against
+  the same declarations with --joints keys)."
 guidanceFile: guidance.md
 pass_criteria:
   - type: shell_verify
     shell_command:
       - python3
-      - scripts/animation/probe-poses.py
+      - scripts/animation/probe-all.py
+      - --contract
       - v3/poses
       - v3/keys
       - v3/charts
-      - --joints
-      - solved
     shell_timeout: 600000
     shell_working_dir: ../media/showcase
     shell_max_attempts: 1

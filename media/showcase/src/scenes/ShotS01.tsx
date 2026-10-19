@@ -9,11 +9,13 @@ import {Box} from '../library/props/Box';
 import {Bubble} from '../library/props/Bubble';
 import {Gadget} from '../library/props/Gadget';
 import {ArchPiece, BlockPiece, FramePiece, RingPiece, StalkPiece, StringPiece} from '../library/props/Pieces';
+import {LightSdf} from '../library/light/LightSdf';
+import {maskCodeOf, type OccluderGroup, type SdfP} from '../library/light/sdf';
 import {Sprite} from '../library/Sprite';
 import {identity, roleVars, s01Turrell, settled} from '../library/tokens';
 import {FlatFigure} from '../library/worlds/parts';
-import {PIECE_SIZE, SIZE, chart, layout, stagedBlocking, stateAt, toScreen, type PieceDraw} from './shotS01Plan';
-import {STALK0_SCALE, projectState, type BehindP, type CoreP, type FigureP, type FrontP, type GrainP, type Pass, type PassProjection, type BackP, type UnderP} from './shotS01Passes';
+import {PIECE_SIZE, SIZE, chart, layout, stagedBlocking, stateAt, toScreen, type GadgetPose, type PieceDraw} from './shotS01Plan';
+import {STALK0_SCALE, projectState, type BehindP, type CoreP, type FigureP, type FrontP, type GrainP, type OccP, type Pass, type PassProjection, type BackP, type UnderP} from './shotS01Passes';
 
 /**
  * Shot s01, the film's intro (D53, D64, D74): beats arrival (0-180) and everything-at-once (180-420) in the home world, one camera move (the widen, 150-210)
@@ -156,45 +158,66 @@ const UnderBody: React.FC<{p: UnderP}> = ({p}) => (
   </>
 );
 
+const CodexBody: React.FC<{boil: number; codex: BehindP['codex']}> = ({boil, codex}) => (
+  <Sprite roles={identity.codex} outline={settled.outline} x={blocking.codex.x} y={blocking.codex.y} scale={blocking.codex.scale} style={cool}>
+    <Codex variant={boil} look={codex.lean > 0.3 ? 1 : 0} lean={codex.lean} catchArms={codex.catch} />
+  </Sprite>
+);
+
 const BehindBody: React.FC<{p: BehindP}> = ({p}) => (
   <>
     <Pieces pieces={p.pieces} boil={p.boil} />
-    <Sprite roles={identity.codex} outline={settled.outline} x={blocking.codex.x} y={blocking.codex.y} scale={blocking.codex.scale} style={cool}>
-      <Codex variant={p.boil} look={p.codex.lean > 0.3 ? 1 : 0} lean={p.codex.lean} catchArms={p.codex.catch} />
-    </Sprite>
+    <CodexBody boil={p.boil} codex={p.codex} />
   </>
 );
 
 const FigureBody: React.FC<{p: FigureP}> = ({p}) => <FlatFigure pose={p.pose} fill={1} line={null} blocking={blocking} order={p.order} />;
 
+const GadgetBody: React.FC<{g: GadgetPose}> = ({g}) => (
+  <Sprite roles={s01Turrell.gadget} outline={s01Turrell.outline} x={g.origin[0]} y={g.origin[1]} scale={g.scale} style={cool}>
+    <Gadget glow={g.glow} />
+  </Sprite>
+);
+
+const BoxBody: React.FC<{lid: number; boil: number}> = ({lid, boil}) => (
+  <Sprite roles={s01Turrell.box} outline={s01Turrell.outline} x={staging.box.x} y={staging.box.y} scale={staging.box.scale} style={cool}>
+    <Box lid={lid} variant={boil} hinge="back" />
+  </Sprite>
+);
+
+const ClawdBody: React.FC<{clawd: {lean: number; push: number}; boil: number}> = ({clawd, boil}) => {
+  const feet = {x: staging.clawd.x + 116 * staging.clawd.scale, y: staging.clawd.feetY};
+  return (
+    <div style={{position: 'absolute', left: 0, top: 0, transformOrigin: `${feet.x}px ${feet.y}px`, transform: `translate(${clawd.push * 70}px, 0) rotate(${clawd.push * 9}deg)`}}>
+      <Sprite roles={identity.clawd} outline={settled.outline} x={blocking.clawd.x} y={blocking.clawd.y} scale={blocking.clawd.scale} style={cool}>
+        <Clawd variant={boil} lean={clawd.lean} squash={clawd.push * 0.8} />
+      </Sprite>
+    </div>
+  );
+};
+
+const StalkBody: React.FC<{g: GadgetPose; stalk0: number; boil: number}> = ({g, stalk0, boil}) =>
+  stalk0 > 0.01 ? (
+    <div style={{...kitVars, ...placed(g.funnel[0], g.funnel[1], -24, STALK0_SCALE)}}>
+      <StalkPiece grow={stalk0} variant={boil} />
+    </div>
+  ) : null;
+
 const FrontBody: React.FC<{p: FrontP}> = ({p}) => {
   const g = p.gadget;
   const bubbleScale = p.bubble.size * 1.2;
-  const clawdFeet = {x: staging.clawd.x + 116 * staging.clawd.scale, y: staging.clawd.feetY};
   return (
     <>
-      <Sprite roles={s01Turrell.gadget} outline={s01Turrell.outline} x={g.origin[0]} y={g.origin[1]} scale={g.scale} style={cool}>
-        <Gadget glow={g.glow} />
-      </Sprite>
+      <GadgetBody g={g} />
       {p.bubble.size > 0.01 && (
         <Sprite roles={s01Turrell.kit} outline={s01Turrell.outline} x={p.bubble.centre[0] - 140 * bubbleScale} y={p.bubble.centre[1] - 140 * bubbleScale} scale={bubbleScale}>
           <Bubble squash={p.boil - 1} wobble={p.boil - 1} />
         </Sprite>
       )}
-      <Sprite roles={s01Turrell.box} outline={s01Turrell.outline} x={staging.box.x} y={staging.box.y} scale={staging.box.scale} style={cool}>
-        <Box lid={p.lid} variant={p.boil} hinge="back" />
-      </Sprite>
-      <div style={{position: 'absolute', left: 0, top: 0, transformOrigin: `${clawdFeet.x}px ${clawdFeet.y}px`, transform: `translate(${p.clawd.push * 70}px, 0) rotate(${p.clawd.push * 9}deg)`}}>
-        <Sprite roles={identity.clawd} outline={settled.outline} x={blocking.clawd.x} y={blocking.clawd.y} scale={blocking.clawd.scale} style={cool}>
-          <Clawd variant={p.boil} lean={p.clawd.lean} squash={p.clawd.push * 0.8} />
-        </Sprite>
-      </div>
+      <BoxBody lid={p.lid} boil={p.boil} />
+      <ClawdBody clawd={p.clawd} boil={p.boil} />
       <Pieces pieces={p.pieces} boil={p.boil} />
-      {p.stalk0 > 0.01 && (
-        <div style={{...kitVars, ...placed(g.funnel[0], g.funnel[1], -24, STALK0_SCALE)}}>
-          <StalkPiece grow={p.stalk0} variant={p.boil} />
-        </div>
-      )}
+      <StalkBody g={g} stalk0={p.stalk0} boil={p.boil} />
       {p.pop > 0 && (
         <svg width={1} height={1} style={{position: 'absolute', left: 0, top: 0, overflow: 'visible'}}>
           <circle cx={p.bubble.centre[0]} cy={p.bubble.centre[1]} r={190 + 330 * (1 - p.pop)} fill="none" stroke={s01Turrell.accent} strokeWidth={10 * p.pop + 2} opacity={p.pop} />
@@ -203,6 +226,41 @@ const FrontBody: React.FC<{p: FrontP}> = ({p}) => {
     </>
   );
 };
+
+/**
+ * One group of solids drawn flat in its material's code colour (`maskCodeOf`): an SVG colour matrix sends every colour to the code and keeps the alpha, so the drawing is the group's silhouette and nothing else.
+ * A group whose material is not solid draws nothing: the bubble is transmissive (the glass pass bends what is behind it), the lamp and the flood are emitters. `slot` keeps the filter ids unique.
+ */
+const Solid: React.FC<{group: OccluderGroup; slot: number; children: React.ReactNode}> = ({group, slot, children}) => {
+  const code = maskCodeOf(group);
+  if (!code) return null;
+  const [r, g, b] = code.map((v) => v / 255);
+  const id = `occ-${group}-${slot}`;
+  return (
+    <>
+      <svg width={0} height={0} style={{position: 'absolute', left: 0, top: 0}}>
+        <filter id={id} filterUnits="userSpaceOnUse" x={-6000} y={-6000} width={13000} height={13000} colorInterpolationFilters="sRGB">
+          <feColorMatrix type="matrix" values={`0 0 0 0 ${r} 0 0 0 0 ${g} 0 0 0 0 ${b} 0 0 0 1 0`} />
+        </filter>
+      </svg>
+      <div style={{position: 'absolute', left: 0, top: 0, filter: `url(#${id})`}}>{children}</div>
+    </>
+  );
+};
+
+/** The solids of the frame, in the order the picture stacks them, each in its group's code. */
+const OccluderBody: React.FC<{p: OccP}> = ({p}) => (
+  <>
+    <Solid group="pieces" slot={0}><Pieces pieces={p.behind} boil={p.boil} /></Solid>
+    <Solid group="codex" slot={0}><CodexBody boil={p.boil} codex={p.codex} /></Solid>
+    <Solid group="figure" slot={0}><FigureBody p={{camera: p.camera, pose: p.figure.pose, order: p.figure.order}} /></Solid>
+    <Solid group="gadget" slot={0}><GadgetBody g={p.front.gadget} /></Solid>
+    <Solid group="box" slot={0}><BoxBody lid={p.front.lid} boil={p.boil} /></Solid>
+    <Solid group="clawd" slot={0}><ClawdBody clawd={p.front.clawd} boil={p.boil} /></Solid>
+    <Solid group="pieces" slot={1}><Pieces pieces={p.front.pieces} boil={p.boil} /></Solid>
+    <Solid group="pieces" slot={2}><StalkBody g={p.front.gadget} stalk0={p.front.stalk0} boil={p.boil} /></Solid>
+  </>
+);
 
 const TitlePass: React.FC<{opacity: number}> = ({opacity}) => (
   <div style={{position: 'absolute', left: 64, top: 52, display: 'flex', alignItems: 'center', gap: 18, opacity}}>
@@ -216,7 +274,7 @@ const TitlePass: React.FC<{opacity: number}> = ({opacity}) => (
  * grain). The twos and hold probes read a crop of the frame and cannot tell a figure change from the light's (the emitter sits inside that crop); this
  * pass is what they measure the drawn layer on.
  */
-export const ShotS01: React.FC<{layers?: 'all' | 'figure'}> = ({layers = 'all'}) => {
+export const ShotS01: React.FC<{layers?: 'all' | 'figure'; /** frame -> the `occluders` drawing id whose full-frame mask is served as `lightsdf-in/<id>.png`; a frame named here is drawn with the light layer (D98), any other without it */ occluderMasks?: Record<string, string>}> = ({layers = 'all', occluderMasks}) => {
   const frame = useCurrentFrame();
   const {passes: P, params} = projectState(stateAt(frame));
   const camera = P.figure!.camera;
@@ -239,6 +297,7 @@ export const ShotS01: React.FC<{layers?: 'all' | 'figure'}> = ({layers = 'all'})
         <FigureBody p={P.figure!} />
         <FrontBody p={P.front!} />
       </CameraView>
+      {P['light-sdf'] && occluderMasks?.[frame] && <LightSdf p={{...P['light-sdf'], occ: occluderMasks[frame]!}} blend="screen" />}
       {P['light-over'] && <Core p={P['light-over']} />}
       {P.grain && <Grain amount={params.grainAmount} variant={P.grain.variant} />}
       {P.title && <TitlePass opacity={params.titleOpacity} />}
@@ -289,6 +348,12 @@ export const ShotS01Layer: React.FC<{jobs: LayerJob[]}> = ({jobs}) => {
       const p = job.p as FigureP;
       return <AbsoluteFill><CameraView pose={p.camera} size={SIZE}><FigureBody p={p} /></CameraView></AbsoluteFill>;
     }
+    case 'occluders': {
+      const p = job.p as OccP;
+      return <AbsoluteFill key={frame}><CameraView pose={p.camera} size={SIZE}><OccluderBody p={p} /></CameraView></AbsoluteFill>;
+    }
+    case 'light-sdf':
+      return <AbsoluteFill key={frame}><LightSdf p={job.p as SdfP} blend="normal" /></AbsoluteFill>;
     case 'light-over': {
       const p = job.p as CoreP;
       return <AbsoluteFill key={frame}><CameraView pose={p.camera} size={SIZE}><FigureCanvasShim /></CameraView><Core p={p} /></AbsoluteFill>;

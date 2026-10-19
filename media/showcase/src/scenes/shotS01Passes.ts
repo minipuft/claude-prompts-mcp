@@ -14,8 +14,10 @@ import {quantise} from '../library/animation/track';
 import type {Joints} from '../library/motion';
 import type {PartName} from '../library/motion/partsRig';
 import {interpolateColors} from 'remotion';
+import lightFile from '../../v3/light.json';
+import type {SdfP} from '../library/light/sdf';
 import {settled} from '../library/tokens';
-import {PIECE_SIZE, chart, stateAt, type Emitter, type GadgetPose, type PieceDraw, type ShotState} from './shotS01Plan';
+import {PIECE_SIZE, chart, stateAt, toScreen, type Emitter, type GadgetPose, type PieceDraw, type ShotState} from './shotS01Plan';
 
 /**
  * Bottom to top: `back` is the field, the flood and the motes over it, and the Codex and the pieces behind the figure, all inside the one camera transform; `figure` the human; `front` the gadget, bubble, box, Clawd, the front
@@ -24,11 +26,19 @@ import {PIECE_SIZE, chart, stateAt, type Emitter, type GadgetPose, type PieceDra
  * "Render cache": at zoom 0.6 the pieces are drawn soft in the whole frame and sharp when drawn without the motes beside them), so a pass drawn apart from its neighbours is not the pass the whole frame draws.
  * What a pass has to carry of its neighbours is their compositing, not their pixels: a sibling under the front with an opacity below 1 (the motes while the flood is rising) makes the browser draw the
  * front soft, so the front pass carries `motes`, the same element drawn invisible (`FrontP.motes`).
+ *
+ * The light layer (D98) is two passes between the front and the lamp: `occluders` draws every solid thing flat in its material's code colour (an input, never composed), and `light-sdf` lights the frame from the
+ * emitter through the signed-distance field of that mask and quantises it to dots (screen-blended, like the lamp's core). `light-sdf` names the drawing it reads (`PASS_INPUT`): the manifest fills that id into
+ * its projection, so its drawing id changes when, and only when, an occluder or the light does.
  */
-export const PASSES = ['back', 'figure', 'front', 'light-over', 'grain', 'title'] as const;
+export const PASSES = ['back', 'figure', 'front', 'occluders', 'light-sdf', 'light-over', 'grain', 'title'] as const;
 export type Pass = (typeof PASSES)[number];
-/** The manifest layer a pass belongs to. `props` carries the back (the field and the light under the props) and the front, `light` the light over the picture, `world` the title lockup. */
-export const PASS_LAYER: Record<Pass, 'figure' | 'props' | 'light' | 'world'> = {back: 'props', figure: 'figure', front: 'props', 'light-over': 'light', grain: 'light', title: 'world'};
+/** The manifest layer a pass belongs to. `props` carries the back (the field and the light under the props) and the front, `light` the light over the picture, `light-sdf` the occluder mask and the signed-distance light, `world` the title lockup. */
+export const PASS_LAYER: Record<Pass, 'figure' | 'props' | 'light' | 'light-sdf' | 'world'> = {back: 'props', figure: 'figure', front: 'props', occluders: 'light-sdf', 'light-sdf': 'light-sdf', 'light-over': 'light', grain: 'light', title: 'world'};
+/** A pass that reads another pass's drawing: the id of that drawing goes into its projection under `as`. */
+export const PASS_INPUT: Partial<Record<Pass, {pass: Pass; as: string}>> = {'light-sdf': {pass: 'occluders', as: 'occ'}};
+/** A pass whose drawings are an input of another and are never composed into a frame. */
+export const PASS_INTERMEDIATE: readonly Pass[] = ['occluders'];
 
 export type UnderP = {flood: number; dial: number; dialXY: [number, number]; motesFrame: number};
 export type BehindP = {boil: number; codex: {lean: number; catch: number}; pieces: PieceDraw[]};
@@ -36,9 +46,11 @@ export type FrontP = {camera: CameraPose; motes: boolean; boil: number; gadget: 
 export type BackP = {camera: CameraPose; field: string; under: UnderP | null; behind: BehindP};
 export type FigureP = {camera: CameraPose; pose: Joints; order: PartName[]};
 export type CoreP = {camera: CameraPose; emitter: Emitter};
+/** What the occluders pass draws: the solids only. The bubble (glass: transmissive), the flood, the motes, the pop and the lamp are not in it, so their changes do not redraw the mask. */
+export type OccP = {camera: CameraPose; boil: number; codex: BehindP['codex']; behind: PieceDraw[]; figure: {pose: Joints; order: PartName[]}; front: {gadget: GadgetPose; lid: number; clawd: {lean: number; push: number}; pieces: PieceDraw[]; stalk0: number}};
 export type GrainP = {variant: number};
 export type TitleP = Record<string, never>;
-export type PassProjection = {back: BackP; figure: FigureP; front: FrontP; 'light-over': CoreP; grain: GrainP; title: TitleP};
+export type PassProjection = {back: BackP; figure: FigureP; front: FrontP; occluders: OccP; 'light-sdf': SdfP; 'light-over': CoreP; grain: GrainP; title: TitleP};
 
 /** What a frame needs besides drawings: the grain's opacity and the title's. */
 export type FrameParams = {field: string; grainAmount: number; grainOpacity: number; titleOpacity: number};
@@ -49,9 +61,21 @@ export type FrameProjection = {[P in Pass]: PassProjection[P] | null};
 export const fieldAt = (flood: number): string => interpolateColors(Math.min(1, flood), [0, 1], [settled.field, '#040a2a']);
 export const titleOpacityAt = (frame: number): number => 1 - Math.max(0, Math.min(1, (frame - 150) / 60));
 
+type LightBeats = Record<string, {pair: {radiance: string; accent: string}; emitter?: {colour: string}}>;
+
+/** The light layer's projection on a frame: the emitter on screen with the colours the light script gives this beat, or null where no emitter is drawn (the same rule as the lamp's core). */
+const lightSdfOf = (s: ShotState): Omit<SdfP, 'occ'> | null => {
+  const e = s.light.emitter;
+  if (!e || e.intensity <= 0.01) return null;
+  const beat = (lightFile as {beats: LightBeats}).beats[s.beat];
+  if (!beat?.emitter) throw new Error(`light-sdf: v3/light.json has no emitter for the beat "${s.beat}" the chart draws one in`);
+  const [x, y] = toScreen(s.camera, e.x, e.y);
+  return {emitter: {x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100}, intensity: Math.round(e.intensity * 1000) / 1000, zoom: Math.round(s.camera.zoom * 1000) / 1000, colour: beat.emitter.colour, pair: beat.pair};
+};
+
 export const projectState = (s: ShotState): {passes: FrameProjection; params: FrameParams} => {
   const camera = s.camera;
-  const flood = s.light.flood, e = s.light.emitter;
+  const flood = s.light.flood, e = s.light.emitter, sdf = lightSdfOf(s);
   const grainOpacity = s.light.grain * 0.1;
   const field = fieldAt(flood);
   return {
@@ -63,6 +87,9 @@ export const projectState = (s: ShotState): {passes: FrameProjection; params: Fr
       },
       figure: {camera, pose: s.pose, order: s.partsOrder},
       front: {camera, motes: flood >= 0.2 && flood < 1, boil: s.boil, gadget: s.gadget, bubble: s.bubble, lid: s.lid, clawd: s.clawd, pieces: s.pieces.filter((p) => p.layer === 'front'), stalk0: s.stalk0, pop: s.light.pop},
+      occluders: sdf === null ? null : {camera, boil: s.boil, codex: s.codex, behind: s.pieces.filter((p) => p.layer === 'back'), figure: {pose: s.pose, order: s.partsOrder}, front: {gadget: s.gadget, lid: s.lid, clawd: s.clawd, pieces: s.pieces.filter((p) => p.layer === 'front'), stalk0: s.stalk0}},
+      // the mask drawing's id is filled in by whoever names the drawings (the manifest): see PASS_INPUT
+      'light-sdf': sdf === null ? null : {...sdf, occ: ''},
       'light-over': !e || e.intensity <= 0.01 ? null : {camera, emitter: e},
       grain: grainOpacity <= 0 ? null : {variant: s.boil},
       title: titleOpacityAt(s.frame) <= 0 ? null : {},

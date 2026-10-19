@@ -710,3 +710,35 @@ def lead_arm_faults(poses):
             held = [j for j in c["joints"] if j in (f"shoulder{arm}", f"elbow{arm}", f"wrist{arm}")]
             if held: out.append((f'{a["name"]} -> {b["name"]}', f'{a["name"]} -> {b["name"]}: the lead arm ({arm}) joint {", ".join(held)} belongs to secondary {c["name"]!r}, which lags on that move; give it side {arm!r} or leave the arm out'))
     return out
+
+
+# ---------- secondaries made of a material (D97; lagFramesOf and `Secondary` in src/library/animation/pose.ts) ----------
+MATERIALS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "v3", "materials.json")
+_MATERIALS = {}
+
+
+def load_materials(path=None):
+    """v3/materials.json (or `path`) as {id: material}; read once per path."""
+    path = path or MATERIALS_FILE
+    if path not in _MATERIALS: _MATERIALS[path] = read_json(path, "materials file")
+    return _MATERIALS[path]
+
+
+def material_motion(materials, mid):
+    """{lagFrames, settleFrames, overshoot} a material declares, or None when it does not exist or declares no lag or settle (the materials a secondary can be made of)."""
+    m = (materials or {}).get(mid)
+    if not m or not m.get("lagFrames") or not m.get("settleFrames"): return None
+    return {"lagFrames": m["lagFrames"]["value"], "settleFrames": m["settleFrames"]["value"], "overshoot": (m.get("overshoot") or {}).get("value", 0)}
+
+
+def secondary_lag_frames(c, materials=None):
+    """Frames a secondary trails its primary: its material's declared lag, else the sheet's lagDrawings x 2 (with both, the material is the lag and the sheet's number the floor)."""
+    if c.get("material"):
+        mo = material_motion(materials if materials is not None else load_materials(), c["material"])
+        if mo: return mo["lagFrames"]
+    return 2 * c["lagDrawings"]
+
+
+def secondary_follows(c, move_start):
+    """False once a secondary has dropped (`dropsAt`): a move that starts on or after that frame does not lag it, it is a prop by then."""
+    return c.get("dropsAt") is None or move_start < c["dropsAt"]

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Renders a shot from cached layer drawings (row 6.12, D87): the browser draws each DISTINCT drawing of each layer once, frames are composed from the cache, and a few frames are drawn
 // by the browser whole and compared with the composed ones.
-// usage: npm run render -- <shot-id> [--force] [--layers figure,props,world,light] [--confirm 8] [--confirm-frames 0,150,300] [--confirm-cap 40] [--browsers 4] [--concurrency 1] [--no-video]
+// usage: npm run render -- <shot-id> [--force] [--layers figure,props,world,light,light-sdf] [--confirm 8] [--confirm-frames 0,150,300] [--confirm-cap 40] [--browsers 4] [--concurrency 1] [--no-video]
 //   exit 0 rendered and every confirm frame inside the determinism tolerance (2 levels on at most 0.01 % of the pixels),
 //        1 a confirm frame is beyond it (the frame and the layer owning the largest difference are named), 2 input error
 // Confirm frames: the defaults (the first, the last, the key frames, at most --confirm of them) plus every frame where a drawing of any layer changes and a prop is magnified above 1.5 on screen
@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {loadTs, root} from './load-ts.mjs';
-import {computeManifest, manifestDocument, sha256} from './render-manifest.mjs';
+import {computeManifest, manifestDocument, sha256, withBackend} from './render-manifest.mjs';
 
 const args = process.argv.slice(2);
 const shot = args.find((a) => !a.startsWith('--'));
@@ -44,37 +44,17 @@ const writeIfChanged = (p, text) => { if (fs.existsSync(p) && fs.readFileSync(p,
 
 const m = await computeManifest(shot).catch((e) => { console.error(String(e.message ?? e)); process.exit(2); });
 const cfg = m.config;
-const {fieldAt, PASSES, PASS_LAYER} = await loadTs(cfg.passes);
+const {fieldAt, PASSES, PASS_LAYER, PASS_INTERMEDIATE} = await loadTs(cfg.passes);
 const outDir = path.join(root, 'out', shot), manifestPath = path.join(outDir, 'render-manifest.json');
 const previous = readJson(manifestPath, null);
 const SIZE = [1280, 720];
 const composeVersion = sha256(fs.readFileSync(path.join(root, 'scripts/animation/compose-layers.py')));
-const layerNames = ['figure', 'props', 'world', 'light'];
+const layerNames = ['figure', 'props', 'world', 'light', 'light-sdf'];
 const selected = (l) => !only || only.includes(l);
-if (only && only.some((l) => !layerNames.includes(l))) { console.error(`--layers names a layer this renderer does not draw: ${only.join(',')} (figure, props, world, light)`); process.exit(2); }
+if (only && only.some((l) => !layerNames.includes(l))) { console.error(`--layers names a layer this renderer does not draw: ${only.join(',')} (figure, props, world, light, light-sdf)`); process.exit(2); }
 
-// ---- 1. what the cache has -------------------------------------------------------------------------------------------------------
-const cacheDir = (layer) => path.join(root, 'out/cache', shot, layer, m.layers[layer].cacheKey.slice(0, 16));
-const indexPath = (layer) => path.join(cacheDir(layer), 'index.json');
-const indexes = Object.fromEntries(layerNames.map((l) => [l, readJson(indexPath(l), {})]));
-const drawingPath = (layer, id) => path.join(cacheDir(layer), `${id}.png`);
-const todo = [];
-for (const layer of layerNames) {
-  const L = m.layers[layer];
-  L.counts = {drawings: L.drawings.length, reused: 0, rendered: 0};
-  for (const d of L.drawings) {
-    const cached = indexes[layer][d.id] && fs.existsSync(drawingPath(layer, d.id));
-    if (cached && !(force && selected(layer))) { L.counts.reused++; d.outputHash = indexes[layer][d.id].sha256; }
-    else todo.push({layer, id: d.id, pass: d.pass, first: d.frames[0], p: L.projections[d.id]});
-  }
-}
-if (only) {
-  const missing = todo.filter((t) => !selected(t.layer));
-  if (missing.length) { console.error(`--layers ${only.join(',')} leaves ${missing.length} drawings of ${[...new Set(missing.map((t) => t.layer))].join(', ')} uncached: render them (drop --layers) before composing`); process.exit(2); }
-}
-say(`${m.shot}: ${m.range[1] - m.range[0]} frames; ${layerNames.map((l) => `${l} ${m.layers[l].counts.drawings - todo.filter((t) => t.layer === l).length}/${m.layers[l].counts.drawings} cached`).join(', ')}`);
-
-// ---- 2. the browser draws what is missing ------------------------------------------------------------------------------------------------
+// ---- 1. the browser, and the backend it draws on ------------------------------------------------------------------------------------
+// The light layer is a shader: its bytes depend on the GPU path as well as on its inputs, so the layer is hashed on the backend the browser reports (user agent and WebGL renderer, `BackendProbe`), recorded in the manifest.
 let serveUrl = null, renderer = null;
 const browsers = [];
 const ensureBundle = async () => {
@@ -109,13 +89,59 @@ const renderFrames = async (compositionId, inputProps, frames, durationInFrames,
     });
   }));
 };
+const probeBackend = async () => {
+  await ensureBundle();
+  const composition = await renderer.selectComposition({serveUrl, id: 'BackendProbe', puppeteerInstance: await browserAt(0), chromiumOptions, logLevel: 'error'});
+  const backend = composition.props.backend;
+  if (!backend?.name) throw new Error('render-cached: BackendProbe returned no backend name');
+  if (!backend.floatTargets) throw new Error(`render-cached: the backend (${backend.name}) cannot render to float targets (EXT_color_buffer_float), which the jump flood needs`);
+  return backend;
+};
+const b0 = Date.now();
+withBackend(m, await probeBackend());
+timings.backendProbeSeconds = (Date.now() - b0) / 1000;
+say(`backend: ${m.backend.name}`);
 
-if (todo.length) {
+// ---- 2. what the cache has -------------------------------------------------------------------------------------------------------
+const cacheDir = (layer) => path.join(root, 'out/cache', shot, layer, m.layers[layer].cacheKey.slice(0, 16));
+const indexPath = (layer) => path.join(cacheDir(layer), 'index.json');
+const indexes = Object.fromEntries(layerNames.map((l) => [l, readJson(indexPath(l), {})]));
+const drawingPath = (layer, id) => path.join(cacheDir(layer), `${id}.png`);
+const todo = [];
+for (const layer of layerNames) {
+  const L = m.layers[layer];
+  L.counts = {drawings: L.drawings.length, reused: 0, rendered: 0};
+  for (const d of L.drawings) {
+    const cached = indexes[layer][d.id] && fs.existsSync(drawingPath(layer, d.id));
+    if (cached && !(force && selected(layer))) { L.counts.reused++; d.outputHash = indexes[layer][d.id].sha256; }
+    else todo.push({layer, id: d.id, pass: d.pass, first: d.frames[0], p: L.projections[d.id]});
+  }
+}
+if (only) {
+  const missing = todo.filter((t) => !selected(t.layer));
+  if (missing.length) { console.error(`--layers ${only.join(',')} leaves ${missing.length} drawings of ${[...new Set(missing.map((t) => t.layer))].join(', ')} uncached: render them (drop --layers) before composing`); process.exit(2); }
+}
+say(`${m.shot}: ${m.range[1] - m.range[0]} frames; ${layerNames.map((l) => `${l} ${m.layers[l].counts.drawings - todo.filter((t) => t.layer === l).length}/${m.layers[l].counts.drawings} cached`).join(', ')}`);
+
+// ---- 3. the browser draws what is missing ------------------------------------------------------------------------------------------------
+/** The occluder masks the light pass reads, as full frames in the served bundle (`lightsdf-in/<occluders id>.png`): the cached drawing is cropped to its alpha box, the shader wants the frame. */
+const ensureMasks = (ids) => {
+  const dir = path.join(serveUrl, 'public', 'lightsdf-in');
+  const need = [...new Set(ids)].filter((id) => !fs.existsSync(path.join(dir, `${id}.png`)));
+  if (!need.length) return 0;
+  const items = need.map((id) => {
+    const entry = indexes['light-sdf'][id];
+    if (!entry || !fs.existsSync(drawingPath('light-sdf', id))) throw new Error(`render-cached: occluder drawing ${id} is not in the cache, so its mask cannot be served`);
+    return {src: drawingPath('light-sdf', id), box: entry, size: SIZE, dst: path.join(dir, `${id}.png`)};
+  });
+  py('expand', {items, workers: 12});
+  return need.length;
+};
+/** Draws a list of cached-layer jobs through the browser and ingests them into the cache. A browser draws a run of one pass in frame order: what a tab drew just before is the picture nearest in time. */
+const drawStage = async (name, list, scratch) => {
+  if (!list.length) return 0;
   const r0 = Date.now();
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'render-cached-'));
-  // One browser draws a run of drawings of one pass in frame order, so what a tab drew just before is the picture nearest in time to the one it draws now: the browser's raster state carries over from one
-  // job to the next (the same front drawing, drawn after different neighbours, differed by 0, 111, 630 and 41 138 pixels beyond 2 levels), and a near-identical predecessor leaves nothing to show.
-  const ordered = todo.map((t, i) => ({t, i})).sort((a, b) => PASSES.indexOf(a.t.pass) - PASSES.indexOf(b.t.pass) || a.t.first - b.t.first);
+  const ordered = list.map((t, i) => ({t, i})).sort((a, b) => PASSES.indexOf(a.t.pass) - PASSES.indexOf(b.t.pass) || a.t.first - b.t.first);
   const jobs = ordered.map(({t}) => ({pass: t.pass, id: t.id, p: t.p}));
   const nb = Math.max(1, Math.min(browserCount, jobs.length));
   const partition = Array.from({length: nb}, () => []);
@@ -123,20 +149,34 @@ if (todo.length) {
     const idx = jobs.map((j, k) => (j.pass === pass ? k : -1)).filter((k) => k >= 0);
     idx.forEach((k, r) => partition[Math.min(nb - 1, Math.floor((r * nb) / idx.length))].push(k));
   }
-  say(`rendering ${todo.length} drawings through the browser (${[...new Set(todo.map((t) => t.layer))].map((l) => `${l} ${todo.filter((t) => t.layer === l).length}`).join(', ')})`);
+  say(`rendering ${list.length} ${name} drawings through the browser (${[...new Set(list.map((t) => t.layer))].map((l) => `${l} ${list.filter((t) => t.layer === l).length}`).join(', ')})`);
   await renderFrames(cfg.layerComposition, {jobs}, jobs.map((_, i) => i), jobs.length, (buffer, frame) => { fs.writeFileSync(path.join(scratch, `${frame}.png`), buffer); }, partition);
   const items = ordered.map(({t}, i) => ({id: `${t.layer}/${t.id}`, src: path.join(scratch, `${i}.png`), dst: drawingPath(t.layer, t.id)}));
   const got = py('ingest', {items, workers: 12}).items;
-  for (const t of todo) {
+  for (const t of list) {
     const entry = got[`${t.layer}/${t.id}`];
     indexes[t.layer][t.id] = entry;
     m.layers[t.layer].drawings.find((d) => d.id === t.id).outputHash = entry.sha256;
     m.layers[t.layer].counts.rendered++;
   }
-  for (const layer of new Set(todo.map((t) => t.layer))) writeIfChanged(indexPath(layer), JSON.stringify(indexes[layer]) + '\n');
+  for (const layer of new Set(list.map((t) => t.layer))) writeIfChanged(indexPath(layer), JSON.stringify(indexes[layer]) + '\n');
+  const seconds = (Date.now() - r0) / 1000;
+  say(`drew ${list.length} ${name} drawings (${seconds.toFixed(1)} s, ${(seconds / list.length).toFixed(3)} s per drawing)`);
+  return seconds;
+};
+
+if (todo.length) {
+  const r0 = Date.now();
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'render-cached-'));
+  // The light layer is drawn in two further stages: the occluder masks first (DOM, like every other pass), then the light, which reads each mask as a texture.
+  const stage = {main: todo.filter((t) => t.pass !== 'occluders' && t.pass !== 'light-sdf'), occluders: todo.filter((t) => t.pass === 'occluders'), light: todo.filter((t) => t.pass === 'light-sdf')};
+  timings.drawingsSeconds = await drawStage('picture', stage.main, scratch);
+  timings.occludersSeconds = await drawStage('occluder', stage.occluders, scratch);
+  const lightIds = stage.light.map((t) => t.p.occ);
+  if (lightIds.length) { const e0 = Date.now(); const n = ensureMasks(lightIds); timings.masksSeconds = (Date.now() - e0) / 1000; say(`served ${n} occluder masks (${timings.masksSeconds.toFixed(1)} s)`); }
+  timings.lightSdfSeconds = await drawStage('light', stage.light, scratch);
   fs.rmSync(scratch, {recursive: true, force: true});
-  timings.drawingsSeconds = (Date.now() - r0) / 1000;
-  say(`drew ${todo.length} drawings (${timings.drawingsSeconds.toFixed(1)} s)`);
+  timings.allDrawingsSeconds = (Date.now() - r0) / 1000;
 }
 for (const layer of layerNames) {
   const L = m.layers[layer];
@@ -156,7 +196,8 @@ const prevRows = new Map((previous?.frames ?? []).map((r) => [r.frame, r]));
 const hashOf = (layer, id) => m.layers[layer].drawings.find((d) => d.id === id).outputHash;
 const drawingIndex = new Map(layerNames.flatMap((l) => m.layers[l].drawings.map((d) => [`${l}/${d.id}`, d])));
 const rows = m.frames.map((fr) => {
-  const ids = PASSES.flatMap((pass) => fr.layers[layerOf(pass)].filter((id) => id.startsWith(`${pass}-`)).map((id) => ({pass, id, layer: layerOf(pass)})));
+  // the occluder masks are an input of the light, not part of the picture: they are never composed
+  const ids = PASSES.filter((pass) => !PASS_INTERMEDIATE.includes(pass)).flatMap((pass) => fr.layers[layerOf(pass)].filter((id) => id.startsWith(`${pass}-`)).map((id) => ({pass, id, layer: layerOf(pass)})));
   const drawings = ids.map((d) => ({...d, path: drawingPath(d.layer, d.id), box: indexes[d.layer][d.id], hash: hashOf(d.layer, d.id)}));
   const field = parseRgb(fr.params.field);
   fr.composeKey = sha256(JSON.stringify([composeVersion, field, fr.params.grainOpacity, fr.params.titleOpacity, drawings.map((d) => [d.pass, d.hash])]));
@@ -183,7 +224,7 @@ say(`composed ${m.frames.length} frames + ${m.frames.length} figure-only frames:
 // ---- 4. the browser's own frames, and the comparison ----------------------------------------------------------------------------------------
 // The sample: the defaults (the first frame, the last and the key frames, thinned to `--confirm`) and every frame where a drawing of any layer changed from the frame before and a prop is magnified on screen
 // above MAGNIFIED, thinned evenly to `--confirm-cap` in all. The record keeps every candidate and why each frame was chosen (the probe reads it).
-const changedFromPrevious = (i) => i > 0 && ['figure', 'props', 'world', 'light'].some((l) => JSON.stringify(m.frames[i].layers[l]) !== JSON.stringify(m.frames[i - 1].layers[l]));
+const changedFromPrevious = (i) => i > 0 && ['figure', 'props', 'world', 'light', 'light-sdf'].some((l) => JSON.stringify(m.frames[i].layers[l]) !== JSON.stringify(m.frames[i - 1].layers[l]));
 const planConfirm = () => {
   const keys = readJson(path.join(root, `v3/keys/${shot}.json`), {keys: []}).keys.map((k) => k.frame);
   const picks = [...new Set([m.range[0], ...keys, m.range[1] - 1])].sort((a, b) => a - b);
@@ -222,7 +263,10 @@ const needBrowser = confirmFrames.filter((f) => {
 if (needBrowser.length) {
   say(`drawing ${needBrowser.length} confirm frames whole through the browser (${needBrowser.join(', ')})`);
   fs.mkdirSync(path.join(root, 'out', confirmDir), {recursive: true});
-  await renderFrames(cfg.composition, {}, needBrowser, m.range[1], (buffer, frame) => { fs.writeFileSync(frameFile(confirmDir, frame), buffer); });
+  // the browser draws these whole, the light layer included: each frame names the occluder mask its light reads, served from the bundle
+  const occluderMasks = Object.fromEntries(needBrowser.flatMap((f) => { const id = m.frames[f - m.range[0]].layers['light-sdf'].find((i) => i.startsWith('occluders-')); return id ? [[String(f), id]] : []; }));
+  ensureMasks(Object.values(occluderMasks));
+  await renderFrames(cfg.composition, {occluderMasks}, needBrowser, m.range[1], (buffer, frame) => { fs.writeFileSync(frameFile(confirmDir, frame), buffer); });
 }
 const toCompare = confirmFrames.map((f) => ({frame: f, composed: frameFile(`${shot}-seq`, f), browser: frameFile(confirmDir, f), drawings: rows[f - m.range[0]].drawings}));
 const compared = py('confirm', {rows: toCompare}).frames;
@@ -250,10 +294,10 @@ if (!flag('no-video') && changedFrames) {
 const doc = manifestDocument(m, {confirm});
 const written = writeIfChanged(manifestPath, JSON.stringify(doc, null, 1) + '\n');
 timings.wallSeconds = (Date.now() - t0) / 1000;
-fs.writeFileSync(path.join(outDir, 'render-report.json'), JSON.stringify({shot, force, layers: only ?? 'all', concurrency, loadAverage: os.loadavg(), timings, drawingsRendered: todo.length, drawingsByLayer: Object.fromEntries(layerNames.map((l) => [l, m.layers[l].counts])), browsers: browserCount, tabsPerBrowser: concurrency, filesWritten: wrote, manifestWritten: written}, null, 1) + '\n');
+fs.writeFileSync(path.join(outDir, 'render-report.json'), JSON.stringify({shot, force, layers: only ?? 'all', backend: m.backend.name, concurrency, loadAverage: os.loadavg(), timings, drawingsRendered: todo.length, drawingsByLayer: Object.fromEntries(layerNames.map((l) => [l, m.layers[l].counts])), browsers: browserCount, tabsPerBrowser: concurrency, filesWritten: wrote, manifestWritten: written}, null, 1) + '\n');
 
 console.log('\nlayer    status  drawings  reused  rendered  inputsHash   cacheKey');
-for (const l of ['figure', 'props', 'world', 'light']) {
+for (const l of layerNames) {
   const L = m.layers[l];
   console.log(`${l.padEnd(8)} ${L.status.toUpperCase().padEnd(7)} ${String(L.counts.drawings).padStart(8)} ${String(L.counts.reused).padStart(7)} ${String(L.counts.rendered).padStart(9)}  ${L.inputsHash.slice(0, 12)} ${L.cacheKey.slice(0, 12)}`);
 }

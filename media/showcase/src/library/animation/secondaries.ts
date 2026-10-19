@@ -19,7 +19,6 @@
  *    Stiffness is the share of that load the drawn shape holds: the blend toward the rest shape that Spine's "follow the unconstrained pose" gives, taken on the load and not on the swing,
  *    because a blend on the swing would cancel the lag the declaration asks for.
  */
-import {spacingProfile} from './pose';
 import type {Motion} from './materials';
 import {quantise} from './track';
 
@@ -187,7 +186,7 @@ export const lagOf = (anchor: number[], tip: number[], useVelocity: boolean, max
 
 /** snap, even or float from the spacing profile of the tip's slow-out: the frames it takes to go from its fastest frame to rest (4 or fewer snap, 10 or more float). */
 export const easeClassOf = (tip: Vec[]): 'snap' | 'even' | 'float' => {
-  const spacing = spacingProfile(tip);
+  const spacing = tip.slice(1).map((p, i) => Math.hypot(p[0] - tip[i]![0], p[1] - tip[i]![1]));
   const peak = spacing.indexOf(Math.max(...spacing));
   let end = peak;
   spacing.forEach((s, i) => { if (i > peak && s > REST_SPEED) end = i; });
@@ -307,3 +306,28 @@ export const secondaryTip = (motion: Motion, bone: Bone, anchor: Vec[]): Vec[] =
 
 /** The bench's measurement of one motion: the three canonical primaries through the designed chain. */
 export const benchResponses = (params: ChainParams, bone: Bone): Response[] => PRIMARIES.map((p) => respond(params, bone, p));
+
+// ---------- the chain on a pose sheet's path ----------
+
+/** The bone the bench designs and measures every material on (`bench-materials.mjs --segment`, default 240 px): long enough that its length constraint stays slack under the moves a pose sheet makes. */
+export const BENCH_SEGMENT = 240;
+export const BENCH_BONE: Bone = {segment: BENCH_SEGMENT};
+
+/**
+ * What a material does to a path (D97, row 8.5): `path` is one joint's position on every frame of a pose sheet (key-sheet px, y down, starting on an even frame), the primary the secondary
+ * hangs from. Each axis of the path is the anchor's x of the material's designed chain on the bench bone (the response the bench measures: free sideways, so lag, settle and overshoot are the declared
+ * ones), stepped on ones and sampled on twos (`onTwos`); the result is how far the chain's tip is from where riding the path rigidly would put it, per frame, in the same px: add it to the path to get the
+ * part as it is drawn. One chain per axis, so a part trails by the same frames whichever way the body moves (the bone is not rigid along one of them, as a taut bone hung down would be along y). The tip's rest under
+ * gravity (the sag the stiffness leaves) is taken out, so a path that never moves returns zeros, and the chain runs in the 720 px field the bench measured it in (`heightPx` is the figure's height in the path's space).
+ */
+export const followOf = (motion: Motion, path: Vec[], heightPx: number): Vec[] => {
+  const k = FIELD_H / heightPx, design = designChain(motion, BENCH_BONE);
+  const rest = runChain(design, BENCH_BONE, [[0, 0]])[0]!.at(-1)![0];
+  const axis = (values: number[]): number[] => {
+    const anchor = values.map((v): Vec => [v * k, 0]);
+    const tips = onTwos(runChain(design, BENCH_BONE, anchor).map((points) => points[points.length - 1]![0]));
+    return tips.map((t, f) => (t - rest - (anchor[f]![0] - anchor[0]![0])) / k);
+  };
+  const x = axis(path.map((p) => p[0] - path[0]![0])), y = axis(path.map((p) => p[1] - path[0]![1]));
+  return path.map((_, f): Vec => [x[f]!, y[f]!]);
+};

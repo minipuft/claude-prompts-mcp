@@ -4,9 +4,10 @@
 usage: compose-layers.py ingest  <job.json> <result.json>     crop each rendered pass to its alpha box, write it to the cache, hash it
        compose-layers.py compose <job.json> <result.json>     place the cached drawings of every frame over the field colour and write element-NNN.png
        compose-layers.py confirm <job.json> <result.json>     per frame: the composed frame against the browser's, with the layer that owns the largest difference
+       compose-layers.py expand  <job.json> <result.json>     place each cropped drawing at its box on a transparent full frame and write it (the occluder masks the light pass reads, D98)
 
 A drawing is a pass drawn by the browser (the back opaque, the others on a transparent frame), cropped to its alpha box (x, y, w, h in frame pixels). The camera is baked into it (src/scenes/shotS01Passes.ts), so
-placing it is a copy. Normal passes composite source-over; the lamp's core and the grain are screen-blended (as the browser does), the grain and the title scaled by the frame's opacity.
+placing it is a copy. Normal passes composite source-over; the light layer's dots (`light-sdf`), the lamp's core and the grain are screen-blended (as the browser does), the grain and the title scaled by the frame's opacity.
 Arithmetic is float32 and rounds once at the end, so a composed frame differs from the browser's (which rounds after every draw) by a level at most on soft edges.
 A frame whose inputs (drawing hashes, field, opacities, this script) are the same as the manifest recorded, and whose file still has the recorded hash, is not written again.
 """
@@ -16,7 +17,7 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 from PIL import Image
 
-SCREEN = ("light-over", "grain")
+SCREEN = ("light-sdf", "light-over", "grain")
 LEVELS, SHARE = 2, 0.0001            # the determinism tolerance (probe-determinism.py): 2 levels on at most 0.01 % of the pixels
 
 
@@ -41,6 +42,22 @@ def ingest_one(it):
 def cmd_ingest(job):
     with ProcessPoolExecutor(max_workers=job.get("workers", 8)) as ex:
         return {"items": dict(ex.map(ingest_one, job["items"], chunksize=8))}
+
+
+# ---------- expand ----------
+def expand_one(it):
+    box = it["box"]; size = it["size"]
+    full = Image.new("RGBA", tuple(size), (0, 0, 0, 0))
+    if box["w"] > 0:
+        full.paste(Image.open(it["src"]).convert("RGBA"), (box["x"], box["y"]))
+    os.makedirs(os.path.dirname(it["dst"]), exist_ok=True)
+    tmp = it["dst"] + ".part"; full.save(tmp, format="PNG", compress_level=1); os.replace(tmp, it["dst"])
+    return it["dst"], sha_file(it["dst"])
+
+
+def cmd_expand(job):
+    with ProcessPoolExecutor(max_workers=job.get("workers", 8)) as ex:
+        return {"items": dict(ex.map(expand_one, job["items"], chunksize=8))}
 
 
 # ---------- compose ----------
@@ -140,8 +157,8 @@ def cmd_confirm(job):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4 or sys.argv[1] not in ("ingest", "compose", "confirm"):
+    if len(sys.argv) != 4 or sys.argv[1] not in ("ingest", "compose", "confirm", "expand"):
         print(__doc__); sys.exit(2)
     with open(sys.argv[2]) as f: job = json.load(f)
-    result = {"ingest": cmd_ingest, "compose": cmd_compose, "confirm": cmd_confirm}[sys.argv[1]](job)
+    result = {"ingest": cmd_ingest, "compose": cmd_compose, "confirm": cmd_confirm, "expand": cmd_expand}[sys.argv[1]](job)
     with open(sys.argv[3], "w") as f: json.dump(result, f)

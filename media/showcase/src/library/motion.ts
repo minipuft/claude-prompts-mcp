@@ -96,10 +96,26 @@ export type {Breakdown};
  * while its parent jumped swung opposite to the parent's sideways travel and left the kinks the arc probe reads as a zigzag (probe-inbetweens, rule a).
  */
 export type PoseLag = {joints: string[]; frames: number; stretch?: number; /** Frame windows [from, to) in which the part does not lag: it moves with the body (a lead arm on the move it leads). */ off?: [number, number][]};
+/**
+ * A secondary derived from a material (animation/secondaries.ts) instead of delayed by hand: for each joint, how far the material's chain draws it from where riding its primary would put it,
+ * one value per frame from `from` (key-sheet px, built on twos). `world` is the joint's own path filtered by the material (the part stays where the body left it, the bone stretches to reach it),
+ * `rel` the joint's bone vector from its parent filtered by it (the part rides its parent and only its angle is late); `stretch` (0-1) mixes the two as it does for `PoseLag`. `virtual`: a joint
+ * the rig does not have (a ponytail's tip), placed at `offset` (in the frame of the `away` -> `at` bone, up being 0) from joint `at` on every frame, then displaced like any other.
+ * `off`: frame windows [from, to) in which the part does not follow (a lead arm on the move it leads; a cloak that has dropped and is a prop).
+ */
+export type PoseFollow = {
+  joints: string[];
+  from: number;
+  stretch: number;
+  world: Record<string, [number, number][]>;
+  rel: Record<string, [number, number][]>;
+  virtual?: {name: string; at: string; away: string; offset: [number, number]};
+  off?: [number, number][];
+};
 /** A moving hold: from `from` (inclusive) to `to` (exclusive) every joint is shifted by `offset(frames since from)`. */
 export type PoseDrift = {from: number; to: number; offset: (since: number) => [number, number]};
-/** `breakdowns[].value`, when set, is the full drawing the breakdown shows (see `Breakdown`); `lags` and `drifts` are the pose pass (animation/pose.ts) and absent from older charts. */
-export type PoseChart = {keys: PoseKey[]; breakdowns?: Breakdown<Joints>[]; lags?: PoseLag[]; drifts?: PoseDrift[]};
+/** `breakdowns[].value`, when set, is the full drawing the breakdown shows (see `Breakdown`); `lags`, `follows` and `drifts` are the pose pass (animation/pose.ts) and absent from older charts. */
+export type PoseChart = {keys: PoseKey[]; breakdowns?: Breakdown<Joints>[]; lags?: PoseLag[]; follows?: PoseFollow[]; drifts?: PoseDrift[]};
 
 const wrapPi = (a: number) => a - 2 * Math.PI * Math.floor((a + Math.PI) / (2 * Math.PI));
 
@@ -145,8 +161,47 @@ export const poseAt = (chart: PoseChart, frame: number, parents?: Record<string,
   const keys = chart.keys.map((k) => ({frame: k.frame, value: k.joints, hold: k.hold}));
   const at = (f: number): Joints => sample({keys}, f, {quantise: 'twos', lerp: (a, b, t) => blendPose(a, b, t, parents), breakdowns: chart.breakdowns ?? []});
   const primary = at(frame);
-  if (!chart.lags?.length && !chart.drifts?.length) return primary;
-  return drifted(chart, frame, lagged(chart, frame, primary, at, parents));
+  if (!chart.lags?.length && !chart.follows?.length && !chart.drifts?.length) return primary;
+  return drifted(chart, frame, followed(chart, frame, primary, lagged(chart, frame, primary, at, parents), parents));
+};
+
+/** The joint a `virtual` secondary adds, on a pose: `offset` from `at`, turned with the `away` -> `at` bone from straight up. */
+export const virtualJoint = (v: NonNullable<PoseFollow['virtual']>, pose: Joints): [number, number] => {
+  const at = pose[v.at], away = pose[v.away];
+  if (!at || !away) throw new Error(`poseAt: virtual joint "${v.name}" needs joints "${v.at}" and "${v.away}"`);
+  const turn = Math.atan2(at[0] - away[0], away[1] - at[1]), c = Math.cos(turn), s = Math.sin(turn);
+  return [at[0] + v.offset[0] * c - v.offset[1] * s, at[1] + v.offset[0] * s + v.offset[1] * c];
+};
+
+/**
+ * The pose with each derived secondary (`PoseFollow`) drawn where its material puts it: `rigid` is the parent as drawn now plus the joint's bone as the pose has it, shifted by the filtered bone's
+ * displacement; `stayed` the joint's own place shifted by its filtered path's displacement; the joint is `rigid` at stretch 0 and `stayed` at stretch 1. Parent-first order. Before a follow's first
+ * frame it has not started (no displacement); past its last it holds the last value.
+ */
+const followed = (chart: PoseChart, frame: number, rode: Joints, drawn: Joints, parents?: Record<string, string>): Joints => {
+  if (!chart.follows?.length) return drawn;
+  const out: Joints = {...drawn}, primary: Joints = {...rode};
+  for (const follow of chart.follows) {
+    const v = follow.virtual;
+    if (v) out[v.name] = primary[v.name] = virtualJoint(v, primary);
+    if (follow.off?.some(([from, to]) => frame >= from && frame < to)) continue;
+    const i = Math.min(frame - follow.from, (follow.world[follow.joints[0]!] ?? follow.rel[follow.joints[0]!])!.length - 1);
+    if (i < 0) continue;
+    for (const name of [...follow.joints].sort((p, q) => depthOf(p, parents) - depthOf(q, parents))) {
+      const cur = primary[name], parent = v?.name === name ? v.at : parents?.[name];
+      if (!cur) continue;
+      const w = follow.world[name]?.[i] ?? [0, 0], r = follow.rel[name]?.[i] ?? [0, 0];
+      const stayed: [number, number] = [cur[0] + w[0], cur[1] + w[1]];
+      const base = parent ? out[parent] : undefined, baseNow = parent ? primary[parent] : undefined;
+      if (!base || !baseNow) {
+        out[name] = stayed;
+        continue;
+      }
+      const rigid: [number, number] = [base[0] + cur[0] - baseNow[0] + r[0], base[1] + cur[1] - baseNow[1] + r[1]];
+      out[name] = [rigid[0] + (stayed[0] - rigid[0]) * follow.stretch, rigid[1] + (stayed[1] - rigid[1]) * follow.stretch];
+    }
+  }
+  return out;
 };
 
 const depthOf = (name: string, parents?: Record<string, string>): number => {

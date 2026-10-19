@@ -18,7 +18,8 @@ Per shot, each failing item is its own line naming the key or breakdown; a categ
                  (the other ankle + over x the stance toward the weight foot; the midpoint for `both`). Feet closer than 0.05 H are not measured.
   breakdowns     every pair of consecutive keys has a breakdown with arc.offsetPx not 0 or an authored `joints` pose, unless no joint travels 0.08 H between the
                  keys: that short straight move is allowed, and said so.
-  secondaries    each declared secondary has lagDrawings 1-3 and joints the key sheet has.
+  secondaries    each declared secondary has lagDrawings 1-3 and joints the key sheet has; or names a material of v3/materials.json that declares a lag and a settle (its lag then comes from the material,
+                 and a lagDrawings the sheet still carries is only a floor the material must clear), and a `tip` names the one joint the rig does not have (the joint it hangs from must exist).
   holds          every key whose hold is over 11 frames has a movingHold or declares `face` (a face change is a moving hold).
   lead arm       one line per move with a lead arm: the shoulder, elbow and wrist of the to-key's lead arm belong to no secondary that lags on that move. A secondary names the `side` it is
                  (`L` or `R`) and then moves with the body on the moves that side leads; one that holds those joints without that side is refused (`parsePoseSheet` refuses it too).
@@ -126,10 +127,19 @@ def check_shot(poses, keys, chart, joints="keys"):
         frames = ", ".join(str(r[0]) for r in rows); got = rows[0][1]
         res["breakdowns"].append((f"{a} -> {b}", False, f"{a} -> {b}: the authored breakdowns on frames {frames} were built on key joints that have moved ("
                                   + (f"their keysHash {got[:12]} is not the keys' {rows[0][2][:12]}" if got else f"they carry no keysHash, the keys' is {rows[0][2][:12]}") + "): author them again with author-breakdowns.mjs"))
+    mats = load_materials() if any(c.get("material") for c in poses.get("secondaries", [])) else None
     for c in poses.get("secondaries", []):
-        bad = [x for x in c["joints"] if x not in next(iter(kj.values()))["joints"]]
-        ok = 1 <= c.get("lagDrawings", 0) <= 3 and not bad
-        res["secondaries"].append((c["name"], ok, f'secondary "{c["name"]}": lagDrawings {c.get("lagDrawings")}' + ("" if ok else f" (must be 1-3){'; unknown joints ' + str(bad) if bad else ''}")))
+        own = [(c.get("tip") or {}).get("at")] if c.get("tip") else []     # a tip names the one joint the rig does not have; the joint it hangs from must exist
+        bad = [x for x in (c["joints"] if not c.get("tip") else own) if x not in next(iter(kj.values()))["joints"]]
+        mo = material_motion(mats, c["material"]) if c.get("material") else None
+        why = []
+        if c.get("material") and not mo: why.append(f'material {c["material"]!r} is not in v3/materials.json or declares no lag and settle')
+        elif mo and c.get("lagDrawings") is not None and 2 * c["lagDrawings"] > mo["lagFrames"]: why.append(f'the sheet asks {2 * c["lagDrawings"]} frames as a floor and the material trails {mo["lagFrames"]}')
+        if not c.get("material") and not 1 <= c.get("lagDrawings", 0) <= 3: why.append("lagDrawings must be 1-3")
+        if c.get("lagDrawings") is not None and not 1 <= c["lagDrawings"] <= 3: why.append("lagDrawings must be 1-3")
+        if bad: why.append(f"unknown joints {bad}")
+        ok = not why
+        res["secondaries"].append((c["name"], ok, f'secondary "{c["name"]}": ' + (f'made of {c["material"]} (lag {mo["lagFrames"]} frames, settle {mo["settleFrames"]}, from the material' + (f'; the sheet\'s lagDrawings {c["lagDrawings"]} is its floor' if c.get("lagDrawings") is not None else "") + ")" if mo and ok else f'lagDrawings {c.get("lagDrawings")}') + ("" if ok else f" ({'; '.join(why)})")))
     held = {h["key"] for h in poses.get("movingHolds", [])}
     for p in poses["keys"]:
         hold = (kj.get(p["name"]) or {}).get("hold", p.get("hold")) or 0

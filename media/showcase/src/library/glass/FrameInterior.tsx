@@ -2,6 +2,7 @@ import {ThreeCanvas} from '@remotion/three';
 import {useMemo} from 'react';
 import {useCurrentFrame} from 'remotion';
 import * as THREE from 'three';
+import {materialOf} from '../animation/materials';
 import type {Palette} from '../tokens';
 import {LightString, NestedFrames, Silhouette, Stalk, blobShape} from './seuss';
 
@@ -120,6 +121,18 @@ const useGrainTexture = (seed: number) =>
     return tex;
   }, [seed]);
 
+/**
+ * The glass is the material `glass` of `v3/materials.json` (D45, D98): `refraction` sets the index of refraction (ior = 1 + 0.75 x refraction, 1.45 at the declared 0.6) and `diffusion` the roughness of the
+ * un-revealed glass (1.25 x diffusion, 0.5 at the declared 0.4), which `reveal` then clears. A glass with no refraction or diffusion is refused by `probe-materials.py`; here it throws, so a material edit
+ * cannot silently flatten the frame interior.
+ */
+const glassOf = () => {
+  const {refraction, diffusion} = materialOf('glass');
+  if (!refraction || !diffusion) throw new Error('FrameInterior: the glass material declares no refraction or diffusion (v3/materials.json)');
+  return {ior: 1 + 0.75 * refraction.value, roughness: 1.25 * diffusion.value};
+};
+const GLASS = glassOf();
+
 type Props = {width: number; height: number; palette: Palette; reveal: number; seed?: number; joinA?: number; joinB?: number; pulseA?: number; pulseB?: number};
 
 /**
@@ -151,7 +164,7 @@ export const FrameInterior: React.FC<Props> = ({width, height, palette, reveal, 
     g.computeVertexNormals();
     return g;
   }, []);
-  const roughness = 0.5 - 0.42 * reveal;
+  const roughness = GLASS.roughness - 0.42 * reveal;
   const slow = frame / 240;
   return (
     <ThreeCanvas width={width} height={height} gl={{alpha: true, antialias: true}} camera={{fov: 42, position: [0, 1.2, 7.5]}} style={{background: 'transparent'}}>
@@ -211,7 +224,7 @@ export const FrameInterior: React.FC<Props> = ({width, height, palette, reveal, 
           color="#ffffff"
           transmission={1}
           roughness={roughness}
-          ior={1.45}
+          ior={GLASS.ior}
           thickness={2.2}
           dispersion={1.2}
           iridescence={0.35}

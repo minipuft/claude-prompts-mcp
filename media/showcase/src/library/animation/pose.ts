@@ -9,9 +9,12 @@
  * - `L` and `R` name the figure's joints as the rig does (`wristL` is image-left).
  * Pure in its arguments. Boundary (scripts/animation/check-boundary.mjs): this file takes the rig as parameters and imports no cast, world or prop.
  */
-import {blendPose, type Joints, type PoseChart} from '../motion';
+import {blendPose, poseAt, virtualJoint, type Joints, type PoseChart, type PoseFollow} from '../motion';
 import {PART_NAMES, type PartName} from '../motion/partsRig';
 import type {KeySheet} from './keys';
+import {MATERIAL_IDS, materialOf, motionOf, type MaterialId} from './materials';
+import {followOf} from './secondaries';
+import {quantise} from './track';
 
 // ---------- contract ----------
 
@@ -61,8 +64,31 @@ export type PoseBreakdown = {
   arc: {joint: string; offsetPx: number};
   /** An authored drawing (every joint of the key sheet). Absent: the solver builds it from the keys and `arc`. */
   joints?: Joints;
+  /** This drawing is a contact (a heel on the floor, a hand on a ledge) of the named material, which declares `contact`: the move's `settle` drawing follows it by that many frames (`contactFaults`). */
+  contact?: MaterialId;
 };
-export type Secondary = {name: string; /** The side (`L` or `R`) whose arm this part is: it does not lag on a move that side leads (the to-key's `lead.arm`), where it moves with the body. */ side?: Side; joints: string[]; /** Drawings on twos (2 frames each) the part arrives after the body: 1-3. A shot drawn on fours lags one of its own drawings with 2, so the part changes on the body's frames and not between them. */ lagDrawings: number; /** 0-1 (default 0): 0 rides the parent and lags only in angle (a limb), 1 stays where it was in the world and the bone stretches to reach it (cloth); see `PoseLag`. */ stretch?: number};
+export type Secondary = {
+  name: string;
+  /** The side (`L` or `R`) whose arm this part is: it does not lag on a move that side leads (the to-key's `lead.arm`), where it moves with the body. */
+  side?: Side;
+  joints: string[];
+  /**
+   * Drawings on twos (2 frames each) the part arrives after the body: 1-3. A shot drawn on fours lags one of its own drawings with 2, so the part changes on the body's frames and not between them.
+   * With a `material` this is only a floor the material must clear (`parsePoseSheet` refuses a material that trails less) and may be left out; without one it is the lag, delayed by hand.
+   */
+  lagDrawings?: number;
+  /** 0-1 (default 0): 0 rides the parent and lags only in angle (a limb), 1 stays where it was in the world and the bone stretches to reach it (cloth); see `PoseLag`. */
+  stretch?: number;
+  /**
+   * What the part is made of (`v3/materials.json`, D97): its lag, settle and overshoot are the material's chain driven by the primary joint's path over the whole sheet (`followOf`, stepped on ones,
+   * drawn on twos), and not a delay written here. The material must declare a lag and a settle.
+   */
+  material?: MaterialId;
+  /** A joint the rig does not have, which `joints` (one name) then names: `offset` px from joint `at`, in the frame of the `away` -> `at` bone (up is 0). Needs a `material`. */
+  tip?: {at: string; away: string; offset: [number, number]};
+  /** The frame the part stops being the figure's and becomes a prop that stays (a cloak dropped on the floor): from it the part no longer follows, and no move that starts on or after it lags it. Needs a `material`. */
+  dropsAt?: number;
+};
 export type MovingHold = {key: string; /** Pixels of drift (key-sheet space), 2-6. */ driftPx: number; /** Frames the drift runs over, from the key landing. */ over: number};
 export type PoseSheet = {
   shot: string;
@@ -170,11 +196,21 @@ export const parsePoseSheet = (json: unknown): PoseSheet => {
     if (typeof b.arc?.joint !== 'string' || !isNum(b.arc.offsetPx)) throw new Error(`${at} needs arc {joint, offsetPx}`);
     const [lo, hi] = TIMING_SHAPE.position[b.kind], pos = chordPosition(b);
     if (pos < lo - EPS || pos > hi + EPS) throw new Error(`${at} is ${b.kind} at ${pos.toFixed(3)} along the chord (favour ${b.favour}); ${b.kind} draws between ${lo} and ${hi}`);
+    if (b.contact !== undefined && !(MATERIAL_IDS.includes(b.contact) && materialOf(b.contact).contact)) throw new Error(`${at} is a contact of "${b.contact}", which declares no contact frames in v3/materials.json`);
     if (b.joints !== undefined && (!isObj(b.joints) || Object.values(b.joints).some((p) => !Array.isArray(p) || p.length !== 2 || !p.every(isNum)))) throw new Error(`${at} joints must map names to [x, y]`);
   }
   for (const c of s.secondaries ?? []) {
     if (typeof c?.name !== 'string' || !Array.isArray(c.joints) || !c.joints.length) throw new Error(`poses: a secondary needs a name and a list of joints (${JSON.stringify(c?.name)})`);
-    if (!(Number.isInteger(c.lagDrawings) && c.lagDrawings >= 1 && c.lagDrawings <= 3)) throw new Error(`poses: secondary "${c.name}" lags ${c.lagDrawings} drawings; it must be 1-3`);
+    if (c.material === undefined && (c.tip !== undefined || c.dropsAt !== undefined)) throw new Error(`poses: secondary "${c.name}" names a ${c.tip !== undefined ? 'tip' : 'dropsAt'} and no material: only a derived secondary can have one`);
+    if (c.material !== undefined) {
+      if (!MATERIAL_IDS.includes(c.material)) throw new Error(`poses: secondary "${c.name}" is made of "${c.material}", which v3/materials.json does not declare (${MATERIAL_IDS.join(', ')})`);
+      const m = motionOf(materialOf(c.material));
+      if (!m || m.lagFrames < 1) throw new Error(`poses: secondary "${c.name}" is made of "${c.material}", which declares no lag: a part that trails its primary needs a material that does`);
+      if (c.lagDrawings !== undefined && 2 * c.lagDrawings > m.lagFrames) throw new Error(`poses: secondary "${c.name}" asks for ${c.lagDrawings} drawings (${2 * c.lagDrawings} frames) as its floor and its material "${c.material}" trails ${m.lagFrames}: the sheet's lag is a floor the material must clear`);
+      if (c.tip !== undefined && (c.joints.length !== 1 || typeof c.tip.at !== 'string' || typeof c.tip.away !== 'string' || !Array.isArray(c.tip.offset) || c.tip.offset.length !== 2 || !c.tip.offset.every(isNum))) throw new Error(`poses: secondary "${c.name}" tip needs one joint name in joints and {at, away, offset: [x, y]}`);
+      if (c.dropsAt !== undefined && !Number.isInteger(c.dropsAt)) throw new Error(`poses: secondary "${c.name}" dropsAt must be a whole frame`);
+    } else if (!(Number.isInteger(c.lagDrawings) && c.lagDrawings! >= 1 && c.lagDrawings! <= 3)) throw new Error(`poses: secondary "${c.name}" lags ${c.lagDrawings} drawings; it must be 1-3 (or name a material)`);
+    if (c.lagDrawings !== undefined && !(Number.isInteger(c.lagDrawings) && c.lagDrawings >= 1 && c.lagDrawings <= 3)) throw new Error(`poses: secondary "${c.name}" lags ${c.lagDrawings} drawings; it must be 1-3`);
     if (c.stretch !== undefined && !(isNum(c.stretch) && c.stretch >= 0 && c.stretch <= 1)) throw new Error(`poses: secondary "${c.name}" stretches ${c.stretch}; it must be 0-1`);
     if (c.side !== undefined && c.side !== 'L' && c.side !== 'R') throw new Error(`poses: secondary "${c.name}" side ${JSON.stringify(c.side)} must be L or R`);
   }
@@ -186,7 +222,7 @@ export const parsePoseSheet = (json: unknown): PoseSheet => {
   s.breakdowns ??= [];
   s.secondaries ??= [];
   s.movingHolds ??= [];
-  const faults = [...timingFaults(s), ...leadArmFaults(s)];
+  const faults = [...timingFaults(s), ...leadArmFaults(s), ...contactFaults(s)];
   if (faults.length) throw new Error(`poses: ${faults[0]}`);
   return s;
 };
@@ -224,6 +260,26 @@ export const timingFaults = (sheet: Pick<PoseSheet, 'keys' | 'breakdowns'>): str
     marks.slice(1).forEach((m, i) => m.favour === marks[i]!.favour && out.push(`${at}: the drawing on frame ${m.frame} has the favour ${m.favour} of the one before it; the exposure sheet marks a breakdown only where the favour changes, so it would not show`));
     const passing = kinds.filter((m) => m.kind === 'passing');
     passing.slice(1).forEach((m, i) => m.favour <= passing[i]!.favour && out.push(`${at}: passing ${m.favour} on frame ${m.frame} does not rise past ${passing[i]!.favour}`));
+  }
+  return out;
+};
+
+/** Frames from a contact drawing to its settle drawing that a material allows: its declared `contact`, give or take one drawing on twos. */
+export const CONTACT_SLACK = 2;
+
+/**
+ * The contact contract (material `contact`): a breakdown that is a `contact` of a material is followed, in the same move, by the move's `settle` drawing `contact` frames later (within `CONTACT_SLACK`), because the body
+ * lands first and settles after. A contact with no settle in its move, or a settle too near or too far, is named.
+ */
+export const contactFaults = (sheet: Pick<PoseSheet, 'keys' | 'breakdowns'>): string[] => {
+  const out: string[] = [];
+  for (const {from, to, marks} of movesOf(sheet)) {
+    const settle = marks.find((m) => m.kind === 'settle');
+    for (const b of sheet.breakdowns.filter((x) => x.contact !== undefined && x.between[0] === from.name && x.between[1] === to.name)) {
+      const want = materialOf(b.contact!).contact!.value, at = `move "${from.name}" -> "${to.name}": the contact of "${b.contact}" on frame ${b.frame}`;
+      if (!settle) out.push(`${at} has no settle drawing after it; the body settles ${want} frames after a contact`);
+      else if (settle.frame <= b.frame || Math.abs(settle.frame - b.frame - want) > CONTACT_SLACK) out.push(`${at} is followed by the settle on frame ${settle.frame}, ${settle.frame - b.frame} frames later; "${b.contact}" settles ${want} frames after a contact (within ${CONTACT_SLACK})`);
+    }
   }
   return out;
 };
@@ -667,14 +723,65 @@ export const firstDrawingAfter = (sheet: PoseSheet, keys: KeySheet, keyName: str
   return Math.min(...frames, next ?? own.frame);
 };
 
+/** Frames a secondary trails: its material's declared lag, else the sheet's hand-written drawings x 2. With both, the material is the lag and the sheet's number the floor it must clear (`parsePoseSheet`). */
+export const lagFramesOf = (c: Pick<Secondary, 'material' | 'lagDrawings'>): number => (c.material ? motionOf(materialOf(c.material))!.lagFrames : c.lagDrawings! * 2);
+
 /** The frame windows in which a side's secondary does not lag: each move that side leads, from the end of the from-key's hold to the to-key's frame plus the lag, so the part lands with the body. */
 const leadWindows = (sheet: PoseSheet, keys: KeySheet, c: Secondary): [number, number][] =>
-  c.side ? movesOf({keys: sheet.keys.map((k) => ({...k, hold: keys.keys.find((n) => n.name === k.name)?.hold ?? k.hold}) as PoseKey), breakdowns: []}).filter(({to}) => to.lead.arm === c.side).map(({to, start}) => [start, to.frame + c.lagDrawings * 2] as [number, number]) : [];
+  c.side ? movesOf({keys: sheet.keys.map((k) => ({...k, hold: keys.keys.find((n) => n.name === k.name)?.hold ?? k.hold}) as PoseKey), breakdowns: []}).filter(({to}) => to.lead.arm === c.side).map(({to, start}) => [start, to.frame + lagFramesOf(c)] as [number, number]) : [];
+
+/** Frames past the last key's hold over which a derived secondary is still run: the longest settle a material declares is 30, so a part is at rest long before this. */
+export const FOLLOW_TAIL = 60;
+
+/**
+ * The derived secondaries of a sheet (`material`): the primary pose on every frame from the first key to the last key's hold plus `FOLLOW_TAIL` (the pose `poseAt` plays with no lag and no drift), each secondary
+ * joint's path and its bone vector from its parent run through the material's chain (`followOf`: stepped on ones, drawn on twos). One chain per joint and per space, built once per chart.
+ */
+const followsOf = (sheet: PoseSheet, keys: KeySheet, bare: PoseChart, parents?: Record<string, string>): PoseFollow[] => {
+  const derived = sheet.secondaries.filter((c) => c.material);
+  if (!derived.length) return [];
+  const frames = keys.keys.map((k) => k.frame), last = keys.keys.reduce((m, k) => Math.max(m, k.frame + (k.hold ?? 0)), 0);
+  const from = quantise(Math.min(...frames), 2), to = last + FOLLOW_TAIL;
+  const poses: Joints[] = Array.from({length: to - from + 1}, (_, i) => poseAt(bare, from + i, parents));
+  return derived.map((c): PoseFollow => {
+    const motion = motionOf(materialOf(c.material!))!, stretch = c.stretch ?? 0;
+    const world: PoseFollow['world'] = {}, rel: PoseFollow['rel'] = {};
+    const virtual = c.tip ? {name: c.joints[0]!, ...c.tip} : undefined;
+    const off: [number, number][] = [...leadWindows(sheet, keys, c), ...(c.dropsAt !== undefined ? [[c.dropsAt, Infinity] as [number, number]] : [])];
+    // a part does not follow inside an `off` window (it is the body's there), so its chain runs on each stretch between the windows, from rest where the stretch begins: a chain that ran on through the window would
+    // carry the whole of the body's move into the stretch after it and pop the part onto it
+    const free = (f: number): boolean => !off.some(([a, b]) => f >= a && f < b);
+    const segments: [number, number][] = [];
+    let begin = -1;
+    for (let i = 0; i <= poses.length; i++) {
+      const on = i < poses.length && free(from + i);
+      if (on && begin < 0) begin = i + ((from + i) % 2);
+      if (!on && begin >= 0) {
+        if (i - begin >= 2) segments.push([begin, i]);
+        begin = -1;
+      }
+    }
+    const along = (path: [number, number][]): [number, number][] => {
+      const out: [number, number][] = path.map(() => [0, 0]);
+      for (const [a, b] of segments) followOf(motion, path.slice(a, b), sheet.heightPx).forEach((d, i) => (out[a + i] = d));
+      return out;
+    };
+    for (const name of c.joints) {
+      const path = poses.map((p) => (virtual ? virtualJoint(virtual, p) : p[name]!));
+      if (path.some((p) => !p)) throw new Error(`poseChartFrom: secondary "${c.name}" names joint "${name}", which the key sheet does not have`);
+      const parent = virtual ? virtual.at : parents?.[name];
+      world[name] = stretch > 0 ? along(path) : path.map(() => [0, 0]);
+      rel[name] = stretch < 1 && parent ? along(path.map((p, i) => [p[0] - poses[i]![parent]![0], p[1] - poses[i]![parent]![1]])) : path.map(() => [0, 0]);
+    }
+    return {joints: c.joints, from, stretch, world, rel, virtual, off};
+  });
+};
 
 /**
  * The chart `poseAt` plays for a pose sheet over its key sheet. Keys and holds are the key sheet's; every pose-sheet breakdown carries a real drawing
- * (`joints` if authored, else `breakdownPose`), and replaces the key sheet's own breakdown list (a segment with none still gets thirds); each secondary is
- * delayed `lagDrawings` x 2 frames behind the body (`PoseChart.lags`); each moving hold drifts the whole figure by `movingHoldOffset` from its key's
+ * (`joints` if authored, else `breakdownPose`), and replaces the key sheet's own breakdown list (a segment with none still gets thirds); a secondary with no `material` is
+ * delayed `lagDrawings` x 2 frames behind the body (`PoseChart.lags`), one with a `material` is drawn where that material's chain puts it (`PoseChart.follows`, `followsOf`: the lag, settle and
+ * overshoot are the material's and the sheet's `lagDrawings`, when it has one, is only the floor `parsePoseSheet` holds the material to); each moving hold drifts the whole figure by `movingHoldOffset` from its key's
  * landing, reaching its full drift after `over` frames and staying there until the first drawing of the move that leaves the key (`firstDrawingAfter`; a drift that stopped at `over`, or at the hold's end, snapped the figure back on a drawing of its own). Throws when a pose key is not on the key sheet at the same frame. `parents` (child to parent) makes
  * blends swing bones and lets an arc carry its limb with it.
  */
@@ -690,10 +797,12 @@ export const poseChartFrom = (sheet: PoseSheet, keys: KeySheet, parents?: Record
     const key = named.get(h.key)!, holdEnd = key.frame + (key.hold ?? h.over);
     return {from: key.frame, to: Math.max(holdEnd, firstDrawingAfter(sheet, keys, key.name)), offset: (since: number) => movingHoldOffset(h, since)};
   });
+  const bare: PoseChart = {keys: keys.keys.map((k) => ({frame: k.frame, joints: k.joints, hold: k.hold})), breakdowns};
+  const follows = followsOf(sheet, keys, bare, parents);
   return {
-    keys: keys.keys.map((k) => ({frame: k.frame, joints: k.joints, hold: k.hold})),
-    breakdowns,
-    lags: sheet.secondaries.map((c) => ({joints: c.joints, frames: c.lagDrawings * 2, stretch: c.stretch, off: leadWindows(sheet, keys, c)})),
+    ...bare,
+    lags: sheet.secondaries.filter((c) => !c.material).map((c) => ({joints: c.joints, frames: c.lagDrawings! * 2, stretch: c.stretch, off: leadWindows(sheet, keys, c)})),
+    ...(follows.length ? {follows} : {}),
     drifts,
   };
 };
