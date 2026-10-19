@@ -193,11 +193,11 @@ def dominant(h):
     return float(np.argmax(sm) * 2 + 1)
 
 
-def radiance_hue(img, em, cam, hexes, tol=0.03, plate=None):
+def radiance_hue(img, em, cam, hexes, tol=0.03, plate=None, owned=None, region=None):
     """The hue of the light itself: the chroma-weighted circular mean hue of the brightest region outside the fixed fills (`brightest_region`, the region the eye trace measures), when that region
     centres within `tol` of the frame width of the projected emitter; None when it does not (the light is not the brightest thing there, which C29 reports) or when it has no hue. A pale tint
     keeps its hue (an emitter lifted to a luma floor is no longer saturated enough for the saturated-pixel check to see it). (hue, pixels) or None."""
-    sel = brightest_region(img, None, masked=cast_mask(img, cam, hexes, plate))
+    sel = brightest_region(img, None, masked=cast_mask(img, cam, hexes, plate, owned=owned, region=region))        # `owned` (the kit's and gadget's pale roles, role_split) only inside `region`: where their props are drawn
     if sel is None: return None
     H, W = img.shape[:2]; sc = W / STAGE[0]
     if sel.sum() > 2 * 0.005 * H * W: return None                    # a flat frame ties everywhere: nothing is the brightest
@@ -220,7 +220,8 @@ def analyse_frames(frames, tl, pairs, max_outside, min_outside_px, masks, xs=Non
         w = next((w for w in tl["windows"] if w["a"] <= f < w["b"]), None)
         img = load_rgb(p)
         em = ((xs or {}).get(f) or {}).get("emitter")
-        glow = radiance_hue(img, em, camera_of(xs, f), masks[0], plate=masks[3] if len(masks) > 3 else None) if isinstance(em, dict) and em.get("x") is not None and em.get("strength", 1.0) > 0 else None
+        cam_f = camera_of(xs, f); bk = masks[4] if len(masks) > 4 and masks[4] else None; bb = (bk[2].get((beat_at(tl, f) or {}).get("id")) if bk else None)       # bk: (everywhere, owned, blocking of the beats these frames are drawn from)
+        glow = radiance_hue(img, em, cam_f, bk[0] if bb else masks[0], plate=masks[3] if len(masks) > 3 else None, owned=bk[1] if bb else None, region=prop_region_from_blocking(img.shape, cam_f, bb) if bb else None) if isinstance(em, dict) and em.get("x") is not None and em.get("strength", 1.0) > 0 else None
         if isinstance(em, dict) and glow is None: glow_skipped += 1
         b = beat_at(tl, f); pr_ = pairs.get(b["id"]) if b else None
         hs = pair_hues(pr_) if pr_ else []
@@ -306,7 +307,8 @@ def main():
         cf_clean, cf_tan, cf_grey = (check_crossing_frames(fade_frames(p_, os.path.join(t, n_)), ctl_tl)[0] for p_, n_ in ((cp_clean, "clean"), (cp_tan, "tan"), (cp_grey, "grey")))
     pr.control(not cf_clean and cf_tan and cf_grey,
                f"a crossing whose frames pass through a tan -> FAIL ({cf_tan[0][1] if cf_tan else 'NOT REFUSED'}); through a grey -> FAIL ({cf_grey[0][1] if cf_grey else 'NOT REFUSED'}); a hue walk between the same ends that holds both floors -> pass")
-    hexes = fixed_role_hexes(a.roles, plates=False); masks = (hexes, fixed_fill_hexes(a.roles), fixed_role_hexes(a.roles, sheets=True), plate_hexes(a.roles))
+    hexes = fixed_role_hexes(a.roles, plates=False)
+    masks = (hexes, fixed_fill_hexes(a.roles), fixed_role_hexes(a.roles, sheets=True), plate_hexes(a.roles), None)
     tl = load_timeline(a.timeline); frames = list_frames(a.frames)
     tl, _, frames, shot_note = apply_shot(a, tl, None, frames)
     if a.contract: lb = light_beats(read_json(a.contract, "light contract")); pairs = {k: v.get("pair") for k, v in lb.items()}
@@ -315,6 +317,8 @@ def main():
         pairs = {k: {"radiance": v[0], "accent": v[1]} for k, v in shots_pairs(read_json(sp, "shots")).items()}
     if not any(pairs.get(b["id"]) for b in tl["beats"]): die("no beat of the timeline has a hue pair (check --contract / --shots)")
     xs = default_xsheet(a)
+    everywhere, owned = role_split(a.roles); bl = load_blocking(a.timeline) if owned else {}; drawn_from = blocking_describes(tl, xs, bl)
+    if drawn_from: masks = masks[:4] + ((everywhere, owned, {k: v for k, v in bl.items() if k in drawn_from}),)       # the light's own hue: the kit's and gadget's pale roles only inside their props' crops (D100), on the beats the blocking describes
     directions = {}
     if a.contract:
         for c in read_json(a.contract, "light contract").get("crossings", []):

@@ -76,6 +76,35 @@ with [(94, 97, 4.5), (109, 111, 3.1), (114, 115, 3.1), (176, 177, 22.2), (183, 2
 - **183-231, the flood rising (up to 7.5 %), with the layer; without it 185-186, 189-190, 197, 199-201, 210-211 and 224-231 (3.2-5.1 %).** The lamp has just arrived, the title is fading over the blue and the cone to the trio is a pale unmasked wedge below the lamp; the layer's dots brighten the pale area below the lamp more than above it and pull the centroid 1-3 points further. This is the part the layer owns: 29 frames are inside 3 % without the layer and outside it with.
 - A tighter volume (r0 0.35 and reach 1.5 times the core) did not help (frame 96: 3.7 %, 200: 5.8 %, against 3.3 % and 6.1 %), so the numbers stay.
 
+## The eye trace after D100 (retargeted, 2026-10-19)
+
+The owner ruled p007 (D100): the eye trace asks for what each story point's light pushes, the lamp only where the story point names it. Two things changed in the probes, and the numbers below are from one run of each, before and after, on the same frames.
+
+**What the probe asks now.** Each frame's target is the `emitter` line of the story point it falls in (`v3/screenplay.json`), else the beat's own named emitter. `box seam`, `gadget dial` and `gadget` are the lamp; `frame interior` is the frame prop's rectangle (a lamp brighter than the interior fails); `the empty join` and `the lit join` are the blocking's join; `none readable` is skipped by name; a line no frame can show (the leaf, the drawn line, the piece's lines, the crayon's own colour, the running bead) is refused by name instead of passing. The table is in the probe's docstring.
+
+**What the mask does now.** The kit's and gadget's pale role colours (the ones the lamp's own halo shares) count as fixed fills only where a prop that wears them is drawn: on this shot, where the manifest's props or title layers drew something; on the animatic, inside the crops of the blocking's props, the cast, the frame's bar, the blocks, the arch and the floor. Everything else in `v3/roles.json` is masked wherever it appears, as before.
+
+| Claim | Probe | Before | After |
+| --- | --- | --- | --- |
+| s01 (416 lit frames): the eye finds the lamp | probe-light.py, eye trace | 56 over 3 % with the layer, 27 without | 45 over with the layer, 28 without |
+| frames 94-97 and 109-115 (the seam's thin core) | same | over (3.1-4.5 %) | inside with the layer; still over without it (94-95, 109-111, 114-115) |
+| frames 126-175 (the bubble) | same, mask built from the occluder mask first | inside | inside (a first mask that read the occluder mask alone put about 50 of these over, 4-24 %: the glass bubble is not in it, so the probe now reads the props layer) |
+| frames 176-177 (the seam going out) | same | 8.2 and 22.2 % | unchanged: the brightest thing left is Clawd's coral base, not light |
+| frames 183-231 (the flood rising) | same | 183-215 and 220-231, up to 7.5 % | 185-215 and 220-231, up to 7.5 %: the layer's dots below the lamp pull the centroid down toward the trio |
+| animatic 04: the eye finds its target | probe-eyetrace.py | 462 of 1638 frames over 3 % (beat 4: 270, worst 30 %; shaded world: 192, worst 67 %) | 232 of 1196 measured over; beat 4: 2 (928-929, 3.5 %); the rest named below; 510 frames refused, 120 skipped (nothing readable), 120 in a crossing |
+| animatic 04: the light's own hue is readable | probe-colour.py, radiance hue | 1174 of 1190 in the pair, 630 unreadable, 16 off the pair | 1668 of 1671 in the pair, 149 unreadable, 3 off the pair (1612-1614, hue 190 against 214 and 205) |
+| sibling probes unchanged | probe-props.py; probe-colour.py on s01 | pass; fails radiance hue and saturated pixels | identical lines |
+
+In the animatic's beat 4 the old failure was the measurement, not the staging: with the lamp (frame 700-880) as the target and the pale roles masked everywhere, the brightest region sat 18-27 % away (Clawd's side of the frame); with the pale roles masked only inside their props it sits within 0.1 % of the same lamp, and within 0.0 % of the frame interior. Retargeting alone, with the old mask, left 7-16 % (measured on frames 700 to 880 every 30).
+
+What still fails on animatic 04, and why (each is a finding, not a drawing fault):
+
+- **1382-1519, the programming world's first two story points, 138 frames (62-67 %).** Their lines are `the empty join` and `the lit join`; the blocking's join is the placeholder test-scene's (1040, 390), and the animatic's glow sits on the gates at the left (x 168-245). The screenplay and the animatic stage this beat differently.
+- **1648-1649, 2 frames (53 %).** `frame interior` against a glow still on the last gate.
+- **1860-1949, the held picture, 90 frames (7.6-7.9 %).** `frame interior`: the light rests in the structure under the frame (the gadget rimming it); the frame's interior is dark. The story point and the glow disagree by about 8 % of the width.
+- **928-929, 2 frames (3.5 %).** The crossing out of beat 4: the picture is already the line world; the cause is not isolated.
+- **The 510 refused frames (930-1229, 1240-1349, 1520-1619)** name targets the animatic does not draw (the crayon's colour, the drawn line, the leaf, the piece's lines, the running bead): no role, prop or layer carries them yet.
+
 ## The probes, verbatim
 
 Every command ran from `media/showcase` on the render of `npm run render -- s01-arrival-overwhelm` recorded in `out/s01-arrival-overwhelm/render-manifest.json`; the files are under `out/light-01/`. The whole run is `out/light-01/proof.sh`.
@@ -129,6 +158,47 @@ $ python3 scripts/animation/probe-eyetrace.py out/light-01/proof-seq ...    (wit
   ok   measured something: 10 frames carry an emitter
   FAIL emitter within tolerance: 1 frame(s) over 3 % of the width: [(177, 22.2)]
 FAIL: eye-trace - 1 of 2 checks failed: emitter within tolerance
+exit 1
+```
+
+### After D100: probe-light.py and probe-eyetrace.py, verbatim
+
+Frames and commands as above (`out/eye-8.6/` holds every line; `before-*` the runs on the unchanged probes).
+
+```
+$ python3 scripts/animation/probe-light.py out/s01-arrival-overwhelm-seq --light v3/light.json --timeline v3/timeline.json --materials v3/materials.json --xsheet out/s01-arrival-overwhelm-xsheet.json --manifest out/s01-arrival-overwhelm/render-manifest.json --base-frames out/light-01/base-seq
+control: a solid between the emitter and the far field with its stipple shadow darkens the far side by 90 % (margin 50 %); the same frame with no block 25 % -> not darkened; the block with its shadow missing 25 % -> not darkened, so the probe would FAIL it; a stipple penumbra reads two-peaked (17.8 % at the dot level, 0.0 % between (at most 10 %), field 5, dots 203); a ramp shadow -> refused (0.0 % at the dot level, 55.3 % between (at most 10 %), field 112, dots 203); a bounce at luma 224 against dots at 208 -> refused, one at 107 inside the pair -> accepted, one off the pair's hues (100 % outside +-15 degrees) -> refused
+  frames 420; measured 416 with an emitter at full strength, skipped 4; solid materials body, box, cloth, hair, line, paper; fixed fills from v3/roles.json
+  ok   measured something: 416 frames carry an emitter
+  ok   far side darker: 372 frames with a measurable solid; median darkening over them 100 % (lowest 100 %, highest 100 %) against a margin of 50 %
+  ok   shadows are stipple: 162 penumbra bands with dots in them read on black-field frames (41 more held no dots: wholly in shadow or past the reach, not informative); every one holds two levels and nothing between (at most 10 % between)
+  ok   bounce inside the pair and under the dots: 318 frames carry bounce dots; all inside the pair's hues and under the direct dots
+  FAIL eye trace holds: 416 frames, probe-eyetrace's own offset (the brightest 0.5 % outside the fixed fills of v3/roles.json against the story point's target) on the frame as drawn: 371 within 3 % of the width with the layer, 388 without it; worst 22.2 % at frame 177 with the layer, 22.2 % without; 45 over, 25 of them inside the limit without the layer; first (frame, with %, without %) [(176, 8.2, 8.2), (177, 22.2, 22.2), (185, 5.2, 4.2), (186, 4.9, 5.0), (187, 4.6, 2.5), (188, 4.6, 1.7), (189, 4.9, 3.9), (190, 5.3, 4.1), (191, 5.6, 2.2), (192, 6.0, 1.9)]
+FAIL: light - 1 of 5 checks failed: eye trace holds
+exit 1
+```
+
+```
+$ python3 scripts/animation/probe-eyetrace.py out/animatic-seq --timeline v3/timeline.json --xsheet v3/xsheet.json
+control: bright blob 10 % of the width off the emitter -> FAIL (offset 10.0 % > 3 %); blob on the emitter -> pass (0.0 %); identity, garment and kit-contour patches brighter than the blob are ignored (read unmasked they would put the offset at 46 %); the same blob against an emitter projected through a camera that moved 140 stage px -> FAIL (10.9 %), so the camera is read; 120 lone white specks, brighter than the blob and a share of the 0.5 % ranked, are not a region: offset 2.2 % blurred, 8.7 % unblurred; target the frame interior: a lamp brighter than the interior's light, outside it -> FAIL (15.6 %), the interior's light alone -> pass (0.0 %), and the same frame against the lamp as the target -> pass (0.0 %), so the target is what is read; a pale halo in the kit's colour: masked everywhere it is eaten -> FAIL (11.2 %), masked only inside the prop's crop it is found -> pass (0.0 %); a line outside the table is refused by name ('the leaf' (story point sp-5.3) is not in the ta...)
+  frames 1950; masked 28 fixed colours everywhere and the human cutout's 82 inside its crop, and 39 kit and gadget colours only inside their props' crops (blocking, beats ['arrival', 'art-world', 'cant-build', 'everything-at-once', 'home-settle', 'programming-world', 'the-frame']), from v3/roles.json; measured 1196 {'emitter': 754, 'frame': 304, 'join': 138}; skipped (target is the emitter and the xsheet row has none) 4; skipped (emitter drawn below strength 1, a crossing) 120; skipped (the story point says the light pushes nowhere readable) 120; worst offset 67.3 % at frame 1382
+  ok   measured something: 1196 frames carry a target
+  FAIL targets resolve: 510 frame(s) have a target the frame cannot resolve: 'the drawn piece as it fills' (beat art-world (light_pushes: 'play: warm amber on paper, the drawing f')) is not in the target table: no role, prop or layer of the frame draws it: frames 930-939 (10); "the crayon's own colour" (story point sp-5.1) is not in the target table: no role, prop or layer of the frame draws it: frames 940-1009 (70); 'the drawn line' (story point sp-5.2) is not in the target table: no role, prop or layer of the frame draws it: frames 1010-1109 (100); 'the leaf' (story point sp-5.3) is not in the target table: no role, prop or layer of the frame draws it: frames 1110-1199 (90); 'the leaf' (story point sp-5.4) is not in the target table: no role, prop or layer of the frame draws it: frames 1200-1229 (30); "the piece's lines" (story point sp-6.1) is not in the target table: no role, prop or layer of the frame draws it: frames 1240-1299 (60); "the piece's lines" (story point sp-6.2) is not in the target table: no role, prop or layer of the frame draws it: frames 1300-1349 (50); 'the running bead' (story point sp-7.3) is not in the target table: no role, prop or layer of the frame draws it: frames 1520-1619 (100)
+  FAIL target within tolerance: 232 frame(s) over 3 % of the width: [(928, 3.5, 'frame'), (929, 3.5, 'frame'), (1382, 67.3, 'join'), (1383, 67.2, 'join'), (1384, 67.1, 'join'), (1385, 67.0, 'join'), (1386, 67.0, 'join'), (1387, 67.0, 'join'), (1388, 66.9, 'join'), (1389, 66.9, 'join'), (1390, 66.9, 'join'), (1391, 66.9, 'join')]
+FAIL: eye-trace - 2 of 3 checks failed: targets resolve, target within tolerance
+exit 1
+```
+
+```
+$ python3 scripts/animation/probe-colour.py out/animatic-seq --timeline v3/timeline.json --contract v3/light.json --xsheet v3/xsheet.json
+control: magenta patch off both pairs -> FAIL (frame 5: 576 of 15376 saturated pixels outside); hue detour through green across a crossing -> FAIL (crossing 14-34 detours: sample 1 (205 deg) sits 16 deg behind the start); clean sequence with identity, garment and kit-accent patches (all saturated, all off the pair) -> pass; a pale blue glow on the emitter reads 221 deg -> inside the blue pair, the same glow in pale green reads 144 deg -> off it, a frame with no glow reads nothing
+control: a crossing whose frames pass through a tan -> FAIL (crossing 100-105: the dominant colour dips at frame 101 (value 0.55 under the floor 0.83); 2 of 5 frames read dip); through a grey -> FAIL (crossing 100-105: the dominant colour dips at frame 101 (chroma 0.00 under the lower endpoint's 0.82); 3 of 5 frames read dip); a hue walk between the same ends that holds both floors -> pass
+  frames 1950; masked 67 fixed colours from v3/roles.json; skipped (no pair for the beat, or under 30 saturated pixels) 1946; crossing windows [(895, 965), (1195, 1265), (1315, 1385), (1615, 1685)]
+  FAIL radiance hue per frame: the light's own hue sits inside the beat's pair on 1668 of 1671 frames where it is drawn and readable (149 drawn but unreadable: the brightest region outside the fixed fills is not on the emitter, or has no chroma to read a hue from); off the pair on 3: [(1612, 190, [214, 205]), (1613, 190, [214, 205]), (1614, 190, [214, 205])] (frame, hue, pair hues)
+  ok   saturated pixels inside the pair: 0 of 4 measured frame(s) (1946 had under 30 saturated pixels left outside the fixed fills and their blends, or no pair) with saturated pixels outside the pair +-15 deg
+  FAIL crossing hue path: crossing 895-965 detours: sample 11 (251 deg) turns back 137 deg; crossing 1615-1685 detours: sample 12 (190 deg) turns back 18 deg
+  ok   crossing value and chroma held: 4 of 4 crossings hold value and chroma on their dominant colour: 895-965: 70 frames read, lowest value 0.05 (floor -0.00), lowest chroma 0.012 (floor 0.008); 1195-1265: 70 frames read, lowest value 0.05 (floor -0.00), lowest chroma 0.012 (floor 0.008); 1315-1385: 70 frames read, lowest value 0.04 (floor -0.01), lowest chroma 0.023 (floor 0.008); 1615-1685: 70 frames read, lowest value 0.04 (floor -0.01), lowest chroma 0.023 (floor 0.008)
+FAIL: colour-continuity - 2 of 4 checks failed: radiance hue per frame, crossing hue path
 exit 1
 ```
 
@@ -240,7 +310,7 @@ The rulings name the layer, not its numbers, so the contract's first values are 
 
 ## What is left
 
-- **The eye trace still fails on 56 of 416 frames with the layer (27 without).** Detail above. What would close it: the lamp's halo colours are the pale roles' colours (kit.light, gadget.light), so masking the roles masks part of the lamp; either the probe masks by region as well as colour, or the pale roles are retired from the mask once the shot's palette is complete.
+- **The eye trace still fails on 45 of 416 frames with the layer (28 without), after D100's retarget and the region-plus-colour mask.** Detail above: the seam going out (176-177) and the flood rising (185-231). The screenplay names `gadget dial` for the flood's story points (sp-2.1 to sp-2.3), so the lamp is the target there and the layer's dots below it pull the eye 3-8 % down toward the trio; either those story points name what the flood pushes, or the dots below the lamp thin.
 - **The class scale is not yet visible.** Every solid on s01 is stipple-2, so soft, medium and hard shadows are exercised only by the probe's planted frames and the shader's constants.
 - **The cloak and the hair** are one figure to the light (`body`); a per-part split needs the parts rig to draw per material (p006).
 - **Beat 4, frame 700.** The animatic (`Animatic65`) draws no passes, so the light layer is wired for `s01-arrival-overwhelm` only (`SHOTS` in `render-manifest.mjs`); frame 700 was not rendered.

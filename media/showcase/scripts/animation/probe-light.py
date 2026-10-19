@@ -9,7 +9,7 @@ render-cached.mjs served it into; without them the probe estimates the solids fr
   stipple     the penumbra band beside the shadow, read on a black field (median luma under 30), holds two levels and nothing between: at most 10 % of its pixels sit between 0.2 and 0.8 of the dots' own level, and dots are in it
               (at least 1 %: a band with none is a ramp or unlit, not a stipple). A ramp has no dots and every level between.
   bounce      dots whose chroma is at least 25 and 0.6 of their luma, within 56 px of an occluder are bounce: their hue is inside the beat's pair (probe-colour's pair hues, +-15 degrees) and their 99th-percentile luma is under the direct dots'.
-  eye trace   probe-eyetrace's own offset (the brightest region outside the fixed fills against the xsheet emitter, 3 % of the width), the drawn solids counted among the fixed fills; with --base-frames the layer may move it by at most 1 % of the width.
+  eye trace   probe-eyetrace's own offset (the brightest region outside the fixed fills against the frame's story-point target, 3 % of the width; the kit's and gadget's pale roles are fixed fills only where the props and title layers drew something, from --manifest); with --base-frames the layer may move it by at most 1 % of the width.
 Control first, on planted frames painted in memory from one clean frame (a block of the codex pigment, dots of the light seeded by distance, the shadow painted as the missing dots): the block with its stipple shadow darkens the far side by at least the margin,
 the same frame with no block does not, the block with its shadow missing (the defect the probe exists to catch) does not, a ramp shadow is refused, a stipple shadow with a penumbra is accepted, a bounce brighter than the direct dots is refused,
 a bounce off the pair's hues is refused and a bounce under the dots inside the pair is accepted. A control that does not trip exits 2 without reporting.
@@ -246,6 +246,8 @@ def main():
     ap.add_argument("--manifest", default=None, help="the render manifest of the frames: names the occluder mask each frame's light was drawn from"); ap.add_argument("--masks", default=None, help="folder of the served occluder masks (default: out/cache/<shot>/bundle/*/public/lightsdf-in)")
     ap.add_argument("--base-frames", default=None, help="the same frames without the light layer (compose-without-light-sdf.py): the eye trace then asks that the layer moved the brightest region by at most 1 % of the width, instead of the 3 % the light track allows (the shot's own fills, the yellow ribbon of the box, sit outside v3/roles.json and are brighter than the emitter's dots on frame 0)")
     ap.add_argument("--tolerance", type=float, default=0.03, help="eye trace, share of the frame width")
+    ap.add_argument("--screenplay", default=None, help="v3/screenplay.json (default: beside the timeline): the story points name the eye's target (probe-eyetrace)")
+    ap.add_argument("--beats", default=None, help="v3/beats-v2.json (default: beside the timeline)"); ap.add_argument("--blocking", default=None, help="v3/blocking (default: beside the timeline)")
     ap.add_argument("--control-only", action="store_true")
     a = ap.parse_args()
     pr = Probe("light", a.json)
@@ -257,6 +259,8 @@ def main():
     tl, xs, frames, note = apply_shot(a, tl, xs, frames)
     want = {int(x) for x in a.only.split(",")} if a.only else None
     hexes = fixed_role_hexes(a.roles, plates=False); plate = plate_hexes(a.roles)
+    everywhere, owned = role_split(a.roles)                 # D100/p007: the kit's and gadget's pale roles are the lamp's halo too; they count only where the layer that draws a prop drew one
+    points, beats, blocking = ET.load_targets(a); refused_eye = {}
     occ_of, mask_dir = {}, None
     if a.manifest:
         man = read_json(a.manifest, "render manifest"); root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(a.manifest))))
@@ -313,10 +317,15 @@ def main():
                 bounce_n += 1
                 if b["outside"] > 0.02 or (b["direct"] is not None and b["bounce"] >= b["direct"]): bad_bounce.append((f, round(100 * b["outside"]), round(b["bounce"]), None if b["direct"] is None else round(b["direct"])))
         d0 = None
-        if base:
-            if f not in base: continue
-            d0 = ET.offset(load_rgb(base[f]), em, cam, 0.005, hexes, BLUR_STAGE_PX, plate)
-        d = ET.offset(raw, em, cam, 0.005, hexes, BLUR_STAGE_PX, plate)
+        if base and f not in base: continue
+        bid = (beat_at(tl, f) or {}).get("id"); line, src = ET.story_target(f, bid, points, beats)
+        tgt, why = ET.resolve_target(line, src, em, blocking.get(bid)) if line is not None else (None, f"{src}: no target named")
+        if tgt is None: refused_eye.setdefault(why, []).append(f); continue
+        if tgt["kind"] == "none": continue
+        prop_region = layer_prop_region(man, root, f, img.shape) if a.manifest else None
+        eye_hexes, eye_owned = (everywhere, owned) if prop_region is not None else (hexes, None)
+        if base: d0 = ET.offset(load_rgb(base[f]), tgt, cam, 0.005, eye_hexes, BLUR_STAGE_PX, plate, eye_owned, prop_region)
+        d = ET.offset(raw, tgt, cam, 0.005, eye_hexes, BLUR_STAGE_PX, plate, eye_owned, prop_region)
         if d is not None:
             eye_rows.append((f, d, d0))
             if d > worst_eye[0]: worst_eye = (d, f)
@@ -330,9 +339,10 @@ def main():
     pr.check("bounce inside the pair and under the dots", not bad_bounce, f"{bounce_n} frames carry bounce dots" + (f"; refused at (frame, % outside the pair, bounce luma, direct luma) {bad_bounce[:6]}" if bad_bounce else "; all inside the pair's hues and under the direct dots") if bounce_n else "no bounce dots found on a measured frame")
     if base:
         worse = [(f, round(100 * d, 1), round(100 * d0, 1)) for f, d, d0 in eye_rows if d0 is not None and d > a.tolerance and d0 <= a.tolerance]
-        pr.check("eye trace holds", bool(eye_rows) and not bad_eye, f"{len(eye_rows)} frames, probe-eyetrace's own offset (the brightest 0.5 % outside the fixed fills of v3/roles.json against the emitter) on the frame as drawn: {sum(1 for _, d, _ in eye_rows if d <= a.tolerance)} within {100 * a.tolerance:.0f} % of the width with the layer, {sum(1 for _, _, d0 in eye_rows if d0 is not None and d0 <= a.tolerance)} without it; worst {100 * worst_eye[0]:.1f} % at frame {worst_eye[1]} with the layer, {100 * max(d0 for _, _, d0 in eye_rows if d0 is not None):.1f} % without" + (f"; {len(bad_eye)} over, {len(worse)} of them inside the limit without the layer; first (frame, with %, without %) {bad_eye[:10]}" if bad_eye else ""))
+        pr.check("eye trace holds", bool(eye_rows) and not bad_eye, f"{len(eye_rows)} frames, probe-eyetrace's own offset (the brightest 0.5 % outside the fixed fills of v3/roles.json against the story point's target) on the frame as drawn: {sum(1 for _, d, _ in eye_rows if d <= a.tolerance)} within {100 * a.tolerance:.0f} % of the width with the layer, {sum(1 for _, _, d0 in eye_rows if d0 is not None and d0 <= a.tolerance)} without it; worst {100 * worst_eye[0]:.1f} % at frame {worst_eye[1]} with the layer, {100 * max(d0 for _, _, d0 in eye_rows if d0 is not None):.1f} % without" + (f"; {len(bad_eye)} over, {len(worse)} of them inside the limit without the layer; first (frame, with %, without %) {bad_eye[:10]}" if bad_eye else ""))
     else:
         pr.check("eye trace holds", not bad_eye and worst_eye[1] is not None, f"worst offset {100 * worst_eye[0]:.1f} % of the width at frame {worst_eye[1]} (limit {100 * a.tolerance:.0f} %)" + (f"; over at {bad_eye[:8]}" if bad_eye else ""))
+    if refused_eye: pr.check("eye trace targets resolve", False, "; ".join(f"{why}: frames {min(fs)}-{max(fs)} ({len(fs)})" for why, fs in sorted(refused_eye.items(), key=lambda kv: min(kv[1]))))
     pr.extra.update({"eye": [{"frame": f, "with": d, "without": d0} for f, d, d0 in eye_rows], "measured": measured, "darkening": [{"frame": f, "median": m, "occluders": n} for f, m, n in occ_all]})
     pr.finish(f"a solid occluder darkens the far side of the light by a median {100 * float(np.median(far)):.0f} % on {occ_n} measured frames, the penumbra is stipple, the bounce stays inside the pair and under the dots, and the eye still finds the emitter" if occ_all else "nothing measured")
 

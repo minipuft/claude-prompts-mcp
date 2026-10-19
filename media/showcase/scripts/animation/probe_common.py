@@ -414,11 +414,133 @@ def plate_hexes(path=None):
     return sorted(set(h.lower() for png in d.get("plates", []) for h in plate_palette(png, root)))
 
 
-def cast_mask(img, cam, hexes, plate, box=FIGURE_BOX):
+def role_split(path=None):
+    """(everywhere, owned): the fixed colours split by whether a pale light can be mistaken for them. `owned` are the kit's and the gadget's role colours that no identity, human or world colour also
+    names: a role file lists them as RGB spheres, and the pale ones (kit.light, gadget.light, the box tape lit at three strengths) are also the lamp's own halo, so masked everywhere they take the lamp with
+    them (D100, p007). They count only where the prop that draws them is (`prop_region_from_blocking`, or the layer's own silhouette); `everywhere` is every other fixed colour, masked wherever it appears.
+    No roles file: the two identity pigments, nothing owned."""
+    path = path or ROLES_FILE
+    allh = fixed_role_hexes(path, plates=False)
+    if not os.path.exists(path): return allh, []
+    d = read_json(path, "roles")
+    elsewhere = {h.lower() for grp in d.get("identity", {}).values() for h in grp} | {h.lower() for h in d.get("human", [])} | {h.lower() for grp in d.get("worlds", {}).values() for h in grp}
+    owned = sorted({h.lower() for h in list(d.get("kit", [])) + list(d.get("gadget", []))} - elsewhere)
+    return sorted(set(allh) - set(owned)), owned
+
+
+PROP_PAD = 12                           # stage px a prop's crop is padded by: the outline and the anti-aliased edge are outside the native box
+FRAME_BAR = 20                          # stage px of the frame prop's bar inwards (Frame.tsx bar 14 + its 5 px contour): the interior is where a frame's light is, not the prop
+GATE_CARVE = 1.7                        # on a beat whose emitter is the gates, a gate is lit by it: its disc (r x this) is never a prop's region
+# actors.tsx: per prop, the anchor's offset inside the prop's native box and the box (px at scale 1): the box stands on it (foot of the front face), the bubble is centred on it, the gadget hangs from its dial,
+# the stalk grows from its root (5.2 x 64 px tall, a spiral about 260 wide) and the structure stands on its base centre (the outer arch 220 x 300).
+PROP_NATIVE = {"box": ((95, 160), (220, 170)), "bubble": ((140, 140), (280, 280)), "gadget": ((108, 190), (200, 260)), "stalk": ((130, 360), (260, 370)), "structure": ((110, 300), (220, 300))}
+
+
+# Codex and Clawd: the box they are drawn in, from the anchor, in native px at scale 1 ((x0, y0), (x1, y1)); read off the animatic's frames (Codex at scale 1.8 spans +15..+175 by +45..+240 stage px, Clawd at 1.5 +35..+195 by +30..+155).
+CAST_NATIVE = {"codex": ((0, 15), (110, 145)), "clawd": ((15, 10), (140, 115))}
+
+
+def blocking_prop_rects(b):
+    """The stage rectangles where a beat's blocking draws a prop that wears kit or gadget roles, and the ones carved out of them (a gate is a light): ([(x0, y0, x1, y1, inset)], [(x0, y0, x1, y1)]).
+    `inset` > 0 makes the rectangle a ring of that bar width (the frame: its interior is the light's, not the prop's). The actors (`blocking.actors`, `PROP_NATIVE`), Codex and Clawd (`CAST_NATIVE`), the human's crop, the frame, the two blocks, the arch and the floor (everything below `floor.y`); the gates are carved out of them only on a beat whose emitter anchor names the gates."""
+    add, carve = [], []
+    for name, a in (b.get("actors") or {}).items():
+        if name not in PROP_NATIVE: die(f"blocking actor {name!r} has no native size in probe_common.PROP_NATIVE (actors.tsx draws {sorted(PROP_NATIVE)})")
+        (ox, oy), (w, h) = PROP_NATIVE[name]; s = a.get("scale", 1.0)
+        add.append((a["x"] - ox * s, a["y"] - oy * s, a["x"] - ox * s + w * s, a["y"] - oy * s + h * s, 0))
+    for who, ((x0, y0), (x1, y1)) in CAST_NATIVE.items():                         # the cast wears kit.light as its contour in the reduced line world
+        c = b.get(who)
+        if c: s = c.get("scale", 1.0); add.append((c["x"] + x0 * s, c["y"] + y0 * s, c["x"] + x1 * s, c["y"] + y1 * s, 0))
+    fc = b.get("figureCrop")
+    if fc: add.append((fc["x"], fc["y"], fc["x"] + fc["width"], fc["y"] + fc["height"], 0))              # the human's own crop (FIGURE_BOX)
+    fr = b.get("frame")
+    if fr: add.append((fr["x"], fr["y"], fr["x"] + fr["width"], fr["y"] + fr["height"], FRAME_BAR))
+    for k in b.get("blocks") or []: add.append((k["x"], k["y"], k["x"] + k["width"], k["y"] + k["height"], 0))
+    ar = b.get("arch")
+    if ar: add.append((ar["x"], ar["y"], ar["x"] + ar["width"], ar["y"] + ar["height"], 0))
+    fl = b.get("floor")
+    if fl: add.append((0, fl["y"], STAGE[0], STAGE[1], 0))                                               # the line world draws its floor grid in kit.light
+    if "gate" in str((b.get("emitter") or {}).get("anchor", "")).lower():                              # the emitter lives on the gates (the programming world): their lit rings are the light, not the prop
+        for g in b.get("gates") or []: carve.append((g["x"] - GATE_CARVE * g["r"], g["y"] - GATE_CARVE * g["r"], g["x"] + GATE_CARVE * g["r"], g["y"] + GATE_CARVE * g["r"]))
+    return add, carve
+
+
+def prop_region_from_blocking(shape, cam, b):
+    """Boolean mask (frame pixels) of where the beat's props are drawn, from the blocking (`blocking_prop_rects`), each crop padded by PROP_PAD stage px and projected through the camera as the
+    bounding box of its corners; the lit gates' discs carved out."""
+    H, W = shape[:2]; sc = W / STAGE[0]; m = np.zeros((H, W), bool)
+    def box(x0, y0, x1, y1):
+        pts = [project(cam, px, py) for px, py in ((x0, y0), (x1, y0), (x0, y1), (x1, y1))]
+        return (int(max(0, min(p[1] for p in pts) * sc)), int(min(H, max(p[1] for p in pts) * sc + 1)), int(max(0, min(p[0] for p in pts) * sc)), int(min(W, max(p[0] for p in pts) * sc + 1)))
+    add, carve = blocking_prop_rects(b)
+    for x0, y0, x1, y1, bar in add:
+        r0, r1, c0, c1 = box(x0 - PROP_PAD, y0 - PROP_PAD, x1 + PROP_PAD, y1 + PROP_PAD); m[r0:r1, c0:c1] = True
+        if bar:
+            r0, r1, c0, c1 = box(x0 + bar, y0 + bar, x1 - bar, y1 - bar)
+            if r1 > r0 and c1 > c0: m[r0:r1, c0:c1] = False
+    for x0, y0, x1, y1 in carve:
+        r0, r1, c0, c1 = box(x0, y0, x1, y1); m[r0:r1, c0:c1] = False
+    return m
+
+
+_LAYER_INDEX = {}
+
+
+def layer_prop_region(man, root, f, shape, grow=2):
+    """Boolean mask (frame pixels) of where the layers that draw the shot's props and title drew something on frame `f`, read from the render manifest `man` and the drawing cache under `root`/out/cache/<shot>:
+    the props layer's `back` drawing (opaque: the field and the props behind the figure) wherever it is not the field colour, its `front` drawing (the props in front) wherever it has alpha, and the
+    world layer's title drawing wherever it has alpha; grown by `grow` px for the anti-aliased edge. The light layers are not in it, so the lamp's halo never is. Region plus colour for a real shot, where the
+    blocking does not describe the staging (`blocking_describes`)."""
+    from PIL import Image
+    from scipy import ndimage as ndi
+    r = next((x for x in man["frames"] if x["frame"] == f), None)
+    if r is None: return None
+    H, W = shape[:2]; m = np.zeros((H, W), bool); fld = [float(v) for v in re.findall(r"[\d.]+", r["params"]["field"])[:3]] if not r["params"]["field"].startswith("#") else [int(r["params"]["field"][i:i + 2], 16) for i in (1, 3, 5)]
+    for layer, passes in (("props", ("back", "front")), ("world", ("title",))):
+        L = man["layers"].get(layer)
+        if not L: continue
+        d = os.path.join(root, "out", "cache", man["shot"], layer, L["cacheKey"][:16])
+        if d not in _LAYER_INDEX: _LAYER_INDEX[d] = read_json(os.path.join(d, "index.json"), "drawing index")
+        for i in r["layers"].get(layer, []):
+            kind = i.split("-")[0]
+            if kind not in passes or i not in _LAYER_INDEX[d]: continue
+            b = _LAYER_INDEX[d][i]
+            if b["w"] == 0: continue
+            a = np.asarray(Image.open(os.path.join(d, i + ".png")).convert("RGBA")).astype(np.int32)
+            drawn = (np.abs(a[..., :3] - np.array(fld)).max(axis=2) > 6) & (a[..., 3] > 0) if kind == "back" else a[..., 3] > 0
+            m[b["y"]:b["y"] + b["h"], b["x"]:b["x"] + b["w"]] |= drawn[: H - b["y"], : W - b["x"]]
+    return ndi.binary_dilation(m, iterations=grow) if grow else m
+
+
+def load_blocking(timeline_path):
+    """{beat id: blocking} from v3/blocking beside the timeline (empty when the directory is absent)."""
+    d = os.path.join(os.path.dirname(os.path.abspath(timeline_path)), "blocking"); out = {}
+    if os.path.isdir(d):
+        for fn in sorted(os.listdir(d)):
+            if fn.endswith(".json"):
+                b = read_json(os.path.join(d, fn), "blocking"); out[b.get("id", fn[:-5])] = b
+    return out
+
+
+def blocking_describes(tl, xs, blocking, tol=3.0):
+    """The beats whose frames are drawn from `blocking` (the animatic stages every prop at the blocking's anchors): the xsheet emitter, on the beat's first frame that carries one, sits within `tol` stage px of
+    the blocking's `emitter.start`. A real shot (s01) has its own staging and its own emitter track, so its beats are not in the set and no prop crop is read from a blocking that does not describe them."""
+    out = set()
+    for b in tl["beats"]:
+        st = ((blocking.get(b["id"]) or {}).get("emitter") or {}).get("start")
+        if not st: continue
+        em = next((r["emitter"] for r in (xs.get(f) for f in range(b["start"], b["end"])) if r and isinstance(r.get("emitter"), dict) and r["emitter"].get("x") is not None), None) if xs else None
+        if em and np.hypot(em["x"] - st[0], em["y"] - st[1]) <= tol: out.add(b["id"])
+    return out
+
+
+def cast_mask(img, cam, hexes, plate, box=FIGURE_BOX, owned=None, region=None):
     """The fixed fills a pale light must not be confused with: the role colours (`hexes`: identity, human, kit, gadget, worlds) everywhere, and the human's cutout palette (`plate`) only inside the
     human's own crop (`box`, stage pixels, projected through the camera as the bounding box of its corners). The cutout carries pale contour and shading colours a pale emitter's glow passes
-    through; masked everywhere they would take the glow's core with them, so they are masked where the human is."""
+    through; masked everywhere they would take the glow's core with them, so they are masked where the human is. The same for `owned` (`role_split`: the kit's and the gadget's pale roles) with `region`
+    (a frame-sized mask of where those props are drawn): region plus colour. `owned` with no `region` is masked everywhere, as `hexes` is, so a caller that has no region reads as it always did."""
     m = role_mask(img, hexes) if hexes else np.zeros(img.shape[:2], bool)
+    if owned: m = m | (role_mask(img, owned) & (region if region is not None else True))
     if plate:
         H, W = img.shape[:2]; sc = W / STAGE[0]; x, y, w, h = box
         pts = [project(cam, px, py) for px, py in ((x, y), (x + w, y), (x, y + h), (x + w, y + h))]
