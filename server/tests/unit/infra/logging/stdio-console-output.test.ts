@@ -13,14 +13,13 @@
  * ever reach stdout/console.log: STDIO owns it for the protocol.
  *
  * POSITIVE CONTROL: the "STDIO + not CI" tests below were run once against the OLD
- * `logToConsole` (the version that gated everything on `transport !== TransportType.STDIO`
+ * `logToConsole` (the version that gated everything on `transport !== 'stdio'`
  * outside the CI branch) and confirmed to fail — a probe that cannot fail is not a check.
  */
 
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 import { EnhancedLogger } from '../../../../src/infra/logging/index.js';
-import { TransportType } from '../../../../src/shared/types/index.js';
 
 const LOG_FILE = '/dev/null';
 
@@ -68,7 +67,7 @@ describe('EnhancedLogger.logToConsole', () => {
 
   describe('STDIO transport, outside CI', () => {
     it('sends warn() to console.warn with the [WARN] prefix', () => {
-      const logger = new EnhancedLogger({ logFile: LOG_FILE, transport: TransportType.STDIO });
+      const logger = new EnhancedLogger({ logFile: LOG_FILE, transport: 'stdio' });
 
       logger.warn('disk space low');
 
@@ -77,7 +76,7 @@ describe('EnhancedLogger.logToConsole', () => {
     });
 
     it('sends error() to console.error with the [ERROR] prefix', () => {
-      const logger = new EnhancedLogger({ logFile: LOG_FILE, transport: TransportType.STDIO });
+      const logger = new EnhancedLogger({ logFile: LOG_FILE, transport: 'stdio' });
 
       logger.error('config load failed');
 
@@ -86,7 +85,7 @@ describe('EnhancedLogger.logToConsole', () => {
     });
 
     it('does not reach the console for info() or debug() without enableDebug', () => {
-      const logger = new EnhancedLogger({ logFile: LOG_FILE, transport: TransportType.STDIO });
+      const logger = new EnhancedLogger({ logFile: LOG_FILE, transport: 'stdio' });
 
       logger.info('server starting');
       logger.debug('verbose detail');
@@ -98,7 +97,7 @@ describe('EnhancedLogger.logToConsole', () => {
     it('reaches console.error for info() and debug() when enableDebug is set', () => {
       const logger = new EnhancedLogger({
         logFile: LOG_FILE,
-        transport: TransportType.STDIO,
+        transport: 'stdio',
         enableDebug: true,
       });
 
@@ -112,7 +111,7 @@ describe('EnhancedLogger.logToConsole', () => {
     it('never writes to stdout or console.log, at any level', () => {
       const logger = new EnhancedLogger({
         logFile: LOG_FILE,
-        transport: TransportType.STDIO,
+        transport: 'stdio',
         enableDebug: true,
       });
 
@@ -131,7 +130,7 @@ describe('EnhancedLogger.logToConsole', () => {
       process.env['CI'] = 'true';
       const logger = new EnhancedLogger({
         logFile: LOG_FILE,
-        transport: TransportType.STDIO,
+        transport: 'stdio',
         enableDebug: true,
       });
 

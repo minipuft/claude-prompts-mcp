@@ -8,13 +8,13 @@ import { createServer, Server } from 'http';
 
 import { ConfigLoader } from '../config/index.js';
 import { Logger } from '../logging/index.js';
-import { TransportRouter, createTransportRouter, HttpTransportType } from './transport/index.js';
+import { TransportRouter, createTransportRouter } from './transport/index.js';
 
 import type { ApiRouterPort } from '#shared/types/index.js';
 import type { Application } from 'express';
 
 // Re-export transport types and utilities for external consumers
-export { TransportRouter, createTransportRouter, HttpTransportType };
+export { TransportRouter, createTransportRouter };
 
 /**
  * Server Manager class

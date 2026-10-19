@@ -50,14 +50,6 @@ function assertTransportSupported(value: string, source: string): void {
 }
 
 /**
- * Transport types supported by the server
- */
-export enum HttpTransportType {
-  STREAMABLE_HTTP = 'streamable-http',
-  BOTH = 'both',
-}
-
-/**
  * Transport Manager class
  */
 export class TransportRouter {
@@ -218,17 +210,14 @@ export class TransportRouter {
    * True for 'streamable-http' or 'both' modes
    */
   isStreamableHttp(): boolean {
-    return (
-      this.transport === HttpTransportType.STREAMABLE_HTTP ||
-      this.transport === HttpTransportType.BOTH
-    );
+    return this.transport === 'streamable-http' || this.transport === 'both';
   }
 
   /**
    * Check if running in dual transport mode
    */
   isBoth(): boolean {
-    return this.transport === HttpTransportType.BOTH;
+    return this.transport === 'both';
   }
 
   /**
