@@ -1,5 +1,5 @@
 {
-  "revision": "shots-03 · 2026-10-13 · D69 cloak→swoop transition on s02; human sheet accepted",
+  "revision": "shots-04 · 2026-10-19 · shot ranges are the 65 s timeline's beats (s01 beats 1-2, s02 3-4, s03 5-7, s04 8); D69 cloak→swoop transition on s02; human sheet accepted",
   "fps": 30,
   "beats": "v3/beats.json",
   "shots": [
@@ -100,8 +100,8 @@
       ],
       "title": "Reaches fail; the frame rises; the cloak falls and the Swoop looks through",
       "frames": [
-        330,
-        600
+        420,
+        930
       ],
       "camera": "medium on the human, panning right to Clawd and the raised frame",
       "move": {
@@ -156,21 +156,20 @@
     {
       "id": "s03-scaffold",
       "beat": [
-        "scaffold"
+        "art-world",
+        "crossing"
       ],
+      "beats_note": "frames 930-1650 hold beats 5-7 (art-world, crossing, programming-world). programming-world is not listed in `beat` because it wears the s02 hue pair by the ledger (timeline radiance: s02 accent as the world's hue) and `beat` is what lightPlan, compile-light and probe-colour read as 'beats wearing this shot's pair'; the shot of a frame comes from `frames`",
       "title": "Six joins through the frame; a slow push along the beaded string",
       "frames": [
-        600,
-        1020
+        930,
+        1650
       ],
       "camera": "through-frame view, pushing in slowly as the structure gains depth",
       "move": {
         "type": "push",
         "led_by": "the beaded light string from the first stalk toward the arch and the rings behind it",
-        "frames": [
-          760,
-          900
-        ]
+        "frames": null
       },
       "actors": [
         "human",
@@ -215,21 +214,18 @@
     {
       "id": "s04-settle",
       "beat": [
-        "settle"
+        "home-settle"
       ],
       "title": "Pull back along the structure's silhouette to the second poster",
       "frames": [
-        1020,
-        1200
+        1650,
+        1950
       ],
       "camera": "pulling back to a wide with the structure centered and the trio at its base",
       "move": {
         "type": "pull",
         "led_by": "the structure's outer silhouette and the frame's edge set down against it",
-        "frames": [
-          1030,
-          1090
-        ]
+        "frames": null
       },
       "actors": [
         "human",

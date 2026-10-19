@@ -54,6 +54,7 @@ chainSteps:
     inlineGateIds:
       - animation-blocking-contract
       - animation-vocabulary
+      - animation-story
     id: blocking
     stepName: Blocking
   - promptId: animation_light_script
@@ -97,6 +98,7 @@ chainSteps:
       - handoff-artifacts
       - animation-bible
       - animation-vocabulary
+      - animation-story
     id: evidence
     stepName: File and Feed Back
 systemMessageFile: system-message.md

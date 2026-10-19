@@ -4,7 +4,7 @@
 // {ok, hash, inputsHash, output} or {ok:false, refusal, output}; a refusal restores the pre-edit bytes, so a bad edit never persists.
 // Binds 127.0.0.1 only. No dependencies: node:http, node:fs, node:child_process.
 //   GET  /state                                                  -> {ok, hash, inputsHash, today}
-//   POST /edit       {file:'beats-v2', beat, field, value}       field: seconds | register | light_pushes | camera | actions | asks
+//   POST /edit       {file:'beats-v2', beat, field, value}       field: seconds | register | light_pushes | camera | actions | asks; an action is {actor, does} and keeps the storyPoint it had (or takes one of its beat's, null unbinds)
 //   POST /edit       {file:'materials', material, field, value}  field: any non-null property of v3/materials.json; the value is patched as a number or a word and the probe judges the range
 //   POST /boundary   {beat, newEndSeconds}
 //   POST /proposal   {kind, title, text, anchor:{beat, frame?}, references:[], before?, after?, from}
@@ -33,6 +33,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 const P = {
   ledger: path.join(root, 'v3/beats-v2.json'),
   timeline: path.join(root, 'v3/timeline.json'),
+  screenplay: path.join(root, 'v3/screenplay.json'),
   bible: path.join(root, 'v3/bible.json'),
   materials: path.join(root, 'v3/materials.json'),
   spec: path.join(root, 'v3/creative-spec.md'),
@@ -98,17 +99,40 @@ const line = (name, max) => (v) => {
   if (!isText(v, max)) throw bad(`${name} must be a non-empty line of at most ${max} characters`);
   return clean(v);
 };
+/** The story point ids of v3/screenplay.json that belong to a beat. */
+const storyPointsOf = (beatId) => {
+  const screenplay = JSON.parse(readText(P.screenplay));
+  return screenplay.story_points.filter((s) => s.beat === beatId).map((s) => s.id);
+};
 const validators = {
   register: line('register', 200),
   light_pushes: line('light_pushes', 600),
   camera: line('camera', 600),
-  actions: (v) => {
-    if (!Array.isArray(v) || v.length > 30) throw bad('actions must be a list of at most 30 {actor, does}');
+  actions: (v, beat) => {
+    if (!Array.isArray(v) || v.length > 30) throw bad('actions must be a list of at most 30 {actor, does} (and optionally storyPoint)');
+    const known = storyPointsOf(beat.id);
+    const had = (beat.actions ?? []).map((a) => ({...a, taken: false}));
+    const carried = (a, i) => {
+      // The page edits actions as text and never holds the story point, so an action that arrives without one keeps the one it had: the same actor and words, else the same actor in the same slot.
+      const exact = had.find((o) => !o.taken && o.storyPoint && o.actor === a.actor && o.does === a.does);
+      const slot = had[i] && !had[i].taken && had[i].storyPoint && had[i].actor === a.actor ? had[i] : null;
+      const from = exact ?? slot;
+      if (from) from.taken = true;
+      return from?.storyPoint;
+    };
     return v.map((a, i) => {
-      if (!a || typeof a !== 'object' || Array.isArray(a) || Object.keys(a).sort().join() !== 'actor,does' || !isText(a.actor, 60) || !isText(a.does, 400)) {
-        throw bad(`action ${i + 1} must be exactly {actor, does}, both non-empty lines`);
+      const keys = a && typeof a === 'object' && !Array.isArray(a) ? Object.keys(a).sort().join() : '';
+      if (!['actor,does', 'actor,does,storyPoint'].includes(keys) || !isText(a.actor, 60) || !isText(a.does, 400)) {
+        throw bad(`action ${i + 1} must be {actor, does}, both non-empty lines, and optionally storyPoint`);
       }
-      return {actor: clean(a.actor), does: clean(a.does)};
+      const out = {actor: clean(a.actor), does: clean(a.does)};
+      // storyPoint: a story point id of this beat binds the action, null unbinds it, absent keeps the binding it had
+      const sp = 'storyPoint' in a ? a.storyPoint : carried(out, i);
+      if (sp !== null && sp !== undefined) {
+        if (!known.includes(sp)) throw bad(`action ${i + 1} names storyPoint ${JSON.stringify(sp)}, which is not a story point of beat ${beat.id} (${known.join(', ') || 'v3/screenplay.json names none'})`);
+        out.storyPoint = sp;
+      }
+      return out;
     });
   },
   asks: (v) => {
@@ -147,7 +171,7 @@ const planEdit = (body) => {
   const ledger = loadLedger();
   const beat = findBeat(ledger, body.beat);
   if (body.field === 'seconds') setSeconds(ledger, beat, body.value);
-  else beat[body.field] = validators[body.field](body.value);
+  else beat[body.field] = validators[body.field](body.value, beat);
   return {files: [P.ledger], apply: () => writeLedger(ledger), what: `${body.beat}.${body.field}`};
 };
 

@@ -1,0 +1,59 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "animation-story-clean-control",
+    "name": "Animation Story (clean control)",
+    "description": "Temporary control: the animation-story commands on the real tree, narrowed to sp-1.1 and sp-4.1, which hold the contract.",
+    "type": "validation",
+    "gate_type": "custom",
+    "severity": "high",
+    "subject": "animation-story-clean-control",
+    "enforcement_mode": "blocking",
+    "guidance": "Temporary control gate for the row 9.4 in-chain proof (the two commands of animation-story narrowed to named story points); deleted after the proof.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-screenplay.py",
+          "v3/screenplay.json"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      },
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-story.py",
+          "v3/screenplay.json",
+          "--frames",
+          "out/animatic-seq",
+          "--figure-frames",
+          "out/animatic-fig-seq",
+          "--story",
+          "sp-1.1,sp-4.1"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ],
+    "activation": {
+      "prompt_categories": [
+        "animation",
+        "development"
+      ],
+      "explicit_request": true
+    },
+    "retry_config": {
+      "max_attempts": 2,
+      "improvement_hints": true
+    }
+  }
+}

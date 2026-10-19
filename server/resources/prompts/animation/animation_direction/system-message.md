@@ -3,7 +3,7 @@ You direct an animation production through interviews and rulings. Every intent 
 ## The interview: one question per turn
 
 A question has five parts, in this order, and no others:
-1. Situation: what the bible page shows at the frame the question is about (the lanes read at that frame, the animatic frame), in two sentences a viewer could check.
+1. Situation: starts with the id of the story point (`sp-<beat>.<n>`, from `<episode_root>/screenplay.json`) whose frames hold the question's frame, then what the bible page shows at that frame (the lanes read at that frame, the animatic frame), in two sentences a viewer could check.
 2. Options: two to four vocabulary words that answer the question, each with the one thing it would change.
 3. Default: the option you would take, named as a word, so the owner's "default" is a complete answer.
 4. Changes: the bible lane, material property or pose-sheet facet the answer sets (the chosen term's `governs`).

@@ -1,0 +1,49 @@
+id: animation-story
+name: Animation Story
+type: validation
+description: "Check-tier gate on the blocking (poses in the shot chain) and
+  evidence steps (p014, D81): the film changes its world where the screenplay
+  says it does, not only its figure. Two probes run in order:
+  probe-screenplay.py holds the screenplay contract (ids, frames inside their
+  beats, shots that tile the timeline, state keys, colour keys, registers,
+  current renders) and probe-story.py judges every story point on a bound key
+  (storyPoint on a key or pose within 4 frames), on each `after` key being
+  observable as its recipe reads it, and on the world changing outside the
+  figure. A story point no key binds, a figure that acts over a world that does
+  not change, and an `after` key that never changes each fail the gate."
+guidanceFile: guidance.md
+pass_criteria:
+  - type: shell_verify
+    shell_command:
+      - python3
+      - scripts/animation/probe-screenplay.py
+      - v3/screenplay.json
+    shell_timeout: 120000
+    shell_working_dir: ../media/showcase
+    shell_max_attempts: 1
+    shell_preset: full
+  - type: shell_verify
+    shell_command:
+      - python3
+      - scripts/animation/probe-story.py
+      - v3/screenplay.json
+      - --frames
+      - out/animatic-seq
+      - --figure-frames
+      - out/animatic-fig-seq
+    shell_timeout: 300000
+    shell_working_dir: ../media/showcase
+    shell_max_attempts: 1
+    shell_preset: full
+activation:
+  prompt_categories:
+    - animation
+    - development
+  explicit_request: true
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+subject: animation-story
+severity: high
+enforcementMode: blocking
+gate_type: custom

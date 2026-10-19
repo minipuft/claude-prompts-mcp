@@ -2,10 +2,9 @@
 // Compiles the screenplay (p014): v3/screenplay.json is the source; this renders v3/screenplay.md (the reader's screenplay with the colour strip) and v3/screenplay.fountain (plain Fountain, the
 // pipeline's screenplay format) from it, and writes each story point's `shot` back into the json so the join is explicit.
 //
-// The pipeline id of a story point is `<shot>/<sp-id>` (`s02/sp-4.3`): the shot is the id of v3/shots.json whose beats contain the story point's frame. A shot's beats are its `beat` list (the aliases in
-// the json's `shot_beat_aliases` expand `scaffold` and `settle`, the 40 s spine's names, to the beats of the 65 s timeline) plus every v3/blocking/<beat>.json whose `shot` names it, the same join
-// `shot_beat_ids` in probe_common.py makes; a beat's frames are v3/timeline.json's. The shots' own `frames` are not read: they are the 40 s spine's. A frame in no shot, or in two, is written as `shot: null`
-// and named on stderr (exit 1 after the files are written); probe-screenplay.py refuses it.
+// The pipeline id of a story point is `<shot>/<sp-id>` (`s02/sp-4.3`): the shot is the id of v3/shots.json whose `frames` range [start, end) holds the story point's frame. The ranges are the beats of
+// v3/timeline.json each shot covers (probe-screenplay.py checks they tile the timeline). A frame in no shot, or in two, is written as `shot: null` and named on stderr (exit 1 after the files are
+// written); probe-screenplay.py refuses it.
 //
 // Both renders carry a first line `generated from screenplay.json ... source <hash> body <hash>`: the source hash covers screenplay.json and beats-v2.json, the body hash everything after the first line,
 // so probe-screenplay.py refuses a render older than its source and a render edited by hand. One model (`scenes`) feeds both renders; the story point's prose is the json's own `action`.
@@ -32,30 +31,12 @@ const screenplayPath = abs(arg('screenplay', 'v3/screenplay.json'));
 const mdPath = abs(arg('out-md', 'v3/screenplay.md'));
 const fountainPath = abs(arg('out-fountain', 'v3/screenplay.fountain'));
 const ledgerPath = abs('v3/beats-v2.json');
-const timelinePath = abs('v3/timeline.json');
 const shotsPath = abs('v3/shots.json');
-const blockingDir = abs('v3/blocking');
-for (const p of [screenplayPath, ledgerPath, timelinePath, shotsPath]) if (!fs.existsSync(p)) fail(`input ${rel(p)} does not exist`);
+for (const p of [screenplayPath, ledgerPath, shotsPath]) if (!fs.existsSync(p)) fail(`input ${rel(p)} does not exist`);
 
 // ---------- shot of a frame ----------
-const timeline = JSON.parse(fs.readFileSync(timelinePath, 'utf8'));
 const shotList = JSON.parse(fs.readFileSync(shotsPath, 'utf8')).shots;
-const aliases = JSON.parse(fs.readFileSync(screenplayPath, 'utf8')).shot_beat_aliases || {};
-const blockingShot = new Map();
-for (const f of fs.readdirSync(blockingDir).filter((n) => n.endsWith('.json')).sort()) {
-  const b = JSON.parse(fs.readFileSync(path.join(blockingDir, f), 'utf8'));
-  if (b.shot) blockingShot.set(b.id ?? f.slice(0, -5), b.shot);
-}
-const beatsOfShot = (shot) => {
-  const ids = new Set(shot.beat.flatMap((b) => aliases[b] ?? [b]));
-  for (const [beat, id] of blockingShot) if (id === shot.id) ids.add(beat);
-  return ids;
-};
-const beatAt = (f) => timeline.beats.find((b) => f >= b.start && f < b.end);
-const shotsOfFrame = (f) => {
-  const beat = beatAt(f);
-  return beat ? shotList.filter((s) => beatsOfShot(s).has(beat.id)).map((s) => s.id) : [];
-};
+const shotsOfFrame = (f) => shotList.filter((s) => f >= s.frames[0] && f < s.frames[1]).map((s) => s.id);
 
 // ---------- write each story point's shot back, line by line, so the file keeps its format ----------
 let text = fs.readFileSync(screenplayPath, 'utf8');

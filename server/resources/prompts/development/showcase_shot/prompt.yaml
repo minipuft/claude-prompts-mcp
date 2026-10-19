@@ -71,6 +71,7 @@ chainSteps:
     inlineGateIds:
       - animation-pose-contract
       - animation-vocabulary
+      - animation-story
     id: poses
     stepName: Pose Sheet
   - promptId: showcase_key_sheet
@@ -120,6 +121,7 @@ chainSteps:
     inlineGateIds:
       - animation-bible
       - animation-vocabulary
+      - animation-story
 budget:
   pauseOnBlocking: true
 artifacts:

@@ -2,12 +2,12 @@
 """Screenplay contract (p014): v3/screenplay.json is the film's story points, and everything that reads them (the bindings, the bible's script lane, the state-change probe) can rely on its shape.
 
 usage: probe-screenplay.py [v3/screenplay.json] [--ledger v3/beats-v2.json] [--timeline v3/timeline.json] [--shots v3/shots.json] [--vocabulary v3/vocabulary.json]
-                           [--overrides v3/vocabulary-overrides.json] [--md v3/screenplay.md] [--fountain v3/screenplay.fountain] [--blocking v3/blocking] [--json out.json]
+                           [--overrides v3/vocabulary-overrides.json] [--md v3/screenplay.md] [--fountain v3/screenplay.fountain] [--json out.json]
 Checks:
   ids        every id is `sp-<beat number>.<n>`, unique, ascending, in the beat of that number; frames strictly ascend; every beat of the ledger has at least 2 story points
   frames     every story point's frame lies inside its beat on the timeline (v3/timeline.json)
-  shots      every story point's `shot` (written by compile-screenplay.mjs) is the one shot of v3/shots.json whose beats hold its frame; a frame in no shot, or in two, is named, never guessed. A shot's
-             beats are its `beat` list (expanded by the json's `shot_beat_aliases`) and every v3/blocking/<beat>.json that names it, the join shot_beat_ids in probe_common.py makes
+  shots      the shots' `frames` ranges [start, end) tile the timeline (from frame 0 to its duration, no gap, no overlap) and each range starts and ends on a beat boundary; every story point's `shot`
+             (written by compile-screenplay.mjs) is the one shot whose range holds its frame, and its beat lies inside that range; a frame in no shot, or in two, is named, never guessed
   after      every `after` key is a state key of the story point's beat in beats-v2.json, or a key the json's `state_keys` declares for that beat; every declared key carries a readable `observe`
              (kind prop, count, actor, xsheet, light, figure or gates) and an origin that is true (a beats-v2 key is in a beat's state, a screenplay key is in none of them)
   colour     every colour key (the parts of `a -> b` each) is a key of `colour_keys`, with a hue pair or a kit and field
@@ -50,9 +50,9 @@ def resolves(phrase, words):
     return p in words or (bool(p) and all(q.strip() in words for q in p.split(",")))
 
 
-def shot_beats(shot, aliases, blocking):
-    ids = {b for name in shot.get("beat", []) for b in aliases.get(name, [name])}
-    return ids | {b for b, s in blocking.items() if s == shot["id"]}
+def shot_range(shot):
+    r = shot.get("frames")
+    return (r[0], r[1]) if isinstance(r, list) and len(r) == 2 and all(isinstance(x, int) for x in r) else None
 
 
 def check_ids(d, ctx):
@@ -83,15 +83,29 @@ def check_frames(d, ctx):
 
 
 def check_shots(d, ctx):
-    p, tl, aliases = [], ctx["timeline"], d.get("shot_beat_aliases", {})
-    shots = {s["id"]: shot_beats(s, aliases, ctx["blocking_shots"]) for s in ctx["shots"]}
+    p, tl = [], ctx["timeline"]
+    ranges = {s["id"]: shot_range(s) for s in ctx["shots"]}
+    for sid, r in ranges.items():
+        if r is None: p.append(f"shot {sid} has no `frames` range [start, end)")
+    live = sorted((r, sid) for sid, r in ranges.items() if r)
+    edges = {b["start"] for b in tl["beats"]} | {tl["beats"][-1]["end"]}
+    end = 0
+    for (lo, hi), sid in live:
+        if lo != end: p.append(f"shots leave frames {end}-{lo - 1} uncovered or overlapping before {sid} (starts at {lo})")
+        if hi <= lo: p.append(f"shot {sid} range {lo}-{hi} is empty")
+        for edge in (lo, hi):
+            if edge not in edges: p.append(f"shot {sid} range edge {edge} is not a beat boundary of the timeline")
+        end = max(end, hi)
+    if end != tl["beats"][-1]["end"]: p.append(f"shots end at frame {end}, the timeline at {tl['beats'][-1]['end']}")
     for sp in d["story_points"]:
         beat = next((b for b in tl["beats"] if b["start"] <= sp["frame"] < b["end"]), None)
-        hits = sorted(s for s, beats in shots.items() if beat and beat["id"] in beats)
-        if not hits: p.append(f"{sp['id']} (frame {sp['frame']}) is in no shot of v3/shots.json: no shot lists beat {beat['id'] if beat else '(none)'!r}"); continue
+        hits = sorted(sid for sid, r in ranges.items() if r and r[0] <= sp["frame"] < r[1])
+        if not hits: p.append(f"{sp['id']} (frame {sp['frame']}) is in no shot of v3/shots.json: no shot's `frames` range holds it"); continue
         if len(hits) > 1: p.append(f"{sp['id']} (frame {sp['frame']}) is in {len(hits)} shots ({', '.join(hits)})"); continue
         if sp.get("shot") != hits[0]: p.append(f"{sp['id']} says shot {sp.get('shot')!r}, its frame {sp['frame']} is in {hits[0]} (run compile-screenplay.mjs)")
-        elif sp["beat"] not in shots[hits[0]]: p.append(f"{sp['id']} names beat {sp['beat']!r}, which shot {hits[0]} does not hold")
+        else:
+            b = next((x for x in tl["beats"] if x["id"] == sp["beat"]), None); lo, hi = ranges[hits[0]]
+            if b is None or not (lo <= b["start"] and b["end"] <= hi): p.append(f"{sp['id']} names beat {sp['beat']!r}, which lies outside the range {lo}-{hi} of shot {hits[0]}")
     return not p, "; ".join(p) if p else f"every story point's frame is inside its shot ({len({sp.get('shot') for sp in d['story_points']})} shots, pipeline ids `<shot>/<sp-id>`)"
 
 
@@ -166,6 +180,10 @@ def planted(d, ctx):
     mutate("a colour key that is not declared", "colour", lambda x: sp(x, 0).update(colour="mauve"))
     mutate("a story point whose shot is not the shot of its frame", "shots", lambda x: sp(x, 0).update(shot=d["story_points"][-1]["shot"]))
     mutate("a story point whose frame is in no shot", "shots", lambda x: None, shots=[s for s in ctx["shots"] if s["id"] != d["story_points"][0]["shot"]])
+    def overlap(shots): s = copy.deepcopy(shots); s[1]["frames"] = [s[1]["frames"][0] - 30, s[1]["frames"][1]]; return s
+    mutate("shot ranges that overlap", "shots", lambda x: None, shots=overlap(ctx["shots"]))
+    def off_boundary(shots): s = copy.deepcopy(shots); s[0]["frames"][1] += 7; s[1]["frames"][0] += 7; return s
+    mutate("shot ranges that end inside a beat", "shots", lambda x: None, shots=off_boundary(ctx["shots"]))
     # the renders are controlled on a synthetic pair that is current by construction, so a stale real render cannot hide a probe that would not see one
     body = "# synthetic\n\nbody line\n"
     line = lambda text_: f"<!-- generated from screenplay.json by compile-screenplay.mjs · source {sha(text_, ctx['ledger_text'])[:12]} · body {sha(body)[:12]} -->"
@@ -181,7 +199,7 @@ def main():
     j = lambda *a: os.path.join(ROOT, *a)
     ap.add_argument("screenplay", nargs="?", default=j("v3", "screenplay.json")); ap.add_argument("--ledger", default=j("v3", "beats-v2.json")); ap.add_argument("--timeline", default=j("v3", "timeline.json"))
     ap.add_argument("--shots", default=j("v3", "shots.json")); ap.add_argument("--vocabulary", default=j("v3", "vocabulary.json")); ap.add_argument("--overrides", default=j("v3", "vocabulary-overrides.json"))
-    ap.add_argument("--md", default=j("v3", "screenplay.md")); ap.add_argument("--fountain", default=j("v3", "screenplay.fountain")); ap.add_argument("--blocking", default=j("v3", "blocking")); ap.add_argument("--json", default=None)
+    ap.add_argument("--md", default=j("v3", "screenplay.md")); ap.add_argument("--fountain", default=j("v3", "screenplay.fountain")); ap.add_argument("--json", default=None)
     a = ap.parse_args(); pr = Probe("screenplay", a.json)
     def text(path, what, must=True):
         try:
@@ -193,13 +211,7 @@ def main():
     try: d, ledger = json.loads(sp_text), json.loads(led_text)
     except ValueError as e: die(f"unreadable json: {e}")
     if d.get("schema") != "showcase.screenplay.1": die(f"{a.screenplay} has schema {d.get('schema')!r}, this probe reads showcase.screenplay.1")
-    blocking = {}
-    if os.path.isdir(a.blocking):
-        for fn in sorted(os.listdir(a.blocking)):
-            if fn.endswith(".json"):
-                b = read_json(os.path.join(a.blocking, fn), "a blocking file")
-                if b.get("shot"): blocking[b.get("id", fn[:-5])] = b["shot"]
-    ctx = {"ledger": ledger, "timeline": load_timeline(a.timeline), "shots": read_json(a.shots, "the shot list")["shots"], "blocking_shots": blocking,
+    ctx = {"ledger": ledger, "timeline": load_timeline(a.timeline), "shots": read_json(a.shots, "the shot list")["shots"],
            "words": vocabulary_words(read_json(a.vocabulary, "the vocabulary"), read_json(a.overrides, "the vocabulary overrides")),
            "screenplay_text": sp_text, "ledger_text": led_text, "md": text(a.md, "the screenplay render", False), "fountain": text(a.fountain, "the fountain render", False)}
     fns = dict(CHECKS)
