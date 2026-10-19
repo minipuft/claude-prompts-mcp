@@ -51,6 +51,8 @@ tags: []
 - **Q3 (RULED, owner 2026-10-19: yes)** The changelog entry for the eight shape-checked parameters is marked BREAKING, with the migration (`activation.frameworks` -> `activation.framework_context`) first. Row 6c.
 - **Q4 (RULED, owner 2026-10-19: fix in this PR)** Row 12 rewrites the stale wording in the bundled authoring prompts through `resource_manager`, against a server built from this branch (CLAUDE.md §Core Principles 1: no hand edits under `server/resources/prompts/**`).
 
+- **F-12 (finding, out of scope per the Scope objective)** `resource_manager`'s prompt `tools` writer serializes `schema.json` with `JSON.stringify(schema, null, 2)` (`mcp/tools/resource-manager/prompt/operations/file-operations.ts`, `planToolFiles`): no trailing newline, one array entry per line. Every tool-adapter update therefore fails `validate:format` until prettier runs over it. Row 12 ran prettier on the three files it wrote. A writer that emits the repo's format, or a gate, is follow-up work.
+
 ## Measured inputs (origin/main `ee3986e2`, 2026-10-19)
 
 - 37 baseline names over 87 exported definitions. Reference counts per definition come from ts-morph `findReferencesAsNodes`, run over a snapshot of `server/src` + `server/tests`. The counts include barrel re-export sites, which R3 says are not consumers, so every count is re-measured by the row.
