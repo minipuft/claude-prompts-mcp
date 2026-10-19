@@ -47,6 +47,10 @@ tags: []
 - **R13 (row 10, from the `>>diagnose` run chain-diagnose#2)** `version_history.resource_type` is one column with two writers. Server: prompt, gate, framework, category, config (`config-utils.ts:154`). cpm: prompt, gate, framework, config. `style` has no writer. One type names what the column HOLDS: `StoredResourceType = 'prompt'|'gate'|'framework'|'category'|'config'`, in `shared/types/version-history.ts`. Server `ResourceType = Exclude<StoredResourceType,'config'>`, which keeps R53: no MCP config write surface. cpm `HistoryResourceType = Exclude<StoredResourceType,'category'>`. No schema bump; the column is plain TEXT.
 - **R14 (defaults applied; owner may override before merge)** (a) cpm keeps not reading category history, stated in its type comment. (b) cpm refuses `style` by name for history, compare, rename and delete, as `rollback` already does. The cast at `version-history.ts:675` becomes a guard that admits only prompt, gate and framework to byte restore; any other value gets a projection-only result with a named reason.
 
+- **Q2 (OPEN, owner)** Publishing the real shapes in `tools/list` grows the `resource_manager` inputSchema 36,365 → 38,409 bytes, over the 37,000 ceiling in `tests/snapshots/mcp-input-schema-sizes.json`. Row 6b validates with `<loose>.pipe(<shape>)`, so calls are checked but the published schema stays loose.
+- **Q3 (OPEN, owner)** `activation.frameworks` (named in the old parameter text, never read) is now refused. Should the 6.0 changelog mark it BREAKING?
+- **Q4 (OPEN, owner)** Bundled authoring prompts (`create_gate`, `create_framework`, `create_prompt`, `framework_builder/schema.json`) still quote the old wording ("frameworks", "Element shape is not constrained"). They can only change through MCP tools, so they need their own row, run against a server built from this branch.
+
 ## Measured inputs (origin/main `ee3986e2`, 2026-10-19)
 
 - 37 baseline names over 87 exported definitions. Reference counts per definition come from ts-morph `findReferencesAsNodes`, run over a snapshot of `server/src` + `server/tests`. The counts include barrel re-export sites, which R3 says are not consumers, so every count is re-measured by the row.
@@ -63,6 +67,8 @@ tags: []
 - **DEV-T1-2** All three running rows were stopped by a client crash, with uncommitted edits in their worktrees. They were resumed through their saved transcripts, and each re-read its own diff before continuing.
 
 ## Findings
+
+- Row 6b: TypeScript lets `Record<string, unknown>` be assigned to an all-optional object type, so `activation` and `gates` compiled while nothing checked them; only a live probe exposes that class. The loader schemas silently drop unknown keys, which is how `frameworks` and `maxRetries` vanished. `pass_criteria` accepts a criterion with no `type` that the loader requires: the same gap, outside this row. `phases.phases` has no engine reader (possibly write-only). `docs/reference/mcp-tools.md:1447` says `execution_type_enhancements` covers "chain vs single", but only `chain` exists.
 
 - Row 7: `version_history.resource_type` is written by two unions that disagree. The server writes `prompt|gate|framework|category`; `cpm` (`HistoryResourceType`) writes `prompt|gate|framework|style|config`. `cli-shared/version-history.ts:675` casts `request.resource_type as VersioningResourceType`. This is possible cross-surface drift, outside this plan; reported to the owner.
 - Row 7: the two `TransportType` enums (`{STDIO}` and `HttpTransportType {STREAMABLE_HTTP, BOTH}`) together equal `TransportMode` in `core-config.ts:68`: one concept split three ways. Not merged.
