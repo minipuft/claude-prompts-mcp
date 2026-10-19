@@ -63,8 +63,9 @@ export interface ArgumentSuggestion {
   name: string;
   type: 'string' | 'array' | 'object' | 'boolean' | 'number';
   description: string;
-  frameworkReason: string;
-  examples: string[];
+  /** Optional, as in the `argument_suggestions` tool schema. */
+  frameworkReason?: string;
+  examples?: string[];
 }
 
 /**
@@ -89,8 +90,9 @@ export interface ExecutionFlow {
  * Quality indicators for compliance validation
  */
 export interface QualityIndicatorPhase {
-  keywords: string[];
-  patterns: string[];
+  /** Both optional, as in the tool schema: the compliance reader treats an absent list as empty. */
+  keywords?: string[];
+  patterns?: string[];
 }
 
 export type QualityIndicators = Record<string, QualityIndicatorPhase>;

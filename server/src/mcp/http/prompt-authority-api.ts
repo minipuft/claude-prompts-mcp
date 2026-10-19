@@ -3,7 +3,6 @@ import { z } from 'zod/v4';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { Logger, ToolResponse } from '#shared/types/index.js';
-import type { ResourceManagerInput } from '../tools/resource-manager/core/types.js';
 import type { Application, Request, Response } from 'express';
 
 import { buildPromptCatalogDetail } from '#modules/prompts/prompt-catalog.js';
@@ -62,7 +61,8 @@ const compareQuerySchema = z
 interface PromptAuthorityDependencies {
   logger: Logger;
   getPrompts: () => ConvertedPrompt[];
-  runAction: (input: ResourceManagerInput) => Promise<ToolResponse>;
+  /** Sends one unparsed `resource_manager` call; the tool's schema parses it. */
+  runAction: (input: Record<string, unknown>) => Promise<ToolResponse>;
 }
 
 /** Authenticated JSON projection over the canonical resource-manager prompt authority. */
@@ -186,7 +186,7 @@ export class PromptAuthorityApi {
     });
   }
 
-  private async respondWithAction(res: Response, input: ResourceManagerInput): Promise<void> {
+  private async respondWithAction(res: Response, input: Record<string, unknown>): Promise<void> {
     const result = await this.runResponse(input);
     if (result === null)
       return this.error(res, 503, 'authority_unavailable', 'Prompt authority unavailable');
@@ -200,21 +200,21 @@ export class PromptAuthorityApi {
       );
     }
     res.setHeader('Cache-Control', 'no-store');
-    res.json(result.structuredContent ?? { action: input.action, completed: true });
+    res.json(result.structuredContent ?? { action: input['action'], completed: true });
   }
 
-  private async run(input: ResourceManagerInput): Promise<Record<string, unknown> | null> {
+  private async run(input: Record<string, unknown>): Promise<Record<string, unknown> | null> {
     const response = await this.runResponse(input);
     return response?.structuredContent ?? null;
   }
 
-  private async runResponse(input: ResourceManagerInput): Promise<ToolResponse | null> {
+  private async runResponse(input: Record<string, unknown>): Promise<ToolResponse | null> {
     try {
       return await this.dependencies.runAction(input);
     } catch (error) {
       this.dependencies.logger.error('Prompt authority action failed', {
-        action: input.action,
-        id: input.id,
+        action: input['action'],
+        id: input['id'],
         error: error instanceof Error ? error.message : String(error),
       });
       return null;

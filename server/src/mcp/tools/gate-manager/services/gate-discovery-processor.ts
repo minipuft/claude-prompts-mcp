@@ -187,7 +187,9 @@ function formatEvaluationLine(evaluation: JudgeEvaluationConfig | undefined): st
 }
 
 /** Complete public definition read-back only: no suite lookup, capture binding or evaluation. */
-function formatPublicPassCriteria(criteria: GateManagerInput['pass_criteria']): string {
+function formatPublicPassCriteria(
+  criteria: Parameters<typeof projectPublicGateCriteria>[0]
+): string {
   if (criteria === undefined || criteria.length === 0) return '';
   const publicCriteria = projectPublicGateCriteria(criteria);
   return (
