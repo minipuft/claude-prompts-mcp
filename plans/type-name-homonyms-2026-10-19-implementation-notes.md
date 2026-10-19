@@ -47,10 +47,17 @@ tags: []
 
 ## Deviations
 
+- **DEV-T1-3** Row 7 renamed `ValidationResult` (errorHandling) to `ErrorValidationResult` instead of merging it. The engine superset references `ValidationCheck`, an engine type, so it cannot move down to shared; keeping the shared base would drop fields `argument-parser.ts:682` writes. Accepted (R4's fallback). Row 7 also edited 2 `cli/src` files that consumed the deleted `ResourceValidationResult` alias; accepted, and `cli` typecheck is clean.
+
 - **DEV-T1-1** R8 revised on 2026-10-19 after the client crash. Rows 1–7 commit NO ratchet baseline, because every row lowers the same counts and parallel commits to one JSON file conflict. Row 8 regenerates eslint, knip, typecheck-tests and homonyms once, on the merged tree. Row 2 had already committed a knip baseline (613 → 603 types); row 8's regeneration supersedes it.
 - **DEV-T1-2** All three running rows were stopped by a client crash, with uncommitted edits in their worktrees. They were resumed through their saved transcripts, and each re-read its own diff before continuing.
 
 ## Findings
+
+- Row 7: `version_history.resource_type` is written by two unions that disagree. The server writes `prompt|gate|framework|category`; `cpm` (`HistoryResourceType`) writes `prompt|gate|framework|style|config`. `cli-shared/version-history.ts:675` casts `request.resource_type as VersioningResourceType`. This is possible cross-surface drift, outside this plan; reported to the owner.
+- Row 7: the two `TransportType` enums (`{STDIO}` and `HttpTransportType {STREAMABLE_HTTP, BOTH}`) together equal `TransportMode` in `core-config.ts:68`: one concept split three ways. Not merged.
+- Row 7: a ts-morph rename followed a barrel that exports both definitions (`shared/types/index.ts`: explicit `ExecutionConfig` plus `export *` from automation) and rewrote the wrong sites in `infra/config/index.ts`; restored. After a rename, read every file that imports through a barrel re-exporting both definitions.
+- Row 7: still unused (R3(a) candidates, not homonyms): `ResourceValidationResultWithData`, `isResourceValidationSuccess`, `hasResourceValidationWarnings`; redundant alias `TemporaryGateRegistryDefinition` in `gates/core/index.ts`.
 
 - Row 3: `framework-definition-types.ts` (`FrameworkGateDefinition`, `TemplateSuggestionDefinition`) and `step-generator.ts` (`ExecutionStepDefinition`, `ProcessingStepDefinition`) are stricter or near-copy twins under DIFFERENT names: the same schema drift, invisible to a name-keyed ratchet. Not a homonym, so it is outside this plan; a follow-up candidate.
 - Row 3: under load average ~57, `composition-root.integration.test.ts` failed 78 tests on 60 s `beforeAll` timeouts; the re-run on the same diff passed. Load-induced, not a regression. Briefs should run `eslint <touched files>` before the whole-project ratchet (seconds vs many minutes).
