@@ -38,6 +38,8 @@ tags: []
 
 - **R10 (row 4 concern, 2026-10-19)** `TemporaryGateDefinition` is two concepts: `engine/execution/types.ts` is the pre-registration draft (no `id`/`created_at`, consumed by `gate-analyzer.ts`), and `gates/core/temporary-gate-registry.ts` is the stored record. Row 7 renames the execution one to `TemporaryGateDraft`; the registry keeps the name. Typing between them is not unified in this plan. When two same-layer copies merge (`PromptLookup`), the survivor is the one its other consumer already imports from.
 
+- **Q1 (OPEN, owner)** `ResourceManagerInput`: the investigation found real drift that is larger than a type merge. (1) 8 parameters (`tools`, `phases`, `tool_descriptions`, `quality_indicators`, `activation`, `retry_config`, `gates`, `gate_configuration`) are `unknown` in the schema, yet the router reads them as typed shapes, so a wrongly shaped value passes through unchecked (e.g. `improvementHints.length > 0` on a number is silently false). (2) `argument_suggestions[].frameworkReason` is required in the framework types but optional in the schema. (3) HTTP callers (`api.ts`, `prompt-authority-api.ts`) build raw input typed as parsed input. (4) A `pass_criteria` string filter in the router is dead under the schema type. Fixing (1) means refusing wrongly shaped values: a resource_manager behavior change.
+
 ## Measured inputs (origin/main `ee3986e2`, 2026-10-19)
 
 - 37 baseline names over 87 exported definitions. Reference counts per definition come from ts-morph `findReferencesAsNodes`, run over a snapshot of `server/src` + `server/tests`. The counts include barrel re-export sites, which R3 says are not consumers, so every count is re-measured by the row.
