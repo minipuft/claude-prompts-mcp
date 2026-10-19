@@ -237,6 +237,21 @@ function readToolIds(existingYaml: Record<string, unknown> | undefined): string[
     : [];
 }
 
+/**
+ * The ids a replacing `tools` list unbinds. An `add` keeps every prior binding and a `remove`
+ * names its own deletions, so only a non-empty list sent under `replace` can drop an id silently.
+ */
+function resolveUnboundToolIds(
+  priorToolIds: readonly string[],
+  suppliedToolIds: readonly string[],
+  writeIntent: PromptWriteIntent
+): string[] {
+  if (suppliedToolIds.length === 0 || writeIntent.toolBinding !== 'replace') return [];
+  return priorToolIds.filter(
+    (id) => !suppliedToolIds.includes(id) && !writeIntent.removedToolIds.includes(id)
+  );
+}
+
 const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -333,8 +348,16 @@ interface PromptWritePlan {
   removesSystemMessage: boolean;
   /** Stub files for nested chain steps that have no directory yet. */
   scaffoldFiles: PlannedPromptFile[];
-  /** Script tool files, grouped so the writer can report each tool it created. */
-  toolFiles: Array<{ id: string; files: PlannedPromptFile[] }>;
+  /**
+   * Script tool files, grouped so the writer can report each tool it wrote. `existed` is true when
+   * the tool's `tool.yaml` was already on disk, so the report says Updated rather than Created.
+   */
+  toolFiles: Array<{ id: string; files: PlannedPromptFile[]; existed: boolean }>;
+  /**
+   * Tools a replacing `tools` list takes off the prompt's binding while leaving their folders on
+   * disk: bound before this write, absent from the list, and not named by `tool_operation:"remove"`.
+   */
+  unboundToolIds: readonly string[];
   /** Tools whose `tools/{id}/` directory this write deletes. */
   removedToolIds: readonly string[];
 }
@@ -469,8 +492,20 @@ export class FileOperations {
           const toolDir = path.join(promptDir, 'tools', tool.id);
           await fs.mkdir(toolDir, { recursive: true });
           affectedFiles.push(toolDir, ...(await this.writePlannedFiles(promptDir, tool.files)));
-          messages.push(`✅ Created tool '${tool.id}' in ${toolDir}`);
-          this.logger.info(`Created script tool '${tool.id}' for prompt '${promptId}'`);
+          const verb = tool.existed ? 'Updated' : 'Created';
+          messages.push(`✅ ${verb} tool '${tool.id}' in ${toolDir}`);
+          this.logger.info(`${verb} script tool '${tool.id}' for prompt '${promptId}'`);
+        }
+
+        // The list REPLACES the binding, so a tool it leaves out is unbound but not deleted. Said
+        // here because the caller cannot see it: their `tools` array named what to keep, and the
+        // reply is the only place the others are accounted for.
+        for (const toolId of plan.unboundToolIds) {
+          const toolDir = path.join(promptDir, 'tools', toolId);
+          messages.push(
+            `⚠️ Unbound tool '${toolId}': it was left out of \`tools\`, which replaces the list. ` +
+              `Its folder was kept at ${toolDir}; to delete it, send tool_operation:"remove", tool_ids:["${toolId}"], confirm:true.`
+          );
         }
 
         // P2.3. Inside the transaction, so a failed write rolls the deletions back with
@@ -665,13 +700,21 @@ export class FileOperations {
     // true, because there is no prior DIRECTORY whose untouched files this write can leave alone.
     const priorYamlPath = priorDir !== null ? path.join(priorDir, 'prompt.yaml') : fileSource;
 
-    const { files: promptFiles, removesSystemMessage } = await this.planPromptFiles(
+    const {
+      files: promptFiles,
+      removesSystemMessage,
+      priorToolIds,
+    } = await this.planPromptFiles(
       promptData,
       priorDir,
       priorYamlPath,
       suppliedKeysForWrite,
       writeIntent
     );
+
+    const toolFiles = Array.isArray(promptData.tools)
+      ? await this.planToolFiles(promptData.tools, promptDir, priorDir)
+      : [];
 
     return {
       promptsDir,
@@ -687,10 +730,13 @@ export class FileOperations {
       scaffoldFiles: Array.isArray(promptData.chainSteps)
         ? this.planChainStepScaffolds(promptDir, priorDir, promptId, promptData.chainSteps)
         : [],
-      toolFiles: Array.isArray(promptData.tools)
-        ? await this.planToolFiles(promptData.tools, promptDir, priorDir)
-        : [],
+      toolFiles,
       removedToolIds: writeIntent.removedToolIds,
+      unboundToolIds: resolveUnboundToolIds(
+        priorToolIds,
+        toolFiles.map((tool) => tool.id),
+        writeIntent
+      ),
     };
   }
 
@@ -1017,7 +1063,11 @@ export class FileOperations {
     priorYamlPath: string | null,
     suppliedKeys: ReadonlySet<string>,
     writeIntent: PromptWriteIntent
-  ): Promise<{ files: PlannedPromptFile[]; removesSystemMessage: boolean }> {
+  ): Promise<{
+    files: PlannedPromptFile[];
+    removesSystemMessage: boolean;
+    priorToolIds: string[];
+  }> {
     const { unsetKeys } = writeIntent;
 
     // Fix B write-scope narrowing (tier-b-settability-proposal §2): a directory with no prior
@@ -1111,7 +1161,7 @@ export class FileOperations {
       files.push({ relativePath: 'system-message.md', content: promptData.systemMessage });
     }
 
-    return { files, removesSystemMessage };
+    return { files, removesSystemMessage, priorToolIds: readToolIds(existingYaml) };
   }
 
   /**
@@ -1269,8 +1319,8 @@ export class FileOperations {
     tools: readonly ToolDefinitionInput[],
     promptDir: string,
     priorDir: string | null
-  ): Promise<Array<{ id: string; files: PlannedPromptFile[] }>> {
-    const planned: Array<{ id: string; files: PlannedPromptFile[] }> = [];
+  ): Promise<PromptWritePlan['toolFiles']> {
+    const planned: PromptWritePlan['toolFiles'] = [];
     for (const tool of tools) {
       const toolDir = `tools/${tool.id}`;
       // Contained the way the removal path is, before anything is read or planned under it.
@@ -1303,7 +1353,7 @@ export class FileOperations {
         });
       }
       files.push({ relativePath: `${toolDir}/${scriptFilename}`, content: tool.script });
-      planned.push({ id: tool.id, files });
+      planned.push({ id: tool.id, files, existed: priorSource !== undefined });
     }
     return planned;
   }

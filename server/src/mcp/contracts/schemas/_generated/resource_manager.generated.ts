@@ -361,7 +361,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'tools',
     type: 'array<object>',
     description:
-      '[Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout. An entry of any other shape is refused before anything is written.',
+      '[Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout. An entry of any other shape is refused before anything is written. On update, the list replaces the prompt\'s tools: a tool left out is unbound and its folder kept; use tool_operation "add" or "remove" to change one.',
     status: 'working',
     compatibility: 'canonical',
     includeInDescription: false,
