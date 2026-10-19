@@ -77,6 +77,7 @@ import { isGateActiveForContext } from '#engine/gates/utils/gate-activation.js';
 import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
 import { frameworkLabel } from '#shared/utils/framework-label.js';
 import { computeContentHash } from '#shared/utils/hash.js';
+import { formatJsonDocument } from '#shared/utils/json-document-format.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { assertUsableDirectorySetting } from '#shared/utils/path-setting.js';
 import {
@@ -2769,7 +2770,7 @@ export function emitGateFiles(
   if (skillId && manifestGates.length > 0) {
     files.push({
       relativePath: `${subDir}/gates/index.json`,
-      content: `${JSON.stringify({ skill: skillId, gates: manifestGates }, null, 2)}\n`,
+      content: formatJsonDocument({ skill: skillId, gates: manifestGates }),
     });
   }
   return files;
@@ -2971,7 +2972,7 @@ function emitScriptToolFiles(scriptTools: readonly IRScriptTool[], subDir: strin
     if (tool.inputSchema && Object.keys(tool.inputSchema).length > 0) {
       files.push({
         relativePath: `${toolSubDir}/schema.json`,
-        content: JSON.stringify(tool.inputSchema, null, 2),
+        content: formatJsonDocument(tool.inputSchema),
       });
     }
 
@@ -2987,7 +2988,7 @@ function emitScriptToolFiles(scriptTools: readonly IRScriptTool[], subDir: strin
       };
       files.push({
         relativePath: `${toolSubDir}/tool.json`,
-        content: JSON.stringify(toolConfig, null, 2),
+        content: formatJsonDocument(toolConfig),
       });
     }
   }
