@@ -332,7 +332,7 @@ export interface ResourceManagerInput {
   /** Opaque evaluation-suite association, preserved verbatim in gate.yaml. */
   calibration_suite_id?: GateManagerInput['calibration_suite_id'];
   guidance?: string;
-  pass_criteria?: Array<string | GatePassCriteria>;
+  pass_criteria?: GatePassCriteria[];
   activation?: {
     prompt_categories?: string[];
     frameworks?: string[];

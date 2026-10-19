@@ -331,19 +331,7 @@ export class ResourceManagerRouter {
     if (args.description) gateArgs.description = args.description;
     if (args.subject) gateArgs.subject = args.subject;
     if (args.guidance) gateArgs.guidance = args.guidance;
-    if (args.pass_criteria !== undefined) {
-      // A bare string only ever existed to populate `required_patterns`, which is gone
-      // (B9: never had an evaluator). The MCP schema now rejects bare strings at the
-      // boundary (`gatePassCriteriaSchema`, resource-manager.schema.ts), so this filter is
-      // type-level safety only — it should never drop a value a validated caller sent.
-      const normalizedPassCriteria: NonNullable<GateManagerInput['pass_criteria']> = (
-        args.pass_criteria ?? []
-      ).filter(
-        (criteria): criteria is NonNullable<GateManagerInput['pass_criteria']>[number] =>
-          typeof criteria !== 'string'
-      );
-      gateArgs.pass_criteria = normalizedPassCriteria;
-    }
+    if (args.pass_criteria !== undefined) gateArgs.pass_criteria = args.pass_criteria;
     if (args.activation) {
       gateArgs.activation = args.activation;
     }

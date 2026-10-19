@@ -32,6 +32,7 @@ import { PREVIEWABLE_ACTIONS } from '../shared/preview-action.js';
 import type { JudgeEvaluationConfig } from '#engine/gates/judge/types.js';
 
 import { SemanticCriterionSchema } from '#engine/gates/core/gate-schema.js';
+import { ARTIFACT_KINDS } from '#engine/gates/utils/artifact-kinds.js';
 import {
   ArgumentValidationSchema,
   ChainStepSchema,
@@ -39,7 +40,8 @@ import {
   PromptComposerMetadataSchema,
   PromptInjectionConfigSchema,
 } from '#modules/prompts/prompt-schema.js';
-import { refuseUndeclaredKey } from '#shared/utils/nested-key-refusal.js';
+import { SUPPORTED_RUNTIMES } from '#shared/types/automation.js';
+import { refuseUndeclaredKey, refuseUnionMismatch } from '#shared/utils/nested-key-refusal.js';
 
 /**
  * Contract description per parameter. `includeInDescription: false` governs a different surface,
@@ -213,6 +215,19 @@ const gateEvaluationSchema: z.ZodType<JudgeEvaluationConfig> = z.strictObject(
   { error: refuseUndeclaredKey }
 );
 
+/**
+ * One phase's compliance indicators: the shape `detectPhase` (compliance-validator.ts) reads, and
+ * the one both `pass_criteria[].quality_indicators` and the framework `quality_indicators`
+ * parameter carry. Both keys stay optional because the reader treats an absent list as empty.
+ */
+const qualityIndicatorSchema = z.strictObject(
+  {
+    keywords: z.array(z.string()).optional(),
+    patterns: z.array(z.string()).optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
+
 export const gatePassCriteriaSchema = z.strictObject(
   {
     type: z
@@ -223,18 +238,7 @@ export const gatePassCriteriaSchema = z.strictObject(
     framework: z.string().optional(),
     min_compliance_score: z.number().min(0).max(1).optional(),
     severity: z.enum(['warn', 'fail']).optional(),
-    quality_indicators: z
-      .record(
-        z.string(),
-        z.strictObject(
-          {
-            keywords: z.array(z.string()).optional(),
-            patterns: z.array(z.string()).optional(),
-          },
-          { error: refuseUndeclaredKey }
-        )
-      )
-      .optional(),
+    quality_indicators: z.record(z.string(), qualityIndicatorSchema).optional(),
 
     // Shell verification options (ground-truth validation via exit code)
     shell_command: z.array(z.string()).nonempty().optional(),
@@ -251,6 +255,119 @@ export const gatePassCriteriaSchema = z.strictObject(
     script_tool_input: z.record(z.string(), z.unknown()).optional(),
     script_tool_timeout: z.number().int().positive().optional(),
     script_tool_working_dir: z.string().optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
+
+// ── Shapes the router reads as typed ────────────────────────────────────────
+//
+// Each of these parameters was published as `unknown[]` or `Record<string, unknown>` while the
+// router and processors read it as a typed shape, so a wrongly shaped value got through
+// unchecked: `improvement_hints: 5` was coerced to `false`, a phase with no `name` was dropped
+// without a word, and `activation.frameworks`, a key no reader looks up, was written to disk.
+// Each shape mirrors the reader that consumes the value. `gate_configuration` is not here: the
+// prompt write path already refuses a wrongly shaped one by name before anything is written.
+//
+// Each field below is `<loose>.pipe(<shape>)`: the loose schema is what `tools/list` publishes,
+// because the JSON Schema of the input side is the one a client receives, and the shape is what
+// a call is checked against. Publishing the shapes too would add 2,044 bytes to this tool's
+// published `inputSchema` (36,365 → 38,409, measured 2026-10-19), over the 37,000 ceiling in
+// `tests/snapshots/mcp-input-schema-sizes.json` that `validate:tool-schemas` holds. The contract
+// descriptions name each shape's keys meanwhile. *(flips when the owner raises that ceiling; then
+// drop each `.pipe()` and publish the shape itself.)*
+
+/** One script tool, written to `tools/{id}/`; the fields `planToolFiles` reads. */
+const scriptToolDefinitionSchema = z.strictObject(
+  {
+    id: z.string(),
+    name: z.string(),
+    description: z.string().optional(),
+    script: z.string(),
+    runtime: z.enum(SUPPORTED_RUNTIMES).optional(),
+    schema: z.record(z.string(), z.unknown()).optional(),
+    trigger: z.enum(['schema_match', 'explicit', 'always', 'never']).optional(),
+    confirm: z.boolean().optional(),
+    strict: z.boolean().optional(),
+    timeout: z.number().positive().optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
+
+/**
+ * Mirrors `GateActivationSchema` (gate-schema.ts), the keys `gate-activation.ts` reads. A
+ * framework restriction is `framework_context`; the `frameworks` key the contract once named
+ * had no reader, and the loader dropped it.
+ */
+const gateActivationSchema = z.strictObject(
+  {
+    prompt_categories: z.array(z.string()).optional(),
+    explicit_request: z.boolean().optional(),
+    framework_context: z.array(z.string()).optional(),
+    artifacts: z.array(z.enum(ARTIFACT_KINDS)).min(1).optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
+
+/**
+ * Mirrors `GateRetryConfigSchema` (gate-schema.ts) without its defaults: a default here would be
+ * written into `gate.yaml` on every call that sent the block.
+ */
+const gateRetryConfigSchema = z.strictObject(
+  {
+    max_attempts: z.number().int().positive().optional(),
+    improvement_hints: z.boolean().optional(),
+    preserve_context: z.boolean().optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
+
+/** One `phases.yaml` phase. The router writes an absent `description` as an empty string. */
+const frameworkPhaseSchema = z.strictObject(
+  {
+    id: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    prompts: z.array(z.string()).optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
+
+/** Mirrors `FrameworkSchema.gates` (framework-schema.ts). */
+const frameworkGateFilterSchema = z.strictObject(
+  {
+    include: z.array(z.string()).optional(),
+    exclude: z.array(z.string()).optional(),
+  },
+  { error: refuseUndeclaredKey }
+);
+
+/** One tool's description overlay; a bare string is shorthand for `{ description }`. */
+const toolDescriptionOverlaySchema = z.union(
+  [
+    z.string(),
+    z.strictObject(
+      {
+        description: z.string().optional(),
+        parameters: z.record(z.string(), z.string()).optional(),
+      },
+      { error: refuseUndeclaredKey }
+    ),
+  ],
+  { error: refuseUnionMismatch }
+);
+
+/** Mirrors `ExecutionTypeEnhancements` (step-generator.ts): step lines keyed by step name. */
+const executionTypeEnhancementsSchema = z.strictObject(
+  {
+    chain: z
+      .strictObject(
+        {
+          advancedChain: z.record(z.string(), z.array(z.string())).optional(),
+          simpleChain: z.record(z.string(), z.array(z.string())).optional(),
+        },
+        { error: refuseUndeclaredKey }
+      )
+      .optional(),
   },
   { error: refuseUndeclaredKey }
 );
@@ -494,8 +611,12 @@ export const resourceManagerInputSchema = z
      * `arguments`; the post-write verification reads the produced FILE and refuses there.
      */
     artifacts: PromptArtifactsSchema.optional().describe(describe('artifacts')),
-    /** [Prompt] Script tools to create with the prompt. */
-    tools: z.array(z.unknown()).optional().describe(describe('tools')),
+    /** [Prompt] Script tools to create with the prompt — see `scriptToolDefinitionSchema`. */
+    tools: z
+      .array(z.unknown())
+      .pipe(z.array(scriptToolDefinitionSchema))
+      .optional()
+      .describe(describe('tools')),
     /**
      * [Prompt] Update-only: how a `tools` change relates to the current binding (P2.3).
      *
@@ -657,23 +778,40 @@ export const resourceManagerInputSchema = z
       .array(z.discriminatedUnion('type', [gatePassCriteriaSchema, SemanticCriterionSchema]))
       .optional()
       .describe(describe('pass_criteria')),
-    /** [Gate] Activation rules. */
-    activation: z.record(z.string(), z.unknown()).optional().describe(describe('activation')),
-    /** [Gate] Retry configuration. */
-    retry_config: z.record(z.string(), z.unknown()).optional().describe(describe('retry_config')),
+    /** [Gate] Activation rules — see `gateActivationSchema`. */
+    activation: z
+      .record(z.string(), z.unknown())
+      .pipe(gateActivationSchema)
+      .optional()
+      .describe(describe('activation')),
+    /** [Gate] Retry configuration — see `gateRetryConfigSchema`. */
+    retry_config: z
+      .record(z.string(), z.unknown())
+      .pipe(gateRetryConfigSchema)
+      .optional()
+      .describe(describe('retry_config')),
 
     // ── Framework parameters ─────────────────────────────────────────────
     /** [Framework] Framework type identifier (e.g. 'CAGEERF', 'ReACT'). */
     framework: z.string().optional().describe(describe('framework')),
     /** [Framework] System prompt guidance injected when active. */
     system_prompt_guidance: z.string().optional().describe(describe('system_prompt_guidance')),
-    /** [Framework] Phase definitions. */
-    phases: z.array(z.unknown()).optional().describe(describe('phases')),
+    /** [Framework] Phase definitions → `phases.yaml`. */
+    phases: z
+      .array(z.unknown())
+      .pipe(z.array(frameworkPhaseSchema))
+      .optional()
+      .describe(describe('phases')),
     /** [Framework] Gate configuration: include, exclude arrays. */
-    gates: z.record(z.string(), z.unknown()).optional().describe(describe('gates')),
-    /** [Framework] Tool description overlays when active. */
+    gates: z
+      .record(z.string(), z.unknown())
+      .pipe(frameworkGateFilterSchema)
+      .optional()
+      .describe(describe('gates')),
+    /** [Framework] Tool description overlays when active, keyed by tool name. */
     tool_descriptions: z
       .record(z.string(), z.unknown())
+      .pipe(z.record(z.string(), toolDescriptionOverlaySchema))
       .optional()
       .describe(describe('tool_descriptions')),
     /** [Framework] Whether the framework is enabled. */
@@ -739,9 +877,10 @@ export const resourceManagerInputSchema = z
       .describe(describe('processing_steps')),
     /** [Framework] Execution steps with dependencies → `phases.yaml`. */
     execution_steps: z.array(executionStepSchema).optional().describe(describe('execution_steps')),
-    /** [Framework] Per-execution-type step overlays (chain vs single) → `phases.yaml`. */
+    /** [Framework] Per-execution-type step overlays → `phases.yaml`. */
     execution_type_enhancements: z
       .record(z.string(), z.unknown())
+      .pipe(executionTypeEnhancementsSchema)
       .optional()
       .describe(describe('execution_type_enhancements')),
     /** [Framework] System/user prompt additions and contextual hints → `phases.yaml`. */
@@ -771,6 +910,7 @@ export const resourceManagerInputSchema = z
     /** [Framework] Per-phase keywords and patterns for compliance scoring → `phases.yaml`. */
     quality_indicators: z
       .record(z.string(), z.unknown())
+      .pipe(z.record(z.string(), qualityIndicatorSchema))
       .optional()
       .describe(describe('quality_indicators')),
 
