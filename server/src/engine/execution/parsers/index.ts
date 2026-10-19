@@ -25,7 +25,6 @@ export {
 
 export {
   ArgumentSchemaValidator,
-  type SchemaValidationIssue,
   type SchemaValidationResult,
   type PromptSchemaOverrides,
 } from './argument-schema.js';

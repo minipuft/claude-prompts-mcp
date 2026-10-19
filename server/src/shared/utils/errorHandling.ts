@@ -8,6 +8,8 @@
  * was removed along with the `toStructuredResponse()` method that existed only to serve it.
  */
 
+import type { Logger } from '#shared/types/index.js';
+
 // Error context interface for enhanced error handling
 export interface ErrorContext {
   tool?: string;
@@ -346,52 +348,6 @@ export class ConfigError extends BaseError {
       ],
     });
   }
-}
-
-export class FrameworkError extends BaseError {
-  constructor(message: string, context: ErrorContext = {}) {
-    super(message, 'FRAMEWORK_ERROR', {
-      ...context,
-      suggestions: context.suggestions || [
-        'Verify framework is enabled and properly configured',
-        'See framework documentation for setup instructions',
-      ],
-    });
-  }
-}
-
-export class ExecutionError extends BaseError {
-  public readonly executionContext: Record<string, unknown> | undefined;
-
-  constructor(
-    message: string,
-    context: ErrorContext = {},
-    executionContext?: Record<string, unknown>
-  ) {
-    super(message, 'EXECUTION_ERROR', context);
-    this.executionContext = executionContext;
-  }
-
-  getEnhancedMessage(): string {
-    let message = super.getEnhancedMessage();
-
-    if (this.executionContext) {
-      message += `\n**Execution Context**:\n`;
-      Object.entries(this.executionContext).forEach(([key, value]) => {
-        message += `- **${key}**: ${JSON.stringify(value)}\n`;
-      });
-    }
-
-    return message;
-  }
-}
-
-// Logger interface to ensure compatibility with the existing logger
-export interface Logger {
-  info: (message: string, ...args: any[]) => void;
-  error: (message: string, ...args: any[]) => void;
-  warn: (message: string, ...args: any[]) => void;
-  debug: (message: string, ...args: any[]) => void;
 }
 
 // Standardized error handling (backwards compatible)
