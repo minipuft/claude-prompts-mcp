@@ -359,7 +359,7 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'tools',
-    type: 'array<unknown>',
+    type: 'array<object>',
     description:
       '[Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout. An entry of any other shape is refused before anything is written.',
     status: 'working',
@@ -579,7 +579,7 @@ export const resource_managerParameters: ToolParameter[] = [
   },
   {
     name: 'phases',
-    type: 'array<unknown>',
+    type: 'array<object>',
     description:
       '[Framework] Phase definitions: id and name (required), description, prompts. The advanced fields are declared as their own parameters below.',
     status: 'working',

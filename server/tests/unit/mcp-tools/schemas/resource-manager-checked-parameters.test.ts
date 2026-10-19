@@ -11,6 +11,7 @@
  * `getResourceManagerHandler` both render an issue as `<path>: <message>`.
  */
 import { describe, expect, it } from '@jest/globals';
+import { z } from 'zod/v4';
 
 import {
   GateActivationSchema,
@@ -121,12 +122,9 @@ describe('resource_manager refuses a wrongly shaped value for the parameters it 
  * `activation.frameworks` sat in `gate.yaml` doing nothing.
  */
 describe('mirrored shapes declare the loader keys', () => {
-  /** The checked side of a `<published>.pipe(<checked>)` parameter, under its `.optional()`. */
+  /** The declared keys of a checked object parameter, under its `.optional()`. */
   function checkedKeys(name: 'activation' | 'retry_config' | 'gates'): string[] {
-    const field = resourceManagerInputSchema.shape[name].unwrap() as unknown as {
-      _zod: { def: { out: { shape: Record<string, unknown> } } };
-    };
-    return Object.keys(field._zod.def.out.shape).sort();
+    return Object.keys(resourceManagerInputSchema.shape[name].unwrap().shape).sort();
   }
 
   it('activation mirrors GateActivationSchema', () => {
@@ -141,5 +139,50 @@ describe('mirrored shapes declare the loader keys', () => {
     expect(checkedKeys('gates')).toEqual(
       Object.keys(FrameworkSchema.shape.gates.unwrap().shape).sort()
     );
+  });
+});
+
+/**
+ * The JSON Schema a client receives for these parameters is the shape a call is checked against,
+ * not a looser stand-in: `tools/list` converts the input side of each zod schema, so a field
+ * validated through `<loose>.pipe(<shape>)` would publish only `<loose>`. Converted here the way
+ * the MCP SDK converts it (`io: 'input'`).
+ */
+describe('the published inputSchema carries the checked shapes', () => {
+  const published = z.toJSONSchema(resourceManagerInputSchema, { io: 'input' }) as {
+    properties: Record<string, Record<string, unknown>>;
+  };
+  const property = (name: string): Record<string, unknown> => {
+    const schema = published.properties[name];
+    if (schema === undefined) throw new Error(`'${name}' is not published`);
+    return schema;
+  };
+
+  it.each(['tools', 'phases'])('%s publishes its element keys', (name) => {
+    const items = property(name)['items'] as Record<string, unknown>;
+    expect(items['additionalProperties']).toBe(false);
+    expect(Object.keys(items['properties'] as object)).toEqual(
+      expect.arrayContaining(['id', 'name'])
+    );
+  });
+
+  it.each(['activation', 'retry_config', 'gates', 'execution_type_enhancements'])(
+    '%s publishes its keys and refuses others',
+    (name) => {
+      expect(property(name)['additionalProperties']).toBe(false);
+      expect(Object.keys(property(name)['properties'] as object).length).toBeGreaterThan(0);
+    }
+  );
+
+  it.each(['tool_descriptions', 'quality_indicators'])('%s publishes its value shape', (name) => {
+    const values = property(name)['additionalProperties'];
+    expect(values).toEqual(expect.any(Object));
+    expect(JSON.stringify(values)).not.toBe('{}');
+  });
+
+  it('activation publishes framework_context, not frameworks', () => {
+    const keys = Object.keys(property('activation')['properties'] as object);
+    expect(keys).toContain('framework_context');
+    expect(keys).not.toContain('frameworks');
   });
 });

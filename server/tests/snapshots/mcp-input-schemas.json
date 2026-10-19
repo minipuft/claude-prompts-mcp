@@ -1006,10 +1006,43 @@
         "type": "string"
       },
       "activation": {
-        "additionalProperties": {},
+        "additionalProperties": false,
         "description": "<present>",
-        "propertyNames": {
-          "type": "string"
+        "properties": {
+          "artifacts": {
+            "items": {
+              "enum": [
+                "source",
+                "test",
+                "docs",
+                "readme",
+                "plan",
+                "changelog",
+                "config",
+                "prompt",
+                "gate",
+                "pr-body"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "explicit_request": {
+            "type": "boolean"
+          },
+          "framework_context": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "prompt_categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
         },
         "type": "object"
       },
@@ -1701,10 +1734,39 @@
         "type": "array"
       },
       "execution_type_enhancements": {
-        "additionalProperties": {},
+        "additionalProperties": false,
         "description": "<present>",
-        "propertyNames": {
-          "type": "string"
+        "properties": {
+          "chain": {
+            "additionalProperties": false,
+            "properties": {
+              "advancedChain": {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "simpleChain": {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "propertyNames": {
+                  "type": "string"
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          }
         },
         "type": "object"
       },
@@ -1838,10 +1900,21 @@
         "type": "string"
       },
       "gates": {
-        "additionalProperties": {},
+        "additionalProperties": false,
         "description": "<present>",
-        "propertyNames": {
-          "type": "string"
+        "properties": {
+          "exclude": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "include": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
         },
         "type": "object"
       },
@@ -2406,7 +2479,33 @@
       },
       "phases": {
         "description": "<present>",
-        "items": {},
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "name": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "prompts": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "id",
+            "name"
+          ],
+          "type": "object"
+        },
         "type": "array"
       },
       "preview_action": {
@@ -2507,7 +2606,24 @@
         "type": "array"
       },
       "quality_indicators": {
-        "additionalProperties": {},
+        "additionalProperties": {
+          "additionalProperties": false,
+          "properties": {
+            "keywords": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "patterns": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "type": "object"
+        },
         "description": "<present>",
         "propertyNames": {
           "type": "string"
@@ -2533,10 +2649,20 @@
         "type": "string"
       },
       "retry_config": {
-        "additionalProperties": {},
+        "additionalProperties": false,
         "description": "<present>",
-        "propertyNames": {
-          "type": "string"
+        "properties": {
+          "improvement_hints": {
+            "type": "boolean"
+          },
+          "max_attempts": {
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991,
+            "type": "integer"
+          },
+          "preserve_context": {
+            "type": "boolean"
+          }
         },
         "type": "object"
       },
@@ -2661,7 +2787,31 @@
         "type": "number"
       },
       "tool_descriptions": {
-        "additionalProperties": {},
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "parameters": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            }
+          ]
+        },
         "description": "<present>",
         "propertyNames": {
           "type": "string"
@@ -2686,7 +2836,64 @@
       },
       "tools": {
         "description": "<present>",
-        "items": {},
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "confirm": {
+              "type": "boolean"
+            },
+            "description": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "runtime": {
+              "enum": [
+                "python",
+                "node",
+                "shell",
+                "auto"
+              ],
+              "type": "string"
+            },
+            "schema": {
+              "additionalProperties": {},
+              "propertyNames": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "script": {
+              "type": "string"
+            },
+            "strict": {
+              "type": "boolean"
+            },
+            "timeout": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "trigger": {
+              "enum": [
+                "schema_match",
+                "explicit",
+                "always",
+                "never"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "script"
+          ],
+          "type": "object"
+        },
         "type": "array"
       },
       "type": {
