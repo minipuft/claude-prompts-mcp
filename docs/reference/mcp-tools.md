@@ -1455,11 +1455,13 @@ file whose content the update does not change is not written at all, so its comm
 formatting survive. An edit to `quality_indicators` rewrites `phases.yaml` and leaves
 `framework.yaml` byte-identical.
 
-A file the update _does_ change is edited rather than re-rendered. Where every changed field is a
-plain value, only that field's own lines move: comments, blank lines, key order, quoting style and
-the wrapping of untouched block scalars are left exactly as authored. A change that alters the
-file's structure — adding or removing a key, or changing the length of a list — still re-renders
-the document, which keeps the comments but may re-wrap a long value.
+A file the update _does_ change is edited rather than re-rendered. Where every change replaces a
+plain value or adds or removes a list item, only those lines move: comments, blank lines, key
+order, quoting style and the wrapping of untouched values are left exactly as authored. A comment
+between two list items belongs to the item below it and is removed with that item; a comment above
+the first item belongs to the list and stays. Any other change to the file's structure — adding or
+removing a key, or a value changing kind — still re-renders the document, which keeps the comments
+but may re-wrap a long value.
 
 </details>
 

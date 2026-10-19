@@ -21,6 +21,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { parseDocument } from 'yaml';
+
 import { serializeYaml } from '../../../src/shared/utils/yaml/yaml-parser.js';
 import { serializeYamlPreservingSource } from '../../../src/shared/utils/yaml/yaml-document-writer.js';
 import { parseYaml } from '../../../src/shared/utils/yaml/yaml-parser.js';
@@ -351,5 +353,400 @@ describe('resource writes preserve the source they did not edit', () => {
       expect(FIXTURE).toContain('# flip me');
       expect(reserialized).not.toContain('# flip me');
     });
+  });
+});
+
+/**
+ * A list that gains or loses items changes those items' lines and no others.
+ *
+ * Measured before this held, on the bundled `reference_demo` prompt that `DEMO` copies: a length
+ * change replaced the whole list through the document layer, which kept 1 of the 5 comments (the
+ * four inside `tools:` went with the old list) and folded the untouched 133-column `description`
+ * onto two lines. The positive control below re-measures that against the same fixture.
+ *
+ * Every fixture is hand-authored, with comments inside and around its lists, keys out of
+ * alphabetical order and at least one line longer than the serializer's 80 columns. Every expected
+ * text is the fixture with named lines dropped or inserted, built without the writer.
+ */
+describe('a list that changes length keeps the lines the edit did not name', () => {
+  type Value = Record<string, unknown>;
+
+  const write = (source: string, edit: (value: Value) => Value) => {
+    const parsed = parseYaml<Value>(source);
+    expect(parsed.success).toBe(true);
+    return serializeYamlPreservingSource(edit(parsed.data!), source);
+  };
+
+  /** `lines` without each named line, every one of which must be present. */
+  const without = (lines: readonly string[], ...dropped: string[]): string[] => {
+    for (const line of dropped) expect(lines).toContain(line);
+    return lines.filter((line) => !dropped.includes(line));
+  };
+
+  /** `lines` with `added` placed right after the line `anchor`. */
+  const after = (lines: readonly string[], anchor: string, ...added: string[]): string[] => {
+    const at = lines.indexOf(anchor);
+    expect(at).toBeGreaterThanOrEqual(0);
+    return [...lines.slice(0, at + 1), ...added, ...lines.slice(at + 1)];
+  };
+
+  const reloads = (content: string): Value => {
+    const reloaded = parseYaml<Value>(content);
+    expect(reloaded.success).toBe(true);
+    return reloaded.data!;
+  };
+
+  describe('a block list of plain values, with the list header comments of reference_demo', () => {
+    const LINES = [
+      'id: reference_demo',
+      'name: Reference Syntax Demo',
+      'description: Demonstrates template reference features - {{ref:id}} for prompt inclusion and {{script:id}} for inline script execution',
+      'userMessageTemplateFile: user-message.md',
+      '# Declare script tools available to this prompt',
+      'tools:',
+      '  # Two tools in one resource, deliberately: `word_count` runs automatically and',
+      '  # `text_digest` requires approval, so the pair proves `confirm` is per-tool and',
+      '  # behaves the same whether the tool is reached from this list or from a',
+      '  # {{script:id}} reference in the template.',
+      '  - word_count',
+      '  - text_digest',
+      'arguments:',
+      '  - name: text',
+      '    description: The text to analyze with the word_count script tool',
+      '    required: true',
+      '    type: string',
+      '  - name: topic',
+      '    description: Optional topic name for the introduction (demonstrates reference feature)',
+      '    required: false',
+      '    type: string',
+      '',
+    ];
+    const DEMO = LINES.join('\n');
+    const DESCRIPTION = LINES[2]!;
+
+    test('shrinking the list removes the dropped item line and nothing else', () => {
+      const written = write(DEMO, (value) => ({ ...value, tools: ['word_count'] }));
+
+      expect(written.content).toBe(without(LINES, '  - text_digest').join('\n'));
+      expect(commentCount(DEMO)).toBe(5);
+      expect(commentCount(written.content)).toBe(5);
+      expect(written.content.split('\n')).toContain(DESCRIPTION);
+      expect(written.fidelity).toBe('source-preserved');
+    });
+
+    test('growing the list inserts the added item line and nothing else', () => {
+      const written = write(DEMO, (value) => ({
+        ...value,
+        tools: ['word_count', 'text_digest', 'char_count'],
+      }));
+
+      expect(written.content).toBe(after(LINES, '  - text_digest', '  - char_count').join('\n'));
+      expect(commentCount(written.content)).toBe(5);
+      expect(written.content.split('\n')).toContain(DESCRIPTION);
+      expect(written.fidelity).toBe('source-preserved');
+    });
+
+    test('removing the first item keeps the comments above it, which belong to the list', () => {
+      const written = write(DEMO, (value) => ({ ...value, tools: ['text_digest'] }));
+
+      expect(written.content).toBe(without(LINES, '  - word_count').join('\n'));
+      expect(commentCount(written.content)).toBe(5);
+      expect(written.fidelity).toBe('source-preserved');
+    });
+
+    test('inserting before the first item puts it under those comments', () => {
+      const written = write(DEMO, (value) => ({
+        ...value,
+        tools: ['char_count', 'word_count', 'text_digest'],
+      }));
+
+      expect(written.content).toBe(
+        after(LINES, '  # {{script:id}} reference in the template.', '  - char_count').join('\n')
+      );
+      expect(written.fidelity).toBe('source-preserved');
+    });
+
+    test('removing every item leaves `[]` under the comments, which still load as an empty list', () => {
+      const written = write(DEMO, (value) => ({ ...value, tools: [] }));
+
+      const expected = after(
+        without(LINES, '  - word_count', '  - text_digest'),
+        '  # {{script:id}} reference in the template.',
+        '  []'
+      );
+      expect(written.content).toBe(expected.join('\n'));
+      expect(commentCount(written.content)).toBe(5);
+      expect(reloads(written.content)['tools']).toEqual([]);
+      expect(written.fidelity).toBe('source-preserved');
+    });
+
+    test('a list with no comment above it empties to `key: []` on the key line', () => {
+      const source = ['severity: high', 'tools:', '  - a', '  - b', 'id: plain', ''].join('\n');
+      const written = write(source, (value) => ({ ...value, tools: [] }));
+
+      expect(written.content).toBe(['severity: high', 'tools: []', 'id: plain', ''].join('\n'));
+      expect(written.fidelity).toBe('source-preserved');
+    });
+
+    test('POSITIVE CONTROL — replacing the list wholesale, as before, loses 4 comments and folds the description', () => {
+      // The previous path, reproduced on the same fixture: `setIn` swaps in a fresh list and
+      // `toString` re-renders the document at the library's 80 columns. Without this, the
+      // assertions above could be passing on a fixture with nothing at stake.
+      const doc = parseDocument(DEMO);
+      doc.setIn(['tools'], ['word_count']);
+      const replaced = doc.toString();
+
+      expect(commentCount(replaced)).toBe(1);
+      expect(replaced.split('\n')).not.toContain(DESCRIPTION);
+    });
+
+    test('a CRLF file gets its added line with CRLF too', () => {
+      const crlf = DEMO.split('\n').join('\r\n');
+      const written = write(crlf, (value) => ({
+        ...value,
+        tools: ['word_count', 'text_digest', 'char_count'],
+      }));
+
+      expect(written.content).toBe(after(LINES, '  - text_digest', '  - char_count').join('\r\n'));
+      expect(written.fidelity).toBe('source-preserved');
+    });
+  });
+
+  describe('comments between the items of a block list', () => {
+    const LINES = [
+      '# Gates run in the order listed; a reviewer reads them top to bottom.',
+      'severity: high',
+      'gates:',
+      '  - alpha',
+      '  # beta is retired once gamma covers the same ground',
+      '  - beta',
+      '  # gamma checks the whole tree',
+      '  - gamma',
+      '  - delta # the slowest, so it runs last',
+      'id: review-gates',
+      'description: A gate set whose description runs well past eighty columns, so a re-render would fold it.',
+      '',
+    ];
+    const SOURCE = LINES.join('\n');
+
+    test.each([
+      ['the first item', ['beta', 'gamma', 'delta'], ['  - alpha']],
+      [
+        'a middle item, with the comment directly above it',
+        ['alpha', 'gamma', 'delta'],
+        ['  # beta is retired once gamma covers the same ground', '  - beta'],
+      ],
+      [
+        'the last item, with the comment on its line',
+        ['alpha', 'beta', 'gamma'],
+        ['  - delta # the slowest, so it runs last'],
+      ],
+    ])('removing %s drops exactly its lines', (_name, gates, dropped) => {
+      const written = write(SOURCE, (value) => ({ ...value, gates }));
+
+      expect(written.content).toBe(without(LINES, ...dropped).join('\n'));
+      // The comment above a KEPT item (gamma) survives every removal.
+      expect(written.content).toContain('  # gamma checks the whole tree\n  - gamma');
+      expect(written.fidelity).toBe('source-preserved');
+    });
+
+    test('a list that kept its length is compared by position: the comments stay where they were', () => {
+      const written = write(SOURCE, (value) => ({
+        ...value,
+        gates: ['delta', 'gamma', 'beta', 'alpha'],
+      }));
+
+      expect(written.content).toBe(
+        SOURCE.replace('  - alpha', '  - delta')
+          .replace('  - beta', '  - gamma')
+          .replace('  - gamma\n  - delta #', '  - beta\n  - alpha #')
+      );
+      expect(written.fidelity).toBe('source-preserved');
+    });
+
+    test('a reorder that also changes length re-adds a moved item without its comments', () => {
+      const written = write(SOURCE, (value) => ({ ...value, gates: ['gamma', 'alpha'] }));
+
+      // gamma is the item both lists share; alpha and beta before it and delta after it are
+      // removed, and alpha comes back after gamma as a new line. gamma's comment stays with it.
+      const expected = after(
+        without(
+          LINES,
+          '  - alpha',
+          '  # beta is retired once gamma covers the same ground',
+          '  - beta',
+          '  - delta # the slowest, so it runs last'
+        ),
+        '  - gamma',
+        '  - alpha'
+      );
+      expect(written.content).toBe(expected.join('\n'));
+      expect(reloads(written.content)['gates']).toEqual(['gamma', 'alpha']);
+      expect(written.fidelity).toBe('source-preserved');
+    });
+
+    test('with a key added in the same write it re-renders, and kept items keep their comments', () => {
+      const written = write(SOURCE, (value) => ({
+        ...value,
+        gates: ['alpha', 'gamma', 'delta'],
+        owner: 'platform-team',
+      }));
+
+      expect(written.fidelity).toBe('reserialized');
+      expect(reloads(written.content)['gates']).toEqual(['alpha', 'gamma', 'delta']);
+      expect(written.content).toContain('# gamma checks the whole tree');
+      expect(written.content).toContain('# the slowest, so it runs last');
+      expect(written.content).not.toContain('# beta is retired');
+      expect(commentCount(written.content)).toBe(commentCount(SOURCE) - 1);
+    });
+  });
+
+  describe('block lists of mappings', () => {
+    const LINES = [
+      '# A three-step chain; the steps were ordered by hand.',
+      'name: Review Chain',
+      'id: review_chain',
+      'arguments:',
+      '  - name: target # what to review',
+      '    required: true',
+      'chain_steps:',
+      '  # Step 1 gathers context before anything is judged.',
+      '  - promptId: gather',
+      '    stepName: Gather',
+      '    gates: [evidence]',
+      '  # Step 2 is the review itself.',
+      '  - promptId: review',
+      '    stepName: Review',
+      '  - promptId: summarize',
+      '    stepName: Summarize',
+      'description: A chain whose description is deliberately longer than eighty columns so a re-render folds it.',
+      '',
+    ];
+    const SOURCE = LINES.join('\n');
+
+    test('removing a middle step drops its lines and the comment above it', () => {
+      const written = write(SOURCE, (value) => {
+        const steps = value['chain_steps'] as Value[];
+        return { ...value, chain_steps: [steps[0], steps[2]] };
+      });
+
+      expect(written.content).toBe(
+        without(
+          LINES,
+          '  # Step 2 is the review itself.',
+          '  - promptId: review',
+          '    stepName: Review'
+        ).join('\n')
+      );
+      expect(written.fidelity).toBe('source-preserved');
+    });
+
+    test('adding an argument inserts it at the list indentation', () => {
+      const written = write(SOURCE, (value) => ({
+        ...value,
+        arguments: [...(value['arguments'] as Value[]), { name: 'depth', required: false }],
+      }));
+
+      expect(written.content).toBe(
+        after(LINES, '    required: true', '  - name: depth', '    required: false').join('\n')
+      );
+      expect(written.fidelity).toBe('source-preserved');
+    });
+
+    test('a step edited in place and a step added in one write change only those lines', () => {
+      const written = write(SOURCE, (value) => {
+        const steps = value['chain_steps'] as Value[];
+        return {
+          ...value,
+          chain_steps: [
+            { ...steps[0], stepName: 'Collect' },
+            steps[1],
+            steps[2],
+            { promptId: 'publish', stepName: 'Publish' },
+          ],
+        };
+      });
+
+      const expected = after(
+        LINES.map((line) => (line === '    stepName: Gather' ? '    stepName: Collect' : line)),
+        '    stepName: Summarize',
+        '  - promptId: publish',
+        '    stepName: Publish'
+      );
+      expect(written.content).toBe(expected.join('\n'));
+      expect(written.fidelity).toBe('source-preserved');
+    });
+
+    test('a nested list and its parent list both change length in one write', () => {
+      const written = write(SOURCE, (value) => {
+        const steps = value['chain_steps'] as Value[];
+        return {
+          ...value,
+          chain_steps: [{ ...steps[0], gates: ['evidence', 'scope'] }, steps[1]],
+        };
+      });
+
+      const expected = without(LINES, '  - promptId: summarize', '    stepName: Summarize').map(
+        (line) => (line === '    gates: [evidence]' ? '    gates: [evidence, scope]' : line)
+      );
+      expect(written.content).toBe(expected.join('\n'));
+      expect(written.fidelity).toBe('source-preserved');
+    });
+  });
+
+  describe('flow lists', () => {
+    const LINES = [
+      '# Aliases as the menu shows them.',
+      'id: development',
+      'aliases: [ dev, code, src ] # padded on purpose',
+      'tags: [alpha, beta]',
+      'name: Development',
+      'description: A category whose description is deliberately longer than eighty columns, to see a fold.',
+      '',
+    ];
+    const SOURCE = LINES.join('\n');
+    const ALIASES = LINES[2]!;
+    const TAGS = LINES[3]!;
+
+    test.each([
+      ['the last item', ['dev', 'code'], 'aliases: [ dev, code ] # padded on purpose'],
+      ['the first item', ['code', 'src'], 'aliases: [ code, src ] # padded on purpose'],
+      ['a middle item', ['dev', 'src'], 'aliases: [ dev, src ] # padded on purpose'],
+      ['every item', [], 'aliases: [] # padded on purpose'],
+    ])('removing %s keeps the padding and the comment', (_name, aliases, line) => {
+      const written = write(SOURCE, (value) => ({ ...value, aliases }));
+
+      expect(written.content).toBe(SOURCE.replace(ALIASES, line));
+      expect(written.fidelity).toBe('source-preserved');
+    });
+
+    test('adding at both ends, with a value that must be quoted to stay a string', () => {
+      const written = write(SOURCE, (value) => ({
+        ...value,
+        tags: ['omega', 'alpha', 'beta', 'true'],
+      }));
+
+      expect(written.content).toBe(SOURCE.replace(TAGS, 'tags: [omega, alpha, beta, "true"]'));
+      expect(reloads(written.content)['tags']).toEqual(['omega', 'alpha', 'beta', 'true']);
+      expect(written.fidelity).toBe('source-preserved');
+    });
+  });
+
+  /**
+   * A token edit that would load as a different type is refused, not written.
+   *
+   * `CST.setScalarValue` writes the string `'5'` into a plain token as the text `5`, which loads as
+   * a number: the write would report success and change the field's type. The output is now
+   * reloaded and compared with what was asked for, and a mismatch goes to the document layer,
+   * which quotes it. The check exists for the list splices, and it catches this older case too.
+   */
+  test('a string that reads as a number stays a string', () => {
+    const source = '# hand-authored\nname: Draft\nid: numeric_name\n';
+    const written = write(source, (value) => ({ ...value, name: '5' }));
+
+    expect(reloads(written.content)['name']).toBe('5');
+    expect(commentCount(written.content)).toBe(1);
+    // POSITIVE CONTROL: the unquoted text the token edit produces does load as a number.
+    expect(reloads(source.replace('name: Draft', 'name: 5'))['name']).toBe(5);
   });
 });
