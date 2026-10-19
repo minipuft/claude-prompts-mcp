@@ -1,0 +1,58 @@
+{
+  "id": "p001",
+  "kind": "change",
+  "from": "director",
+  "date": "2026-10-18",
+  "anchor": {
+    "beat": "the-frame"
+  },
+  "title": "What happens in beat 4",
+  "text": "1. Slump: the human is still bent from the failed joins, cloak heavy, the light lost on the floor; hold. 2. The frame rises at the edge, Clawd lifting it from the hand's side; the light moves before the human does: the floor glow dies and the frame's interior lights; the human turns toward it with a small anticipation away first. 3. Rise: the human stands up out of the cloak, which drops as a heap and stays there; weight on contact: the body settles, then the cloth settles after. 4. One step toward the frame, then the threshold pause: the heel tap into the shoe, the gesture no one needs, so the body is real before it goes through. 5. Codex, small, nudges the cloak heap aside with one foot: the beat's one gag. 6. Through: the human goes alone, framed small inside the frame's light; the guides follow into the art world.",
+  "references": [
+    "spirited-away-shoes",
+    "totoro-lived-in",
+    "elmo-world",
+    "samurai-jack-holds"
+  ],
+  "before": {
+    "keys": [],
+    "note": "beat 4 has no keys in v3/xsheet.json; the figure holds whatever beat 3 left"
+  },
+  "after": {
+    "keys": [
+      {
+        "name": "slump",
+        "frame": 630,
+        "hold": 26
+      },
+      {
+        "name": "turn",
+        "frame": 690,
+        "hold": 16
+      },
+      {
+        "name": "rise",
+        "frame": 740,
+        "hold": 20
+      },
+      {
+        "name": "step",
+        "frame": 800,
+        "hold": 14
+      },
+      {
+        "name": "threshold",
+        "frame": 840,
+        "hold": 24
+      },
+      {
+        "name": "through",
+        "frame": 900,
+        "hold": 30
+      }
+    ],
+    "note": "six keys over 300 frames, holds in the house band 11-27 except the final hold, breakdowns to be authored by the pose step"
+  },
+  "status": "open",
+  "ruling": null
+}

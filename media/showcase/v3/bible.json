@@ -1,0 +1,6001 @@
+{
+  "schema": "showcase.bible.1",
+  "revision": "beats-v2 · 2026-10-13 · D78 worlds and guides, D79 65 s · provisional until the plot asks are answered; beats.json (6 beats, 40 s) stays the composition's input until the shots are rebuilt · D88/D91 register and light_pushes per beat (planner defaults 2026-10-17) · D93 beat 4 = 10 s, worlds 10 s each (owner 2026-10-18)",
+  "fps": 30,
+  "duration": 1950,
+  "generatedFrom": [
+    "v3/beats-v2.json",
+    "v3/timeline.json",
+    "v3/xsheet.json",
+    "v3/light.json",
+    "v3/blocking/arrival.json",
+    "v3/blocking/art-world.json",
+    "v3/blocking/cant-build.json",
+    "v3/blocking/crossing.json",
+    "v3/blocking/everything-at-once.json",
+    "v3/blocking/home-settle.json",
+    "v3/blocking/programming-world.json",
+    "v3/blocking/test-scene.json",
+    "v3/blocking/the-frame.json",
+    "v3/references/board.json",
+    "v3/references/owner/picks.json",
+    "v3/script.md",
+    "v3/proposals/p001-beat4-action.json"
+  ],
+  "inputsHash": "370fb0f878e90b9f12b48c92fa5a1ab6d8ffd7a794598192dba841966041d36f",
+  "tracks": [
+    {
+      "name": "pacing",
+      "items": [
+        {
+          "start": 0,
+          "end": 180,
+          "beat": "arrival",
+          "label": "1. arrival",
+          "data": {
+            "seconds": 6,
+            "register": "warm, inviting",
+            "light_pushes": "curiosity: the seam's tiny glow asks to be opened",
+            "transitions": {
+              "in": "title held",
+              "out": "the bubble swells (leading line up) into beat 2, no cut"
+            },
+            "actions": [
+              "human: opens the box lid",
+              "box: lid lifts; the gadget rises on its bubble",
+              "codex: leans in",
+              "clawd: leans in"
+            ],
+            "asks": []
+          }
+        },
+        {
+          "start": 180,
+          "end": 420,
+          "beat": "everything-at-once",
+          "label": "2. everything-at-once",
+          "data": {
+            "seconds": 8,
+            "register": "playful tipping to overwhelm",
+            "light_pushes": "delight then overwhelm: the flood is fun before it is too much",
+            "transitions": {
+              "in": "continuous from beat 1",
+              "out": "pieces keep arriving as the human reaches, into beat 3"
+            },
+            "actions": [
+              "gadget: projects every piece, structure and route around the trio",
+              "human: turns with joy, then shrinks",
+              "codex: catches a piece",
+              "clawd: is pushed by a stalk"
+            ],
+            "asks": []
+          }
+        },
+        {
+          "start": 420,
+          "end": 630,
+          "beat": "cant-build",
+          "label": "3. cant-build",
+          "data": {
+            "seconds": 7,
+            "register": "gentle gag",
+            "light_pushes": "frustration kept kind: the light is lost on the floor, the join will not take",
+            "transitions": {
+              "in": "continuous",
+              "out": "the stalk slides back toward Clawd; the frame's left bar rises (leading line) into beat 4"
+            },
+            "actions": [
+              "human: reaches for the stalk and misses; grabs pieces; a stack collapses",
+              "codex: winces, small at frame left",
+              "clawd: winces, then goes to fetch the frame"
+            ],
+            "asks": []
+          }
+        },
+        {
+          "start": 630,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "4. the-frame",
+          "data": {
+            "seconds": 10,
+            "register": "reverent",
+            "light_pushes": "wonder: the field narrows to the frame and the frame is lit from inside",
+            "transitions": {
+              "in": "the frame rising",
+              "out": "the human steps through alone; the guides follow (plot default 3); the push crosses the frame edge into beat 5, no cut"
+            },
+            "actions": [
+              "clawd: holds the frame up",
+              "human: turns to the frame; the cloak drops (D69); the Swoop is revealed hands first; looks through",
+              "codex: joins Clawd at the frame",
+              "frame: interior lights: the crayon world visible inside, refracted (D45)"
+            ],
+            "asks": []
+          }
+        },
+        {
+          "start": 930,
+          "end": 1230,
+          "beat": "art-world",
+          "label": "5. art-world",
+          "data": {
+            "seconds": 10,
+            "register": "playful",
+            "light_pushes": "play: warm amber on paper, the drawing fills with light as it becomes real",
+            "transitions": {
+              "in": "refill from the frame's glass into crayon",
+              "out": "the piece and the world reduce to their contour lines (the crossing, beat 6)"
+            },
+            "actions": [
+              "clawd: guides: hands the human a crayon (Clawd owns the art workflow)",
+              "human: draws one piece in the air; the drawing fills in and becomes a real piece (a prompt becoming a resource)",
+              "codex: watches, small, keeps the piece from drifting",
+              "world: crayon architecture: stacked arches as paper scribbles, stalks as waxy lines"
+            ],
+            "asks": [
+              "which object the human draws first (default: the first stalk)"
+            ]
+          }
+        },
+        {
+          "start": 1230,
+          "end": 1350,
+          "beat": "crossing",
+          "label": "6. crossing",
+          "data": {
+            "seconds": 4,
+            "register": "focused",
+            "light_pushes": "focus: no light, only lines; the eye follows the re-routing contour",
+            "transitions": {
+              "in": "reduce-to-lines",
+              "out": "refill into the shaded world (beat 7)"
+            },
+            "actions": [
+              "world: everything reduces to pale contour lines; the lines re-route and connect (a chain being wired)",
+              "human: holds the drawn piece; its lines connect to the next world's grid",
+              "codex: takes the lead (the programming workflow is his)",
+              "clawd: follows"
+            ],
+            "asks": []
+          }
+        },
+        {
+          "start": 1350,
+          "end": 1650,
+          "beat": "programming-world",
+          "label": "7. programming-world",
+          "data": {
+            "seconds": 10,
+            "register": "playful, satisfied",
+            "light_pushes": "satisfaction: each gate lights in turn, the human's own gate last",
+            "transitions": {
+              "in": "refill from lines into shaded forms",
+              "out": "the structure's silhouette leads the pull back home (beat 8); the shaded world's lines fold into the Seuss stalks"
+            },
+            "actions": [
+              "codex: guides: points to the join",
+              "human: places the drawn piece against another; the join lights; the chain runs down the grid (a step passing a gate)",
+              "clawd: watches from the edge",
+              "world: shaded architecture with emissive edges; gates as rings that light in sequence"
+            ],
+            "asks": [
+              "how many gates light (default: three, the third is the one the human made)"
+            ]
+          }
+        },
+        {
+          "start": 1650,
+          "end": 1950,
+          "beat": "home-settle",
+          "label": "8. home-settle",
+          "data": {
+            "seconds": 10,
+            "register": "reverent, content",
+            "light_pushes": "contentment: the glow is bounded and rests inside the structure",
+            "transitions": {
+              "in": "pull along the structure's silhouette",
+              "out": "title; settled state returns"
+            },
+            "actions": [
+              "structure: stands, the crayon piece and the lit joins inside it",
+              "gadget: rests inside, bright but bounded",
+              "human: at ease; one last look through the frame, now a window",
+              "codex: settles left",
+              "clawd: settles right"
+            ],
+            "asks": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "script",
+      "items": [
+        {
+          "start": 0,
+          "end": 180,
+          "beat": "arrival",
+          "label": "1. Arrival",
+          "data": {
+            "heading": "1. Arrival",
+            "headingRange": "0–180",
+            "headingRangeMatchesTimeline": true,
+            "sharedWith": [],
+            "notes": [
+              "2026-10-14, shot run s01-01: measured range 0–180 on the 65 s ledger (`v3/timeline.json`); the 0–150 above was the 40 s spine's provisional range. Study: `v3/studies/s01-01.md`. 2026-10-15, run s01-02: range unchanged (0–180); study `v3/studies/s01-02.md`."
+            ],
+            "prose": "*2026-10-14, shot run s01-01: measured range 0–180 on the 65 s ledger (`v3/timeline.json`); the 0–150 above was the 40 s spine's provisional range. Study: `v3/studies/s01-01.md`. 2026-10-15, run s01-02: range unchanged (0–180); study `v3/studies/s01-02.md`.*\n\nSettled state. Mark and title held top-left. Codex, the box, Clawd, and the human behind the box. One emitter: the box seam. Hold 60. The human lifts the lid (one move). The seam light lags, then a bubble swells from the box over 40 frames with the gadget dim inside; the companions lean in (staggered 4). Hold 20 on the bubble."
+          }
+        },
+        {
+          "start": 180,
+          "end": 420,
+          "beat": "everything-at-once",
+          "label": "2. Everything at once",
+          "data": {
+            "heading": "2. Everything at once",
+            "headingRange": "180–420",
+            "headingRangeMatchesTimeline": true,
+            "sharedWith": [],
+            "notes": [
+              "2026-10-14, shot run s01-01: measured range 180–420 on the 65 s ledger; the 150–330 above was provisional. The camera's widen runs 150–210 across the seam between the two beats. 2026-10-15, run s01-02: range unchanged (180–420); the widen now ends at zoom 0.6."
+            ],
+            "prose": "*2026-10-14, shot run s01-01: measured range 180–420 on the 65 s ledger; the 150–330 above was provisional. The camera's widen runs 150–210 across the seam between the two beats. 2026-10-15, run s01-02: range unchanged (180–420); the widen now ends at zoom 0.6.*\n\nThe bubble pops: one frame of smear, then the overwhelm state arrives through the lag chain, light first, glass second. The gadget stands free, dial wide. It projects: stalks shoot up across the field, arches drop in, rings spin out, patches tile outward, beads scatter. Each arrives on twos, staggered 3, until nothing is staggered anymore and everything arrives at once (the one permitted violation of law 1, as the point of the beat). Codex's glyph flickers; Clawd's eyes narrow. The frame fills toward the maximalist painting. Hold 12 at full."
+          }
+        },
+        {
+          "start": 420,
+          "end": 630,
+          "beat": "cant-build",
+          "label": "3. Can't build",
+          "data": {
+            "heading": "3. Can't build",
+            "headingRange": "330–480",
+            "headingRangeMatchesTimeline": false,
+            "sharedWith": [],
+            "notes": [],
+            "prose": "The human reaches for a stalk and a patch: anticipation, action, contact. The join fails: no pulse, the stalk slides back. Second try with an arch: the arch stays dark, the piece returns. A stack of patches collapses (three pieces, staggered 3, each a settle with no hold). The radiance goes noisy, grain up, the single emitter lost among projections. The companions wince (one boil variant held). Hold 16 on the mess."
+          }
+        },
+        {
+          "start": 630,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "4. The frame",
+          "data": {
+            "heading": "4. The frame",
+            "headingRange": "480–600",
+            "headingRangeMatchesTimeline": false,
+            "sharedWith": [],
+            "notes": [],
+            "prose": "Clawd raises the frame (the pass-08 move, entering from the hand's side). Through it: the environment already assembled, rings, arches, stalks, patches, string, refracted and diffused, someplace else. Outside the frame the projections dim through the lag; inside, the emitter narrows to one piece. Hold 20 on the view through the frame. The human looks from the mess to the frame."
+          }
+        },
+        {
+          "start": 930,
+          "end": 1230,
+          "beat": "art-world",
+          "label": "5. Scaffold",
+          "data": {
+            "heading": "5. Scaffold",
+            "headingRange": "600–1020",
+            "headingRangeMatchesTimeline": false,
+            "sharedWith": [
+              "crossing",
+              "programming-world"
+            ],
+            "notes": [],
+            "prose": "One join at a time, each a seam pulse, each staggered after the previous settle:\n\n1. a patch lands (category);\n2. a stalk is planted on it (prompt), leaf opens;\n3. a second stalk, and a bead string joins them (chain);\n4. an arch drops over the string (gate); the first piece passes it, pulse at the keystone;\n5. a ring spins out around the whole (framework); the view gains a level of depth;\n6. a second patch joins at a soft seam; the workspace reshapes (D40).\n\nThe light state shifts from overwhelm toward scaffold through the lag over the whole beat. The gadget's dial closes to a point; its light now rims the structure instead of flooding it."
+          }
+        },
+        {
+          "start": 1230,
+          "end": 1350,
+          "beat": "crossing",
+          "label": "5. Scaffold",
+          "data": {
+            "heading": "5. Scaffold",
+            "headingRange": "600–1020",
+            "headingRangeMatchesTimeline": false,
+            "sharedWith": [
+              "art-world",
+              "programming-world"
+            ],
+            "notes": [],
+            "prose": "One join at a time, each a seam pulse, each staggered after the previous settle:\n\n1. a patch lands (category);\n2. a stalk is planted on it (prompt), leaf opens;\n3. a second stalk, and a bead string joins them (chain);\n4. an arch drops over the string (gate); the first piece passes it, pulse at the keystone;\n5. a ring spins out around the whole (framework); the view gains a level of depth;\n6. a second patch joins at a soft seam; the workspace reshapes (D40).\n\nThe light state shifts from overwhelm toward scaffold through the lag over the whole beat. The gadget's dial closes to a point; its light now rims the structure instead of flooding it."
+          }
+        },
+        {
+          "start": 1350,
+          "end": 1650,
+          "beat": "programming-world",
+          "label": "5. Scaffold",
+          "data": {
+            "heading": "5. Scaffold",
+            "headingRange": "600–1020",
+            "headingRangeMatchesTimeline": false,
+            "sharedWith": [
+              "art-world",
+              "crossing"
+            ],
+            "notes": [],
+            "prose": "One join at a time, each a seam pulse, each staggered after the previous settle:\n\n1. a patch lands (category);\n2. a stalk is planted on it (prompt), leaf opens;\n3. a second stalk, and a bead string joins them (chain);\n4. an arch drops over the string (gate); the first piece passes it, pulse at the keystone;\n5. a ring spins out around the whole (framework); the view gains a level of depth;\n6. a second patch joins at a soft seam; the workspace reshapes (D40).\n\nThe light state shifts from overwhelm toward scaffold through the lag over the whole beat. The gadget's dial closes to a point; its light now rims the structure instead of flooding it."
+          }
+        },
+        {
+          "start": 1650,
+          "end": 1950,
+          "beat": "home-settle",
+          "label": "6. Settle",
+          "data": {
+            "heading": "6. Settle",
+            "headingRange": "1020–1200",
+            "headingRangeMatchesTimeline": false,
+            "sharedWith": [],
+            "notes": [],
+            "prose": "The structure stands. The gadget rests inside it, bright but bounded. The human sits on the patch. Codex and Clawd each take one idle boil. The frame is set down against the structure and keeps showing depth. Hold 40. Title held: Claude Prompts. Frame 1199 is the second poster."
+          }
+        }
+      ]
+    },
+    {
+      "name": "blocking",
+      "items": [
+        {
+          "start": 0,
+          "end": 180,
+          "beat": "arrival",
+          "label": "arrival (provisional)",
+          "data": {
+            "provisional": true,
+            "figure": {
+              "scale": 0.68,
+              "x": 420,
+              "y": 40
+            },
+            "codex": {
+              "x": 60,
+              "y": 440,
+              "scale": 1.8
+            },
+            "clawd": {
+              "x": 940,
+              "y": 470,
+              "scale": 1.5
+            },
+            "emitter": {
+              "start": [
+                1000,
+                396
+              ],
+              "end": [
+                1010,
+                384
+              ],
+              "anchor": "box seam"
+            },
+            "card": "eagle-lyio3is7tokub"
+          }
+        },
+        {
+          "start": 180,
+          "end": 420,
+          "beat": "everything-at-once",
+          "label": "everything-at-once (provisional)",
+          "data": {
+            "provisional": true,
+            "figure": {
+              "scale": 0.68,
+              "x": 420,
+              "y": 40
+            },
+            "codex": {
+              "x": 60,
+              "y": 440,
+              "scale": 1.8
+            },
+            "clawd": {
+              "x": 940,
+              "y": 470,
+              "scale": 1.5
+            },
+            "emitter": {
+              "start": [
+                1010,
+                384
+              ],
+              "end": [
+                1040,
+                330
+              ],
+              "anchor": "gadget dial"
+            },
+            "card": "seuss-no-one-youer"
+          }
+        },
+        {
+          "start": 420,
+          "end": 630,
+          "beat": "cant-build",
+          "label": "cant-build (provisional)",
+          "data": {
+            "provisional": true,
+            "figure": {
+              "scale": 0.58,
+              "x": 452,
+              "y": 85
+            },
+            "codex": {
+              "x": 60,
+              "y": 440,
+              "scale": 1.8
+            },
+            "clawd": {
+              "x": 940,
+              "y": 470,
+              "scale": 1.5
+            },
+            "emitter": {
+              "start": [
+                441.6,
+                637.9
+              ],
+              "end": [
+                441.6,
+                637.9
+              ],
+              "anchor": "gadget dial, lost on the floor (the join)"
+            },
+            "card": "eagle-lxu2uuohr9v2c"
+          }
+        },
+        {
+          "start": 630,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "the-frame (provisional)",
+          "data": {
+            "provisional": true,
+            "figure": {
+              "scale": 0.58,
+              "x": 452,
+              "y": 85
+            },
+            "codex": {
+              "x": 60,
+              "y": 440,
+              "scale": 1.8
+            },
+            "clawd": {
+              "x": 940,
+              "y": 470,
+              "scale": 1.5
+            },
+            "emitter": {
+              "start": [
+                1000,
+                140
+              ],
+              "end": [
+                1060,
+                200
+              ],
+              "anchor": "frame interior"
+            },
+            "card": "seuss-nested-frames"
+          }
+        },
+        {
+          "start": 930,
+          "end": 1230,
+          "beat": "art-world",
+          "label": "art-world (provisional)",
+          "data": {
+            "provisional": true,
+            "figure": {
+              "scale": 0.58,
+              "x": 452,
+              "y": 85
+            },
+            "codex": {
+              "x": 60,
+              "y": 440,
+              "scale": 1.8
+            },
+            "clawd": {
+              "x": 940,
+              "y": 470,
+              "scale": 1.5
+            },
+            "emitter": {
+              "start": [
+                1000,
+                390
+              ],
+              "end": [
+                1080,
+                390
+              ],
+              "anchor": "join (the drawn piece as it fills)"
+            },
+            "card": "seuss-cat-stairway"
+          }
+        },
+        {
+          "start": 1230,
+          "end": 1350,
+          "beat": "crossing",
+          "label": "crossing (provisional)",
+          "data": {
+            "provisional": true,
+            "figure": {
+              "scale": 0.58,
+              "x": 452,
+              "y": 85
+            },
+            "codex": {
+              "x": 60,
+              "y": 440,
+              "scale": 1.8
+            },
+            "clawd": {
+              "x": 940,
+              "y": 470,
+              "scale": 1.5
+            },
+            "emitter": {
+              "start": [
+                1040,
+                390
+              ],
+              "end": [
+                1040,
+                390
+              ],
+              "anchor": "none (the lines themselves glow faintly); placed at the join"
+            },
+            "card": "eagle-mf83t1h77o7bm"
+          }
+        },
+        {
+          "start": 1350,
+          "end": 1650,
+          "beat": "programming-world",
+          "label": "programming-world (provisional)",
+          "data": {
+            "provisional": true,
+            "figure": {
+              "scale": 0.58,
+              "x": 452,
+              "y": 85
+            },
+            "codex": {
+              "x": 60,
+              "y": 440,
+              "scale": 1.8
+            },
+            "clawd": {
+              "x": 940,
+              "y": 470,
+              "scale": 1.5
+            },
+            "emitter": {
+              "start": [
+                150,
+                388
+              ],
+              "end": [
+                325,
+                376
+              ],
+              "anchor": "gates, first to last"
+            },
+            "card": "seuss-archbishop-katz"
+          }
+        },
+        {
+          "start": 1650,
+          "end": 1950,
+          "beat": "home-settle",
+          "label": "home-settle (provisional)",
+          "data": {
+            "provisional": true,
+            "figure": {
+              "scale": 0.58,
+              "x": 452,
+              "y": 85
+            },
+            "codex": {
+              "x": 60,
+              "y": 440,
+              "scale": 1.8
+            },
+            "clawd": {
+              "x": 940,
+              "y": 470,
+              "scale": 1.5
+            },
+            "emitter": {
+              "start": [
+                1000,
+                340
+              ],
+              "end": [
+                1080,
+                340
+              ],
+              "anchor": "gadget, rimming the structure"
+            },
+            "card": "seuss-green-cat-lights"
+          }
+        }
+      ]
+    },
+    {
+      "name": "camera",
+      "items": [
+        {
+          "start": 0,
+          "end": 180,
+          "beat": "arrival",
+          "label": "zoom 1 at (640, 360)",
+          "data": {
+            "pose": {
+              "x": 640,
+              "y": 360,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "medium-wide on the trio and the box; locked (frame 0 is the poster, D53)"
+          }
+        },
+        {
+          "start": 180,
+          "end": 420,
+          "beat": "everything-at-once",
+          "label": "zoom 1 at (640, 360)",
+          "data": {
+            "pose": {
+              "x": 640,
+              "y": 360,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "widen to the full field, led by the first stalk's curl"
+          }
+        },
+        {
+          "start": 420,
+          "end": 630,
+          "beat": "cant-build",
+          "label": "zoom 1 at (640, 360)",
+          "data": {
+            "pose": {
+              "x": 640,
+              "y": 360,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "medium on the human, panning right (s02 layout, approved pending)"
+          }
+        },
+        {
+          "start": 630,
+          "end": 631,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640, 360)",
+          "data": {
+            "pose": {
+              "x": 640,
+              "y": 360,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 631,
+          "end": 632,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640.007, 359.994)",
+          "data": {
+            "pose": {
+              "x": 640.007,
+              "y": 359.994,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 632,
+          "end": 633,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640.028, 359.975)",
+          "data": {
+            "pose": {
+              "x": 640.028,
+              "y": 359.975,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 633,
+          "end": 634,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640.062, 359.944)",
+          "data": {
+            "pose": {
+              "x": 640.062,
+              "y": 359.944,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 634,
+          "end": 635,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640.11, 359.901)",
+          "data": {
+            "pose": {
+              "x": 640.11,
+              "y": 359.901,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 635,
+          "end": 636,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640.172, 359.846)",
+          "data": {
+            "pose": {
+              "x": 640.172,
+              "y": 359.846,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 636,
+          "end": 637,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640.247, 359.779)",
+          "data": {
+            "pose": {
+              "x": 640.247,
+              "y": 359.779,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 637,
+          "end": 638,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640.336, 359.7)",
+          "data": {
+            "pose": {
+              "x": 640.336,
+              "y": 359.7,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 638,
+          "end": 639,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640.437, 359.609)",
+          "data": {
+            "pose": {
+              "x": 640.437,
+              "y": 359.609,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 639,
+          "end": 640,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640.552, 359.507)",
+          "data": {
+            "pose": {
+              "x": 640.552,
+              "y": 359.507,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 640,
+          "end": 641,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640.68, 359.393)",
+          "data": {
+            "pose": {
+              "x": 640.68,
+              "y": 359.393,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 641,
+          "end": 642,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640.82, 359.267)",
+          "data": {
+            "pose": {
+              "x": 640.82,
+              "y": 359.267,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 642,
+          "end": 643,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640.974, 359.13)",
+          "data": {
+            "pose": {
+              "x": 640.974,
+              "y": 359.13,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 643,
+          "end": 644,
+          "beat": "the-frame",
+          "label": "zoom 1 at (641.14, 358.982)",
+          "data": {
+            "pose": {
+              "x": 641.14,
+              "y": 358.982,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 644,
+          "end": 645,
+          "beat": "the-frame",
+          "label": "zoom 1 at (641.318, 358.822)",
+          "data": {
+            "pose": {
+              "x": 641.318,
+              "y": 358.822,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 645,
+          "end": 646,
+          "beat": "the-frame",
+          "label": "zoom 1 at (641.509, 358.651)",
+          "data": {
+            "pose": {
+              "x": 641.509,
+              "y": 358.651,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 646,
+          "end": 647,
+          "beat": "the-frame",
+          "label": "zoom 1 at (641.713, 358.47)",
+          "data": {
+            "pose": {
+              "x": 641.713,
+              "y": 358.47,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 647,
+          "end": 648,
+          "beat": "the-frame",
+          "label": "zoom 1 at (641.929, 358.277)",
+          "data": {
+            "pose": {
+              "x": 641.929,
+              "y": 358.277,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 648,
+          "end": 649,
+          "beat": "the-frame",
+          "label": "zoom 1 at (642.157, 358.073)",
+          "data": {
+            "pose": {
+              "x": 642.157,
+              "y": 358.073,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 649,
+          "end": 650,
+          "beat": "the-frame",
+          "label": "zoom 1 at (642.397, 357.859)",
+          "data": {
+            "pose": {
+              "x": 642.397,
+              "y": 357.859,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 650,
+          "end": 651,
+          "beat": "the-frame",
+          "label": "zoom 1 at (642.648, 357.634)",
+          "data": {
+            "pose": {
+              "x": 642.648,
+              "y": 357.634,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 651,
+          "end": 652,
+          "beat": "the-frame",
+          "label": "zoom 1 at (642.912, 357.398)",
+          "data": {
+            "pose": {
+              "x": 642.912,
+              "y": 357.398,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 652,
+          "end": 653,
+          "beat": "the-frame",
+          "label": "zoom 1 at (643.188, 357.152)",
+          "data": {
+            "pose": {
+              "x": 643.188,
+              "y": 357.152,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 653,
+          "end": 654,
+          "beat": "the-frame",
+          "label": "zoom 1 at (643.475, 356.896)",
+          "data": {
+            "pose": {
+              "x": 643.475,
+              "y": 356.896,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 654,
+          "end": 655,
+          "beat": "the-frame",
+          "label": "zoom 1 at (643.773, 356.629)",
+          "data": {
+            "pose": {
+              "x": 643.773,
+              "y": 356.629,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 655,
+          "end": 656,
+          "beat": "the-frame",
+          "label": "zoom 1 at (644.083, 356.352)",
+          "data": {
+            "pose": {
+              "x": 644.083,
+              "y": 356.352,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 656,
+          "end": 657,
+          "beat": "the-frame",
+          "label": "zoom 1 at (644.405, 356.065)",
+          "data": {
+            "pose": {
+              "x": 644.405,
+              "y": 356.065,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 657,
+          "end": 658,
+          "beat": "the-frame",
+          "label": "zoom 1 at (644.737, 355.768)",
+          "data": {
+            "pose": {
+              "x": 644.737,
+              "y": 355.768,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 658,
+          "end": 659,
+          "beat": "the-frame",
+          "label": "zoom 1 at (645.081, 355.461)",
+          "data": {
+            "pose": {
+              "x": 645.081,
+              "y": 355.461,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 659,
+          "end": 660,
+          "beat": "the-frame",
+          "label": "zoom 1 at (645.436, 355.144)",
+          "data": {
+            "pose": {
+              "x": 645.436,
+              "y": 355.144,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 660,
+          "end": 661,
+          "beat": "the-frame",
+          "label": "zoom 1 at (645.801, 354.817)",
+          "data": {
+            "pose": {
+              "x": 645.801,
+              "y": 354.817,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 661,
+          "end": 662,
+          "beat": "the-frame",
+          "label": "zoom 1 at (646.177, 354.481)",
+          "data": {
+            "pose": {
+              "x": 646.177,
+              "y": 354.481,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 662,
+          "end": 663,
+          "beat": "the-frame",
+          "label": "zoom 1 at (646.564, 354.135)",
+          "data": {
+            "pose": {
+              "x": 646.564,
+              "y": 354.135,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 663,
+          "end": 664,
+          "beat": "the-frame",
+          "label": "zoom 1 at (646.962, 353.78)",
+          "data": {
+            "pose": {
+              "x": 646.962,
+              "y": 353.78,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 664,
+          "end": 665,
+          "beat": "the-frame",
+          "label": "zoom 1 at (647.37, 353.416)",
+          "data": {
+            "pose": {
+              "x": 647.37,
+              "y": 353.416,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 665,
+          "end": 666,
+          "beat": "the-frame",
+          "label": "zoom 1 at (647.789, 353.042)",
+          "data": {
+            "pose": {
+              "x": 647.789,
+              "y": 353.042,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 666,
+          "end": 667,
+          "beat": "the-frame",
+          "label": "zoom 1 at (648.217, 352.659)",
+          "data": {
+            "pose": {
+              "x": 648.217,
+              "y": 352.659,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 667,
+          "end": 668,
+          "beat": "the-frame",
+          "label": "zoom 1 at (648.656, 352.267)",
+          "data": {
+            "pose": {
+              "x": 648.656,
+              "y": 352.267,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 668,
+          "end": 669,
+          "beat": "the-frame",
+          "label": "zoom 1 at (649.105, 351.866)",
+          "data": {
+            "pose": {
+              "x": 649.105,
+              "y": 351.866,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 669,
+          "end": 670,
+          "beat": "the-frame",
+          "label": "zoom 1 at (649.564, 351.456)",
+          "data": {
+            "pose": {
+              "x": 649.564,
+              "y": 351.456,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 670,
+          "end": 671,
+          "beat": "the-frame",
+          "label": "zoom 1 at (650.032, 351.037)",
+          "data": {
+            "pose": {
+              "x": 650.032,
+              "y": 351.037,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 671,
+          "end": 672,
+          "beat": "the-frame",
+          "label": "zoom 1 at (650.511, 350.61)",
+          "data": {
+            "pose": {
+              "x": 650.511,
+              "y": 350.61,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 672,
+          "end": 673,
+          "beat": "the-frame",
+          "label": "zoom 1 at (650.999, 350.174)",
+          "data": {
+            "pose": {
+              "x": 650.999,
+              "y": 350.174,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 673,
+          "end": 674,
+          "beat": "the-frame",
+          "label": "zoom 1 at (651.497, 349.729)",
+          "data": {
+            "pose": {
+              "x": 651.497,
+              "y": 349.729,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 674,
+          "end": 675,
+          "beat": "the-frame",
+          "label": "zoom 1 at (652.003, 349.276)",
+          "data": {
+            "pose": {
+              "x": 652.003,
+              "y": 349.276,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 675,
+          "end": 676,
+          "beat": "the-frame",
+          "label": "zoom 1 at (652.52, 348.815)",
+          "data": {
+            "pose": {
+              "x": 652.52,
+              "y": 348.815,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 676,
+          "end": 677,
+          "beat": "the-frame",
+          "label": "zoom 1 at (653.045, 348.346)",
+          "data": {
+            "pose": {
+              "x": 653.045,
+              "y": 348.346,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 677,
+          "end": 678,
+          "beat": "the-frame",
+          "label": "zoom 1 at (653.58, 347.868)",
+          "data": {
+            "pose": {
+              "x": 653.58,
+              "y": 347.868,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 678,
+          "end": 679,
+          "beat": "the-frame",
+          "label": "zoom 1 at (654.123, 347.382)",
+          "data": {
+            "pose": {
+              "x": 654.123,
+              "y": 347.382,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 679,
+          "end": 680,
+          "beat": "the-frame",
+          "label": "zoom 1 at (654.676, 346.889)",
+          "data": {
+            "pose": {
+              "x": 654.676,
+              "y": 346.889,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 680,
+          "end": 681,
+          "beat": "the-frame",
+          "label": "zoom 1 at (655.237, 346.387)",
+          "data": {
+            "pose": {
+              "x": 655.237,
+              "y": 346.387,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 681,
+          "end": 682,
+          "beat": "the-frame",
+          "label": "zoom 1 at (655.807, 345.878)",
+          "data": {
+            "pose": {
+              "x": 655.807,
+              "y": 345.878,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 682,
+          "end": 683,
+          "beat": "the-frame",
+          "label": "zoom 1 at (656.386, 345.361)",
+          "data": {
+            "pose": {
+              "x": 656.386,
+              "y": 345.361,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 683,
+          "end": 684,
+          "beat": "the-frame",
+          "label": "zoom 1 at (656.973, 344.837)",
+          "data": {
+            "pose": {
+              "x": 656.973,
+              "y": 344.837,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 684,
+          "end": 685,
+          "beat": "the-frame",
+          "label": "zoom 1 at (657.568, 344.305)",
+          "data": {
+            "pose": {
+              "x": 657.568,
+              "y": 344.305,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 685,
+          "end": 686,
+          "beat": "the-frame",
+          "label": "zoom 1 at (658.172, 343.766)",
+          "data": {
+            "pose": {
+              "x": 658.172,
+              "y": 343.766,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 686,
+          "end": 687,
+          "beat": "the-frame",
+          "label": "zoom 1 at (658.784, 343.219)",
+          "data": {
+            "pose": {
+              "x": 658.784,
+              "y": 343.219,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 687,
+          "end": 688,
+          "beat": "the-frame",
+          "label": "zoom 1 at (659.403, 342.665)",
+          "data": {
+            "pose": {
+              "x": 659.403,
+              "y": 342.665,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 688,
+          "end": 689,
+          "beat": "the-frame",
+          "label": "zoom 1 at (660.031, 342.104)",
+          "data": {
+            "pose": {
+              "x": 660.031,
+              "y": 342.104,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 689,
+          "end": 690,
+          "beat": "the-frame",
+          "label": "zoom 1 at (660.667, 341.537)",
+          "data": {
+            "pose": {
+              "x": 660.667,
+              "y": 341.537,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 690,
+          "end": 691,
+          "beat": "the-frame",
+          "label": "zoom 1 at (661.31, 340.962)",
+          "data": {
+            "pose": {
+              "x": 661.31,
+              "y": 340.962,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 691,
+          "end": 692,
+          "beat": "the-frame",
+          "label": "zoom 1 at (661.961, 340.38)",
+          "data": {
+            "pose": {
+              "x": 661.961,
+              "y": 340.38,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 692,
+          "end": 693,
+          "beat": "the-frame",
+          "label": "zoom 1 at (662.62, 339.792)",
+          "data": {
+            "pose": {
+              "x": 662.62,
+              "y": 339.792,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 693,
+          "end": 694,
+          "beat": "the-frame",
+          "label": "zoom 1 at (663.286, 339.197)",
+          "data": {
+            "pose": {
+              "x": 663.286,
+              "y": 339.197,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 694,
+          "end": 695,
+          "beat": "the-frame",
+          "label": "zoom 1 at (663.959, 338.595)",
+          "data": {
+            "pose": {
+              "x": 663.959,
+              "y": 338.595,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 695,
+          "end": 696,
+          "beat": "the-frame",
+          "label": "zoom 1 at (664.639, 337.988)",
+          "data": {
+            "pose": {
+              "x": 664.639,
+              "y": 337.988,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 696,
+          "end": 697,
+          "beat": "the-frame",
+          "label": "zoom 1 at (665.327, 337.373)",
+          "data": {
+            "pose": {
+              "x": 665.327,
+              "y": 337.373,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 697,
+          "end": 698,
+          "beat": "the-frame",
+          "label": "zoom 1 at (666.022, 336.753)",
+          "data": {
+            "pose": {
+              "x": 666.022,
+              "y": 336.753,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 698,
+          "end": 699,
+          "beat": "the-frame",
+          "label": "zoom 1 at (666.723, 336.126)",
+          "data": {
+            "pose": {
+              "x": 666.723,
+              "y": 336.126,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 699,
+          "end": 700,
+          "beat": "the-frame",
+          "label": "zoom 1 at (667.431, 335.493)",
+          "data": {
+            "pose": {
+              "x": 667.431,
+              "y": 335.493,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 700,
+          "end": 701,
+          "beat": "the-frame",
+          "label": "zoom 1 at (668.146, 334.855)",
+          "data": {
+            "pose": {
+              "x": 668.146,
+              "y": 334.855,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 701,
+          "end": 702,
+          "beat": "the-frame",
+          "label": "zoom 1 at (668.868, 334.21)",
+          "data": {
+            "pose": {
+              "x": 668.868,
+              "y": 334.21,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 702,
+          "end": 703,
+          "beat": "the-frame",
+          "label": "zoom 1 at (669.596, 333.56)",
+          "data": {
+            "pose": {
+              "x": 669.596,
+              "y": 333.56,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 703,
+          "end": 704,
+          "beat": "the-frame",
+          "label": "zoom 1 at (670.33, 332.904)",
+          "data": {
+            "pose": {
+              "x": 670.33,
+              "y": 332.904,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 704,
+          "end": 705,
+          "beat": "the-frame",
+          "label": "zoom 1 at (671.071, 332.242)",
+          "data": {
+            "pose": {
+              "x": 671.071,
+              "y": 332.242,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 705,
+          "end": 706,
+          "beat": "the-frame",
+          "label": "zoom 1 at (671.817, 331.575)",
+          "data": {
+            "pose": {
+              "x": 671.817,
+              "y": 331.575,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 706,
+          "end": 707,
+          "beat": "the-frame",
+          "label": "zoom 1 at (672.57, 330.902)",
+          "data": {
+            "pose": {
+              "x": 672.57,
+              "y": 330.902,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 707,
+          "end": 708,
+          "beat": "the-frame",
+          "label": "zoom 1 at (673.329, 330.224)",
+          "data": {
+            "pose": {
+              "x": 673.329,
+              "y": 330.224,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 708,
+          "end": 709,
+          "beat": "the-frame",
+          "label": "zoom 1 at (674.094, 329.541)",
+          "data": {
+            "pose": {
+              "x": 674.094,
+              "y": 329.541,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 709,
+          "end": 710,
+          "beat": "the-frame",
+          "label": "zoom 1 at (674.864, 328.853)",
+          "data": {
+            "pose": {
+              "x": 674.864,
+              "y": 328.853,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 710,
+          "end": 711,
+          "beat": "the-frame",
+          "label": "zoom 1 at (675.64, 328.16)",
+          "data": {
+            "pose": {
+              "x": 675.64,
+              "y": 328.16,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 711,
+          "end": 712,
+          "beat": "the-frame",
+          "label": "zoom 1 at (676.421, 327.462)",
+          "data": {
+            "pose": {
+              "x": 676.421,
+              "y": 327.462,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 712,
+          "end": 713,
+          "beat": "the-frame",
+          "label": "zoom 1 at (677.208, 326.759)",
+          "data": {
+            "pose": {
+              "x": 677.208,
+              "y": 326.759,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 713,
+          "end": 714,
+          "beat": "the-frame",
+          "label": "zoom 1 at (678.001, 326.051)",
+          "data": {
+            "pose": {
+              "x": 678.001,
+              "y": 326.051,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 714,
+          "end": 715,
+          "beat": "the-frame",
+          "label": "zoom 1 at (678.798, 325.339)",
+          "data": {
+            "pose": {
+              "x": 678.798,
+              "y": 325.339,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 715,
+          "end": 716,
+          "beat": "the-frame",
+          "label": "zoom 1 at (679.6, 324.622)",
+          "data": {
+            "pose": {
+              "x": 679.6,
+              "y": 324.622,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 716,
+          "end": 717,
+          "beat": "the-frame",
+          "label": "zoom 1 at (680.408, 323.9)",
+          "data": {
+            "pose": {
+              "x": 680.408,
+              "y": 323.9,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 717,
+          "end": 718,
+          "beat": "the-frame",
+          "label": "zoom 1 at (681.22, 323.174)",
+          "data": {
+            "pose": {
+              "x": 681.22,
+              "y": 323.174,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 718,
+          "end": 719,
+          "beat": "the-frame",
+          "label": "zoom 1 at (682.038, 322.444)",
+          "data": {
+            "pose": {
+              "x": 682.038,
+              "y": 322.444,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 719,
+          "end": 720,
+          "beat": "the-frame",
+          "label": "zoom 1 at (682.86, 321.71)",
+          "data": {
+            "pose": {
+              "x": 682.86,
+              "y": 321.71,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 720,
+          "end": 721,
+          "beat": "the-frame",
+          "label": "zoom 1 at (683.686, 320.972)",
+          "data": {
+            "pose": {
+              "x": 683.686,
+              "y": 320.972,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 721,
+          "end": 722,
+          "beat": "the-frame",
+          "label": "zoom 1 at (684.517, 320.229)",
+          "data": {
+            "pose": {
+              "x": 684.517,
+              "y": 320.229,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 722,
+          "end": 723,
+          "beat": "the-frame",
+          "label": "zoom 1 at (685.352, 319.483)",
+          "data": {
+            "pose": {
+              "x": 685.352,
+              "y": 319.483,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 723,
+          "end": 724,
+          "beat": "the-frame",
+          "label": "zoom 1 at (686.192, 318.733)",
+          "data": {
+            "pose": {
+              "x": 686.192,
+              "y": 318.733,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 724,
+          "end": 725,
+          "beat": "the-frame",
+          "label": "zoom 1 at (687.036, 317.979)",
+          "data": {
+            "pose": {
+              "x": 687.036,
+              "y": 317.979,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 725,
+          "end": 726,
+          "beat": "the-frame",
+          "label": "zoom 1 at (687.883, 317.222)",
+          "data": {
+            "pose": {
+              "x": 687.883,
+              "y": 317.222,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 726,
+          "end": 727,
+          "beat": "the-frame",
+          "label": "zoom 1 at (688.735, 316.461)",
+          "data": {
+            "pose": {
+              "x": 688.735,
+              "y": 316.461,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 727,
+          "end": 728,
+          "beat": "the-frame",
+          "label": "zoom 1 at (689.591, 315.697)",
+          "data": {
+            "pose": {
+              "x": 689.591,
+              "y": 315.697,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 728,
+          "end": 729,
+          "beat": "the-frame",
+          "label": "zoom 1 at (690.45, 314.929)",
+          "data": {
+            "pose": {
+              "x": 690.45,
+              "y": 314.929,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 729,
+          "end": 730,
+          "beat": "the-frame",
+          "label": "zoom 1 at (691.313, 314.158)",
+          "data": {
+            "pose": {
+              "x": 691.313,
+              "y": 314.158,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 730,
+          "end": 731,
+          "beat": "the-frame",
+          "label": "zoom 1 at (692.179, 313.384)",
+          "data": {
+            "pose": {
+              "x": 692.179,
+              "y": 313.384,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 731,
+          "end": 732,
+          "beat": "the-frame",
+          "label": "zoom 1 at (693.049, 312.607)",
+          "data": {
+            "pose": {
+              "x": 693.049,
+              "y": 312.607,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 732,
+          "end": 733,
+          "beat": "the-frame",
+          "label": "zoom 1 at (693.923, 311.827)",
+          "data": {
+            "pose": {
+              "x": 693.923,
+              "y": 311.827,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 733,
+          "end": 734,
+          "beat": "the-frame",
+          "label": "zoom 1 at (694.799, 311.044)",
+          "data": {
+            "pose": {
+              "x": 694.799,
+              "y": 311.044,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 734,
+          "end": 735,
+          "beat": "the-frame",
+          "label": "zoom 1 at (695.678, 310.258)",
+          "data": {
+            "pose": {
+              "x": 695.678,
+              "y": 310.258,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 735,
+          "end": 736,
+          "beat": "the-frame",
+          "label": "zoom 1 at (696.561, 309.469)",
+          "data": {
+            "pose": {
+              "x": 696.561,
+              "y": 309.469,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 736,
+          "end": 737,
+          "beat": "the-frame",
+          "label": "zoom 1 at (697.446, 308.678)",
+          "data": {
+            "pose": {
+              "x": 697.446,
+              "y": 308.678,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 737,
+          "end": 738,
+          "beat": "the-frame",
+          "label": "zoom 1 at (698.335, 307.885)",
+          "data": {
+            "pose": {
+              "x": 698.335,
+              "y": 307.885,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 738,
+          "end": 739,
+          "beat": "the-frame",
+          "label": "zoom 1 at (699.225, 307.089)",
+          "data": {
+            "pose": {
+              "x": 699.225,
+              "y": 307.089,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 739,
+          "end": 740,
+          "beat": "the-frame",
+          "label": "zoom 1 at (700.119, 306.291)",
+          "data": {
+            "pose": {
+              "x": 700.119,
+              "y": 306.291,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 740,
+          "end": 741,
+          "beat": "the-frame",
+          "label": "zoom 1 at (701.015, 305.49)",
+          "data": {
+            "pose": {
+              "x": 701.015,
+              "y": 305.49,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 741,
+          "end": 742,
+          "beat": "the-frame",
+          "label": "zoom 1 at (701.913, 304.688)",
+          "data": {
+            "pose": {
+              "x": 701.913,
+              "y": 304.688,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 742,
+          "end": 743,
+          "beat": "the-frame",
+          "label": "zoom 1 at (702.814, 303.883)",
+          "data": {
+            "pose": {
+              "x": 702.814,
+              "y": 303.883,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 743,
+          "end": 744,
+          "beat": "the-frame",
+          "label": "zoom 1 at (703.716, 303.077)",
+          "data": {
+            "pose": {
+              "x": 703.716,
+              "y": 303.077,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 744,
+          "end": 745,
+          "beat": "the-frame",
+          "label": "zoom 1 at (704.621, 302.269)",
+          "data": {
+            "pose": {
+              "x": 704.621,
+              "y": 302.269,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 745,
+          "end": 746,
+          "beat": "the-frame",
+          "label": "zoom 1 at (705.528, 301.458)",
+          "data": {
+            "pose": {
+              "x": 705.528,
+              "y": 301.458,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 746,
+          "end": 747,
+          "beat": "the-frame",
+          "label": "zoom 1 at (706.437, 300.647)",
+          "data": {
+            "pose": {
+              "x": 706.437,
+              "y": 300.647,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 747,
+          "end": 748,
+          "beat": "the-frame",
+          "label": "zoom 1 at (707.347, 299.834)",
+          "data": {
+            "pose": {
+              "x": 707.347,
+              "y": 299.834,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 748,
+          "end": 749,
+          "beat": "the-frame",
+          "label": "zoom 1 at (708.259, 299.019)",
+          "data": {
+            "pose": {
+              "x": 708.259,
+              "y": 299.019,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 749,
+          "end": 750,
+          "beat": "the-frame",
+          "label": "zoom 1 at (709.172, 298.203)",
+          "data": {
+            "pose": {
+              "x": 709.172,
+              "y": 298.203,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 750,
+          "end": 751,
+          "beat": "the-frame",
+          "label": "zoom 1 at (710.087, 297.385)",
+          "data": {
+            "pose": {
+              "x": 710.087,
+              "y": 297.385,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 751,
+          "end": 752,
+          "beat": "the-frame",
+          "label": "zoom 1 at (711.003, 296.567)",
+          "data": {
+            "pose": {
+              "x": 711.003,
+              "y": 296.567,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 752,
+          "end": 753,
+          "beat": "the-frame",
+          "label": "zoom 1 at (711.921, 295.747)",
+          "data": {
+            "pose": {
+              "x": 711.921,
+              "y": 295.747,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 753,
+          "end": 754,
+          "beat": "the-frame",
+          "label": "zoom 1 at (712.839, 294.927)",
+          "data": {
+            "pose": {
+              "x": 712.839,
+              "y": 294.927,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 754,
+          "end": 755,
+          "beat": "the-frame",
+          "label": "zoom 1 at (713.759, 294.105)",
+          "data": {
+            "pose": {
+              "x": 713.759,
+              "y": 294.105,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 755,
+          "end": 756,
+          "beat": "the-frame",
+          "label": "zoom 1 at (714.679, 293.283)",
+          "data": {
+            "pose": {
+              "x": 714.679,
+              "y": 293.283,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 756,
+          "end": 757,
+          "beat": "the-frame",
+          "label": "zoom 1 at (715.6, 292.46)",
+          "data": {
+            "pose": {
+              "x": 715.6,
+              "y": 292.46,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 757,
+          "end": 758,
+          "beat": "the-frame",
+          "label": "zoom 1 at (716.522, 291.636)",
+          "data": {
+            "pose": {
+              "x": 716.522,
+              "y": 291.636,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 758,
+          "end": 759,
+          "beat": "the-frame",
+          "label": "zoom 1 at (717.445, 290.812)",
+          "data": {
+            "pose": {
+              "x": 717.445,
+              "y": 290.812,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 759,
+          "end": 760,
+          "beat": "the-frame",
+          "label": "zoom 1 at (718.368, 289.988)",
+          "data": {
+            "pose": {
+              "x": 718.368,
+              "y": 289.988,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 760,
+          "end": 761,
+          "beat": "the-frame",
+          "label": "zoom 1 at (719.291, 289.163)",
+          "data": {
+            "pose": {
+              "x": 719.291,
+              "y": 289.163,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 761,
+          "end": 762,
+          "beat": "the-frame",
+          "label": "zoom 1 at (720.214, 288.338)",
+          "data": {
+            "pose": {
+              "x": 720.214,
+              "y": 288.338,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 762,
+          "end": 763,
+          "beat": "the-frame",
+          "label": "zoom 1 at (721.138, 287.513)",
+          "data": {
+            "pose": {
+              "x": 721.138,
+              "y": 287.513,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 763,
+          "end": 764,
+          "beat": "the-frame",
+          "label": "zoom 1 at (722.062, 286.687)",
+          "data": {
+            "pose": {
+              "x": 722.062,
+              "y": 286.687,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 764,
+          "end": 765,
+          "beat": "the-frame",
+          "label": "zoom 1 at (722.986, 285.862)",
+          "data": {
+            "pose": {
+              "x": 722.986,
+              "y": 285.862,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 765,
+          "end": 766,
+          "beat": "the-frame",
+          "label": "zoom 1 at (723.909, 285.037)",
+          "data": {
+            "pose": {
+              "x": 723.909,
+              "y": 285.037,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 766,
+          "end": 767,
+          "beat": "the-frame",
+          "label": "zoom 1 at (724.832, 284.212)",
+          "data": {
+            "pose": {
+              "x": 724.832,
+              "y": 284.212,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 767,
+          "end": 768,
+          "beat": "the-frame",
+          "label": "zoom 1 at (725.755, 283.388)",
+          "data": {
+            "pose": {
+              "x": 725.755,
+              "y": 283.388,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 768,
+          "end": 769,
+          "beat": "the-frame",
+          "label": "zoom 1 at (726.678, 282.564)",
+          "data": {
+            "pose": {
+              "x": 726.678,
+              "y": 282.564,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 769,
+          "end": 770,
+          "beat": "the-frame",
+          "label": "zoom 1 at (727.6, 281.74)",
+          "data": {
+            "pose": {
+              "x": 727.6,
+              "y": 281.74,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 770,
+          "end": 771,
+          "beat": "the-frame",
+          "label": "zoom 1 at (728.521, 280.917)",
+          "data": {
+            "pose": {
+              "x": 728.521,
+              "y": 280.917,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 771,
+          "end": 772,
+          "beat": "the-frame",
+          "label": "zoom 1 at (729.441, 280.095)",
+          "data": {
+            "pose": {
+              "x": 729.441,
+              "y": 280.095,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 772,
+          "end": 773,
+          "beat": "the-frame",
+          "label": "zoom 1 at (730.361, 279.273)",
+          "data": {
+            "pose": {
+              "x": 730.361,
+              "y": 279.273,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 773,
+          "end": 774,
+          "beat": "the-frame",
+          "label": "zoom 1 at (731.279, 278.453)",
+          "data": {
+            "pose": {
+              "x": 731.279,
+              "y": 278.453,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 774,
+          "end": 775,
+          "beat": "the-frame",
+          "label": "zoom 1 at (732.197, 277.633)",
+          "data": {
+            "pose": {
+              "x": 732.197,
+              "y": 277.633,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 775,
+          "end": 776,
+          "beat": "the-frame",
+          "label": "zoom 1 at (733.113, 276.815)",
+          "data": {
+            "pose": {
+              "x": 733.113,
+              "y": 276.815,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 776,
+          "end": 777,
+          "beat": "the-frame",
+          "label": "zoom 1 at (734.028, 275.997)",
+          "data": {
+            "pose": {
+              "x": 734.028,
+              "y": 275.997,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 777,
+          "end": 778,
+          "beat": "the-frame",
+          "label": "zoom 1 at (734.941, 275.181)",
+          "data": {
+            "pose": {
+              "x": 734.941,
+              "y": 275.181,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 778,
+          "end": 779,
+          "beat": "the-frame",
+          "label": "zoom 1 at (735.853, 274.366)",
+          "data": {
+            "pose": {
+              "x": 735.853,
+              "y": 274.366,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 779,
+          "end": 780,
+          "beat": "the-frame",
+          "label": "zoom 1 at (736.763, 273.553)",
+          "data": {
+            "pose": {
+              "x": 736.763,
+              "y": 273.553,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 780,
+          "end": 781,
+          "beat": "the-frame",
+          "label": "zoom 1 at (737.672, 272.742)",
+          "data": {
+            "pose": {
+              "x": 737.672,
+              "y": 272.742,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 781,
+          "end": 782,
+          "beat": "the-frame",
+          "label": "zoom 1 at (738.579, 271.931)",
+          "data": {
+            "pose": {
+              "x": 738.579,
+              "y": 271.931,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 782,
+          "end": 783,
+          "beat": "the-frame",
+          "label": "zoom 1 at (739.484, 271.123)",
+          "data": {
+            "pose": {
+              "x": 739.484,
+              "y": 271.123,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 783,
+          "end": 784,
+          "beat": "the-frame",
+          "label": "zoom 1 at (740.386, 270.317)",
+          "data": {
+            "pose": {
+              "x": 740.386,
+              "y": 270.317,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 784,
+          "end": 785,
+          "beat": "the-frame",
+          "label": "zoom 1 at (741.287, 269.512)",
+          "data": {
+            "pose": {
+              "x": 741.287,
+              "y": 269.512,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 785,
+          "end": 786,
+          "beat": "the-frame",
+          "label": "zoom 1 at (742.185, 268.71)",
+          "data": {
+            "pose": {
+              "x": 742.185,
+              "y": 268.71,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 786,
+          "end": 787,
+          "beat": "the-frame",
+          "label": "zoom 1 at (743.081, 267.909)",
+          "data": {
+            "pose": {
+              "x": 743.081,
+              "y": 267.909,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 787,
+          "end": 788,
+          "beat": "the-frame",
+          "label": "zoom 1 at (743.975, 267.111)",
+          "data": {
+            "pose": {
+              "x": 743.975,
+              "y": 267.111,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 788,
+          "end": 789,
+          "beat": "the-frame",
+          "label": "zoom 1 at (744.865, 266.315)",
+          "data": {
+            "pose": {
+              "x": 744.865,
+              "y": 266.315,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 789,
+          "end": 790,
+          "beat": "the-frame",
+          "label": "zoom 1 at (745.754, 265.522)",
+          "data": {
+            "pose": {
+              "x": 745.754,
+              "y": 265.522,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 790,
+          "end": 791,
+          "beat": "the-frame",
+          "label": "zoom 1 at (746.639, 264.731)",
+          "data": {
+            "pose": {
+              "x": 746.639,
+              "y": 264.731,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 791,
+          "end": 792,
+          "beat": "the-frame",
+          "label": "zoom 1 at (747.522, 263.942)",
+          "data": {
+            "pose": {
+              "x": 747.522,
+              "y": 263.942,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 792,
+          "end": 793,
+          "beat": "the-frame",
+          "label": "zoom 1 at (748.401, 263.156)",
+          "data": {
+            "pose": {
+              "x": 748.401,
+              "y": 263.156,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 793,
+          "end": 794,
+          "beat": "the-frame",
+          "label": "zoom 1 at (749.277, 262.373)",
+          "data": {
+            "pose": {
+              "x": 749.277,
+              "y": 262.373,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 794,
+          "end": 795,
+          "beat": "the-frame",
+          "label": "zoom 1 at (750.151, 261.593)",
+          "data": {
+            "pose": {
+              "x": 750.151,
+              "y": 261.593,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 795,
+          "end": 796,
+          "beat": "the-frame",
+          "label": "zoom 1 at (751.021, 260.816)",
+          "data": {
+            "pose": {
+              "x": 751.021,
+              "y": 260.816,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 796,
+          "end": 797,
+          "beat": "the-frame",
+          "label": "zoom 1 at (751.887, 260.042)",
+          "data": {
+            "pose": {
+              "x": 751.887,
+              "y": 260.042,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 797,
+          "end": 798,
+          "beat": "the-frame",
+          "label": "zoom 1 at (752.75, 259.271)",
+          "data": {
+            "pose": {
+              "x": 752.75,
+              "y": 259.271,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 798,
+          "end": 799,
+          "beat": "the-frame",
+          "label": "zoom 1 at (753.609, 258.503)",
+          "data": {
+            "pose": {
+              "x": 753.609,
+              "y": 258.503,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 799,
+          "end": 800,
+          "beat": "the-frame",
+          "label": "zoom 1 at (754.465, 257.739)",
+          "data": {
+            "pose": {
+              "x": 754.465,
+              "y": 257.739,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 800,
+          "end": 801,
+          "beat": "the-frame",
+          "label": "zoom 1 at (755.317, 256.978)",
+          "data": {
+            "pose": {
+              "x": 755.317,
+              "y": 256.978,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 801,
+          "end": 802,
+          "beat": "the-frame",
+          "label": "zoom 1 at (756.164, 256.221)",
+          "data": {
+            "pose": {
+              "x": 756.164,
+              "y": 256.221,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 802,
+          "end": 803,
+          "beat": "the-frame",
+          "label": "zoom 1 at (757.008, 255.467)",
+          "data": {
+            "pose": {
+              "x": 757.008,
+              "y": 255.467,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 803,
+          "end": 804,
+          "beat": "the-frame",
+          "label": "zoom 1 at (757.848, 254.717)",
+          "data": {
+            "pose": {
+              "x": 757.848,
+              "y": 254.717,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 804,
+          "end": 805,
+          "beat": "the-frame",
+          "label": "zoom 1 at (758.683, 253.971)",
+          "data": {
+            "pose": {
+              "x": 758.683,
+              "y": 253.971,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 805,
+          "end": 806,
+          "beat": "the-frame",
+          "label": "zoom 1 at (759.514, 253.228)",
+          "data": {
+            "pose": {
+              "x": 759.514,
+              "y": 253.228,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 806,
+          "end": 807,
+          "beat": "the-frame",
+          "label": "zoom 1 at (760.34, 252.49)",
+          "data": {
+            "pose": {
+              "x": 760.34,
+              "y": 252.49,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 807,
+          "end": 808,
+          "beat": "the-frame",
+          "label": "zoom 1 at (761.162, 251.756)",
+          "data": {
+            "pose": {
+              "x": 761.162,
+              "y": 251.756,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 808,
+          "end": 809,
+          "beat": "the-frame",
+          "label": "zoom 1 at (761.98, 251.026)",
+          "data": {
+            "pose": {
+              "x": 761.98,
+              "y": 251.026,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 809,
+          "end": 810,
+          "beat": "the-frame",
+          "label": "zoom 1 at (762.792, 250.3)",
+          "data": {
+            "pose": {
+              "x": 762.792,
+              "y": 250.3,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 810,
+          "end": 811,
+          "beat": "the-frame",
+          "label": "zoom 1 at (763.6, 249.578)",
+          "data": {
+            "pose": {
+              "x": 763.6,
+              "y": 249.578,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 811,
+          "end": 812,
+          "beat": "the-frame",
+          "label": "zoom 1 at (764.402, 248.861)",
+          "data": {
+            "pose": {
+              "x": 764.402,
+              "y": 248.861,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 812,
+          "end": 813,
+          "beat": "the-frame",
+          "label": "zoom 1 at (765.199, 248.149)",
+          "data": {
+            "pose": {
+              "x": 765.199,
+              "y": 248.149,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 813,
+          "end": 814,
+          "beat": "the-frame",
+          "label": "zoom 1 at (765.992, 247.441)",
+          "data": {
+            "pose": {
+              "x": 765.992,
+              "y": 247.441,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 814,
+          "end": 815,
+          "beat": "the-frame",
+          "label": "zoom 1 at (766.779, 246.738)",
+          "data": {
+            "pose": {
+              "x": 766.779,
+              "y": 246.738,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 815,
+          "end": 816,
+          "beat": "the-frame",
+          "label": "zoom 1 at (767.56, 246.04)",
+          "data": {
+            "pose": {
+              "x": 767.56,
+              "y": 246.04,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 816,
+          "end": 817,
+          "beat": "the-frame",
+          "label": "zoom 1 at (768.336, 245.347)",
+          "data": {
+            "pose": {
+              "x": 768.336,
+              "y": 245.347,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 817,
+          "end": 818,
+          "beat": "the-frame",
+          "label": "zoom 1 at (769.106, 244.659)",
+          "data": {
+            "pose": {
+              "x": 769.106,
+              "y": 244.659,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 818,
+          "end": 819,
+          "beat": "the-frame",
+          "label": "zoom 1 at (769.871, 243.976)",
+          "data": {
+            "pose": {
+              "x": 769.871,
+              "y": 243.976,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 819,
+          "end": 820,
+          "beat": "the-frame",
+          "label": "zoom 1 at (770.63, 243.298)",
+          "data": {
+            "pose": {
+              "x": 770.63,
+              "y": 243.298,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 820,
+          "end": 821,
+          "beat": "the-frame",
+          "label": "zoom 1 at (771.383, 242.625)",
+          "data": {
+            "pose": {
+              "x": 771.383,
+              "y": 242.625,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 821,
+          "end": 822,
+          "beat": "the-frame",
+          "label": "zoom 1 at (772.129, 241.958)",
+          "data": {
+            "pose": {
+              "x": 772.129,
+              "y": 241.958,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 822,
+          "end": 823,
+          "beat": "the-frame",
+          "label": "zoom 1 at (772.87, 241.296)",
+          "data": {
+            "pose": {
+              "x": 772.87,
+              "y": 241.296,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 823,
+          "end": 824,
+          "beat": "the-frame",
+          "label": "zoom 1 at (773.604, 240.64)",
+          "data": {
+            "pose": {
+              "x": 773.604,
+              "y": 240.64,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 824,
+          "end": 825,
+          "beat": "the-frame",
+          "label": "zoom 1 at (774.332, 239.99)",
+          "data": {
+            "pose": {
+              "x": 774.332,
+              "y": 239.99,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 825,
+          "end": 826,
+          "beat": "the-frame",
+          "label": "zoom 1 at (775.054, 239.345)",
+          "data": {
+            "pose": {
+              "x": 775.054,
+              "y": 239.345,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 826,
+          "end": 827,
+          "beat": "the-frame",
+          "label": "zoom 1 at (775.769, 238.707)",
+          "data": {
+            "pose": {
+              "x": 775.769,
+              "y": 238.707,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 827,
+          "end": 828,
+          "beat": "the-frame",
+          "label": "zoom 1 at (776.477, 238.074)",
+          "data": {
+            "pose": {
+              "x": 776.477,
+              "y": 238.074,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 828,
+          "end": 829,
+          "beat": "the-frame",
+          "label": "zoom 1 at (777.178, 237.447)",
+          "data": {
+            "pose": {
+              "x": 777.178,
+              "y": 237.447,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 829,
+          "end": 830,
+          "beat": "the-frame",
+          "label": "zoom 1 at (777.873, 236.827)",
+          "data": {
+            "pose": {
+              "x": 777.873,
+              "y": 236.827,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 830,
+          "end": 831,
+          "beat": "the-frame",
+          "label": "zoom 1 at (778.561, 236.212)",
+          "data": {
+            "pose": {
+              "x": 778.561,
+              "y": 236.212,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 831,
+          "end": 832,
+          "beat": "the-frame",
+          "label": "zoom 1 at (779.241, 235.605)",
+          "data": {
+            "pose": {
+              "x": 779.241,
+              "y": 235.605,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 832,
+          "end": 833,
+          "beat": "the-frame",
+          "label": "zoom 1 at (779.914, 235.003)",
+          "data": {
+            "pose": {
+              "x": 779.914,
+              "y": 235.003,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 833,
+          "end": 834,
+          "beat": "the-frame",
+          "label": "zoom 1 at (780.58, 234.408)",
+          "data": {
+            "pose": {
+              "x": 780.58,
+              "y": 234.408,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 834,
+          "end": 835,
+          "beat": "the-frame",
+          "label": "zoom 1 at (781.239, 233.82)",
+          "data": {
+            "pose": {
+              "x": 781.239,
+              "y": 233.82,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 835,
+          "end": 836,
+          "beat": "the-frame",
+          "label": "zoom 1 at (781.89, 233.238)",
+          "data": {
+            "pose": {
+              "x": 781.89,
+              "y": 233.238,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 836,
+          "end": 837,
+          "beat": "the-frame",
+          "label": "zoom 1 at (782.533, 232.663)",
+          "data": {
+            "pose": {
+              "x": 782.533,
+              "y": 232.663,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 837,
+          "end": 838,
+          "beat": "the-frame",
+          "label": "zoom 1 at (783.169, 232.096)",
+          "data": {
+            "pose": {
+              "x": 783.169,
+              "y": 232.096,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 838,
+          "end": 839,
+          "beat": "the-frame",
+          "label": "zoom 1 at (783.797, 231.535)",
+          "data": {
+            "pose": {
+              "x": 783.797,
+              "y": 231.535,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 839,
+          "end": 840,
+          "beat": "the-frame",
+          "label": "zoom 1 at (784.416, 230.981)",
+          "data": {
+            "pose": {
+              "x": 784.416,
+              "y": 230.981,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 840,
+          "end": 841,
+          "beat": "the-frame",
+          "label": "zoom 1 at (785.028, 230.434)",
+          "data": {
+            "pose": {
+              "x": 785.028,
+              "y": 230.434,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 841,
+          "end": 842,
+          "beat": "the-frame",
+          "label": "zoom 1 at (785.632, 229.895)",
+          "data": {
+            "pose": {
+              "x": 785.632,
+              "y": 229.895,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 842,
+          "end": 843,
+          "beat": "the-frame",
+          "label": "zoom 1 at (786.227, 229.363)",
+          "data": {
+            "pose": {
+              "x": 786.227,
+              "y": 229.363,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 843,
+          "end": 844,
+          "beat": "the-frame",
+          "label": "zoom 1 at (786.814, 228.839)",
+          "data": {
+            "pose": {
+              "x": 786.814,
+              "y": 228.839,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 844,
+          "end": 845,
+          "beat": "the-frame",
+          "label": "zoom 1 at (787.393, 228.322)",
+          "data": {
+            "pose": {
+              "x": 787.393,
+              "y": 228.322,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 845,
+          "end": 846,
+          "beat": "the-frame",
+          "label": "zoom 1 at (787.963, 227.813)",
+          "data": {
+            "pose": {
+              "x": 787.963,
+              "y": 227.813,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 846,
+          "end": 847,
+          "beat": "the-frame",
+          "label": "zoom 1 at (788.524, 227.311)",
+          "data": {
+            "pose": {
+              "x": 788.524,
+              "y": 227.311,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 847,
+          "end": 848,
+          "beat": "the-frame",
+          "label": "zoom 1 at (789.077, 226.818)",
+          "data": {
+            "pose": {
+              "x": 789.077,
+              "y": 226.818,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 848,
+          "end": 849,
+          "beat": "the-frame",
+          "label": "zoom 1 at (789.62, 226.332)",
+          "data": {
+            "pose": {
+              "x": 789.62,
+              "y": 226.332,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 849,
+          "end": 850,
+          "beat": "the-frame",
+          "label": "zoom 1 at (790.155, 225.854)",
+          "data": {
+            "pose": {
+              "x": 790.155,
+              "y": 225.854,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 850,
+          "end": 851,
+          "beat": "the-frame",
+          "label": "zoom 1 at (790.68, 225.385)",
+          "data": {
+            "pose": {
+              "x": 790.68,
+              "y": 225.385,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 851,
+          "end": 852,
+          "beat": "the-frame",
+          "label": "zoom 1 at (791.197, 224.924)",
+          "data": {
+            "pose": {
+              "x": 791.197,
+              "y": 224.924,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 852,
+          "end": 853,
+          "beat": "the-frame",
+          "label": "zoom 1 at (791.703, 224.471)",
+          "data": {
+            "pose": {
+              "x": 791.703,
+              "y": 224.471,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 853,
+          "end": 854,
+          "beat": "the-frame",
+          "label": "zoom 1 at (792.201, 224.026)",
+          "data": {
+            "pose": {
+              "x": 792.201,
+              "y": 224.026,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 854,
+          "end": 855,
+          "beat": "the-frame",
+          "label": "zoom 1 at (792.689, 223.59)",
+          "data": {
+            "pose": {
+              "x": 792.689,
+              "y": 223.59,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 855,
+          "end": 856,
+          "beat": "the-frame",
+          "label": "zoom 1 at (793.168, 223.163)",
+          "data": {
+            "pose": {
+              "x": 793.168,
+              "y": 223.163,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 856,
+          "end": 857,
+          "beat": "the-frame",
+          "label": "zoom 1 at (793.636, 222.744)",
+          "data": {
+            "pose": {
+              "x": 793.636,
+              "y": 222.744,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 857,
+          "end": 858,
+          "beat": "the-frame",
+          "label": "zoom 1 at (794.095, 222.334)",
+          "data": {
+            "pose": {
+              "x": 794.095,
+              "y": 222.334,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 858,
+          "end": 859,
+          "beat": "the-frame",
+          "label": "zoom 1 at (794.544, 221.933)",
+          "data": {
+            "pose": {
+              "x": 794.544,
+              "y": 221.933,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 859,
+          "end": 860,
+          "beat": "the-frame",
+          "label": "zoom 1 at (794.983, 221.541)",
+          "data": {
+            "pose": {
+              "x": 794.983,
+              "y": 221.541,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 860,
+          "end": 861,
+          "beat": "the-frame",
+          "label": "zoom 1 at (795.411, 221.158)",
+          "data": {
+            "pose": {
+              "x": 795.411,
+              "y": 221.158,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 861,
+          "end": 862,
+          "beat": "the-frame",
+          "label": "zoom 1 at (795.83, 220.784)",
+          "data": {
+            "pose": {
+              "x": 795.83,
+              "y": 220.784,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 862,
+          "end": 863,
+          "beat": "the-frame",
+          "label": "zoom 1 at (796.238, 220.42)",
+          "data": {
+            "pose": {
+              "x": 796.238,
+              "y": 220.42,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 863,
+          "end": 864,
+          "beat": "the-frame",
+          "label": "zoom 1 at (796.636, 220.065)",
+          "data": {
+            "pose": {
+              "x": 796.636,
+              "y": 220.065,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 864,
+          "end": 865,
+          "beat": "the-frame",
+          "label": "zoom 1 at (797.023, 219.719)",
+          "data": {
+            "pose": {
+              "x": 797.023,
+              "y": 219.719,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 865,
+          "end": 866,
+          "beat": "the-frame",
+          "label": "zoom 1 at (797.399, 219.383)",
+          "data": {
+            "pose": {
+              "x": 797.399,
+              "y": 219.383,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 866,
+          "end": 867,
+          "beat": "the-frame",
+          "label": "zoom 1 at (797.764, 219.056)",
+          "data": {
+            "pose": {
+              "x": 797.764,
+              "y": 219.056,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 867,
+          "end": 868,
+          "beat": "the-frame",
+          "label": "zoom 1 at (798.119, 218.739)",
+          "data": {
+            "pose": {
+              "x": 798.119,
+              "y": 218.739,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 868,
+          "end": 869,
+          "beat": "the-frame",
+          "label": "zoom 1 at (798.463, 218.432)",
+          "data": {
+            "pose": {
+              "x": 798.463,
+              "y": 218.432,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 869,
+          "end": 870,
+          "beat": "the-frame",
+          "label": "zoom 1 at (798.795, 218.135)",
+          "data": {
+            "pose": {
+              "x": 798.795,
+              "y": 218.135,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 870,
+          "end": 871,
+          "beat": "the-frame",
+          "label": "zoom 1 at (799.117, 217.848)",
+          "data": {
+            "pose": {
+              "x": 799.117,
+              "y": 217.848,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 871,
+          "end": 872,
+          "beat": "the-frame",
+          "label": "zoom 1 at (799.427, 217.571)",
+          "data": {
+            "pose": {
+              "x": 799.427,
+              "y": 217.571,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 872,
+          "end": 873,
+          "beat": "the-frame",
+          "label": "zoom 1 at (799.725, 217.304)",
+          "data": {
+            "pose": {
+              "x": 799.725,
+              "y": 217.304,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 873,
+          "end": 874,
+          "beat": "the-frame",
+          "label": "zoom 1 at (800.012, 217.048)",
+          "data": {
+            "pose": {
+              "x": 800.012,
+              "y": 217.048,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 874,
+          "end": 875,
+          "beat": "the-frame",
+          "label": "zoom 1 at (800.288, 216.802)",
+          "data": {
+            "pose": {
+              "x": 800.288,
+              "y": 216.802,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 875,
+          "end": 876,
+          "beat": "the-frame",
+          "label": "zoom 1 at (800.552, 216.566)",
+          "data": {
+            "pose": {
+              "x": 800.552,
+              "y": 216.566,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 876,
+          "end": 877,
+          "beat": "the-frame",
+          "label": "zoom 1 at (800.803, 216.341)",
+          "data": {
+            "pose": {
+              "x": 800.803,
+              "y": 216.341,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 877,
+          "end": 878,
+          "beat": "the-frame",
+          "label": "zoom 1 at (801.043, 216.127)",
+          "data": {
+            "pose": {
+              "x": 801.043,
+              "y": 216.127,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 878,
+          "end": 879,
+          "beat": "the-frame",
+          "label": "zoom 1 at (801.271, 215.923)",
+          "data": {
+            "pose": {
+              "x": 801.271,
+              "y": 215.923,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 879,
+          "end": 880,
+          "beat": "the-frame",
+          "label": "zoom 1 at (801.487, 215.73)",
+          "data": {
+            "pose": {
+              "x": 801.487,
+              "y": 215.73,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 880,
+          "end": 881,
+          "beat": "the-frame",
+          "label": "zoom 1 at (801.691, 215.549)",
+          "data": {
+            "pose": {
+              "x": 801.691,
+              "y": 215.549,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 881,
+          "end": 882,
+          "beat": "the-frame",
+          "label": "zoom 1 at (801.882, 215.378)",
+          "data": {
+            "pose": {
+              "x": 801.882,
+              "y": 215.378,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 882,
+          "end": 883,
+          "beat": "the-frame",
+          "label": "zoom 1 at (802.06, 215.218)",
+          "data": {
+            "pose": {
+              "x": 802.06,
+              "y": 215.218,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 883,
+          "end": 884,
+          "beat": "the-frame",
+          "label": "zoom 1 at (802.226, 215.07)",
+          "data": {
+            "pose": {
+              "x": 802.226,
+              "y": 215.07,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 884,
+          "end": 885,
+          "beat": "the-frame",
+          "label": "zoom 1 at (802.38, 214.933)",
+          "data": {
+            "pose": {
+              "x": 802.38,
+              "y": 214.933,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 885,
+          "end": 886,
+          "beat": "the-frame",
+          "label": "zoom 1 at (802.52, 214.807)",
+          "data": {
+            "pose": {
+              "x": 802.52,
+              "y": 214.807,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 886,
+          "end": 887,
+          "beat": "the-frame",
+          "label": "zoom 1 at (802.648, 214.693)",
+          "data": {
+            "pose": {
+              "x": 802.648,
+              "y": 214.693,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 887,
+          "end": 888,
+          "beat": "the-frame",
+          "label": "zoom 1 at (802.763, 214.591)",
+          "data": {
+            "pose": {
+              "x": 802.763,
+              "y": 214.591,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 888,
+          "end": 889,
+          "beat": "the-frame",
+          "label": "zoom 1 at (802.864, 214.5)",
+          "data": {
+            "pose": {
+              "x": 802.864,
+              "y": 214.5,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 889,
+          "end": 890,
+          "beat": "the-frame",
+          "label": "zoom 1 at (802.953, 214.421)",
+          "data": {
+            "pose": {
+              "x": 802.953,
+              "y": 214.421,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 890,
+          "end": 891,
+          "beat": "the-frame",
+          "label": "zoom 1 at (803.028, 214.354)",
+          "data": {
+            "pose": {
+              "x": 803.028,
+              "y": 214.354,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 891,
+          "end": 892,
+          "beat": "the-frame",
+          "label": "zoom 1 at (803.09, 214.299)",
+          "data": {
+            "pose": {
+              "x": 803.09,
+              "y": 214.299,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 892,
+          "end": 893,
+          "beat": "the-frame",
+          "label": "zoom 1 at (803.138, 214.256)",
+          "data": {
+            "pose": {
+              "x": 803.138,
+              "y": 214.256,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 893,
+          "end": 894,
+          "beat": "the-frame",
+          "label": "zoom 1 at (803.172, 214.225)",
+          "data": {
+            "pose": {
+              "x": 803.172,
+              "y": 214.225,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 894,
+          "end": 895,
+          "beat": "the-frame",
+          "label": "zoom 1 at (803.193, 214.206)",
+          "data": {
+            "pose": {
+              "x": 803.193,
+              "y": 214.206,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 895,
+          "end": 896,
+          "beat": "the-frame",
+          "label": "zoom 1 at (803.2, 214.2)",
+          "data": {
+            "pose": {
+              "x": 803.2,
+              "y": 214.2,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 896,
+          "end": 897,
+          "beat": "the-frame",
+          "label": "zoom 1 at (796.104, 220.539)",
+          "data": {
+            "pose": {
+              "x": 796.104,
+              "y": 220.539,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 897,
+          "end": 898,
+          "beat": "the-frame",
+          "label": "zoom 1 at (789.009, 226.878)",
+          "data": {
+            "pose": {
+              "x": 789.009,
+              "y": 226.878,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 898,
+          "end": 899,
+          "beat": "the-frame",
+          "label": "zoom 1 at (781.913, 233.217)",
+          "data": {
+            "pose": {
+              "x": 781.913,
+              "y": 233.217,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 899,
+          "end": 900,
+          "beat": "the-frame",
+          "label": "zoom 1 at (774.817, 239.557)",
+          "data": {
+            "pose": {
+              "x": 774.817,
+              "y": 239.557,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 900,
+          "end": 901,
+          "beat": "the-frame",
+          "label": "zoom 1 at (767.722, 245.896)",
+          "data": {
+            "pose": {
+              "x": 767.722,
+              "y": 245.896,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 901,
+          "end": 902,
+          "beat": "the-frame",
+          "label": "zoom 1 at (760.626, 252.235)",
+          "data": {
+            "pose": {
+              "x": 760.626,
+              "y": 252.235,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 902,
+          "end": 903,
+          "beat": "the-frame",
+          "label": "zoom 1 at (753.53, 258.574)",
+          "data": {
+            "pose": {
+              "x": 753.53,
+              "y": 258.574,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 903,
+          "end": 904,
+          "beat": "the-frame",
+          "label": "zoom 1 at (746.435, 264.913)",
+          "data": {
+            "pose": {
+              "x": 746.435,
+              "y": 264.913,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 904,
+          "end": 905,
+          "beat": "the-frame",
+          "label": "zoom 1 at (739.339, 271.252)",
+          "data": {
+            "pose": {
+              "x": 739.339,
+              "y": 271.252,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 905,
+          "end": 906,
+          "beat": "the-frame",
+          "label": "zoom 1 at (732.243, 277.591)",
+          "data": {
+            "pose": {
+              "x": 732.243,
+              "y": 277.591,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 906,
+          "end": 907,
+          "beat": "the-frame",
+          "label": "zoom 1 at (725.148, 283.93)",
+          "data": {
+            "pose": {
+              "x": 725.148,
+              "y": 283.93,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 907,
+          "end": 908,
+          "beat": "the-frame",
+          "label": "zoom 1 at (718.052, 290.27)",
+          "data": {
+            "pose": {
+              "x": 718.052,
+              "y": 290.27,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 908,
+          "end": 909,
+          "beat": "the-frame",
+          "label": "zoom 1 at (710.957, 296.609)",
+          "data": {
+            "pose": {
+              "x": 710.957,
+              "y": 296.609,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 909,
+          "end": 910,
+          "beat": "the-frame",
+          "label": "zoom 1 at (703.861, 302.948)",
+          "data": {
+            "pose": {
+              "x": 703.861,
+              "y": 302.948,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 910,
+          "end": 911,
+          "beat": "the-frame",
+          "label": "zoom 1 at (696.765, 309.287)",
+          "data": {
+            "pose": {
+              "x": 696.765,
+              "y": 309.287,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 911,
+          "end": 912,
+          "beat": "the-frame",
+          "label": "zoom 1 at (689.67, 315.626)",
+          "data": {
+            "pose": {
+              "x": 689.67,
+              "y": 315.626,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 912,
+          "end": 913,
+          "beat": "the-frame",
+          "label": "zoom 1 at (682.574, 321.965)",
+          "data": {
+            "pose": {
+              "x": 682.574,
+              "y": 321.965,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 913,
+          "end": 914,
+          "beat": "the-frame",
+          "label": "zoom 1 at (675.478, 328.304)",
+          "data": {
+            "pose": {
+              "x": 675.478,
+              "y": 328.304,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 914,
+          "end": 915,
+          "beat": "the-frame",
+          "label": "zoom 1 at (668.383, 334.643)",
+          "data": {
+            "pose": {
+              "x": 668.383,
+              "y": 334.643,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 915,
+          "end": 916,
+          "beat": "the-frame",
+          "label": "zoom 1 at (661.287, 340.983)",
+          "data": {
+            "pose": {
+              "x": 661.287,
+              "y": 340.983,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 916,
+          "end": 917,
+          "beat": "the-frame",
+          "label": "zoom 1 at (654.191, 347.322)",
+          "data": {
+            "pose": {
+              "x": 654.191,
+              "y": 347.322,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 917,
+          "end": 918,
+          "beat": "the-frame",
+          "label": "zoom 1 at (647.096, 353.661)",
+          "data": {
+            "pose": {
+              "x": 647.096,
+              "y": 353.661,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 918,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "zoom 1 at (640, 360)",
+          "data": {
+            "pose": {
+              "x": 640,
+              "y": 360,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "the raised frame at frame right; push toward its interior"
+          }
+        },
+        {
+          "start": 930,
+          "end": 1230,
+          "beat": "art-world",
+          "label": "zoom 1 at (640, 360)",
+          "data": {
+            "pose": {
+              "x": 640,
+              "y": 360,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "wide, flat, paper-like depth; a slow lateral drift along a drawn horizon"
+          }
+        },
+        {
+          "start": 1230,
+          "end": 1350,
+          "beat": "crossing",
+          "label": "zoom 1 at (640, 360)",
+          "data": {
+            "pose": {
+              "x": 640,
+              "y": 360,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "locked; the lines re-route across the frame along the move's leading line"
+          }
+        },
+        {
+          "start": 1350,
+          "end": 1650,
+          "beat": "programming-world",
+          "label": "zoom 1 at (640, 360)",
+          "data": {
+            "pose": {
+              "x": 640,
+              "y": 360,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "three-quarter perspective, slow push along a lit grid line"
+          }
+        },
+        {
+          "start": 1650,
+          "end": 1950,
+          "beat": "home-settle",
+          "label": "zoom 1 at (640, 360)",
+          "data": {
+            "pose": {
+              "x": 640,
+              "y": 360,
+              "zoom": 1,
+              "rot": 0
+            },
+            "description": "pull back to a wide with the structure centred and the trio at its base"
+          }
+        }
+      ]
+    },
+    {
+      "name": "keys",
+      "items": [
+        {
+          "start": 0,
+          "end": 42,
+          "beat": "arrival",
+          "label": "rest-on-lid",
+          "data": {
+            "hold": 26,
+            "breakdowns": 4
+          }
+        },
+        {
+          "start": 42,
+          "end": 66,
+          "beat": "arrival",
+          "label": "grip",
+          "data": {
+            "hold": 16,
+            "breakdowns": 3
+          }
+        },
+        {
+          "start": 66,
+          "end": 104,
+          "beat": "arrival",
+          "label": "lift",
+          "data": {
+            "hold": 26,
+            "breakdowns": 3
+          }
+        },
+        {
+          "start": 104,
+          "end": 154,
+          "beat": "arrival",
+          "label": "awe",
+          "data": {
+            "hold": 26,
+            "breakdowns": 6
+          }
+        },
+        {
+          "start": 154,
+          "end": 180,
+          "beat": "arrival",
+          "label": "brace",
+          "data": {
+            "hold": 24,
+            "breakdowns": 1
+          }
+        },
+        {
+          "start": 190,
+          "end": 228,
+          "beat": "everything-at-once",
+          "label": "joy-a",
+          "data": {
+            "hold": 22,
+            "breakdowns": 3
+          }
+        },
+        {
+          "start": 228,
+          "end": 272,
+          "beat": "everything-at-once",
+          "label": "joy-b",
+          "data": {
+            "hold": 20,
+            "breakdowns": 5
+          }
+        },
+        {
+          "start": 272,
+          "end": 420,
+          "beat": "everything-at-once",
+          "label": "shrink",
+          "data": {
+            "hold": 148,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 420,
+          "end": 444,
+          "beat": "cant-build",
+          "label": "rest",
+          "data": {
+            "hold": 24,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 444,
+          "end": 470,
+          "beat": "cant-build",
+          "label": "raise",
+          "data": {
+            "hold": null,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 470,
+          "end": 630,
+          "beat": "cant-build",
+          "label": "settle",
+          "data": {
+            "hold": null,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 930,
+          "end": 954,
+          "beat": "art-world",
+          "label": "rest",
+          "data": {
+            "hold": 24,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 954,
+          "end": 980,
+          "beat": "art-world",
+          "label": "raise",
+          "data": {
+            "hold": null,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 980,
+          "end": 1230,
+          "beat": "art-world",
+          "label": "settle",
+          "data": {
+            "hold": null,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 1230,
+          "end": 1254,
+          "beat": "crossing",
+          "label": "rest",
+          "data": {
+            "hold": 24,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 1254,
+          "end": 1280,
+          "beat": "crossing",
+          "label": "raise",
+          "data": {
+            "hold": null,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 1280,
+          "end": 1350,
+          "beat": "crossing",
+          "label": "settle",
+          "data": {
+            "hold": null,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 1350,
+          "end": 1374,
+          "beat": "programming-world",
+          "label": "rest",
+          "data": {
+            "hold": 24,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 1374,
+          "end": 1400,
+          "beat": "programming-world",
+          "label": "raise",
+          "data": {
+            "hold": null,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 1400,
+          "end": 1650,
+          "beat": "programming-world",
+          "label": "settle",
+          "data": {
+            "hold": null,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 1650,
+          "end": 1674,
+          "beat": "home-settle",
+          "label": "rest",
+          "data": {
+            "hold": 24,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 1674,
+          "end": 1700,
+          "beat": "home-settle",
+          "label": "raise",
+          "data": {
+            "hold": null,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 1700,
+          "end": 1950,
+          "beat": "home-settle",
+          "label": "settle",
+          "data": {
+            "hold": null,
+            "breakdowns": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "light",
+      "items": [
+        {
+          "start": 0,
+          "end": 180,
+          "beat": "arrival",
+          "label": "box seam · 0.824",
+          "data": {
+            "pair": {
+              "radiance": "#0a51fb",
+              "accent": "#fad204"
+            },
+            "emitter": {
+              "anchor": "box seam",
+              "path": {
+                "from": [
+                  0.7813,
+                  0.55
+                ],
+                "to": [
+                  0.7891,
+                  0.5333
+                ]
+              },
+              "intensity": 0.824,
+              "colour": "#eff3ff",
+              "on": 0,
+              "off": 178
+            },
+            "radiance": "settled",
+            "grain": "low"
+          }
+        },
+        {
+          "start": 180,
+          "end": 420,
+          "beat": "everything-at-once",
+          "label": "gadget dial · 0.9",
+          "data": {
+            "pair": {
+              "radiance": "#0a51fb",
+              "accent": "#fad204"
+            },
+            "emitter": {
+              "anchor": "gadget dial",
+              "path": {
+                "from": [
+                  0.7891,
+                  0.5333
+                ],
+                "to": [
+                  0.8125,
+                  0.4583
+                ]
+              },
+              "intensity": 0.9,
+              "colour": "#d1dffe",
+              "on": 180,
+              "off": 418
+            },
+            "radiance": "floods, Turrell blue (D74 s01)",
+            "grain": "rising"
+          }
+        },
+        {
+          "start": 420,
+          "end": 630,
+          "beat": "cant-build",
+          "label": "gadget dial, lost on the floor (the join) · 0.9",
+          "data": {
+            "pair": {
+              "radiance": "#17263a",
+              "accent": "#457ca4"
+            },
+            "emitter": {
+              "anchor": "gadget dial, lost on the floor (the join)",
+              "path": {
+                "from": [
+                  0.345,
+                  0.886
+                ],
+                "to": [
+                  0.345,
+                  0.886
+                ]
+              },
+              "intensity": 0.9,
+              "colour": "#d5e0ee",
+              "on": 420,
+              "off": 628
+            },
+            "radiance": "Styx steel (D74 s02), noisy",
+            "grain": "high"
+          }
+        },
+        {
+          "start": 630,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "frame interior · 0.9",
+          "data": {
+            "pair": {
+              "radiance": "#17263a",
+              "accent": "#457ca4"
+            },
+            "emitter": {
+              "anchor": "frame interior",
+              "path": {
+                "from": [
+                  0.7813,
+                  0.1944
+                ],
+                "to": [
+                  0.8281,
+                  0.2778
+                ]
+              },
+              "intensity": 0.9,
+              "colour": "#d5e0ee",
+              "on": 630,
+              "off": 928
+            },
+            "radiance": "narrows to the frame",
+            "grain": "falling"
+          }
+        },
+        {
+          "start": 930,
+          "end": 1230,
+          "beat": "art-world",
+          "label": "join (the drawn piece as it fills) · 0.9",
+          "data": {
+            "pair": {
+              "radiance": "#e1750c",
+              "accent": "#fad204"
+            },
+            "emitter": {
+              "anchor": "join (the drawn piece as it fills)",
+              "path": {
+                "from": [
+                  0.7813,
+                  0.5417
+                ],
+                "to": [
+                  0.8438,
+                  0.5417
+                ]
+              },
+              "intensity": 0.9,
+              "colour": "#fbdab9",
+              "on": 930,
+              "off": 1230
+            },
+            "radiance": "warm, s03 amber (D74) on a paper-coloured field, not black",
+            "grain": "paper tooth"
+          }
+        },
+        {
+          "start": 1230,
+          "end": 1350,
+          "beat": "crossing",
+          "label": "no emitter · off",
+          "data": {
+            "pair": {
+              "radiance": "#e1750c",
+              "accent": "#fad204"
+            },
+            "emitter": null,
+            "radiance": "off",
+            "grain": "none"
+          }
+        },
+        {
+          "start": 1350,
+          "end": 1650,
+          "beat": "programming-world",
+          "label": "gates, first to last · 0.9",
+          "data": {
+            "pair": {
+              "radiance": "#17263a",
+              "accent": "#457ca4"
+            },
+            "emitter": {
+              "anchor": "gates, first to last",
+              "path": {
+                "from": [
+                  0.1172,
+                  0.5389
+                ],
+                "to": [
+                  0.2539,
+                  0.5222
+                ]
+              },
+              "intensity": 0.9,
+              "colour": "#c5e4f0",
+              "on": 1350,
+              "off": 1648
+            },
+            "radiance": "cold cyan on black, s02 accent as the world's hue",
+            "grain": "none"
+          }
+        },
+        {
+          "start": 1650,
+          "end": 1950,
+          "beat": "home-settle",
+          "label": "gadget, rimming the structure · 0.9",
+          "data": {
+            "pair": {
+              "radiance": "#a63a2e",
+              "accent": "#f8c496"
+            },
+            "emitter": {
+              "anchor": "gadget, rimming the structure",
+              "path": {
+                "from": [
+                  0.7813,
+                  0.4722
+                ],
+                "to": [
+                  0.8438,
+                  0.4722
+                ]
+              },
+              "intensity": 0.9,
+              "colour": "#f4d9d6",
+              "on": 1650,
+              "off": 1950
+            },
+            "radiance": "Soup! coral (D74 s04)",
+            "grain": "low"
+          }
+        }
+      ]
+    },
+    {
+      "name": "colour-script",
+      "items": [
+        {
+          "start": 0,
+          "end": 180,
+          "beat": "arrival",
+          "label": "#0a51fb / #fad204",
+          "data": {
+            "radiance": "#0a51fb",
+            "accent": "#fad204",
+            "midFrame": 90,
+            "animaticFrame": "out/animatic-seq/element-0090.png"
+          }
+        },
+        {
+          "start": 180,
+          "end": 420,
+          "beat": "everything-at-once",
+          "label": "#0a51fb / #fad204",
+          "data": {
+            "radiance": "#0a51fb",
+            "accent": "#fad204",
+            "midFrame": 300,
+            "animaticFrame": "out/animatic-seq/element-0300.png"
+          }
+        },
+        {
+          "start": 420,
+          "end": 630,
+          "beat": "cant-build",
+          "label": "#17263a / #457ca4",
+          "data": {
+            "radiance": "#17263a",
+            "accent": "#457ca4",
+            "midFrame": 525,
+            "animaticFrame": "out/animatic-seq/element-0525.png"
+          }
+        },
+        {
+          "start": 630,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "#17263a / #457ca4",
+          "data": {
+            "radiance": "#17263a",
+            "accent": "#457ca4",
+            "midFrame": 780,
+            "animaticFrame": "out/animatic-seq/element-0780.png"
+          }
+        },
+        {
+          "start": 930,
+          "end": 1230,
+          "beat": "art-world",
+          "label": "#e1750c / #fad204",
+          "data": {
+            "radiance": "#e1750c",
+            "accent": "#fad204",
+            "midFrame": 1080,
+            "animaticFrame": "out/animatic-seq/element-1080.png"
+          }
+        },
+        {
+          "start": 1230,
+          "end": 1350,
+          "beat": "crossing",
+          "label": "#e1750c / #fad204",
+          "data": {
+            "radiance": "#e1750c",
+            "accent": "#fad204",
+            "midFrame": 1290,
+            "animaticFrame": "out/animatic-seq/element-1290.png"
+          }
+        },
+        {
+          "start": 1350,
+          "end": 1650,
+          "beat": "programming-world",
+          "label": "#17263a / #457ca4",
+          "data": {
+            "radiance": "#17263a",
+            "accent": "#457ca4",
+            "midFrame": 1500,
+            "animaticFrame": "out/animatic-seq/element-1500.png"
+          }
+        },
+        {
+          "start": 1650,
+          "end": 1950,
+          "beat": "home-settle",
+          "label": "#a63a2e / #f8c496",
+          "data": {
+            "radiance": "#a63a2e",
+            "accent": "#f8c496",
+            "midFrame": 1800,
+            "animaticFrame": "out/animatic-seq/element-1800.png"
+          }
+        }
+      ]
+    },
+    {
+      "name": "look",
+      "items": [
+        {
+          "start": 0,
+          "end": 180,
+          "beat": "arrival",
+          "label": "home",
+          "data": {
+            "world": "home",
+            "worldRaw": "home"
+          }
+        },
+        {
+          "start": 180,
+          "end": 420,
+          "beat": "everything-at-once",
+          "label": "home",
+          "data": {
+            "world": "home",
+            "worldRaw": "home"
+          }
+        },
+        {
+          "start": 420,
+          "end": 630,
+          "beat": "cant-build",
+          "label": "home",
+          "data": {
+            "world": "home",
+            "worldRaw": "home"
+          }
+        },
+        {
+          "start": 630,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "home",
+          "data": {
+            "world": "home",
+            "worldRaw": "home → portal"
+          }
+        },
+        {
+          "start": 895,
+          "end": 965,
+          "beat": "the-frame",
+          "label": "the-frame>art-world",
+          "data": {
+            "crossing": true,
+            "from": "the-frame",
+            "to": "art-world",
+            "fromWorld": "home",
+            "toWorld": "crayon",
+            "length": 70,
+            "split": [
+              35,
+              35
+            ],
+            "path": [
+              "#d5e0ee",
+              "#d9cff1",
+              "#f4c8f2",
+              "#f7c1cd",
+              "#fbdab9"
+            ]
+          }
+        },
+        {
+          "start": 930,
+          "end": 1230,
+          "beat": "art-world",
+          "label": "crayon",
+          "data": {
+            "world": "crayon",
+            "worldRaw": "crayon"
+          }
+        },
+        {
+          "start": 1195,
+          "end": 1265,
+          "beat": "art-world",
+          "label": "art-world>crossing",
+          "data": {
+            "crossing": true,
+            "from": "art-world",
+            "to": "crossing",
+            "fromWorld": "crayon",
+            "toWorld": "line",
+            "length": 70,
+            "split": [
+              35,
+              35
+            ],
+            "path": [
+              "#fbdab9",
+              "#fbdab9"
+            ]
+          }
+        },
+        {
+          "start": 1230,
+          "end": 1350,
+          "beat": "crossing",
+          "label": "line",
+          "data": {
+            "world": "line",
+            "worldRaw": "line"
+          }
+        },
+        {
+          "start": 1315,
+          "end": 1385,
+          "beat": "crossing",
+          "label": "crossing>programming-world",
+          "data": {
+            "crossing": true,
+            "from": "crossing",
+            "to": "programming-world",
+            "fromWorld": "line",
+            "toWorld": "shaded",
+            "length": 70,
+            "split": [
+              35,
+              35
+            ],
+            "path": [
+              "#fbdab9",
+              "#ecf8bc",
+              "#c5f5bf",
+              "#c2f3de",
+              "#c5e4f0"
+            ]
+          }
+        },
+        {
+          "start": 1350,
+          "end": 1650,
+          "beat": "programming-world",
+          "label": "shaded",
+          "data": {
+            "world": "shaded",
+            "worldRaw": "shaded"
+          }
+        },
+        {
+          "start": 1615,
+          "end": 1685,
+          "beat": "programming-world",
+          "label": "programming-world>home-settle",
+          "data": {
+            "crossing": true,
+            "from": "programming-world",
+            "to": "home-settle",
+            "fromWorld": "shaded",
+            "toWorld": "home",
+            "length": 70,
+            "split": [
+              35,
+              35
+            ],
+            "path": [
+              "#c5e4f0",
+              "#c9caf1",
+              "#e7cef2",
+              "#f3d2e6",
+              "#f4d9d6"
+            ]
+          }
+        },
+        {
+          "start": 1650,
+          "end": 1950,
+          "beat": "home-settle",
+          "label": "home",
+          "data": {
+            "world": "home",
+            "worldRaw": "home"
+          }
+        }
+      ]
+    },
+    {
+      "name": "proposals",
+      "items": [
+        {
+          "start": 630,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "p001 What happens in beat 4",
+          "data": {
+            "id": "p001",
+            "title": "What happens in beat 4",
+            "kind": "change",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-18",
+            "ruling": null,
+            "anchor": {
+              "beat": "the-frame"
+            },
+            "text": "1. Slump: the human is still bent from the failed joins, cloak heavy, the light lost on the floor; hold. 2. The frame rises at the edge, Clawd lifting it from the hand's side; the light moves before the human does: the floor glow dies and the frame's interior lights; the human turns toward it with a small anticipation away first. 3. Rise: the human stands up out of the cloak, which drops as a heap and stays there; weight on contact: the body settles, then the cloth settles after. 4. One step toward the frame, then the threshold pause: the heel tap into the shoe, the gesture no one needs, so the body is real before it goes through. 5. Codex, small, nudges the cloak heap aside with one foot: the beat's one gag. 6. Through: the human goes alone, framed small inside the frame's light; the guides follow into the art world.",
+            "references": [
+              {
+                "id": "spirited-away-shoes",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Spirited Away (2001): Chihiro taps her heel into her shoe",
+                "borrow": [
+                  "one unneeded gesture that proves the body is real",
+                  "the pause before a step through a threshold (beat 4, the frame)"
+                ],
+                "governs": [
+                  "D92",
+                  "D89"
+                ]
+              },
+              {
+                "id": "totoro-lived-in",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "My Neighbor Totoro (1988): Mei's shoes, the rotting pillar, the acorns",
+                "borrow": [
+                  "the details only a child would notice: a shoe left askew, a pillar that crumbles when pushed, acorns on the floor",
+                  "weight on contact: a body lands, settles, then the cloth settles after",
+                  "a world that is lived in before the story touches it"
+                ],
+                "governs": [
+                  "D92",
+                  "C14",
+                  "C31"
+                ]
+              },
+              {
+                "id": "elmo-world",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Elmo's World (Sesame Street, 1998–)",
+                "borrow": [
+                  "a world that wants to play with the child: furniture, door and window answer when addressed",
+                  "the crayon-drawn room as a warm field, lines that wobble because a child drew them",
+                  "failures are met with delight, never shame"
+                ],
+                "governs": [
+                  "D88",
+                  "C14"
+                ]
+              },
+              {
+                "id": "samurai-jack-holds",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Samurai Jack (2001–2017): holds, snaps, the silent episode",
+                "borrow": [
+                  "long held poses that are compositions, then one snap",
+                  "silence carried by staging and light alone",
+                  "wide flat planes of colour as the field"
+                ],
+                "governs": [
+                  "D92",
+                  "C28",
+                  "C31"
+                ]
+              }
+            ],
+            "before": {
+              "keys": [],
+              "note": "beat 4 has no keys in v3/xsheet.json; the figure holds whatever beat 3 left"
+            },
+            "after": {
+              "keys": [
+                {
+                  "name": "slump",
+                  "frame": 630,
+                  "hold": 26
+                },
+                {
+                  "name": "turn",
+                  "frame": 690,
+                  "hold": 16
+                },
+                {
+                  "name": "rise",
+                  "frame": 740,
+                  "hold": 20
+                },
+                {
+                  "name": "step",
+                  "frame": 800,
+                  "hold": 14
+                },
+                {
+                  "name": "threshold",
+                  "frame": 840,
+                  "hold": 24
+                },
+                {
+                  "name": "through",
+                  "frame": 900,
+                  "hold": 30
+                }
+              ],
+              "note": "six keys over 300 frames, holds in the house band 11-27 except the final hold, breakdowns to be authored by the pose step"
+            },
+            "file": "v3/proposals/p001-beat4-action.json"
+          }
+        }
+      ]
+    }
+  ],
+  "flags": [
+    {
+      "beat": "cant-build",
+      "text": "held 100 % of the beat (over 90 %): nothing moves"
+    },
+    {
+      "beat": "cant-build",
+      "text": "no breakdowns between keys: straight inbetweens"
+    },
+    {
+      "beat": "the-frame",
+      "text": "no keys: the figure is not posed in this beat"
+    },
+    {
+      "beat": "art-world",
+      "text": "no breakdowns between keys: straight inbetweens"
+    },
+    {
+      "beat": "art-world",
+      "text": "plot ask open: which object the human draws first (default: the first stalk)"
+    },
+    {
+      "beat": "crossing",
+      "text": "no breakdowns between keys: straight inbetweens"
+    },
+    {
+      "beat": "programming-world",
+      "text": "no breakdowns between keys: straight inbetweens"
+    },
+    {
+      "beat": "programming-world",
+      "text": "plot ask open: how many gates light (default: three, the third is the one the human made)"
+    },
+    {
+      "beat": "home-settle",
+      "text": "no breakdowns between keys: straight inbetweens"
+    }
+  ]
+}

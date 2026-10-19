@@ -29,7 +29,8 @@
     "film-keys": "remotion render src/index.ts KeyFilmS01 out/s01-arrival-overwhelm-key-film --sequence --image-format=png --concurrency=4",
     "eagle:sync": "python3 $HOME/.claude/skills/inspiration/scripts/eagle_board.py sync --out v3/references/owner",
     "eagle:watch": "python3 $HOME/.claude/skills/inspiration/scripts/eagle_board.py watch --out v3/references/owner",
-    "eagle:serve": "python3 -m http.server 3108 --directory v3/references/owner"
+    "eagle:serve": "python3 -m http.server 3108 --directory v3/references/owner",
+    "bible": "node scripts/animation/compile-timeline.mjs && node scripts/animation/compile-light.mjs && node scripts/animation/xsheet.mjs && node scripts/animation/compile-bible.mjs && node scripts/animation/bible-page.mjs && python3 scripts/animation/probe-bible.py v3/bible.json --page out/bible.html"
   },
   "dependencies": {
     "@react-three/fiber": "^9.8.1",

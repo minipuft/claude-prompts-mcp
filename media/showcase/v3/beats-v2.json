@@ -261,7 +261,7 @@
    "asks": [],
    "frames": [
     630,
-    810
+    930
    ],
    "register": "reverent",
    "light_pushes": "wonder: the field narrows to the frame and the frame is lit from inside"
@@ -326,8 +326,8 @@
     "which object the human draws first (default: the first stalk)"
    ],
    "frames": [
-    810,
-    1170
+    930,
+    1230
    ],
    "register": "playful",
    "light_pushes": "play: warm amber on paper, the drawing fills with light as it becomes real"
@@ -384,8 +384,8 @@
    ],
    "asks": [],
    "frames": [
-    1170,
-    1290
+    1230,
+    1350
    ],
    "register": "focused",
    "light_pushes": "focus: no light, only lines; the eye follows the re-routing contour"
@@ -450,7 +450,7 @@
     "how many gates light (default: three, the third is the one the human made)"
    ],
    "frames": [
-    1290,
+    1350,
     1650
    ],
    "register": "playful, satisfied",
