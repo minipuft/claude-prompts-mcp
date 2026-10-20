@@ -23,7 +23,7 @@ story point on three things, then prints one line per story point (pass or FAIL,
           here, read over the story point's window clipped at the end of its own beat (a cut ends what a story point can observe: p020). A story point whose measure has no recipe fails `measure`. Kinds (the fields each takes
           are listed in `RECIPE_NEEDS` of probe-screenplay.py):
             stage     a thing the blocking holds, as it stands on a frame (`resolve_blocking_at`): present, persists to a frame, absent, appears, disappears, moves (px, a range), rest, returns to its start within N frames,
-                      inside another thing's rectangle, offstage, onstage
+                      inside another thing's rectangle, offstage, onstage, carried-by (`from` the holder on the first frame the thing is on stage at or after `since`, `to` the holder on the window's last frame, within `within` px)
             count     named props on stage: rises (from, to), at-most, rises-then-falls;  arrivals: N named props come on one frame;  stagger: the `on` (or `off`) frames of props are N frames apart;  order: one thing
                       starts to move N frames before another;  contact: two things' rectangles (props and the cast at their native size, the frame, the join; the human is her hands, the figure layer's thin skin) are within N px
             emitters  the light.json emitter count, or a steady xsheet emitter;  hold: the xsheet declares a hold of N frames;  glow: the area lit around the emitter (outside the figure and the cast) grows M % at least N frames
@@ -461,6 +461,7 @@ def read_stage(film, sp, o, fb, fa, i):
                 p = anchor_at(film, n, f)
                 if (ref is None) != (p is None) or (ref and p and np.hypot(ref[0] - p[0], ref[1] - p[1]) > 1.0): moved.append(f"{n} at f{f}"); break
         return (not moved), (f"{'/'.join(names) or 'nothing on stage'} {'stays' if len(names) == 1 else 'stay'} where {'it is' if len(names) == 1 else 'they are'} f{f0}-{end}" if not moved else f"{', '.join(moved)}: it moves inside f{f0}-{end}")
+    if e == "carried-by": return read_carried_by(film, sp, o, fb, fa, names[0])
     if e == "returns":
         n = names[0]; start = anchor_at(film, n, fb); last = min(fa, f0 + o["within"])
         if start is None: return False, f"{n!r} is not on stage at f{fb}"
@@ -469,6 +470,25 @@ def read_stage(film, sp, o, fb, fa, i):
         back = next((f for f in range(went[0], f0 + o["within"] + 1) if (p := anchor_at(film, n, f)) and np.hypot(p[0] - start[0], p[1] - start[1]) <= 6 and f > went[0]), None)
         return back is not None, f"{n!r} leaves its start at f{went[0]}" + (f" and is back at f{back}" if back else f" and is not back within {o['within']} frames of the story point")
     return False, f"stage expect {e!r} is not one the probe reads"
+
+
+def holder_gap(film, name, holder, f):
+    """How far a thing is from the one holding it on frame f, in stage px: the human is her hands (the figure layer's thin skin), Codex and Clawd their native rectangles, anything else its rectangle; None when either is not there."""
+    r = rect_of(film, name, f)
+    if r is None: return None
+    if holder == "human": return hand_gap(film, f, r)
+    h = rect_of(film, holder, f); return gap_of(r, h) if h is not None else None
+
+
+def read_carried_by(film, sp, o, fb, fa, name):
+    """`carried-by` with `from` and `to`: the thing is in `from`'s hand (within `within` px, 8 by default) on the first frame it is on stage at or after `since` (a frame; else the frame before the story point), and in `to`'s hand on the window's last frame."""
+    within = o.get("within", 8); since = o["since"] if isinstance(o.get("since"), int) else fb
+    start = next((f for f in range(max(since, 0), fa + 1) if thing_here(film, name, f)), None)
+    if start is None: return False, f"{name!r} is not on stage on any frame of f{since}-{fa} (the blocking of beat {film.beat_id(fa)!r} names {sorted(res_at(film, fa).get('actors') or {}) or 'no actors'})"
+    g0, g1 = holder_gap(film, name, o["from"], start), holder_gap(film, name, o["to"], fa)
+    if g0 is None or g1 is None: return False, f"{o['from'] if g0 is None else o['to']} is not on stage or draws no hands at f{start if g0 is None else fa}, so {name!r} is held by no one there"
+    ok = g0 <= within and g1 <= within
+    return ok, f"{name!r} is {g0:.0f} px from {o['from']} at f{start} and {g1:.0f} px from {o['to']} at f{fa} (within {within} px of {o['from']} first, then of {o['to']})"
 
 
 def read_count_recipe(film, sp, o, fb, fa, i):
@@ -565,7 +585,7 @@ def hue_share(film, f, pair_hex):
 
 
 def read_picture(film, sp, o, fb, fa, i):
-    m = o["measure"]; sc = lambda f: film.composed(f)
+    m = o["measure"]; sc = lambda f: film.composed(f); fb = o["from"] if isinstance(o.get("from"), int) else fb
     if m == "hue-share":
         pair = (film.light_at(fa).get("pair") or {}).get("radiance")
         if not pair: return False, f"v3/light.json has no colour pair for beat {film.beat_id(fa)!r}"
@@ -636,7 +656,7 @@ def read_actor_recipe(film, sp, o, fb, fa, i): return READERS["actor"](film, sp,
 
 def read_xsheet_recipe(film, sp, o, fb, fa, i):
     if o["field"] == "world" and o["expect"] == "equals":
-        f = fa + 1 if o.get("at") == "next" else fa; r = film.xs(f)
+        at = o.get("at"); f = fa + 1 if at == "next" else at if isinstance(at, int) else fa; r = film.xs(f)
         if not r: return False, f"v3/xsheet.json has no row at f{f}"
         w = xs_world(r); return (w == o["value"]), f"world is {w!r} at f{f} ({o['value']!r} needed)"
     return read_xsheet(film, sp, o, fb, fa, i)
@@ -800,7 +820,23 @@ def recipe_cases():
     grow = lambda start: (lambda f: disc_frame(20 if f < start else 34))
     blue = lambda share: (lambda f: np.where((np.arange(W)[None, :, None] < share * W) & (f >= 40), np.array([10, 81, 251], np.uint8), dark).astype(np.uint8))
     heights = lambda hs: (lambda f: (lambda im, h: (im.__setitem__((slice(170 - h, 170), slice(150, 170)), (200, 90, 90)), im)[1])(np.full((H, W, 3), 12, np.uint8), hs(f)))
+    pen = lambda keys, on=20: {**B, "actors": {**B["actors"], "pen": {"x": 940, "y": 520, "on": on, "at": keys}}}
+    to_hand = [{"frame": 20, "x": 940, "y": 520}, {"frame": 40, "x": 300, "y": 300}]
+    ink = lambda share_of: (lambda f: (lambda im: (im.__setitem__((slice(0, H), slice(0, int(share_of(f) * W))), (210, 210, 210)), im)[1])(dark.copy()))
+    ink_curve = lambda f: 0.10 if f < 10 else 0.40 if f < 30 else 0.15
+    xs_world_at = lambda f: {**row(f), "world": "crayon" if f >= 45 else "home"}
     cases = [
+        ("a pen in Clawd's hand on its first frame that is in the human's hand on the last", {"kind": "stage", "actor": "pen", "expect": "carried-by", "from": "clawd", "to": "human", "since": 18}, True, film(blocking=pen(to_hand), figure=lambda f: fingers_fig(10))),
+        ("the same pen, which never leaves Clawd's hand", {"kind": "stage", "actor": "pen", "expect": "carried-by", "from": "clawd", "to": "human", "since": 18}, False, film(blocking=pen([{"frame": 20, "x": 940, "y": 520}]), figure=lambda f: fingers_fig(10))),
+        ("a pen that starts in the human's hand, asked to start in Clawd's", {"kind": "stage", "actor": "pen", "expect": "carried-by", "from": "clawd", "to": "human", "since": 18}, False, film(blocking=pen([{"frame": 20, "x": 300, "y": 300}]), figure=lambda f: fingers_fig(10))),
+        ("the same pen with no hands drawn at its end", {"kind": "stage", "actor": "pen", "expect": "carried-by", "from": "clawd", "to": "human", "since": 18}, False, film(blocking=pen(to_hand), figure=lambda f: fingers_fig(0))),
+        ("a pen that never comes on", {"kind": "stage", "actor": "pen", "expect": "carried-by", "from": "clawd", "to": "human", "since": 18}, False, film(figure=lambda f: fingers_fig(10))),
+        ("a world 'crayon' asked at f50, which is crayon from f45", {"kind": "xsheet", "field": "world", "expect": "equals", "value": "crayon", "at": 50}, True, film(xs=xs_world_at)),
+        ("the same world asked at f40, before it changes", {"kind": "xsheet", "field": "world", "expect": "equals", "value": "crayon", "at": 40}, False, film(xs=xs_world_at)),
+        ("a world 'crayon' asked at the window's end, which is crayon", {"kind": "xsheet", "field": "world", "expect": "equals", "value": "crayon"}, True, film(xs=xs_world_at)),
+        ("ink that falls 62 % from f19, asked for 50 %", {"kind": "picture", "measure": "ink-share", "expect": "falls", "min": 0.5}, True, film(composed=ink(ink_curve))),
+        ("the same ink asked to fall 50 % from f0, where it was lower", {"kind": "picture", "measure": "ink-share", "expect": "falls", "min": 0.5, "from": 0}, False, film(composed=ink(ink_curve))),
+        ("the same ink asked to fall 50 % from f12, where it was high", {"kind": "picture", "measure": "ink-share", "expect": "falls", "min": 0.5, "from": 12}, True, film(composed=ink(ink_curve))),
         ("a prop that comes on inside the window", {"kind": "stage", "actor": "lamp", "expect": "appears"}, True, film()),
         ("a prop that never comes on", {"kind": "stage", "actor": "ghost", "expect": "appears"}, False, film()),
         ("a lid that moves 80 px, asked 40 to 120", {"kind": "stage", "actor": "lid", "expect": "moves", "by": [40, 120]}, True, film()),

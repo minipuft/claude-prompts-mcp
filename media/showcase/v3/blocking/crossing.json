@@ -113,7 +113,13 @@
       274
     ],
     "anchor": "the piece's lines (the carried stalk), reaching the grid",
-    "storyPoint": "sp-6.1"
+    "storyPoint": "sp-6.1",
+    "at": [
+      {
+        "frame": 1230,
+        "radius": 60
+      }
+    ]
   },
   "card": "eagle-mf83t1h77o7bm",
   "cardNote": "provisional: board \u00a78 \"Red corridor, converging lines\" for the leading line of the crossing",
@@ -141,7 +147,7 @@
         "from": 1230,
         "offset": [
           25,
-          -420
+          -300
         ]
       },
       "at": [

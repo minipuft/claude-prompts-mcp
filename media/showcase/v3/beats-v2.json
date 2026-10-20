@@ -379,8 +379,8 @@
     }
    ],
    "effects": {
-    "emitter": "none; the lines themselves glow faintly",
-    "radiance": "off",
+    "emitter": "the piece's lines (the carried stalk), lit as a lantern; no light elsewhere",
+    "radiance": "a faint lantern on the carried piece's lines only; the rest is lines",
     "grain": "none",
     "boil": "on",
     "line": "pure contour, one weight (D76 ratio), no fills"

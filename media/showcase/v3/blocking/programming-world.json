@@ -106,7 +106,7 @@
         "strength": 1
       },
       {
-        "frame": 1500,
+        "frame": 1514,
         "radius": 260
       },
       {
@@ -119,9 +119,16 @@
         "strength": 1.6
       },
       {
-        "frame": 1572,
-        "strength": 1.6,
+        "frame": 1552,
         "radius": 60
+      },
+      {
+        "frame": 1566,
+        "radius": 100
+      },
+      {
+        "frame": 1572,
+        "strength": 1.6
       },
       {
         "frame": 1600,

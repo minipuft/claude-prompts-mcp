@@ -56,6 +56,17 @@ const gateLight = (i: number, gateX: number, emitterX: number | undefined): numb
   return rest * (GATE_DIM + (1 - GATE_DIM) * near);
 };
 
+/** Share of its brightness the frame's rim keeps while the light is elsewhere: the frame is a window the light has not yet looked through (its `litFrom`), so under the bead's run (sp-7.3) the eye goes to the bead and not to the rim. */
+const FRAME_DIM = 0.25;
+/** Stage px past the frame's box inside which the emitter counts as being at the frame. */
+const FRAME_REACH = 40;
+/** The frame's rim brightness: all of it where there is no light given or the light stands at the frame, `FRAME_DIM` of it where the light is elsewhere. */
+const frameLight = (frame: {x: number; y: number; width: number; height: number} | undefined, emitter: {x: number; y: number} | undefined): number => {
+  if (!frame || !emitter) return 1;
+  const at = emitter.x >= frame.x - FRAME_REACH && emitter.x <= frame.x + frame.width + FRAME_REACH && emitter.y >= frame.y - FRAME_REACH && emitter.y <= frame.y + frame.height + FRAME_REACH;
+  return at ? 1 : FRAME_DIM;
+};
+
 const toonGradient = (steps: number): DataTexture => {
   const data = Uint8Array.from({length: steps}, (_, i) => Math.round(255 * (0.3 + (0.7 * i) / Math.max(1, steps - 1))));
   const t = new DataTexture(data, steps, 1, RedFormat);
@@ -199,7 +210,7 @@ const ShadedFigure: React.FC<{pose: Joints; fill: number; line: ReturnType<typeo
   );
 };
 
-const Architecture: React.FC<{fill: number; reduce: number; edge: string; lineHex: string; lw: number; gradient: DataTexture; bloom?: Bloom; parts: PropsPart[]; blocking: Blocking; lightX?: number}> = ({lightX, fill, reduce, edge, lineHex, lw, gradient, bloom, parts, blocking}) => {
+const Architecture: React.FC<{fill: number; reduce: number; edge: string; lineHex: string; lw: number; gradient: DataTexture; bloom?: Bloom; parts: PropsPart[]; blocking: Blocking; lightX?: number; frameK?: number}> = ({lightX, frameK = 1, fill, reduce, edge, lineHex, lw, gradient, bloom, parts, blocking}) => {
   const {x, y, width: w, height: h} = blocking.frame ?? {x: 0, y: 0, width: 0, height: 0};
   const ring = useMemo(() => {
     if (!blocking.frame) return null;
@@ -224,7 +235,7 @@ const Architecture: React.FC<{fill: number; reduce: number; edge: string; lineHe
       {parts.includes('architecture') && ring && (
         <group position={[x + w / 2, -(y + h / 2), 0]} rotation={[0, TURN.frame * (1 - reduce), 0]} scale={[1, 1, flat]}>
           <group position={[-w / 2, h / 2, 0]}>
-            <Solid geometry={ring} fillColour={settled.gadget.main1} fill={fill} edge={edge} lw={lw} gradient={gradient} bloom={bloom} />
+            <Solid geometry={ring} fillColour={settled.gadget.main1} fill={fill} edge={frameK < 1 ? new Color(edge).multiplyScalar(frameK).getStyle() : edge} lw={lw} gradient={gradient} bloom={bloom && frameK < 1 ? {...bloom, strength: bloom.strength * frameK} : bloom} />
           </group>
         </group>
       )}
@@ -272,7 +283,7 @@ export const ShadedScene: React.FC<SceneProps> = ({frame, pose, emitter, reduce 
         <Lights />
         {parts.includes('floor') && <Floor strength={1 - r} floorY={blocking.floor.y} colour={edge} lw={lw} />}
         <ShadedFigure pose={pose} fill={1 - r} line={line} steps={steps} turn={TURN.figure * (1 - r)} bloom={bloom} light={light} figure={blocking.figure} />
-        <Architecture fill={1 - r} reduce={r} edge={edge} lineHex={lineColour(contracts.line)} lw={lw} gradient={gradient} bloom={bloom} parts={parts} blocking={blocking} lightX={emitter?.x} />
+        <Architecture fill={1 - r} reduce={r} edge={edge} lineHex={lineColour(contracts.line)} lw={lw} gradient={gradient} bloom={bloom} parts={parts} blocking={blocking} lightX={emitter?.x} frameK={frameLight(blocking.frame, emitter)} />
       </ThreeCanvas>
       {/* the beat's actors are filled with the kit's own roles (the settled palette), not the beat's dark pair: the radiance of the shaded world's hue is #17263a, and props in it stand black on black */}
       <PropsStack contract={c} lineWorld={contracts.line} reduce={r} native={native} frame={frame} parts={parts.includes('actors') ? ['companions', 'actors'] : ['companions']} blocking={blocking} />

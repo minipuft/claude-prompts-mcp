@@ -275,6 +275,7 @@ export const frameState = (frame: number): FrameState => {
       intensity: (contract ? emitterIntensityAt(contract, beat.id, frame) : 0.9) * (glow.strength ?? 1),
       ...(grain !== undefined ? {grain} : {}),
       ...(glow.strength !== undefined ? {glow: glow.strength} : {}),
+      ...(lit ? {lit: lit.actor} : {}),
     },
     local,
     pose,

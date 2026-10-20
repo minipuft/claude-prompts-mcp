@@ -112,7 +112,7 @@
         "intensity": 0.9,
         "colour": "#fbdab9",
         "on": 930,
-        "off": 1230
+        "off": 1228
       }
     },
     "crossing": {
@@ -120,8 +120,23 @@
         "radiance": "#e1750c",
         "accent": "#fad204"
       },
-      "radiance": "off",
-      "grain": "none"
+      "radiance": "a faint lantern on the carried piece's lines only; the rest is lines",
+      "grain": "none",
+      "emitter": {
+        "anchor": "the piece's lines (the carried stalk), reaching the grid",
+        "start": [
+          0.625,
+          0.3806
+        ],
+        "end": [
+          0.625,
+          0.3806
+        ],
+        "intensity": 0.9,
+        "colour": "#fbdab9",
+        "on": 1230,
+        "off": 1348
+      }
     },
     "programming-world": {
       "pair": {

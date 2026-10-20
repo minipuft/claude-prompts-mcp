@@ -173,6 +173,13 @@ def off_picture(em, cam, shape):
     return False
 
 
+def fades(em, f, tl, min_strength):
+    """Is the light fading through a crossing on frame f: an emitter row drawn below `min_strength`, or no emitter row at all on a frame inside a crossing window (the two frames where one beat's emitter hands over to the next's are the same
+    fade to nothing: `compileLight`'s handoff leaves the sheet without a row there). A frame outside every window with no row is not a fade (the target is measured and, if the light is absent, fails)."""
+    if isinstance(em, dict): return em.get("strength", 1.0) < min_strength
+    return any(w["a"] <= f < w["b"] for w in tl.get("windows", []))
+
+
 def controls(a, ctl):
     """The control: (ok, text), planted in memory (320x180 frames, `make`)."""
     on = offset(make.eye_frame(10), make.emitter_at(10), None, a.share, ctl, a.blur)
@@ -224,7 +231,9 @@ def controls(a, ctl):
     below_rect = {"rect": (400, 725, 300, 200)}; far_point = {"x": 1404.0, "y": 392.0}; near_point = {"x": 1270.0, "y": 392.0}
     off_flags = (off_picture(edge_rect, None, shape), off_picture(just_in, None, shape), off_picture(below_rect, None, shape), off_picture(far_point, None, shape), off_picture(near_point, None, shape), off_picture(inside_rect, None, shape))
     d_off = offset(inner(120), edge_rect, None, a.share, ctl, a.blur)
-    ok = (on is not None and on <= a.tolerance and off is not None and off > a.tolerance and raw > a.tolerance and moved > a.tolerance and sp <= a.tolerance and (a.blur == 0 or sp_raw > sp)
+    win = {"windows": [{"a": 100, "b": 170}]}
+    fade_flags = (fades({"strength": 0.4}, 120, win, 1.0), fades({"strength": 1.0}, 120, win, 1.0), fades(None, 150, win, 1.0), fades(None, 90, win, 1.0), fades(None, 170, win, 1.0))
+    ok = (fade_flags == (True, False, True, False, False) and on is not None and on <= a.tolerance and off is not None and off > a.tolerance and raw > a.tolerance and moved > a.tolerance and sp <= a.tolerance and (a.blur == 0 or sp_raw > sp)
           and d_lamp_brighter > a.tolerance and d_interior <= a.tolerance and d_lamp_named <= a.tolerance
           and d_travel <= a.tolerance and d_final > a.tolerance and walk_x == (950.0, 1200.0, 700.0)
           and l_h == "the human" and d_h_lamp > a.tolerance and d_h_own <= a.tolerance and l_d == "gadget dial" and d_d_lamp <= a.tolerance and trio_none is None
@@ -243,7 +252,8 @@ def controls(a, ctl):
                 f"a line outside the table is refused by name ({refused[:48]}...); "
                 f"the props the scaffold beats name resolve to where their props stand (the crayon's rectangle 18 x 90 at its anchor, the strokes' union, the stalk's leaf above the stalk's lines, the bead): the light in the crayon -> pass ({100 * p_on:.1f} %), the light a tenth of the width away -> FAIL ({100 * p_off:.1f} %), the light at the stalk's root against the leaf -> FAIL ({100 * leaf_root:.1f} %), the light on the leaf -> pass ({100 * leaf_on:.1f} %), and a line whose props are not on stage is refused naming them ({absent[:60]}...); "
                 f"a frame wholly past the right edge (x 1288 of 1280) -> off the picture and skipped (read as a target it would FAIL, {100 * d_off:.1f} %), one overlapping the edge by a pixel -> measured, one wholly below -> off the picture, "
-                f"a point at x 1404 -> off, a point at x 1270 -> measured")
+                f"a point at x 1404 -> off, a point at x 1270 -> measured; "
+                f"a frame inside a crossing window (100-169) with no emitter row (a handoff between two beats' lights) or a row below full strength -> fading and skipped, a full-strength row inside it -> measured, no row outside the window (frames 90 and 170) -> measured")
 
 
 def _blob(a, centre, amp, sigma=6.0, colour=(1.0, 1.0, 1.0)):
@@ -322,7 +332,7 @@ def main():
         if tgt is None: span_of(refused, why, f); continue
         if tgt["kind"] == "none": span_of(unreadable, f"{line!r} ({source})", f); continue
         if tgt.get("missing"): skipped += 1; continue
-        if isinstance(em, dict) and em.get("strength", 1.0) < a.min_strength: fading += 1; continue
+        if fades(em, f, tl, a.min_strength): fading += 1; continue
         cam = camera_of(xs, f); img = load_rgb(p)
         if off_picture(tgt, cam, img.shape): span_of(off, f"{line!r} ({source})", f); continue
         if tgt["kind"] in ("human", "trio"):
@@ -338,7 +348,7 @@ def main():
     nref = sum(v[2] for v in refused.values()); nun = sum(v[2] for v in unreadable.values()); noff = sum(v[2] for v in off.values())
     pr.note(f"frames {len(frames)}{'; ' + shot_note if shot_note else ''}; masked {len(everywhere) if drawn_from else len(hexes_all)} fixed colours everywhere and the human cutout's {len(plate)} inside its crop"
             + (f", and {len(owned)} kit and gadget colours only inside their props' crops (blocking, beats {sorted(drawn_from)})" if drawn_from else ", the kit and gadget colours everywhere (no blocking describes these frames)") + f", from {roles_source(a.roles)}; "
-            f"measured {n} {dict(sorted(kinds.items()))}; skipped (target is the emitter and the xsheet row has none) {skipped}; skipped (emitter drawn below strength {a.min_strength:g}, a crossing) {fading}; "
+            f"measured {n} {dict(sorted(kinds.items()))}; skipped (target is the emitter and the xsheet row has none) {skipped}; skipped (emitter drawn below strength {a.min_strength:g}, or no emitter on a frame inside a crossing, a fade) {fading}; "
             f"skipped (the story point says the light pushes nowhere readable) {nun}; skipped (the target is wholly off the picture) {noff}{' (' + '; '.join(f'{k}: frames {lo}-{hi}' for k, (lo, hi, _) in sorted(off.items(), key=lambda kv: kv[1][0])) + ')' if off else ''}; worst offset {100 * worst[0]:.1f} % at frame {worst[1]}")
     pr.check("measured something", n > 0, f"{n} frames carry a target" + ("" if n else " - every frame was skipped or refused, so the probe observed nothing"))
     pr.check("targets resolve", not refused, (f"{nref} frame(s) have a target the frame cannot resolve: " + "; ".join(f"{why}: frames {lo}-{hi} ({c})" for why, (lo, hi, c) in sorted(refused.items(), key=lambda kv: kv[1][0]))) if refused

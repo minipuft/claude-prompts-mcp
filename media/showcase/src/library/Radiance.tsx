@@ -3,7 +3,8 @@ import {useCurrentFrame, useVideoConfig} from 'remotion';
 import {onTwos} from './motion';
 
 /** `grain` is the speckle's alpha over the glow (default 0.05, the settled amount); above it the speckle is also denser, in proportion, so a beat that says "grain high" shows it (`blocking.grain`). */
-export type Emitter = {x: number; y: number; radius: number; color: string; intensity: number; grain?: number};
+/** `lit` names what the beat's blocking has the light sit on (an actor with `lit`, or `frame` for a window the light looks through): the line world, which has no light of its own, draws the emitter only where something is lit. */
+export type Emitter = {x: number; y: number; radius: number; color: string; intensity: number; grain?: number; lit?: string};
 export type Mask = {x: number; y: number; width: number; height: number};
 
 /** Deterministic PRNG (mulberry32); the only randomness source allowed in the film. */

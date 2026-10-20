@@ -53,10 +53,14 @@
     "v3/proposals/p027-sp-5-2-the-key-strokes-count-counts-stro.json",
     "v3/proposals/p028-sp-5-1-the-key-human-holds-crayon-appear.json",
     "v3/proposals/p029-sp-6-1-fill-area-falls-80-cannot-be-met.json",
+    "v3/proposals/p030-sp-7-4-three-figures-crossing-the-window-x-is.json",
+    "v3/proposals/p031-the-plate-versus-film-measure-now-reads-each.json",
+    "v3/proposals/p032-the-eye-trace-reads-20-frames-of-beat-7-over.json",
+    "v3/proposals/p033-colour-two-reads-fail-on-animatic-10-the-join.json",
     "v3/materials.json",
     "v3/materials.schema.json"
   ],
-  "inputsHash": "f1d16dc1f27f1eebefae4a3e218bb36f3e15b1da3a4f0d488edd316cbb5caebf",
+  "inputsHash": "f0193cccacbf027b379e6bc708741d413efd4ff885a41c0cb8b62b82d7956b92",
   "tracks": [
     {
       "name": "pacing",
@@ -1307,7 +1311,13 @@
                 274
               ],
               "anchor": "the piece's lines (the carried stalk), reaching the grid",
-              "storyPoint": "sp-6.1"
+              "storyPoint": "sp-6.1",
+              "at": [
+                {
+                  "frame": 1230,
+                  "radius": 60
+                }
+              ]
             },
             "card": "eagle-mf83t1h77o7bm"
           }
@@ -1359,7 +1369,7 @@
                   "strength": 1
                 },
                 {
-                  "frame": 1500,
+                  "frame": 1514,
                   "radius": 260
                 },
                 {
@@ -1372,9 +1382,16 @@
                   "strength": 1.6
                 },
                 {
-                  "frame": 1572,
-                  "strength": 1.6,
+                  "frame": 1552,
                   "radius": 60
+                },
+                {
+                  "frame": 1566,
+                  "radius": 100
+                },
+                {
+                  "frame": 1572,
+                  "strength": 1.6
                 },
                 {
                   "frame": 1600,
@@ -5514,7 +5531,7 @@
               "intensity": 0.9,
               "colour": "#fbdab9",
               "on": 930,
-              "off": 1230
+              "off": 1228
             },
             "radiance": "warm, s03 amber (D74) on a paper-coloured field, not black",
             "grain": "paper tooth"
@@ -5524,14 +5541,30 @@
           "start": 1230,
           "end": 1350,
           "beat": "crossing",
-          "label": "no emitter · off",
+          "label": "the piece's lines (the carried stalk), reaching the grid · 0.9",
           "data": {
             "pair": {
               "radiance": "#e1750c",
               "accent": "#fad204"
             },
-            "emitter": null,
-            "radiance": "off",
+            "emitter": {
+              "anchor": "the piece's lines (the carried stalk), reaching the grid",
+              "path": {
+                "from": [
+                  0.625,
+                  0.3806
+                ],
+                "to": [
+                  0.625,
+                  0.3806
+                ]
+              },
+              "intensity": 0.9,
+              "colour": "#fbdab9",
+              "on": 1230,
+              "off": 1348
+            },
+            "radiance": "a faint lantern on the carried piece's lines only; the rest is lines",
             "grain": "none"
           }
         },
@@ -6138,7 +6171,6 @@
               {
                 "key": "line",
                 "name": "crossing, pale contour lines",
-                "radiance": null,
                 "accent": null,
                 "field": "#07060c",
                 "swatches": [
@@ -6146,7 +6178,6 @@
                 ]
               }
             ],
-            "radiance": null,
             "accent": null,
             "midFrame": 1270,
             "animaticFrame": "out/animatic-seq/element-1270.png"
@@ -6164,7 +6195,6 @@
               {
                 "key": "line",
                 "name": "crossing, pale contour lines",
-                "radiance": null,
                 "accent": null,
                 "field": "#07060c",
                 "swatches": [
@@ -6172,7 +6202,6 @@
                 ]
               }
             ],
-            "radiance": null,
             "accent": null,
             "midFrame": 1330,
             "animaticFrame": "out/animatic-seq/element-1330.png"
@@ -7749,6 +7778,102 @@
             "before": "f1239 8.4 %, f1299 10.1 % (+20 %)",
             "after": "a measure that sees fills drain, on a window that holds the reduce",
             "file": "v3/proposals/p029-sp-6-1-fill-area-falls-80-cannot-be-met.json"
+          }
+        },
+        {
+          "start": 1620,
+          "end": 1621,
+          "beat": "programming-world",
+          "label": "p030 sp-7.4: three figures crossing the window's x is not staged; the story point's texture line says so and no layer records it",
+          "data": {
+            "id": "p030",
+            "title": "sp-7.4: three figures crossing the window's x is not staged; the story point's texture line says so and no layer records it",
+            "kind": "finding",
+            "status": "open",
+            "from": "worker",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "programming-world",
+              "frame": 1620
+            },
+            "text": "sp-7.4's texture line reads \"three figures cross its x (the human's crossing is read at sp-4.6; Codex and Clawd's are not recorded for this beat)\" and its only recipe is `frame prop present`. Measured on the blocking of beat 7 (`v3/blocking/programming-world.json`): the window (`frame`) stands at x 1040-1270, y 50-240 from the beat's first frame; Codex stands at x 1100 and Clawd at x 1075, both already on the window's side of its left edge x 1040 for the whole beat, and the human's crop (380-880) is 160 px left of it. The story point's window is f1620-1659 and the beat's cut is f1650 (the crossing out is 1615-1685), so a crossing of x 1040 by all three is 30 frames. Putting the three left of x 1040 at f1620 and walking each across it needs: the human's root travel of about 410 px in 30 frames (her stride at the beat-4 walk is 152 px in 60), Codex and Clawd moved off the grid's right edge (the gates stand at x 870-1030 and the bead's run ends at 870 on f1572-1600), and the human's crop clear of both identity boxes (`probe-blocking.py` `identity boxes apart`) while it passes beside the window. It also moves the gadget's holder (`th-glass`: the gadget rests in the structure from beat 8) and the light's target (sp-7.4's eye line is `frame interior`, which the crossing figures would cover). That is a restage of beats 7 and 8's cast, not a staging fix inside this story point, so it is left as the texture line says: the frame stands, the light goes into it (litFrom 1620, the eye trace's target) and the trio's crossing is not read by any probe. Options: (a) keep the line as texture and say it is not staged, (b) restage the cast of beats 7-8 with the trio left of x 1040 at the start of sp-7.4 and a crossing recipe (`stage` expect `crosses`, which does not exist yet: `carried-by` and `inside` are the closest forms), (c) re-word the story point to what the film stages: the light goes into the window.",
+            "references": [],
+            "before": "the frame stands; Codex and Clawd already right of its left edge; the human 160 px left of it; no recipe reads a crossing",
+            "after": "a ruling on (a), (b) or (c)",
+            "file": "v3/proposals/p030-sp-7-4-three-figures-crossing-the-window-x-is.json"
+          }
+        },
+        {
+          "start": 432,
+          "end": 433,
+          "beat": "cant-build",
+          "label": "p031 The plate-versus-film measure now reads each shot's own keys: 5 of 27 keys of s02 to s04 sit 0.06 to 0.78 over the 10.0 bar",
+          "data": {
+            "id": "p031",
+            "title": "The plate-versus-film measure now reads each shot's own keys: 5 of 27 keys of s02 to s04 sit 0.06 to 0.78 over the 10.0 bar",
+            "kind": "finding",
+            "status": "open",
+            "from": "worker",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "cant-build",
+              "frame": 432
+            },
+            "text": "p023: `npm run plates -- <shot>` rendered `KeyFilmS01`, which drew s01's keys for every shot, so the shot's key sheet never got a `measured` block (its control read `film rig as drawn -> mad 98.08` and the run ended `refused`). `KeyFilmS01` now takes the shot as a prop (`--props={\"shot\":...}`, `calculateMetadata` for the length), `plates-from-poses.mjs` passes it and clears `out/<shot>-key-film` first, `film_compare.film_frame` reads frames by number (padded or not), and `measure-keys.py` runs, for a shot other than s01, a control of its own: the film rig's picture of the shot's best-matching key must pass and its picture of the shot's most different other key must fail (s02-cant-build: key `stack` 7.07 against 134.92; s02-the-frame `threshold` 6.49 against 138.38; s03-scaffold `reroute` 6.72 against 143.66; s04-settle `home` 7.07 against 136.40; the bar is 10.0). s01 reads as before (its own swap control, 12 film frames byte-identical to the earlier render). `measured` is written for all four shots. Five keys fail the film measure by a hair: s02-cant-build `ready` 10.58, s02-the-frame `slump` 10.57, s03-scaffold `paper` 10.58 and `real` 10.78, s04-settle `window` 10.06 (the other 22 read 6.49 to 9.96; every worst centroid is under 1.5 px, so the joints agree; the cause is not isolated here: `ready`, `slump` and `paper` read 10.57 to 10.58 within a hundredth of each other). The README says the bar is never edited to fit a key; the keys carry `verdict: REJECTED: FILM` as measured and the shot's `plates` run exits 1. A ruling is needed on whether the bar holds for these five (isolate the difference by key, then fix the shared code) or is re-measured.",
+            "references": [],
+            "before": "no `measured` block on any key of s02-cant-build, s02-the-frame, s03-scaffold, s04-settle",
+            "after": "`measured` on 27 of 27 keys; 22 accepted, 5 REJECTED: FILM at mad 10.06 to 10.78",
+            "file": "v3/proposals/p031-the-plate-versus-film-measure-now-reads-each.json"
+          }
+        },
+        {
+          "start": 1508,
+          "end": 1509,
+          "beat": "programming-world",
+          "label": "p032 Eye trace: 20 frames of beat 7 are over 3 %: the join's glow and the bead's glow are outranked by lit pale edges beside them",
+          "data": {
+            "id": "p032",
+            "title": "Eye trace: 20 frames of beat 7 are over 3 %: the join's glow and the bead's glow are outranked by lit pale edges beside them",
+            "kind": "finding",
+            "status": "open",
+            "from": "worker",
+            "date": "2026-10-20",
+            "ruling": null,
+            "anchor": {
+              "beat": "programming-world",
+              "frame": 1508
+            },
+            "text": "`probe-eyetrace.py` on animatic 10 (`out/animatic-10-chain-probe-all.txt`, 1950 frames, 1504 measured): 1484 frames are within 3 % of their story point's target; the 20 over are 1508-1511 (4.6 %) and 1516-1519 (5.8 to 11.1 %) under `the lit join` (sp-7.2) and 1532-1537 (up to 22.3 %), 1540-1541 and 1552-1555 under `the running bead` (sp-7.3). The cause by frame: the brightest 0.5 % of the unmasked, blurred picture is the pale edge of the left kit block next to the join (about (731, 252) and (749, 304)) and the human's head highlight (about (653, 191)), not the glow. While the bead stands on a gate ring its glow sits on a ring and outranks both (the frames not listed pass); while it hops between rings its glow is on dark field and its pixels are fewer and dimmer than the edge pixels. What was tried: the frame's rim is dimmed to a quarter until the light stands at it (FRAME_DIM: the run's frames read 22 to 24 % over before it (1540, 1550, 1560), 1544 and 1556 and the resting frames 0 after); a glow radius of 90 or 130 instead of 60 for the run makes the second gate change on the same frame as the first (sp-7.3 `lit-in-order`: `[1520, 1520, 1540]`), so 60 holds while it runs and 100 while it rests at the third gate (cleared 1560-1576); a white core on the glow changed nothing (21.3 against 22.6 %, the edge pixels are as bright). Options for a ruling: (a) dim the shaded world's other emissive edges (the human's rim, the kit blocks, the arch) by their distance from the light, as the rim and the gates already are, which changes the look of the whole shaded beat; (b) let the eye trace skip a frame whose target glow is a hop between two lit things (a named exemption, not a wider tolerance); (c) read the join as the region of the two blocks, not a point, which says what sp-7.2's eye line means (the join between the blocks).",
+            "references": [],
+            "before": "1508-1511, 1516-1519, 1532-1537, 1540-1541, 1552-1555: 4.6 to 22.3 % of the width off the target",
+            "after": "every measured frame within 3 %",
+            "file": "v3/proposals/p032-the-eye-trace-reads-20-frames-of-beat-7-over.json"
+          }
+        },
+        {
+          "start": 1428,
+          "end": 1429,
+          "beat": "programming-world",
+          "label": "p033 Colour: the join's glow reads 1 degree outside its pair on 1428-1515, and the 1615-1685 crossing reads a hue path the light's path does not take",
+          "data": {
+            "id": "p033",
+            "title": "Colour: the join's glow reads 1 degree outside its pair on 1428-1515, and the 1615-1685 crossing reads a hue path the light's path does not take",
+            "kind": "finding",
+            "status": "open",
+            "from": "worker",
+            "date": "2026-10-20",
+            "ruling": null,
+            "anchor": {
+              "beat": "programming-world",
+              "frame": 1428
+            },
+            "text": "`probe-all` colour-continuity on animatic 10 (`out/animatic-10-chain-probe-all.txt`): (1) `radiance hue per frame`: 96 of 1560 frames where the light is drawn and readable read a hue outside the beat's pair (205 and 214 deg, tolerance 15): 190 deg on 1428-1431 and 189 deg on 1432-1435 (the first eight of the list), i.e. under a degree past the edge. The read region is the brightest 0.5 % of the frame outside the fixed fills within 3 % of the emitter, and it takes in the kit blocks' lit pale edge (hue about 190), so the emitter's own hue does not move it: the shaded world's radiance colour was changed from #56b0d4 (197 deg) to #56a0d4 and to #5aa0e8 (about 210 deg) and the read stayed 189-190, then the colour was put back. The standalone `probe-colour.py` (every fixed colour masked everywhere, not by prop crop) reads 1560 of 1560 inside the pair. (2) `crossing hue path`: the 1615-1685 crossing (shaded to home) read on frames detours: sample 7 reads 39 deg, 153 deg behind its start (194 deg), while the light contract's path for it (`#c5e4f0 #c9caf1 #e7cef2 #f3d2e6 #f4d9d6`) is monotonic and the contract check passes. The frames read the world refilling from lines to the warm home (cyan to yellow-orange, hue falling through green), the light path goes up through violet and pink: two different directions between the same ends. The contract compiles the shorter arc (168 deg upward against 192 deg downward). Options for a ruling: (a) give the crossing's light path the direction the frames take (a `via` hue or a direction key in the light compile), (b) change the world's refill so its dominant hue walks the light's way, (c) read the crossing's hue path from the light's own path and not from the frames where the line world's middle has no colour. Neither read is one of the contract's own checks, which pass.",
+            "references": [],
+            "before": "96 frames off the pair by about 1 deg; the 1615-1685 path 153 deg behind",
+            "after": "both reads inside the pair and monotonic",
+            "file": "v3/proposals/p033-colour-two-reads-fail-on-animatic-10-the-join.json"
           }
         }
       ]

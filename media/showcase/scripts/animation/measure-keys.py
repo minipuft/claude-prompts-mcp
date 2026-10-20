@@ -107,7 +107,17 @@ def main():
     else: std = model_contour(model)[0]
     # the film control: the film rig's picture of one key with the draw order of one hand swapped must be named by the plate-versus-film measure
     swap = re.search(r"SWAP: [^=]*= \{key: (\d+), parts: \[([^\]]+)\]\}", open(os.path.join(ROOT, "src/scenes/KeyFilmS01.tsx")).read())
-    if swap and any(k.get("plate") for k in keys["keys"]):
+    if swap and shot != "s01-arrival-overwhelm" and sum(1 for k in keys["keys"] if k.get("plate")) >= 2:
+        # another shot's keys: the control is the film rig's picture of a DIFFERENT key against a plate (the shot's keys differ from each other), which must fail the measure while the key's own picture passes
+        plates = [k for k in keys["keys"] if k.get("plate")]
+        pic = lambda k: np.asarray(Image.open(os.path.join(ROOT, k["plate"])).convert("RGBA"))
+        own = {k["name"]: fc.compare_key(pic(k), fc.film_frame(shot, keys["keys"].index(k)), k["plateInfo"], k["joints"], std) for k in plates}
+        sk = min(plates, key=lambda k: own[k["name"]]["mad"]); clean = own[sk["name"]]; plate_sk = pic(sk)
+        others = [fc.compare_key(plate_sk, fc.film_frame(shot, keys["keys"].index(o)), sk["plateInfo"], sk["joints"], std) for o in plates if o is not sk]
+        ctl = max(others, key=lambda r: r["mad"])
+        lines.append(f"control FILM: key {sk['name']} (the shot's best match): film rig as drawn -> mad {clean['mad']}, worst centroid {clean['worstPart']} {clean['worstPx']} px (pass {clean['pass']}); the picture of the shot's most different other key -> mad {ctl['mad']} (bar {fc.MAD_BAR}) (pass {ctl['pass']})")
+        if ctl["pass"] or not clean["pass"]: print("\n".join(lines)); print("refused: the plate-versus-film measure did not trip its control (" + ("the film rig's picture of a different key passed it" if ctl["pass"] else f"no key of {shot} reads under the bar against its own film picture, the best being {sk['name']} at mad {clean['mad']}: the two rasters do not share the shot's draw order or pose") + ")"); sys.exit(2)
+    elif swap and any(k.get("plate") for k in keys["keys"]):
         sk = keys["keys"][int(swap.group(1)) - 1]
         if sk.get("plate"):
             plate_sk = np.asarray(Image.open(os.path.join(ROOT, sk["plate"])).convert("RGBA"))

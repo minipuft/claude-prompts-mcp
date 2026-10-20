@@ -130,8 +130,10 @@ const plates = keys.map((k, i) => ({key: `K${i + 1}`, name: k.name, plate: k.pla
 fs.writeFileSync(path.join(outDir, 'plates.json'), JSON.stringify(plates, null, 1) + '\n');
 console.log(`wrote ${rel(keysPath)} (${keys.filter((k) => k.status === 'plate').length} plates, ${keys.filter((k) => k.status !== 'plate').length} needing a family) and ${rel(path.join(outDir, 'plates.json'))}`);
 
-// the film rig's picture of every key (src/scenes/KeyFilmS01.tsx, the component the film draws the human with): measure-keys.py compares it to the plates
-const film = spawnSync('npx', ['remotion', 'render', 'src/index.ts', 'KeyFilmS01', path.join('out', `${shot}-key-film`), '--sequence', '--image-format=png', '--concurrency=4'], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe']});
+// the film rig's picture of every key of THIS shot (src/scenes/KeyFilmS01.tsx, the component the film draws the human with, given `shot`): measure-keys.py compares it to the plates
+// `KeyFilmS01` takes the shot as a prop and draws THAT shot's keys (it drew s01's whatever shot was named: out/<shot>-key-film held s01's figure for every other shot and the measure refused its own control)
+fs.rmSync(path.join(root, 'out', `${shot}-key-film`), {recursive: true, force: true});   // a frame of an earlier run (another shot's keys, more keys than this sheet has) is not left to be read
+const film = spawnSync('npx', ['remotion', 'render', 'src/index.ts', 'KeyFilmS01', path.join('out', `${shot}-key-film`), '--sequence', '--image-format=png', '--concurrency=4', `--props=${JSON.stringify({shot})}`], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'ignore', 'pipe']});
 if (film.status !== 0) { console.error(film.stderr.split('\n').slice(-12).join('\n')); console.error('input error: the film rig could not render the keys'); process.exit(2); }
 const measure = spawnSync('python3', [path.join(root, 'scripts/animation/measure-keys.py'), shot], {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit']});
 process.stdout.write(measure.stdout);

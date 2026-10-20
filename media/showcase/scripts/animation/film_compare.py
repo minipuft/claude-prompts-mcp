@@ -82,6 +82,8 @@ def compare_key(plate_rgba, film_frame, info, joints_key, contour_px):
 
 
 def film_frame(shot, index):
-    p = os.path.join(ROOT, "out", f"{shot}-key-film", f"element-{index}.png")
-    if not os.path.exists(p): raise SystemExit(f"measure-keys: {os.path.relpath(p, ROOT)} does not exist; run `npm run film-keys` (the film rig's picture of every key)")
-    return np.asarray(Image.open(p).convert("RGBA"))
+    """Frame `index` of out/<shot>-key-film: the name is unpadded below ten frames and padded to the width of the last frame from ten up (remotion pads a sequence to its last frame), so the files are read by number."""
+    d = os.path.join(ROOT, "out", f"{shot}-key-film")
+    found = {int(m.group(1)): os.path.join(d, n) for n in (os.listdir(d) if os.path.isdir(d) else []) if (m := re.fullmatch(r"element-(\d+)\.png", n))}
+    if index not in found: raise SystemExit(f"measure-keys: frame {index} of {os.path.relpath(d, ROOT)} does not exist; run `npm run plates -- {shot}` (it renders KeyFilmS01 with shot={shot}), or `npm run film-keys` for s01")
+    return np.asarray(Image.open(found[index]).convert("RGBA"))

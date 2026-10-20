@@ -1,0 +1,17 @@
+{
+  "id": "p031",
+  "kind": "finding",
+  "from": "worker",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "cant-build",
+    "frame": 432
+  },
+  "title": "The plate-versus-film measure now reads each shot's own keys: 5 of 27 keys of s02 to s04 sit 0.06 to 0.78 over the 10.0 bar",
+  "text": "p023: `npm run plates -- <shot>` rendered `KeyFilmS01`, which drew s01's keys for every shot, so the shot's key sheet never got a `measured` block (its control read `film rig as drawn -> mad 98.08` and the run ended `refused`). `KeyFilmS01` now takes the shot as a prop (`--props={\"shot\":...}`, `calculateMetadata` for the length), `plates-from-poses.mjs` passes it and clears `out/<shot>-key-film` first, `film_compare.film_frame` reads frames by number (padded or not), and `measure-keys.py` runs, for a shot other than s01, a control of its own: the film rig's picture of the shot's best-matching key must pass and its picture of the shot's most different other key must fail (s02-cant-build: key `stack` 7.07 against 134.92; s02-the-frame `threshold` 6.49 against 138.38; s03-scaffold `reroute` 6.72 against 143.66; s04-settle `home` 7.07 against 136.40; the bar is 10.0). s01 reads as before (its own swap control, 12 film frames byte-identical to the earlier render). `measured` is written for all four shots. Five keys fail the film measure by a hair: s02-cant-build `ready` 10.58, s02-the-frame `slump` 10.57, s03-scaffold `paper` 10.58 and `real` 10.78, s04-settle `window` 10.06 (the other 22 read 6.49 to 9.96; every worst centroid is under 1.5 px, so the joints agree; the cause is not isolated here: `ready`, `slump` and `paper` read 10.57 to 10.58 within a hundredth of each other). The README says the bar is never edited to fit a key; the keys carry `verdict: REJECTED: FILM` as measured and the shot's `plates` run exits 1. A ruling is needed on whether the bar holds for these five (isolate the difference by key, then fix the shared code) or is re-measured.",
+  "references": [],
+  "before": "no `measured` block on any key of s02-cant-build, s02-the-frame, s03-scaffold, s04-settle",
+  "after": "`measured` on 27 of 27 keys; 22 accepted, 5 REJECTED: FILM at mad 10.06 to 10.78",
+  "status": "open",
+  "ruling": null
+}

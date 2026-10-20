@@ -9,7 +9,8 @@ register) are the screenplay's own and are read by probe-screenplay.py. One line
   glass        th-glass         on every frame where `actor` (the gadget) is on stage its anchor lies in one of the `holders` (the bubble, the frame's interior inside its bar, the structure), except inside an `except` span
                                  (`from` story point to `until` story point): the one stretch the gadget stands free, the overwhelm after the pop.
   one-join     th-one-join      after the story point named by `after` (sp-4.6) no story point's window brings more than one new prop on stage (`on` inside the window), and any two arrivals in the film are at least `stagger`
-                                 frames apart (3) unless both fall inside the window of a story point in `unstaggered` (sp-2.3, the flood). `joins.lit` in an `after` list counts as one arrival.
+                                 frames apart (3) unless both fall inside the window of a story point in `unstaggered` (sp-2.3, the flood). `joins.lit` in an `after` list counts as one arrival. `except_actors` (globs, `stroke-*`) names the props
+                                 that are one piece and not joins: the strokes of one drawing (sp-5.2) are not counted as arrivals.
   light-leads  th-light-leads   every story point names an `eye` or an `emitter`, and the line resolves to a target the eye trace can measure (`probe-eyetrace.resolve_target`: its target table, and the beat's blocking has the
                                  `frame` or `join` the line points at): a line outside the table, or one whose source is missing, is refused naming it.
 Control first, on a synthetic film that is clean by construction (three beats, six story points): the frame on stage on frame 0, the frame gone from the end, the gadget outside every holder, the gadget free outside the
@@ -17,7 +18,7 @@ excepted span, two arrivals in one story point after the boundary, two arrivals 
 a beat whose blocking has no frame must each be refused by the check that names them; the clean film, the same film with the arrivals inside the flood and with the excepted span declared must pass.
 Exit 0 pass, 1 a refusal, 2 a control that did not trip or an unreadable input.
 """
-import argparse, copy, importlib.util, os, sys
+import argparse, copy, fnmatch, importlib.util, os, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -121,7 +122,8 @@ def arrivals(film):
 def check_one_join(film, t):
     c = t["check"]; p = []; after = film.sp_frame(c["after"], "th-one-join"); allowed = [film.sp_frame(s, "th-one-join") for s in c.get("unstaggered", [])]
     allowed = [(lo, film.next_frame(s)) for s, lo in zip(c.get("unstaggered", []), allowed)]
-    ev = arrivals(film)
+    skip = c.get("except_actors", [])
+    ev = [(f, n) for f, n in arrivals(film) if not any(fnmatch.fnmatchcase(n, g) for g in skip)]
     for i, sp in enumerate(film.sps):
         lo, hi = film.window(i)
         if sp["frame"] <= after: continue
@@ -130,7 +132,7 @@ def check_one_join(film, t):
     for (f1, n1), (f2, n2) in zip(ev, ev[1:]):
         if f2 - f1 < c.get("stagger", 3) and not any(lo <= f1 < hi and lo <= f2 < hi for lo, hi in allowed):
             p.append(f"{n1} (f{f1}) and {n2} (f{f2}) arrive {f2 - f1} frame(s) apart in beat {film.beat_at(f1)!r}, outside the flood: {c.get('stagger', 3)} needed")
-    return not p, "; ".join(p) if p else f"{len(ev)} arrivals, each at least {c.get('stagger', 3)} frames from the next (or inside {', '.join(c.get('unstaggered', [])) or 'no flood'}); no story point after {c['after']} brings more than one"
+    return not p, "; ".join(p) if p else f"{len(ev)} arrivals, each at least {c.get('stagger', 3)} frames from the next (or inside {', '.join(c.get('unstaggered', [])) or 'no flood'}); no story point after {c['after']} brings more than one" + (f"; {', '.join(skip)} are one piece, not joins" if skip else "")
 
 
 def check_light_leads(film, t, eye):
@@ -192,6 +194,10 @@ def run_control(eye):
     plant("two arrivals in one story point after the boundary", "th-one-join", lambda d_, b: b["c"]["actors"].update(arch={"x": 100, "y": 400, "on": 260}, stalk={"x": 150, "y": 400, "on": 270}))
     plant("two arrivals one frame apart outside the flood", "th-one-join", lambda d_, b: b["a"]["actors"].update(ring={"x": 200, "y": 400, "on": 60}, patch={"x": 300, "y": 400, "on": 61}))
     plant("two arrivals one frame apart inside the flood", "th-one-join", lambda d_, b: b["b"]["actors"].update(ring={"x": 200, "y": 400, "on": 101}, patch={"x": 300, "y": 400, "on": 102}), want_ok=True)
+    strokes = lambda d_, b: b["c"]["actors"].update({"stroke-1": {"x": 100, "y": 400, "on": 260}, "stroke-2": {"x": 150, "y": 400, "on": 270}, "stroke-3": {"x": 200, "y": 400, "on": 280}})
+    plant("three strokes in one story point after the boundary, none excepted", "th-one-join", strokes)
+    plant("the same strokes with `stroke-*` excepted", "th-one-join", lambda d_, b: (strokes(d_, b), d_["themes"][2]["check"].update({"except_actors": ["stroke-*"]})), want_ok=True)
+    plant("an arch and a stalk in one story point with `stroke-*` excepted", "th-one-join", lambda d_, b: (b["c"]["actors"].update(arch={"x": 100, "y": 400, "on": 260}, stalk={"x": 150, "y": 400, "on": 270}), d_["themes"][2]["check"].update({"except_actors": ["stroke-*"]})))
     plant("an eye line outside the table", "th-light-leads", lambda d_, b: d_["story_points"][0].update(eye="the leaf"))
     plant("a story point naming neither eye nor emitter", "th-light-leads", lambda d_, b: d_["story_points"][1].pop("emitter"))
     plant("a `frame interior` line in a beat with no frame", "th-light-leads", lambda d_, b: d_["story_points"][2].update(emitter="frame interior"))

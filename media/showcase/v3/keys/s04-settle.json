@@ -280,6 +280,79 @@
       "pass": true
      }
     }
+   },
+   "measured": {
+    "c31": {
+     "declared": "C 0.07 -1",
+     "read": {
+      "class": "C",
+      "bow": 0.072,
+      "sign": -1
+     },
+     "twinning": 0.67,
+     "pass": true,
+     "refused": []
+    },
+    "c20": {
+     "headScale": 1,
+     "headCount": 8.0,
+     "limbScales": {
+      "armL": 1,
+      "armR": 1,
+      "legL": 1,
+      "legR": 1
+     },
+     "jointChains": {
+      "armL": 1.0,
+      "armR": 1.0,
+      "legL": 1.0,
+      "legR": 1.0
+     },
+     "worstDevPct": 0,
+     "pass": true
+    },
+    "c21": {
+     "components": 1,
+     "solidity": 0.37,
+     "wristsFromSpineH": {
+      "wristL": 0.083,
+      "wristR": 0.023
+     },
+     "kind": "closed",
+     "wristsApartRequired": 0,
+     "wristsApart": 0,
+     "pass": true
+    },
+    "c22": {
+     "contourPx": 4.126149177650047,
+     "targetPx": 3.6029989445399884,
+     "vsModelPct": 14.5,
+     "pass": true
+    },
+    "joints": {
+     "fill": 1,
+     "fade": 1.52,
+     "pass": true,
+     "open": []
+    },
+    "film": {
+     "mad": 7.07,
+     "centroid": {
+      "head": 0.95,
+      "handL": 0.24,
+      "footL": 0.09,
+      "handR": 0.23,
+      "footR": 0.12
+     },
+     "worstPart": "head",
+     "worstPx": 0.95,
+     "bar": {
+      "centroidPx": 3.6,
+      "mad": 10.0
+     },
+     "pass": true
+    },
+    "verdict": "accepted"
    }
   },
   {
@@ -558,6 +631,79 @@
       "pass": true
      }
     }
+   },
+   "measured": {
+    "c31": {
+     "declared": "C 0.07 +1",
+     "read": {
+      "class": "C",
+      "bow": 0.072,
+      "sign": 1
+     },
+     "twinning": 0.67,
+     "pass": true,
+     "refused": []
+    },
+    "c20": {
+     "headScale": 1,
+     "headCount": 8.0,
+     "limbScales": {
+      "armL": 0.9999,
+      "armR": 1,
+      "legL": 1,
+      "legR": 1
+     },
+     "jointChains": {
+      "armL": 1.0,
+      "armR": 1.0,
+      "legL": 1.0,
+      "legR": 1.0
+     },
+     "worstDevPct": 0.0,
+     "pass": true
+    },
+    "c21": {
+     "components": 1,
+     "solidity": 0.38,
+     "wristsFromSpineH": {
+      "wristL": 0.022,
+      "wristR": 0.045
+     },
+     "kind": "closed",
+     "wristsApartRequired": 0,
+     "wristsApart": 0,
+     "pass": true
+    },
+    "c22": {
+     "contourPx": 4.059097933867157,
+     "targetPx": 3.6029989445399884,
+     "vsModelPct": 12.7,
+     "pass": true
+    },
+    "joints": {
+     "fill": 1,
+     "fade": 1.53,
+     "pass": true,
+     "open": []
+    },
+    "film": {
+     "mad": 7.15,
+     "centroid": {
+      "head": 0.39,
+      "handL": 0.16,
+      "footL": 0.14,
+      "handR": 0.59,
+      "footR": 0.28
+     },
+     "worstPart": "handR",
+     "worstPx": 0.59,
+     "bar": {
+      "centroidPx": 3.6,
+      "mad": 10.0
+     },
+     "pass": true
+    },
+    "verdict": "accepted"
    }
   },
   {
@@ -836,6 +982,79 @@
       "pass": true
      }
     }
+   },
+   "measured": {
+    "c31": {
+     "declared": "C 0.08 +1",
+     "read": {
+      "class": "C",
+      "bow": 0.082,
+      "sign": 1
+     },
+     "twinning": 0.55,
+     "pass": true,
+     "refused": []
+    },
+    "c20": {
+     "headScale": 1,
+     "headCount": 8.0,
+     "limbScales": {
+      "armL": 1,
+      "armR": 1,
+      "legL": 1,
+      "legR": 1
+     },
+     "jointChains": {
+      "armL": 1.0,
+      "armR": 1.0,
+      "legL": 1.0,
+      "legR": 1.0
+     },
+     "worstDevPct": 0,
+     "pass": true
+    },
+    "c21": {
+     "components": 1,
+     "solidity": 0.38,
+     "wristsFromSpineH": {
+      "wristL": 0.016,
+      "wristR": 0.047
+     },
+     "kind": "closed",
+     "wristsApartRequired": 0,
+     "wristsApart": 0,
+     "pass": true
+    },
+    "c22": {
+     "contourPx": 4.045288788416007,
+     "targetPx": 3.6029989445399884,
+     "vsModelPct": 12.3,
+     "pass": true
+    },
+    "joints": {
+     "fill": 1,
+     "fade": 1.47,
+     "pass": true,
+     "open": []
+    },
+    "film": {
+     "mad": 8.3,
+     "centroid": {
+      "head": 0.58,
+      "handL": 0.69,
+      "footL": 0.37,
+      "handR": 0.5,
+      "footR": 0.2
+     },
+     "worstPart": "handL",
+     "worstPx": 0.69,
+     "bar": {
+      "centroidPx": 3.6,
+      "mad": 10.0
+     },
+     "pass": true
+    },
+    "verdict": "accepted"
    }
   },
   {
@@ -1114,6 +1333,79 @@
       "pass": true
      }
     }
+   },
+   "measured": {
+    "c31": {
+     "declared": "C 0.12 +1",
+     "read": {
+      "class": "C",
+      "bow": 0.122,
+      "sign": 1
+     },
+     "twinning": 0.14,
+     "pass": true,
+     "refused": []
+    },
+    "c20": {
+     "headScale": 1,
+     "headCount": 8.0,
+     "limbScales": {
+      "armL": 1,
+      "armR": 1,
+      "legL": 1,
+      "legR": 1
+     },
+     "jointChains": {
+      "armL": 1.0,
+      "armR": 1.0,
+      "legL": 1.0,
+      "legR": 1.0
+     },
+     "worstDevPct": 0,
+     "pass": true
+    },
+    "c21": {
+     "components": 1,
+     "solidity": 0.47,
+     "wristsFromSpineH": {
+      "wristL": 0.053,
+      "wristR": 0.018
+     },
+     "kind": "fold",
+     "wristsApartRequired": 0,
+     "wristsApart": 0,
+     "pass": true
+    },
+    "c22": {
+     "contourPx": 4.015684690655521,
+     "targetPx": 3.6029989445399884,
+     "vsModelPct": 11.5,
+     "pass": true
+    },
+    "joints": {
+     "fill": 1,
+     "fade": 1.92,
+     "pass": true,
+     "open": []
+    },
+    "film": {
+     "mad": 8.47,
+     "centroid": {
+      "head": 0.27,
+      "handL": 0.3,
+      "footL": 0.62,
+      "handR": 1.15,
+      "footR": 0.24
+     },
+     "worstPart": "handR",
+     "worstPx": 1.15,
+     "bar": {
+      "centroidPx": 3.6,
+      "mad": 10.0
+     },
+     "pass": true
+    },
+    "verdict": "accepted"
    }
   },
   {
@@ -1392,6 +1684,79 @@
       "pass": true
      }
     }
+   },
+   "measured": {
+    "c31": {
+     "declared": "C 0.12 +1",
+     "read": {
+      "class": "C",
+      "bow": 0.122,
+      "sign": 1
+     },
+     "twinning": 0.0,
+     "pass": true,
+     "refused": []
+    },
+    "c20": {
+     "headScale": 1,
+     "headCount": 8.0,
+     "limbScales": {
+      "armL": 1,
+      "armR": 1,
+      "legL": 1,
+      "legR": 1
+     },
+     "jointChains": {
+      "armL": 1.0,
+      "armR": 1.0,
+      "legL": 1.0,
+      "legR": 1.0
+     },
+     "worstDevPct": 0,
+     "pass": true
+    },
+    "c21": {
+     "components": 1,
+     "solidity": 0.48,
+     "wristsFromSpineH": {
+      "wristL": 0.053,
+      "wristR": 0.018
+     },
+     "kind": "fold",
+     "wristsApartRequired": 0,
+     "wristsApart": 0,
+     "pass": true
+    },
+    "c22": {
+     "contourPx": 4.017324470953299,
+     "targetPx": 3.6029989445399884,
+     "vsModelPct": 11.5,
+     "pass": true
+    },
+    "joints": {
+     "fill": 1,
+     "fade": 1.94,
+     "pass": true,
+     "open": []
+    },
+    "film": {
+     "mad": 10.06,
+     "centroid": {
+      "head": 0.66,
+      "handL": 0.42,
+      "footL": 0.13,
+      "handR": 0.75,
+      "footR": 0.38
+     },
+     "worstPart": "handR",
+     "worstPx": 0.75,
+     "bar": {
+      "centroidPx": 3.6,
+      "mad": 10.0
+     },
+     "pass": false
+    },
+    "verdict": "REJECTED: FILM"
    }
   }
  ],

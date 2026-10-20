@@ -39,11 +39,11 @@ STAMP = re.compile(r"generated from screenplay\.json .*source ([0-9a-f]{12}) · 
 THEME_FIELDS = ("id", "name", "source", "invariant", "measure")
 THEME_KINDS = ("portal", "glass", "one-join", "light-leads", "channels", "child-detail", "register")
 CHANNELS = ("eyes", "heart", "humour")
-STAGE_EXPECT = ("present", "persists", "absent", "inside", "offstage", "onstage", "appears", "disappears", "moves", "rest", "returns")
+STAGE_EXPECT = ("present", "persists", "absent", "inside", "offstage", "onstage", "appears", "disappears", "moves", "rest", "returns", "carried-by")
 RECIPE_NEEDS = {"stage": (("actor", "actors"), "expect"), "count": ("actors", "expect"), "arrivals": ("same_frame",), "stagger": ("min",), "order": ("first", "then", "by"), "contact": ("a", "b", "within"),
                 "emitters": ("expect",), "hold": ("frames",), "glow": ("expect", "after", "lag", "min"), "picture": ("measure", "expect", "min"), "hands": ("expect",), "figure": ("measure", "expect"),
                 "actor": ("actor", "expect"), "xsheet": ("field", "expect"), "light": ("field", "expect"), "gates": ("expect",)}
-RECIPE_EXTRA = {"stage": {"moves": ("by",), "inside": ("of",), "returns": ("within",), "persists": ("until",)}, "count": {"at-most": ("to",), "rises-then-falls": ("to",)}, "emitters": {"count": ("to",)}}
+RECIPE_EXTRA = {"stage": {"moves": ("by",), "inside": ("of",), "returns": ("within",), "persists": ("until",), "carried-by": ("from", "to")}, "count": {"at-most": ("to",), "rises-then-falls": ("to",)}, "emitters": {"count": ("to",)}}
 
 
 def sha(*parts): return hashlib.sha256("\n".join(parts).encode("utf8")).hexdigest()
