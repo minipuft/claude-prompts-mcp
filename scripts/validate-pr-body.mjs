@@ -420,6 +420,16 @@ function checkVerificationRows(sections, failures, hasVerifiedHeading) {
 }
 
 /**
+ * The ref a pull request is measured against: the PR's base branch in CI (`GITHUB_BASE_REF`),
+ * else the repository's own default branch (`origin/HEAD`) — never a hard-coded `origin/main`,
+ * which is far behind on a repository whose default branch is not `main`. The one definition both
+ * this validator and `pr-body.mjs` read, so a seeded body and its check measure the same range.
+ */
+export function resolveBaseRef(env = process.env) {
+  return env.GITHUB_BASE_REF ? `origin/${env.GITHUB_BASE_REF}` : "origin/HEAD";
+}
+
+/**
  * The commit this PR forked from, as `{ mergeBase }`, or `{ error }` when no honest comparison is
  * available from this checkout.
  *
@@ -427,9 +437,7 @@ function checkVerificationRows(sections, failures, hasVerifiedHeading) {
  * not this PR's progress, and counting them would let a stale branch pass on someone else's work.
  */
 function resolveMergeBase(repoRoot) {
-  const baseRef = process.env.GITHUB_BASE_REF
-    ? `origin/${process.env.GITHUB_BASE_REF}`
-    : "origin/HEAD";
+  const baseRef = resolveBaseRef();
   const git = (args) =>
     execFileSync("git", args, {
       cwd: repoRoot,
