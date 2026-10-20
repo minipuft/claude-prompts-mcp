@@ -34,8 +34,8 @@ worktree where that path does not resolve — and git skips every hook silently,
 no failing exit code. Commits and pushes from there run no local validation at all.
 
 Create additional worktrees with the bootstrap script, which adds the worktree, wires husky inside
-it, links both `node_modules` trees, and then verifies the hooks are executable before reporting
-success:
+it, links every installed `node_modules` tree (the root, `server/`, and `cli/` when it has one),
+and then verifies the hooks are executable before reporting success:
 
 ```bash
 npm run worktree:create -- ../claude-prompts-mcp-featurex feat/my-change --from origin/main
@@ -427,7 +427,10 @@ title, which is how #283 failed on `subject-case` after passing locally._
 
 **These scripts are installed, not written here.** `scripts/pr-check.mjs`, `scripts/pr-body.mjs`,
 `scripts/validate-pr-body.mjs`, `scripts/validate-squash-message.mjs`, `scripts/warn-contract-lag.mjs`,
-`scripts/vendor/conventional-commits-parser.cjs`, `scripts/adr.mjs`, `commitlint.rules.mjs`,
+`scripts/vendor/conventional-commits-parser.cjs`, `scripts/adr.mjs`,
+`scripts/validate-github-action-pins.mjs`, `scripts/validate-required-contexts.mjs`,
+`scripts/validate-lockfile-sync.mjs`, `scripts/validate-git-hooks-active.mjs`,
+`scripts/create-worktree.mjs`, `scripts/merge-unreleased-changelog.mjs`, `commitlint.rules.mjs`,
 `.husky/commit-msg` and `.github/workflows/pr-conventions.yml` are managed copies of the fleet delivery contract
 (`minipuft/repository-standards`), at the version `.delivery-contract.json` records; this
 repository stays on the latest version. Change them upstream, never in place:

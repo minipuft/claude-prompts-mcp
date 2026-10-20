@@ -46,7 +46,7 @@ jobs:
         run: |
           PR_BRANCH=$(echo "$PR_JSON" | jq -r '.headBranchName')
           git checkout "$PR_BRANCH"
-          node scripts/merge-unreleased-changelog.js
+          node scripts/merge-unreleased-changelog.mjs
           if git diff --quiet CHANGELOG.md; then
             echo "No manual entries to merge"
           else
@@ -67,7 +67,7 @@ jobs:
 
       - name: Retire finished plans
         if: steps.release.outputs.pr && steps.release.outputs.release_created != 'true'
-        uses: minipuft/repository-standards/actions/retire-plans@ff2e508b179264555c0c440121f848542ed36b36 # v1.12.0
+        uses: minipuft/repository-standards/actions/retire-plans@ef7af49963f55ed2cc2aa5d7fd43187f9d96142f # v1.13.0
         with:
           mode: apply
 
