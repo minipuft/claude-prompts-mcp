@@ -1,4 +1,4 @@
-<!-- generated from screenplay.json by scripts/animation/compile-screenplay.mjs · source 036a16ffbf8d · body d96a74bc61c9 -->
+<!-- generated from screenplay.json by scripts/animation/compile-screenplay.mjs · source f9d1ac7f2787 · body fc75ae0d5b4d -->
 > Generated from `v3/screenplay.json` by `npm run screenplay`. Edit the json, never this file.
 
 # Claude Prompts: screenplay
@@ -29,7 +29,7 @@ What the film keeps true from beat to beat. A probe reads each one: `probe-scree
 | Theme | What it says | Carried by | Measured by |
 | --- | --- | --- | --- |
 | th-glass · capability is always seen through glass | the gadget is visible only inside the bubble or the frame interior; outside both it is lost in grain (beat 3) or resting inside the structure (beat 8); the one stretch it stands free is sp-2.1 to sp-3.1, the overwhelm after the pop (script.md bubble (D45), beats-v2 the-frame) | sp-1.3, sp-2.1, sp-3.3, sp-4.2, sp-8.1 | blocking: on every frame where gadget is on, bubble or frame or structure contains its anchor |
-| th-one-join · scaffolding is one lit join at a time | after sp-4.6 no story point lights more than one new join, and the flood (sp-2.2 to sp-2.3) is the only place where arrivals are not staggered (thesis; script.md beat 5) | sp-2.2, sp-2.3, sp-3.1, sp-5.2, sp-5.3, sp-6.2, sp-7.2, sp-7.3 | blocking: joins.lit rises by at most 1 per story point in beats 5-8; arrivals staggered >= 3 frames outside sp-2.3 |
+| th-one-join · scaffolding is one lit join at a time | after sp-4.6 no story point lights more than one new join, and the flood (sp-2.2 to sp-2.3) is the only place where arrivals are not staggered; the strokes of one drawing (sp-5.2) are one piece, not three joins (thesis; script.md beat 5) | sp-2.2, sp-2.3, sp-3.1, sp-5.2, sp-5.3, sp-6.2, sp-7.2, sp-7.3 | blocking: joins.lit rises by at most 1 per story point in beats 5-8; arrivals staggered >= 3 frames outside sp-2.3 |
 | th-light-leads · light leads composition | every story point names what its light pushes and the eye finds it (D91) | sp-1.1, sp-1.2, sp-1.3, sp-2.1, sp-2.2, sp-2.3, sp-4.2, sp-4.6, sp-5.3, sp-6.1, sp-7.1, sp-7.2, sp-8.3 | screenplay: eye or emitter on every story point; probe-eyetrace target resolves |
 | th-channels · the human is eyes, Clawd is heart, Codex is humour | in each act (beats 1-3, beat 4, beats 5-8) at least one story point carries the human's look, one Clawd's touch, one Codex's gag (D89) | sp-1.2, sp-1.3, sp-2.3, sp-3.1, sp-3.2, sp-3.3, sp-4.2, sp-4.3, sp-4.4, sp-4.5, sp-5.1, sp-5.2, sp-6.2, sp-7.1, sp-7.3, sp-8.2 | screenplay: channels field per story point, each act covers eyes, heart, humour |
 | th-child-detail · details only a child would notice | every beat carries at least one small persistent detail (the heap that stays, the heel tap, the lid, the hands appearing, the tape on the box) (D92 (Ghibli, totoro-lived-in, spirited-away-shoes)) | sp-1.1, sp-1.2, sp-4.3, sp-4.4, sp-4.5, sp-5.4, sp-8.1 | screenplay: each beat has a story point tagged th-child-detail whose after key or prop persists past the story point |
@@ -199,7 +199,7 @@ The human steps through. The field narrows to the frame; everything outside it d
 
 - turn: the world changes
 - sees: the figure crosses the frame's plane; the outside goes dark
-- measure: human crosses frame x; outside luminance falls ≥ 50 %; next frame's field is paper
+- measure: human crosses frame x; outside luminance falls ≥ 50 %; the field is paper by the crossing's end
 - themes: th-frame-portal, th-light-leads
 
 ## 5. EXT. CRAYON PAPER - ART WORLD · frames 930–1230
@@ -210,7 +210,7 @@ A paper field. Crayon architecture: stacked arches as scribbles, stalks as waxy 
 
 - turn: a tool is given
 - sees: white paper; a crayon changes hands
-- measure: field is paper; crayon prop moves from clawd to human
+- measure: field is paper; the crayon passes from Clawd's hand to the human's
 - themes: th-channels, th-register
 - channels: heart
 
@@ -251,7 +251,7 @@ The human picks the stalk up and holds it like a lantern. Turns toward the edge 
 Everything reduces to pale contour lines, the figures included.
 
 - sees: fills drain; only lines
-- measure: fill area falls ≥ 80 %
+- measure: fill area falls ≥ 50 % from the reduce's start
 - themes: th-light-leads
 - texture: figure drawn as line (the line figure is a render of its own, `animatic-figline-seq`, with no layer to compare it to)
 

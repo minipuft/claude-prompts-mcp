@@ -1,4 +1,4 @@
-/* generated from screenplay.json by scripts/animation/compile-screenplay.mjs · source 036a16ffbf8d · body 0f572ca6a6ed */
+/* generated from screenplay.json by scripts/animation/compile-screenplay.mjs · source f9d1ac7f2787 · body 5ae64624c7e5 */
 Title: Claude Prompts
 Credit: a silent film in eight beats
 Revision: 1 · 2026-10-19 · director's draft for the owner (p014)
@@ -12,7 +12,7 @@ Notes:
 
 = th-glass · capability is always seen through glass: the gadget is visible only inside the bubble or the frame interior; outside both it is lost in grain (beat 3) or resting inside the structure (beat 8); the one stretch it stands free is sp-2.1 to sp-3.1, the overwhelm after the pop [[carried by sp-1.3, sp-2.1, sp-3.3, sp-4.2, sp-8.1]]
 
-= th-one-join · scaffolding is one lit join at a time: after sp-4.6 no story point lights more than one new join, and the flood (sp-2.2 to sp-2.3) is the only place where arrivals are not staggered [[carried by sp-2.2, sp-2.3, sp-3.1, sp-5.2, sp-5.3, sp-6.2, sp-7.2, sp-7.3]]
+= th-one-join · scaffolding is one lit join at a time: after sp-4.6 no story point lights more than one new join, and the flood (sp-2.2 to sp-2.3) is the only place where arrivals are not staggered; the strokes of one drawing (sp-5.2) are one piece, not three joins [[carried by sp-2.2, sp-2.3, sp-3.1, sp-5.2, sp-5.3, sp-6.2, sp-7.2, sp-7.3]]
 
 = th-light-leads · light leads composition: every story point names what its light pushes and the eye finds it [[carried by sp-1.1, sp-1.2, sp-1.3, sp-2.1, sp-2.2, sp-2.3, sp-4.2, sp-4.6, sp-5.3, sp-6.1, sp-7.1, sp-7.2, sp-8.3]]
 
