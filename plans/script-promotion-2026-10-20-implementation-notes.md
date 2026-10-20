@@ -39,4 +39,11 @@ tags: [scripts, repository-standards, fleet, hooks, validation]
 - Finding (2.5 feedback, kept for future managed-script rows): the test harness copies the scripts into `<tmp>/scripts/` so the `scripts/..` root lookup and sibling imports run in the shape a consumer receives.
 - HARD STOP reached (R1): the next step is an upstream RELEASE (v1.13.0), which the owner cuts on explicit request. Row 2.9 (adoption here) waits on it.
 
+## 2026-10-20 — T3 discovery accepted, premise corrected
+
+- Row 3.0 accepted (read-only; it declined `--self-test` because the JS self-test writes `.plan-row-selftest/` into the repo — correct). DEV-T3-1: the plan's Why and the chat assessment said the Python hooks re-derive the JS stamp rules; measured: they do not. The duplicate is the parser + vocabulary, in four places; `validate-plan-row-tracking.js:398-404` claims the second parser was removed while `validate-pr-body.mjs` carries an identical copy.
+- Findings carried into Q-T3: `ACCEPTED_STATUS_GLYPHS` claims to be the sole home (R15 of an earlier plan) and is restated in three other files; `STATUSES` and `TRACKING_REASONS` duplicated between `plan_hygiene.py` and `retire-done-plans.cjs`; `STATE_DIRS` disagrees (`backlog` vs upstream's `future`); `plan_lint.py` flags ✅ as an unknown glyph while listing it in DONE_MARKS; the JS self-test is wired nowhere and not hermetic; JS reads the index (staged), not HEAD, so an uncommitted plan is invisible to it — hook mode needs explicit paths.
+- Interface proposed for 3.1+: `node scripts/validate-plan-rows.mjs [--root] [--json] [--self-test] [paths...]`, exit 0/1/2, findings `{rule,file,line,rowId?,message}`; plans directory from `plan-retirement.config.json` `plansDirectory` when present, else `plans`, missing directory = nothing to check. Python keeps R7–R13 (frontmatter, tracking, stale-copy, N-of-M, limbo, Now staleness, notes presence) and drops only the glyph rule when the script is present.
+- Hook triggers measured: `lint-plans.py --hook` is PreToolUse(Bash) on `git commit` with staged plans; `plan-sync-stop.py` is Stop. Neither is PostToolUse as the brief said.
+
 ## Findings
