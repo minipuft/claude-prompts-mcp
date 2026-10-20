@@ -83,6 +83,7 @@ const NOT_OUR_OPTIONS = new Set([
   '--grep', // git log --grep; how a plan's PRs are listed by their `Plan:` footer
   '--repo', // delivery-contract --repo; a flag of the managed upstream tool this repo does not own
   '--initiative', // scripts/adr.mjs new --initiative; a flag of a managed script this repo does not own
+  '--from', // scripts/create-worktree.mjs --from (npm run worktree:create); a managed script's flag
 ]);
 
 /** Read a file relative to the repo root, empty string when absent. */

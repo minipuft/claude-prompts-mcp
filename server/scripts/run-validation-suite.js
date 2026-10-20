@@ -140,7 +140,7 @@ export const SUITE = [
     // committed against the lockfile's 6.32.2 (2026-08-19).
     script: 'validate:lockfile-sync',
     io: 'read',
-    reads: ['file'],
+    reads: ['file', 'spawn', 'tracked'],
     converse: 'unexamined',
   },
   {
@@ -544,7 +544,7 @@ export const SUITE = [
   {
     script: 'validate:git-hooks-active',
     io: 'read',
-    reads: ['file', 'spawn', 'walk'],
+    reads: ['file', 'spawn', 'tracked', 'walk'],
     converse:
       'UNCHECKED and known — verifies hooks CAN run in this worktree (core.hooksPath resolves to executable pre-commit/commit-msg/pre-push), NOT that they DID run for any commit already made. A commit pushed from a worktree before this gate was added is indistinguishable here from one the hooks passed; git records no evidence either way.',
   },
