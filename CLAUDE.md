@@ -111,9 +111,10 @@ the gate. Verified at the time: adding it reformatted zero files on either side.
 
 **`npm run pr:check` is the whole local gate, and it is a subset of CI by construction.**
 
-`PR Conventions` is a required context whose gating steps on a non-bot PR are: two positive
-controls, the body against `.github/pull_request_template.md`, and `commitlint` on the title. Run
-every one of them before `gh pr create`, from the repo root:
+`PR Conventions` is a required context whose gating steps on a non-bot PR are: three positive
+controls, the body against `.github/pull_request_template.md`, the squash commit against the parser
+release-please reads it with, and `commitlint` on the title. Run every one of them before
+`gh pr create`, from the repo root:
 
 ```bash
 TITLE="feat(scope): outcome"
@@ -133,6 +134,14 @@ to assemble a multi-PR initiative (ADR 0003); a `Decision: ADR-NNNN` trailer mus
 ADR. The scripts that enforce this are managed by the fleet delivery contract
 (`.delivery-contract.json`); `validate:delivery-contract` fails on any local edit to them, and a
 newer contract is adopted with `delivery-contract update` (CONTRIBUTING.md §Pull Request Process).
+
+The squash check exists because release-please leaves out, silently, any commit its parser rejects
+-- no changelog line, no version bump, no BREAKING CHANGE note -- and what it parses is not the body
+as written: GitHub re-flows the body at 72 columns, so a long line can open `name(` and close it on
+the next line. That dropped #501 (a breaking change) and #503 from a release although both bodies
+passed every other check. On a refusal, put the example on one line inside a fenced block, reword
+the line, or add a `BEGIN_COMMIT_OVERRIDE` block to the body -- the marker counts anywhere in the
+body, even quoted in backticks, so never mention it in prose.
 
 Parity is enforced rather than documented: `scripts/pr-check.mjs` names each workflow step it
 mirrors and `server/tests/unit/scripts/pr-check-ci-parity.test.ts` reads `pr-conventions.yml` and
