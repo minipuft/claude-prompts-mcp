@@ -25,4 +25,12 @@ tags: [scripts, repository-standards, fleet, hooks, validation]
 - Finding: R6 links `cli/node_modules` too (tracked `package.json` + `node_modules` present); `CLAUDE.md` §Concurrent sessions and `AGENTS.md` name only root and `server/` — adoption row 2.9 updates both via `guidance:sync`.
 - Finding: adoption must declare `tracked` on the suite entries for git-hooks-active (and lockfile-sync under R10) in `run-validation-suite.js`, since `validate:suite-membership` re-derives `reads` from source.
 
+## 2026-10-20 — T2 ports landing
+
+- 2.1, 2.4, 2.3, 2.2 accepted in that order and committed upstream one concern each (`5dd870c`, `19447d0`, `a515027`, `4714ffb`).
+- DEV-T2-1: the planner added the six manifest entries before rows 2.2 and 2.5 had written their files, so `npm test` upstream went red (11 failures: "manifest entry … has no file in the template") for every worker still running. The workers attributed it correctly. Lesson: a shared-tree file that references others' outputs is committed LAST, not prepared early.
+- DEV-T2-2: the first writeback's row insert for 2.1–2.5 was a no-match `str.replace` that exited 0; the committed plan at `9a49c3c7` still carried the placeholder line. Caught at the 2.1–2.4 writeback; fixed with an asserted line anchor (memory: silent no-op edits exit 0).
+- Rulings on handoff concerns: docker digest refs need no `# vX.Y.Z` comment (a digest is the immutable ref) — R16 stands. The dropped YAML parse of `validate-workflows.mjs` needs no replacement: an unparseable workflow never reports its required check, so the PR blocks anyway. Lockfile fixtures under `test/fixtures/**` are not a Renovate surface (no package.json beside them).
+- Finding (2.2): the new reader refuses an empty or flow-style `jobs:` block where js-yaml returned no names; loud over silent, kept.
+
 ## Findings
