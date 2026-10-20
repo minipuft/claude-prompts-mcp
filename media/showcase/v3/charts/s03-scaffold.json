@@ -19,19 +19,19 @@
       "keys": [
         {
           "name": "paper",
-          "frame": 936,
+          "frame": 930,
           "pose": "A white page and nothing on it: she stands before the paper with her arms down while Clawd holds a crayon out.",
           "lineOfAction": "one C line, bow 0.07",
           "changes": "A white page and nothing on it: she stands before the paper with her arms down while Clawd holds a crayon out.",
-          "hold": 20
+          "hold": 2
         },
         {
           "name": "take",
-          "frame": 966,
+          "frame": 942,
           "pose": "The right hand opens and closes on the crayon Clawd holds out: a tool is given.",
           "lineOfAction": "one C line, bow 0.09",
           "changes": "The right hand opens and closes on the crayon Clawd holds out: a tool is given.",
-          "hold": 20
+          "hold": 44
         },
         {
           "name": "draw",
@@ -93,7 +93,7 @@
           "name": "join",
           "frame": 1440,
           "pose": "The stalk goes down against the other piece: she leans in with the arm out, and holds.",
-          "lineOfAction": "one C line, bow 0.12",
+          "lineOfAction": "one C line, bow 0.1",
           "changes": "The stalk goes down against the other piece: she leans in with the arm out, and holds.",
           "hold": 56
         },
@@ -111,7 +111,7 @@
           "pose": "The frame stands ahead as a window with home in it: she steps toward it, one arm out.",
           "lineOfAction": "one S line, bow 0.07",
           "changes": "The frame stands ahead as a window with home in it: she steps toward it, one arm out.",
-          "hold": 28
+          "hold": 30
         }
       ],
       "breakdowns": [],

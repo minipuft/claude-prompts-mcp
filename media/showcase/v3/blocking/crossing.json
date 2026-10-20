@@ -120,6 +120,11 @@
   "cutIn": true,
   "cutOut": true,
   "actors": {
+    "heap": {
+      "x": 418,
+      "y": 602,
+      "scale": 1.0
+    },
     "stalk": {
       "x": 854,
       "y": 264,

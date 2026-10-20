@@ -96,6 +96,11 @@
   "cutIn": true,
   "cutOut": true,
   "actors": {
+    "heap": {
+      "x": 418,
+      "y": 602,
+      "scale": 1.0
+    },
     "crayon": {
       "x": 930,
       "y": 402,

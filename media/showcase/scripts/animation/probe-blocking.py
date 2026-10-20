@@ -361,6 +361,12 @@ def main():
     tl0, ledger0, block0, cases, (declared0, timed0, nudged0) = planted()
     clean = [c for c in check_blocking(tl0, ledger0, block0, exempt)[0] + check_blocking(tl0, ledger0, declared0, exempt)[0] + check_blocking(tl0, ledger0, timed0, exempt)[0] + check_blocking(tl0, ledger0, nudged0, exempt)[0] if not c[1]]
     tripped = {n: [c for c in check_blocking(tl0, ledger0, b, exempt)[0] if not c[1]] for n, b in cases.items()}
+    # the scaffold beats: a stalk in the air is fine when the human carries it or it is set on something (`standsOn`), and still refused when it is neither (the case "a stalk in the air" above is the same stalk with neither)
+    air = {"floor": {"y": 480}, "actors": {"stalk": {"x": 900, "y": 300, "scale": 0.5, "facing": "left"}}}
+    held0 = copy.deepcopy(block0); held0["a"].update({"floor": {"y": 480}, "actors": {"stalk": {**air["actors"]["stalk"], "carriedBy": "human"}}})
+    set0 = copy.deepcopy(block0); set0["a"].update({"floor": {"y": 480}, "actors": {"stalk": {**air["actors"]["stalk"], "standsOn": "blocks"}}})
+    clean_air = [c for c in check_blocking(tl0, ledger0, held0, exempt)[0] + check_blocking(tl0, ledger0, set0, exempt)[0] if not c[1]]
+    neither0 = copy.deepcopy(block0); neither0["a"].update(air); tripped["a half-size stalk in the air that nobody carries and nothing holds"] = [c for c in check_blocking(tl0, ledger0, neither0, exempt)[0] if not c[1]]
     body = copy.deepcopy(block0["a"]); body.update({"floor": {"y": 480}, "actors": {"box": {"x": 600, "y": 450, "scale": 1.0}}})
     near, far = [("lean", [(560, 330)], 40)], [("lean", [(300, 100)], 40)]
     heap_beat = {**copy.deepcopy(block0["a"]), "actors": {"heap": {"x": 600, "y": 470, "scale": 1.0, "on": 20}}}
@@ -374,7 +380,7 @@ def main():
     clear_tables = [t for t in actor_table_faults(drawn.replace("'lantern'", "'bubble'"))]
     tripped["a prop inside the human's body"] = [("props apart", False, t) for k, t in prop_faults(body, near) if k == "overlap"]
     clear_of_body = [t for _, t in prop_faults(body, far)]
-    pr.control(not clean and not clear_of_body and not clear_heap and not clear_tables and not still and all(tripped.values()), "; ".join(f"{n} -> {'FAIL (' + v[0][0] + ')' if v else 'NOT REFUSED'}" for n, v in tripped.items()) + f"; clean fixture, the same two overlapping props with their contact declared, two props at one place that are never on stage together, a heap that moves 8 px against a declared 4 to 12, a heap that comes on the frame the cloak drops, a human who stays where she is beside the same prop, and actor names every table carries -> pass ({len(clean)} failures)")
+    pr.control(not clean and not clean_air and not clear_of_body and not clear_heap and not clear_tables and not still and all(tripped.values()), "; ".join(f"{n} -> {'FAIL (' + v[0][0] + ')' if v else 'NOT REFUSED'}" for n, v in tripped.items()) + f"; clean fixture, a stalk in the air that the human carries and one set on the blocks, the same two overlapping props with their contact declared, two props at one place that are never on stage together, a heap that moves 8 px against a declared 4 to 12, a heap that comes on the frame the cloak drops, a human who stays where she is beside the same prop, and actor names every table carries -> pass ({len(clean)} failures)")
     tl, _, _, shot_note = apply_shot(a, load_timeline(a.timeline)); raw = tl["source"]
     if shot_note: pr.note(shot_note)
     lp = a.ledger or raw.get("ledger") or next((b.get("ledgerPath") for b in tl["beats"] if b.get("ledgerPath")), None) or os.path.join(os.path.dirname(os.path.abspath(a.timeline)), "beats-v2.json")

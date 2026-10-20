@@ -18,6 +18,14 @@
       "keySheet": "v3/keys/s04-settle.json",
       "keys": [
         {
+          "name": "home",
+          "frame": 1650,
+          "pose": "Home: the last step of the walk back through the frame, weight still on the front foot, and she looks at what she built.",
+          "lineOfAction": "one C line, bow 0.07",
+          "changes": "Home: the last step of the walk back through the frame, weight still on the front foot, and she looks at what she built.",
+          "hold": 2
+        },
+        {
           "name": "stand",
           "frame": 1660,
           "pose": "Home: she stands beside what she built, arms easy, looking at it.",
@@ -47,7 +55,7 @@
           "pose": "One last look through the frame, now a window, from where she sits: she leans a little toward it.",
           "lineOfAction": "one C line, bow 0.12",
           "changes": "One last look through the frame, now a window, from where she sits: she leans a little toward it.",
-          "hold": 60
+          "hold": 90
         }
       ],
       "breakdowns": [],

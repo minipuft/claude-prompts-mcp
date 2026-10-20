@@ -7,8 +7,8 @@
   {
    "name": "paper",
    "storyPoint": "sp-5.1",
-   "frame": 936,
-   "hold": 20,
+   "frame": 930,
+   "hold": 2,
    "joints": {
     "root": [
      352,
@@ -285,8 +285,8 @@
   {
    "name": "take",
    "storyPoint": "sp-5.1",
-   "frame": 966,
-   "hold": 20,
+   "frame": 942,
+   "hold": 44,
    "joints": {
     "root": [
      305.75,
@@ -3066,7 +3066,7 @@
    "name": "return",
    "storyPoint": "sp-7.4",
    "frame": 1620,
-   "hold": 28,
+   "hold": 30,
    "joints": {
     "root": [
      292.8,

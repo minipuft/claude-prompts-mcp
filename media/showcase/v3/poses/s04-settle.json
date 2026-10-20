@@ -11,6 +11,99 @@
   },
   "keys": [
     {
+      "name": "home",
+      "storyPoint": "sp-8.1",
+      "frame": 1650,
+      "hold": 2,
+      "moment": "Home: the last step of the walk back through the frame, weight still on the front foot, and she looks at what she built.",
+      "lineOfAction": {
+        "class": "C",
+        "bow": 0.07,
+        "sign": -1,
+        "lean": 8
+      },
+      "weight": {
+        "foot": "L",
+        "over": 0.6
+      },
+      "lead": {
+        "arm": "none",
+        "leg": "none"
+      },
+      "silhouette": "closed",
+      "solved": {
+        "root": [
+          315,
+          483.6
+        ],
+        "head": [
+          347.58,
+          195.14
+        ],
+        "torso": [
+          320.26,
+          221.65
+        ],
+        "neck": [
+          333.11,
+          208.43
+        ],
+        "shoulderL": [
+          262.94,
+          221.69
+        ],
+        "hipL": [
+          290.32,
+          500.66
+        ],
+        "shoulderR": [
+          328.93,
+          282.89
+        ],
+        "hipR": [
+          337.21,
+          468.25
+        ],
+        "ponchoPoint": [
+          321.63,
+          478.74
+        ],
+        "ankleL": [
+          241,
+          838
+        ],
+        "kneeL": [
+          334.71,
+          679.2
+        ],
+        "ankleR": [
+          422.68,
+          824.19
+        ],
+        "kneeR": [
+          369.27,
+          636.77
+        ],
+        "wristL": [
+          242.6,
+          286.08
+        ],
+        "elbowL": [
+          362.27,
+          287.29
+        ],
+        "wristR": [
+          296.68,
+          336.24
+        ],
+        "elbowR": [
+          206.96,
+          272.85
+        ]
+      },
+      "solvedAt": "2026-10-20"
+    },
+    {
       "name": "stand",
       "storyPoint": "sp-8.1",
       "frame": 1660,
@@ -298,7 +391,7 @@
       "name": "window",
       "storyPoint": "sp-8.3",
       "frame": 1860,
-      "hold": 60,
+      "hold": 90,
       "moment": "One last look through the frame, now a window, from where she sits: she leans a little toward it.",
       "lineOfAction": {
         "class": "C",
@@ -393,6 +486,346 @@
     }
   ],
   "breakdowns": [
+    {
+      "between": [
+        "home",
+        "stand"
+      ],
+      "frame": 1652,
+      "favour": 0.4,
+      "kind": "anticipation",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 14
+      },
+      "joints": {
+        "root": [
+          311.99,
+          488.36
+        ],
+        "head": [
+          344.89,
+          199.97
+        ],
+        "torso": [
+          312.78,
+          225.94
+        ],
+        "neck": [
+          327.78,
+          213.02
+        ],
+        "shoulderL": [
+          252.1,
+          220.76
+        ],
+        "hipL": [
+          287.66,
+          506.09
+        ],
+        "shoulderR": [
+          316.38,
+          291.56
+        ],
+        "hipR": [
+          333.89,
+          472.41
+        ],
+        "ponchoPoint": [
+          318.67,
+          483.4
+        ],
+        "ankleL": [
+          240.77,
+          842.89
+        ],
+        "kneeL": [
+          334.63,
+          684.18
+        ],
+        "ankleR": [
+          422.13,
+          827.8
+        ],
+        "kneeR": [
+          367.26,
+          640.73
+        ],
+        "wristL": [
+          231.51,
+          285.86
+        ],
+        "elbowL": [
+          351.19,
+          286.74
+        ],
+        "wristR": [
+          284.19,
+          343.88
+        ],
+        "elbowR": [
+          194.45,
+          280.52
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "d527bc7aa7bd71f9686746d2388eee2966312e5e974c0c19ef3f1e9284d9ae19"
+    },
+    {
+      "between": [
+        "home",
+        "stand"
+      ],
+      "frame": 1654,
+      "favour": 0.26,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 14
+      },
+      "joints": {
+        "root": [
+          321.73,
+          494.13
+        ],
+        "head": [
+          353.5,
+          205.51
+        ],
+        "torso": [
+          338.63,
+          233.42
+        ],
+        "neck": [
+          345.87,
+          219.41
+        ],
+        "shoulderL": [
+          290.05,
+          247.02
+        ],
+        "hipL": [
+          296.15,
+          509.46
+        ],
+        "shoulderR": [
+          360.47,
+          283.27
+        ],
+        "hipR": [
+          344.75,
+          480.35
+        ],
+        "ponchoPoint": [
+          328.25,
+          489.54
+        ],
+        "ankleL": [
+          240.52,
+          848.19
+        ],
+        "kneeL": [
+          333.84,
+          689.17
+        ],
+        "ankleR": [
+          423.02,
+          837.73
+        ],
+        "kneeR": [
+          373.41,
+          649.38
+        ],
+        "wristL": [
+          270.35,
+          309.58
+        ],
+        "elbowL": [
+          390,
+          311.65
+        ],
+        "wristR": [
+          328.06,
+          339.29
+        ],
+        "elbowR": [
+          238.39,
+          275.83
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "d527bc7aa7bd71f9686746d2388eee2966312e5e974c0c19ef3f1e9284d9ae19"
+    },
+    {
+      "between": [
+        "home",
+        "stand"
+      ],
+      "frame": 1656,
+      "favour": 0.58,
+      "kind": "passing",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 14
+      },
+      "joints": {
+        "root": [
+          330.46,
+          497.9
+        ],
+        "head": [
+          361.21,
+          209.07
+        ],
+        "torso": [
+          361.66,
+          238.72
+        ],
+        "neck": [
+          362.02,
+          223.74
+        ],
+        "shoulderL": [
+          323.86,
+          269.01
+        ],
+        "hipL": [
+          303.76,
+          511.09
+        ],
+        "shoulderR": [
+          399.72,
+          274.55
+        ],
+        "hipR": [
+          354.48,
+          486.04
+        ],
+        "ponchoPoint": [
+          336.84,
+          493.63
+        ],
+        "ankleL": [
+          240.36,
+          851.55
+        ],
+        "kneeL": [
+          333.19,
+          692.23
+        ],
+        "ankleR": [
+          423.88,
+          845.19
+        ],
+        "kneeR": [
+          378.94,
+          655.71
+        ],
+        "wristL": [
+          304.95,
+          329.32
+        ],
+        "elbowL": [
+          424.57,
+          332.43
+        ],
+        "wristR": [
+          367.12,
+          333.86
+        ],
+        "elbowR": [
+          277.51,
+          270.31
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "d527bc7aa7bd71f9686746d2388eee2966312e5e974c0c19ef3f1e9284d9ae19"
+    },
+    {
+      "between": [
+        "home",
+        "stand"
+      ],
+      "frame": 1658,
+      "favour": 0.96,
+      "kind": "settle",
+      "arc": {
+        "joint": "root",
+        "offsetPx": 0
+      },
+      "joints": {
+        "root": [
+          341.56,
+          486.61
+        ],
+        "head": [
+          371.12,
+          197.53
+        ],
+        "torso": [
+          389.77,
+          229.23
+        ],
+        "neck": [
+          381.93,
+          213.1
+        ],
+        "shoulderL": [
+          364.74,
+          279.34
+        ],
+        "hipL": [
+          313.55,
+          497.26
+        ],
+        "shoulderR": [
+          447.08,
+          248.42
+        ],
+        "hipR": [
+          366.76,
+          477.03
+        ],
+        "ponchoPoint": [
+          347.78,
+          482.72
+        ],
+        "ankleL": [
+          240.92,
+          839.75
+        ],
+        "kneeL": [
+          333.18,
+          680.11
+        ],
+        "ankleR": [
+          425.64,
+          838.28
+        ],
+        "kneeR": [
+          386.26,
+          647.45
+        ],
+        "wristL": [
+          346.77,
+          336.98
+        ],
+        "elbowL": [
+          466.36,
+          341.33
+        ],
+        "wristR": [
+          414.25,
+          311.63
+        ],
+        "elbowR": [
+          324.71,
+          247.98
+        ]
+      },
+      "authored": "world blend + arc",
+      "keysHash": "d527bc7aa7bd71f9686746d2388eee2966312e5e974c0c19ef3f1e9284d9ae19"
+    },
     {
       "between": [
         "stand",
@@ -1689,7 +2122,7 @@
     {
       "key": "window",
       "driftPx": 4,
-      "over": 60
+      "over": 90
     }
   ]
 }

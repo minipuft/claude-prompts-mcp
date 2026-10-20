@@ -56,7 +56,7 @@
     "v3/materials.json",
     "v3/materials.schema.json"
   ],
-  "inputsHash": "ec7d085bbef5044a37fcad342e5b6f987a090577a4fc017cd0a30f929726e4ae",
+  "inputsHash": "0f4c577a6ed63ff00f9745613a5c04b0d12f3c231107263da8a41906c243e1f1",
   "tracks": [
     {
       "name": "pacing",
@@ -5191,22 +5191,22 @@
           }
         },
         {
-          "start": 936,
-          "end": 966,
+          "start": 930,
+          "end": 942,
           "beat": "art-world",
           "label": "paper",
           "data": {
-            "hold": 20,
+            "hold": 2,
             "breakdowns": 4
           }
         },
         {
-          "start": 966,
+          "start": 942,
           "end": 1010,
           "beat": "art-world",
           "label": "take",
           "data": {
-            "hold": 20,
+            "hold": 44,
             "breakdowns": 5
           }
         },
@@ -5306,8 +5306,18 @@
           "beat": "programming-world",
           "label": "return",
           "data": {
-            "hold": 28,
+            "hold": 30,
             "breakdowns": 0
+          }
+        },
+        {
+          "start": 1650,
+          "end": 1660,
+          "beat": "home-settle",
+          "label": "home",
+          "data": {
+            "hold": 2,
+            "breakdowns": 4
           }
         },
         {
@@ -5346,7 +5356,7 @@
           "beat": "home-settle",
           "label": "window",
           "data": {
-            "hold": 60,
+            "hold": 90,
             "breakdowns": 0
           }
         }

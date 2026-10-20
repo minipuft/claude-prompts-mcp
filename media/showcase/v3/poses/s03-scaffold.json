@@ -13,8 +13,8 @@
     {
       "name": "paper",
       "storyPoint": "sp-5.1",
-      "frame": 936,
-      "hold": 20,
+      "frame": 930,
+      "hold": 2,
       "moment": "A white page and nothing on it: she stands before the paper with her arms down while Clawd holds a crayon out.",
       "lineOfAction": {
         "class": "C",
@@ -106,8 +106,8 @@
     {
       "name": "take",
       "storyPoint": "sp-5.1",
-      "frame": 966,
-      "hold": 20,
+      "frame": 942,
+      "hold": 44,
       "moment": "The right hand opens and closes on the crayon Clawd holds out: a tool is given.",
       "lineOfAction": {
         "class": "C",
@@ -1042,7 +1042,7 @@
       "name": "return",
       "storyPoint": "sp-7.4",
       "frame": 1620,
-      "hold": 28,
+      "hold": 30,
       "moment": "The frame stands ahead as a window with home in it: she steps toward it, one arm out.",
       "lineOfAction": {
         "class": "S",
@@ -1139,7 +1139,7 @@
         "paper",
         "take"
       ],
-      "frame": 956,
+      "frame": 932,
       "favour": 0.4,
       "kind": "anticipation",
       "arc": {
@@ -1224,7 +1224,7 @@
         "paper",
         "take"
       ],
-      "frame": 960,
+      "frame": 936,
       "favour": 0.26,
       "kind": "passing",
       "arc": {
@@ -1309,7 +1309,7 @@
         "paper",
         "take"
       ],
-      "frame": 962,
+      "frame": 938,
       "favour": 0.58,
       "kind": "passing",
       "arc": {
@@ -1394,7 +1394,7 @@
         "paper",
         "take"
       ],
-      "frame": 964,
+      "frame": 940,
       "favour": 0.96,
       "kind": "settle",
       "arc": {
@@ -5728,14 +5728,9 @@
   "secondaries": [],
   "movingHolds": [
     {
-      "key": "paper",
-      "driftPx": 4,
-      "over": 20
-    },
-    {
       "key": "take",
       "driftPx": 4,
-      "over": 20
+      "over": 44
     },
     {
       "key": "draw",
@@ -5785,7 +5780,7 @@
     {
       "key": "return",
       "driftPx": 4,
-      "over": 28
+      "over": 30
     }
   ]
 }

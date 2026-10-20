@@ -1,8 +1,24 @@
 [
  {
   "key": "K1",
-  "name": "stand",
+  "name": "home",
   "plate": "assets/human/keys/s04-settle/K1.png",
+  "family": "home",
+  "cropPx": [
+   235,
+   507
+  ],
+  "baselineInCrop": 504,
+  "scale": 0.4745,
+  "originMask": [
+   77,
+   -111
+  ]
+ },
+ {
+  "key": "K2",
+  "name": "stand",
+  "plate": "assets/human/keys/s04-settle/K2.png",
   "family": "home",
   "cropPx": [
    243,
@@ -16,9 +32,9 @@
   ]
  },
  {
-  "key": "K2",
+  "key": "K3",
   "name": "settle",
-  "plate": "assets/human/keys/s04-settle/K2.png",
+  "plate": "assets/human/keys/s04-settle/K3.png",
   "family": "home",
   "cropPx": [
    244,
@@ -32,9 +48,9 @@
   ]
  },
  {
-  "key": "K3",
+  "key": "K4",
   "name": "seat",
-  "plate": "assets/human/keys/s04-settle/K3.png",
+  "plate": "assets/human/keys/s04-settle/K4.png",
   "family": "home",
   "cropPx": [
    247,
@@ -48,9 +64,9 @@
   ]
  },
  {
-  "key": "K4",
+  "key": "K5",
   "name": "window",
-  "plate": "assets/human/keys/s04-settle/K4.png",
+  "plate": "assets/human/keys/s04-settle/K5.png",
   "family": "home",
   "cropPx": [
    252,
