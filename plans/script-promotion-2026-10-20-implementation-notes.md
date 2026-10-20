@@ -33,4 +33,10 @@ tags: [scripts, repository-standards, fleet, hooks, validation]
 - Rulings on handoff concerns: docker digest refs need no `# vX.Y.Z` comment (a digest is the immutable ref) — R16 stands. The dropped YAML parse of `validate-workflows.mjs` needs no replacement: an unparseable workflow never reports its required check, so the PR blocks anyway. Lockfile fixtures under `test/fixtures/**` are not a Renovate surface (no package.json beside them).
 - Finding (2.2): the new reader refuses an empty or flow-style `jobs:` block where js-yaml returned no names; loud over silent, kept.
 
+## 2026-10-20 — T2 upstream PR open
+
+- 2.5 accepted (`0d2aa19`); manifest + README committed last (`9e9853f`, after DEV-T2-1). repository-standards#49 opened, auto-merge armed. Rulings on 2.5 concerns: no `--self-test` for `create-worktree` (waived, see row); `HUSKY=0` failing the bootstrap at its self-check is correct (a worktree with no hooks is the defect); hooks husky 9 never wraps (sendemail-validate, fsmonitor-watchman, p4-*, post-index-change) would read as red with the wrong remedy — no member tracks one; noted, no row.
+- Finding (2.5 feedback, kept for future managed-script rows): the test harness copies the scripts into `<tmp>/scripts/` so the `scripts/..` root lookup and sibling imports run in the shape a consumer receives.
+- HARD STOP reached (R1): the next step is an upstream RELEASE (v1.13.0), which the owner cuts on explicit request. Row 2.9 (adoption here) waits on it.
+
 ## Findings
