@@ -21,22 +21,23 @@
  *
  * WHAT IT GUARANTEES. `MIRRORED_CI_STEPS` below names each workflow step it stands in for, and
  * a parity test in the consumer repo, where one exists, reads the workflow file and fails when
- * the two sets diverge. So a fifth gating step added to CI breaks this script's test until it is
+ * the two sets diverge. So a new gating step added to CI breaks this script's test until it is
  * mirrored here — the subset relation is enforced rather than asserted in a comment.
  *
  * Every step RUNS; none short-circuits. A body failure and a title failure are independent
  * defects, and reporting only the first costs a second round trip to find the second.
  *
- * NOT ZERO-DEPENDENCY, unlike its two siblings in this directory, and that is safe: commitlint is
- * a root devDependency and this script is never the pre-install CI path. `validate-pr-body.mjs`
- * and `pr-body.mjs` keep their zero-dependency posture because the workflow runs them before
- * `npm ci`; this one runs only on a developer machine with the tree installed.
+ * NOT ZERO-DEPENDENCY, unlike its siblings in this directory, and that is safe: commitlint is a
+ * root devDependency and this script is never the pre-install CI path. `validate-pr-body.mjs`,
+ * `validate-squash-message.mjs` (with its vendored parser) and `pr-body.mjs` keep their
+ * zero-dependency posture because the workflow runs them before `npm ci`; this one runs only on a
+ * developer machine with the tree installed.
  *
  * Usage (from the repo root):
  *   npm run pr:body -- --out /tmp/pr-body.md     # seed it; do not author one from scratch
  *   $EDITOR /tmp/pr-body.md
  *   npm run pr:check -- --body-file /tmp/pr-body.md --title "feat(scope): outcome"
- *   node scripts/pr-check.mjs --self-test        # positive control: both halves can fail
+ *   node scripts/pr-check.mjs --self-test        # positive control: each authored check can fail
  */
 
 import { spawnSync } from "node:child_process";
@@ -45,11 +46,18 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { REFLOWED_CALL } from "./validate-squash-message.mjs";
+
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
 const VALIDATOR = path.join(REPO_ROOT, "scripts", "validate-pr-body.mjs");
+const SQUASH_VALIDATOR = path.join(
+  REPO_ROOT,
+  "scripts",
+  "validate-squash-message.mjs",
+);
 
 /**
  * The `commitlint` exec prefix and install-remediation hint per `answers.packageManager`, mirrored
@@ -111,8 +119,11 @@ function consumerPackageManager() {
  * join key on purpose: matching command strings instead would be defeated by the title-lint step,
  * whose `run:` also carries an `npm ci` that has no local counterpart.
  *
- * `needsAuthoredInput` marks the two steps that judge THIS pull request rather than the checkout.
+ * `needsAuthoredInput` marks the steps that judge THIS pull request rather than the checkout.
  * They are the ones that need a body and a title, and the ones the self-test drives.
+ *
+ * The squash-message step runs without a PR number: GitHub appends ` (#<n>)` to the title line,
+ * and a title line's text is free-form to the parser, so the suffix cannot change the verdict.
  */
 export const MIRRORED_CI_STEPS = [
   {
@@ -138,6 +149,22 @@ export const MIRRORED_CI_STEPS = [
     needsAuthoredInput: true,
     run: ({ bodyFile, title }) =>
       node([VALIDATOR, "--body-file", bodyFile, "--title", title]),
+  },
+  {
+    id: "squash-self-test",
+    ciStepName: "Prove the squash-message check can fail (positive control)",
+    label: "squash-message rules can fail (positive control)",
+    needsAuthoredInput: false,
+    run: () => node([SQUASH_VALIDATOR, "--self-test"]),
+  },
+  {
+    id: "squash",
+    ciStepName:
+      "Check release-please can parse the squash commit (scripts/validate-squash-message.mjs)",
+    label: "squash commit parses as release-please reads it",
+    needsAuthoredInput: true,
+    run: ({ bodyFile, title }) =>
+      node([SQUASH_VALIDATOR, "--body-file", bodyFile, "--title", title]),
   },
   {
     id: "title",
@@ -205,7 +232,7 @@ function warningLines(text) {
 /**
  * Runs every step and returns one verdict per step — never short-circuits.
  *
- * `steps` is injectable so the self-test can drive the authored-input pair against fixtures
+ * `steps` is injectable so the self-test can drive the authored-input steps against fixtures
  * without reaching for the real branch state.
  */
 export function runSteps({ bodyFile, title, steps = MIRRORED_CI_STEPS }) {
@@ -221,12 +248,12 @@ export function runSteps({ bodyFile, title, steps = MIRRORED_CI_STEPS }) {
 }
 
 /**
- * Proves the two authored-input steps can each FAIL, independently.
+ * Proves the authored-input steps can each FAIL, independently.
  *
- * A wrapper that reported "4 passed" while observing nothing is the exact shape this repo's own
- * workflow guards against with its two positive-control steps; a wrapper around them needs its
- * own. Asserts failure, not just a non-zero exit somewhere: each half is driven to red while the
- * other is held green, so a wrapper that ran only one check cannot pass this.
+ * A wrapper that reported "all passed" while observing nothing is the exact shape this repo's own
+ * workflow guards against with its positive-control steps; a wrapper around them needs its own.
+ * Asserts WHICH step failed, not just a non-zero exit somewhere: each case drives one step to red
+ * while the others are held green, so a wrapper that dropped or swapped a check cannot pass this.
  */
 /**
  * The default body used when this checkout carries no
@@ -303,8 +330,11 @@ function selfTest() {
   const goodBody = buildGoodBody(REPO_ROOT);
   const goodFile = path.join(scratch, "good.md");
   const badFile = path.join(scratch, "bad.md");
+  const unparseableFile = path.join(scratch, "unparseable.md");
   writeFileSync(goodFile, goodBody);
   writeFileSync(badFile, "## Summary\n\nNo other sections.\n");
+  // Every body rule holds; only the squash message GitHub would write from it fails to parse.
+  writeFileSync(unparseableFile, `${goodBody}\n${REFLOWED_CALL}\n`);
 
   const authored = MIRRORED_CI_STEPS.filter((step) => step.needsAuthoredInput);
   // No scope on purpose: scopes are the consumer's own answer (scope-enum), and
@@ -317,19 +347,25 @@ function selfTest() {
       name: "a filled body and a conventional title pass",
       bodyFile: goodFile,
       title: goodTitle,
-      expect: true,
+      failing: [],
     },
     {
       name: "a body missing required sections fails",
       bodyFile: badFile,
       title: goodTitle,
-      expect: false,
+      failing: ["body"],
     },
     {
       name: "a non-conventional title fails",
       bodyFile: goodFile,
       title: badTitle,
-      expect: false,
+      failing: ["title"],
+    },
+    {
+      name: "a body whose squash commit release-please cannot parse fails",
+      bodyFile: unparseableFile,
+      title: goodTitle,
+      failing: ["squash"],
     },
   ];
 
@@ -340,8 +376,10 @@ function selfTest() {
       title: testCase.title,
       steps: authored,
     });
-    const allPassed = results.every((result) => result.passed);
-    const ok = allPassed === testCase.expect;
+    const failing = results
+      .filter((result) => !result.passed)
+      .map((result) => result.id);
+    const ok = failing.join(",") === testCase.failing.join(",");
     console.log(`${ok ? "PASS" : "FAIL"}  ${testCase.name}`);
     if (!ok) {
       failed += 1;

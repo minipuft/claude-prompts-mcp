@@ -391,26 +391,42 @@ gh pr create --title "$TITLE" --body-file /tmp/pr-body.md
 **Note**: `gh pr create --body "..."` BYPASSES the template silently. Use `--body-file`.
 
 **`pr:check` is the whole gate, not half of it.** The `PR Conventions` workflow's gating steps on
-a non-bot PR are two positive controls, the body check, and `commitlint` on the title -- and
-`pr:check` runs every one of them locally, from the repo root, in about a second. Run it before
-`gh pr create`; a green run means that workflow will be green too.
+a non-bot PR are three positive controls, the body check, the squash-message check, and
+`commitlint` on the title -- and `pr:check` runs every one of them locally, from the repo root, in
+about a second. Run it before `gh pr create`; a green run means that workflow will be green too.
+
+**The squash-message check reads the commit the merge will write, not the body you wrote.**
+GitHub re-flows the PR body at 72 columns when it writes the squash commit, and release-please
+parses that re-flowed text. A commit the parser rejects is left out of the release silently: no
+changelog line, no version bump, no BREAKING CHANGE note, only a debug-log line. A long line that
+re-flows into one starting `name(` and closing its parenthesis on the next line is enough; on
+2026-10-19 that dropped #501 (a breaking change) and #503 from a release although both bodies passed
+every other check. `scripts/validate-squash-message.mjs` rebuilds the squash message, parses it with
+the parser release-please bundles (vendored at `scripts/vendor/conventional-commits-parser.cjs`), and
+on a refusal names the squash line, the body line it came from, and the fix: put the example call on
+one line inside a fenced code block, reword the line, or add a `BEGIN_COMMIT_OVERRIDE` block, which
+replaces the squash message for release-please. Release-please splits the body on that marker
+wherever it appears, backticks included, so a PR body that only mentions it in prose is read as a
+malformed override block and refused.
 
 That completeness is enforced, not promised. `scripts/pr-check.mjs` names each workflow step it
 mirrors and `server/tests/unit/scripts/pr-check-ci-parity.test.ts` reads the workflow file and
-fails when the two sets diverge, so a fifth gating step added to CI breaks the suite until the
+fails when the two sets diverge, so a new gating step added to CI breaks the suite until the
 local mirror catches up. _Until 2026-09-15 this section named only the body check. The title is
 judged separately -- the script that checks the body says outright that it "does not read the
 title beyond its type" -- so following these instructions exactly still shipped an unchecked
 title, which is how #283 failed on `subject-case` after passing locally._
 
 **These scripts are installed, not written here.** `scripts/pr-check.mjs`, `scripts/pr-body.mjs`,
-`scripts/validate-pr-body.mjs`, `scripts/adr.mjs`, `commitlint.rules.mjs`, `.husky/commit-msg` and
-`.github/workflows/pr-conventions.yml` are managed copies of the fleet delivery contract
+`scripts/validate-pr-body.mjs`, `scripts/validate-squash-message.mjs`,
+`scripts/vendor/conventional-commits-parser.cjs`, `scripts/adr.mjs`, `commitlint.rules.mjs`,
+`.husky/commit-msg` and `.github/workflows/pr-conventions.yml` are managed copies of the fleet delivery contract
 (`minipuft/repository-standards`), at the version `.delivery-contract.json` records; this
 repository stays on the latest version. Change them upstream, never in place:
 `npm run validate:delivery-contract` (inside `validate:all`) fails on any byte of drift. When
 Renovate bumps the `@minipuft/repository-standards-validation` pin, that check fails on the bump's
-own pull request until the managed files follow it: on that branch, with a clean tree, run
+own pull request until the managed files follow it: on that branch, with no uncommitted change to
+a managed file (`update` refuses to overwrite one; other edits may stay uncommitted), run
 `npx --no -- delivery-contract update --repo ..` from `server/`, review the diff, and commit it
 beside the bump. `commitlint.config.mjs` (the scope list), the PR template and the ADR template are
 seeded, not managed: they are this repository's own and are edited here.
