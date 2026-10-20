@@ -281,6 +281,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:downstream-lock-sync:self-test',
+    io: 'read',
+    reads: ['file', 'spawn'],
+    converse:
+      'CHECKED — falsified 2026-10-20 by restoring the old 6 x 20 s budget (120000 ms) as the default publication wait; the simulated registry that lists 5.1.0 only after 6 minutes then failed the run. A budget one millisecond short of the lag must also fail. Blind spot: the registry is simulated, so what `npm view` prints for an unpublished version is covered only by the real run recorded in the PR',
+  },
+  {
     script: 'validate:renovate-preset-agreement',
     io: 'read',
     reads: ['file'],

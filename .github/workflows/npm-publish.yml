@@ -112,10 +112,10 @@ jobs:
           # OIDC trusted publishing - no token needed, provenance auto-enabled
           npm publish "$RUNNER_TEMP/npm-package/claude-prompts-${{ steps.version.outputs.version }}.tgz" --access public --provenance
 
-      # Downstream updates handled by Dependabot in each repo
-      # - gemini-prompts: dependabot watches claude-prompts daily
-      # - opencode-prompts: dependabot watches claude-prompts daily
-      # - codex-prompts: dependabot watches claude-prompts daily
+      # Downstream updates: the `sync-downstream` job in extension-publish.yml is the ONLY writer
+      # of a downstream claude-prompts version. It is not Renovate (the shared preset lists
+      # claude-prompts in ignoreDeps) and not Dependabot (no member runs it); a failed sync
+      # leaves every member on its old version until a later release is synced.
       # Lock refresh per downstream: server/scripts/synchronize-downstream-lock.js
       #   --workspace ../<repo> --package claude-prompts --version <published>
 
