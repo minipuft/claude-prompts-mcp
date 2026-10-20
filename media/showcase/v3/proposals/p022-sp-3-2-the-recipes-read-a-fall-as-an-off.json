@@ -1,0 +1,17 @@
+{
+  "id": "p022",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "cant-build",
+    "frame": 500
+  },
+  "title": "sp-3.2: the recipes read a fall as an `off` frame, so two patches leave the stage and one lands",
+  "text": "sp-3.2 says 'three pieces go up, three come down ... each a settle with no hold', and its recipes read it two ways at once: `rises-then-falls` counts the named patches on stage (peak 3, fewer at the window's last frame) and `stagger` reads the `off` frames of the props, while the `stack.collapsed` key wants `patch` still present on frame 579. All three can only hold if the top two patches go off the stage (here at the picture's bottom edge, on 547 and 550, three frames apart) and the bottom one lands on the floor and stays; a settle (a landing with a bounce) is then drawn only for that one, and the other two get a sag of 8 px on the frame before they drop. Animatic 07 plays it that way (out/animatic-07-draft-beat3-measures.txt, v3/blocking/cant-build.json). If 'three come down' should be three landings, the recipes need a floor contact instead of `off`, and `stack.collapsed` a count of three.",
+  "references": [],
+  "before": "three patches rise and none leaves: the pile is the same three pieces on the floor",
+  "after": "the screenplay names how a fall is read: an `off` frame (two leave, one lands) or a landing (three stay), and the recipes follow",
+  "status": "open",
+  "ruling": null
+}

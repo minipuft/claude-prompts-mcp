@@ -1,7 +1,7 @@
 {
   "id": "cant-build",
   "provisional": true,
-  "derivedFrom": "restaged 2026-10-19 (animatic 04, blocking step): props apart per probe-blocking.py; v3/layouts/s02-cant-build-frame.json emitter.startXY (0.345, 0.886) of the frame -> join and the two blocks that touch at it; every other field is the test scene's: the layout's figure heights are not used (startHeightPct 63.4 measures the human bent in the reach, endHeightPct is null); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
+  "derivedFrom": "restaged 2026-10-19 (animatic 04, blocking step): props apart per probe-blocking.py; v3/layouts/s02-cant-build-frame.json emitter.startXY (0.345, 0.886) of the frame -> join and the two blocks that touch at it; every other field is the test scene's: the layout's figure heights are not used. Restaged toward sp-3.1 to sp-3.3 (row 9.6, beat 3): the human plays her own pose sheet (v3/poses/s02-cant-build.json: reach 432, stack 500, sit 580), the stalk she reaches for slides back within 17 frames of the contact, three patches rise on 500-528 and stand as one stack, then fall: the top two to the picture's bottom edge and off the stage on 547 and 550 (staggered 3), the bottom one to the floor, where it stays; Codex holds one boil variant and does not move, Clawd looks and leaves frame right from 594, and the dial's glow takes more grain from 570 to 604 (`grain` keys); no frame prop: the frame is the portal (th-frame-portal, p021) and first stands on stage when Clawd carries it in at sp-4.2 (frame 690); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
   "figure": {
     "scale": 0.58,
     "x": 452,
@@ -10,18 +10,34 @@
   "codex": {
     "x": 60,
     "y": 440,
-    "scale": 1.8
+    "scale": 1.8,
+    "hold": {
+      "from": 500,
+      "to": 548
+    }
   },
   "clawd": {
     "x": 940,
     "y": 470,
-    "scale": 1.5
-  },
-  "frame": {
-    "x": 910,
-    "y": 70,
-    "width": 280,
-    "height": 230
+    "scale": 1.5,
+    "at": [
+      {
+        "frame": 580,
+        "x": 940
+      },
+      {
+        "frame": 594,
+        "x": 926
+      },
+      {
+        "frame": 606,
+        "x": 926
+      },
+      {
+        "frame": 626,
+        "x": 1330
+      }
+    ]
   },
   "blocks": [
     {
@@ -79,14 +95,150 @@
   },
   "beat": "cant-build",
   "shot": "s02-cant-build-frame",
+  "poseShot": "s02-cant-build",
   "actors": {
     "stalk": {
       "x": 880,
       "y": 470,
-      "scale": 0.45,
-      "facing": "right"
+      "scale": 0.7,
+      "facing": "right",
+      "at": [
+        {
+          "frame": 430,
+          "x": 880
+        },
+        {
+          "frame": 437,
+          "x": 860
+        },
+        {
+          "frame": 449,
+          "x": 880
+        }
+      ]
+    },
+    "patch": {
+      "x": 480,
+      "y": 600,
+      "scale": 0.7,
+      "on": 500,
+      "at": [
+        {
+          "frame": 500,
+          "x": 480,
+          "y": 600
+        },
+        {
+          "frame": 512,
+          "x": 520,
+          "y": 310
+        },
+        {
+          "frame": 541,
+          "x": 520,
+          "y": 310
+        },
+        {
+          "frame": 543,
+          "x": 520,
+          "y": 318
+        },
+        {
+          "frame": 553,
+          "x": 480,
+          "y": 600
+        },
+        {
+          "frame": 556,
+          "x": 480,
+          "y": 592
+        },
+        {
+          "frame": 559,
+          "x": 480,
+          "y": 600
+        }
+      ]
+    },
+    "patch-2": {
+      "x": 400,
+      "y": 600,
+      "scale": 0.7,
+      "on": 508,
+      "off": 550,
+      "at": [
+        {
+          "frame": 508,
+          "x": 400,
+          "y": 600
+        },
+        {
+          "frame": 520,
+          "x": 520,
+          "y": 246
+        },
+        {
+          "frame": 538,
+          "x": 520,
+          "y": 246
+        },
+        {
+          "frame": 540,
+          "x": 520,
+          "y": 254
+        },
+        {
+          "frame": 549,
+          "x": 520,
+          "y": 716
+        }
+      ]
+    },
+    "patch-3": {
+      "x": 380,
+      "y": 600,
+      "scale": 0.7,
+      "on": 516,
+      "off": 547,
+      "at": [
+        {
+          "frame": 516,
+          "x": 380,
+          "y": 600
+        },
+        {
+          "frame": 528,
+          "x": 520,
+          "y": 182
+        },
+        {
+          "frame": 534,
+          "x": 520,
+          "y": 182
+        },
+        {
+          "frame": 536,
+          "x": 520,
+          "y": 190
+        },
+        {
+          "frame": 546,
+          "x": 520,
+          "y": 716
+        }
+      ]
     }
   },
+  "grain": [
+    {
+      "frame": 570,
+      "amount": 0.05
+    },
+    {
+      "frame": 604,
+      "amount": 0.4
+    }
+  ],
   "emitter": {
     "start": [
       411,
@@ -100,5 +252,43 @@
     "storyPoint": "sp-3.3"
   },
   "card": "eagle-lxu2uuohr9v2c",
-  "cardNote": "provisional: board §8 \"Corner of a cold room\" for the low, lost light; not yet chosen against the layout sheet"
+  "cardNote": "provisional: board §8 \"Corner of a cold room\" for the low, lost light; not yet chosen against the layout sheet",
+  "contacts": [
+    {
+      "a": "human",
+      "b": "stalk",
+      "frame": 432,
+      "why": "the hand closes on the stalk (sp-3.1): anticipation, action, contact"
+    },
+    {
+      "a": "human",
+      "b": "patch",
+      "why": "both hands hold the stack of three patches up (sp-3.2)"
+    },
+    {
+      "a": "human",
+      "b": "patch-2",
+      "why": "both hands hold the stack of three patches up (sp-3.2)"
+    },
+    {
+      "a": "human",
+      "b": "patch-3",
+      "why": "both hands hold the stack of three patches up (sp-3.2)"
+    },
+    {
+      "a": "patch",
+      "b": "patch-2",
+      "why": "the stack: one patch stands on the next"
+    },
+    {
+      "a": "patch-2",
+      "b": "patch-3",
+      "why": "the stack: one patch stands on the next"
+    },
+    {
+      "a": "patch",
+      "b": "patch-3",
+      "why": "the stack collapses: the top patch falls past the bottom one"
+    }
+  ]
 }

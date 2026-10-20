@@ -1,7 +1,7 @@
 {
   "id": "arrival",
   "provisional": true,
-  "derivedFrom": "restaged 2026-10-19 (row 9.6, beat 1): the box, lid, bubble and gadget stand beside the human so the flood's lamp lands on the trio; the lid opens on its position keys (the lift key 60), the bubble swells out of it over 110-150 with the gadget on inside it, Codex leans in 4 frames before Clawd; props apart per probe-blocking.py; test-scene (no layout contract for this beat's shot yet); the emitter and card are provisional placeholders",
+  "derivedFrom": "restaged 2026-10-19 (row 9.6, beat 1): the box, lid, bubble and gadget stand beside the human so the flood's lamp lands on the trio; the lid opens on its position keys (the lift key 60), the bubble swells out of it over 110-150 with the gadget on inside it, Codex leans in 4 frames before Clawd; props apart per probe-blocking.py; test-scene (no layout contract for this beat's shot yet); the emitter and card are provisional placeholders; no frame prop: the frame is the portal (th-frame-portal, p021) and first stands on stage when Clawd carries it in at sp-4.2 (frame 690)",
   "figure": {
     "scale": 0.68,
     "x": 420,
@@ -36,12 +36,6 @@
         "x": 988
       }
     ]
-  },
-  "frame": {
-    "x": 1000,
-    "y": 40,
-    "width": 280,
-    "height": 230
   },
   "blocks": [
     {

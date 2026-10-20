@@ -200,8 +200,9 @@ const ShadedFigure: React.FC<{pose: Joints; fill: number; line: ReturnType<typeo
 };
 
 const Architecture: React.FC<{fill: number; reduce: number; edge: string; lineHex: string; lw: number; gradient: DataTexture; bloom?: Bloom; parts: PropsPart[]; blocking: Blocking; lightX?: number}> = ({lightX, fill, reduce, edge, lineHex, lw, gradient, bloom, parts, blocking}) => {
-  const {x, y, width: w, height: h} = blocking.frame;
+  const {x, y, width: w, height: h} = blocking.frame ?? {x: 0, y: 0, width: 0, height: 0};
   const ring = useMemo(() => {
+    if (!blocking.frame) return null;
     const r = frameRings(w, h);
     const g = new ExtrudeGeometry(ringShape(r.outer, r.inner), {depth: DEPTH.frame, bevelEnabled: false});
     g.translate(0, 0, -DEPTH.frame / 2);
@@ -220,7 +221,7 @@ const Architecture: React.FC<{fill: number; reduce: number; edge: string; lineHe
   const flat = Math.max(0.001, 1 - reduce);
   return (
     <>
-      {parts.includes('architecture') && (
+      {parts.includes('architecture') && ring && (
         <group position={[x + w / 2, -(y + h / 2), 0]} rotation={[0, TURN.frame * (1 - reduce), 0]} scale={[1, 1, flat]}>
           <group position={[-w / 2, h / 2, 0]}>
             <Solid geometry={ring} fillColour={settled.gadget.main1} fill={fill} edge={edge} lw={lw} gradient={gradient} bloom={bloom} />

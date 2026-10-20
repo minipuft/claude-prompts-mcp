@@ -2,7 +2,8 @@ import {useEffect, useRef} from 'react';
 import {useCurrentFrame, useVideoConfig} from 'remotion';
 import {onTwos} from './motion';
 
-export type Emitter = {x: number; y: number; radius: number; color: string; intensity: number};
+/** `grain` is the speckle's alpha over the glow (default 0.05, the settled amount); above it the speckle is also denser, in proportion, so a beat that says "grain high" shows it (`blocking.grain`). */
+export type Emitter = {x: number; y: number; radius: number; color: string; intensity: number; grain?: number};
 export type Mask = {x: number; y: number; width: number; height: number};
 
 /** Deterministic PRNG (mulberry32); the only randomness source allowed in the film. */
@@ -72,7 +73,7 @@ export const Radiance: React.FC<Props> = ({emitter, bands, depthRings = 0, motes
     const grainRnd = seeded(seed * 104729 + onTwos(frame));
     ctx.globalAlpha = grain;
     ctx.fillStyle = '#ffffff';
-    const cells = 900;
+    const cells = Math.round(900 * Math.max(1, grain / 0.05));
     for (let i = 0; i < cells; i++) {
       ctx.fillRect(grainRnd() * width, grainRnd() * height, 1, 1);
     }

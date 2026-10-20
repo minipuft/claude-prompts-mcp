@@ -109,7 +109,7 @@ const result = readJson(resultPath);
 const round2 = (v) => Math.round(v * 100) / 100;
 const keys = sheet.keys.map((spec, i) => {
   const got = result.items[spec.name], c = got.chosen, solvedAt = posesRaw.keys[i].solvedAt;
-  const base = {name: spec.name, frame: spec.frame, hold: spec.hold, joints: Object.fromEntries(Object.entries(posesRaw.keys[i].solved).map(([n, p]) => [n, [round2(p[0]), round2(p[1])]])), source: 'solver', solvedAt, plateFamily: spec.plateFamily};
+  const base = {name: spec.name, ...(posesRaw.keys[i].storyPoint ? {storyPoint: posesRaw.keys[i].storyPoint} : {}), frame: spec.frame, hold: spec.hold, joints: Object.fromEntries(Object.entries(posesRaw.keys[i].solved).map(([n, p]) => [n, [round2(p[0]), round2(p[1])]])), source: 'solver', solvedAt, plateFamily: spec.plateFamily};
   if (!c) return {...base, status: 'needs-family', plate: null, needsFamily: {family: spec.plateFamily, silhouette: spec.silhouette, tried: got.tried}};
   return {...base, status: 'plate', family: c.family, registration: c.registration, plate: c.plate, plateSha256: c.plateSha256, plateInfo: c.info,
     render: {hold: c.metrics, partScales: c.partScales, ...(c.rig ? {rig: c.rig, order: c.order, depths: limbDepths(posesRaw.keys[i].solved, spec.lead, spec.weight.foot), declaredOrder: spec.order ?? null, parts: c.parts, worstParts: c.worstParts, jointFill: c.jointFill} : {})}};

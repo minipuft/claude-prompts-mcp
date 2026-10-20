@@ -37,7 +37,7 @@ export const JoinGlow: React.FC<{contract: WorldContract; emitter?: Emitter; opa
   const light = joinEmitter(contract, emitter, blocking);
   return (
     <div style={{position: 'absolute', inset: 0, opacity}}>
-      <Radiance emitter={light} motes={24} grain={0.05} mask={glowMask(light)} seed={4} />
+      <Radiance emitter={light} motes={24} grain={light.grain ?? 0.05} mask={glowMask(light)} seed={4} />
     </div>
   );
 };
@@ -109,11 +109,14 @@ export const PropsLayer: React.FC<{look: PropsLook; frame: number; contract: Wor
   const cls = [look.shading ? '' : 'wl-flat', look.lw === null ? '' : 'wl-lw', look.fill ? '' : 'wl-outline'].join(' ');
   const gadget = look.fill ? settled.gadget : clear;
   const kit = look.fill ? settled.kit : clear;
+  // a held wince is one boil variant: inside `codex.hold` Codex is drawn as the frame the hold starts on
+  const hold = blocking.codex.hold;
+  const codexFrame = hold && frame >= hold.from && frame < hold.to ? hold.from : frame;
   return (
     <div className={cls} style={{position: 'absolute', inset: 0, opacity}}>
       <style>{lookCss}</style>
       {(parts.includes('arch') || parts.includes('gates') || parts.includes('floor')) && <StageStrokes parts={parts} ink={outline} width={look.lw ?? 4} blocking={blocking} />}
-      {parts.includes('architecture') && (
+      {parts.includes('architecture') && blocking.frame && (
         <Sprite roles={gadget} outline={outline} x={blocking.frame.x} y={blocking.frame.y} style={lwFor(1)}>
           <Frame width={blocking.frame.width} height={blocking.frame.height} />
         </Sprite>
@@ -132,7 +135,7 @@ export const PropsLayer: React.FC<{look: PropsLook; frame: number; contract: Wor
       {parts.includes('companions') && (
         <>
           <Sprite roles={look.fill ? identity.codex : clear} outline={outline} x={blocking.codex.x} y={blocking.codex.y} scale={blocking.codex.scale} style={lwFor(blocking.codex.scale)}>
-            <Codex variant={variantOf(frame, contract, 1)} look={variantOf(frame, contract, 5) % 2} />
+            <Codex variant={variantOf(codexFrame, contract, 1)} look={variantOf(codexFrame, contract, 5) % 2} />
           </Sprite>
           <Sprite roles={look.fill ? identity.clawd : clear} outline={outline} x={blocking.clawd.x} y={blocking.clawd.y} scale={blocking.clawd.scale} style={lwFor(blocking.clawd.scale)}>
             <Clawd raise={blocking.clawd.raise ?? 0.2} variant={variantOf(frame, contract, 2)} />

@@ -40,14 +40,16 @@ export type Blocking = {
    * has no `order`): the garment flip of beats-v2 is permanent. Neither is ever in a blocking file.
    */
   figure: {scale: number; x: number; y: number; order?: readonly string[]; swoop?: boolean; /** The human's root travel: position keys on the canvas's top-left (`x`, `y` are where the move starts). The animatic reads them on the frame each drawing came on, so the layer changes only where the exposure sheet has a row. */ at?: PlacementKey[]};
-  codex: {x: number; y: number; scale: number; at?: PlacementKey[]};
+  /** `hold` freezes Codex's boil on the variant of frame `from` for the frames `from` to `to` (exclusive): a held wince is one drawing, not a shimmer (film frames). */
+  codex: {x: number; y: number; scale: number; at?: PlacementKey[]; hold?: {from: number; to: number}};
   /** `raise` (0..1, default 0.2) is how far the arm that holds the frame is lifted. */
   clawd: {x: number; y: number; scale: number; raise?: number; at?: PlacementKey[]};
   /**
    * `carriedBy` names who holds the frame while it moves: the frame stands at its own `x`, `y` once its carrier has stopped, and until then it travels with the carrier's offset from the carrier's last key
    * (so the frame's own box is where it ends, which is what the eye trace and the story probe read). `at` moves the frame by itself.
+   * A beat with no `frame` draws none: the frame is the portal (th-frame-portal), absent from every frame before Clawd carries it in at sp-4.2 (beats 1-3 carry no `frame`; beat 4's stands off the picture until its carrier brings it).
    */
-  frame: Box & {at?: PlacementKey[]; carriedBy?: 'clawd'};
+  frame?: Box & {at?: PlacementKey[]; carriedBy?: 'clawd'};
   /** Kit blocks that touch at `join.x`. `role` names a palette role of the kit. */
   blocks: (Box & {role: 'main1' | 'main2'})[];
   join: {x: number; y: number};
@@ -58,6 +60,8 @@ export type Blocking = {
   figureCrop: Box;
   /** Every other actor the ledger names in this beat, by name. The top-level `figure`, `codex`, `clawd` and `frame` stay where the renderers read them. */
   actors?: Record<string, ActorPlacement>;
+  /** How grainy the light is across the beat: `amount` (the speckle's alpha, 0.05 is the settled grain) at film frames, linear between keys, the first before the first key and the last after it. Absent: the settled grain. `grainAt` reads it. */
+  grain?: {frame: number; amount: number}[];
   /** The emitter's path across the beat. Absent in the test scene; present in every beat file. */
   emitter?: EmitterPath;
   /** The composition card (an id on v3/references/board.json) the staging borrows its framing from. */
@@ -102,7 +106,7 @@ export const parseBlocking = (json: unknown): Blocking => {
   group(b.figure, 'figure', ['scale', 'x', 'y']);
   group(b.codex, 'codex', ['x', 'y', 'scale']);
   group(b.clawd, 'clawd', ['x', 'y', 'scale']);
-  group(b.frame, 'frame', ['x', 'y', 'width', 'height']);
+  if (b.frame !== undefined) group(b.frame, 'frame', ['x', 'y', 'width', 'height']);
   group(b.join, 'join', ['x', 'y']);
   group(b.arch, 'arch', ['x', 'y', 'width', 'height', 'opening', 'top']);
   group(b.floor, 'floor', ['y']);
@@ -120,7 +124,13 @@ export const parseBlocking = (json: unknown): Blocking => {
       placementKeys(placed, `actors.${name}`);
     }
   }
-  for (const who of ['codex', 'clawd', 'frame', 'figure'] as const) placementKeys(b[who] as Record<string, unknown>, who);
+  for (const who of ['codex', 'clawd', 'frame', 'figure'] as const) if (b[who] !== undefined) placementKeys(b[who] as Record<string, unknown>, who);
+  const held = (b.codex as Record<string, unknown>).hold as Record<string, unknown> | undefined;
+  if (held !== undefined) {
+    num(held?.from, 'codex.hold.from');
+    num(held?.to, 'codex.hold.to');
+    if ((held!.to as number) <= (held!.from as number)) throw new Error(`blocking: codex.hold runs from ${held!.from} to ${held!.to}, which is not after it starts`);
+  }
   if (b.clawd && (b.clawd as Record<string, unknown>).raise !== undefined) num((b.clawd as Record<string, unknown>).raise, 'clawd.raise');
   if (b.frame && (b.frame as Record<string, unknown>).carriedBy !== undefined && (b.frame as Record<string, unknown>).carriedBy !== 'clawd') throw new Error(`blocking: frame.carriedBy must be "clawd", got ${JSON.stringify((b.frame as Record<string, unknown>).carriedBy)}`);
   if (b.emitter !== undefined) {
@@ -134,6 +144,15 @@ export const parseBlocking = (json: unknown): Blocking => {
     }
     if (typeof e.anchor !== 'string' || !e.anchor) throw new Error('blocking: emitter.anchor must name what the light sits on');
     if (e.follows !== undefined && e.follows !== 'frame') throw new Error(`blocking: emitter.follows must be "frame", got ${JSON.stringify(e.follows)}`);
+    if (e.follows === 'frame' && b.frame === undefined) throw new Error('blocking: emitter.follows "frame" needs a frame in the beat');
+  }
+  if (b.grain !== undefined) {
+    if (!Array.isArray(b.grain) || !b.grain.length) throw new Error('blocking: grain must be a non-empty list of {frame, amount}');
+    b.grain.forEach((k, i) => {
+      num((k as Record<string, unknown>)?.frame, `grain[${i}].frame`);
+      num((k as Record<string, unknown>)?.amount, `grain[${i}].amount`);
+      if (i && (k as {frame: number}).frame <= (b.grain as {frame: number}[])[i - 1]!.frame) throw new Error(`blocking: grain must run in ascending frames (key ${i} is at ${(k as {frame: number}).frame})`);
+    });
   }
   if (b.card !== undefined && (typeof b.card !== 'string' || !b.card)) throw new Error('blocking: card must be a board card id');
   return json as Blocking;
@@ -180,9 +199,11 @@ export const resolveBlocking = (b: Blocking, frame: number): Blocking => {
   };
   const codexAt = placedAt(b.codex, b.codex.at, frame), clawdAt = placedAt(b.clawd, b.clawd.at, frame);
   const clawdEnd = b.clawd.at?.length ? placedAt(b.clawd, b.clawd.at, Infinity) : {x: b.clawd.x, y: b.clawd.y};
-  const own = placedAt(b.frame, b.frame.at, frame);
   const figureAt = placedAt(b.figure, b.figure.at, frame);
-  const carry = b.frame.carriedBy === 'clawd' ? {x: clawdAt.x - clawdEnd.x, y: clawdAt.y - clawdEnd.y} : {x: 0, y: 0};
+  const carry = b.frame?.carriedBy === 'clawd' ? {x: clawdAt.x - clawdEnd.x, y: clawdAt.y - clawdEnd.y} : {x: 0, y: 0};
+  const {frame: base, ...rest} = b;
+  const own = base ? placedAt(base, base.at, frame) : null;
+  const framed = base && own ? {frame: {...strip(base), x: own.x + carry.x, y: own.y + carry.y}} : {};
   const actors = b.actors
     ? Object.fromEntries(
         Object.entries(b.actors)
@@ -191,10 +212,10 @@ export const resolveBlocking = (b: Blocking, frame: number): Blocking => {
       )
     : undefined;
   return {
-    ...b,
+    ...rest,
     codex: {...strip(b.codex), ...codexAt},
     clawd: {...strip(b.clawd), ...clawdAt},
-    frame: {...strip(b.frame), x: own.x + carry.x, y: own.y + carry.y},
+    ...framed,
     figure: {...strip(b.figure), ...figureAt},
     figureCrop: {...b.figureCrop, x: b.figureCrop.x + figureAt.x - b.figure.x, y: b.figureCrop.y + figureAt.y - b.figure.y},
     ...(actors ? {actors} : {}),
@@ -223,11 +244,23 @@ export const blockingAt = (track: Track<Blocking>, frame: number): Blocking => {
   return resolveBlocking(sample(track, f, {quantise: 'twos', lerp: (a, b, t) => lerpBlocking(resolveBlocking(a, f), resolveBlocking(b, f), t)}), f);
 };
 
+/** The grain amount on `frame` of a beat (`blocking.grain`), or undefined for the settled grain: linear between keys, held before the first and after the last. */
+export const grainAt = (blocking: Blocking, frame: number): number | undefined => {
+  const keys = blocking.grain;
+  if (!keys?.length) return undefined;
+  if (frame <= keys[0]!.frame) return keys[0]!.amount;
+  const i = keys.findIndex((k) => k.frame > frame);
+  if (i < 0) return keys[keys.length - 1]!.amount;
+  const a = keys[i - 1]!, b = keys[i]!;
+  return a.amount + ((b.amount - a.amount) * (frame - a.frame)) / (b.frame - a.frame);
+};
+
 /** The emitter's position on `frame` of a beat: a straight line from `start` to `end` across the beat, on ones (light is not a drawn layer), moved with the frame it follows. Null when the beat has none. `blocking` is the beat's file, not its resolved placement. */
 export const emitterPointAt = (blocking: Blocking, beat: {start: number; end: number}, frame: number): {x: number; y: number} | null => {
   const e = blocking.emitter;
   if (!e) return null;
   const t = beat.end - beat.start <= 1 ? 0 : Math.max(0, Math.min(1, (frame - beat.start) / (beat.end - beat.start - 1)));
   const carried = e.follows === 'frame' ? resolveBlocking(blocking, frame).frame : blocking.frame;
-  return {x: e.start[0] + (e.end[0] - e.start[0]) * t + carried.x - blocking.frame.x, y: e.start[1] + (e.end[1] - e.start[1]) * t + carried.y - blocking.frame.y};
+  const shift = carried && blocking.frame ? {x: carried.x - blocking.frame.x, y: carried.y - blocking.frame.y} : {x: 0, y: 0};
+  return {x: e.start[0] + (e.end[0] - e.start[0]) * t + shift.x, y: e.start[1] + (e.end[1] - e.start[1]) * t + shift.y};
 };

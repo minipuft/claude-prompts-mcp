@@ -39,7 +39,13 @@ export type PoseKey = {
   /** One sentence: the script moment this key carries. */
   moment: string;
   lineOfAction: LineOfAction;
-  weight: {foot: Side | 'both'; /** 0-1: how far the root sits over that foot (0 over the other foot, 1 directly over this one; ignored for `both`). */ over: number};
+  weight: {
+    foot: Side | 'both';
+    /** 0-1: how far the root sits over that foot (0 over the other foot, 1 directly over this one; ignored for `both`). */
+    over: number;
+    /** 0-0.5 (default 0): how far the hips sink, as a share of the leg's length taken off the weight leg's hip-to-ankle reach. Both knees bend and the root drops; only `solvePose` reads it (a crouch, a seat on the heels). */
+    sink?: number;
+  };
   lead: {arm: Side | 'none'; leg: Side | 'none'};
   /** An intentional symmetric pose must say why. */
   twinned?: {why: string};
@@ -176,6 +182,7 @@ export const parsePoseSheet = (json: unknown): PoseSheet => {
     if (l.sign !== 1 && l.sign !== -1) throw new Error(`${at} sign must be 1 or -1`);
     if (l.inflection !== undefined && (l.class !== 'S' || !(l.inflection > 0 && l.inflection < 1))) throw new Error(`${at} inflection belongs to class S and must be between 0 and 1`);
     if (!['L', 'R', 'both'].includes(k.weight?.foot) || !(k.weight.over >= 0 && k.weight.over <= 1)) throw new Error(`${at} weight needs foot L, R or both and over between 0 and 1`);
+    if (k.weight.sink !== undefined && !(isNum(k.weight.sink) && k.weight.sink >= 0 && k.weight.sink <= SINK_MAX)) throw new Error(`${at} weight.sink must be a number between 0 and ${SINK_MAX} of the leg's length`);
     if (!['L', 'R', 'none'].includes(k.lead?.arm) || !['L', 'R', 'none'].includes(k.lead?.leg)) throw new Error(`${at} lead needs arm and leg of L, R or none`);
     if (k.twinned !== undefined && !(typeof k.twinned.why === 'string' && k.twinned.why.trim())) throw new Error(`${at} is twinned but says no why`);
     if (!SILHOUETTES.includes(k.silhouette)) throw new Error(`${at} has an unknown silhouette ${JSON.stringify(k.silhouette)}`);
@@ -462,6 +469,9 @@ const bendOf = (from: Vec, mid: Vec, to: Vec): 1 | -1 => (dot(sub(mid, from), ri
 /** The solved spine bows this much more than declared, so that rounding the joints to a hundredth of a pixel cannot read a declared bow of exactly the probe's floor (0.06) as 0.0599. */
 const SOLVE_BOW_MARGIN = 0.002;
 
+/** The deepest a key's hips may sink (`weight.sink`), as a share of the leg's length. */
+export const SINK_MAX = 0.5;
+
 /** The most the shoulder line may be turned against the trunk to draw a declared S, degrees. */
 export const SHOULDER_TILT_MAX = 35;
 
@@ -536,7 +546,7 @@ export const solvePose = (spec: PoseKey, rest: RestSkeleton, heightPx: number): 
   const weightSide: Side = foot === 'both' ? (rootX < centreX ? 'L' : 'R') : foot;
   const legLen = boneLen('hipL', 'kneeL') + boneLen('kneeL', 'ankleL');
   const hipHalf = len(sub(R('hipR'), R('hipL'))) / 2;
-  const reach = rest.reachRatios?.[`ankle${weightSide}`] ?? SOLVE_DEFAULTS.weightLegReach;
+  const reach = (rest.reachRatios?.[`ankle${weightSide}`] ?? SOLVE_DEFAULTS.weightLegReach) - (spec.weight.sink ?? 0);
   const hx = rootX + (weightSide === 'L' ? -hipHalf : hipHalf) - ankle[weightSide][0];
   const rootY = ground - Math.sqrt(Math.max(0, (reach * legLen) ** 2 - hx * hx));
   const root: Vec = [rootX, rootY];

@@ -1,0 +1,75 @@
+{
+  "shot": "s02-cant-build",
+  "fps": 30,
+  "frames": [
+    420,
+    630
+  ],
+  "provisional": true,
+  "source": {
+    "timeline": "v3/timeline.json (cant-build 420-630)",
+    "layout": "v3/layouts/s02-cant-build-frame.json",
+    "proposal": "v3/screenplay.json sp-3.1 to sp-3.3"
+  },
+  "pieces": [],
+  "actors": {
+    "human": {
+      "kind": "rig",
+      "keySheet": "v3/keys/s02-cant-build.json",
+      "keys": [
+        {
+          "name": "ready",
+          "frame": 420,
+          "pose": "standing in the mess the flood left, arms down, looking at the stalk",
+          "lineOfAction": "a slight C, plumb enough to read as waiting",
+          "changes": "the entry; she is about to reach",
+          "hold": 2
+        },
+        {
+          "name": "reach",
+          "frame": 432,
+          "pose": "the right arm out to the stalk, the hand closing on it, the back foot planted",
+          "lineOfAction": "one C leaning toward the stalk",
+          "changes": "pull back, then out; the hand lands on the stalk on 432",
+          "hold": 44
+        },
+        {
+          "name": "stack",
+          "frame": 500,
+          "pose": "both hands at the chest holding a stack of three patches",
+          "lineOfAction": "a small C bowed over the stack",
+          "changes": "the hands come up together; the stack collapses while she holds the pose",
+          "hold": 56
+        },
+        {
+          "name": "sit",
+          "frame": 580,
+          "pose": "sunk to the floor in the mess, folded forward, forearms crossed over the knees",
+          "lineOfAction": "one deep C folded over the knees",
+          "changes": "the hips sink and the spine folds; she stays down to the cut",
+          "hold": 50
+        }
+      ],
+      "breakdowns": [],
+      "note": "Beat 3 of the film: four keys over 210 frames, three of them the story points sp-3.1 to sp-3.3. The drawings between them are the pose sheet's breakdowns (v3/poses/s02-cant-build.json)."
+    }
+  },
+  "pulses": [],
+  "lag": {
+    "frames": 3,
+    "recovery": 12,
+    "note": "the light follows the drawn layer by 2-4 frames; this chart carries the figure only, the light layer is its own sheet"
+  },
+  "boil": {
+    "variants": 3,
+    "rate": 4,
+    "seed": 11
+  },
+  "camera": {
+    "span": [
+      420,
+      630
+    ],
+    "note": "the layout's camera for this beat (v3/layouts/s02-cant-build-frame.json): locked through the beat, the lost light holds still; not authored in this chart"
+  }
+}

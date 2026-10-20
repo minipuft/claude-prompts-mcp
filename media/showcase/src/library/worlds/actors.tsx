@@ -24,10 +24,10 @@ import {settled, type RoleMap} from '../tokens';
  * (`lidAngleAtFrontY`; closed at 80 px of the box's own scale above its foot, open about 85 px higher), so the lid opens on the frames its `at` keys say; the BUBBLE swells as it rises out of the box: its size is
  * `BUBBLE_SWELL.from` of its `scale` where its centre is at `BUBBLE_SWELL.fromY` and the whole `scale` from `BUBBLE_SWELL.toY` up. A box with no lid actor draws its own lid closed.
  */
-export type ActorName = 'box' | 'lid' | 'bubble' | 'gadget' | 'stalk' | 'arch' | 'ring' | 'patch' | 'bead' | 'structure' | 'heap';
+export type ActorName = 'box' | 'lid' | 'bubble' | 'gadget' | 'stalk' | 'arch' | 'ring' | 'patch' | 'patch-2' | 'patch-3' | 'bead' | 'structure' | 'heap';
 
 /** Which role map each placeholder is filled with when the scene is given none: a settled map, so every fill is a fixed colour of v3/roles.json (C1, C24). The animatic gives every beat its own (`SceneProps.actorRoles`). */
-const ROLES: Record<ActorName, RoleMap> = {box: settled.gadget, lid: settled.gadget, bubble: settled.kit, gadget: settled.gadget, stalk: settled.kit, arch: settled.kit, ring: settled.kit, patch: settled.kit, bead: settled.kit, structure: settled.kit, heap: settled.kit};
+const ROLES: Record<ActorName, RoleMap> = {box: settled.gadget, lid: settled.gadget, bubble: settled.kit, gadget: settled.gadget, stalk: settled.kit, arch: settled.kit, ring: settled.kit, patch: settled.kit, 'patch-2': settled.kit, 'patch-3': settled.kit, bead: settled.kit, structure: settled.kit, heap: settled.kit};
 
 /** Offset of the anchor inside each prop's own SVG box, in the prop's native pixels (Box 220 x 170 from (-10, -30); Bubble 280 x 280; Gadget 200 x 260 from (-20, -20), dial at (88, 170)). */
 const BOX_FOOT: [number, number] = [95, 160];
@@ -46,7 +46,7 @@ const BEAD_END: [number, number] = [140, 30];
 const BEAD_SAG = 24;
 
 /** Back to front: the pieces and the structure behind, then the box with its lid, the gadget inside the bubble, the bubble over it. */
-export const ACTOR_NAMES: readonly ActorName[] = ['structure', 'stalk', 'arch', 'ring', 'patch', 'bead', 'heap', 'box', 'lid', 'gadget', 'bubble'];
+export const ACTOR_NAMES: readonly ActorName[] = ['structure', 'stalk', 'arch', 'ring', 'patch', 'patch-2', 'patch-3', 'bead', 'heap', 'box', 'lid', 'gadget', 'bubble'];
 const isActor = (name: string): name is ActorName => (ACTOR_NAMES as readonly string[]).includes(name);
 
 const at = (a: ActorPlacement, offset: [number, number]): {x: number; y: number; scale: number} => ({x: a.x - offset[0] * a.scale, y: a.y - offset[1] * a.scale, scale: a.scale});
@@ -78,6 +78,8 @@ const drawing = (name: ActorName, a: ActorPlacement, blocking: Blocking): React.
     case 'ring':
       return <RingPiece r={RING_R} />;
     case 'patch':
+    case 'patch-2':
+    case 'patch-3':
       return <PatchPiece />;
     case 'bead':
       return <StringPiece end={BEAD_END} sag={BEAD_SAG} />;

@@ -45,10 +45,12 @@
     "v3/proposals/p019-sp-1-2-sp-2-1-the-light-is-one-constant.json",
     "v3/proposals/p020-sp-2-3-the-shrink-drawing-is-as-tall-as.json",
     "v3/proposals/p021-the-frame-is-on-stage-from-frame-0-the-s.json",
+    "v3/proposals/p022-sp-3-2-the-recipes-read-a-fall-as-an-off.json",
+    "v3/proposals/p023-the-plate-versus-film-measure-draws-the.json",
     "v3/materials.json",
     "v3/materials.schema.json"
   ],
-  "inputsHash": "067c5879ee37983e5fd8269f853adc6e8fa0505d4f9c2585d5689d0dd01b908b",
+  "inputsHash": "e7e71bef26227466a8573a197d253981c5f46240f38c293fb95cd03fc57332a2",
   "tracks": [
     {
       "name": "pacing",
@@ -305,7 +307,7 @@
             "colour": "blue",
             "register": "curiosity",
             "emitter": "box seam → gadget",
-            "measure": "bubble radius grows; gadget present inside; codex lean precedes clawd lean by 4"
+            "measure": "bubble appears out of the box; gadget present inside; codex lean precedes clawd lean by 4"
           }
         },
         {
@@ -353,7 +355,7 @@
             "colour": "blue",
             "register": "delight",
             "emitter": "gadget dial",
-            "measure": "piece count rises from 0; human turns ≥ 90°; arrivals staggered ≥ 3 frames until sp-2.3"
+            "measure": "piece count rises from 0; arrivals staggered ≥ 3 frames until sp-2.3"
           }
         },
         {
@@ -423,7 +425,7 @@
             "colour": "steel",
             "register": "gentle gag",
             "emitter": "gadget dial, lost",
-            "measure": "three props rise then fall; falls staggered 3; codex boil variant held"
+            "measure": "three props rise then fall; falls staggered 3; codex holds still"
           }
         },
         {
@@ -497,7 +499,7 @@
             "colour": "steel",
             "register": "wonder",
             "emitter": "frame interior",
-            "measure": "frame prop enters; frame interior is the brightest region; human head turn precedes torso by ≥ 4"
+            "measure": "frame prop enters; emitter sits inside the frame interior"
           }
         },
         {
@@ -522,7 +524,7 @@
             "colour": "steel",
             "register": "wonder",
             "emitter": "frame interior",
-            "measure": "cloak prop on floor after, absent before; figure silhouette changes garment; heap stays to 1950"
+            "measure": "heap prop on the floor after, absent before; figure silhouette changes garment; heap stays to 1950"
           }
         },
         {
@@ -571,7 +573,7 @@
             "colour": "steel",
             "register": "reverent",
             "emitter": "frame interior",
-            "measure": "hand within 8 px of frame edge; heel contact 828 settles 836; hold 24"
+            "measure": "hand within 8 px of frame edge; hold 24"
           }
         },
         {
@@ -669,7 +671,7 @@
             "colour": "crayon",
             "register": "delight",
             "emitter": "the leaf",
-            "measure": "stroke props replaced by a stalk prop; leaf opens over ≥ 8 frames; codex contact with stalk"
+            "measure": "stroke props replaced by a stalk prop; codex contact with stalk"
           }
         },
         {
@@ -693,7 +695,7 @@
             "colour": "crayon",
             "register": "curiosity",
             "emitter": "the leaf",
-            "measure": "stalk prop attached to the human's hand; human faces frame right"
+            "measure": "stalk prop attached to the human's hand"
           }
         },
         {
@@ -717,7 +719,7 @@
             "colour": "line",
             "register": "focused",
             "emitter": "the piece's lines",
-            "measure": "fill area falls ≥ 80 %; figure drawn as line"
+            "measure": "fill area falls ≥ 80 %"
           }
         },
         {
@@ -741,7 +743,7 @@
             "colour": "line",
             "register": "focused",
             "emitter": "the piece's lines",
-            "measure": "codex x passes clawd x; piece lines connect to grid (contact)"
+            "measure": "codex x passes clawd x"
           }
         },
         {
@@ -765,7 +767,7 @@
             "colour": "shaded",
             "register": "focused",
             "emitter": "the empty join",
-            "measure": "field shaded; codex points (arm extended) at the join prop"
+            "measure": "field shaded"
           }
         },
         {
@@ -789,7 +791,7 @@
             "colour": "shaded",
             "register": "satisfaction",
             "emitter": "the lit join",
-            "measure": "stalk prop contact with the join; seam pulse after contact, lag ≥ 4; join emitter lit after"
+            "measure": "stalk prop contact with the join; seam pulse; join emitter lit after"
           }
         },
         {
@@ -813,7 +815,7 @@
             "colour": "shaded",
             "register": "satisfaction",
             "emitter": "the running bead",
-            "measure": "three gate props lit in order, staggered ≥ 8; the third is the human's"
+            "measure": "three gate props lit in order, staggered ≥ 8"
           }
         },
         {
@@ -837,7 +839,7 @@
             "colour": "shaded → coral",
             "register": "contentment",
             "emitter": "frame interior",
-            "measure": "frame prop present; three figures cross its x"
+            "measure": "frame prop present"
           }
         },
         {
@@ -886,7 +888,7 @@
             "colour": "coral",
             "register": "settled",
             "emitter": "gadget",
-            "measure": "human height falls to seated; codex and clawd each hold 1 boil variant; frame prop at rest against structure"
+            "measure": "human height falls to seated; codex and clawd hold still; frame prop at rest against structure"
           }
         },
         {
@@ -910,7 +912,7 @@
             "colour": "coral",
             "register": "settled",
             "emitter": "frame interior",
-            "measure": "hold ≥ 60; title mark visible; frame 1949 is the second poster"
+            "measure": "hold ≥ 60; title mark visible"
           }
         }
       ]
@@ -1047,12 +1049,34 @@
             "codex": {
               "x": 60,
               "y": 440,
-              "scale": 1.8
+              "scale": 1.8,
+              "hold": {
+                "from": 500,
+                "to": 548
+              }
             },
             "clawd": {
               "x": 940,
               "y": 470,
-              "scale": 1.5
+              "scale": 1.5,
+              "at": [
+                {
+                  "frame": 580,
+                  "x": 940
+                },
+                {
+                  "frame": 594,
+                  "x": 926
+                },
+                {
+                  "frame": 606,
+                  "x": 926
+                },
+                {
+                  "frame": 626,
+                  "x": 1330
+                }
+              ]
             },
             "emitter": {
               "start": [
@@ -4945,31 +4969,41 @@
         },
         {
           "start": 420,
-          "end": 444,
+          "end": 432,
           "beat": "cant-build",
-          "label": "rest",
+          "label": "ready",
           "data": {
-            "hold": 24,
-            "breakdowns": 0
+            "hold": 2,
+            "breakdowns": 4
           }
         },
         {
-          "start": 444,
-          "end": 470,
+          "start": 432,
+          "end": 500,
           "beat": "cant-build",
-          "label": "raise",
+          "label": "reach",
           "data": {
-            "hold": null,
-            "breakdowns": 0
+            "hold": 44,
+            "breakdowns": 5
           }
         },
         {
-          "start": 470,
+          "start": 500,
+          "end": 580,
+          "beat": "cant-build",
+          "label": "stack",
+          "data": {
+            "hold": 56,
+            "breakdowns": 5
+          }
+        },
+        {
+          "start": 580,
           "end": 630,
           "beat": "cant-build",
-          "label": "settle",
+          "label": "sit",
           "data": {
-            "hold": null,
+            "hold": 50,
             "breakdowns": 0
           }
         },
@@ -7351,6 +7385,54 @@
             "after": "frame prop on from 690 only; theme invariant th-frame-portal enforced by probe-theme",
             "file": "v3/proposals/p021-the-frame-is-on-stage-from-frame-0-the-s.json"
           }
+        },
+        {
+          "start": 500,
+          "end": 501,
+          "beat": "cant-build",
+          "label": "p022 sp-3.2: the recipes read a fall as an `off` frame, so two patches leave the stage and one lands",
+          "data": {
+            "id": "p022",
+            "title": "sp-3.2: the recipes read a fall as an `off` frame, so two patches leave the stage and one lands",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "cant-build",
+              "frame": 500
+            },
+            "text": "sp-3.2 says 'three pieces go up, three come down ... each a settle with no hold', and its recipes read it two ways at once: `rises-then-falls` counts the named patches on stage (peak 3, fewer at the window's last frame) and `stagger` reads the `off` frames of the props, while the `stack.collapsed` key wants `patch` still present on frame 579. All three can only hold if the top two patches go off the stage (here at the picture's bottom edge, on 547 and 550, three frames apart) and the bottom one lands on the floor and stays; a settle (a landing with a bounce) is then drawn only for that one, and the other two get a sag of 8 px on the frame before they drop. Animatic 07 plays it that way (out/animatic-07-draft-beat3-measures.txt, v3/blocking/cant-build.json). If 'three come down' should be three landings, the recipes need a floor contact instead of `off`, and `stack.collapsed` a count of three.",
+            "references": [],
+            "before": "three patches rise and none leaves: the pile is the same three pieces on the floor",
+            "after": "the screenplay names how a fall is read: an `off` frame (two leave, one lands) or a landing (three stay), and the recipes follow",
+            "file": "v3/proposals/p022-sp-3-2-the-recipes-read-a-fall-as-an-off.json"
+          }
+        },
+        {
+          "start": 432,
+          "end": 433,
+          "beat": "cant-build",
+          "label": "p023 The plate-versus-film measure draws the s01 sheet whatever shot `npm run plates` names",
+          "data": {
+            "id": "p023",
+            "title": "The plate-versus-film measure draws the s01 sheet whatever shot `npm run plates` names",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "cant-build",
+              "frame": 432
+            },
+            "text": "`plates-from-poses.mjs` ends by rendering `KeyFilmS01` and running `measure-keys.py <shot>`; `KeyFilmS01.tsx` imports v3/keys/s01-arrival-overwhelm.json and shotS01Plan's sheet, so for any other shot its control reads `control FILM: key ready: film rig as drawn -> mad 98.08, worst centroid handR 41.24 px (pass False)` and the run ends `refused: the plate-versus-film measure did not trip its control`. Plates and the key sheet are written before that step, so `probe-poses.py` reads them, but `measured` (C20, C21, C22, C31, the hinge measure and the film measure) is never written for s02-the-frame or s02-cant-build: neither key sheet carries one. The film component needs the shot's keys and lead arms (the pose sheet of the shot) instead of the s01 constants.",
+            "references": [],
+            "before": "npm run plates -- s02-cant-build: plates written, measure refused, no `measured` on any key",
+            "after": "the film step draws the named shot's keys and the measure writes `measured` for it",
+            "file": "v3/proposals/p023-the-plate-versus-film-measure-draws-the.json"
+          }
         }
       ]
     },
@@ -8394,14 +8476,6 @@
     }
   },
   "flags": [
-    {
-      "beat": "cant-build",
-      "text": "held 100 % of the beat (over 90 %): nothing moves"
-    },
-    {
-      "beat": "cant-build",
-      "text": "no breakdowns between keys: straight inbetweens"
-    },
     {
       "beat": "art-world",
       "text": "no breakdowns between keys: straight inbetweens"

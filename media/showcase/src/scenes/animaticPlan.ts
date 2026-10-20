@@ -14,12 +14,14 @@ import theFrame from '../../v3/blocking/the-frame.json';
 import s01Keys from '../../v3/keys/s01-arrival-overwhelm.json';
 import s01Poses from '../../v3/poses/s01-arrival-overwhelm.json';
 import s02Keys from '../../v3/keys/s02-cant-build-frame.json';
+import s02CantBuildKeys from '../../v3/keys/s02-cant-build.json';
+import s02CantBuildPoses from '../../v3/poses/s02-cant-build.json';
 import s02FrameKeys from '../../v3/keys/s02-the-frame.json';
 import s02FramePoses from '../../v3/poses/s02-the-frame.json';
 import s02Layout from '../../v3/layouts/s02-cant-build-frame.json';
 import lightFile from '../../v3/light.json';
 import timelineFile from '../../v3/timeline.json';
-import {blockingAt, blockingTrack, emitterPointAt, parseBlocking, resolveBlocking, type Blocking} from '../library/animation/blocking';
+import {blockingAt, blockingTrack, emitterPointAt, grainAt, parseBlocking, resolveBlocking, type Blocking} from '../library/animation/blocking';
 import {cameraAt, cameraFromLayout, lockedCamera, type Camera, type CameraPose} from '../library/animation/camera';
 import {describeFrame, heldDrawing, listBreakdowns, parseKeySheet, type FrameInfo, type KeySheet} from '../library/animation/keys';
 import {coversTimeline, emitterIntensityAt, lightAt, lightTrack, lightTrackFromContract, parseLightContract} from '../library/animation/light';
@@ -70,6 +72,10 @@ const s01Sheet = poseKeySheet(s01Poses_, s01Keys_);
 const s02FrameKeys_ = parseKeySheet(s02FrameKeys);
 const s02FramePoses_ = parsePoseSheet(s02FramePoses);
 const s02FrameChart = poseChartFrom(s02FramePoses_, s02FrameKeys_, jointParents);
+/** Beat 3 (`s02-cant-build`, sp-3.1 to sp-3.3) plays its own pose sheet in film frames, the body only: its cloak and hair lag from beat 4, where the sheet derives them. */
+const s02CantBuildKeys_ = parseKeySheet(s02CantBuildKeys);
+const s02CantBuildPoses_ = parsePoseSheet(s02CantBuildPoses);
+const s02CantBuildChart = poseChartFrom(s02CantBuildPoses_, s02CantBuildKeys_, jointParents);
 /**
  * Beat 4 (`s02-the-frame`, D99) is the one shot whose secondaries are DERIVED (D97: the cloak is cloth, the hair is hair, `PoseChart.follows`), and the animatic plays them: `pose` below is the chart with its follows, so the cloak
  * trails the body and drops, as the shot's own render draws it. The body alone, `bodyPose`, is the chart without them: what the hold-band and twos probes measure on the figure layers, because a cloak still moving 24 frames
@@ -78,7 +84,11 @@ const s02FrameChart = poseChartFrom(s02FramePoses_, s02FrameKeys_, jointParents)
  */
 const playedCharts: Record<string, PoseChart> = (() => {
   const {keys, breakdowns} = poseChartFrom(s01Poses_, s01Keys_, jointParents);
-  return {'s01-arrival-overwhelm': {keys, breakdowns}, 's02-the-frame': {keys: s02FrameChart.keys, breakdowns: s02FrameChart.breakdowns, follows: s02FrameChart.follows}};
+  return {
+    's01-arrival-overwhelm': {keys, breakdowns},
+    's02-cant-build': {keys: s02CantBuildChart.keys, breakdowns: s02CantBuildChart.breakdowns},
+    's02-the-frame': {keys: s02FrameChart.keys, breakdowns: s02FrameChart.breakdowns, follows: s02FrameChart.follows},
+  };
 })();
 /**
  * The garment (D69, D99): the pose sheet's cloak is the rig's poncho part (`ponchoPoint` is its tip), and the sheet says on which frame it comes off (`dropsAt`, the first frame after the cloth has stopped moving).
@@ -104,9 +114,9 @@ const partsOrder = (shot: string, pose: Joints, info: FrameInfo, garment: Garmen
   return garment === 'swoop' ? order.filter((n) => n !== 'poncho') : order;
 };
 const bodyCharts: Record<string, PoseChart> = Object.fromEntries(Object.entries(playedCharts).map(([shot, chart]) => [shot, {keys: chart.keys, breakdowns: chart.breakdowns}]));
-const keySheets: Record<string, KeySheet> = {'s01-arrival-overwhelm': s01Sheet, 's02-cant-build-frame': parseKeySheet(s02Keys), 's02-the-frame': poseKeySheet(s02FramePoses_, s02FrameKeys_)};
+const keySheets: Record<string, KeySheet> = {'s01-arrival-overwhelm': s01Sheet, 's02-cant-build-frame': parseKeySheet(s02Keys), 's02-cant-build': poseKeySheet(s02CantBuildPoses_, s02CantBuildKeys_), 's02-the-frame': poseKeySheet(s02FramePoses_, s02FrameKeys_)};
 /** Key sheets whose frames are film frames (a beat's own sheet inside a shot that starts earlier): their keys are read at `frame`, not at the frame since the shot began. */
-const FILM_FRAME_SHEETS: ReadonlySet<string> = new Set(['s02-the-frame']);
+const FILM_FRAME_SHEETS: ReadonlySet<string> = new Set(['s02-cant-build', 's02-the-frame']);
 
 /** liftChart as a key sheet (rest / raise / settle), the placeholder for every shot whose key sheet is not drawn yet. */
 const placeholderSheet: KeySheet = {
@@ -183,7 +193,7 @@ export type FrameState = {
   blocking: Blocking;
   camera: CameraPose;
   /** `intensity` is 0 on a frame with no light (a beat with no emitter, or the frames between two emitters). */
-  emitter: {x: number; y: number; radius: number; color: string; intensity: number};
+  emitter: {x: number; y: number; radius: number; color: string; intensity: number; grain?: number};
   /** The beat-local frame the key sheet is read at. */
   local: number;
   /** The pose drawn on this frame (a held shot: each key for exactly the hold it declares; a played shot: its pose chart on twos) and the single-key chart that holds it. */
@@ -228,6 +238,7 @@ export const frameState = (frame: number): FrameState => {
   const placed = resolveBlocking(blockingByBeat[beat.id]!, frame - (local - drawingRow(sheet, local)));
   const blocking = {...blockingAt(blockingOnTimeline, frame), figureCrop: placed.figureCrop, figure: {...placed.figure, ...(partsRigged ? {order: partsOrder(shot!, bodyPose, info, garment)} : {}), ...(garment === 'swoop' ? {swoop: true} : {})}};
   const colour = lightAt(light, frame);
+  const grain = grainAt(blockingByBeat[beat.id]!, frame);
   const spot = contract ? emitterPointAt(blockingByBeat[beat.id]!, beat, frame) : null;
   return {
     frame,
@@ -241,6 +252,7 @@ export const frameState = (frame: number): FrameState => {
       radius: EMITTER_RADIUS,
       color: colour,
       intensity: contract ? emitterIntensityAt(contract, beat.id, frame) : 0.9,
+      ...(grain !== undefined ? {grain} : {}),
     },
     local,
     pose,

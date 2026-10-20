@@ -134,7 +134,7 @@ def time_faults(bl, beat, drops=()):
 # ---------- props apart ----------
 # Extents of each placeholder prop relative to its anchor, per unit scale, as (left, top, right, bottom) in stage pixels: the bounding box of the pixels that differ between the animatic's still
 # with the prop and without it (render-props.mjs, 1280x720, camera locked), divided by the scale it stood at. The stalk is measured facing left and mirrors when it faces right.
-PROP_EXTENT = {"box": (-67, -156, 106, 1), "bubble": (-128, -132, 126, 128), "gadget": (-56, -169, 108, 69), "stalk": (-51, -333, 43, 10), "structure": (-112, -302, 112, 2), "heap": (-88, -64, 88, 4), "lid": (-78, -23, 108, 68), "arch": (-62, -172, 62, 3), "ring": (-53, -53, 53, 53), "patch": (-58, -90, 58, 2), "bead": (-8, -8, 148, 47)}
+PROP_EXTENT = {"box": (-67, -156, 106, 1), "bubble": (-128, -132, 126, 128), "gadget": (-56, -169, 108, 69), "stalk": (-51, -333, 43, 10), "structure": (-112, -302, 112, 2), "heap": (-88, -64, 88, 4), "lid": (-78, -23, 108, 68), "arch": (-62, -172, 62, 3), "ring": (-53, -53, 53, 53), "patch": (-58, -90, 58, 2), "patch-2": (-58, -90, 58, 2), "patch-3": (-58, -90, 58, 2), "bead": (-8, -8, 148, 47)}
 STANDS = ("box", "stalk", "structure", "heap")   # anchored at a foot: it stands on the floor
 FLOOR_BAND = (-60, 260)                  # the foot's y relative to the floor line: the stage is 3/4 view, so the floor is a band, not a line
 TOUCH = 4                                # pixels two rectangles may share each way before they count as overlapping
