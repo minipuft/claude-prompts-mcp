@@ -183,6 +183,17 @@ jobs:
         with:
           node-version-file: .node-version
 
+      # Advisory, never a gate: the delivery contract falling behind the latest repository-standards
+      # release is a fact about the repository, and only a separate adoption PR can change it, so a
+      # new release must not turn every open PR red. The fleet audit upstream is what fails on lag.
+      # Unguarded on purpose (lag is the same whoever opened the PR), and `continue-on-error` keeps
+      # even a crash from failing this job. scripts/pr-check.mjs lists it in ADVISORY_CI_STEPS.
+      - name: Warn when the delivery contract is behind the latest release (scripts/warn-contract-lag.mjs)
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/warn-contract-lag.mjs
+
       - name: Prove the body check can fail (positive control)
         if: github.event.pull_request.user.type != 'Bot' && !startsWith(github.head_ref, 'release-please--')
         run: node scripts/validate-pr-body.mjs --self-test

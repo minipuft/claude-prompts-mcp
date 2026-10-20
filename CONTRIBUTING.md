@@ -395,6 +395,13 @@ a non-bot PR are three positive controls, the body check, the squash-message che
 `commitlint` on the title -- and `pr:check` runs every one of them locally, from the repo root, in
 about a second. Run it before `gh pr create`; a green run means that workflow will be green too.
 
+One step warns and never fails: `scripts/warn-contract-lag.mjs` compares `.delivery-contract.json`
+`templateVersion` with the latest repository-standards release and, when the contract is behind,
+annotates the pull request with both versions. It is about the repository, not the change under
+review, and only a separate adoption pull request clears it, so do not fix it inside an unrelated
+PR. `pr:check` lists it in `ADVISORY_CI_STEPS` instead of running it, and the parity test fails if
+an unmirrored workflow step is missing from that list or lacks `continue-on-error: true`.
+
 **The squash-message check reads the commit the merge will write, not the body you wrote.**
 GitHub re-flows the PR body at 72 columns when it writes the squash commit, and release-please
 parses that re-flowed text. A commit the parser rejects is left out of the release silently: no
@@ -418,7 +425,7 @@ title beyond its type" -- so following these instructions exactly still shipped 
 title, which is how #283 failed on `subject-case` after passing locally._
 
 **These scripts are installed, not written here.** `scripts/pr-check.mjs`, `scripts/pr-body.mjs`,
-`scripts/validate-pr-body.mjs`, `scripts/validate-squash-message.mjs`,
+`scripts/validate-pr-body.mjs`, `scripts/validate-squash-message.mjs`, `scripts/warn-contract-lag.mjs`,
 `scripts/vendor/conventional-commits-parser.cjs`, `scripts/adr.mjs`, `commitlint.rules.mjs`,
 `.husky/commit-msg` and `.github/workflows/pr-conventions.yml` are managed copies of the fleet delivery contract
 (`minipuft/repository-standards`), at the version `.delivery-contract.json` records; this
