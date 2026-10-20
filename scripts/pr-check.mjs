@@ -201,6 +201,20 @@ export const MIRRORED_CI_STEPS = [
   },
 ];
 
+/**
+ * Workflow `run:` steps that report and never gate, so this script deliberately does NOT mirror
+ * them. The parity test requires every unguarded `run:` step in `pr-conventions.yml` to be named
+ * here AND to carry `continue-on-error: true`, so an advisory step cannot quietly become a gate
+ * this script skips.
+ *
+ * The contract-lag warning compares `.delivery-contract.json` with the latest repository-standards
+ * release: a fact about the repository, not about the pull request being checked, and one only a
+ * separate adoption pull request can change.
+ */
+export const ADVISORY_CI_STEPS = [
+  "Warn when the delivery contract is behind the latest release (scripts/warn-contract-lag.mjs)",
+];
+
 function node(args) {
   return spawnSync(process.execPath, args, {
     cwd: REPO_ROOT,

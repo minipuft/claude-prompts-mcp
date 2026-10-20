@@ -21,6 +21,10 @@
  * comparing command strings would report a difference that is correct behaviour. The step name is
  * the stable join key, and a rename is itself a change worth failing on.
  *
+ * THE OTHER HALF. A `run:` step that `pr-check.mjs` does not mirror must be declared in its
+ * `ADVISORY_CI_STEPS` and carry `continue-on-error: true`, so an unguarded step cannot gate CI
+ * while the local check skips it. The contract-lag warning is the one such step today.
+ *
  * Sibling precedent: `pr-conventions-merge-settings.test.ts` extracts a step's script from this
  * same workflow file so it cannot drift from what CI executes. This is the same technique applied
  * to the step LIST rather than to one step's body.
@@ -53,6 +57,7 @@ interface WorkflowStep {
   name?: string;
   run?: string;
   if?: string;
+  'continue-on-error'?: boolean;
 }
 
 interface WorkflowFile {
@@ -72,15 +77,26 @@ function gatingStepNames(): string[] {
     .sort();
 }
 
+function unmirroredRunSteps(): WorkflowStep[] {
+  const workflow = parseYamlOrThrow<WorkflowFile>(readFileSync(WORKFLOW, 'utf8'));
+  const mirrored = new Set(mirroredStepNames);
+  return Object.values(workflow.jobs)
+    .flatMap((job) => job.steps)
+    .filter((step) => typeof step.run === 'string' && !mirrored.has(step.name ?? ''));
+}
+
 let mirroredStepNames: string[];
 let mirroredIds: string[];
+let advisoryStepNames: string[];
 
 beforeAll(async () => {
   const module = (await import(pathToFileURL(PR_CHECK).href)) as {
     MIRRORED_CI_STEPS: { id: string; ciStepName: string }[];
+    ADVISORY_CI_STEPS: string[];
   };
   mirroredStepNames = module.MIRRORED_CI_STEPS.map((step) => step.ciStepName).sort();
   mirroredIds = module.MIRRORED_CI_STEPS.map((step) => step.id);
+  advisoryStepNames = [...module.ADVISORY_CI_STEPS].sort();
 });
 
 describe('pr:check mirrors the PR Conventions workflow', () => {
@@ -112,6 +128,19 @@ describe('pr:check mirrors the PR Conventions workflow', () => {
     const raw = readFileSync(WORKFLOW, 'utf8');
     for (const name of mirroredStepNames) {
       expect(raw).toContain(name);
+    }
+  });
+
+  it('declares every unmirrored run step advisory, and none of them can fail the job', () => {
+    const unmirrored = unmirroredRunSteps();
+    // Positive control: the contract-lag warning is such a step, so an empty selector cannot
+    // make the equality below pass by comparing two empty lists.
+    expect(unmirrored.length).toBeGreaterThan(0);
+    expect(unmirrored.map((step) => step.name ?? '(unnamed step)').sort()).toEqual(
+      advisoryStepNames
+    );
+    for (const step of unmirrored) {
+      expect(step['continue-on-error']).toBe(true);
     }
   });
 });
