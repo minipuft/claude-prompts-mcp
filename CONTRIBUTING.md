@@ -396,8 +396,9 @@ a non-bot PR are three positive controls, the body check, the squash-message che
 about a second. Run it before `gh pr create`; a green run means that workflow will be green too.
 
 One step warns and never fails: `scripts/warn-contract-lag.mjs` compares `.delivery-contract.json`
-`templateVersion` with the latest repository-standards release and, when the contract is behind,
-annotates the pull request with both versions. It is about the repository, not the change under
+`templateVersion` with the latest repository-standards release and, when the contract is behind
+AND that release changed the delivery-contract template, annotates the pull request with both
+versions; a release that leaves the template alone stays quiet. It is about the repository, not the change under
 review, and only a separate adoption pull request clears it, so do not fix it inside an unrelated
 PR. `pr:check` lists it in `ADVISORY_CI_STEPS` instead of running it, and the parity test fails if
 an unmirrored workflow step is missing from that list or lacks `continue-on-error: true`.

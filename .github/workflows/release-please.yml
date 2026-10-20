@@ -67,7 +67,7 @@ jobs:
 
       - name: Retire finished plans
         if: steps.release.outputs.pr && steps.release.outputs.release_created != 'true'
-        uses: minipuft/repository-standards/actions/retire-plans@6de1f8d6f703135a1d7ea76050ef1b9e537b51bb # v1.11.0
+        uses: minipuft/repository-standards/actions/retire-plans@ff2e508b179264555c0c440121f848542ed36b36 # v1.12.0
         with:
           mode: apply
 

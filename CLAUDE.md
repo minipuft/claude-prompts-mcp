@@ -144,7 +144,8 @@ the line, or add a `BEGIN_COMMIT_OVERRIDE` block to the body -- the marker count
 body, even quoted in backticks, so never mention it in prose.
 
 One more step warns and never gates: `scripts/warn-contract-lag.mjs` annotates a PR when
-`.delivery-contract.json` trails the latest repository-standards release. Leave it to an adoption PR.
+`.delivery-contract.json` trails a repository-standards release that changed the contract template.
+Leave it to an adoption PR.
 
 Parity is enforced rather than documented: `scripts/pr-check.mjs` names each workflow step it
 mirrors and `server/tests/unit/scripts/pr-check-ci-parity.test.ts` reads `pr-conventions.yml` and
