@@ -1,0 +1,75 @@
+{
+  "shot": "s04-settle",
+  "fps": 30,
+  "frames": [
+    1650,
+    1950
+  ],
+  "provisional": true,
+  "source": {
+    "timeline": "v3/timeline.json (home-settle 1650-1950)",
+    "layout": "v3/layouts/s02-cant-build-frame.json",
+    "proposal": "v3/screenplay.json sp-8.1 to sp-8.3"
+  },
+  "pieces": [],
+  "actors": {
+    "human": {
+      "kind": "rig",
+      "keySheet": "v3/keys/s04-settle.json",
+      "keys": [
+        {
+          "name": "stand",
+          "frame": 1660,
+          "pose": "Home: she stands beside what she built, arms easy, looking at it.",
+          "lineOfAction": "one C line, bow 0.07",
+          "changes": "Home: she stands beside what she built, arms easy, looking at it.",
+          "hold": 76
+        },
+        {
+          "name": "settle",
+          "frame": 1760,
+          "pose": "She turns to the patch she will sit on, weight settling onto the back foot: the hips have only begun to sink.",
+          "lineOfAction": "one C line, bow 0.08",
+          "changes": "She turns to the patch she will sit on, weight settling onto the back foot: the hips have only begun to sink.",
+          "hold": 32
+        },
+        {
+          "name": "seat",
+          "frame": 1816,
+          "pose": "Seated on the patch, forearms on her knees: she is the lowest she is in the second half.",
+          "lineOfAction": "one C line, bow 0.12",
+          "changes": "Seated on the patch, forearms on her knees: she is the lowest she is in the second half.",
+          "hold": 20
+        },
+        {
+          "name": "window",
+          "frame": 1860,
+          "pose": "One last look through the frame, now a window, from where she sits: she leans a little toward it.",
+          "lineOfAction": "one C line, bow 0.12",
+          "changes": "One last look through the frame, now a window, from where she sits: she leans a little toward it.",
+          "hold": 60
+        }
+      ],
+      "breakdowns": [],
+      "note": "Beat 8 (home-settle, 1650-1950): the pose pass of the story points sp-8.1 to sp-8.3, each key bound to its story point. The body only, in film frames."
+    }
+  },
+  "pulses": [],
+  "lag": {
+    "frames": 3,
+    "recovery": 12,
+    "note": "the light follows the drawn layer by 2-4 frames; this chart carries the figure only"
+  },
+  "boil": {
+    "variants": 3,
+    "rate": 4,
+    "seed": 11
+  },
+  "camera": {
+    "span": [
+      1650,
+      1950
+    ],
+    "note": "locked: the camera of these beats is the locked frame (no layout contract for this shot yet)"
+  }
+}

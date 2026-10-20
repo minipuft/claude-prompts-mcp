@@ -1,7 +1,7 @@
 {
   "id": "arrival",
   "provisional": true,
-  "derivedFrom": "restaged 2026-10-19 (row 9.6, beat 1): the box, lid, bubble and gadget stand beside the human so the flood's lamp lands on the trio; the lid opens on its position keys (the lift key 60), the bubble swells out of it over 110-150 with the gadget on inside it, Codex leans in 4 frames before Clawd; props apart per probe-blocking.py; test-scene (no layout contract for this beat's shot yet); the emitter and card are provisional placeholders; no frame prop: the frame is the portal (th-frame-portal, p021) and first stands on stage when Clawd carries it in at sp-4.2 (frame 690)",
+  "derivedFrom": "restaged 2026-10-19 (row 9.6, beat 1): the box, lid, bubble and gadget stand beside the human so the flood's lamp lands on the trio; the lid opens on its position keys (the lift key 60), the bubble swells out of it over 110-150 with the gadget on inside it, Codex leans in 4 frames before Clawd; props apart per probe-blocking.py; test-scene (no layout contract for this beat's shot yet); the emitter and card are provisional placeholders; no frame prop: the frame is the portal (th-frame-portal, p021) and first stands on stage when Clawd carries it in at sp-4.2 (frame 690); the seam's glow is 150 px wide until the lid has started to rise and widens to 260 between 58 and 84 (emitter.at: the light lags the lid, then spills; sp-1.2)",
   "figure": {
     "scale": 0.68,
     "x": 420,
@@ -163,7 +163,17 @@
       382
     ],
     "anchor": "box seam",
-    "storyPoint": "sp-1.1"
+    "storyPoint": "sp-1.1",
+    "at": [
+      {
+        "frame": 58,
+        "radius": 150
+      },
+      {
+        "frame": 84,
+        "radius": 260
+      }
+    ]
   },
   "card": "eagle-lyio3is7tokub",
   "cardNote": "provisional: board §8 \"Silhouette before a lit interior\" for the medium-wide on the trio and the box; not yet chosen against the layout sheet",

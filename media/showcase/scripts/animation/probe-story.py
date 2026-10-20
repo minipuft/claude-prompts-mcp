@@ -195,8 +195,14 @@ def read_prop(film, sp, o, fb, fa, i):
     return True, f"{actor!r} {want}, {best} px change within {REACH} px of ({anc[0]:.0f}, {anc[1]:.0f})"
 
 
+def present_family(rec, name, f):
+    """A name that stands for a family of numbered props (`stroke`: stroke-1, stroke-2, stroke-3): present when the prop of that name is, or any `<name>-<n>` is. The screenplay's state key `strokes.count` counts `stroke`, its recipes name the three props one by one."""
+    names = [name] + [n for n in (rec.get("actors") or {}) if re.fullmatch(re.escape(name) + r"-\d+", n)]
+    return any(present(rec, n, f) for n in names)
+
+
 def read_count(film, sp, o, fb, fa, i):
-    n = lambda f: sum(1 for a in o["actors"] if present(film.rec(f), a, f))
+    n = lambda f: sum(1 for a in o["actors"] if present_family(film.rec(f), a, f))
     nb, na = n(fb), n(fa)
     if o["expect"] == "rises" and not na > nb: return False, f"{'/'.join(o['actors'])} count is {nb} at f{fb} and {na} at f{fa}: the blocking names {sorted(film.rec(fa).get('actors') or {}) or 'no actors'} and none of them arrives inside the story point"
     return True, f"count {nb} -> {na}"
@@ -858,6 +864,25 @@ def run_recipe_control():
     return res, bad
 
 
+def family_cases():
+    """The count reader over a family name: a beat of 60 frames whose blocking brings stroke-1, stroke-2 and stroke-3 on at 30, 40 and 50. Returns [(label, actors, expected ok)] and the film."""
+    tl = {"beats": [{"id": "b", "start": 0, "end": 60}]}; ledger = {"beats": [{"id": "b", "state": []}]}
+    sps = [{"id": "sp-1.1", "frame": 20, "slug": "A", "after": [], "colour": "k"}, {"id": "sp-1.2", "frame": 59, "slug": "B", "after": [], "colour": "k"}]
+    blocking = {"actors": {f"stroke-{k}": {"x": 100 * k, "y": 100, "scale": 1, "on": 20 + 10 * k} for k in (1, 2, 3)} | {"strokes": {"x": 5, "y": 5, "scale": 1}}}
+    film = Film(sps, {"colour_keys": {}, "state_keys": {"keys": {}}}, ledger, tl, lambda f: np.full((180, 320, 3), 12, np.uint8), lambda f: np.full((180, 320, 3), 12, np.uint8), lambda f: None, {}, {"b": blocking}, {}, 60)
+    return film, [("a count over `stroke` while stroke-1 to stroke-3 come on inside the window", ["stroke"], True), ("a count over `ghost`, which no prop of the beat is or is numbered from", ["ghost"], False),
+                  ("a count over `strok`, a prefix of a name and not a family", ["strok"], False)]
+
+
+def run_family_control():
+    film, cases = family_cases(); res, bad = [], []
+    for label, actors, want in cases:
+        ok, why = read_count(film, film.sps[0], {"actors": actors, "expect": "rises"}, 19, 59, 0)
+        res.append(f"{label} -> {'pass' if ok else 'FAIL'}")
+        if bool(ok) != want: bad.append(f"{label} ({why})")
+    return res, bad
+
+
 def run_travel_control():
     res, bad = [], []
     for label, film, i, recipe, want in travel_films():
@@ -876,8 +901,8 @@ def main():
     ap.add_argument("--keys", default=j("v3", "keys")); ap.add_argument("--poses", default=j("v3", "poses")); ap.add_argument("--ledger", default=j("v3", "beats-v2.json")); ap.add_argument("--timeline", default=j("v3", "timeline.json"))
     ap.add_argument("--story", default=None, help="comma-separated story point ids to judge (the others are not read)"); ap.add_argument("--json", default=None)
     a = ap.parse_args(); pr = Probe("story", a.json)
-    (res, bad), (res_t, bad_t), (res_r, bad_r) = run_control(), run_travel_control(), run_recipe_control()
-    bad_t = bad_t + bad_r
+    (res, bad), (res_t, bad_t), (res_r, bad_r), (res_f, bad_f) = run_control(), run_travel_control(), run_recipe_control(), run_family_control()
+    bad_t = bad_t + bad_r + bad_f; res_r = res_r + res_f
     pr.control(not bad and not bad_t, "; ".join(res + res_t + res_r) + ("" if not bad_t else " (NOT AS EXPECTED: " + "; ".join(bad_t) + ")"))
     d = read_json(a.screenplay, "the screenplay"); ledger = read_json(a.ledger, "the ledger"); tl = load_timeline(a.timeline)
     if d.get("schema") != "showcase.screenplay.1": die(f"{a.screenplay} has schema {d.get('schema')!r}")

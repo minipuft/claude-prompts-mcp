@@ -113,8 +113,40 @@
  },
  {
   "key": "K8",
-  "name": "shrink",
+  "name": "joy-c",
   "plate": "assets/human/keys/s01-arrival-overwhelm/K8.png",
+  "family": "home",
+  "cropPx": [
+   279,
+   520
+  ],
+  "baselineInCrop": 517,
+  "scale": 0.4745,
+  "originMask": [
+   35,
+   -138
+  ]
+ },
+ {
+  "key": "K9",
+  "name": "flinch",
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K9.png",
+  "family": "home",
+  "cropPx": [
+   289,
+   428
+  ],
+  "baselineInCrop": 425,
+  "scale": 0.4745,
+  "originMask": [
+   19,
+   56
+  ]
+ },
+ {
+  "key": "K10",
+  "name": "shrink",
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K10.png",
   "family": "home",
   "cropPx": [
    236,
@@ -125,6 +157,22 @@
   "originMask": [
    72,
    -116
+  ]
+ },
+ {
+  "key": "K11",
+  "name": "fold",
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K11.png",
+  "family": "home",
+  "cropPx": [
+   251,
+   424
+  ],
+  "baselineInCrop": 421,
+  "scale": 0.4745,
+  "originMask": [
+   58,
+   64
   ]
  }
 ]

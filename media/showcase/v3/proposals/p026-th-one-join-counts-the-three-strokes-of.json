@@ -1,0 +1,17 @@
+{
+  "id": "p026",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "art-world",
+    "frame": 1010
+  },
+  "title": "th-one-join counts the three strokes of sp-5.2 as three joins; the screenplay's own recipe asks for exactly that",
+  "text": "`th-one-join` (probe-theme.py `check_one_join`) refuses a story point after sp-4.6 whose window brings more than one prop `on`. sp-5.2's recipes ask for `stroke-1`, `stroke-2` and `stroke-3` to appear in order staggered by at least 6 frames (`count rises to 3`, `stagger on`), so the staging that passes the story point fails the theme: `th-one-join (one-join): sp-5.2 brings 3 new joins (stroke-1, stroke-2, stroke-3) after sp-4.6: one lit join at a time`. A stroke is not a join: the theme's own measure is `joins.lit rises by at most 1 per story point`, and the probe counts every prop's `on`. The three strokes are staggered 8 and 12 frames apart on animatic 09 draft (1010, 1018, 1030). Either `arrivals` counts only the props that are joins (the blocks, the stalk set against them, the gates), or sp-5.2 is exempt as the flood is (`unstaggered`), or the three strokes are one prop. Beat 7 was staged to stay inside the theme: its three gates are the shaded world's own, lit by where the emitter stands, so sp-7.3 brings one prop (the bead).",
+  "references": [],
+  "before": "th-one-join FAIL on sp-5.2 (3 arrivals)",
+  "after": "the theme reads joins, not every prop that comes on",
+  "status": "open",
+  "ruling": null
+}

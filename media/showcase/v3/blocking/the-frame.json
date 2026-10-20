@@ -1,7 +1,7 @@
 {
   "id": "the-frame",
   "provisional": true,
-  "derivedFrom": "restaged wide 2026-10-19 (D101, row 9.5): the frame large near centre, the figure small against it; props apart per probe-blocking.py; Clawd enters from the right carrying the frame (690-738), the cloak heap lies on the floor from the frame the cloak drops (760, the pose sheet's dropsAt), Codex walks to the heap and nudges it (812). The human's root travels toward the frame in the pose sheet's moves (`figure.at`: 814-836 step to threshold, 62 px, so the hand rests on the frame's edge at 840; 864-896 threshold to through, 90 px, so the body crosses the frame's left edge by the end of the beat). The test scene's arch, gates and floor stand unused",
+  "derivedFrom": "restaged wide 2026-10-19 (D101, row 9.5): the frame large near centre, the figure small against it; props apart per probe-blocking.py; Clawd enters from the right carrying the frame (690-738), the cloak heap lies on the floor from the frame the cloak drops (760, the pose sheet's dropsAt), Codex walks to the heap and nudges it (812). The human's root travels toward the frame in the pose sheet's moves (`figure.at`: 814-836 step to threshold, 62 px, so the hand rests on the frame's edge at 840; 864-896 threshold to through, 90 px, so the body crosses the frame's left edge by the end of the beat). The test scene's arch, gates and floor stand unused; the frame's light wells up as she nears it and narrows to the frame as she steps through: the glow widens from 260 to 700 px over 800-870, holds to 899 and narrows to 260 by 918 (emitter.at, sp-4.6 'outside luminance falls')",
   "cutIn": true,
   "cutOut": true,
   "shot": "s02-cant-build-frame",
@@ -176,7 +176,25 @@
     ],
     "anchor": "frame interior",
     "follows": "frame",
-    "storyPoint": "sp-4.2"
+    "storyPoint": "sp-4.2",
+    "at": [
+      {
+        "frame": 800,
+        "radius": 260
+      },
+      {
+        "frame": 870,
+        "radius": 700
+      },
+      {
+        "frame": 899,
+        "radius": 700
+      },
+      {
+        "frame": 918,
+        "radius": 260
+      }
+    ]
   },
   "card": "seuss-nested-frames",
   "cardNote": "provisional: board §1 world, \"Nested frames on black\" for the frame interior; the layout sheet may replace it"

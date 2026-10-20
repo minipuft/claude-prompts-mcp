@@ -4,6 +4,7 @@ import {Box, Lid, lidAngleAtFrontY} from '../props/Box';
 import {Bubble} from '../props/Bubble';
 import {Gadget} from '../props/Gadget';
 import {Heap} from '../props/Heap';
+import {CrayonPiece, GridPiece, OpeningStalk, PointerPiece, StrokePiece, TitlePiece} from '../props/Scaffold';
 import {ArchPiece, PatchPiece, RingPiece, StalkPiece, StringPiece} from '../props/Pieces';
 import {Sprite} from '../Sprite';
 import {settled, type RoleMap} from '../tokens';
@@ -23,11 +24,15 @@ import {settled, type RoleMap} from '../tokens';
  * the LID is the box's lid and its anchor is the mid-point of its front edge (the part the hands lift): its opening angle is the one whose front edge stands at the anchor's `y` above the box's closed lid
  * (`lidAngleAtFrontY`; closed at 80 px of the box's own scale above its foot, open about 85 px higher), so the lid opens on the frames its `at` keys say; the BUBBLE swells as it rises out of the box: its size is
  * `BUBBLE_SWELL.from` of its `scale` where its centre is at `BUBBLE_SWELL.fromY` and the whole `scale` from `BUBBLE_SWELL.toY` up. A box with no lid actor draws its own lid closed.
+ *
+ * The scaffold beats (5-8, `props/Scaffold.tsx`): the crayon stands on its tip, the three strokes (`stroke-1` to `stroke-3`) on the stalk's foot (they are the stalk's own centreline in three cuts), the grid on its bottom centre, the pointer
+ * (Codex's arm) hangs from its shoulder to the finger at (-290, -272), the title mark is centred. The STALK draws a leaf that opens when its placement carries `open` (`openAt` keys of the blocking, resolved by `resolveBlocking`); with none it is the
+ * stalk of beats 2 and 3. The three gates of beat 7 are the blocking's own `gates`, which the shaded world lights by where the emitter stands, so they have no prop of their own.
  */
-export type ActorName = 'box' | 'lid' | 'bubble' | 'gadget' | 'stalk' | 'arch' | 'ring' | 'patch' | 'patch-2' | 'patch-3' | 'bead' | 'structure' | 'heap';
+export type ActorName = 'grid' | 'stroke-1' | 'stroke-2' | 'stroke-3' | 'pointer' | 'crayon' | 'title' | 'box' | 'lid' | 'bubble' | 'gadget' | 'stalk' | 'arch' | 'arch-2' | 'ring' | 'ring-2' | 'patch' | 'patch-2' | 'patch-3' | 'bead' | 'bead-2' | 'structure' | 'heap';
 
 /** Which role map each placeholder is filled with when the scene is given none: a settled map, so every fill is a fixed colour of v3/roles.json (C1, C24). The animatic gives every beat its own (`SceneProps.actorRoles`). */
-const ROLES: Record<ActorName, RoleMap> = {box: settled.gadget, lid: settled.gadget, bubble: settled.kit, gadget: settled.gadget, stalk: settled.kit, arch: settled.kit, ring: settled.kit, patch: settled.kit, 'patch-2': settled.kit, 'patch-3': settled.kit, bead: settled.kit, structure: settled.kit, heap: settled.kit};
+const ROLES: Record<ActorName, RoleMap> = {grid: settled.kit, 'stroke-1': settled.kit, 'stroke-2': settled.kit, 'stroke-3': settled.kit, pointer: settled.kit, crayon: settled.kit, title: settled.kit, box: settled.gadget, lid: settled.gadget, bubble: settled.kit, gadget: settled.gadget, stalk: settled.kit, arch: settled.kit, 'arch-2': settled.kit, ring: settled.kit, 'ring-2': settled.kit, patch: settled.kit, 'patch-2': settled.kit, 'patch-3': settled.kit, bead: settled.kit, 'bead-2': settled.kit, structure: settled.kit, heap: settled.kit};
 
 /** Offset of the anchor inside each prop's own SVG box, in the prop's native pixels (Box 220 x 170 from (-10, -30); Bubble 280 x 280; Gadget 200 x 260 from (-20, -20), dial at (88, 170)). */
 const BOX_FOOT: [number, number] = [95, 160];
@@ -46,7 +51,7 @@ const BEAD_END: [number, number] = [140, 30];
 const BEAD_SAG = 24;
 
 /** Back to front: the pieces and the structure behind, then the box with its lid, the gadget inside the bubble, the bubble over it. */
-export const ACTOR_NAMES: readonly ActorName[] = ['structure', 'stalk', 'arch', 'ring', 'patch', 'patch-2', 'patch-3', 'bead', 'heap', 'box', 'lid', 'gadget', 'bubble'];
+export const ACTOR_NAMES: readonly ActorName[] = ['grid', 'structure', 'stroke-1', 'stroke-2', 'stroke-3', 'stalk', 'arch', 'arch-2', 'ring', 'ring-2', 'patch', 'patch-2', 'patch-3', 'bead', 'bead-2', 'heap', 'box', 'lid', 'gadget', 'bubble', 'pointer', 'crayon', 'title'];
 const isActor = (name: string): name is ActorName => (ACTOR_NAMES as readonly string[]).includes(name);
 
 const at = (a: ActorPlacement, offset: [number, number]): {x: number; y: number; scale: number} => ({x: a.x - offset[0] * a.scale, y: a.y - offset[1] * a.scale, scale: a.scale});
@@ -72,19 +77,36 @@ const drawing = (name: ActorName, a: ActorPlacement, blocking: Blocking): React.
     case 'gadget':
       return <Gadget glow={0.5} />;
     case 'stalk':
-      return <StalkPiece flip={a.facing === 'left'} />;
+      return a.open !== undefined ? <OpeningStalk open={a.open} flip={a.facing === 'left'} /> : <StalkPiece flip={a.facing === 'left'} />;
     case 'arch':
+    case 'arch-2':
       return <ArchPiece width={ARCH.width} height={ARCH.height} />;
     case 'ring':
+    case 'ring-2':
       return <RingPiece r={RING_R} />;
     case 'patch':
     case 'patch-2':
     case 'patch-3':
       return <PatchPiece />;
     case 'bead':
+    case 'bead-2':
       return <StringPiece end={BEAD_END} sag={BEAD_SAG} />;
     case 'heap':
       return <Heap />;
+    case 'grid':
+      return <GridPiece />;
+    case 'stroke-1':
+      return <StrokePiece index={1} />;
+    case 'stroke-2':
+      return <StrokePiece index={2} />;
+    case 'stroke-3':
+      return <StrokePiece index={3} />;
+    case 'pointer':
+      return <PointerPiece />;
+    case 'crayon':
+      return <CrayonPiece />;
+    case 'title':
+      return <TitlePiece />;
     case 'structure':
       return (
         <>

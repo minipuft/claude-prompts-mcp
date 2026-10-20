@@ -1,0 +1,139 @@
+{
+  "shot": "s03-scaffold",
+  "fps": 30,
+  "frames": [
+    930,
+    1650
+  ],
+  "provisional": true,
+  "source": {
+    "timeline": "v3/timeline.json (art-world, crossing and programming-world, 930-1650)",
+    "layout": "v3/layouts/s02-cant-build-frame.json",
+    "proposal": "v3/screenplay.json sp-5.1 to sp-7.4"
+  },
+  "pieces": [],
+  "actors": {
+    "human": {
+      "kind": "rig",
+      "keySheet": "v3/keys/s03-scaffold.json",
+      "keys": [
+        {
+          "name": "paper",
+          "frame": 936,
+          "pose": "A white page and nothing on it: she stands before the paper with her arms down while Clawd holds a crayon out.",
+          "lineOfAction": "one C line, bow 0.07",
+          "changes": "A white page and nothing on it: she stands before the paper with her arms down while Clawd holds a crayon out.",
+          "hold": 20
+        },
+        {
+          "name": "take",
+          "frame": 966,
+          "pose": "The right hand opens and closes on the crayon Clawd holds out: a tool is given.",
+          "lineOfAction": "one C line, bow 0.09",
+          "changes": "The right hand opens and closes on the crayon Clawd holds out: a tool is given.",
+          "hold": 20
+        },
+        {
+          "name": "draw",
+          "frame": 1010,
+          "pose": "The crayon raised, she draws the first sweep of a stalk in the air.",
+          "lineOfAction": "one S line, bow 0.1",
+          "changes": "The crayon raised, she draws the first sweep of a stalk in the air.",
+          "hold": 18
+        },
+        {
+          "name": "draw-b",
+          "frame": 1052,
+          "pose": "The second and third sweeps: the arm crosses the other way and the line stays where it was drawn.",
+          "lineOfAction": "one C line, bow 0.08",
+          "changes": "The second and third sweeps: the arm crosses the other way and the line stays where it was drawn.",
+          "hold": 34
+        },
+        {
+          "name": "real",
+          "frame": 1110,
+          "pose": "The lines fill and a real stalk stands there, its leaf opening: both hands come open at once.",
+          "lineOfAction": "one C line, bow 0.06",
+          "changes": "The lines fill and a real stalk stands there, its leaf opening: both hands come open at once.",
+          "hold": 66
+        },
+        {
+          "name": "carry",
+          "frame": 1200,
+          "pose": "She lifts the stalk like a lantern and turns to the edge of the paper, where the lines begin.",
+          "lineOfAction": "one C line, bow 0.08",
+          "changes": "She lifts the stalk like a lantern and turns to the edge of the paper, where the lines begin.",
+          "hold": 16
+        },
+        {
+          "name": "reduce",
+          "frame": 1240,
+          "pose": "Everything is lines now; she walks on with the stalk held in front of her.",
+          "lineOfAction": "one C line, bow 0.07",
+          "changes": "Everything is lines now; she walks on with the stalk held in front of her.",
+          "hold": 36
+        },
+        {
+          "name": "reroute",
+          "frame": 1300,
+          "pose": "She steps aside as Codex strides past to take the lead, the stalk held close.",
+          "lineOfAction": "one S line, bow 0.08",
+          "changes": "She steps aside as Codex strides past to take the lead, the stalk held close.",
+          "hold": 36
+        },
+        {
+          "name": "grid",
+          "frame": 1360,
+          "pose": "A dark grid with lit edges: she stops, the stalk at her side, and looks where Codex points.",
+          "lineOfAction": "one C line, bow 0.08",
+          "changes": "A dark grid with lit edges: she stops, the stalk at her side, and looks where Codex points.",
+          "hold": 56
+        },
+        {
+          "name": "join",
+          "frame": 1440,
+          "pose": "The stalk goes down against the other piece: she leans in with the arm out, and holds.",
+          "lineOfAction": "one C line, bow 0.12",
+          "changes": "The stalk goes down against the other piece: she leans in with the arm out, and holds.",
+          "hold": 56
+        },
+        {
+          "name": "run",
+          "frame": 1520,
+          "pose": "Her hands come away and she steps back to watch the chain run, arms down.",
+          "lineOfAction": "one C line, bow 0.07",
+          "changes": "Her hands come away and she steps back to watch the chain run, arms down.",
+          "hold": 76
+        },
+        {
+          "name": "return",
+          "frame": 1620,
+          "pose": "The frame stands ahead as a window with home in it: she steps toward it, one arm out.",
+          "lineOfAction": "one S line, bow 0.07",
+          "changes": "The frame stands ahead as a window with home in it: she steps toward it, one arm out.",
+          "hold": 28
+        }
+      ],
+      "breakdowns": [],
+      "note": "Beats 5-7 (art-world, crossing, programming-world, 930-1650): the pose pass of the story points sp-5.1 to sp-7.4, each key bound to its story point. The body only, in film frames. Beat 4's keys are v3/poses/s02-the-frame.json."
+    }
+  },
+  "pulses": [],
+  "lag": {
+    "frames": 3,
+    "recovery": 12,
+    "note": "the light follows the drawn layer by 2-4 frames; this chart carries the figure only"
+  },
+  "boil": {
+    "variants": 3,
+    "rate": 4,
+    "seed": 11
+  },
+  "camera": {
+    "span": [
+      930,
+      1650
+    ],
+    "note": "locked: the camera of these beats is the locked frame (no layout contract for this shot yet)"
+  }
+}

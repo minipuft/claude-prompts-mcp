@@ -47,10 +47,16 @@
     "v3/proposals/p021-the-frame-is-on-stage-from-frame-0-the-s.json",
     "v3/proposals/p022-sp-3-2-the-recipes-read-a-fall-as-an-off.json",
     "v3/proposals/p023-the-plate-versus-film-measure-draws-the.json",
+    "v3/proposals/p024-sp-4-3-heap-stays-to-1950-reads-the-bloc.json",
+    "v3/proposals/p025-sp-4-6-next-frames-field-is-paper-reads.json",
+    "v3/proposals/p026-th-one-join-counts-the-three-strokes-of.json",
+    "v3/proposals/p027-sp-5-2-the-key-strokes-count-counts-stro.json",
+    "v3/proposals/p028-sp-5-1-the-key-human-holds-crayon-appear.json",
+    "v3/proposals/p029-sp-6-1-fill-area-falls-80-cannot-be-met.json",
     "v3/materials.json",
     "v3/materials.schema.json"
   ],
-  "inputsHash": "e7e71bef26227466a8573a197d253981c5f46240f38c293fb95cd03fc57332a2",
+  "inputsHash": "ec7d085bbef5044a37fcad342e5b6f987a090577a4fc017cd0a30f929726e4ae",
   "tracks": [
     {
       "name": "pacing",
@@ -972,7 +978,17 @@
                 382
               ],
               "anchor": "box seam",
-              "storyPoint": "sp-1.1"
+              "storyPoint": "sp-1.1",
+              "at": [
+                {
+                  "frame": 58,
+                  "radius": 150
+                },
+                {
+                  "frame": 84,
+                  "radius": 260
+                }
+              ]
             },
             "card": "eagle-lyio3is7tokub"
           }
@@ -1029,7 +1045,17 @@
                 336
               ],
               "anchor": "gadget dial",
-              "storyPoint": "sp-2.1"
+              "storyPoint": "sp-2.1",
+              "at": [
+                {
+                  "frame": 186,
+                  "radius": 150
+                },
+                {
+                  "frame": 205,
+                  "radius": 700
+                }
+              ]
             },
             "card": "seuss-no-one-youer"
           }
@@ -1165,7 +1191,25 @@
               ],
               "anchor": "frame interior",
               "follows": "frame",
-              "storyPoint": "sp-4.2"
+              "storyPoint": "sp-4.2",
+              "at": [
+                {
+                  "frame": 800,
+                  "radius": 260
+                },
+                {
+                  "frame": 870,
+                  "radius": 700
+                },
+                {
+                  "frame": 899,
+                  "radius": 700
+                },
+                {
+                  "frame": 918,
+                  "radius": 260
+                }
+              ]
             },
             "card": "seuss-nested-frames"
           }
@@ -1183,26 +1227,26 @@
               "y": 85
             },
             "codex": {
-              "x": 60,
-              "y": 440,
-              "scale": 1.8
+              "x": 925,
+              "y": 500,
+              "scale": 0.9
             },
             "clawd": {
-              "x": 940,
-              "y": 470,
-              "scale": 1.5
+              "x": 1075,
+              "y": 500,
+              "scale": 0.8
             },
             "emitter": {
               "start": [
-                1000,
-                390
+                1110,
+                520
               ],
               "end": [
-                1080,
-                390
+                1110,
+                520
               ],
-              "anchor": "join (the drawn piece as it fills)",
-              "storyPoint": "sp-5.3"
+              "anchor": "the crayon, then the drawn line, then the stalk's leaf (the piece as it is made)",
+              "storyPoint": "sp-5.1"
             },
             "card": "seuss-cat-stairway"
           }
@@ -1220,25 +1264,50 @@
               "y": 85
             },
             "codex": {
-              "x": 60,
-              "y": 440,
-              "scale": 1.8
+              "x": 925,
+              "y": 500,
+              "scale": 0.9,
+              "at": [
+                {
+                  "frame": 1300,
+                  "x": 925,
+                  "y": 500
+                },
+                {
+                  "frame": 1349,
+                  "x": 1100,
+                  "y": 540
+                }
+              ]
             },
             "clawd": {
-              "x": 940,
-              "y": 470,
-              "scale": 1.5
+              "x": 1075,
+              "y": 500,
+              "scale": 0.8,
+              "at": [
+                {
+                  "frame": 1240,
+                  "x": 1075,
+                  "y": 500
+                },
+                {
+                  "frame": 1270,
+                  "x": 1075,
+                  "y": 330
+                }
+              ]
             },
             "emitter": {
               "start": [
-                1040,
-                390
+                800,
+                274
               ],
               "end": [
-                1040,
-                390
+                800,
+                274
               ],
-              "anchor": "none (the lines themselves glow faintly); placed at the join"
+              "anchor": "the piece's lines (the carried stalk), reaching the grid",
+              "storyPoint": "sp-6.1"
             },
             "card": "eagle-mf83t1h77o7bm"
           }
@@ -1256,26 +1325,66 @@
               "y": 85
             },
             "codex": {
-              "x": 60,
-              "y": 440,
-              "scale": 1.8
+              "x": 1100,
+              "y": 540,
+              "scale": 0.9
             },
             "clawd": {
-              "x": 940,
-              "y": 470,
-              "scale": 1.5
+              "x": 1075,
+              "y": 330,
+              "scale": 0.8
             },
             "emitter": {
               "start": [
-                150,
-                388
+                800,
+                274
               ],
               "end": [
-                325,
-                376
+                800,
+                274
               ],
-              "anchor": "gates, first to last",
-              "storyPoint": "sp-7.2"
+              "anchor": "the join (empty, then lit), then the running bead, then the frame's interior",
+              "storyPoint": "sp-7.2",
+              "at": [
+                {
+                  "frame": 1350,
+                  "strength": 0.3
+                },
+                {
+                  "frame": 1452,
+                  "strength": 0.3
+                },
+                {
+                  "frame": 1464,
+                  "strength": 1
+                },
+                {
+                  "frame": 1500,
+                  "radius": 260
+                },
+                {
+                  "frame": 1518,
+                  "strength": 1,
+                  "radius": 60
+                },
+                {
+                  "frame": 1524,
+                  "strength": 1.6
+                },
+                {
+                  "frame": 1572,
+                  "strength": 1.6,
+                  "radius": 60
+                },
+                {
+                  "frame": 1600,
+                  "strength": 1
+                },
+                {
+                  "frame": 1612,
+                  "radius": 260
+                }
+              ]
             },
             "card": "seuss-archbishop-katz"
           }
@@ -1293,14 +1402,18 @@
               "y": 85
             },
             "codex": {
-              "x": 60,
-              "y": 440,
-              "scale": 1.8
+              "x": 130,
+              "y": 500,
+              "scale": 0.9,
+              "hold": {
+                "from": 1760,
+                "to": 1949
+              }
             },
             "clawd": {
-              "x": 940,
-              "y": 470,
-              "scale": 1.5
+              "x": 1135,
+              "y": 500,
+              "scale": 0.8
             },
             "emitter": {
               "start": [
@@ -4959,11 +5072,21 @@
         },
         {
           "start": 330,
-          "end": 420,
+          "end": 364,
           "beat": "everything-at-once",
           "label": "shrink",
           "data": {
-            "hold": 90,
+            "hold": 20,
+            "breakdowns": 4
+          }
+        },
+        {
+          "start": 364,
+          "end": 420,
+          "beat": "everything-at-once",
+          "label": "fold",
+          "data": {
+            "hold": 56,
             "breakdowns": 0
           }
         },
@@ -5068,122 +5191,162 @@
           }
         },
         {
-          "start": 930,
-          "end": 954,
+          "start": 936,
+          "end": 966,
           "beat": "art-world",
-          "label": "rest",
+          "label": "paper",
           "data": {
-            "hold": 24,
-            "breakdowns": 0
+            "hold": 20,
+            "breakdowns": 4
           }
         },
         {
-          "start": 954,
-          "end": 980,
+          "start": 966,
+          "end": 1010,
           "beat": "art-world",
-          "label": "raise",
+          "label": "take",
           "data": {
-            "hold": null,
-            "breakdowns": 0
+            "hold": 20,
+            "breakdowns": 5
           }
         },
         {
-          "start": 980,
+          "start": 1010,
+          "end": 1052,
+          "beat": "art-world",
+          "label": "draw",
+          "data": {
+            "hold": 18,
+            "breakdowns": 5
+          }
+        },
+        {
+          "start": 1052,
+          "end": 1110,
+          "beat": "art-world",
+          "label": "draw-b",
+          "data": {
+            "hold": 34,
+            "breakdowns": 5
+          }
+        },
+        {
+          "start": 1110,
+          "end": 1200,
+          "beat": "art-world",
+          "label": "real",
+          "data": {
+            "hold": 66,
+            "breakdowns": 5
+          }
+        },
+        {
+          "start": 1200,
           "end": 1230,
           "beat": "art-world",
-          "label": "settle",
+          "label": "carry",
           "data": {
-            "hold": null,
-            "breakdowns": 0
+            "hold": 16,
+            "breakdowns": 2
           }
         },
         {
-          "start": 1230,
-          "end": 1254,
+          "start": 1240,
+          "end": 1300,
           "beat": "crossing",
-          "label": "rest",
+          "label": "reduce",
           "data": {
-            "hold": 24,
-            "breakdowns": 0
+            "hold": 36,
+            "breakdowns": 5
           }
         },
         {
-          "start": 1254,
-          "end": 1280,
-          "beat": "crossing",
-          "label": "raise",
-          "data": {
-            "hold": null,
-            "breakdowns": 0
-          }
-        },
-        {
-          "start": 1280,
+          "start": 1300,
           "end": 1350,
           "beat": "crossing",
-          "label": "settle",
+          "label": "reroute",
           "data": {
-            "hold": null,
-            "breakdowns": 0
+            "hold": 36,
+            "breakdowns": 2
           }
         },
         {
-          "start": 1350,
-          "end": 1374,
+          "start": 1360,
+          "end": 1440,
           "beat": "programming-world",
-          "label": "rest",
+          "label": "grid",
           "data": {
-            "hold": 24,
-            "breakdowns": 0
+            "hold": 56,
+            "breakdowns": 5
           }
         },
         {
-          "start": 1374,
-          "end": 1400,
+          "start": 1440,
+          "end": 1520,
           "beat": "programming-world",
-          "label": "raise",
+          "label": "join",
           "data": {
-            "hold": null,
-            "breakdowns": 0
+            "hold": 56,
+            "breakdowns": 5
           }
         },
         {
-          "start": 1400,
+          "start": 1520,
+          "end": 1620,
+          "beat": "programming-world",
+          "label": "run",
+          "data": {
+            "hold": 76,
+            "breakdowns": 5
+          }
+        },
+        {
+          "start": 1620,
           "end": 1650,
           "beat": "programming-world",
+          "label": "return",
+          "data": {
+            "hold": 28,
+            "breakdowns": 0
+          }
+        },
+        {
+          "start": 1660,
+          "end": 1760,
+          "beat": "home-settle",
+          "label": "stand",
+          "data": {
+            "hold": 76,
+            "breakdowns": 5
+          }
+        },
+        {
+          "start": 1760,
+          "end": 1816,
+          "beat": "home-settle",
           "label": "settle",
           "data": {
-            "hold": null,
-            "breakdowns": 0
+            "hold": 32,
+            "breakdowns": 5
           }
         },
         {
-          "start": 1650,
-          "end": 1674,
+          "start": 1816,
+          "end": 1860,
           "beat": "home-settle",
-          "label": "rest",
+          "label": "seat",
           "data": {
-            "hold": 24,
-            "breakdowns": 0
+            "hold": 20,
+            "breakdowns": 5
           }
         },
         {
-          "start": 1674,
-          "end": 1700,
-          "beat": "home-settle",
-          "label": "raise",
-          "data": {
-            "hold": null,
-            "breakdowns": 0
-          }
-        },
-        {
-          "start": 1700,
+          "start": 1860,
           "end": 1950,
           "beat": "home-settle",
-          "label": "settle",
+          "label": "window",
           "data": {
-            "hold": null,
+            "hold": 60,
             "breakdowns": 0
           }
         }
@@ -5320,22 +5483,22 @@
           "start": 930,
           "end": 1230,
           "beat": "art-world",
-          "label": "join (the drawn piece as it fills) · 0.9",
+          "label": "the crayon, then the drawn line, then the stalk's leaf (the piece as it is made) · 0.9",
           "data": {
             "pair": {
               "radiance": "#e1750c",
               "accent": "#fad204"
             },
             "emitter": {
-              "anchor": "join (the drawn piece as it fills)",
+              "anchor": "the crayon, then the drawn line, then the stalk's leaf (the piece as it is made)",
               "path": {
                 "from": [
-                  0.7813,
-                  0.5417
+                  0.8672,
+                  0.7222
                 ],
                 "to": [
-                  0.8438,
-                  0.5417
+                  0.8672,
+                  0.7222
                 ]
               },
               "intensity": 0.9,
@@ -5366,22 +5529,22 @@
           "start": 1350,
           "end": 1650,
           "beat": "programming-world",
-          "label": "gates, first to last · 0.9",
+          "label": "the join (empty, then lit), then the running bead, then the frame's interior · 0.9",
           "data": {
             "pair": {
               "radiance": "#17263a",
               "accent": "#457ca4"
             },
             "emitter": {
-              "anchor": "gates, first to last",
+              "anchor": "the join (empty, then lit), then the running bead, then the frame's interior",
               "path": {
                 "from": [
-                  0.1172,
-                  0.5389
+                  0.625,
+                  0.3806
                 ],
                 "to": [
-                  0.2539,
-                  0.5222
+                  0.625,
+                  0.3806
                 ]
               },
               "intensity": 0.9,
@@ -7433,6 +7596,150 @@
             "after": "the film step draws the named shot's keys and the measure writes `measured` for it",
             "file": "v3/proposals/p023-the-plate-versus-film-measure-draws-the.json"
           }
+        },
+        {
+          "start": 740,
+          "end": 741,
+          "beat": "the-frame",
+          "label": "p024 sp-4.3 'heap stays to 1950' reads the blocking of beats 5-8, and none of them names a heap",
+          "data": {
+            "id": "p024",
+            "title": "sp-4.3 'heap stays to 1950' reads the blocking of beats 5-8, and none of them names a heap",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "the-frame",
+              "frame": 740
+            },
+            "text": "The recipe `{kind: stage, actor: heap, expect: persists, until: 1949}` reads the heap as `blocking.actors.heap` on every sampled frame to 1949 (probe-story `read_stage`). Beat 4 holds it from 760 (the pose sheet's `dropsAt`) to its last frame, 929; art-world, crossing, programming-world and home-settle name no actors, so the heap is gone from 930 (the probe reads 'on stage at f799 and gone at f934'). The staging that meets the line is in files the worlds slice owns (the four later blocking files each need a `heap` at (444, 602), where Codex left it, and the crayon, line and shaded prop layers need to draw it: the heap is a home-world actor today), so row 9.6's beats 1-4 slice could not make it. Beat 4's own file is unchanged for this line.",
+            "references": [],
+            "before": "the heap is on stage from 760 to 929 and in no later beat",
+            "after": "the heap is in every later beat's blocking at (444, 602) and the worlds draw it, so the cloak that was dropped stays to 1949",
+            "file": "v3/proposals/p024-sp-4-3-heap-stays-to-1950-reads-the-bloc.json"
+          }
+        },
+        {
+          "start": 929,
+          "end": 930,
+          "beat": "the-frame",
+          "label": "p025 sp-4.6 \"next frame's field is paper\" reads frame 930, which the 70-frame morph puts in the middle of its line phase",
+          "data": {
+            "id": "p025",
+            "title": "sp-4.6 \"next frame's field is paper\" reads frame 930, which the 70-frame morph puts in the middle of its line phase",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "the-frame",
+              "frame": 929
+            },
+            "text": "The recipe `{kind: xsheet, field: world, expect: equals, value: crayon, at: next}` reads the exposure sheet's world on the frame after the story point's last (930). The crossing from the frame to the art world is declared 895-965 (`timeline.crossings`: length 70, split 35/35 around the cut at 930), so the sheet reads `home>crayon/line` on 930 and `crayon` only from 965. The morph cannot end by 930 without the crossing becoming a 35-frame one (the cut at 930 would be its last frame) or starting at 860, inside sp-4.5; with the 70-frame morph a story point that ends at 930 can only read 'crayon' on 965 or later. Options: read the world 'after the crossing' (`at: after-crossing`, the first frame whose world is a plain world), read it on 965, or move the story point's end to the crossing's end. Beat 4's other line of the point, 'outside luminance falls >= 50 %', is met by the staging (the frame's light wells wide as she nears it and narrows as she steps through, `emitter.at` in v3/blocking/the-frame.json): 40.7 on 899 and 14.3 on 929 (-65 %).",
+            "references": [],
+            "before": "the sheet reads home>crayon/line on 930",
+            "after": "the recipe reads the first frame the crossing has finished, or the crossing ends on 930",
+            "file": "v3/proposals/p025-sp-4-6-next-frames-field-is-paper-reads.json"
+          }
+        },
+        {
+          "start": 1010,
+          "end": 1011,
+          "beat": "art-world",
+          "label": "p026 th-one-join counts the three strokes of sp-5.2 as three joins; the screenplay's own recipe asks for exactly that",
+          "data": {
+            "id": "p026",
+            "title": "th-one-join counts the three strokes of sp-5.2 as three joins; the screenplay's own recipe asks for exactly that",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "art-world",
+              "frame": 1010
+            },
+            "text": "`th-one-join` (probe-theme.py `check_one_join`) refuses a story point after sp-4.6 whose window brings more than one prop `on`. sp-5.2's recipes ask for `stroke-1`, `stroke-2` and `stroke-3` to appear in order staggered by at least 6 frames (`count rises to 3`, `stagger on`), so the staging that passes the story point fails the theme: `th-one-join (one-join): sp-5.2 brings 3 new joins (stroke-1, stroke-2, stroke-3) after sp-4.6: one lit join at a time`. A stroke is not a join: the theme's own measure is `joins.lit rises by at most 1 per story point`, and the probe counts every prop's `on`. The three strokes are staggered 8 and 12 frames apart on animatic 09 draft (1010, 1018, 1030). Either `arrivals` counts only the props that are joins (the blocks, the stalk set against them, the gates), or sp-5.2 is exempt as the flood is (`unstaggered`), or the three strokes are one prop. Beat 7 was staged to stay inside the theme: its three gates are the shaded world's own, lit by where the emitter stands, so sp-7.3 brings one prop (the bead).",
+            "references": [],
+            "before": "th-one-join FAIL on sp-5.2 (3 arrivals)",
+            "after": "the theme reads joins, not every prop that comes on",
+            "file": "v3/proposals/p026-th-one-join-counts-the-three-strokes-of.json"
+          }
+        },
+        {
+          "start": 1010,
+          "end": 1011,
+          "beat": "art-world",
+          "label": "p027 sp-5.2: the key `strokes.count` counts `stroke`, its recipes name `stroke-1`, `stroke-2`, `stroke-3`",
+          "data": {
+            "id": "p027",
+            "title": "sp-5.2: the key `strokes.count` counts `stroke`, its recipes name `stroke-1`, `stroke-2`, `stroke-3`",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "art-world",
+              "frame": 1010
+            },
+            "text": "`state_keys.strokes.count` is `{kind: count, actors: [stroke], expect: rises}` and the story point's recipes name three props, `stroke-1` to `stroke-3`. `read_count` reads `present(rec, 'stroke', f)`, so the blocking would need a fourth prop called `stroke` for the key to pass. `probe-story.py` now reads a bare name as a family (`present_family`: `stroke` is present when `stroke` or any `stroke-<n>` is), with its own control (a count over `stroke` passes with the three on, `ghost` and `strok` do not). That makes the key pass on the three strokes the story point draws; the alternative is to edit the key to name the three props, which is the screenplay's.",
+            "references": [],
+            "before": "`after strokes.count`: FAIL (nothing named `stroke`)",
+            "after": "pass on the three numbered strokes",
+            "file": "v3/proposals/p027-sp-5-2-the-key-strokes-count-counts-stro.json"
+          }
+        },
+        {
+          "start": 940,
+          "end": 941,
+          "beat": "art-world",
+          "label": "p028 sp-5.1: the key `human.holds_crayon` (appears) and the recipe `crayon prop moves` (moves) cannot both pass",
+          "data": {
+            "id": "p028",
+            "title": "sp-5.1: the key `human.holds_crayon` (appears) and the recipe `crayon prop moves` (moves) cannot both pass",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "art-world",
+              "frame": 940
+            },
+            "text": "`human.holds_crayon` observes `{kind: prop, actor: crayon, expect: appears}` and reads the crayon ABSENT on f939 (the frame before the story point: `read_prop` refuses an `appears` prop that is in the blocking before it). The recipe `{kind: stage, actor: crayon, expect: moves, by: [1]}` reads the crayon's anchor on f939 and on f1009 and refuses a prop with no anchor on either (`read_stage`: `'crayon' has no anchor at f939 or f1009`). Both read the same actor on the same frame, so a crayon that is absent on f939 fails `moves` and one that is present on f939 fails `appears`. Measured on animatic 09 draft with the crayon `on: 940`: `after human.holds_crayon` passes (`'crayon' appears, 65960 px change within 150 px of (930, 402)`), `measure 'crayon prop moves from clawd to human'` fails with the text above. The staging is the one the story point asks for (Clawd holds the crayon out on 940, it travels 270 px to her hand by 968 on `at` keys, declared contacts crayon-clawd and crayon-human). Either `moves` should read from the first frame the prop is on stage inside the window (as `returns` does with its `went`), or the key should say `present`.",
+            "references": [],
+            "before": "crayon on 940: `appears` ok, `moves` FAIL; crayon on before 939: `appears` FAIL, `moves` ok",
+            "after": "one reading of a prop's first frame for both",
+            "file": "v3/proposals/p028-sp-5-1-the-key-human-holds-crayon-appear.json"
+          }
+        },
+        {
+          "start": 1240,
+          "end": 1241,
+          "beat": "crossing",
+          "label": "p029 sp-6.1: `fill area falls >= 80 %` cannot be met: reduced by f1239, and paper to lines is 21 % to 10 % ink",
+          "data": {
+            "id": "p029",
+            "title": "sp-6.1: `fill area falls >= 80 %` cannot be met: reduced by f1239, and paper to lines is 21 % to 10 % ink",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "crossing",
+              "frame": 1240
+            },
+            "text": "The recipe `{kind: picture, measure: ink-share, expect: falls, min: 0.8}` reads the share of pixels that are not the field colour on f1239 and f1299. Two measured facts: (1) the crossing out of the art world is the window 1195-1265 (`v3/timeline.json` crossings), its thirds reduce 1195-1218, hold the line world 1218-1242 and refill 1242-1265, so f1239 is already a line frame: 8.4 % of the picture is ink on f1239, 10.1 % on f1299 (+20 %); the fills drained 22 frames before the story point's own frame 1240. (2) Even read against the last full paper frame the fall is 21.1 % on f1190 to 10.1 % on f1299 = 52 %, because the line world draws the arch, the floor's ticks, both cast contours and the stalk as lines and the measure counts line pixels as ink; a fall of 80 % from a picture that is 21 % ink needs the line world to be under 4 %. Either the measure counts area that is filled (pixels in regions wider than the line: a morphological opening of the ink), or the bar is lower (50 %), and the crossing window moves to start on 1240 so the reduce happens inside the story point. Not edited here: the screenplay and the timeline are the planner's.",
+            "references": [],
+            "before": "f1239 8.4 %, f1299 10.1 % (+20 %)",
+            "after": "a measure that sees fills drain, on a window that holds the reduce",
+            "file": "v3/proposals/p029-sp-6-1-fill-area-falls-80-cannot-be-met.json"
+          }
         }
       ]
     },
@@ -8478,27 +8785,11 @@
   "flags": [
     {
       "beat": "art-world",
-      "text": "no breakdowns between keys: straight inbetweens"
-    },
-    {
-      "beat": "art-world",
       "text": "plot ask open: which object the human draws first (default: the first stalk)"
-    },
-    {
-      "beat": "crossing",
-      "text": "no breakdowns between keys: straight inbetweens"
-    },
-    {
-      "beat": "programming-world",
-      "text": "no breakdowns between keys: straight inbetweens"
     },
     {
       "beat": "programming-world",
       "text": "plot ask open: how many gates light (default: three, the third is the one the human made)"
-    },
-    {
-      "beat": "home-settle",
-      "text": "no breakdowns between keys: straight inbetweens"
     }
   ]
 }

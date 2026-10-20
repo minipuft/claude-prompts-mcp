@@ -383,12 +383,12 @@ const CrayonStage: React.FC<{contract: WorldContract; parts: PropsPart[]; varian
   );
 };
 
-export const CrayonScene: React.FC<SceneProps> = ({frame, pose, emitter, reduce = 0, shift, field, parts: override, blocking = STAGE}) => {
+export const CrayonScene: React.FC<SceneProps> = ({frame, pose, emitter, reduce = 0, shift, field, parts: override, blocking = STAGE, actorRoles}) => {
   const c = contracts.crayon;
   const r = clamp01(reduce);
   const lw = contourPx(c, blocking);
   const parts = partsOf('crayon', override);
-  const propParts = parts.filter((p) => p === 'companions' || p === 'architecture' || p === 'blocks');
+  const propParts = parts.filter((p) => p === 'companions' || p === 'architecture' || p === 'blocks' || p === 'actors');
   const native: PropsLook = {fill: true, ink: lineColour(c), lw, shading: false};
   const variant = boil(onTwos(frame), c.boil.variants, 11, 30, c.boil.rate);
   const seed = 3 + variant;
@@ -407,7 +407,7 @@ export const CrayonScene: React.FC<SceneProps> = ({frame, pose, emitter, reduce 
         {strength > 0 && <CrayonFilter id={FILTER_ID} contract={c} seed={seed} strength={strength} images={images?.props} stageImages={images?.stage} patch={patch} blocking={blocking} />}
         {strength > 0 && <CrayonStage contract={c} parts={parts} variant={variant} patch={patch} blocking={blocking} />}
         <div style={{position: 'absolute', inset: 0, filter: strength > 0 ? `url(#${FILTER_ID})` : undefined}}>
-          <PropsStack contract={c} lineWorld={contracts.line} reduce={r} native={native} frame={frame} parts={propParts} blocking={blocking} />
+          <PropsStack contract={c} lineWorld={contracts.line} reduce={r} native={native} frame={frame} parts={propParts} blocking={blocking} actorRoles={actorRoles} />
           <FlatFigure pose={pose} fill={1 - r} line={r > 0 ? reducedLine(c, contracts.line, r, blocking) : null} blocking={blocking} />
         </div>
       </Stage>

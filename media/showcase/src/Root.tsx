@@ -20,7 +20,7 @@ import {BackendProbe, probeBackend, type Backend} from './library/light/backend'
 import {PoseSheetS01, type PlateInfo} from './scenes/PoseSheetS01';
 import s01Keys from '../v3/keys/s01-arrival-overwhelm.json';
 import s01Plates from '../assets/human/keys/s01-arrival-overwhelm/plates.json';
-import {KEY_FILM, KeyFilmS01} from './scenes/KeyFilmS01';
+import {KEY_FILM, KEY_FILM_FRAMES, KeyFilmS01} from './scenes/KeyFilmS01';
 import {XSheetPage} from './scenes/XSheet';
 import {REEL_FRAMES, timeline} from './scenes/animaticPlan';
 import {parseKeySheet} from './library/animation/keys';
@@ -47,7 +47,7 @@ export const RemotionRoot = () => <>
   <Composition id="Animatic65Figure" component={Animatic} width={1280} height={720} fps={timeline.fps} durationInFrames={timeline.durationInFrames} defaultProps={{layers: 'figure' as const}}/>
   <Composition id="Animatic65FigureLine" component={Animatic} width={1280} height={720} fps={timeline.fps} durationInFrames={timeline.durationInFrames} defaultProps={{layers: 'figure-line' as const}}/>
   <Composition id="PoseSheetS01" component={PoseSheetS01} width={2400} height={1190} fps={30} durationInFrames={1} defaultProps={{sheet: parseKeySheet(s01Keys), plates: s01Plates.map((k): PlateInfo => ({key: k.key, name: k.name, plate: k.plate, family: k.family, cropPx: [k.cropPx[0]!, k.cropPx[1]!], baselineInCrop: k.baselineInCrop, scale: k.scale, originMask: [k.originMask[0]!, k.originMask[1]!]}))}}/>
-  <Composition id="KeyFilmS01" component={KeyFilmS01} width={KEY_FILM.size[0]} height={KEY_FILM.size[1]} fps={30} durationInFrames={9}/>
+  <Composition id="KeyFilmS01" component={KeyFilmS01} width={KEY_FILM.size[0]} height={KEY_FILM.size[1]} fps={30} durationInFrames={KEY_FILM_FRAMES}/>
   <Composition id="ShotS01" component={ShotS01} width={1280} height={720} fps={30} durationInFrames={420}/>
   <Composition id="ShotS01Figure" component={ShotS01} width={1280} height={720} fps={30} durationInFrames={420} defaultProps={{layers: 'figure' as const}}/>
   <Composition id="ShotS01Layer" component={ShotS01Layer} width={1280} height={720} fps={30} durationInFrames={1} defaultProps={{jobs: [] as LayerJob[]}} calculateMetadata={({props}) => ({durationInFrames: Math.max(1, props.jobs.length)})}/>

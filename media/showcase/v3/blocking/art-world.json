@@ -1,47 +1,47 @@
 {
   "id": "art-world",
   "provisional": true,
-  "derivedFrom": "test-scene (no layout contract for this beat's shot yet); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
+  "derivedFrom": "restaged 2026-10-20 (row 9.6, beat 5): the human plays her own pose sheet (v3/poses/s03-scaffold.json: paper 936, take 966, draw 1010, draw-b 1052, real 1110, carry 1200); Clawd hands her a crayon (sp-5.1), she draws a stalk in three strokes (sp-5.2), the strokes go off and the stalk stands with its leaf opening and Codex's hand on it (sp-5.3), she lifts it like a lantern (sp-5.4); the cast stands on the right, outside her crop, Codex touching the stalk; the kit blocks wait at the lower left; the arch and gates are the crayon world's own; test-scene fields otherwise",
   "figure": {
     "scale": 0.58,
     "x": 452,
     "y": 85
   },
   "codex": {
-    "x": 60,
-    "y": 440,
-    "scale": 1.8
+    "x": 925,
+    "y": 500,
+    "scale": 0.9
   },
   "clawd": {
-    "x": 940,
-    "y": 470,
-    "scale": 1.5
+    "x": 1075,
+    "y": 500,
+    "scale": 0.8
   },
   "frame": {
-    "x": 910,
-    "y": 70,
-    "width": 280,
-    "height": 230
+    "x": 1040,
+    "y": 50,
+    "width": 230,
+    "height": 190
   },
   "blocks": [
     {
-      "x": 960,
-      "y": 360,
-      "width": 80,
-      "height": 60,
+      "x": 140,
+      "y": 618,
+      "width": 56,
+      "height": 42,
       "role": "main1"
     },
     {
-      "x": 1040,
-      "y": 360,
-      "width": 80,
-      "height": 60,
+      "x": 196,
+      "y": 618,
+      "width": 56,
+      "height": 42,
       "role": "main2"
     }
   ],
   "join": {
-    "x": 1040,
-    "y": 390
+    "x": 196,
+    "y": 639
   },
   "arch": {
     "x": 30,
@@ -78,19 +78,196 @@
     "height": 720
   },
   "beat": "art-world",
-  "shot": null,
+  "shot": "s03-scaffold",
   "emitter": {
     "start": [
-      1000,
-      390
+      1110,
+      520
     ],
     "end": [
-      1080,
-      390
+      1110,
+      520
     ],
-    "anchor": "join (the drawn piece as it fills)",
-    "storyPoint": "sp-5.3"
+    "anchor": "the crayon, then the drawn line, then the stalk's leaf (the piece as it is made)",
+    "storyPoint": "sp-5.1"
   },
   "card": "seuss-cat-stairway",
-  "cardNote": "provisional: board §1 world, the card worlds/crayon.json already cites"
+  "cardNote": "provisional: board \u00a71 world, the card worlds/crayon.json already cites",
+  "cutIn": true,
+  "cutOut": true,
+  "actors": {
+    "crayon": {
+      "x": 930,
+      "y": 402,
+      "scale": 1.0,
+      "on": 940,
+      "off": 1100,
+      "carriedBy": "human",
+      "lit": {
+        "from": 940,
+        "offset": [
+          0,
+          -42
+        ]
+      },
+      "at": [
+        {
+          "frame": 940,
+          "x": 1110,
+          "y": 520
+        },
+        {
+          "frame": 950,
+          "x": 930,
+          "y": 402
+        },
+        {
+          "frame": 958,
+          "x": 930,
+          "y": 402
+        },
+        {
+          "frame": 968,
+          "x": 835,
+          "y": 214
+        },
+        {
+          "frame": 1010,
+          "x": 837,
+          "y": 349
+        },
+        {
+          "frame": 1052,
+          "x": 775,
+          "y": 158
+        },
+        {
+          "frame": 1098,
+          "x": 718,
+          "y": 349
+        }
+      ]
+    },
+    "stroke-1": {
+      "x": 880,
+      "y": 548,
+      "scale": 0.55,
+      "on": 1010,
+      "off": 1110,
+      "lit": {
+        "from": 1010,
+        "offset": [
+          16,
+          -100
+        ]
+      }
+    },
+    "stroke-2": {
+      "x": 880,
+      "y": 548,
+      "scale": 0.55,
+      "on": 1018,
+      "off": 1110,
+      "lit": {
+        "from": 1018,
+        "offset": [
+          0,
+          -290
+        ]
+      }
+    },
+    "stroke-3": {
+      "x": 880,
+      "y": 548,
+      "scale": 0.55,
+      "on": 1030,
+      "off": 1110,
+      "lit": {
+        "from": 1030,
+        "offset": [
+          30,
+          -345
+        ]
+      }
+    },
+    "stalk": {
+      "x": 880,
+      "y": 548,
+      "scale": 0.55,
+      "facing": "right",
+      "on": 1110,
+      "carriedBy": "human",
+      "openAt": [
+        {
+          "frame": 1110,
+          "value": 0
+        },
+        {
+          "frame": 1124,
+          "value": 1
+        }
+      ],
+      "lit": {
+        "from": 1110,
+        "offset": [
+          25,
+          -420
+        ]
+      },
+      "at": [
+        {
+          "frame": 1110,
+          "x": 880,
+          "y": 548
+        },
+        {
+          "frame": 1168,
+          "x": 880,
+          "y": 548
+        },
+        {
+          "frame": 1198,
+          "x": 854,
+          "y": 264
+        }
+      ]
+    }
+  },
+  "contacts": [
+    {
+      "a": "clawd",
+      "b": "crayon",
+      "why": "Clawd holds the crayon out and she takes it (sp-5.1: a tool is given)"
+    },
+    {
+      "a": "human",
+      "b": "crayon",
+      "why": "the crayon is in her hand from the take to the last stroke"
+    },
+    {
+      "a": "stroke-1",
+      "b": "stroke-2",
+      "why": "one line continues the other at the joint of the stalk's S-curve"
+    },
+    {
+      "a": "stroke-2",
+      "b": "stroke-3",
+      "why": "one line continues the other where the S-curve turns into the curl"
+    },
+    {
+      "a": "human",
+      "b": "stroke-2",
+      "why": "the crayon draws it: her hand is on the line (sp-5.2)"
+    },
+    {
+      "a": "human",
+      "b": "stroke-3",
+      "why": "the crayon draws it: her hand is on the line (sp-5.2)"
+    },
+    {
+      "a": "human",
+      "b": "stalk",
+      "why": "she picks the stalk up and holds it like a lantern (sp-5.4)"
+    }
+  ]
 }

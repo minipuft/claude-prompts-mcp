@@ -16,6 +16,8 @@ import {partsOrderAt, sheet} from './shotS01Plan';
 export const KEY_FILM = {size: [1800, 1500] as const, scale: 0.9, x: 450, y: 420};
 export const SWAP: {key: number; parts: PartName[]} = {key: 1, parts: ['upperLegL', 'handR']};
 const keys = keysFile.keys as unknown as {name: string; frame: number; joints: Joints}[];
+/** One frame per key of the sheet and the control after the last: the composition's length follows the sheet, so a key added to it is measured (it was a literal 9 and measured the first 8 keys of 11). */
+export const KEY_FILM_FRAMES = keys.length + 1;
 
 export const KeyFilmS01: React.FC = () => {
   const frame = useCurrentFrame();

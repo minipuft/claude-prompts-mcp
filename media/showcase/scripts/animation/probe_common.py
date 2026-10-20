@@ -433,7 +433,7 @@ FRAME_BAR = 20                          # stage px of the frame prop's bar inwar
 GATE_CARVE = 1.7                        # on a beat whose emitter is the gates, a gate is lit by it: its disc (r x this) is never a prop's region
 # actors.tsx: per prop, the anchor's offset inside the prop's native box and the box (px at scale 1): the box stands on it (foot of the front face), the bubble is centred on it, the gadget hangs from its dial,
 # the stalk grows from its root (5.2 x 64 px tall, a spiral about 260 wide), the structure stands on its base centre (the outer arch 220 x 300) and the heap's mound lies on its bottom centre (168 x 66, measured on the restaged beat 4's frames).
-PROP_NATIVE = {"box": ((95, 160), (220, 170)), "bubble": ((140, 140), (280, 280)), "gadget": ((108, 190), (200, 260)), "stalk": ((130, 360), (260, 370)), "structure": ((110, 300), (220, 300)), "heap": ((84, 64), (168, 66)), "lid": ((78, 23), (186, 91)), "arch": ((62, 172), (124, 175)), "ring": ((53, 53), (106, 106)), "patch": ((58, 90), (116, 92)), "patch-2": ((58, 90), (116, 92)), "patch-3": ((58, 90), (116, 92)), "bead": ((8, 8), (156, 55))}
+PROP_NATIVE = {"crayon": ((9, 90), (18, 90)), "stroke-1": ((11, 194), (54, 205)), "stroke-2": ((58, 396), (105, 224)), "stroke-3": ((24, 394), (105, 107)), "grid": ((120, 240), (240, 240)), "pointer": ((304, 296), (314, 306)), "title": ((200, 46), (420, 60)), "box": ((95, 160), (220, 170)), "bubble": ((140, 140), (280, 280)), "gadget": ((108, 190), (200, 260)), "stalk": ((130, 360), (260, 370)), "structure": ((110, 300), (220, 300)), "heap": ((84, 64), (168, 66)), "lid": ((78, 23), (186, 91)), "arch": ((62, 172), (124, 175)), "arch-2": ((62, 172), (124, 175)), "ring": ((53, 53), (106, 106)), "ring-2": ((53, 53), (106, 106)), "patch": ((58, 90), (116, 92)), "patch-2": ((58, 90), (116, 92)), "patch-3": ((58, 90), (116, 92)), "bead": ((8, 8), (156, 55)), "bead-2": ((8, 8), (156, 55))}
 
 
 # Codex and Clawd: the box they are drawn in, from the anchor, in native px at scale 1 ((x0, y0), (x1, y1)); read off the animatic's frames (Codex at scale 1.8 spans +15..+175 by +45..+240 stage px, Clawd at 1.5 +35..+195 by +30..+155).
@@ -478,7 +478,29 @@ def resolve_blocking_at(bl, f):
         x, y = placed_at(hm, hm["at"], f); out["figure"]["x"], out["figure"]["y"] = x, y
         if isinstance(bl.get("figureCrop"), dict): out["figureCrop"]["x"] += x - hm["x"]; out["figureCrop"]["y"] += y - hm["y"]
     if isinstance(bl.get("actors"), dict):
-        out["actors"] = {n: {**a, **dict(zip(("x", "y"), placed_at(a, a.get("at"), f)))} for n, a in bl["actors"].items() if isinstance(a, dict) and (a.get("on") is None or a["on"] <= f) and (a.get("off") is None or f < a["off"])}
+        out["actors"] = {n: _actor_at(bl, a, f) for n, a in bl["actors"].items() if isinstance(a, dict) and (a.get("on") is None or a["on"] <= f) and (a.get("off") is None or f < a["off"])}
+    return out
+
+
+def _open_at(keys, f):
+    """How open a thing is on frame `f` by its `openAt` keys (linear, the first value before the first key and the last after the last); None with no keys."""
+    if not keys: return None
+    if f <= keys[0]["frame"]: return keys[0]["value"]
+    nxt = next((k for k in keys if k["frame"] > f), None)
+    if nxt is None: return keys[-1]["value"]
+    a = keys[keys.index(nxt) - 1]
+    return a["value"] + (nxt["value"] - a["value"]) * (f - a["frame"]) / (nxt["frame"] - a["frame"])
+
+
+def _actor_at(bl, a, f):
+    """One actor on frame `f` (the mirror of the actors map of `resolveBlocking`): its `at` keys, moved with its carrier's offset from the carrier's last key (`carriedBy`: the human's `figure.at`, Clawd's `at`), and its `open` from `openAt`."""
+    x, y = placed_at(a, a.get("at"), f); who = a.get("carriedBy"); sx = sy = 0.0
+    src = bl.get("figure") if who == "human" else bl.get("clawd") if who == "clawd" else None
+    if isinstance(src, dict) and _is_num(src.get("x")) and src.get("at"):
+        cx, cy = placed_at(src, src["at"], f); ex, ey = placed_at(src, src["at"], math.inf); sx, sy = cx - ex, cy - ey
+    out = {k: v for k, v in a.items() if k != "openAt"}; out["x"], out["y"] = x + sx, y + sy
+    o = _open_at(a.get("openAt"), f)
+    if o is not None: out["open"] = o
     return out
 
 

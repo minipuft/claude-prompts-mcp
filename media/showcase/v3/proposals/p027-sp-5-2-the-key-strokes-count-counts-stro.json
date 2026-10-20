@@ -1,0 +1,17 @@
+{
+  "id": "p027",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "art-world",
+    "frame": 1010
+  },
+  "title": "sp-5.2: the key `strokes.count` counts `stroke`, its recipes name `stroke-1`, `stroke-2`, `stroke-3`",
+  "text": "`state_keys.strokes.count` is `{kind: count, actors: [stroke], expect: rises}` and the story point's recipes name three props, `stroke-1` to `stroke-3`. `read_count` reads `present(rec, 'stroke', f)`, so the blocking would need a fourth prop called `stroke` for the key to pass. `probe-story.py` now reads a bare name as a family (`present_family`: `stroke` is present when `stroke` or any `stroke-<n>` is), with its own control (a count over `stroke` passes with the three on, `ghost` and `strok` do not). That makes the key pass on the three strokes the story point draws; the alternative is to edit the key to name the three props, which is the screenplay's.",
+  "references": [],
+  "before": "`after strokes.count`: FAIL (nothing named `stroke`)",
+  "after": "pass on the three numbered strokes",
+  "status": "open",
+  "ruling": null
+}

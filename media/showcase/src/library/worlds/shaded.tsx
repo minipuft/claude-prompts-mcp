@@ -274,7 +274,8 @@ export const ShadedScene: React.FC<SceneProps> = ({frame, pose, emitter, reduce 
         <ShadedFigure pose={pose} fill={1 - r} line={line} steps={steps} turn={TURN.figure * (1 - r)} bloom={bloom} light={light} figure={blocking.figure} />
         <Architecture fill={1 - r} reduce={r} edge={edge} lineHex={lineColour(contracts.line)} lw={lw} gradient={gradient} bloom={bloom} parts={parts} blocking={blocking} lightX={emitter?.x} />
       </ThreeCanvas>
-      <PropsStack contract={c} lineWorld={contracts.line} reduce={r} native={native} frame={frame} parts={['companions']} blocking={blocking} />
+      {/* the beat's actors are filled with the kit's own roles (the settled palette), not the beat's dark pair: the radiance of the shaded world's hue is #17263a, and props in it stand black on black */}
+      <PropsStack contract={c} lineWorld={contracts.line} reduce={r} native={native} frame={frame} parts={parts.includes('actors') ? ['companions', 'actors'] : ['companions']} blocking={blocking} />
     </Stage>
   );
 };

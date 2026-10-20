@@ -96,6 +96,8 @@ export type Secondary = {
   dropsAt?: number;
 };
 export type MovingHold = {key: string; /** Pixels of drift (key-sheet space), 2-6. */ driftPx: number; /** Frames the drift runs over, from the key landing. */ over: number};
+/** Parts of the parts rig that are not drawn before a frame, because something in the staging covers them (the human's hands in the cloak's sleeves until the lift): the animatic leaves them out of the draw order on every frame before `until`. */
+export type PartCover = {parts: string[]; until: number; why: string};
 export type PoseSheet = {
   shot: string;
   actor: string;
@@ -108,6 +110,8 @@ export type PoseSheet = {
   breakdowns: PoseBreakdown[];
   secondaries: Secondary[];
   movingHolds: MovingHold[];
+  /** The parts the sheet keeps out of the picture until a frame: `parts` are names of the parts rig, `until` the first film frame (of the shot) they are drawn on. */
+  covers?: PartCover[];
 };
 
 /** The measuring constants of the spine fit. `scripts/animation/probe_common.py` carries the same values (SPINE_*). */
@@ -225,6 +229,11 @@ export const parsePoseSheet = (json: unknown): PoseSheet => {
     if (!names.has(h?.key)) throw new Error(`poses: a moving hold names key "${h?.key}", which is not in the sheet`);
     if (!(isNum(h.driftPx) && h.driftPx >= 2 && h.driftPx <= 6)) throw new Error(`poses: moving hold on "${h.key}" drifts ${h.driftPx} px; it must be 2-6`);
     if (!(Number.isInteger(h.over) && h.over > 0)) throw new Error(`poses: moving hold on "${h.key}" needs a whole number of frames in over`);
+  }
+  for (const c of s.covers ?? []) {
+    if (!Array.isArray(c?.parts) || !c.parts.length || c.parts.some((n) => typeof n !== 'string')) throw new Error(`poses: ${s.shot} has a cover with no list of part names`);
+    if (!Number.isInteger(c.until)) throw new Error(`poses: ${s.shot} cover of ${c.parts.join(', ')} needs a whole frame in until`);
+    if (typeof c.why !== 'string' || !c.why) throw new Error(`poses: ${s.shot} cover of ${c.parts.join(', ')} must say what covers it`);
   }
   s.breakdowns ??= [];
   s.secondaries ??= [];

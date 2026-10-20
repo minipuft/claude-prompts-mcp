@@ -134,7 +134,7 @@ def time_faults(bl, beat, drops=()):
 # ---------- props apart ----------
 # Extents of each placeholder prop relative to its anchor, per unit scale, as (left, top, right, bottom) in stage pixels: the bounding box of the pixels that differ between the animatic's still
 # with the prop and without it (render-props.mjs, 1280x720, camera locked), divided by the scale it stood at. The stalk is measured facing left and mirrors when it faces right.
-PROP_EXTENT = {"box": (-67, -156, 106, 1), "bubble": (-128, -132, 126, 128), "gadget": (-56, -169, 108, 69), "stalk": (-51, -333, 43, 10), "structure": (-112, -302, 112, 2), "heap": (-88, -64, 88, 4), "lid": (-78, -23, 108, 68), "arch": (-62, -172, 62, 3), "ring": (-53, -53, 53, 53), "patch": (-58, -90, 58, 2), "patch-2": (-58, -90, 58, 2), "patch-3": (-58, -90, 58, 2), "bead": (-8, -8, 148, 47)}
+PROP_EXTENT = {"crayon": (-11, -92, 11, 2), "stroke-1": (-11, -194, 43, 11), "stroke-2": (-58, -396, 47, -172), "stroke-3": (-24, -394, 81, -287), "grid": (-122, -242, 122, 3), "pointer": (-304, -296, 10, 10), "title": (-200, -46, 222, 10), "box": (-67, -156, 106, 1), "bubble": (-128, -132, 126, 128), "gadget": (-56, -169, 108, 69), "stalk": (-51, -333, 43, 10), "structure": (-112, -302, 112, 2), "heap": (-88, -64, 88, 4), "lid": (-78, -23, 108, 68), "arch": (-62, -172, 62, 3), "arch-2": (-62, -172, 62, 3), "ring": (-53, -53, 53, 53), "ring-2": (-53, -53, 53, 53), "patch": (-58, -90, 58, 2), "patch-2": (-58, -90, 58, 2), "patch-3": (-58, -90, 58, 2), "bead": (-8, -8, 148, 47), "bead-2": (-8, -8, 148, 47)}
 STANDS = ("box", "stalk", "structure", "heap")   # anchored at a foot: it stands on the floor
 FLOOR_BAND = (-60, 260)                  # the foot's y relative to the floor line: the stage is 3/4 view, so the floor is a band, not a line
 TOUCH = 4                                # pixels two rectangles may share each way before they count as overlapping
@@ -227,7 +227,7 @@ def prop_faults(bl, figure, frames=(None,)):
             if dx or dy: shapes = [(sh[0], [(x + dx, y + dy) for x, y in sh[1]], *sh[2:]) for sh in shapes]
         acts = cur.get("actors") if isinstance(cur.get("actors"), dict) else {}
         for n, a in acts.items():
-            if n in PROP_EXTENT and xy(a) and num(a.get("scale")) and n in STANDS and num(floor) and not (floor + FLOOR_BAND[0] <= a["y"] <= floor + FLOOR_BAND[1]):
+            if n in PROP_EXTENT and xy(a) and num(a.get("scale")) and n in STANDS and not a.get("carriedBy") and not a.get("standsOn") and num(floor) and not (floor + FLOOR_BAND[0] <= a["y"] <= floor + FLOOR_BAND[1]):
                 add("air", f"the {n} stands at y {a['y']:g}, {abs(a['y'] - floor):g} px {'above' if a['y'] < floor else 'below'} the floor line {floor:g} (a foot belongs within {FLOOR_BAND[0]} to +{FLOOR_BAND[1]})", f)
         for n, r in rects.items():
             if n in PROP_EXTENT and (r[0] < -TOUCH or r[1] < -TOUCH or r[0] + r[2] > STAGE[0] + TOUCH or r[1] + r[3] > STAGE[1] + TOUCH):

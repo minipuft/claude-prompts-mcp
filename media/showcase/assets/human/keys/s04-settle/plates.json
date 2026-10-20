@@ -1,0 +1,66 @@
+[
+ {
+  "key": "K1",
+  "name": "stand",
+  "plate": "assets/human/keys/s04-settle/K1.png",
+  "family": "home",
+  "cropPx": [
+   243,
+   435
+  ],
+  "baselineInCrop": 431,
+  "scale": 0.4745,
+  "originMask": [
+   56,
+   42
+  ]
+ },
+ {
+  "key": "K2",
+  "name": "settle",
+  "plate": "assets/human/keys/s04-settle/K2.png",
+  "family": "home",
+  "cropPx": [
+   244,
+   423
+  ],
+  "baselineInCrop": 420,
+  "scale": 0.4745,
+  "originMask": [
+   79,
+   65
+  ]
+ },
+ {
+  "key": "K3",
+  "name": "seat",
+  "plate": "assets/human/keys/s04-settle/K3.png",
+  "family": "home",
+  "cropPx": [
+   247,
+   355
+  ],
+  "baselineInCrop": 353,
+  "scale": 0.4745,
+  "originMask": [
+   75,
+   208
+  ]
+ },
+ {
+  "key": "K4",
+  "name": "window",
+  "plate": "assets/human/keys/s04-settle/K4.png",
+  "family": "home",
+  "cropPx": [
+   252,
+   352
+  ],
+  "baselineInCrop": 349,
+  "scale": 0.4745,
+  "originMask": [
+   74,
+   216
+  ]
+ }
+]

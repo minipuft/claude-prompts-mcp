@@ -81,23 +81,32 @@ export const archStrokes = (layout: number, variant: number, lw: number, arch: B
   return out;
 };
 
+/**
+ * The centreline of a gate's stalk from its foot `base`: an S-curve up (21 points) and then the spiral (56 points), `side` +1 or -1 the way it leans. The stalk prop (`props/Scaffold.tsx`) draws the same line in three
+ * strokes, so the strokes the human draws and the stalk they become are one shape.
+ */
+export const stalkCentre = (base: Pt, r: number, side: 1 | -1): Pt[] => {
+  const height = r * 5.2;
+  const centre: Pt[] = [];
+  for (let u = 0; u <= 1.0001; u += 0.05) centre.push([base[0] + side * Math.sin(u * Math.PI * 1.25 + 0.4) * r * 0.8 * u, base[1] - u * height]);
+  const top = centre[centre.length - 1]!;
+  const turns = 3.2 * Math.PI, r0 = r * 0.95;
+  const sx = top[0] + side * r0, sy = top[1];
+  for (let t = 0.15; t <= turns; t += 0.18) {
+    const rho = r0 * (1 - t / (turns * 1.08));
+    centre.push([sx - side * rho * Math.cos(t), sy - rho * Math.sin(t)]);
+  }
+  return centre;
+};
+
 /** A waxy stalk from each gate's foot: an S-curve up, then a spiral. Three passes (blue, sky, yellow) at offsets so the wax shows its layers. */
 export const gateStrokes = (variant: number, lw: number, gates: Blocking['gates']): Stroke[] => {
   const out: Stroke[] = [];
   gates.forEach((g, i) => {
     const jitter = rng(variant * 61 + i * 11 + 3);
-    const height = g.r * 5.2;
     const base: Pt = [g.x, g.y + g.r];
     const side = i % 2 === 0 ? 1 : -1;
-    const centre: Pt[] = [];
-    for (let u = 0; u <= 1.0001; u += 0.05) centre.push([base[0] + side * Math.sin(u * Math.PI * 1.25 + 0.4) * g.r * 0.8 * u, base[1] - u * height]);
-    const top = centre[centre.length - 1]!;
-    const turns = 3.2 * Math.PI, r0 = g.r * 0.95;
-    const sx = top[0] + side * r0, sy = top[1];
-    for (let t = 0.15; t <= turns; t += 0.18) {
-      const rho = r0 * (1 - t / (turns * 1.08));
-      centre.push([sx - side * rho * Math.cos(t), sy - rho * Math.sin(t)]);
-    }
+    const centre = stalkCentre(base, g.r, side);
     const width = g.r * 0.3;
     [
       {colour: 'blue' as const, dx: 0, w: width, opacity: 0.95},

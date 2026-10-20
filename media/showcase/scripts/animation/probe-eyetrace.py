@@ -22,9 +22,16 @@ it resolves to must exist on the frame; a line outside the table, or whose sourc
                                    `figureCrop`, `codex`, `clawd` at their native size; a real shot: the
                                    mask's `figure`, `codex` and `clawd` groups)
   none                           nothing: the story point says the light pushes nowhere readable     skipped and counted, by name
+                                 (also the art world's own named emitter, 'the drawn piece as it fills', which holds before the crayon comes in: nothing is drawn yet)
   (any target)                   a point or a rectangle that lies wholly outside the picture on a frame (the frame Clawd carries in is still off the right edge on 690 and 691, so there is no interior to find
                                  the light in): skipped and counted as `off the picture`, never failed
-  anything else (the leaf, the drawn line, the piece's lines, the crayon's own colour, the running bead, ...): no role, prop or layer of the animatic draws it, so it cannot be measured: refused.
+  the crayon's own colour        the crayon prop (`blocking.actors.crayon`, `PROP_NATIVE`) as it stands on the frame       a region: 0 inside its rectangle, else the distance to its edge
+  the drawn line                 the stroke props on stage on the frame (stroke-1, stroke-2, stroke-3): their union         a region, as above
+  the leaf                       the stalk's leaf: a box at the stalk's top (`LEAF_NATIVE`, mirrored when it faces left)     a region, as above
+  the piece's lines              the stalk prop on stage (the lines of the piece the human carries)                         a region, as above
+  the running bead               the bead prop on stage                                                                     a region, as above
+                                 (each of these five needs its prop on stage on the frame, in the beat's blocking as it stands on THAT frame: a prop not yet on, or gone, is a refusal, never a pass)
+  anything else (the shimmer, ...): no role, prop or layer of the animatic draws it, so it cannot be measured: refused.
 The lamp is therefore the target only where a story point says "box seam", "gadget ..." (the xsheet emitter); where it says "frame interior" a lamp brighter than the interior FAILS.
 Masks (region plus colour, p007): the kit's and gadget's pale roles are also the lamp's own halo colours (kit.light, gadget.light, the box tape lit), so a role colour in `role_split`'s `owned` set counts
 as a fixed fill only inside the crop of the prop that draws it (`prop_region_from_blocking`: each actor at its native size and scale, the frame's bar, the blocks, the arch, gates carved out as lights);
@@ -45,16 +52,45 @@ from probe_common import *
 from fixtures import make
 
 
-TARGET_TABLE = (("box seam", "emitter"), ("gadget dial", "emitter"), ("gadget", "emitter"), ("frame interior", "frame"), ("the empty join", "join"), ("the lit join", "join"), ("the human", "human"), ("the trio", "trio"), ("none", "none"))
+TARGET_TABLE = (("box seam", "emitter"), ("gadget dial", "emitter"), ("gadget", "emitter"), ("frame interior", "frame"), ("the empty join", "join"), ("the lit join", "join"), ("the human", "human"), ("the trio", "trio"), ("none", "none"),
+                ("the drawn piece as it fills", "none"), ("the crayon's own colour", "prop"), ("the drawn line", "prop"), ("the leaf", "leaf"), ("the piece's lines", "prop"), ("the running bead", "prop"))
+PROP_TARGETS = {"the crayon's own colour": ["crayon"], "the drawn line": ["stroke-1", "stroke-2", "stroke-3"], "the piece's lines": ["stalk"], "the running bead": ["bead"]}
+"""The props a `prop` line names (their union is the target region). The stalk's leaf is drawn at the top of the spiral (`OpeningStalk`: its base at (0, -394) in the stalk's own px, open about 75 px wide and 45 high)."""
+LEAF_NATIVE = ((-10, -470), (95, -385))
+"""The leaf's box from the stalk's anchor, in native px at scale 1: (x0, y0), (x1, y1)."""
 """(prefix of the screenplay's `eye` or `emitter` line, kind): see the docstring for what each kind resolves to. The longest prefix wins, so 'gadget dial, lost' and 'gadget, rimming the structure' are both the lamp."""
 
 
-def table_kind(line):
-    """The kind a story point's `eye` or `emitter` line resolves to (`TARGET_TABLE`), or None when no entry matches. A prefix matches whole words: 'none readable' is 'none', 'gadgetry' is not 'gadget'."""
+def table_entry(line):
+    """(prefix, kind) of the longest `TARGET_TABLE` entry a line starts with, or None. A prefix matches whole words: 'none readable' is 'none', 'gadgetry' is not 'gadget'."""
     t = (line or "").strip().lower(); best = None
     for pre, kind in TARGET_TABLE:
         if t.startswith(pre) and (len(t) == len(pre) or not t[len(pre)].isalnum()) and (best is None or len(pre) > len(best[0])): best = (pre, kind)
-    return best[1] if best else None
+    return best
+
+
+def table_kind(line):
+    """The kind a story point's `eye` or `emitter` line resolves to (`TARGET_TABLE`), or None when no entry matches."""
+    e = table_entry(line); return e[1] if e else None
+
+
+def prop_rect(line, blocking):
+    """The stage rectangle (x, y, w, h) of the props a `prop` or `leaf` line names, as they stand in `blocking`, or None when none of them is on stage there: the union of each prop's native box (`PROP_NATIVE`) at its anchor and scale;
+    the leaf is `LEAF_NATIVE` from the stalk's anchor (mirrored for a stalk that faces left)."""
+    pre, kind = table_entry(line); names = ["stalk"] if kind == "leaf" else PROP_TARGETS[pre]; acts = (blocking or {}).get("actors") or {}; rects = []
+    for n in names:
+        a = acts.get(n)
+        if not isinstance(a, dict) or n not in PROP_NATIVE or a.get("x") is None: continue
+        s = a.get("scale", 1.0)
+        if kind == "leaf":
+            (x0, y0), (x1, y1) = LEAF_NATIVE
+            if a.get("facing") == "left": x0, x1 = -x1, -x0
+            rects.append((a["x"] + x0 * s, a["y"] + y0 * s, a["x"] + x1 * s, a["y"] + y1 * s))
+        else:
+            (ox, oy), (w, h) = PROP_NATIVE[n]; rects.append((a["x"] - ox * s, a["y"] - oy * s, a["x"] - ox * s + w * s, a["y"] - oy * s + h * s))
+    if not rects: return None
+    x0, y0, x1, y1 = min(r[0] for r in rects), min(r[1] for r in rects), max(r[2] for r in rects), max(r[3] for r in rects)
+    return (x0, y0, x1 - x0, y1 - y0)
 
 
 def story_target(f, beat_id, points, beats):
@@ -78,6 +114,10 @@ def resolve_target(line, source, em, blocking):
     if kind == "emitter":
         if not isinstance(em, dict) or em.get("x") is None: return {"kind": "emitter", "missing": True}, None
         return {"kind": "emitter", "x": em["x"], "y": em["y"]}, None
+    if kind in ("prop", "leaf"):
+        r = prop_rect(line, blocking)
+        if r is None: return None, f"{line!r} ({source}) needs {'the stalk' if kind == 'leaf' else ' or '.join(PROP_TARGETS[table_entry(line)[0]])} on stage in the beat's blocking, and none is"
+        return {"kind": kind, "rect": r}, None
     if kind == "frame":
         fr = (blocking or {}).get("frame")
         if not fr: return None, f"{line!r} ({source}) needs the beat's blocking `frame`, which is absent"
@@ -168,7 +208,17 @@ def controls(a, ctl):
     halo, region = _halo_frame(); kit_pale = ["#d9e5e3"]; bare = [h for h in ctl if h not in kit_pale]
     d_all = offset(halo, make.emitter_at(10), None, a.share, bare + kit_pale, a.blur)                                   # masked everywhere: the halo is eaten
     d_reg = offset(halo, make.emitter_at(10), None, a.share, bare, a.blur, owned=kit_pale, region=region)               # region plus colour: the halo is found, the prop's own pale is masked
-    refused = resolve_target("the leaf", "story point sp-5.3", None, {})[1]; kind_ok = (table_kind("box seam, tiny"), table_kind("gadget, rimming the structure"), table_kind("none readable"), table_kind("gadgetry"), table_kind("the lit join, then each gate in sequence"))
+    refused = resolve_target("the shimmer", "story point sp-5.3", None, {})[1]; kind_ok = (table_kind("box seam, tiny"), table_kind("gadget, rimming the structure"), table_kind("none readable"), table_kind("gadgetry"), table_kind("the lit join, then each gate in sequence"))
+    # the props the scaffold beats name: each resolves to the rectangle its prop stands in on the frame; the light on it passes, the light a prop's height away fails; a prop that is not on stage on the frame is refused by name
+    bl_p = {"actors": {"crayon": {"x": 640, "y": 400, "scale": 1.0}, "stroke-1": {"x": 300, "y": 500, "scale": 0.5}, "stroke-3": {"x": 700, "y": 500, "scale": 0.5}, "stalk": {"x": 900, "y": 560, "scale": 0.55, "facing": "right"}, "bead": {"x": 200, "y": 600, "scale": 0.5}}}
+    t_cray = resolve_target("the crayon's own colour", "story point sp-5.1", None, bl_p)[0]; t_draw = resolve_target("the drawn line", "story point sp-5.2", None, bl_p)[0]
+    t_leaf = resolve_target("the leaf", "story point sp-5.3", None, bl_p)[0]; t_piece = resolve_target("the piece's lines, carried", "story point sp-6.1", None, bl_p)[0]; t_bead = resolve_target("the running bead", "story point sp-7.3", None, bl_p)[0]
+    c_in = lambda t: ((t["rect"][0] + t["rect"][2] / 2) * make.S, (t["rect"][1] + t["rect"][3] / 2) * make.S)
+    p_on = offset(_blob(_field(), c_in(t_cray), 120), t_cray, None, a.share, ctl, a.blur); p_off = offset(_blob(_field(), (c_in(t_cray)[0] + 0.1 * make.W, c_in(t_cray)[1]), 120), t_cray, None, a.share, ctl, a.blur)
+    leaf_on = offset(_blob(_field(), c_in(t_leaf), 120), t_leaf, None, a.share, ctl, a.blur); leaf_root = offset(_blob(_field(), (900 * make.S, 540 * make.S), 120), t_leaf, None, a.share, ctl, a.blur)
+    absent = resolve_target("the drawn line", "story point sp-5.2", None, {"actors": {"crayon": bl_p["actors"]["crayon"]}})[1]
+    props_ok = (t_cray is not None and t_cray["rect"] == (640 - 9, 400 - 90, 18, 90) and t_draw["rect"][0] < 300 and t_draw["rect"][0] + t_draw["rect"][2] > 700 and t_leaf["rect"][1] < t_piece["rect"][1] and t_piece["kind"] == "prop" and t_leaf["kind"] == "leaf"
+                and t_bead["rect"][0] == 200 - 8 * 0.5 and p_on <= a.tolerance and p_off > a.tolerance and leaf_on <= a.tolerance and leaf_root > a.tolerance and absent is not None and "on stage" in absent and "stroke-1" in absent)
     # a target wholly off the picture (the frame at x 1288 of 1280 on frame 690) is skipped, not measured; it would have failed (the light is somewhere on the picture, the rect is not)
     S_ = make.S; shape = (make.H, make.W, 3); inside_rect = {"rect": (700, 100, 360, 260)}; edge_rect = {"rect": (1288, 190, 400, 410)}; just_in = {"rect": (1279, 190, 400, 410)}
     below_rect = {"rect": (400, 725, 300, 200)}; far_point = {"x": 1404.0, "y": 392.0}; near_point = {"x": 1270.0, "y": 392.0}
@@ -178,7 +228,7 @@ def controls(a, ctl):
           and d_lamp_brighter > a.tolerance and d_interior <= a.tolerance and d_lamp_named <= a.tolerance
           and d_travel <= a.tolerance and d_final > a.tolerance and walk_x == (950.0, 1200.0, 700.0)
           and l_h == "the human" and d_h_lamp > a.tolerance and d_h_own <= a.tolerance and l_d == "gadget dial" and d_d_lamp <= a.tolerance and trio_none is None
-          and d_all > a.tolerance and d_reg <= a.tolerance and refused and "the leaf" in refused and kind_ok == ("emitter", "emitter", "none", None, "join")
+          and d_all > a.tolerance and d_reg <= a.tolerance and refused and "the shimmer" in refused and kind_ok == ("emitter", "emitter", "none", None, "join") and props_ok
           and off_flags == (True, False, True, True, False, False) and d_off > a.tolerance)
     return ok, (f"bright blob 10 % of the width off the emitter -> FAIL (offset {100 * off:.1f} % > {100 * a.tolerance:.0f} %); blob on the emitter -> pass ({100 * on:.1f} %); "
                 f"identity, garment and kit-contour patches brighter than the blob are ignored (read unmasked they would put the offset at {100 * raw:.0f} %); "
@@ -191,6 +241,7 @@ def controls(a, ctl):
                 f"the same frame under a point with no eye (the lamp) -> pass ({100 * d_d_lamp:.1f} %), and a blocking without the cast's crops resolves no trio; "
                 f"a pale halo in the kit's colour: masked everywhere it is eaten -> FAIL ({100 * d_all:.1f} %), masked only inside the prop's crop it is found -> pass ({100 * d_reg:.1f} %); "
                 f"a line outside the table is refused by name ({refused[:48]}...); "
+                f"the props the scaffold beats name resolve to where their props stand (the crayon's rectangle 18 x 90 at its anchor, the strokes' union, the stalk's leaf above the stalk's lines, the bead): the light in the crayon -> pass ({100 * p_on:.1f} %), the light a tenth of the width away -> FAIL ({100 * p_off:.1f} %), the light at the stalk's root against the leaf -> FAIL ({100 * leaf_root:.1f} %), the light on the leaf -> pass ({100 * leaf_on:.1f} %), and a line whose props are not on stage is refused naming them ({absent[:60]}...); "
                 f"a frame wholly past the right edge (x 1288 of 1280) -> off the picture and skipped (read as a target it would FAIL, {100 * d_off:.1f} %), one overlapping the edge by a pixel -> measured, one wholly below -> off the picture, "
                 f"a point at x 1404 -> off, a point at x 1270 -> measured")
 

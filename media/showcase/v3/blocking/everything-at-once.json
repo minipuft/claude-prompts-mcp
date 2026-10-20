@@ -1,7 +1,7 @@
 {
   "id": "everything-at-once",
   "provisional": true,
-  "derivedFrom": "restaged 2026-10-19 (row 9.6, beat 2): the bubble pops inside 186-229 (off 190) and the gadget drops onto the blocks; the pieces arrive one after another from 232 (stalk, arch) and all at once on 330 (ring, patch, bead); a stalk shoves Clawd 58 px from 334 and Codex catches the ring (338); the lamp is the gadget's dial, beside the human, so the eye finds the trio and then the human; props apart per probe-blocking.py; test-scene (no layout contract for this beat's shot yet); the card is a provisional placeholder; no frame prop: the frame is the portal (th-frame-portal, p021) and first stands on stage when Clawd carries it in at sp-4.2 (frame 690)",
+  "derivedFrom": "restaged 2026-10-19 (row 9.6, beat 2): the bubble pops inside 186-229 (off 190) and the gadget drops onto the blocks; the pieces arrive one after another from 232 (stalk, arch) and all at once on 330 (ring, patch, bead); a stalk shoves Clawd 58 px from 334 and Codex catches the ring (338); the lamp is the gadget's dial, beside the human, so the eye finds the trio and then the human; props apart per probe-blocking.py; test-scene (no layout contract for this beat's shot yet); the card is a provisional placeholder; no frame prop: the frame is the portal (th-frame-portal, p021) and first stands on stage when Clawd carries it in at sp-4.2 (frame 690); the dial's glow is 150 px inside the bubble and floods to 700 px between 186 and 205 (emitter.at: the field floods at the pop, sp-2.1); the arrivals of 330 are six named props (ring, patch, bead and arch-2, ring-2, bead-2) on the one frame (sp-2.3)",
   "figure": {
     "scale": 0.68,
     "x": 420,
@@ -193,6 +193,24 @@
       "y": 190,
       "scale": 1.0,
       "on": 330
+    },
+    "arch-2": {
+      "x": 1210,
+      "y": 230,
+      "scale": 1.0,
+      "on": 330
+    },
+    "ring-2": {
+      "x": 1090,
+      "y": 190,
+      "scale": 1.0,
+      "on": 330
+    },
+    "bead-2": {
+      "x": 985,
+      "y": 60,
+      "scale": 1.0,
+      "on": 330
     }
   },
   "emitter": {
@@ -205,7 +223,17 @@
       336
     ],
     "anchor": "gadget dial",
-    "storyPoint": "sp-2.1"
+    "storyPoint": "sp-2.1",
+    "at": [
+      {
+        "frame": 186,
+        "radius": 150
+      },
+      {
+        "frame": 205,
+        "radius": 700
+      }
+    ]
   },
   "card": "seuss-no-one-youer",
   "cardNote": "provisional: board §1 world, the overwhelm of towers and stalks the field widens onto; s01 lists it first",

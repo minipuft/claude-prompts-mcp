@@ -1,27 +1,32 @@
 {
   "id": "home-settle",
   "provisional": true,
-  "derivedFrom": "restaged 2026-10-19 (animatic 04, blocking step): props apart per probe-blocking.py; test-scene (no layout contract for this beat's shot yet); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
+  "derivedFrom": "restaged 2026-10-20 (row 9.6, beat 8; animatic 04 blocking step before it): home; the structure stands small under the frame (D102) with the stalk and the lit joins (the two kit blocks) inside it and the gadget resting inside, the heap still on the floor; the human plays s04-settle (stand 1660, settle 1760, seat 1816, window 1860), sitting on a patch; Codex settles at the left with one held boil, Clawd at the right; the frame is set against the structure; on 1860 the light goes into the frame's interior and the title mark comes on; props apart per probe-blocking.py; actors, emitter and card are provisional placeholders",
   "figure": {
     "scale": 0.58,
     "x": 452,
     "y": 85
   },
   "codex": {
-    "x": 60,
-    "y": 440,
-    "scale": 1.8
+    "x": 130,
+    "y": 500,
+    "scale": 0.9,
+    "hold": {
+      "from": 1760,
+      "to": 1949
+    }
   },
   "clawd": {
-    "x": 940,
-    "y": 470,
-    "scale": 1.5
+    "x": 1135,
+    "y": 500,
+    "scale": 0.8
   },
   "frame": {
     "x": 910,
     "y": 70,
     "width": 280,
-    "height": 230
+    "height": 230,
+    "litFrom": 1860
   },
   "blocks": [
     {
@@ -78,7 +83,7 @@
     "height": 720
   },
   "beat": "home-settle",
-  "shot": null,
+  "shot": "s04-settle",
   "actors": {
     "structure": {
       "x": 1050,
@@ -94,6 +99,32 @@
       "x": 470,
       "y": 706,
       "scale": 0.5
+    },
+    "stalk": {
+      "x": 1022,
+      "y": 450,
+      "scale": 0.25,
+      "facing": "right",
+      "openAt": [
+        {
+          "frame": 1650,
+          "value": 1
+        }
+      ],
+      "standsOn": "blocks",
+      "madeBy": "human"
+    },
+    "patch": {
+      "x": 650,
+      "y": 545,
+      "scale": 0.6,
+      "on": 1766
+    },
+    "title": {
+      "x": 640,
+      "y": 100,
+      "scale": 1.0,
+      "on": 1860
     }
   },
   "emitter": {
@@ -109,7 +140,7 @@
     "storyPoint": "sp-8.1"
   },
   "card": "seuss-green-cat-lights",
-  "cardNote": "provisional: board §1 world, \"Green Cat with Lights\" for light on built structure",
+  "cardNote": "provisional: board \u00a71 world, \"Green Cat with Lights\" for light on built structure",
   "contacts": [
     {
       "a": "structure",
@@ -125,6 +156,22 @@
       "a": "gadget",
       "b": "blocks",
       "why": "the gadget stands on the lit join"
+    },
+    {
+      "a": "structure",
+      "b": "stalk",
+      "why": "the stalk the human made stands inside the structure"
+    },
+    {
+      "a": "blocks",
+      "b": "stalk",
+      "why": "the stalk is set against the lit join"
+    },
+    {
+      "a": "human",
+      "b": "patch",
+      "why": "she sits on the patch (sp-8.2)"
     }
-  ]
+  ],
+  "cutIn": true
 }

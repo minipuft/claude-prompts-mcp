@@ -97,7 +97,15 @@
      "pose": "knees bent, back rounded, chin to chest, forearms crossed over the head: small and covering",
      "lineOfAction": "a closing C from the crown down to the bent knees",
      "changes": "joy is overrun: the figure folds in on itself and holds (the field floods)",
-     "hold": 90
+     "hold": 20
+    },
+    {
+     "name": "fold",
+     "frame": 364,
+     "pose": "knees bent, hips sunk, back rounded, chin to chest, forearms crossed over the head: folded down to the floor",
+     "lineOfAction": "a closing C from the crown down to the sunk hips",
+     "changes": "joy is overrun and she goes lower: the figure folds down and holds to the cut",
+     "hold": 56
     }
    ],
    "breakdowns": [
@@ -251,6 +259,118 @@
     },
     {
      "frame": 328,
+     "favour": 0.98
+    },
+    {
+     "frame": 350,
+     "favour": 0.25
+    },
+    {
+     "frame": 354,
+     "favour": 0.55
+    },
+    {
+     "frame": 358,
+     "favour": 0.7
+    },
+    {
+     "frame": 362,
+     "favour": 0.98
+    },
+    {
+     "frame": 350,
+     "favour": 0.25
+    },
+    {
+     "frame": 354,
+     "favour": 0.55
+    },
+    {
+     "frame": 358,
+     "favour": 0.7
+    },
+    {
+     "frame": 362,
+     "favour": 0.98
+    },
+    {
+     "frame": 350,
+     "favour": 0.25
+    },
+    {
+     "frame": 354,
+     "favour": 0.55
+    },
+    {
+     "frame": 358,
+     "favour": 0.7
+    },
+    {
+     "frame": 362,
+     "favour": 0.98
+    },
+    {
+     "frame": 350,
+     "favour": 0.25
+    },
+    {
+     "frame": 354,
+     "favour": 0.55
+    },
+    {
+     "frame": 358,
+     "favour": 0.7
+    },
+    {
+     "frame": 362,
+     "favour": 0.98
+    },
+    {
+     "frame": 350,
+     "favour": 0.25
+    },
+    {
+     "frame": 354,
+     "favour": 0.55
+    },
+    {
+     "frame": 358,
+     "favour": 0.7
+    },
+    {
+     "frame": 362,
+     "favour": 0.98
+    },
+    {
+     "frame": 350,
+     "favour": 0.25
+    },
+    {
+     "frame": 354,
+     "favour": 0.55
+    },
+    {
+     "frame": 358,
+     "favour": 0.7
+    },
+    {
+     "frame": 362,
+     "favour": 0.98
+    },
+    {
+     "frame": 350,
+     "favour": 0.25
+    },
+    {
+     "frame": 354,
+     "favour": 0.55
+    },
+    {
+     "frame": 358,
+     "favour": 0.7
+    },
+    {
+     "frame": 362,
      "favour": 0.98
     }
    ],

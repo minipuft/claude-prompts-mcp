@@ -50,12 +50,12 @@ export const archOutline = (a = STAGE.arch): [number, number][] => {
 };
 
 const ORIGINAL_PARTS: PropsPart[] = ['companions', 'architecture', 'blocks'];
-/** What each world draws. Home never includes the arch, the gates or the floor, and draws `actors` only where the blocking names some: with none, its output is today's look, byte for byte. */
+/** What each world draws. Home never includes the arch, the gates or the floor; every world draws `actors` only where the blocking names some: with none, its output is today's look, byte for byte (the scaffold beats 5-7 stage props in the crayon, line and shaded worlds). */
 export const WORLD_PARTS: Record<WorldId, PropsPart[]> = {
   home: [...ORIGINAL_PARTS, 'actors'],
-  crayon: [...ORIGINAL_PARTS, 'arch', 'gates', 'floor'],
-  line: [...ORIGINAL_PARTS, 'arch', 'gates', 'floor'],
-  shaded: [...ORIGINAL_PARTS, 'arch', 'gates', 'floor'],
+  crayon: [...ORIGINAL_PARTS, 'arch', 'gates', 'floor', 'actors'],
+  line: [...ORIGINAL_PARTS, 'arch', 'gates', 'floor', 'actors'],
+  shaded: [...ORIGINAL_PARTS, 'arch', 'gates', 'floor', 'actors'],
 };
 
 /** The world's own parts, narrowed to `override` when one is given (an override never adds a part the world does not draw). */

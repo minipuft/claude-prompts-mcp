@@ -100,14 +100,14 @@
       "radiance": "warm, s03 amber (D74) on a paper-coloured field, not black",
       "grain": "paper tooth",
       "emitter": {
-        "anchor": "join (the drawn piece as it fills)",
+        "anchor": "the crayon, then the drawn line, then the stalk's leaf (the piece as it is made)",
         "start": [
-          0.7813,
-          0.5417
+          0.8672,
+          0.7222
         ],
         "end": [
-          0.8438,
-          0.5417
+          0.8672,
+          0.7222
         ],
         "intensity": 0.9,
         "colour": "#fbdab9",
@@ -131,14 +131,14 @@
       "radiance": "cold cyan on black, s02 accent as the world's hue",
       "grain": "none",
       "emitter": {
-        "anchor": "gates, first to last",
+        "anchor": "the join (empty, then lit), then the running bead, then the frame's interior",
         "start": [
-          0.1172,
-          0.5389
+          0.625,
+          0.3806
         ],
         "end": [
-          0.2539,
-          0.5222
+          0.625,
+          0.3806
         ],
         "intensity": 0.9,
         "colour": "#c5e4f0",

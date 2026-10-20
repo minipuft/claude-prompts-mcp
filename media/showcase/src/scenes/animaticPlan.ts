@@ -17,11 +17,15 @@ import s02Keys from '../../v3/keys/s02-cant-build-frame.json';
 import s02CantBuildKeys from '../../v3/keys/s02-cant-build.json';
 import s02CantBuildPoses from '../../v3/poses/s02-cant-build.json';
 import s02FrameKeys from '../../v3/keys/s02-the-frame.json';
+import s03Keys from '../../v3/keys/s03-scaffold.json';
+import s04Keys from '../../v3/keys/s04-settle.json';
 import s02FramePoses from '../../v3/poses/s02-the-frame.json';
+import s03Poses from '../../v3/poses/s03-scaffold.json';
+import s04Poses from '../../v3/poses/s04-settle.json';
 import s02Layout from '../../v3/layouts/s02-cant-build-frame.json';
 import lightFile from '../../v3/light.json';
 import timelineFile from '../../v3/timeline.json';
-import {blockingAt, blockingTrack, emitterPointAt, grainAt, parseBlocking, resolveBlocking, type Blocking} from '../library/animation/blocking';
+import {blockingAt, blockingTrack, emitterPointAt, glowAt, grainAt, litPointAt, parseBlocking, resolveBlocking, type Blocking} from '../library/animation/blocking';
 import {cameraAt, cameraFromLayout, lockedCamera, type Camera, type CameraPose} from '../library/animation/camera';
 import {describeFrame, heldDrawing, listBreakdowns, parseKeySheet, type FrameInfo, type KeySheet} from '../library/animation/keys';
 import {coversTimeline, emitterIntensityAt, lightAt, lightTrack, lightTrackFromContract, parseLightContract} from '../library/animation/light';
@@ -72,6 +76,13 @@ const s01Sheet = poseKeySheet(s01Poses_, s01Keys_);
 const s02FrameKeys_ = parseKeySheet(s02FrameKeys);
 const s02FramePoses_ = parsePoseSheet(s02FramePoses);
 const s02FrameChart = poseChartFrom(s02FramePoses_, s02FrameKeys_, jointParents);
+/** Beats 5-7 (`s03-scaffold`, 930-1650) and beat 8 (`s04-settle`, 1650-1950) play their own pose sheets in film frames, the body only (the cloak is gone from 760 and the Swoop is the figure). */
+const s03Keys_ = parseKeySheet(s03Keys);
+const s03Poses_ = parsePoseSheet(s03Poses);
+const s03Chart = poseChartFrom(s03Poses_, s03Keys_, jointParents);
+const s04Keys_ = parseKeySheet(s04Keys);
+const s04Poses_ = parsePoseSheet(s04Poses);
+const s04Chart = poseChartFrom(s04Poses_, s04Keys_, jointParents);
 /** Beat 3 (`s02-cant-build`, sp-3.1 to sp-3.3) plays its own pose sheet in film frames, the body only: its cloak and hair lag from beat 4, where the sheet derives them. */
 const s02CantBuildKeys_ = parseKeySheet(s02CantBuildKeys);
 const s02CantBuildPoses_ = parsePoseSheet(s02CantBuildPoses);
@@ -88,6 +99,8 @@ const playedCharts: Record<string, PoseChart> = (() => {
     's01-arrival-overwhelm': {keys, breakdowns},
     's02-cant-build': {keys: s02CantBuildChart.keys, breakdowns: s02CantBuildChart.breakdowns},
     's02-the-frame': {keys: s02FrameChart.keys, breakdowns: s02FrameChart.breakdowns, follows: s02FrameChart.follows},
+    's03-scaffold': {keys: s03Chart.keys, breakdowns: s03Chart.breakdowns},
+    's04-settle': {keys: s04Chart.keys, breakdowns: s04Chart.breakdowns},
   };
 })();
 /**
@@ -99,7 +112,11 @@ const playedCharts: Record<string, PoseChart> = (() => {
  */
 const partsRigFile = parseParts(partsFile, restPose);
 const dropsAt: Record<string, number | undefined> = {'s02-the-frame': s02FramePoses_.secondaries.find((c) => c.dropsAt !== undefined)?.dropsAt};
-const poseSheets: Record<string, typeof s02FramePoses_> = {'s02-the-frame': s02FramePoses_};
+/**
+ * The pose sheets of the shots drawn as the parts rig. s01 is drawn as the rig from its first frame too, so that its sheet's `covers` can keep the hand parts out of the picture until the lift (sp-1.1 `cloak covers both hands`,
+ * sp-1.2 `hands visible after, not before`): the one-piece mesh has the hands baked into its texture and nothing to hide them with. A shot with no garment to drop and no cover is drawn as before.
+ */
+const poseSheets: Record<string, typeof s02FramePoses_> = {'s01-arrival-overwhelm': s01Poses_, 's02-the-frame': s02FramePoses_};
 export type Garment = 'cloak' | 'swoop';
 /** The first frame any shot's pose sheet takes a garment off: from it the film is the Swoop. */
 const garmentOffFrom = Math.min(Infinity, ...Object.values(dropsAt).filter((d): d is number => d !== undefined));
@@ -108,15 +125,17 @@ export const garmentAt = (shot: string | null, frame: number): Garment | null =>
   return shot && dropsAt[shot] !== undefined ? 'cloak' : null;
 };
 /** The parts rig's draw order for the body `pose` on a frame of `shot` (front first): the rule over the joints with the lead of the key the frame is on or moving toward, under that key's own `order`, without the garment that is off. */
-const partsOrder = (shot: string, pose: Joints, info: FrameInfo, garment: Garment): PartName[] => {
-  const key = poseSheets[shot]!.keys.find((k) => k.name === (info.phase === 'breakdown' && info.to ? info.to : info.from))!;
+const partsOrder = (shot: string, pose: Joints, info: FrameInfo, garment: Garment | null, frame: number): PartName[] => {
+  const sheet = poseSheets[shot]!;
+  const key = sheet.keys.find((k) => k.name === (info.phase === 'breakdown' && info.to ? info.to : info.from))!;
   const order = applyOrder(defaultOrder(partsRigFile, pose, key.lead, key.weight.foot), key.order);
-  return garment === 'swoop' ? order.filter((n) => n !== 'poncho') : order;
+  const covered = (sheet.covers ?? []).filter((c) => frame < c.until).flatMap((c) => c.parts);
+  return order.filter((n) => !(garment === 'swoop' && n === 'poncho') && !covered.includes(n));
 };
 const bodyCharts: Record<string, PoseChart> = Object.fromEntries(Object.entries(playedCharts).map(([shot, chart]) => [shot, {keys: chart.keys, breakdowns: chart.breakdowns}]));
-const keySheets: Record<string, KeySheet> = {'s01-arrival-overwhelm': s01Sheet, 's02-cant-build-frame': parseKeySheet(s02Keys), 's02-cant-build': poseKeySheet(s02CantBuildPoses_, s02CantBuildKeys_), 's02-the-frame': poseKeySheet(s02FramePoses_, s02FrameKeys_)};
+const keySheets: Record<string, KeySheet> = {'s01-arrival-overwhelm': s01Sheet, 's02-cant-build-frame': parseKeySheet(s02Keys), 's02-cant-build': poseKeySheet(s02CantBuildPoses_, s02CantBuildKeys_), 's02-the-frame': poseKeySheet(s02FramePoses_, s02FrameKeys_), 's03-scaffold': poseKeySheet(s03Poses_, s03Keys_), 's04-settle': poseKeySheet(s04Poses_, s04Keys_)};
 /** Key sheets whose frames are film frames (a beat's own sheet inside a shot that starts earlier): their keys are read at `frame`, not at the frame since the shot began. */
-const FILM_FRAME_SHEETS: ReadonlySet<string> = new Set(['s02-cant-build', 's02-the-frame']);
+const FILM_FRAME_SHEETS: ReadonlySet<string> = new Set(['s02-cant-build', 's02-the-frame', 's03-scaffold', 's04-settle']);
 
 /** liftChart as a key sheet (rest / raise / settle), the placeholder for every shot whose key sheet is not drawn yet. */
 const placeholderSheet: KeySheet = {
@@ -193,7 +212,7 @@ export type FrameState = {
   blocking: Blocking;
   camera: CameraPose;
   /** `intensity` is 0 on a frame with no light (a beat with no emitter, or the frames between two emitters). */
-  emitter: {x: number; y: number; radius: number; color: string; intensity: number; grain?: number};
+  emitter: {x: number; y: number; radius: number; color: string; intensity: number; grain?: number; /** The beat's `emitter.at` strength on this frame (1 where a beat keys none): the xsheet multiplies the crossing's fade by it, so a light that is dim and then lit shows in the sheet. */ glow?: number};
   /** The beat-local frame the key sheet is read at. */
   local: number;
   /** The pose drawn on this frame (a held shot: each key for exactly the hold it declares; a played shot: its pose chart on twos) and the single-key chart that holds it. */
@@ -233,13 +252,15 @@ export const frameState = (frame: number): FrameState => {
   const drawnFrom = held ? held.start : info.phase === 'key' && sheet.keys.some((k) => k.name === info.from && k.frame === q) ? q : -1;
   // The figure's placement (scale, x, y) is part of its drawing: it steps at a cut with the pose and never eases like a prop does, so the drawn layer changes only where the exposure sheet has a key.
   const garment = garmentAt(shot, frame);
-  const partsRigged = garment !== null && shot !== null && poseSheets[shot] !== undefined;
+  const partsRigged = shot !== null && poseSheets[shot] !== undefined;
   // the human's root travel (`figure.at`) is read on the frame the drawing came on, like the pose: it steps with each drawing instead of gliding between them
   const placed = resolveBlocking(blockingByBeat[beat.id]!, frame - (local - drawingRow(sheet, local)));
-  const blocking = {...blockingAt(blockingOnTimeline, frame), figureCrop: placed.figureCrop, figure: {...placed.figure, ...(partsRigged ? {order: partsOrder(shot!, bodyPose, info, garment)} : {}), ...(garment === 'swoop' ? {swoop: true} : {})}};
+  const blocking = {...blockingAt(blockingOnTimeline, frame), figureCrop: placed.figureCrop, figure: {...placed.figure, ...(partsRigged ? {order: partsOrder(shot!, bodyPose, info, garment, frame)} : {}), ...(garment === 'swoop' ? {swoop: true} : {})}};
   const colour = lightAt(light, frame);
   const grain = grainAt(blockingByBeat[beat.id]!, frame);
   const spot = contract ? emitterPointAt(blockingByBeat[beat.id]!, beat, frame) : null;
+  const glow = glowAt(blockingByBeat[beat.id]!, frame);
+  const lit = litPointAt(blockingByBeat[beat.id]!, blocking, frame);
   return {
     frame,
     beat,
@@ -247,12 +268,13 @@ export const frameState = (frame: number): FrameState => {
     blocking,
     camera: cameraAt(camera, frame),
     emitter: {
-      x: spot?.x ?? blocking.join.x,
-      y: spot?.y ?? blocking.join.y,
-      radius: EMITTER_RADIUS,
+      x: lit?.x ?? spot?.x ?? blocking.join.x,
+      y: lit?.y ?? spot?.y ?? blocking.join.y,
+      radius: glow.radius ?? EMITTER_RADIUS,
       color: colour,
-      intensity: contract ? emitterIntensityAt(contract, beat.id, frame) : 0.9,
+      intensity: (contract ? emitterIntensityAt(contract, beat.id, frame) : 0.9) * (glow.strength ?? 1),
       ...(grain !== undefined ? {grain} : {}),
+      ...(glow.strength !== undefined ? {glow: glow.strength} : {}),
     },
     local,
     pose,
@@ -278,7 +300,7 @@ export const xstateOf = (frame: number): XState => {
     drawing: s.drawing,
     chart: {phase: s.chart.phase, favour: s.chart.favour, to: s.chart.to},
     camera: s.camera,
-    emitter: s.emitter.intensity > 0 ? {x: s.emitter.x, y: s.emitter.y, hex: s.emitter.color, strength: emitterStrength(frame, s.crossing ?? null)} : null,
+    emitter: s.emitter.intensity > 0 ? {x: s.emitter.x, y: s.emitter.y, hex: s.emitter.color, strength: emitterStrength(frame, s.crossing ?? null) * (s.emitter.glow ?? 1)} : null,
     key,
     hold: key ? (s.sheet.keys.find((k) => k.name === key)?.hold ?? null) : null,
   };
