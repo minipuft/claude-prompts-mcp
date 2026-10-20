@@ -57,8 +57,11 @@ export const SQUASH_WRAP_COLUMNS = 72;
 export const VENDORED_PARSER = fileURLToPath(
   new URL("./vendor/conventional-commits-parser.cjs", import.meta.url),
 );
-const OVERRIDE_BEGIN = "BEGIN_COMMIT_OVERRIDE";
-const OVERRIDE_END = "END_COMMIT_OVERRIDE";
+export const OVERRIDE_BEGIN = "BEGIN_COMMIT_OVERRIDE";
+export const OVERRIDE_END = "END_COMMIT_OVERRIDE";
+/** release-please's README section on the override block, at the version this file reproduces. */
+const OVERRIDE_DOCS =
+  "https://github.com/googleapis/release-please/tree/v17.6.0#how-can-i-fix-release-notes";
 const NESTED_BEGIN = "BEGIN_NESTED_COMMIT";
 const NESTED_END = "END_NESTED_COMMIT";
 /** release-please 17.6.0 `splitMessages`: a paragraph opening with one of these starts an entry. */
@@ -272,6 +275,14 @@ function whereLine(failure, source) {
   return `squash message line ${failure.messageLine}, from PR body line ${failure.bodyLine}`;
 }
 
+/**
+ * A marker as this script prints it: split before `OVERRIDE`, never whole. release-please finds
+ * the block with `body.split(marker)`, an exact match anywhere in the PR body, backticks and code
+ * fences included, and the PR template asks for pasted transcripts. A whole marker printed here
+ * would open an override block in any body this output is pasted into. The reader joins the halves.
+ */
+const splitMarker = (marker) => marker.replace(/OVERRIDE$/, " + OVERRIDE");
+
 const SQUASH_FIXES = [
   "Fix it in the PR body, any one of:",
   "  · put an example call on ONE line inside a fenced code block (```). GitHub re-flows the",
@@ -279,23 +290,26 @@ const SQUASH_FIXES = [
   "    `name(` without closing the parenthesis on that same line is what the parser refuses.",
   "    A call split over several lines fails inside a fence too.",
   "  · reword the paragraph so that no line of the squash message starts with `name(` left open.",
-  `  · add a block release-please reads INSTEAD of the whole squash message:`,
-  `      ${OVERRIDE_BEGIN}`,
+  "  · add a block release-please reads INSTEAD of the whole squash message. Its two markers are",
+  '    printed split so this advice stays inert if pasted: write each as one word, without " + ".',
+  `      ${splitMarker(OVERRIDE_BEGIN)}`,
   "      <the commit as release-please should read it, e.g. the PR title>",
-  `      ${OVERRIDE_END}`,
+  `      ${splitMarker(OVERRIDE_END)}`,
+  `    release-please documents the block at ${OVERRIDE_DOCS}`,
 ];
 const OVERRIDE_FIXES = [
-  `Fix the text between ${OVERRIDE_BEGIN} and ${OVERRIDE_END}: release-please reads it instead of`,
-  "the squash message, so its first line must be a conventional commit header (the PR title is",
-  "one), and no later line may start with `name(` left open. A prose mention of the marker",
-  "counts as a block too: release-please splits on the bare word.",
+  "Fix the text between the two commit-override markers: release-please reads it instead of the",
+  "squash message, so its first line must be a conventional commit header (the PR title is one),",
+  "and no later line may start with `name(` left open. Any mention of the begin marker opens a",
+  "block, inside backticks or a code fence too: release-please splits on the bare word.",
+  `The block is documented at ${OVERRIDE_DOCS}`,
 ];
 
 /** Lines to print for a verdict; the first failure line carries `::error::` under Actions. */
 export function formatVerdict(verdict, { ci = false } = {}) {
   const what =
     verdict.source === "override"
-      ? `the ${OVERRIDE_BEGIN} block in the PR body`
+      ? "the commit-override block in the PR body"
       : "the squash commit this pull request merges as";
   if (verdict.failures.length === 0) {
     const count = verdict.entries.length;
@@ -364,12 +378,12 @@ function selfTest() {
       expect: refused(3),
     },
     {
-      name: `a ${OVERRIDE_BEGIN} block that parses replaces an unparseable message`,
+      name: "a commit-override block that parses replaces an unparseable message",
       body: `${demonstration([REFLOWED_CALL])}\n\n${OVERRIDE_BEGIN}\n${title}\n${OVERRIDE_END}\n`,
       expect: (verdict) => verdict.source === "override" && parses(verdict),
     },
     {
-      name: `a ${OVERRIDE_BEGIN} block that does not parse is refused`,
+      name: "a commit-override block that does not parse is refused",
       body: `## Summary\n\nx\n\n${OVERRIDE_BEGIN}\nnot a conventional header\n${OVERRIDE_END}\n`,
       expect: (verdict) =>
         verdict.source === "override" &&
