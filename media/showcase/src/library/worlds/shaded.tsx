@@ -12,6 +12,7 @@ import {frameRings, type Pt} from '../props/Frame';
 import {settled} from '../tokens';
 import {STAGE, archOutline, clamp01, contourPx, lineColour, partsOf} from './contract';
 import {contracts} from './contracts';
+import {SHADOW_FLOOR} from './figureShader';
 import {FigureLines, JoinGlow, PropsStack, Stage, reducedLine, useBloomLines, type Bloom, type FigureLight, type PropsLook} from './parts';
 import type {PropsPart, SceneProps, WorldContract} from './types';
 
@@ -67,6 +68,23 @@ const frameLight = (frame: {x: number; y: number; width: number; height: number}
   return at ? 1 : FRAME_DIM;
 };
 
+/** Share of its brightness a lit edge keeps when the light is a reach or more away from it. The light leads composition (D91): an edge is as bright as the emitter is near it, so the join the eye is sent to and the bead running the gates are not outranked by the pale edge of a block beside them. */
+const RIM_DIM = 0.15;
+/** Stage px over which an edge's brightness falls from all of it (the light on it) to `RIM_DIM`: under the 80 px between the join and the far edge of the left block, over the block's own half width. */
+const RIM_REACH = 60;
+/** The brightness of an edge point `distance` stage px from the emitter: 1 under it, `RIM_DIM` at `RIM_REACH` or more. With no emitter (the world sheet, a stand-alone scene) every edge is at its resting brightness. */
+const rimLight = (distance: number, relax = 0): number => {
+  const k = RIM_DIM + (1 - RIM_DIM) * Math.max(0, 1 - distance / RIM_REACH);
+  return k + (1 - k) * relax;
+};
+/** Share of its shadow floor the human's figure keeps while a light is drawn elsewhere: she is the actor and the light is the subject, so her unlit side (a large face-and-garment area, as bright as a small glow) falls darker and does not outrank it. The lit step is untouched. */
+const FIGURE_SHADOW = 0.5;
+/** Share of its bloom the human's contour keeps while a light is drawn elsewhere: the bloom stacks on whatever she crosses (a kit block's face) and shines brighter than a small glow. */
+const FIGURE_BLOOM = 0.1;
+
+/** Where a geometry's local origin stands on the stage (px, y down) and where the light is: what `useEdges` reads to dim each edge point by its own distance from the light. */
+type RimLit = {origin: [number, number]; emitter: {x: number; y: number} | undefined; relax: number};
+
 const toonGradient = (steps: number): DataTexture => {
   const data = Uint8Array.from({length: steps}, (_, i) => Math.round(255 * (0.3 + (0.7 * i) / Math.max(1, steps - 1))));
   const t = new DataTexture(data, steps, 1, RedFormat);
@@ -76,19 +94,33 @@ const toonGradient = (steps: number): DataTexture => {
   return t;
 };
 
-/** Edges of `geometry` as screen-space fat lines of `width` px in `colour`, with the contract's bloom lines behind them. */
-const useEdges = (geometry: BufferGeometry, colour: string, width: number, bloom?: Bloom, glowOrder = -1): {lines: LineSegments2; glow: LineSegments2[]} => {
+/**
+ * Edges of `geometry` as screen-space fat lines of `width` px in `colour`, with the contract's bloom lines behind them. With `lit` every edge point is drawn at `rimLight` of its distance from the emitter
+ * (per-vertex colour, which the bloom lines that share the geometry carry too), so the edge nearest the light stays bright and the far ones fall back.
+ */
+const useEdges = (geometry: BufferGeometry, colour: string, width: number, bloom?: Bloom, glowOrder = -1, lit?: RimLit): {lines: LineSegments2; glow: LineSegments2[]} => {
   const lines = useMemo(
-    () => new LineSegments2(new LineSegmentsGeometry().fromEdgesGeometry(new EdgesGeometry(geometry, 25)), new LineMaterial({toneMapped: false, resolution: new Vector2(W, H)})),
-    [geometry],
+    () => new LineSegments2(new LineSegmentsGeometry().fromEdgesGeometry(new EdgesGeometry(geometry, 25)), new LineMaterial({toneMapped: false, vertexColors: !!lit, resolution: new Vector2(W, H)})),
+    [geometry, !!lit],
   );
   // the colour and width change every crossing frame: write them into the one material instead of rebuilding it
   useLayoutEffect(() => {
     lines.material.color.set(colour);
     lines.material.linewidth = width;
+    if (lit) lines.geometry.setColors(rimColours(lines.geometry, lit));
   });
   const glow = useBloomLines(lines, colour, width, bloom, glowOrder);
   return {lines, glow};
+};
+
+/** One rgb per segment end (the pairs `setColors` takes): `rimLight` of the end's stage distance from the emitter, 1 where there is no emitter. */
+const rimColours = (geometry: LineSegmentsGeometry, {origin, emitter, relax}: RimLit): Float32Array => {
+  const start = geometry.getAttribute('instanceStart');
+  const end = geometry.getAttribute('instanceEnd');
+  const out = new Float32Array(start.count * 6);
+  const k = (a: typeof start, i: number): number => (emitter ? rimLight(Math.hypot(origin[0] + a.getX(i) - emitter.x, origin[1] - a.getY(i) - emitter.y), relax) : 1);
+  for (let i = 0; i < start.count; i++) out.fill(k(start, i), i * 6, i * 6 + 3).fill(k(end, i), i * 6 + 3, i * 6 + 6);
+  return out;
 };
 
 const ringShape = (outer: Pt[], inner: Pt[]): Shape => {
@@ -97,10 +129,10 @@ const ringShape = (outer: Pt[], inner: Pt[]): Shape => {
   return s;
 };
 
-type SolidProps = {geometry: BufferGeometry; fillColour: string; fill: number; edge: string; lw: number; gradient: DataTexture; bloom?: Bloom; emissive?: boolean; glowOrder?: number};
+type SolidProps = {geometry: BufferGeometry; fillColour: string; fill: number; edge: string; lw: number; gradient: DataTexture; bloom?: Bloom; emissive?: boolean; glowOrder?: number; lit?: RimLit};
 /** One extruded solid: toon-lit faces at `fill` opacity, emissive edges that stay (with their bloom). */
-const Solid: React.FC<SolidProps> = ({geometry, fillColour, fill, edge, lw, gradient, bloom, emissive, glowOrder}) => {
-  const {lines, glow} = useEdges(geometry, edge, lw, bloom, glowOrder);
+const Solid: React.FC<SolidProps> = ({geometry, fillColour, fill, edge, lw, gradient, bloom, emissive, glowOrder, lit}) => {
+  const {lines, glow} = useEdges(geometry, edge, lw, bloom, glowOrder, lit);
   return (
     <>
       {glow.map((g, i) => (
@@ -194,7 +226,7 @@ const Gate: React.FC<{g: Blocking['gates'][number]; light: number; fill: number;
     </>
   );
 };
-const ShadedFigure: React.FC<{pose: Joints; fill: number; line: ReturnType<typeof reducedLine>; steps: number; turn: number; bloom?: Bloom; light?: FigureLight; figure: Blocking['figure']}> = ({pose, fill, line, steps, turn, bloom, light, figure}) => {
+const ShadedFigure: React.FC<{pose: Joints; fill: number; line: ReturnType<typeof reducedLine>; steps: number; turn: number; bloom?: Bloom; light?: FigureLight; figure: Blocking['figure']; rim: number}> = ({pose, fill, line, steps, turn, bloom, light, figure, rim}) => {
   const texture = useFigureTexture(figure.swoop);
   const geometry = useFigureGeometry(pose, figure.swoop);
   const pivotX = maskToCanvas(restPose.torso!)[0];
@@ -203,14 +235,14 @@ const ShadedFigure: React.FC<{pose: Joints; fill: number; line: ReturnType<typeo
     <group position={[x, -y, 0]} scale={scale}>
       <group position={[pivotX, 0, 0]} rotation={[0, turn, 0]}>
         <group position={[-pivotX, 0, 0]}>
-          <FigureLines parts={{geometry, texture}} line={line} fill={fill} steps={steps} resolution={[W, H]} bloom={bloom} light={light} />
+          <FigureLines parts={{geometry, texture}} line={line} fill={fill} steps={steps} resolution={[W, H]} bloom={bloom && rim < 1 ? {...bloom, strength: bloom.strength * rim} : bloom} light={light} />
         </group>
       </group>
     </group>
   );
 };
 
-const Architecture: React.FC<{fill: number; reduce: number; edge: string; lineHex: string; lw: number; gradient: DataTexture; bloom?: Bloom; parts: PropsPart[]; blocking: Blocking; lightX?: number; frameK?: number}> = ({lightX, frameK = 1, fill, reduce, edge, lineHex, lw, gradient, bloom, parts, blocking}) => {
+const Architecture: React.FC<{fill: number; reduce: number; edge: string; lineHex: string; lw: number; gradient: DataTexture; bloom?: Bloom; parts: PropsPart[]; blocking: Blocking; lightX?: number; emitter?: {x: number; y: number}; frameK?: number}> = ({lightX, emitter, frameK = 1, fill, reduce, edge, lineHex, lw, gradient, bloom, parts, blocking}) => {
   const {x, y, width: w, height: h} = blocking.frame ?? {x: 0, y: 0, width: 0, height: 0};
   const ring = useMemo(() => {
     if (!blocking.frame) return null;
@@ -242,13 +274,13 @@ const Architecture: React.FC<{fill: number; reduce: number; edge: string; lineHe
       {parts.includes('blocks') &&
         blocks.map(({b, g}, i) => (
           <group key={i} position={[b.x + b.width / 2, -(b.y + b.height / 2), 0]} rotation={[0, TURN.blocks * (1 - reduce), 0]} scale={[1, 1, flat]}>
-            <Solid geometry={g} fillColour={settled.kit[b.role]} fill={fill} edge={edge} lw={lw} gradient={gradient} bloom={bloom} />
+            <Solid geometry={g} fillColour={settled.kit[b.role]} fill={fill} edge={edge} lw={lw} gradient={gradient} bloom={bloom} lit={{origin: [b.x + b.width / 2, b.y + b.height / 2], emitter, relax: reduce}} />
           </group>
         ))}
       {parts.includes('arch') && (
         <group position={[a.x + a.width / 2, -(a.y + a.height / 2), 0]} rotation={[0, TURN.arch * (1 - reduce), 0]} scale={[1, 1, flat]}>
           <group position={[-a.width / 2, a.height / 2, 0]}>
-            <Solid geometry={arch} fillColour={settled.kit.main1} fill={fill} edge={edge} lw={lw} gradient={gradient} bloom={bloom} />
+            <Solid geometry={arch} fillColour={settled.kit.main1} fill={fill} edge={edge} lw={lw} gradient={gradient} bloom={bloom} lit={{origin: [a.x, a.y], emitter, relax: reduce}} />
           </group>
         </group>
       )}
@@ -275,15 +307,15 @@ export const ShadedScene: React.FC<SceneProps> = ({frame, pose, emitter, reduce 
   const native: PropsLook = {fill: true, ink: settled.outline, lw: null, shading: true};
   const edge = c.shading?.emissiveEdges === false ? lineColour(contracts.line) : line.colour;
   const bloom = bloomOf(c, 1 - r);
-  const light: FigureLight = {lightDir: c.shading?.lightDir, shadowFloor: c.shading?.shadowFloor, stepAt: c.shading?.stepAt};
+  const light: FigureLight = {lightDir: c.shading?.lightDir, shadowFloor: (c.shading?.shadowFloor ?? SHADOW_FLOOR) * (emitter ? FIGURE_SHADOW + (1 - FIGURE_SHADOW) * r : 1), stepAt: c.shading?.stepAt};
   return (
     <Stage field={field ?? c.field} shift={shift}>
       <JoinGlow contract={c} emitter={emitter} opacity={1 - r} blocking={blocking} />
       <ThreeCanvas width={W} height={HT} style={{position: 'absolute', left: 0, top: -PAD}} camera={{fov: FOV, near: 10, far: 6000, position: [W / 2, -H / 2, CAMERA_Z], rotation: [0, 0, 0]}}>
         <Lights />
         {parts.includes('floor') && <Floor strength={1 - r} floorY={blocking.floor.y} colour={edge} lw={lw} />}
-        <ShadedFigure pose={pose} fill={1 - r} line={line} steps={steps} turn={TURN.figure * (1 - r)} bloom={bloom} light={light} figure={blocking.figure} />
-        <Architecture fill={1 - r} reduce={r} edge={edge} lineHex={lineColour(contracts.line)} lw={lw} gradient={gradient} bloom={bloom} parts={parts} blocking={blocking} lightX={emitter?.x} frameK={frameLight(blocking.frame, emitter)} />
+        <ShadedFigure pose={pose} fill={1 - r} line={line} steps={steps} turn={TURN.figure * (1 - r)} bloom={bloom} light={light} figure={blocking.figure} rim={emitter ? FIGURE_BLOOM + (1 - FIGURE_BLOOM) * r : 1} />
+        <Architecture fill={1 - r} reduce={r} edge={edge} lineHex={lineColour(contracts.line)} lw={lw} gradient={gradient} bloom={bloom} parts={parts} blocking={blocking} lightX={emitter?.x} emitter={emitter} frameK={frameLight(blocking.frame, emitter)} />
       </ThreeCanvas>
       {/* the beat's actors are filled with the kit's own roles (the settled palette), not the beat's dark pair: the radiance of the shaded world's hue is #17263a, and props in it stand black on black */}
       <PropsStack contract={c} lineWorld={contracts.line} reduce={r} native={native} frame={frame} parts={parts.includes('actors') ? ['companions', 'actors'] : ['companions']} blocking={blocking} />

@@ -158,7 +158,7 @@ export const useBloomLines = (lines: LineSegments2, colour: string, width: numbe
   const glow = useMemo(
     () =>
       Array.from({length: count}, () => {
-        const m = new LineMaterial({toneMapped: false, transparent: true, depthWrite: false, depthTest: false, blending: AdditiveBlending, resolution: lines.material.resolution});
+        const m = new LineMaterial({toneMapped: false, transparent: true, depthWrite: false, depthTest: false, blending: AdditiveBlending, vertexColors: lines.material.vertexColors, resolution: lines.material.resolution});
         const g = new LineSegments2(lines.geometry, m);
         g.frustumCulled = false;
         return g;

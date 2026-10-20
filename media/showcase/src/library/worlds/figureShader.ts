@@ -66,6 +66,9 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
+/** The share of a colour the unlit step keeps (the material's own default; a world's `shading.shadowFloor` replaces it). */
+export const SHADOW_FLOOR = 0.58;
+
 export type FigureShaderState = {
   widthTex: number;
   lineColour: string;
@@ -97,7 +100,7 @@ export const makeFigureMaterial = (texture: Texture): ShaderMaterial => {
       steps: {value: 0},
       lightDir: {value: new Vector3(-0.5, -0.6, 0.65)},
       coolShadow: {value: new Color('#1a2a6a')},
-      shadowFloor: {value: 0.58},
+      shadowFloor: {value: SHADOW_FLOOR},
       stepAt: {value: 0.5},
     },
   });
