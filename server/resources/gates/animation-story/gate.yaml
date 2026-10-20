@@ -2,21 +2,35 @@ id: animation-story
 name: Animation Story
 type: validation
 description: "Check-tier gate on the blocking (poses in the shot chain) and
-  evidence steps (p014, D81): the film changes its world where the screenplay
-  says it does, not only its figure. Two probes run in order:
-  probe-screenplay.py holds the screenplay contract (ids, frames inside their
-  beats, shots that tile the timeline, state keys, colour keys, registers,
-  current renders) and probe-story.py judges every story point on a bound key
-  (storyPoint on a key or pose within 4 frames), on each `after` key being
-  observable as its recipe reads it, and on the world changing outside the
-  figure. A story point no key binds, a figure that acts over a world that does
-  not change, and an `after` key that never changes each fail the gate."
+  evidence steps (p014, D81, row 9.8): the film changes its world where the
+  screenplay says it does, not only its figure, and keeps its themes. Three
+  probes run in order: probe-screenplay.py holds the screenplay contract (ids,
+  frames inside their beats, shots that tile the timeline, state keys, colour
+  keys, registers, the theme ledger and its tags, a recipe for every measure
+  clause, a want or a turn in every beat, current renders), probe-theme.py holds
+  the theme invariants on the blocking (the frame is carried in at sp-4.2 and on
+  no frame before, the gadget is seen only through glass, one lit join at a
+  time, every light line resolves to a target the eye trace measures) and
+  probe-story.py judges every story point on a bound key, on each `after` key
+  and each recipe of its measure being observable, and on the world changing
+  outside the figure. A story point no key binds, a figure that acts over a
+  world that does not change, a measure clause no frame shows, a theme the
+  staging breaks and a story point with no recipe each fail the gate."
 guidanceFile: guidance.md
 pass_criteria:
   - type: shell_verify
     shell_command:
       - python3
       - scripts/animation/probe-screenplay.py
+      - v3/screenplay.json
+    shell_timeout: 120000
+    shell_working_dir: ../media/showcase
+    shell_max_attempts: 1
+    shell_preset: full
+  - type: shell_verify
+    shell_command:
+      - python3
+      - scripts/animation/probe-theme.py
       - v3/screenplay.json
     shell_timeout: 120000
     shell_working_dir: ../media/showcase
@@ -43,6 +57,7 @@ activation:
 retry_config:
   max_attempts: 2
   improvement_hints: true
+  preserve_context: true
 subject: animation-story
 severity: high
 enforcementMode: blocking

@@ -1,10 +1,28 @@
-/* generated from screenplay.json by scripts/animation/compile-screenplay.mjs · source 0fde017ab075 · body 233e245187dc */
+/* generated from screenplay.json by scripts/animation/compile-screenplay.mjs · source 036a16ffbf8d · body 0f572ca6a6ed */
 Title: Claude Prompts
 Credit: a silent film in eight beats
 Revision: 1 · 2026-10-19 · director's draft for the owner (p014)
 Notes:
     A user opens a box that is too bright to use, and two companions walk them through the frame that makes it usable, one lit join at a time.
     Thesis: Raw capability is radiant and overwhelming; scaffolding is one lit join at a time.
+
+===
+
+# themes
+
+= th-glass · capability is always seen through glass: the gadget is visible only inside the bubble or the frame interior; outside both it is lost in grain (beat 3) or resting inside the structure (beat 8); the one stretch it stands free is sp-2.1 to sp-3.1, the overwhelm after the pop [[carried by sp-1.3, sp-2.1, sp-3.3, sp-4.2, sp-8.1]]
+
+= th-one-join · scaffolding is one lit join at a time: after sp-4.6 no story point lights more than one new join, and the flood (sp-2.2 to sp-2.3) is the only place where arrivals are not staggered [[carried by sp-2.2, sp-2.3, sp-3.1, sp-5.2, sp-5.3, sp-6.2, sp-7.2, sp-7.3]]
+
+= th-light-leads · light leads composition: every story point names what its light pushes and the eye finds it [[carried by sp-1.1, sp-1.2, sp-1.3, sp-2.1, sp-2.2, sp-2.3, sp-4.2, sp-4.6, sp-5.3, sp-6.1, sp-7.1, sp-7.2, sp-8.3]]
+
+= th-channels · the human is eyes, Clawd is heart, Codex is humour: in each act (beats 1-3, beat 4, beats 5-8) at least one story point carries the human's look, one Clawd's touch, one Codex's gag [[carried by sp-1.2, sp-1.3, sp-2.3, sp-3.1, sp-3.2, sp-3.3, sp-4.2, sp-4.3, sp-4.4, sp-4.5, sp-5.1, sp-5.2, sp-6.2, sp-7.1, sp-7.3, sp-8.2]]
+
+= th-child-detail · details only a child would notice: every beat carries at least one small persistent detail (the heap that stays, the heel tap, the lid, the hands appearing, the tape on the box) [[carried by sp-1.1, sp-1.2, sp-4.3, sp-4.4, sp-4.5, sp-5.4, sp-8.1]]
+
+= th-register · warm, playful, inviting; reverent only at beats 4 and 8: registers outside beats 4 and 8 are warm, playful, inviting, curious, delighted or overwhelmed; reverent appears only in beats 4 and 8 [[carried by sp-1.1, sp-2.2, sp-3.2, sp-4.1, sp-4.5, sp-5.1, sp-8.1, sp-8.2, sp-8.3]]
+
+= th-frame-portal · the frame is the portal: carried in at sp-4.2, never on stage before: the frame prop is absent from every frame before sp-4.2 and present from sp-4.2 to the end [[carried by sp-4.2, sp-4.6, sp-7.4, sp-8.3]]
 
 ===
 

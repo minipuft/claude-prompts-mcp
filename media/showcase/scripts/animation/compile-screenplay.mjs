@@ -73,12 +73,18 @@ const scenes = ledger.beats.map((b, i) => {
     points: points.map((p) => ({...p, pid: pipelineId(p), note: `${p.id} · f${p.frame} · ${p.colour} · ${p.register}`})),
   };
 });
+const themes = (sp.themes ?? []).map((t) => ({...t, carriedBy: sp.story_points.filter((p) => (p.themes ?? []).includes(t.id)).map((p) => p.id)}));
 const asks = sp.asks.map((a) => `${a.id} (${a.story_point}): ${a.question}. Default: ${a.default}.`);
 const stamp = (kind, body) => (kind === 'md' ? `<!-- generated from screenplay.json by scripts/animation/compile-screenplay.mjs · source ${sourceHash.slice(0, 12)} · body ${sha(body).slice(0, 12)} -->` : `/* generated from screenplay.json by scripts/animation/compile-screenplay.mjs · source ${sourceHash.slice(0, 12)} · body ${sha(body).slice(0, 12)} */`);
 
 // ---------- fountain ----------
 const fountainBody = (() => {
   const out = [`Title: ${sp.title}`, 'Credit: a silent film in eight beats', `Revision: ${sp.revision}`, 'Notes:', `    ${sp.logline}`, `    Thesis: ${sp.thesis}`, '', '===', ''];
+  if (themes.length) {
+    out.push('# themes', '');
+    for (const t of themes) out.push(`= ${t.id} · ${t.name}: ${t.invariant} [[carried by ${t.carriedBy.join(', ')}]]`, '');
+    out.push('===', '');
+  }
   let lastShot;
   for (const s of scenes) {
     const shot = s.points[0]?.shot;
@@ -124,11 +130,17 @@ const mdBody = (() => {
     ...Object.entries(sp.colour_keys).map(([k, v]) => `| ${k} | ${v.name} | ${swatch(k)} |`),
     '',
   ];
+  if (themes.length) {
+    out.push('## Themes', '', 'What the film keeps true from beat to beat. A probe reads each one: `probe-screenplay.py` the tags and the channels, `probe-theme.py` the staging.', '');
+    out.push('| Theme | What it says | Carried by | Measured by |', '| --- | --- | --- | --- |');
+    for (const t of themes) out.push(`| ${t.id} · ${t.name} | ${t.invariant} (${t.source}) | ${t.carriedBy.join(', ')} | ${t.measure} |`);
+    out.push('');
+  }
   for (const s of scenes) {
     out.push(`## ${s.n}. ${s.heading} · frames ${s.frames[0]}–${s.frames[1]}`, '');
     for (const p of s.points) {
       out.push(`### ${p.pid} · ${p.slug} · f${p.frame} · ${p.colour} · ${p.register}`, '', p.action, '');
-      const facts = [['wants', p.want], ['turn', p.turn], ['sees', p.sees], ['measure', p.measure]].filter(([, v]) => v);
+      const facts = [['wants', p.want], ['turn', p.turn], ['sees', p.sees], ['measure', p.measure], ['themes', (p.themes ?? []).join(', ')], ['channels', (p.channels ?? []).join(', ')], ['texture', (p.texture ?? []).join('; ')]].filter(([, v]) => v);
       out.push(...facts.map(([k, v]) => `- ${k}: ${v}`), '');
     }
   }

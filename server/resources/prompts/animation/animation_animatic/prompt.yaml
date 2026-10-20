@@ -43,6 +43,7 @@ chainSteps:
       output_root: output_root
     inlineGateIds:
       - animation-timeline-contract
+      - animation-story-contract
     id: timeline
     stepName: Timeline
   - promptId: animation_blocking

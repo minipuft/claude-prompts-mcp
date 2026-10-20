@@ -22,6 +22,8 @@ it resolves to must exist on the frame; a line outside the table, or whose sourc
                                    `figureCrop`, `codex`, `clawd` at their native size; a real shot: the
                                    mask's `figure`, `codex` and `clawd` groups)
   none                           nothing: the story point says the light pushes nowhere readable     skipped and counted, by name
+  (any target)                   a point or a rectangle that lies wholly outside the picture on a frame (the frame Clawd carries in is still off the right edge on 690 and 691, so there is no interior to find
+                                 the light in): skipped and counted as `off the picture`, never failed
   anything else (the leaf, the drawn line, the piece's lines, the crayon's own colour, the running bead, ...): no role, prop or layer of the animatic draws it, so it cannot be measured: refused.
 The lamp is therefore the target only where a story point says "box seam", "gadget ..." (the xsheet emitter); where it says "frame interior" a lamp brighter than the interior FAILS.
 Masks (region plus colour, p007): the kit's and gadget's pale roles are also the lamp's own halo colours (kit.light, gadget.light, the box tape lit), so a role colour in `role_split`'s `owned` set counts
@@ -33,7 +35,8 @@ Emitter space: ONE convention. A target is in stage pixels (1280x720) and is pro
 `cameraTransform`), then scaled to the frame's width. There is no screen-space option; it read the same point as frame coordinates and was wrong wherever the camera moved.
 Control first: a frame with the bright blob 10 % of the width away from the emitter must fail, the blob on the emitter must pass, and a patch of every kind of fixed role (identity
 pigment, human garment, kit contour) brighter than the blob must be ignored (read unmasked, it would put the offset far off); with the target the frame interior a lamp brighter than the interior
-FAILS and the interior alone passes; a pale halo in the kit's colour counts outside a prop's crop and not inside it; a line outside the table is refused by name.
+FAILS and the interior alone passes; a pale halo in the kit's colour counts outside a prop's crop and not inside it; a line outside the table is refused by name; a frame rectangle wholly past the right edge (and one past the bottom, and a point beyond the corner) is off the picture and one that overlaps it by a pixel is not,
+and the same rectangle read as a target puts the offset over the tolerance (it would have failed).
 """
 import argparse, os, sys
 import numpy as np
@@ -119,6 +122,17 @@ def offset(img, em, cam, share=0.005, hexes=None, blur=BLUR_STAGE_PX, plate=None
     return float(np.hypot(c[0] - ex * s, c[1] - ey * s) / W)
 
 
+def off_picture(em, cam, shape):
+    """True when a point or rectangle target (stage px, projected through `cam`) lies wholly outside the picture: there is nothing on the frame for the light to be found in."""
+    H, W = shape[:2]; s = W / STAGE[0]
+    if "rect" in em:
+        x, y, w, h = em["rect"]; pts = [project(cam, px, py) for px, py in ((x, y), (x + w, y), (x, y + h), (x + w, y + h))]
+        return max(p[0] for p in pts) * s <= 0 or min(p[0] for p in pts) * s >= W or max(p[1] for p in pts) * s <= 0 or min(p[1] for p in pts) * s >= H
+    if "x" in em:
+        ex, ey = project(cam, em["x"], em["y"]); return not (0 <= ex * s < W and 0 <= ey * s < H)
+    return False
+
+
 def controls(a, ctl):
     """The control: (ok, text), planted in memory (320x180 frames, `make`)."""
     on = offset(make.eye_frame(10), make.emitter_at(10), None, a.share, ctl, a.blur)
@@ -155,11 +169,17 @@ def controls(a, ctl):
     d_all = offset(halo, make.emitter_at(10), None, a.share, bare + kit_pale, a.blur)                                   # masked everywhere: the halo is eaten
     d_reg = offset(halo, make.emitter_at(10), None, a.share, bare, a.blur, owned=kit_pale, region=region)               # region plus colour: the halo is found, the prop's own pale is masked
     refused = resolve_target("the leaf", "story point sp-5.3", None, {})[1]; kind_ok = (table_kind("box seam, tiny"), table_kind("gadget, rimming the structure"), table_kind("none readable"), table_kind("gadgetry"), table_kind("the lit join, then each gate in sequence"))
+    # a target wholly off the picture (the frame at x 1288 of 1280 on frame 690) is skipped, not measured; it would have failed (the light is somewhere on the picture, the rect is not)
+    S_ = make.S; shape = (make.H, make.W, 3); inside_rect = {"rect": (700, 100, 360, 260)}; edge_rect = {"rect": (1288, 190, 400, 410)}; just_in = {"rect": (1279, 190, 400, 410)}
+    below_rect = {"rect": (400, 725, 300, 200)}; far_point = {"x": 1404.0, "y": 392.0}; near_point = {"x": 1270.0, "y": 392.0}
+    off_flags = (off_picture(edge_rect, None, shape), off_picture(just_in, None, shape), off_picture(below_rect, None, shape), off_picture(far_point, None, shape), off_picture(near_point, None, shape), off_picture(inside_rect, None, shape))
+    d_off = offset(inner(120), edge_rect, None, a.share, ctl, a.blur)
     ok = (on is not None and on <= a.tolerance and off is not None and off > a.tolerance and raw > a.tolerance and moved > a.tolerance and sp <= a.tolerance and (a.blur == 0 or sp_raw > sp)
           and d_lamp_brighter > a.tolerance and d_interior <= a.tolerance and d_lamp_named <= a.tolerance
           and d_travel <= a.tolerance and d_final > a.tolerance and walk_x == (950.0, 1200.0, 700.0)
           and l_h == "the human" and d_h_lamp > a.tolerance and d_h_own <= a.tolerance and l_d == "gadget dial" and d_d_lamp <= a.tolerance and trio_none is None
-          and d_all > a.tolerance and d_reg <= a.tolerance and refused and "the leaf" in refused and kind_ok == ("emitter", "emitter", "none", None, "join"))
+          and d_all > a.tolerance and d_reg <= a.tolerance and refused and "the leaf" in refused and kind_ok == ("emitter", "emitter", "none", None, "join")
+          and off_flags == (True, False, True, True, False, False) and d_off > a.tolerance)
     return ok, (f"bright blob 10 % of the width off the emitter -> FAIL (offset {100 * off:.1f} % > {100 * a.tolerance:.0f} %); blob on the emitter -> pass ({100 * on:.1f} %); "
                 f"identity, garment and kit-contour patches brighter than the blob are ignored (read unmasked they would put the offset at {100 * raw:.0f} %); "
                 f"the same blob against an emitter projected through a camera that moved 140 stage px -> FAIL ({100 * moved:.1f} %), so the camera is read; "
@@ -170,7 +190,9 @@ def controls(a, ctl):
                 f"a story point with eye 'the human' (read before its emitter 'gadget dial'): the lamp brightest outside the human's crop -> FAIL ({100 * d_h_lamp:.1f} %), the human's own light -> pass ({100 * d_h_own:.1f} %), "
                 f"the same frame under a point with no eye (the lamp) -> pass ({100 * d_d_lamp:.1f} %), and a blocking without the cast's crops resolves no trio; "
                 f"a pale halo in the kit's colour: masked everywhere it is eaten -> FAIL ({100 * d_all:.1f} %), masked only inside the prop's crop it is found -> pass ({100 * d_reg:.1f} %); "
-                f"a line outside the table is refused by name ({refused[:48]}...)")
+                f"a line outside the table is refused by name ({refused[:48]}...); "
+                f"a frame wholly past the right edge (x 1288 of 1280) -> off the picture and skipped (read as a target it would FAIL, {100 * d_off:.1f} %), one overlapping the edge by a pixel -> measured, one wholly below -> off the picture, "
+                f"a point at x 1404 -> off, a point at x 1270 -> measured")
 
 
 def _blob(a, centre, amp, sigma=6.0, colour=(1.0, 1.0, 1.0)):
@@ -240,7 +262,7 @@ def main():
     everywhere, owned = role_split(a.roles)
     drawn_from = blocking_describes(tl, xs, blocking) if owned else set()        # the beats whose frames the blocking stages (the animatic); a real shot's props are elsewhere
     bad, skipped, fading, worst, n = [], 0, 0, (-1.0, None), 0
-    refused, unreadable, kinds = {}, {}, {}
+    refused, unreadable, off, kinds = {}, {}, {}, {}
     for f, p in frames.items():
         b = beat_at(tl, f); bid = b["id"] if b else None
         line, source = story_target(f, bid, points, beats) if bid else (None, "the frame is on no beat of the timeline")
@@ -251,6 +273,7 @@ def main():
         if tgt.get("missing"): skipped += 1; continue
         if isinstance(em, dict) and em.get("strength", 1.0) < a.min_strength: fading += 1; continue
         cam = camera_of(xs, f); img = load_rgb(p)
+        if off_picture(tgt, cam, img.shape): span_of(off, f"{line!r} ({source})", f); continue
         if tgt["kind"] in ("human", "trio"):
             m, why = cast_mask_for(tgt, img.shape, cam, bl_f if bid in drawn_from else None)
             if m is None: span_of(refused, f"{line!r} ({source}): {why}", f); continue
@@ -261,18 +284,18 @@ def main():
         n += 1; kinds[tgt["kind"]] = kinds.get(tgt["kind"], 0) + 1
         if d > worst[0]: worst = (d, f)
         if d > a.tolerance: bad.append((f, round(100 * d, 1), tgt["kind"]))
-    nref = sum(v[2] for v in refused.values()); nun = sum(v[2] for v in unreadable.values())
+    nref = sum(v[2] for v in refused.values()); nun = sum(v[2] for v in unreadable.values()); noff = sum(v[2] for v in off.values())
     pr.note(f"frames {len(frames)}{'; ' + shot_note if shot_note else ''}; masked {len(everywhere) if drawn_from else len(hexes_all)} fixed colours everywhere and the human cutout's {len(plate)} inside its crop"
             + (f", and {len(owned)} kit and gadget colours only inside their props' crops (blocking, beats {sorted(drawn_from)})" if drawn_from else ", the kit and gadget colours everywhere (no blocking describes these frames)") + f", from {roles_source(a.roles)}; "
             f"measured {n} {dict(sorted(kinds.items()))}; skipped (target is the emitter and the xsheet row has none) {skipped}; skipped (emitter drawn below strength {a.min_strength:g}, a crossing) {fading}; "
-            f"skipped (the story point says the light pushes nowhere readable) {nun}; worst offset {100 * worst[0]:.1f} % at frame {worst[1]}")
+            f"skipped (the story point says the light pushes nowhere readable) {nun}; skipped (the target is wholly off the picture) {noff}{' (' + '; '.join(f'{k}: frames {lo}-{hi}' for k, (lo, hi, _) in sorted(off.items(), key=lambda kv: kv[1][0])) + ')' if off else ''}; worst offset {100 * worst[0]:.1f} % at frame {worst[1]}")
     pr.check("measured something", n > 0, f"{n} frames carry a target" + ("" if n else " - every frame was skipped or refused, so the probe observed nothing"))
     pr.check("targets resolve", not refused, (f"{nref} frame(s) have a target the frame cannot resolve: " + "; ".join(f"{why}: frames {lo}-{hi} ({c})" for why, (lo, hi, c) in sorted(refused.items(), key=lambda kv: kv[1][0]))) if refused
              else "every story point's target is in the table and its source exists" + (f"; {nun} frame(s) name no readable target: " + "; ".join(f"{k}: frames {lo}-{hi}" for k, (lo, hi, _) in sorted(unreadable.items(), key=lambda kv: kv[1][0])) if unreadable else ""))
     pr.check("target within tolerance", not bad, f"{len(bad)} frame(s) over {100 * a.tolerance:.0f} % of the width{': ' + str(bad[:12]) if bad else ''}")
-    pr.extra.update({"measured": n, "kinds": kinds, "skipped": skipped, "fading": fading, "unreadable": {k: list(v) for k, v in unreadable.items()}, "refused": {k: list(v) for k, v in refused.items()},
+    pr.extra.update({"offPicture": {k: list(v) for k, v in off.items()}, "measured": n, "kinds": kinds, "skipped": skipped, "fading": fading, "unreadable": {k: list(v) for k, v in unreadable.items()}, "refused": {k: list(v) for k, v in refused.items()},
                      "worst": {"frame": worst[1], "share": worst[0]}, "over": bad})
-    pr.finish(f"the brightest region outside the fixed roles sits within {100 * a.tolerance:.0f} % of its story point's target on all {n} measured frames ({skipped + fading + nun} skipped)")
+    pr.finish(f"the brightest region outside the fixed roles sits within {100 * a.tolerance:.0f} % of its story point's target on all {n} measured frames ({skipped + fading + nun + noff} skipped)")
 
 
 if __name__ == "__main__": main()

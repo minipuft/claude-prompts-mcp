@@ -1,0 +1,7 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_direction#1",
+    "user_response": "The lid lifts in one move, soft: the sleeves slide back and the seam light lags the lid by a beat.\n"
+  }
+}

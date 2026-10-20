@@ -5,6 +5,8 @@ usage: probe-poses.py v3/poses v3/keys v3/charts [--shot <id>] [--joints keys|so
 --joints keys (default) measures the key sheet's joints. --joints solved measures line of action, twinning and weight on each pose key's `solved` joints (what `solvePose` draws for
 the declared spec; `npm run solve-poses -- <shot>` writes them into the pose sheet); a pose sheet with a key that has no `solved` is refused (exit 2). The other categories
 (keys, breakdowns, secondaries, holds, timing shape, lead arm) read the same files in both modes.
+  story point    every pose key and every key of the key sheet carries `storyPoint: <id>` (v3/screenplay.json), the id is a story point of the screenplay and the key's frame lies in that story point's beat
+                 (v3/timeline.json): a pose that does not serve a story point is not a key (p014, row 9.8). `--screenplay` and `--timeline` default to the files beside the pose sheet directory.
 Directory mode: for every v3/charts/<shot>.json with a rig actor, v3/poses/<shot>.json and v3/keys/<shot>.json must exist (--shot limits it to one).
 Per shot, each failing item is its own line naming the key or breakdown; a category with nothing wrong prints one ok line. H = the pose sheet's heightPx.
   keys           every chart key has a pose entry with the same name and frame (and the key sheet has it on that frame); every pose key has a `moment`.
@@ -30,7 +32,8 @@ Per shot, each failing item is its own line naming the key or breakdown; a categ
 Control first (synthetic sheets, fixtures/make.py pose_fixture): a straight spine declared S is refused on line of action; a spine mirrored to the other side of its chord and still
 declared the original sign is refused on line of action (by name, `A/sign`), the same mirrored spine declared the other sign is accepted; mirrored limbs with no twinned.why are
 refused on twinning; a long move whose only breakdown is a favour is refused on breakdowns; a 10-drawing move and a passing drawing at 0.10 are refused on timing shape;
-a clean sheet (a move of anticipation, passing, overshoot, settle) is accepted on every check.
+a clean sheet (a move of anticipation, passing, overshoot, settle) is accepted on every check; a pose key and a key-sheet key with no storyPoint, a storyPoint the screenplay does not have and a key outside its story
+point's beat are each refused on `story point` alone, and the same sheets with every key bound pass.
 Exit 0 pass, 1 fail, 2 input error or a control that did not trip.
 """
 import argparse, copy, os, re, sys
@@ -57,9 +60,9 @@ def with_solved(poses, joints_by_key):
     return out
 
 
-def check_shot(poses, keys, chart, joints="keys"):
+def check_shot(poses, keys, chart, joints="keys", story=None):
     """{category: [(item, ok, text)]} for one shot's pose sheet against its key sheet and chart. `joints` = "solved" measures line of action, twinning and weight on the pose keys' `solved` joints."""
-    H = poses["heightPx"]; res = {c: [] for c in ("keys", "line of action", "twinning", "weight", "breakdowns", "secondaries", "holds", "timing shape", "lead arm")}
+    H = poses["heightPx"]; res = {c: [] for c in ("keys", "line of action", "twinning", "weight", "breakdowns", "secondaries", "holds", "timing shape", "lead arm") + (("story point",) if story else ())}
     kj = {k["name"]: k for k in keys["keys"]}
     rig = next((a for a in chart.get("actors", {}).values() if a.get("kind") == "rig"), {"keys": []})
     pk = {k["name"]: k for k in poses["keys"]}
@@ -153,6 +156,16 @@ def check_shot(poses, keys, chart, joints="keys"):
     for mv in lead_moves:
         t = [x[1] for x in bad_lead if x[0] == mv]
         res["lead arm"].append((mv, not t, t[0] if t else f"{mv}: the lead arm is no lagging secondary on this move"))
+    if story:
+        for where, sheet in (("pose key", poses["keys"]), ("key-sheet key", keys["keys"])):
+            for k in sheet:
+                sid = k.get("storyPoint"); name = f'{where} "{k["name"]}" (frame {k["frame"]})'
+                if not sid: res["story point"].append((f'{where} {k["name"]}', False, f"{name} names no story point: a pose that does not serve a story point is not a key"))
+                elif sid not in story["beats_of"]: res["story point"].append((f'{where} {k["name"]}', False, f"{name} names {sid}, which the screenplay does not have"))
+                else:
+                    lo, hi = story["span"][story["beats_of"][sid]]
+                    ok = lo <= k["frame"] < hi
+                    res["story point"].append((f'{where} {k["name"]}', ok, f"{name} serves {sid} (beat {story['beats_of'][sid]!r}, frames {lo}-{hi - 1})" if ok else f"{name} names {sid}, a story point of beat {story['beats_of'][sid]!r} (frames {lo}-{hi - 1}): the key is outside it"))
     return res
 
 
@@ -210,13 +223,34 @@ def family_control():
                 f"solver keys on their solved joints -> pass")
 
 
+def story_control():
+    """(ok, text): a sheet whose every key names a story point of its beat passes `story point`; a key with no storyPoint (pose sheet, key sheet), one naming a story point the screenplay lacks and one outside its
+    story point's beat are each refused on `story point` and on nothing else."""
+    sheet, keys, chart = make.pose_fixture("clean"); story = {"beats_of": {"sp-1.1": "a", "sp-1.2": "a", "sp-2.1": "b"}, "span": {"a": (0, 100), "b": (100, 200)}}
+    def bind(poses, ks, names=("sp-1.1", "sp-1.2")):
+        p, k = copy.deepcopy(poses), copy.deepcopy(ks)
+        for sheet_ in (p["keys"], k["keys"]):
+            for key, sid in zip(sheet_, names): key["storyPoint"] = sid
+        return p, k
+    bp, bk = bind(sheet, keys); clean = check_shot(bp, bk, chart, "keys", story)
+    unbound_p = copy.deepcopy(bp); del unbound_p["keys"][0]["storyPoint"]; unbound_k = copy.deepcopy(bk); del unbound_k["keys"][1]["storyPoint"]
+    r_up, r_uk = check_shot(unbound_p, bk, chart, "keys", story), check_shot(bp, unbound_k, chart, "keys", story)
+    r_dangling = check_shot(*bind(sheet, keys, ("sp-1.1", "sp-9.9")), chart, "keys", story)
+    r_outside = check_shot(*bind(sheet, keys, ("sp-1.1", "sp-2.1")), chart, "keys", story)
+    unbound_msg = [t for _, ok, t in r_up["story point"] if not ok]
+    ok = (not failed(clean) and all(failed(r) == {"story point"} for r in (r_up, r_uk, r_dangling, r_outside))
+          and len(unbound_msg) == 1 and "does not serve a story point" in unbound_msg[0] and "frame 40" in [t for _, ok_, t in r_outside["story point"] if not ok_][0])
+    return ok, (f"a pose key with no storyPoint -> FAIL (['story point']: {unbound_msg[0] if unbound_msg else None}); a key-sheet key with none -> FAIL ({sorted(failed(r_uk))}); a storyPoint the screenplay lacks -> FAIL ({sorted(failed(r_dangling))}); "
+                f"a key outside its story point's beat -> FAIL ({sorted(failed(r_outside))}); every key bound -> pass on {len(clean['story point'])} checks")
+
+
 def control(pr, joints="keys"):
     out = {k: check_shot(*make.pose_fixture(k)) for k in ("clean", "straight-s", "twin", "favour-only", "ten-drawings", "early-passing", "lead-lag", "wrong-sign", "mirrored-declared")}
     sign_text = next((t for i, ok, t in out["wrong-sign"]["line of action"] if not ok), None)
     sok, stext = solved_control() if joints == "solved" else (True, "")
-    fok, ftext = family_control()
+    fok, ftext = family_control(); gok, gtext = story_control()
     only = {"straight-s": "line of action", "twin": "twinning", "favour-only": "breakdowns", "ten-drawings": "timing shape", "early-passing": "timing shape", "lead-lag": "lead arm", "wrong-sign": "line of action"}
-    ok = fok and sok and not failed(out["clean"]) and not failed(out["mirrored-declared"]) and all(failed(out[k]) == {c} for k, c in only.items()) \
+    ok = fok and gok and sok and not failed(out["clean"]) and not failed(out["mirrored-declared"]) and all(failed(out[k]) == {c} for k, c in only.items()) \
         and sign_text is not None and "/sign" not in sign_text and "wrong side" in sign_text and [i for i, ok_, t in out["wrong-sign"]["line of action"] if not ok_] == ["A/sign"]
     clean = out["clean"]["timing shape"][0][2]
     pr.control(ok, f"a straight spine declared S -> FAIL ({sorted(failed(out['straight-s']))}); mirrored limbs with no twinned.why -> FAIL ({sorted(failed(out['twin']))}); "
@@ -224,18 +258,24 @@ def control(pr, joints="keys"):
                    f"a passing drawing at 0.10 -> FAIL ({sorted(failed(out['early-passing']))}: {out['early-passing']['timing shape'][0][2].split('; ', 1)[-1]}); "
                    f"a spine mirrored to the other side of its chord, declared the original side -> FAIL ({sorted(failed(out['wrong-sign']))}: {sign_text}); the same mirrored spine declared the other side -> pass; "
                    f"a lead-arm joint declared as a lagging secondary -> FAIL ({sorted(failed(out['lead-lag']))}: {out['lead-lag']['lead arm'][0][2]}); "
-                   f"a clean sheet -> pass on {len(out['clean'])} checks ({clean})" + (f"; {stext}" if stext else "") + f"; {ftext}")
+                   f"a clean sheet -> pass on {len(out['clean'])} checks ({clean})" + (f"; {stext}" if stext else "") + f"; {ftext}; {gtext}")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("poses"); ap.add_argument("keys"); ap.add_argument("charts"); ap.add_argument("--shot", default=None); ap.add_argument("--json", default=None)
     ap.add_argument("--joints", choices=("keys", "solved"), default="keys", help="measure the key sheet's joints (default) or each pose key's solved joints")
+    ap.add_argument("--screenplay", default=None, help="v3/screenplay.json (default: beside the pose sheet directory): the story points the keys serve"); ap.add_argument("--timeline", default=None, help="v3/timeline.json (default: beside the pose sheet directory): the beat of each story point")
     a = ap.parse_args()
     pr = Probe("poses", a.json)
     control(pr, a.joints)
     for d in (a.poses, a.keys, a.charts):
         if not os.path.isdir(d): die(f"{d} is not a directory")
+    base = os.path.dirname(os.path.abspath(a.poses)); sp_path, tl_path = a.screenplay or os.path.join(base, "screenplay.json"), a.timeline or os.path.join(base, "timeline.json")
+    for pth, what in ((sp_path, "screenplay"), (tl_path, "timeline")):
+        if not os.path.exists(pth): die(f"no {what} {pth}: every key serves a story point of v3/screenplay.json (--screenplay, --timeline)")
+    beats_of = {sp["id"]: sp["beat"] for sp in read_json(sp_path, "screenplay")["story_points"]}; tl = load_timeline(tl_path)
+    story = {"beats_of": beats_of, "span": {b["id"]: (b["start"], b["end"]) for b in tl["beats"]}}
     shots = sorted(f[:-5] for f in os.listdir(a.charts) if f.endswith(".json"))
     if a.shot: shots = [s for s in shots if s == a.shot] or die(f"no chart {a.charts}/{a.shot}.json")
     n_shots = bad_total = 0
@@ -250,11 +290,11 @@ def main():
         poses = read_json(pp, "pose sheet")
         if a.joints == "solved" and unsolved(poses):
             die(f"{pp}: no solved joints on key(s) {', '.join(unsolved(poses))}; run `npm run solve-poses -- {shot}` first")
-        res = check_shot(poses, read_json(kp, "key sheet"), chart, a.joints)
+        res = check_shot(poses, read_json(kp, "key sheet"), chart, a.joints, story)
         bad_total += report(pr, shot, res)
         pr.extra.setdefault("shots", {})[shot] = {c: [{"item": i, "ok": bool(ok), "text": t} for i, ok, t in v] for c, v in res.items()}
     if not n_shots: die("no chart with a rig actor to check")
-    pr.finish(f"{n_shots} shot(s) ({a.joints} joints): keys, line of action, twinning, weight, breakdowns, secondaries, holds, timing shape and lead arm all as declared")
+    pr.finish(f"{n_shots} shot(s) ({a.joints} joints): keys, line of action, twinning, weight, breakdowns, secondaries, holds, timing shape, lead arm and story point all as declared")
 
 
 if __name__ == "__main__": main()

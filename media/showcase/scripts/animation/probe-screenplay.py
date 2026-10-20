@@ -12,9 +12,16 @@ Checks:
              (kind prop, count, actor, xsheet, light, figure or gates) and an origin that is true (a beats-v2 key is in a beat's state, a screenplay key is in none of them)
   colour     every colour key (the parts of `a -> b` each) is a key of `colour_keys`, with a hue pair or a kit and field
   register   every register, and every `intent` where a story point has one, is a word or alias of the direction vocabulary (v3/vocabulary.json and its overrides)
+  themes     the film's themes (`themes`, each with id, name, source, invariant, measure and a `check.kind` a probe reads): every theme is carried by at least 2 story points, every story point's themes and channels
+             are declared, every beat carries at least one theme, each act (the th-channels check's `acts`) covers eyes, heart and humour, and the registers word `reverent` appears only in the beats the
+             th-register check names. Advisory, not refused: a beat with no story point tagged th-child-detail is named (the detail is the director's to write; flips to a refusal when the draft carries one per beat)
+  drive      every beat has a story point with a `want` or a `turn` (row 9.8, story first); a beat with no want and one with no turn are named, not refused
+  recipes    every story point carries `recipes` (kinds the story probe executes: stage, count, arrivals, stagger, order, contact, emitters, hold, glow, picture, hands, figure, actor, xsheet, light, gates, each with the
+             fields its reader needs) and every `;` clause of its `measure` is the `says` of one of them: a measure line no probe reads cannot exist. What no layer of the film records goes in `texture`, not in `measure`
   renders    v3/screenplay.md and v3/screenplay.fountain each start with the line `generated from screenplay.json ... source <hash> body <hash>`, the source hash is that of today's screenplay.json
              and beats-v2.json, and the body hash is that of the file below the line: a render older than its json, or edited by hand, is refused
-Control first: a story point moved outside its beat, a duplicate id, an `after` key no beat declares, a register that is not vocabulary, a colour key that is not declared, a story point whose frame
+Control first: a theme no story point carries, a beat with no theme, an act with no heart channel, a story point with no theme, a beat whose story points have neither want nor turn, `reverent` in beat 2, a measure clause no recipe says, a recipe of a kind no probe reads and a recipe missing a field must each be refused
+by the check that names it; and a story point moved outside its beat, a duplicate id, an `after` key no beat declares, a register that is not vocabulary, a colour key that is not declared, a story point whose frame
 leaves its shot (and one in no shot), a render made from an older json and a render edited by hand must each be refused by the check that names it, and the draft untouched must pass.
 Exit 0 pass, 1 refusal, 2 a control that did not trip or an unreadable input.
 """
@@ -28,6 +35,15 @@ from probe_common import Probe, die, read_json, load_timeline
 ID = re.compile(r"^sp-(\d+)\.(\d+)$")
 KINDS = {"prop": ("actor", "expect"), "count": ("actors", "expect"), "actor": ("actor", "expect"), "xsheet": ("field", "expect"), "light": ("field", "expect"), "figure": ("measure", "expect"), "gates": ("expect",)}
 STAMP = re.compile(r"generated from screenplay\.json .*source ([0-9a-f]{12}) · body ([0-9a-f]{12})")
+
+THEME_FIELDS = ("id", "name", "source", "invariant", "measure")
+THEME_KINDS = ("portal", "glass", "one-join", "light-leads", "channels", "child-detail", "register")
+CHANNELS = ("eyes", "heart", "humour")
+STAGE_EXPECT = ("present", "persists", "absent", "inside", "offstage", "onstage", "appears", "disappears", "moves", "rest", "returns")
+RECIPE_NEEDS = {"stage": (("actor", "actors"), "expect"), "count": ("actors", "expect"), "arrivals": ("same_frame",), "stagger": ("min",), "order": ("first", "then", "by"), "contact": ("a", "b", "within"),
+                "emitters": ("expect",), "hold": ("frames",), "glow": ("expect", "after", "lag", "min"), "picture": ("measure", "expect", "min"), "hands": ("expect",), "figure": ("measure", "expect"),
+                "actor": ("actor", "expect"), "xsheet": ("field", "expect"), "light": ("field", "expect"), "gates": ("expect",)}
+RECIPE_EXTRA = {"stage": {"moves": ("by",), "inside": ("of",), "returns": ("within",), "persists": ("until",)}, "count": {"at-most": ("to",), "rises-then-falls": ("to",)}, "emitters": {"count": ("to",)}}
 
 
 def sha(*parts): return hashlib.sha256("\n".join(parts).encode("utf8")).hexdigest()
@@ -152,6 +168,78 @@ def check_register(d, ctx):
     return not p, "; ".join(p) if p else f"every register is a vocabulary word or alias ({len({sp['register'] for sp in d['story_points']})} distinct)"
 
 
+def clauses_of(measure): return [c.strip() for c in str(measure).split(";") if c.strip()]
+
+
+def check_themes(d, ctx):
+    """The theme ledger and the story points' tags (th-* ids, channels): the contract a director's draft keeps before any frame is staged."""
+    p, themes, sps = [], d.get("themes"), d["story_points"]
+    if not isinstance(themes, list) or not themes: return False, "screenplay.json has no `themes` list"
+    ids = [t.get("id") for t in themes]
+    for t in themes:
+        miss = [f for f in THEME_FIELDS if not str(t.get(f, "")).strip()]
+        if miss: p.append(f"theme {t.get('id')!r} lacks {', '.join(miss)}")
+        k = (t.get("check") or {}).get("kind")
+        if k not in THEME_KINDS: p.append(f"theme {t.get('id')!r} has check kind {k!r}, not one a probe reads ({', '.join(THEME_KINDS)})")
+    p += [f"theme id {i!r} is declared twice" for i in sorted({i for i in ids if ids.count(i) > 1})]
+    for sp in sps:
+        p += [f"{sp['id']} carries theme {t!r}, which `themes` does not declare" for t in sp.get("themes", []) if t not in ids]
+        p += [f"{sp['id']} has channel {c!r}, not one of {', '.join(CHANNELS)}" for c in sp.get("channels", []) if c not in CHANNELS]
+    p += [f"{sp['id']} carries no theme: a story point that serves none of the film's themes is not yet a story point" for sp in sps if not sp.get("themes")]
+    for t in ids:
+        n = sum(1 for sp in sps if t in sp.get("themes", []))
+        if n < 2: p.append(f"theme {t} is carried by {n} story point(s), needs at least 2")
+    order = [b["id"] for b in ctx["ledger"]["beats"]]
+    p += [f"beat {b!r} carries no theme" for b in order if not any(sp.get("themes") for sp in sps if sp["beat"] == b)]
+    by_kind = {(t.get("check") or {}).get("kind"): t for t in themes}
+    ch = (by_kind.get("channels") or {}).get("check", {}); reg = (by_kind.get("register") or {}).get("check", {})
+    if not ch: p.append("no theme has check kind 'channels': the acts cannot be read")
+    for act, beats in (ch.get("acts") or {}).items():
+        have = {c for sp in sps if sp["beat"] in beats for c in sp.get("channels", [])}
+        p += [f"act {act} ({', '.join(beats)}) carries no story point on the {c} channel" for c in ch.get("wants", CHANNELS) if c not in have]
+    if not reg: p.append("no theme has check kind 'register': the reverent beats cannot be read")
+    p += [f"{sp['id']} (beat {sp['beat']!r}) is {sp['register']!r}: reverent belongs to {', '.join(reg.get('reverent_only', []))} only" for sp in sps if "reverent" in sp.get("register", "").lower() and sp["beat"] not in reg.get("reverent_only", [])]
+    detail = next((t["id"] for t in themes if (t.get("check") or {}).get("kind") == "child-detail"), None)
+    lacking = [b for b in order if detail and not any(detail in sp.get("themes", []) for sp in sps if sp["beat"] == b)]
+    note = f"; advisory, not refused: no story point of {', '.join(lacking)} carries {detail}" if lacking else ""
+    return not p, "; ".join(p) if p else f"{len(ids)} themes, each carried by at least 2 story points; every beat carries a theme; each act covers {', '.join(ch.get('wants', CHANNELS))}; reverent only where the register theme allows{note}"
+
+
+def check_recipes(d, ctx):
+    """Every measure clause is read by a recipe of a kind the story probe executes."""
+    p = []
+    for sp in d["story_points"]:
+        rs = sp.get("recipes")
+        if not isinstance(rs, list) or not rs: p.append(f"{sp['id']} has no `recipes`: its measure {sp.get('measure', '')!r} is a line no probe reads"); continue
+        for r in rs:
+            k = r.get("kind"); say = r.get("says")
+            if k not in RECIPE_NEEDS: p.append(f"{sp['id']} recipe {say!r} has kind {k!r}, not one the story probe reads ({', '.join(RECIPE_NEEDS)})"); continue
+            need = [f for f in RECIPE_NEEDS[k] if not (any(x in r for x in f) if isinstance(f, tuple) else f in r)]
+            need += list(RECIPE_EXTRA.get(k, {}).get(r.get("expect"), ())) and [f for f in RECIPE_EXTRA[k][r["expect"]] if f not in r]
+            if k == "stage" and r.get("expect") not in STAGE_EXPECT: need.append(f"expect one of {', '.join(STAGE_EXPECT)}")
+            if need: p.append(f"{sp['id']} recipe {say!r} ({k}) lacks {', '.join(str(x) for x in need)}")
+        said = [r.get("says") for r in rs]; clauses = clauses_of(sp.get("measure", ""))
+        p += [f"{sp['id']} measure clause {c!r} is read by no recipe" for c in clauses if c not in said]
+        p += [f"{sp['id']} recipe says {s_!r}, which is not a clause of its measure" for s_ in said if s_ not in clauses]
+        tx = sp.get("texture", [])
+        if not isinstance(tx, list) or not all(isinstance(t, str) and t.strip() for t in tx): p.append(f"{sp['id']} `texture` is not a list of lines")
+        p += [f"{sp['id']} texture {t!r} is also a measure clause" for t in (tx if isinstance(tx, list) else []) if t in clauses]
+    n = sum(len(sp.get("recipes", [])) for sp in d["story_points"])
+    return not p, "; ".join(p) if p else f"{n} recipes read every measure clause of {len(d['story_points'])} story points ({sum(len(sp.get('texture', [])) for sp in d['story_points'])} texture lines no layer records)"
+
+
+def check_drive(d, ctx):
+    """Story first (row 9.8): a beat wants something or turns something. At least one story point of every beat names a `want` or a `turn`; the rest may hold. Advisory, not refused: a beat with no want and a beat with no turn are named."""
+    sps, p = d["story_points"], []
+    order = [b["id"] for b in ctx["ledger"]["beats"]]
+    for b in order:
+        mine = [sp for sp in sps if sp["beat"] == b]
+        if not any(str(sp.get("want", "")).strip() or str(sp.get("turn", "")).strip() for sp in mine): p.append(f"beat {b!r} has no story point with a want or a turn ({', '.join(sp['id'] for sp in mine)}): nothing in it asks or changes")
+    no_want = [b for b in order if not any(str(sp.get("want", "")).strip() for sp in sps if sp["beat"] == b)]; no_turn = [b for b in order if not any(str(sp.get("turn", "")).strip() for sp in sps if sp["beat"] == b)]
+    note = (f"; advisory, not refused: no want in {', '.join(no_want)}" if no_want else "") + (f"; no turn in {', '.join(no_turn)}" if no_turn else "")
+    return not p, "; ".join(p) if p else f"every beat of {len(order)} has a story point that wants or turns something{note}"
+
+
 def check_renders(d, ctx):
     p, want = [], sha(ctx["screenplay_text"], ctx["ledger_text"])[:12]
     for name, text in (("screenplay.md", ctx["md"]), ("screenplay.fountain", ctx["fountain"])):
@@ -164,7 +252,7 @@ def check_renders(d, ctx):
     return not p, "; ".join(p) if p else f"screenplay.md and screenplay.fountain are the render of source {want} and carry no edit of their own"
 
 
-CHECKS = [("ids", check_ids), ("frames", check_frames), ("shots", check_shots), ("after", check_after), ("colour", check_colour), ("register", check_register), ("renders", check_renders)]
+CHECKS = [("ids", check_ids), ("frames", check_frames), ("shots", check_shots), ("after", check_after), ("colour", check_colour), ("register", check_register), ("themes", check_themes), ("recipes", check_recipes), ("drive", check_drive), ("renders", check_renders)]
 
 
 def planted(d, ctx):
@@ -184,6 +272,26 @@ def planted(d, ctx):
     mutate("shot ranges that overlap", "shots", lambda x: None, shots=overlap(ctx["shots"]))
     def off_boundary(shots): s = copy.deepcopy(shots); s[0]["frames"][1] += 7; s[1]["frames"][0] += 7; return s
     mutate("shot ranges that end inside a beat", "shots", lambda x: None, shots=off_boundary(ctx["shots"]))
+    theme_ids = [t["id"] for t in d["themes"]]
+    def drop_theme(x, tid):
+        for s_ in x["story_points"][1:]: s_["themes"] = [t for t in s_.get("themes", []) if t != tid]
+    mutate("a theme no story point carries", "themes", lambda x: drop_theme(x, "th-frame-portal"))
+    mutate("a beat with no theme", "themes", lambda x: [s_.update(themes=[]) for s_ in x["story_points"] if s_["beat"] == "crossing"])
+    mutate("an act with no heart channel", "themes", lambda x: [s_.update(channels=[c for c in s_.get("channels", []) if c != "heart"]) for s_ in x["story_points"] if s_["beat"] in ("art-world", "crossing", "programming-world", "home-settle")])
+    mutate("reverent in beat 2", "themes", lambda x: next(s_ for s_ in x["story_points"] if s_["beat"] == "everything-at-once").update(register="reverent"))
+    mutate("a story point tagged with an undeclared theme", "themes", lambda x: sp(x, 0).update(themes=sp(x, 0)["themes"] + ["th-nothing"]))
+    mutate("a measure clause no recipe says", "recipes", lambda x: sp(x, 0).update(measure=sp(x, 0)["measure"] + "; the box glows"))
+    mutate("a story point with a measure and no recipes", "recipes", lambda x: sp(x, 0).update(recipes=[]))
+    mutate("a recipe of a kind no probe reads", "recipes", lambda x: sp(x, 0)["recipes"][0].update(kind="vibes"))
+    mutate("a recipe missing the field its reader needs", "recipes", lambda x: next(r for s_ in x["story_points"] for r in s_["recipes"] if r.get("expect") == "moves").pop("by"))
+    mutate("a beat whose story points have neither want nor turn", "drive", lambda x: [s_.update(want="", turn="") for s_ in x["story_points"] if s_["beat"] == "everything-at-once"])
+    mutate("a story point with no theme", "themes", lambda x: sp(x, 2).update(themes=[]))
+    def all_detail(x):
+        did = next(t["id"] for t in x["themes"] if t["check"]["kind"] == "child-detail")
+        for b in {s_["beat"] for s_ in x["story_points"]}:
+            first = next(s_ for s_ in x["story_points"] if s_["beat"] == b)
+            if did not in first["themes"]: first["themes"] = first["themes"] + [did]
+    out["a draft whose every beat carries a child detail names no advisory"] = ("themes", (lambda x: (all_detail(x), x)[1])(copy.deepcopy(d)), ctx)
     # the renders are controlled on a synthetic pair that is current by construction, so a stale real render cannot hide a probe that would not see one
     body = "# synthetic\n\nbody line\n"
     line = lambda text_: f"<!-- generated from screenplay.json by compile-screenplay.mjs · source {sha(text_, ctx['ledger_text'])[:12]} · body {sha(body)[:12]} -->"
@@ -218,12 +326,12 @@ def main():
     res, bad = [], []
     for label, (check, x, c) in planted(d, ctx).items():
         ok, why = fns[check](x, c)
-        clean = label.endswith("(clean)")
+        clean = label.endswith("(clean)"); quiet = label.endswith("names no advisory")
         base_ok, base_why = fns[check](d, ctx)
-        refused = (not ok) if not clean else False
-        if not clean and ok is False and not base_ok and why == base_why: refused = False      # the draft already fails this way: the planted fault added nothing
-        res.append(f"{label} -> {'accepted' if ok else 'refused'}" if clean else f"planted {label} -> {'refused' if refused else 'NOT REFUSED'} ({check})")
-        if (clean and not ok) or (not clean and not refused): bad.append(label)
+        refused = (not ok) if not (clean or quiet) else False
+        if not (clean or quiet) and ok is False and not base_ok and why == base_why: refused = False      # the draft already fails this way: the planted fault added nothing
+        res.append(f"{label} -> {'accepted' if ok else 'refused'}" if clean else f"{label} -> {'no advisory' if 'advisory' not in why else 'ADVISORY STILL NAMED'}" if quiet else f"planted {label} -> {'refused' if refused else 'NOT REFUSED'} ({check})")
+        if (clean and not ok) or (quiet and "advisory" in why) or (not (clean or quiet) and not refused): bad.append(label)
     pr.control(not bad, "; ".join(res))
     for name, fn in CHECKS:
         ok, why = fn(d, ctx)
