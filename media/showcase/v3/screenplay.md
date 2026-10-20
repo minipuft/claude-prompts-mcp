@@ -1,4 +1,4 @@
-<!-- generated from screenplay.json by scripts/animation/compile-screenplay.mjs · source 2b6a8ce9376e · body 6df38de1f337 -->
+<!-- generated from screenplay.json by scripts/animation/compile-screenplay.mjs · source 0fde017ab075 · body 6df38de1f337 -->
 > Generated from `v3/screenplay.json` by `npm run screenplay`. Edit the json, never this file.
 
 # Claude Prompts: screenplay
