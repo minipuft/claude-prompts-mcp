@@ -163,7 +163,6 @@ node_modules
 plans/_backup-commands/
 
 # Local dev scripts
-scripts/dev-link.sh
 
 # IDE workspace files
 plans/claude-prompts.code-workspace

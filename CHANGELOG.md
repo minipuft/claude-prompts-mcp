@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Contributors: a pull request whose squash commit release-please cannot parse now fails the `PR Conventions` check.** GitHub re-flows the PR body at 72 columns when it writes the squash commit, and release-please leaves out any commit its parser rejects, with no changelog line, version bump or BREAKING CHANGE note; that is how #501 and #503 were missed by a release. `npm run pr:check` runs the same check locally and names the offending line; the fix is to put the example on one line inside a fenced block, reword the line, or add a `BEGIN_COMMIT_OVERRIDE` block. The fleet delivery contract and standards pins move to repository-standards v1.10.0.
 - **Contributors: a pull request now shows a warning when the repository's delivery contract is behind the latest repository-standards release.** The `PR Conventions` workflow annotates the pull request with the recorded and latest versions; the warning never fails the check, and only a separate adoption pull request (`delivery-contract update`) clears it. The fleet delivery contract and standards pins move to repository-standards v1.11.0.
 
+### Removed
+
+- **`npm run sync` and `npm run dev` (the plugin-cache copy script) are gone.** Load the checkout directly with `npm run dev:claude`, which runs `claude --plugin-dir` and takes hooks, manifest and server from the checkout instead of imitating them in the marketplace cache.
+
 ### Fixed
 
 - Aborting a run clears its owned stored verification; cleanup failures report an error and can be retried with another abort while cancellation remains durable.
