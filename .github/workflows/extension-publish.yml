@@ -413,9 +413,19 @@ jobs:
           # npm-publish workflow for months. The repo's own CI used `bun install` (which migrates
           # the lockfile) so nothing surfaced it.
           #
-          # The registry can lag a new publication. Retry a bounded number of fresh lock
-          # resolutions and fail rather than opening a PR whose lock points at another version.
-          if [ -f package-lock.json ]; then
+          # Which members go through the lock sync is decided by what their package.json
+          # DECLARES, never by whether a lockfile exists. minipuft-plugins gained a lockfile
+          # for commitlint and husky (its #12) and declares no claude-prompts, so a
+          # `-f package-lock.json` guard sent the marketplace through a sync that always fails
+          # with "claude-prompts is absent from package-lock.json" — and that failed 5.1.0 and
+          # 5.1.1 for every member, because the matrix job fails as a whole. The marketplace
+          # takes the jq listing edit above and nothing else.
+          #
+          # The registry lags a new publication (npm took 2m38s for 5.1.1 and 6m13s for 5.1.0).
+          # The script first waits until `npm view` lists this version (15 minutes), then
+          # retries a bounded number of fresh lock resolutions, and fails rather than opening a
+          # PR whose lock points at another version.
+          if [ -f package.json ] && jq -e '((.dependencies // {}) + (.devDependencies // {})) | has("claude-prompts")' package.json >/dev/null; then
             node ../upstream/server/scripts/synchronize-downstream-lock.js \
               --workspace . \
               --package claude-prompts \
@@ -511,7 +521,10 @@ jobs:
           # and it is the same command the downstream publish workflows run. If this fails, the
           # sync PR is never opened and the release surfaces the problem here instead of silently
           # downstream.
-          if [ -f package-lock.json ]; then
+          #
+          # Gated on the same declaration as the lock sync above: a member that does not
+          # declare claude-prompts has no `node_modules/claude-prompts` to read back.
+          if [ -f package.json ] && jq -e '((.dependencies // {}) + (.devDependencies // {})) | has("claude-prompts")' package.json >/dev/null; then
             echo "Asserting package.json and package-lock.json agree (npm ci)..."
             if ! npm ci --ignore-scripts --no-audit --no-fund; then
               echo "::error::${{ matrix.name }}: npm ci failed — package.json and package-lock.json are out of sync. Refusing to open a sync PR that would break the downstream publish path."

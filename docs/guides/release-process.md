@@ -7,7 +7,7 @@ Ship releases to npm and update the `dist` branch automatically; downstream proj
 | Problem                                  | Solution                     | Result                   |
 | ---------------------------------------- | ---------------------------- | ------------------------ |
 | Manual version bumps across 4 files      | release-please automation    | Merge PR → versions sync |
-| Downstream projects need latest runtime  | npm dependency + Renovate    | Auto-PRs, auto-merged    |
+| Downstream projects need latest runtime  | npm dependency + sync job    | Auto-PRs, auto-merged    |
 | Non-conventional commits break changelog | commitlint + commit-msg hook | Enforced at commit time  |
 
 ---
@@ -77,34 +77,44 @@ own release toolchain; what they share is the published package.
 
 | Project                                                          | Distribution                                       | Update Mechanism                          |
 | ---------------------------------------------------------------- | -------------------------------------------------- | ----------------------------------------- |
-| [gemini-prompts](https://github.com/minipuft/gemini-prompts)     | Gemini CLI extension (npm pkg unpublished)         | Renovate → auto-merge                     |
-| [opencode-prompts](https://github.com/minipuft/opencode-prompts) | npm package + OpenCode plugin                      | Renovate → auto-merge                     |
+| [gemini-prompts](https://github.com/minipuft/gemini-prompts)     | Gemini CLI extension (npm pkg unpublished)         | sync job → validated PR, auto-merge       |
+| [opencode-prompts](https://github.com/minipuft/opencode-prompts) | npm package + OpenCode plugin                      | sync job → validated PR, auto-merge       |
 | [codex-prompts](https://github.com/minipuft/codex-prompts)       | Codex CLI plugin, installed from its `dist` branch | sync job → its `publish-dist` republishes |
-| [minipuft-plugins](https://github.com/minipuft/minipuft-plugins) | Marketplace index only, no plugin content          | validated PR, merged immediately          |
+| [minipuft-plugins](https://github.com/minipuft/minipuft-plugins) | Marketplace index only, no plugin content          | sync job → validated PR, auto-merge       |
 
 ```json
 // package.json (gemini-prompts, opencode-prompts, codex-prompts)
 { "dependencies": { "claude-prompts": "^3.0.0" } }
 ```
 
-codex-prompts is not yet in `fleet.json`, so the weekly audit does not see it. Joining is more
-than an entry: the auditor fetches each member's `downstream-contract.json`,
-`consumer-contract.yml`, `.node-version` and branch protection, and codex-prompts has none of
-them — `main` is unprotected. Adding it before those land would fail the audit on a missing file
-rather than on drift.
+The `sync-downstream` job in `extension-publish.yml` is the **only** writer of a downstream
+`claude-prompts` version. It opens a PR in each repository above on every upstream release and
+auto-merges it once the repository's checks pass; **no workflow pushes directly to a downstream
+default branch**. Nothing else moves the version: the shared Renovate preset in
+`minipuft/repository-standards` lists `claude-prompts` in `ignoreDeps` so that a second writer
+cannot race the sync, and no member runs Dependabot. A member whose sync fails therefore stays on
+its old version until a release is synced again, and the weekly drift audit below is what reports
+it. That is how 5.1.0 and 5.1.1 reached no member (the first sync waited about 100 seconds for
+a publication npm took 2 to 6 minutes to serve, and the marketplace was sent through a lock sync
+it has no lock entry for).
 
-Downstream repos are updated on two independent channels, and both open PRs rather than pushing:
+The job checks out each downstream and edits the one thing it owns:
 
-| Channel                                          | Owns                                                                                | Cadence                |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------- | ---------------------- |
-| `sync-downstream` job in `extension-publish.yml` | the dependency **range** (`^MAJOR.0.0`), the marketplace `version`/`license` fields | every upstream release |
-| Renovate, configured in each consumer            | the resolved **patch/minor** inside that range                                      | continuous             |
+| Member kind                                                                | Edit                                            | Lockfile                                                                                                                     |
+| -------------------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| declares `claude-prompts` in `dependencies` or `devDependencies` (3 repos) | the dependency **range** (`^MAJOR.0.0`)         | regenerated through `server/scripts/synchronize-downstream-lock.js`, then `npm ci` must install exactly the released version |
+| does not declare it (minipuft-plugins)                                     | the marketplace entry's `version` and `license` | untouched, even when the repository has one for its own tooling                                                              |
 
-The sync job checks out each downstream, edits the one field it owns, and regenerates the lockfile
-through `server/scripts/synchronize-downstream-lock.js` — editing `package.json` without the lock
-desynchronizes the two, which once left opencode-prompts with `^2.0.0` against a `1.7.0` lock and
-blocked its publish workflow for months. **No workflow pushes directly to a downstream default
-branch**; protected repos auto-merge the validated PR and the unprotected marketplace merges its own.
+The branch is chosen by what `package.json` **declares**, never by whether a lockfile exists:
+minipuft-plugins gained a lockfile for commitlint and husky and still has no `claude-prompts`
+entry in it. Editing `package.json` without the lock desynchronizes the two, which once left
+opencode-prompts with `^2.0.0` against a `1.7.0` lock and blocked its publish workflow for months.
+
+The lock sync first waits until `npm view claude-prompts@<version>` lists the release (15 minutes,
+polling every 15 seconds), because a fresh publication takes minutes to become installable; then it
+refreshes the lock, retrying a few times for the gap between a listing and an installable
+resolution. If either bound runs out, the job fails instead of opening a PR whose lock points at
+another version, and a failed run is re-run once npm lists the release.
 
 What _was_ removed is the separate `downstream-sync.yml` workflow and its `repository_dispatch`
 trigger — a dead chain that had never run. The job described above lives inside
@@ -151,11 +161,11 @@ Push to main
      │
      ▼
 ┌────────────────────────────────────┐
-│  Downstream (Renovate)             │
+│  Downstream (sync-downstream job)  │
 │  • marketplace: validated merge    │
 │  • gemini-prompts: auto-merge PR   │
 │  • opencode-prompts: auto-merge PR │
-│  • codex-prompts: vendored, manual │
+│  • codex-prompts: auto-merge PR    │
 └────────────────────────────────────┘
      │
      ▼
