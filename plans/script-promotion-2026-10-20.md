@@ -34,6 +34,14 @@ Assessment of 2026-10-20 (chat): no fleet member carries a twin of any candidate
 - R6 (create-worktree node_modules): symlink `node_modules` for every directory in the main worktree that holds both a `package.json` and a `node_modules`; no hardcoded `server/`.
 - R7 (required-contexts): replace `js-yaml` with a line-level job-`name:` extraction proven by a positive control (rename a job name → red) on this repo's workflows AND on a fixture with quoted and interpolated names.
 - R8 (adoption here): one PR per release: `delivery-contract update`, delete each local copy, repoint `server/package.json` entries to `node ../scripts/<name>.mjs` (npm script NAMES unchanged so `validate:suite-membership` and `run-validation-suite.js` stay green), CONTRIBUTING managed-scripts list, CLAUDE.md command table where it names a path.
+- R10 (Q1, lockfile-sync root): check EVERY tracked `package-lock.json` (`git ls-files '*package-lock.json'`), each against its sibling `node_modules/.package-lock.json`; a lockfile whose sibling is missing is reported as not installed (fail, as today). The repo root is only for `.delivery-contract.json`.
+- R11 (Q2, required-contexts without the JSON): self-gate — no `.github/required-contexts.json` → exit 0 naming the file and that creating it opts in. Not seeded. This repo's `$comment` owner path is fixed at adoption.
+- R12 (Q3, no husky): no tracked `.husky/*` hook → skip with a named reason; an unset `core.hooksPath` is a problem only when tracked hooks exist.
+- R13 (Q4, package-manager-free husky): run `node <mainRoot>/node_modules/husky/bin.js` with cwd = the new worktree; husky absent from the main tree → fail naming it. No `npx`, no `npm install`, no `packageManager` read.
+- R14 (Q5, clean-tree check): keep the loud check but scope it to the links the script created (`git status --porcelain -- <links>`); a hit names the `.gitignore` fix (`node_modules` without the trailing slash, since git ignores a symlink as a file).
+- R15 (Q6, upstream's own pin checker): the ported script takes `--root <dir>`; upstream's `validate:workflows` calls it on `.` and `scripts/validate-workflows.mjs` is deleted in the same row. If upstream's own workflows lack release comments, add them in that row.
+- R16 (Q7, docker refs): `docker://<image>@sha256:<64 hex>` is pinned; any other `docker://` ref is rejected with its own message.
+- R17 (shared files upstream): workers never edit `templates/delivery-contract/manifest.json`, `README.md` or `CHANGELOG.md`; the planner adds manifest entries and the README table at 2.7. Upstream prettier runs on defaults (double quotes).
 - R9 (T3 consolidation target): the global Python hooks call the repo's managed `scripts/validate-plan-rows.mjs` when the repo carries it and keep only their non-overlapping checks (stale-copy, N-of-M, Now block); the glyph vocabulary constant moves upstream with the validator.
 
 ## Tiers
