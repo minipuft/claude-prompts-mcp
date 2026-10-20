@@ -13,7 +13,7 @@ from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, HERE)
-from probe_common import IDENTITY_PIGMENTS, IDENTITY_RADIUS, hex_rgb, list_frames
+from probe_common import IDENTITY_PIGMENTS, IDENTITY_RADIUS, hex_rgb, list_frames, resolve_blocking_at
 spec = importlib.util.spec_from_file_location("pb", os.path.join(HERE, "probe-blocking.py")); pb = importlib.util.module_from_spec(spec); spec.loader.exec_module(pb)
 
 
@@ -64,7 +64,7 @@ def main():
                 if cut and seen[who]: bad.append(f"frame {f}: {who} (pigment {b}) touches an edge after standing in picture")
                 if not cut: seen[who] = True
             elif who == "codex" and seen[who]: bad.append(f"frame {f}: codex is not in picture")
-        cur = pb.resolve_at(bl, f); rects = pb.rects_of(cur); cam = xs[f]["camera"]; out = []
+        cur = resolve_blocking_at(bl, f); rects = pb.rects_of(cur); cam = xs[f]["camera"]; out = []
         for n, r in rects.items():
             if n not in ("frame", "heap") and n not in pb.PROP_EXTENT: continue
             x0, y0, x1, y1 = view_rect(r, cam, sc); inside = x0 >= -1 and y0 >= -1 and x1 <= W + 1 and y1 <= H + 1

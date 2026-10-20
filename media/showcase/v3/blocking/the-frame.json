@@ -1,15 +1,33 @@
 {
   "id": "the-frame",
   "provisional": true,
-  "derivedFrom": "restaged wide 2026-10-19 (D101, row 9.5): the frame large near centre, the figure small against it; props apart per probe-blocking.py; Clawd enters from the right carrying the frame (690-738), the cloak heap lies on the floor from the frame the cloak drops (760, the pose sheet's dropsAt), Codex walks to the heap and nudges it (812). The test scene's arch, gates and floor stand unused",
+  "derivedFrom": "restaged wide 2026-10-19 (D101, row 9.5): the frame large near centre, the figure small against it; props apart per probe-blocking.py; Clawd enters from the right carrying the frame (690-738), the cloak heap lies on the floor from the frame the cloak drops (760, the pose sheet's dropsAt), Codex walks to the heap and nudges it (812). The human's root travels toward the frame in the pose sheet's moves (`figure.at`: 814-836 step to threshold, 62 px, so the hand rests on the frame's edge at 840; 864-896 threshold to through, 90 px, so the body crosses the frame's left edge by the end of the beat). The test scene's arch, gates and floor stand unused",
   "cutIn": true,
   "cutOut": true,
   "shot": "s02-cant-build-frame",
   "poseShot": "s02-the-frame",
   "figure": {
     "scale": 0.34,
-    "x": 395,
-    "y": 266
+    "x": 333,
+    "y": 266,
+    "at": [
+      {
+        "frame": 814,
+        "x": 333
+      },
+      {
+        "frame": 836,
+        "x": 395
+      },
+      {
+        "frame": 864,
+        "x": 395
+      },
+      {
+        "frame": 896,
+        "x": 485
+      }
+    ]
   },
   "codex": {
     "x": 110,
@@ -98,7 +116,7 @@
     "y": 480
   },
   "figureCrop": {
-    "x": 396,
+    "x": 393,
     "y": 190,
     "width": 250,
     "height": 430

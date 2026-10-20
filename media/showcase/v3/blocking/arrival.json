@@ -1,7 +1,7 @@
 {
   "id": "arrival",
   "provisional": true,
-  "derivedFrom": "restaged 2026-10-19 (animatic 04, blocking step): props apart per probe-blocking.py; test-scene (no layout contract for this beat's shot yet); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
+  "derivedFrom": "restaged 2026-10-19 (row 9.6, beat 1): the box, lid, bubble and gadget stand beside the human so the flood's lamp lands on the trio; the lid opens on its position keys (the lift key 60), the bubble swells out of it over 110-150 with the gadget on inside it, Codex leans in 4 frames before Clawd; props apart per probe-blocking.py; test-scene (no layout contract for this beat's shot yet); the emitter and card are provisional placeholders",
   "figure": {
     "scale": 0.68,
     "x": 420,
@@ -10,29 +10,49 @@
   "codex": {
     "x": 60,
     "y": 440,
-    "scale": 1.8
+    "scale": 1.8,
+    "at": [
+      {
+        "frame": 106,
+        "x": 60
+      },
+      {
+        "frame": 118,
+        "x": 84
+      }
+    ]
   },
   "clawd": {
-    "x": 940,
+    "x": 1010,
     "y": 470,
-    "scale": 1.5
+    "scale": 1.5,
+    "at": [
+      {
+        "frame": 110,
+        "x": 1010
+      },
+      {
+        "frame": 122,
+        "x": 988
+      }
+    ]
   },
   "frame": {
-    "x": 910,
-    "y": 70,
+    "x": 1000,
+    "y": 40,
     "width": 280,
     "height": 230
   },
   "blocks": [
     {
-      "x": 985,
+      "x": 840,
       "y": 382,
       "width": 60,
       "height": 46,
       "role": "main1"
     },
     {
-      "x": 1045,
+      "x": 900,
       "y": 382,
       "width": 60,
       "height": 46,
@@ -40,7 +60,7 @@
     }
   ],
   "join": {
-    "x": 1045,
+    "x": 900,
     "y": 405.0
   },
   "arch": {
@@ -81,23 +101,71 @@
   "shot": "s01-arrival-overwhelm",
   "actors": {
     "box": {
-      "x": 1040,
+      "x": 895,
       "y": 450,
       "scale": 0.9
     },
+    "lid": {
+      "x": 895,
+      "y": 378.0,
+      "scale": 0.9,
+      "at": [
+        {
+          "frame": 54,
+          "x": 895,
+          "y": 378.0
+        },
+        {
+          "frame": 70,
+          "x": 940.4,
+          "y": 301.4
+        }
+      ]
+    },
     "bubble": {
-      "x": 1050,
+      "x": 905,
       "y": 372,
-      "scale": 0.5
+      "scale": 0.75,
+      "on": 110,
+      "at": [
+        {
+          "frame": 110,
+          "x": 905,
+          "y": 372
+        },
+        {
+          "frame": 150,
+          "x": 905,
+          "y": 285
+        }
+      ]
+    },
+    "gadget": {
+      "x": 905,
+      "y": 399,
+      "scale": 0.55,
+      "on": 138,
+      "at": [
+        {
+          "frame": 110,
+          "x": 905,
+          "y": 399
+        },
+        {
+          "frame": 150,
+          "x": 905,
+          "y": 312
+        }
+      ]
     }
   },
   "emitter": {
     "start": [
-      1035,
+      900,
       402
     ],
     "end": [
-      1045,
+      910,
       382
     ],
     "anchor": "box seam",
@@ -120,6 +188,56 @@
       "a": "blocks",
       "b": "bubble",
       "why": "the bubble rises from the blocks inside the box"
+    },
+    {
+      "a": "box",
+      "b": "lid",
+      "why": "the lid is the box's own top"
+    },
+    {
+      "a": "box",
+      "b": "gadget",
+      "why": "the gadget rises out of the box inside its bubble"
+    },
+    {
+      "a": "bubble",
+      "b": "gadget",
+      "why": "the gadget is inside the bubble"
+    },
+    {
+      "a": "lid",
+      "b": "human",
+      "why": "the hands lift the lid"
+    },
+    {
+      "a": "box",
+      "b": "human",
+      "why": "the human stands at the box with her hands on it"
+    },
+    {
+      "a": "blocks",
+      "b": "lid",
+      "why": "the closed lid lies over the kit's blocks"
+    },
+    {
+      "a": "bubble",
+      "b": "lid",
+      "why": "the bubble swells out from under the lifted lid"
+    },
+    {
+      "a": "gadget",
+      "b": "lid",
+      "why": "the gadget rises out through the open lid"
+    },
+    {
+      "a": "bubble",
+      "b": "human",
+      "why": "the human steps back with her hands open toward the swelling bubble"
+    },
+    {
+      "a": "gadget",
+      "b": "human",
+      "why": "the human steps back with her hands open toward the gadget in its bubble"
     }
   ]
 }

@@ -1,0 +1,17 @@
+{
+  "id": "p019",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "arrival",
+    "frame": 60
+  },
+  "title": "sp-1.2, sp-2.1: the light is one constant emitter per beat, so it cannot widen after the lid or jump at the pop",
+  "text": "sp-1.2 measures 'light area grows after the lid, lag of 4 frames or more' and sp-2.1 'field hue area jumps' at the pop. The animatic draws each beat's light as one emitter at a fixed radius (260 stage px, `EMITTER_RADIUS` in animaticPlan.ts) and one intensity (light.json `intensity`, `on`, `off`): the only thing that moves is the emitter's position (the blocking's emitter start to end, `follows: frame`). Nothing varies the lit area from frame to frame, so the seam stays the same size while the lid rises (out/animatic-06-draft-seq, frames 54-72) and the pop changes only what is in front of the glow. The lid, the bubble and the gadget carry beat 1 and the pop in the staging of row 9.6; the light lines are left. What would meet them: a light key track in the contract (`{frame, intensity or radius}` on the emitter, read by `emitterIntensityAt` and animaticPlan, compiled by compile-light.mjs from the blocking emitter), or the emitter list the README already allows for a handoff, which the animatic reads as a single object. The probe to write with it: area of the pixels above the glow's level against frames, with the lid's frame as its reference.",
+  "references": [],
+  "before": "a constant glow through the lift and the pop",
+  "after": "the seam widens at least 4 frames after the lid starts to rise; the field's hue area jumps on the pop",
+  "status": "open",
+  "ruling": null
+}

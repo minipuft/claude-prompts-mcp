@@ -66,6 +66,18 @@ export const BlockPiece: React.FC<{width: number; height: number; role?: 'main1'
   </svg>
 );
 
+/** A patch of tile (the crayon world's patch, home-world fills): four kit blocks in a two-by-two grid, bottom centre at (0, 0), 112 px wide and 88 px high at size 1. */
+export const PATCH = {width: 112, height: 88};
+export const PatchPiece: React.FC = () => (
+  <div style={{position: 'absolute', left: 0, top: 0}}>
+    {([[-30, -66, 'main1'], [30, -66, 'main2'], [-30, -22, 'main2'], [30, -22, 'main1']] as const).map(([x, y, role]) => (
+      <div key={`${x},${y}`} style={{position: 'absolute', left: x, top: y}}>
+        <BlockPiece width={52} height={40} role={role} />
+      </div>
+    ))}
+  </div>
+);
+
 /** A framed opening centred on (0, 0): the project's `Frame`. */
 export const FramePiece: React.FC<{width: number; height: number}> = ({width, height}) => (
   <div style={{position: 'absolute', left: -width / 2, top: -height / 2}}>

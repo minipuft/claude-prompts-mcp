@@ -10,11 +10,11 @@
       "emitter": {
         "anchor": "box seam",
         "start": [
-          0.8086,
+          0.7031,
           0.5583
         ],
         "end": [
-          0.8164,
+          0.7109,
           0.5306
         ],
         "intensity": 0.824,
@@ -33,12 +33,12 @@
       "emitter": {
         "anchor": "gadget dial",
         "start": [
-          0.8164,
-          0.5306
+          0.707,
+          0.4667
         ],
         "end": [
-          0.8203,
-          0.4861
+          0.707,
+          0.4667
         ],
         "intensity": 0.9,
         "colour": "#d1dffe",

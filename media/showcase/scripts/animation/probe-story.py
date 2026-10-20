@@ -19,8 +19,14 @@ story point on three things, then prints one line per story point (pass or FAIL,
           cast: Codex's and Clawd's pigments grown by 24, the frame's and the blocks' rectangles, which re-draw themselves on their boil steps and change thousands of pixels with no story point) or the
           BLOCKING layer (a prop comes or goes, Codex, Clawd or the frame moves 20 px, the xsheet's world or crossing phase, the beat's colour pair). A story point whose before and after differ only in the
           figure layer fails here however well the figure acts. A story point with no `after` key holds, and needs only its binding
+  The human is read where the story point's measure line names her: `human x moves toward frame >= 60 px` (actor `human` reads the root travel `figure.at` of the blocking, which the animatic plays on the frame each drawing
+  comes on), `hand within 8 px of frame edge` (figure measure `edge-gap`: the figure layer's rightmost ink against the frame's left edge, on the story point's first frame) and `human crosses frame x` (figure measure
+  `centre`: the silhouette's centre is left of the frame's left edge on the frame the recipe starts from, `since: previous` being the previous story point's frame, and at or past it on the last frame of the beat; a cut ends
+  the observation). A recipe with `world: false` reads the figure itself and asks nothing of the world, so its story point needs no `world` change.
 Control first, on synthetic 320x180 frames and fixtures: a story point whose prop appears where its blocking says passes; a figure that moves over a world that does not (the figure shrinks, nothing
-else changes) is refused by `world`; a story point no key binds is refused by `bound`; an `after` key whose prop is in the blocking on both sides and never changes is refused by `after`.
+else changes) is refused by `world`; a story point no key binds is refused by `bound`; an `after` key whose prop is in the blocking on both sides and never changes is refused by `after`; a human who walks 70 px toward the frame
+passes and one who walks 30 px is refused; a hand 3 px from the frame's edge passes and one 40 px short of it is refused; a body whose centre goes from left of the frame's edge to right of it passes, one that stays left is
+refused and one that was already across before the story point is refused.
 Exit 0 every story point passes, 1 some fail (each named, with its reason), 2 a control that did not trip or an unreadable input.
 """
 import argparse, glob, json, os, re, sys
@@ -249,7 +255,33 @@ def box_of(fig):
     ys, xs = np.nonzero(m); return (xs.min(), ys.min(), xs.max() + 1, ys.max() + 1, int(m.sum()))
 
 
+def beat_last(film, f):
+    """The last frame of the beat holding `f`: a cut ends what a story point can observe of the figure's placement."""
+    b = next((b for b in film.tl["beats"] if b["start"] <= f < b["end"]), None)
+    return b["end"] - 1 if b else f
+
+
+def read_edge_gap(film, sp, o, fb, fa, i):
+    """The figure layer's rightmost ink against the left edge of the frame on the story point's first frame, in stage pixels (hand within `within` of the edge)."""
+    f0 = sp["frame"]; fr = film.rec(f0).get("frame"); box = box_of(film.figure(f0))
+    if not fr or not box: return False, f"no frame in the blocking or an empty figure layer at f{f0}"
+    reach = box[2] / scale_of(film.figure(f0)); gap = abs(reach - fr["x"])
+    return gap <= o["within"], f"the figure's rightmost ink is at x {reach:.0f} on f{f0}, the frame's left edge at x {fr['x']:.0f}: {gap:.0f} px apart (within {o['within']} px needed)"
+
+
+def read_centre_crossing(film, sp, o, fb, fa, i):
+    """The silhouette's centre is left of the frame's left edge on the frame the recipe starts from and at or right of it on the last frame of the beat."""
+    start = film.sps[i - 1]["frame"] if o.get("since") == "previous" and i > 0 else fb; last = min(fa, beat_last(film, sp["frame"]))
+    fr = film.rec(last).get("frame"); b0, b1 = box_of(film.figure(start)), box_of(film.figure(last))
+    if not fr or not b0 or not b1: return False, f"no frame in the blocking or an empty figure layer at f{start} or f{last}"
+    c = lambda b, f: (b[0] + b[2]) / 2 / scale_of(film.figure(f))
+    c0, c1 = c(b0, start), c(b1, last)
+    return (c0 < fr["x"] <= c1), f"the figure's centre is at x {c0:.0f} on f{start} and x {c1:.0f} on f{last}, the frame's left edge at x {fr['x']:.0f}" + ("" if c0 < fr["x"] <= c1 else ": it does not go from the left of the edge to the right of it")
+
+
 def read_figure(film, sp, o, fb, fa, i):
+    if o["measure"] == "edge-gap": return read_edge_gap(film, sp, o, fb, fa, i)
+    if o["measure"] == "centre": return read_centre_crossing(film, sp, o, fb, fa, i)
     bb, ba = box_of(film.figure(fb)), box_of(film.figure(fa))
     if not bb or not ba: return False, "the figure layer is empty at one of the frames"
     pick = {"height": lambda b: b[3] - b[1], "width": lambda b: b[2] - b[0], "area": lambda b: b[4]}[o["measure"]]
@@ -291,7 +323,7 @@ def judge(film, i):
         if not o: checks.append((f"after {key}", False, "state_keys carries no recipe for it")); continue
         ok, why = READERS[o["kind"]](film, sp, o, fb, fa, i)
         checks.append((f"after {key}", bool(ok), why))
-    if sp.get("after"):
+    if any((film.registry.get(k) or {}).get("observe", {}).get("world") is not False for k in sp.get("after", [])):
         best, floor = 0, 1; reg = film.props_region(fb, fa)
         for t in list(range(f0, f1, SAMPLE_EVERY)) + [fa]:
             n, floor = film.world_diff(fb, t, reg); best = max(best, n)
@@ -354,14 +386,42 @@ def synthetic():
     return cases
 
 
-def run_control(pr):
+def run_control():
     res, bad = [], []
     for label, (film, i, want_ok, want_check) in synthetic().items():
         r = judge(film, i); failed = [c["check"] for c in r["checks"] if not c["ok"]]
         right = r["ok"] if want_ok else (not r["ok"] and want_check in failed)
         res.append(f"{label} -> {'pass' if r['ok'] else 'FAIL (' + ', '.join(failed) + ')'}")
         if not right: bad.append(label)
-    pr.control(not bad, "; ".join(res))
+    return res, bad
+
+
+def travel_films():
+    """The human's three measure lines on 320x180 fixtures (scale 0.25, the frame's left edge at stage x 800 = pixel 200): Films whose figure layer is a 20 px wide block at stage x `at(f)` on frame f, one story point each at f 20 in a
+    beat of 60 frames. Returns [(label, Film, story index, recipe, expected ok)]."""
+    tl = {"beats": [{"id": "b", "start": 0, "end": 60}]}; ledger = {"beats": [{"id": "b", "state": []}]}
+    sps = [{"id": "sp-1.1", "frame": 10, "slug": "A", "after": [], "colour": "k"}, {"id": "sp-1.2", "frame": 20, "slug": "B", "after": [], "colour": "k"}]
+    def film(left, blocking_figure):
+        def figure_at(f):
+            im = np.full((180, 320, 3), 12, np.uint8); x = int(left(f) * 0.25); im[60:170, x:x + 5] = (200, 90, 90); return im
+        return Film(sps, {"colour_keys": {}, "state_keys": {"keys": {}}}, ledger, tl, lambda f: np.full((180, 320, 3), 12, np.uint8), figure_at, lambda f: None, {}, {"b": {"frame": {"x": 800, "y": 100, "width": 400, "height": 400}, "figure": blocking_figure}}, {}, 60)
+    walk = lambda dx: {"x": 100, "y": 0, "at": [{"frame": 22, "x": 100}, {"frame": 30, "x": 100 + dx}]}
+    toward = {"kind": "actor", "actor": "human", "expect": "toward-frame", "min": 60}; edge = {"kind": "figure", "measure": "edge-gap", "expect": "within", "within": 8}
+    cross = {"kind": "figure", "measure": "centre", "expect": "crosses-frame", "since": "previous"}
+    still = {"x": 100, "y": 0}
+    return [("a human who walks 70 px toward the frame", film(lambda f: 100, walk(70)), 1, toward, True), ("a human who walks 30 px toward the frame", film(lambda f: 100, walk(30)), 1, toward, False),
+            ("a hand 4 px past the frame's edge", film(lambda f: 787, still), 1, edge, True), ("a hand 40 px short of the frame's edge", film(lambda f: 740, still), 1, edge, False),
+            ("a body whose centre goes from left of the frame's edge to right of it", film(lambda f: 500 if f < 40 else 900, still), 1, cross, True), ("a body that stays left of the frame's edge", film(lambda f: 500, still), 1, cross, False),
+            ("a body that was already across before the story point", film(lambda f: 900, still), 1, cross, False)]
+
+
+def run_travel_control():
+    res, bad = [], []
+    for label, film, i, recipe, want in travel_films():
+        sp = film.sps[i]; fb, f0, f1, fa = film.window(i); ok, why = READERS[recipe["kind"]](film, sp, recipe, fb, fa, i)
+        res.append(f"{label} -> {'pass' if ok else 'FAIL'}")
+        if bool(ok) != want: bad.append(f"{label} ({why})")
+    return res, bad
 
 
 # ---------- main ----------
@@ -373,7 +433,8 @@ def main():
     ap.add_argument("--keys", default=j("v3", "keys")); ap.add_argument("--poses", default=j("v3", "poses")); ap.add_argument("--ledger", default=j("v3", "beats-v2.json")); ap.add_argument("--timeline", default=j("v3", "timeline.json"))
     ap.add_argument("--story", default=None, help="comma-separated story point ids to judge (the others are not read)"); ap.add_argument("--json", default=None)
     a = ap.parse_args(); pr = Probe("story", a.json)
-    run_control(pr)
+    (res, bad), (res_t, bad_t) = run_control(), run_travel_control()
+    pr.control(not bad and not bad_t, "; ".join(res + res_t) + ("" if not bad_t else " (NOT AS EXPECTED: " + "; ".join(bad_t) + ")"))
     d = read_json(a.screenplay, "the screenplay"); ledger = read_json(a.ledger, "the ledger"); tl = load_timeline(a.timeline)
     if d.get("schema") != "showcase.screenplay.1": die(f"{a.screenplay} has schema {d.get('schema')!r}")
     xs = {r["frame"]: r for r in read_json(a.xsheet, "the xsheet")["rows"]}

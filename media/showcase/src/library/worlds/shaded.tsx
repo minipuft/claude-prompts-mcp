@@ -184,8 +184,8 @@ const Gate: React.FC<{g: Blocking['gates'][number]; light: number; fill: number;
   );
 };
 const ShadedFigure: React.FC<{pose: Joints; fill: number; line: ReturnType<typeof reducedLine>; steps: number; turn: number; bloom?: Bloom; light?: FigureLight; figure: Blocking['figure']}> = ({pose, fill, line, steps, turn, bloom, light, figure}) => {
-  const texture = useFigureTexture();
-  const geometry = useFigureGeometry(pose);
+  const texture = useFigureTexture(figure.swoop);
+  const geometry = useFigureGeometry(pose, figure.swoop);
   const pivotX = maskToCanvas(restPose.torso!)[0];
   const {scale, x, y} = figure;
   return (

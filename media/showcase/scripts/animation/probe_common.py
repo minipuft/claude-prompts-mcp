@@ -4,7 +4,7 @@ without reporting when that control does not trip (dev-workflow: a null result n
 
 Exit codes: 0 pass, 1 fail, 2 input error or a control that did not trip (a refusal is not a verified negative).
 """
-import glob, json, os, re, sys
+import copy, glob, json, math, os, re, sys
 import numpy as np
 from PIL import Image
 
@@ -432,12 +432,54 @@ PROP_PAD = 12                           # stage px a prop's crop is padded by: t
 FRAME_BAR = 20                          # stage px of the frame prop's bar inwards (Frame.tsx bar 14 + its 5 px contour): the interior is where a frame's light is, not the prop
 GATE_CARVE = 1.7                        # on a beat whose emitter is the gates, a gate is lit by it: its disc (r x this) is never a prop's region
 # actors.tsx: per prop, the anchor's offset inside the prop's native box and the box (px at scale 1): the box stands on it (foot of the front face), the bubble is centred on it, the gadget hangs from its dial,
-# the stalk grows from its root (5.2 x 64 px tall, a spiral about 260 wide) and the structure stands on its base centre (the outer arch 220 x 300).
-PROP_NATIVE = {"box": ((95, 160), (220, 170)), "bubble": ((140, 140), (280, 280)), "gadget": ((108, 190), (200, 260)), "stalk": ((130, 360), (260, 370)), "structure": ((110, 300), (220, 300))}
+# the stalk grows from its root (5.2 x 64 px tall, a spiral about 260 wide), the structure stands on its base centre (the outer arch 220 x 300) and the heap's mound lies on its bottom centre (168 x 66, measured on the restaged beat 4's frames).
+PROP_NATIVE = {"box": ((95, 160), (220, 170)), "bubble": ((140, 140), (280, 280)), "gadget": ((108, 190), (200, 260)), "stalk": ((130, 360), (260, 370)), "structure": ((110, 300), (220, 300)), "heap": ((84, 64), (168, 66)), "lid": ((78, 23), (186, 91)), "arch": ((62, 172), (124, 175)), "ring": ((53, 53), (106, 106)), "patch": ((58, 90), (116, 92)), "bead": ((8, 8), (156, 55))}
 
 
 # Codex and Clawd: the box they are drawn in, from the anchor, in native px at scale 1 ((x0, y0), (x1, y1)); read off the animatic's frames (Codex at scale 1.8 spans +15..+175 by +45..+240 stage px, Clawd at 1.5 +35..+195 by +30..+155).
 CAST_NATIVE = {"codex": ((0, 15), (110, 145)), "clawd": ((15, 10), (140, 115))}
+
+
+# ---------- the blocking on one frame (the mirror of resolveBlocking in src/library/animation/blocking.ts; the one copy every probe reads) ----------
+def _smooth(t): return t * t * (3 - 2 * t)
+
+
+def placed_at(base, keys, f):
+    """Where something stands on film frame `f`: its base before the first key, the last key after it, a smooth move between two keys. `f` None or infinity: the last key (None: the base)."""
+    x, y = base["x"], base["y"]
+    if not keys or f is None or f < keys[0]["frame"]: return x, y
+    i = max(n for n, k in enumerate(keys) if k["frame"] <= f)
+    a = keys[i]; b = keys[i + 1] if i + 1 < len(keys) else None
+    ay = a.get("y", y)
+    if b is None: return a["x"], ay
+    t = _smooth((f - a["frame"]) / (b["frame"] - a["frame"]))
+    return a["x"] + (b["x"] - a["x"]) * t, ay + (b.get("y", y) - ay) * t
+
+
+def _is_num(v): return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def resolve_blocking_at(bl, f):
+    """The blocking as it stands on film frame `f`: a prop that is not on stage is gone, everything with position keys is where its keys put it (Codex, Clawd, the frame, the human's `figure`, whose `figureCrop` travels with it), and a
+    frame with `carriedBy: clawd` moves with Clawd's offset from his last key. `f` None is the file read as it is (nothing timed). A copy: the argument is not changed."""
+    if f is None or bl is None: return bl
+    out = copy.deepcopy(bl)
+    for who in ("codex", "clawd"):
+        if isinstance(bl.get(who), dict) and _is_num(bl[who].get("x")): out[who]["x"], out[who]["y"] = placed_at(bl[who], bl[who].get("at"), f)
+    fr = bl.get("frame")
+    if isinstance(fr, dict) and _is_num(fr.get("x")):
+        x, y = placed_at(fr, fr.get("at"), f)
+        if fr.get("carriedBy") == "clawd" and isinstance(bl.get("clawd"), dict):
+            cx, cy = placed_at(bl["clawd"], bl["clawd"].get("at"), f); ex, ey = placed_at(bl["clawd"], bl["clawd"].get("at"), math.inf) if bl["clawd"].get("at") else (bl["clawd"]["x"], bl["clawd"]["y"])
+            x, y = x + cx - ex, y + cy - ey
+        out["frame"]["x"], out["frame"]["y"] = x, y
+    hm = bl.get("figure")
+    if isinstance(hm, dict) and _is_num(hm.get("x")) and hm.get("at"):
+        x, y = placed_at(hm, hm["at"], f); out["figure"]["x"], out["figure"]["y"] = x, y
+        if isinstance(bl.get("figureCrop"), dict): out["figureCrop"]["x"] += x - hm["x"]; out["figureCrop"]["y"] += y - hm["y"]
+    if isinstance(bl.get("actors"), dict):
+        out["actors"] = {n: {**a, **dict(zip(("x", "y"), placed_at(a, a.get("at"), f)))} for n, a in bl["actors"].items() if isinstance(a, dict) and (a.get("on") is None or a["on"] <= f) and (a.get("off") is None or f < a["off"])}
+    return out
 
 
 def blocking_prop_rects(b):
@@ -558,15 +600,29 @@ def load_blocking(timeline_path):
     return out
 
 
+def emitter_expected(bl, beat, f):
+    """Where the blocking puts the emitter on film frame `f` of `beat` (the mirror of emitterPointAt in src/library/animation/blocking.ts): a straight line from `emitter.start` to `emitter.end` across the beat, moved with
+    the frame it follows (`follows: frame`) by the frame's displacement from where it ends. None when the beat has no emitter."""
+    e = bl.get("emitter")
+    if not e: return None
+    t = 0.0 if beat["end"] - beat["start"] <= 1 else max(0.0, min(1.0, (f - beat["start"]) / (beat["end"] - beat["start"] - 1)))
+    fr, own = (resolve_blocking_at(bl, f).get("frame") if e.get("follows") == "frame" else None) or bl.get("frame"), bl.get("frame")
+    dx, dy = (fr["x"] - own["x"], fr["y"] - own["y"]) if fr and own else (0, 0)
+    return e["start"][0] + (e["end"][0] - e["start"][0]) * t + dx, e["start"][1] + (e["end"][1] - e["start"][1]) * t + dy
+
+
 def blocking_describes(tl, xs, blocking, tol=3.0):
     """The beats whose frames are drawn from `blocking` (the animatic stages every prop at the blocking's anchors): the xsheet emitter, on the beat's first frame that carries one, sits within `tol` stage px of
-    the blocking's `emitter.start`. A real shot (s01) has its own staging and its own emitter track, so its beats are not in the set and no prop crop is read from a blocking that does not describe them."""
+    where the blocking puts it on that frame (`emitter_expected`: `emitter.start` at a beat's first frame, moved with the frame it follows). A real shot (s01) has its own staging and its own emitter track, so its beats are not in the
+    set and no prop crop is read from a blocking that does not describe them."""
     out = set()
     for b in tl["beats"]:
-        st = ((blocking.get(b["id"]) or {}).get("emitter") or {}).get("start")
-        if not st: continue
-        em = next((r["emitter"] for r in (xs.get(f) for f in range(b["start"], b["end"])) if r and isinstance(r.get("emitter"), dict) and r["emitter"].get("x") is not None), None) if xs else None
-        if em and np.hypot(em["x"] - st[0], em["y"] - st[1]) <= tol: out.add(b["id"])
+        bl = blocking.get(b["id"]) or {}
+        if not (bl.get("emitter") or {}).get("start"): continue
+        hit = next(((f, r["emitter"]) for f, r in ((f, xs.get(f)) for f in range(b["start"], b["end"])) if r and isinstance(r.get("emitter"), dict) and r["emitter"].get("x") is not None), None) if xs else None
+        if not hit: continue
+        want = emitter_expected(bl, b, hit[0])
+        if want and np.hypot(hit[1]["x"] - want[0], hit[1]["y"] - want[1]) <= tol: out.add(b["id"])
     return out
 
 

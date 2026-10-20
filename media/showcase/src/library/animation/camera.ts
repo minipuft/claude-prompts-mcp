@@ -48,7 +48,7 @@ export type LayoutCameraFields = {
    * The move as numbers, when the layout carries them: the pose at the start and at the end (stage pixels at the film's frame size) and the
    * frames the move runs over (shot-local or film frames, whichever the caller's keys use). Explicit numbers win over everything derived below.
    */
-  cameraPose?: {span?: [number, number]; start: Partial<CameraPose>; end: Partial<CameraPose>};
+  cameraPose?: {span?: number[]; start: Partial<CameraPose>; end: Partial<CameraPose>};
 };
 
 export type LayoutCameraOptions = {
@@ -69,7 +69,9 @@ export type LayoutCameraOptions = {
 export const cameraFromLayout = (layout: LayoutCameraFields, size: FrameSize, options: LayoutCameraOptions): Camera => {
   const {follow = 0.5} = options;
   const explicit = layout.cameraPose;
-  const span = explicit?.span ?? options.span;
+  // a layout is JSON, so its span arrives as a list of any length (as `startXY` does): read as two frames or refused, never a silent default
+  if (explicit?.span && explicit.span.length !== 2) throw new Error(`camera: layout cameraPose.span must be [first, last] frame, got ${JSON.stringify(explicit.span)}`);
+  const span: [number, number] = explicit?.span ? [explicit.span[0]!, explicit.span[1]!] : options.span;
   if (explicit) {
     const base = lockedCamera(size);
     return {keys: [{frame: span[0], value: {...base, ...explicit.start}, ease: 'smooth'}, {frame: span[1], value: {...base, ...explicit.end}}]};

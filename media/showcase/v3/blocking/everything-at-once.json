@@ -1,38 +1,58 @@
 {
   "id": "everything-at-once",
   "provisional": true,
-  "derivedFrom": "restaged 2026-10-19 (animatic 04, blocking step): props apart per probe-blocking.py; test-scene (no layout contract for this beat's shot yet); actors, emitter and card are provisional placeholders (2026-10-14, reconciled with the probes)",
+  "derivedFrom": "restaged 2026-10-19 (row 9.6, beat 2): the bubble pops inside 186-229 (off 190) and the gadget drops onto the blocks; the pieces arrive one after another from 232 (stalk, arch) and all at once on 330 (ring, patch, bead); a stalk shoves Clawd 58 px from 334 and Codex catches the ring (338); the lamp is the gadget's dial, beside the human, so the eye finds the trio and then the human; props apart per probe-blocking.py; test-scene (no layout contract for this beat's shot yet); the card is a provisional placeholder",
   "figure": {
     "scale": 0.68,
     "x": 420,
     "y": 40
   },
   "codex": {
-    "x": 60,
+    "x": 84,
     "y": 440,
-    "scale": 1.8
+    "scale": 1.8,
+    "at": [
+      {
+        "frame": 330,
+        "x": 84
+      },
+      {
+        "frame": 338,
+        "x": 96
+      }
+    ]
   },
   "clawd": {
-    "x": 940,
+    "x": 988,
     "y": 470,
-    "scale": 1.5
+    "scale": 1.5,
+    "at": [
+      {
+        "frame": 334,
+        "x": 988
+      },
+      {
+        "frame": 346,
+        "x": 930
+      }
+    ]
   },
   "frame": {
-    "x": 910,
-    "y": 70,
+    "x": 1000,
+    "y": 40,
     "width": 280,
     "height": 230
   },
   "blocks": [
     {
-      "x": 985,
+      "x": 840,
       "y": 382,
       "width": 60,
       "height": 46,
       "role": "main1"
     },
     {
-      "x": 1045,
+      "x": 900,
       "y": 382,
       "width": 60,
       "height": 46,
@@ -40,7 +60,7 @@
     }
   ],
   "join": {
-    "x": 1045,
+    "x": 900,
     "y": 405.0
   },
   "arch": {
@@ -80,26 +100,115 @@
   "beat": "everything-at-once",
   "shot": "s01-arrival-overwhelm",
   "actors": {
+    "bubble": {
+      "x": 905,
+      "y": 285,
+      "scale": 0.75,
+      "off": 190
+    },
     "gadget": {
-      "x": 1050,
-      "y": 406,
-      "scale": 0.55
+      "x": 905,
+      "y": 312,
+      "scale": 0.55,
+      "at": [
+        {
+          "frame": 186,
+          "x": 905,
+          "y": 312
+        },
+        {
+          "frame": 196,
+          "x": 905,
+          "y": 350
+        }
+      ]
     },
     "stalk": {
-      "x": 1212,
+      "x": 1215,
       "y": 478,
-      "scale": 0.5,
-      "facing": "left"
+      "scale": 0.6,
+      "facing": "left",
+      "on": 232,
+      "at": [
+        {
+          "frame": 232,
+          "x": 1215,
+          "y": 560
+        },
+        {
+          "frame": 240,
+          "x": 1215,
+          "y": 478
+        },
+        {
+          "frame": 326,
+          "x": 1215,
+          "y": 478
+        },
+        {
+          "frame": 338,
+          "x": 1150,
+          "y": 478
+        }
+      ]
+    },
+    "arch": {
+      "x": 100,
+      "y": 300,
+      "scale": 1.0,
+      "on": 244,
+      "at": [
+        {
+          "frame": 244,
+          "x": 100,
+          "y": 180
+        },
+        {
+          "frame": 252,
+          "x": 100,
+          "y": 300
+        }
+      ]
+    },
+    "ring": {
+      "x": 205,
+      "y": 540,
+      "scale": 1.0,
+      "on": 330,
+      "at": [
+        {
+          "frame": 330,
+          "x": 262,
+          "y": 330
+        },
+        {
+          "frame": 338,
+          "x": 205,
+          "y": 540
+        }
+      ]
+    },
+    "patch": {
+      "x": 905,
+      "y": 170,
+      "scale": 1.0,
+      "on": 330
+    },
+    "bead": {
+      "x": 195,
+      "y": 190,
+      "scale": 1.0,
+      "on": 330
     }
   },
   "emitter": {
     "start": [
-      1045,
-      382
+      905,
+      336
     ],
     "end": [
-      1050,
-      350
+      905,
+      336
     ],
     "anchor": "gadget dial",
     "storyPoint": "sp-2.1"
@@ -110,12 +219,24 @@
     {
       "a": "gadget",
       "b": "blocks",
-      "why": "the gadget stands on the join of the kit's blocks"
+      "why": "the gadget stands on the join of the kit's blocks once the bubble is gone"
+    },
+    {
+      "a": "bubble",
+      "b": "gadget",
+      "why": "the gadget hangs inside the bubble until it pops"
     },
     {
       "a": "stalk",
       "b": "clawd",
-      "why": "the stalk pushes Clawd"
+      "why": "the stalk pushes Clawd",
+      "frame": 338
+    },
+    {
+      "a": "ring",
+      "b": "codex",
+      "why": "Codex catches the ring out of the air",
+      "frame": 338
     }
   ]
 }

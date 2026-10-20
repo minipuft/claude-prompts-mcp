@@ -19,9 +19,9 @@ import s02FramePoses from '../../v3/poses/s02-the-frame.json';
 import s02Layout from '../../v3/layouts/s02-cant-build-frame.json';
 import lightFile from '../../v3/light.json';
 import timelineFile from '../../v3/timeline.json';
-import {blockingAt, blockingTrack, emitterPointAt, parseBlocking, type Blocking} from '../library/animation/blocking';
+import {blockingAt, blockingTrack, emitterPointAt, parseBlocking, resolveBlocking, type Blocking} from '../library/animation/blocking';
 import {cameraAt, cameraFromLayout, lockedCamera, type Camera, type CameraPose} from '../library/animation/camera';
-import {describeFrame, heldDrawing, parseKeySheet, type FrameInfo, type KeySheet} from '../library/animation/keys';
+import {describeFrame, heldDrawing, listBreakdowns, parseKeySheet, type FrameInfo, type KeySheet} from '../library/animation/keys';
 import {coversTimeline, emitterIntensityAt, lightAt, lightTrack, lightTrackFromContract, parseLightContract} from '../library/animation/light';
 import {beatAt, crossingAt, type CrossingWindow, type Timeline, type TimelineBeat} from '../library/animation/timeline';
 import {quantise, type Key} from '../library/animation/track';
@@ -83,15 +83,19 @@ const playedCharts: Record<string, PoseChart> = (() => {
 /**
  * The garment (D69, D99): the pose sheet's cloak is the rig's poncho part (`ponchoPoint` is its tip), and the sheet says on which frame it comes off (`dropsAt`, the first frame after the cloth has stopped moving).
  * A shot whose sheet drops a garment is drawn as the parts rig (the plate family cut into parts, the same figure its key plates are built from), in the order the key governs, and from that frame the parts rig
- * leaves the poncho out: the figure is the Swoop. The contour worlds (a crossing's line phase, the line, crayon and shaded worlds) draw the one-piece mesh, which has no garment to take off; that is left open.
+ * leaves the poncho out: the figure is the Swoop. The flip is permanent (beats-v2 `human.garment`, scope permanent): every frame from the drop on is the Swoop in every shot and every world, so a frame outside
+ * the dropping shot has no pose sheet to order a parts rig by and draws the one-piece figure with `figure.swoop` (the same mesh and texture without the poncho's pixels, `assets/human/swoop.json`), which is also what
+ * the contour worlds (a crossing's line phase, the line, crayon and shaded worlds) read.
  */
 const partsRigFile = parseParts(partsFile, restPose);
 const dropsAt: Record<string, number | undefined> = {'s02-the-frame': s02FramePoses_.secondaries.find((c) => c.dropsAt !== undefined)?.dropsAt};
 const poseSheets: Record<string, typeof s02FramePoses_> = {'s02-the-frame': s02FramePoses_};
 export type Garment = 'cloak' | 'swoop';
+/** The first frame any shot's pose sheet takes a garment off: from it the film is the Swoop. */
+const garmentOffFrom = Math.min(Infinity, ...Object.values(dropsAt).filter((d): d is number => d !== undefined));
 export const garmentAt = (shot: string | null, frame: number): Garment | null => {
-  const drop = shot ? dropsAt[shot] : undefined;
-  return drop === undefined ? null : frame >= drop ? 'swoop' : 'cloak';
+  if (frame >= garmentOffFrom) return 'swoop';
+  return shot && dropsAt[shot] !== undefined ? 'cloak' : null;
 };
 /** The parts rig's draw order for the body `pose` on a frame of `shot` (front first): the rule over the joints with the lead of the key the frame is on or moving toward, under that key's own `order`, without the garment that is off. */
 const partsOrder = (shot: string, pose: Joints, info: FrameInfo, garment: Garment): PartName[] => {
@@ -196,6 +200,13 @@ export type FrameState = {
   sheet: KeySheet;
 };
 
+/** The sheet-local frame the drawing on `local` came on: the latest key or breakdown row at or before it (on twos), `local` itself before the first row. */
+const drawingRow = (sheet: KeySheet, local: number): number => {
+  const q = quantise(local, 2);
+  const rows = [...sheet.keys.map((k) => k.frame), ...listBreakdowns(sheet).map((b) => b.frame)].filter((r) => r <= q);
+  return rows.length ? Math.max(...rows) : local;
+};
+
 export const frameState = (frame: number): FrameState => {
   const beat = beatAt(timeline, frame);
   const shot = blockingByBeat[beat.id]?.poseShot ?? blockingByBeat[beat.id]?.shot ?? null;
@@ -212,7 +223,10 @@ export const frameState = (frame: number): FrameState => {
   const drawnFrom = held ? held.start : info.phase === 'key' && sheet.keys.some((k) => k.name === info.from && k.frame === q) ? q : -1;
   // The figure's placement (scale, x, y) is part of its drawing: it steps at a cut with the pose and never eases like a prop does, so the drawn layer changes only where the exposure sheet has a key.
   const garment = garmentAt(shot, frame);
-  const blocking = {...blockingAt(blockingOnTimeline, frame), figure: {...blockingByBeat[beat.id]!.figure, ...(garment ? {order: partsOrder(shot!, bodyPose, info, garment)} : {})}};
+  const partsRigged = garment !== null && shot !== null && poseSheets[shot] !== undefined;
+  // the human's root travel (`figure.at`) is read on the frame the drawing came on, like the pose: it steps with each drawing instead of gliding between them
+  const placed = resolveBlocking(blockingByBeat[beat.id]!, frame - (local - drawingRow(sheet, local)));
+  const blocking = {...blockingAt(blockingOnTimeline, frame), figureCrop: placed.figureCrop, figure: {...placed.figure, ...(partsRigged ? {order: partsOrder(shot!, bodyPose, info, garment)} : {}), ...(garment === 'swoop' ? {swoop: true} : {})}};
   const colour = lightAt(light, frame);
   const spot = contract ? emitterPointAt(blockingByBeat[beat.id]!, beat, frame) : null;
   return {

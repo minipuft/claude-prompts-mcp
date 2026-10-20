@@ -12,7 +12,7 @@ export type LayoutContract = {
   emitter: {start: string; end: string; startXY?: number[]; endXY?: number[]};
   figure: {actor: string; startHeightPct: number | null; endHeightPct: number | null; heads: number; note?: string};
   /** The move as numbers (stage pixels at the film's frame size), when the layout carries them: `cameraFromLayout` reads it. */
-  cameraPose?: {span?: [number, number]; start: {x?: number; y?: number; zoom?: number}; end: {x?: number; y?: number; zoom?: number}};
+  cameraPose?: {span?: number[]; start: {x?: number; y?: number; zoom?: number}; end: {x?: number; y?: number; zoom?: number}};
   panels: {n: number; what: string}[];
   cards: string[];
   receipt: string;

@@ -103,3 +103,60 @@ Eye trace and colour continuity refuse to run: `input error: blocking actor 'hea
 - Clawd is drawn with one raised arm, to the right of the frame he carries; "holding the frame up with both arms" is not in the picture.
 - `npm run typecheck` reports two type errors in `Root.tsx` and `animaticPlan.ts` (the layout's `cameraPose.span` read as `number[]`); they come from `92617ae7` and are not touched here.
 - The emitter is on from 630 (C18 hands off 2 frames after the dial of beat 3) and sits where the frame will be; it is off the stage until the frame comes in, because it follows the frame.
+
+## 2026-10-19, later: the human travels, the cloak stays off, the probes read what the lines name (animatic 05 draft 2)
+
+The owner has not watched this either. It closes the five open items the first section ended on (row 9.5 of `plans/animation-scaffold-2026-10-14.md`); the first draft stays (`out/animatic-05-draft*`), the new one is `out/animatic-05-draft2.mp4` (65.0 s, 1950 frames, half size, h264) with `out/animatic-05-draft2-seq` (composed), `-seq-b` (every tenth frame again), `-fig-seq` (the human alone) and `-figline-seq` (the line-phase frames). The renders are the same five steps as the first draft (`render-shards.mjs` over `Animatic65`, `Animatic65Figure`, `Animatic65FigureLine` on the xsheet's line frames, `Animatic65` on every tenth frame, then `remotion render ... Animatic65 ... --scale=0.5 --concurrency=4 --timeout=180000`), run from a copy of the tree so a concurrent edit could not put two versions of the code in one render. Frames 0-419 differ from the first draft because another worker restaged beats 1 and 2 in the same tree; nothing below reads them.
+
+![the human on frames 740, 800, 826, 840, 864, 896 and 928 of draft 2: she starts 62 px left of where the first draft had her, walks to the frame's edge by 840 and through its left edge by 896; the cloak is off in the line world on 928](beat4-restage/beat4-human-travel-strip.png)
+
+**1. The tables name every prop.** `probe_common.PROP_NATIVE` has `heap` (`((84, 64), (168, 66))`, what the restage measured) and `probe-blocking.py` has a new `actor tables` check that reads `ACTOR_NAMES` and the `ActorName` union of `src/library/worlds/actors.tsx` and refuses a name either table lacks (control: a planted source that draws `lantern` is refused, one whose names the tables carry passes). On the first draft's frames with the heap entry, `probe-all` ran all seven probes and none stopped with an input error (`out/animatic-05-draft-probe-all-heap-entry.txt`: `FAIL: probe-all - 5 of 7 probes passed`, exit 1; the two that fail, eye trace and colour, were read with the new probe code against the first draft's frames, so their numbers are not used). The beats 1-2 worker then added `lid`, `arch`, `ring`, `patch` and `bead` to `actors.tsx`; the check named all five (and the eye trace and colour probes stopped on `lid` as they had on the heap) until their measured rows (`out/b12/table-rows.txt`) went into both tables. With them the check passes on the real tree (`actor tables: ... (arch, bead, box, bubble, gadget, heap, lid, patch, ring, stalk, structure)`), and removing any one of the six rows from either table fails it naming that actor and table (12 of 12, `out/animatic-05-draft2-actor-tables-mutations.txt`).
+
+**2. The eye-trace target follows a carried frame.** `probe_common.resolve_blocking_at` is the one Python copy of `resolveBlocking` (probe-blocking's own copy moved there): the eye trace reads the blocking as it stands on each frame, so while Clawd carries the lit frame in (690-738) the target is the frame's box on that frame, not the box it ends in. Control (in the probe's own control line): the light inside a frame on its way in, read against the box it ends in, fails at 5.5 %, against the box it stands in on that frame passes at 0.0 %. The props' and the human's crops are read where they stand on the frame too, and `blocking_describes` now compares the xsheet's emitter with where the blocking puts it on that frame (the emitter follows the frame), which it could not before: beat 4 was not counted as drawn from its blocking, so no prop crop was read for it. Beat 4 on draft 2, frames 630-929:
+
+```
+as probed: 212 beat-4 frames measured, 2 over 3 %
+  690-691 (2): worst 66.6 % at 690; centroid in frame px (435, 418)..(435, 418); sits on/near ['human crop']; target frame
+masked heap: 212 beat-4 frames measured, 2 over 3 %
+  690-691 (2): worst 66.6 % at 690; centroid in frame px (435, 418)..(435, 418); sits on/near ['human crop']; target frame
+```
+
+The first draft read 94 of 300. What was in them, by reading the first draft's frames and blocking with the new probe code (`out/animatic-05-draft-eyetrace-attribution.txt`): the new target alone leaves 2 over 3 % of 212 measured; with beat 4 again not counted as drawn from its blocking (the old `blocking_describes`, no prop crops read for the beat) the same frames read 62, the 60 beyond 690-691 being the 49 frames of 690-738 that were measured against the frame's final box while it was on its way, and the scattered 4-8 % frames from 728 on, which sit on Clawd's pale contour (centroid x 991-1149, y 484-551), not on the heap; two more, 928-929, sit at the human's line figure. Masking the heap's drawn extent once changes nothing on draft 2 (2 frames both ways), so the heap's pale rim was not the cause. What is left is 690 and 691: the carried frame and its light are not in the picture yet (the frame is at x 1288 and the light's glow has not reached the stage), so the brightest region outside the fixed fills is the human's own pale highlights at the human crop, and the probe asks the eye to find a target that is off the picture. Whether a target wholly outside the picture should be skipped and counted, as a crossing's fading emitter is, is the planner's call; it is not done here.
+
+**3. The human travels toward the frame.** `figure.at` (position keys on the human's canvas, base `x` 333, 62 px left of the first draft's 395) in `v3/blocking/the-frame.json`: 814 to 836 (the pose sheet's step-to-threshold move) 333 -> 395, 864 to 896 (threshold-to-through) 395 -> 485. The animatic reads the keys on the frame each drawing came on (the latest key or breakdown row), so the figure layer changes only on rows the exposure sheet has; the hold-band and twos probes read it that way. `figureCrop` travels with it. The first draft's picture is unchanged on 836-879, where the placement is the first draft's. `probe-story.py` now reads what the three lines name:
+
+```
+pass  s02/sp-4.4  STEP       f800-839
+        ok   after human.near_frame: human toward-frame: (333, 266) -> (395, 266)
+        ok   after codex.near_frame: codex toward-frame: (110, 474) -> (262, 474)
+pass  s02/sp-4.5  THRESHOLD  f840-899
+        ok   after human.at_frame_edge: the figure's rightmost ink is at x 595 on f840, the frame's left edge at x 590: 5 px apart (within 8 px needed)
+pass  s02/sp-4.6  THROUGH    f900-939
+        ok   after human.crosses_frame: the figure's centre is at x 454 on f840 and x 610 on f929, the frame's left edge at x 590
+```
+
+Each has its own control in the probe (a human who walks 70 px passes and 30 px is refused; a hand 4 px past the edge passes and 40 px short is refused; a centre that goes from left of the edge to right of it passes, one that stays left or was across before is refused). The three recipes are in `v3/screenplay.json`'s `state_keys`; `human.at_frame_edge` carries `world: false` (a hold asks nothing of the world), so sp-4.5 needs no world change. `probe-blocking.py` moves the human's body shapes with her travel (control: a human who travels into a prop nothing declares is refused, the same fixture standing still passes). Because she now starts 62 px left, the cloak heap lies round her feet at the rise (the contact the blocking declares) and she walks out of it.
+
+**4. The dropped garment stays dropped.** `human.garment` is `cloak -> swoop` with scope `permanent` in beats-v2.json, so every frame from 760 is the Swoop in every world. `animaticPlan.garmentAt` is now film-wide, and every frame from the drop sets `figure.swoop`, which draws the one-piece mesh and texture without the poncho (`assets/human/cutout-swoop.png`, mirrored in `public/`, and `assets/human/swoop.json`, written by the new `scripts/animation/cut-swoop.py`: the pixels the parts rig's owners map gives to its poncho part are cleared, and the 46 of 580 mesh triangles whose visible pixels are all poncho are dropped, so the contour, which is the mesh's boundary, stops running round it). A lower share (0.9, 65 triangles) split the mesh in two and `probe-loop.py` read 59 of the 142 line-phase frames as open (`closed on 83 of 142`, the first of them 919); at 1.0 it reads `closed on 142 of 142 line-phase frames`. The same code with the human's placement as the first draft had it (a copy of the tree with only `figure.at` removed) against the first draft, 252 frames (every tenth, 890-944 and the home settle's):
+
+```
+differing frames in 420-899: []   first differing frame from 420: 900
+```
+
+so the poncho's return began at 900, where the crossing starts to reduce the world, and nothing before it changed (frames 0-419 are the other worker's). p016 is now a finding: the ledger answers it. What it leaves is a limit of the asset: the plate has no body under the poncho, so the revealed figure is four separate pieces that the rig draws overlapping.
+
+**5. `npm run typecheck`** is clean: a layout is JSON, so `cameraPose.span` arrives as a list of any length like `startXY` does; `LayoutCameraFields` and `LayoutContract` type it `number[]` and `cameraFromLayout` refuses one that is not two frames.
+
+### Gates on draft 2
+
+| Gate | Result |
+| --- | --- |
+| `probe-story.py` | sp-4.1 to sp-4.6 pass; the whole film `FAIL: story - 16 of 29 checks failed` (it was 21), the 16 being beats 3 (sp-3.x), 5, 6, 7 and 8 |
+| `probe-all.py out/animatic-05-draft2-seq ... --shot s02-cant-build-frame` (frames 420-929, all seven probes) | `FAIL: probe-all - 6 of 7 probes passed`: twos, hold band, screen time, loop, colour and determinism pass; the eye trace reads 2 frames over 3 % (above) |
+| `probe-all.py out/animatic-05-draft2-seq ...` (whole film, with the six table rows) | `FAIL: probe-all - 4 of 7 probes passed` (exit 1, no ERROR): twos, screen time, loop (142 of 142 closed) and determinism pass; hold band fails on 3 pose changes at frames 92, 104 and 108 (beat 1, rendered before the other worker's last edits); the eye trace and colour read the whole film, so they fail on beats 5-8 as before (232 frames over 3 %, the first two beat 4's 690-691) |
+| `probe-all.py --contract v3/poses v3/keys v3/charts` | `pass: probe-all --contract - 2 of 2 probe runs passed, 1 shot(s) skipped` |
+| `probe-blocking.py v3/timeline.json v3/blocking` | `pass: blocking-contract - 8 beats staged: actors placed, emitter inside the frame, a card cited, identity boxes apart, props apart` (all eight checks, `actor tables` included) |
+| `measure-staging.py` over 630-930 | `pass: staging - 0 fault(s) over 300 frames` |
+| `npm run typecheck`, `npm run bible` | exit 0 on both (`pass: bible 1f7545722986 covers 1950 frames in 10 tracks (382 items), 16 proposal(s) sit inside their beats, 56 ruling(s) mirrored, and the page shows this bible`) |
+
+The files are `out/animatic-05-draft2-*.txt`.

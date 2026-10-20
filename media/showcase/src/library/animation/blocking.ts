@@ -36,9 +36,10 @@ export type Blocking = {
   contacts?: {a: string; b: string; why: string; /** The film frame the two touch on, when they touch at one moment (a foot against a heap). */ frame?: number; /** What the touch moves: the named thing's anchor shifts by `by[0]` to `by[1]` pixels (`probe-blocking.py` measures it from the `at` keys). */ moves?: {actor: string; by: [number, number]}}[];
   /**
    * The human: HumanPuppet canvas scale and the canvas's top-left. `order` (part names of the parts rig, front first) draws the human as the parts rig in that order and draws only the parts it lists: the animatic sets it on the
-   * frames of a shot whose pose sheet drops a garment (`animaticPlan`), so a part left out is a garment that is off. Never in a blocking file.
+   * frames of a shot whose pose sheet drops a garment (`animaticPlan`), so a part left out is a garment that is off. `swoop` draws the one-piece figure without its poncho (the contour worlds and every frame after the drop that
+   * has no `order`): the garment flip of beats-v2 is permanent. Neither is ever in a blocking file.
    */
-  figure: {scale: number; x: number; y: number; order?: readonly string[]};
+  figure: {scale: number; x: number; y: number; order?: readonly string[]; swoop?: boolean; /** The human's root travel: position keys on the canvas's top-left (`x`, `y` are where the move starts). The animatic reads them on the frame each drawing came on, so the layer changes only where the exposure sheet has a row. */ at?: PlacementKey[]};
   codex: {x: number; y: number; scale: number; at?: PlacementKey[]};
   /** `raise` (0..1, default 0.2) is how far the arm that holds the frame is lifted. */
   clawd: {x: number; y: number; scale: number; raise?: number; at?: PlacementKey[]};
@@ -119,7 +120,7 @@ export const parseBlocking = (json: unknown): Blocking => {
       placementKeys(placed, `actors.${name}`);
     }
   }
-  for (const who of ['codex', 'clawd', 'frame'] as const) placementKeys(b[who] as Record<string, unknown>, who);
+  for (const who of ['codex', 'clawd', 'frame', 'figure'] as const) placementKeys(b[who] as Record<string, unknown>, who);
   if (b.clawd && (b.clawd as Record<string, unknown>).raise !== undefined) num((b.clawd as Record<string, unknown>).raise, 'clawd.raise');
   if (b.frame && (b.frame as Record<string, unknown>).carriedBy !== undefined && (b.frame as Record<string, unknown>).carriedBy !== 'clawd') throw new Error(`blocking: frame.carriedBy must be "clawd", got ${JSON.stringify((b.frame as Record<string, unknown>).carriedBy)}`);
   if (b.emitter !== undefined) {
@@ -169,7 +170,7 @@ const placedAt = (base: {x: number; y: number}, keys: PlacementKey[] | undefined
 };
 
 /**
- * The blocking as it stands on `frame` (a film frame): a prop that is not on stage on it is gone, and everything with position keys is where its keys put it. The result carries no `on`, `off`, `at` or `carriedBy`,
+ * The blocking as it stands on `frame` (a film frame): a prop that is not on stage on it is gone, and everything with position keys is where its keys put it. The result carries no `on`, `off`, `at` or `carriedBy` (the human's `figure` too has its `at` keys resolved),
  * so resolving it again changes nothing. The frame carried by Clawd stands where Clawd's last key puts it and travels with Clawd's offset from that key until then.
  */
 export const resolveBlocking = (b: Blocking, frame: number): Blocking => {
@@ -180,6 +181,7 @@ export const resolveBlocking = (b: Blocking, frame: number): Blocking => {
   const codexAt = placedAt(b.codex, b.codex.at, frame), clawdAt = placedAt(b.clawd, b.clawd.at, frame);
   const clawdEnd = b.clawd.at?.length ? placedAt(b.clawd, b.clawd.at, Infinity) : {x: b.clawd.x, y: b.clawd.y};
   const own = placedAt(b.frame, b.frame.at, frame);
+  const figureAt = placedAt(b.figure, b.figure.at, frame);
   const carry = b.frame.carriedBy === 'clawd' ? {x: clawdAt.x - clawdEnd.x, y: clawdAt.y - clawdEnd.y} : {x: 0, y: 0};
   const actors = b.actors
     ? Object.fromEntries(
@@ -193,6 +195,8 @@ export const resolveBlocking = (b: Blocking, frame: number): Blocking => {
     codex: {...strip(b.codex), ...codexAt},
     clawd: {...strip(b.clawd), ...clawdAt},
     frame: {...strip(b.frame), x: own.x + carry.x, y: own.y + carry.y},
+    figure: {...strip(b.figure), ...figureAt},
+    figureCrop: {...b.figureCrop, x: b.figureCrop.x + figureAt.x - b.figure.x, y: b.figureCrop.y + figureAt.y - b.figure.y},
     ...(actors ? {actors} : {}),
   };
 };

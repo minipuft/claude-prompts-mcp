@@ -29,7 +29,7 @@
     },
     {
      "name": "grip",
-     "frame": 42,
+     "frame": 38,
      "pose": "shoulders drop and round, elbows bend, fingertips curl under the lid's near edge: the gather before the lift",
      "lineOfAction": "the C deepens: spine curves toward the box, elbows out",
      "changes": "anticipation: shoulders down 8 %, elbows bent, hands under the edge",
@@ -37,7 +37,7 @@
     },
     {
      "name": "lift",
-     "frame": 66,
+     "frame": 60,
      "pose": "arms rise to chest height pulling the lid, torso straightens and leans a little back, chin lifts",
      "lineOfAction": "a rising diagonal from the planted feet up through the lifted forearms",
      "changes": "the lid is in the hands: arms up, spine from a C to a straight lean",
@@ -45,7 +45,7 @@
     },
     {
      "name": "awe",
-     "frame": 104,
+     "frame": 110,
      "pose": "one step back, arms drop open and low at the sides, palms out, head tipped back to follow the rising bubble",
      "lineOfAction": "an open S: heels, hips back, ribs forward, chin up",
      "changes": "release: arms fall open, weight shifts back",
@@ -76,146 +76,182 @@
      "hold": 20
     },
     {
+     "name": "joy-c",
+     "frame": 266,
+     "pose": "the spin comes round: arms flung up and out, hips to the left again, face up",
+     "lineOfAction": "the diagonal comes back: the second half of one full turn",
+     "changes": "the turn completes: weight crosses back, arms trade sides again",
+     "hold": 20
+    },
+    {
+     "name": "flinch",
+     "frame": 300,
+     "pose": "hands drawn in to the chest, shoulders up, weight back on the heels",
+     "lineOfAction": "a backward lean from heels to crown, hands as the fulcrum",
+     "changes": "delight tips to overwhelm: the first flinch as the pieces arrive faster",
+     "hold": 16
+    },
+    {
      "name": "shrink",
-     "frame": 272,
+     "frame": 330,
      "pose": "knees bent, back rounded, chin to chest, forearms crossed over the head: small and covering",
      "lineOfAction": "a closing C from the crown down to the bent knees",
      "changes": "joy is overrun: the figure folds in on itself and holds (the field floods)",
-     "hold": 148
+     "hold": 90
     }
    ],
    "breakdowns": [
     {
      "frame": 26,
-     "favour": 0.104
+     "favour": 0.25
     },
     {
      "frame": 30,
-     "favour": 0.352
+     "favour": 0.65
     },
     {
      "frame": 34,
-     "favour": 0.648
+     "favour": 0.98
     },
     {
-     "frame": 38,
-     "favour": 0.896
+     "frame": 54,
+     "favour": 0.25
+    },
+    {
+     "frame": 56,
+     "favour": 0.65
     },
     {
      "frame": 58,
-     "favour": 0.104
+     "favour": 0.98
     },
     {
-     "frame": 60,
-     "favour": 0.352
+     "frame": 86,
+     "favour": 0.25
     },
     {
-     "frame": 62,
-     "favour": 0.648
+     "frame": 90,
+     "favour": 0.35
     },
     {
-     "frame": 64,
-     "favour": 0.896
+     "frame": 94,
+     "favour": 0.45
     },
     {
-     "frame": 92,
-     "favour": 0.156
+     "frame": 98,
+     "favour": 0.6
     },
     {
-     "frame": 96,
-     "favour": 0.58
+     "frame": 102,
+     "favour": 0.75
     },
     {
-     "frame": 100,
-     "favour": 0.844
+     "frame": 106,
+     "favour": 0.98
     },
     {
-     "frame": 130,
-     "favour": 0.055
-    },
-    {
-     "frame": 134,
-     "favour": 0.198
+     "frame": 136,
+     "favour": 0.4
     },
     {
      "frame": 138,
-     "favour": 0.394
+     "favour": 0.25
     },
     {
      "frame": 142,
-     "favour": 0.606
+     "favour": 0.45
     },
     {
      "frame": 146,
-     "favour": 0.802
+     "favour": 0.6
     },
     {
      "frame": 150,
-     "favour": 0.945
+     "favour": 0.75
+    },
+    {
+     "frame": 152,
+     "favour": 0.98
     },
     {
      "frame": 178,
-     "favour": 0.055
-    },
-    {
-     "frame": 180,
-     "favour": 0.198
+     "favour": 0.25
     },
     {
      "frame": 182,
-     "favour": 0.394
-    },
-    {
-     "frame": 184,
-     "favour": 0.606
+     "favour": 0.58
     },
     {
      "frame": 186,
-     "favour": 0.802
+     "favour": 0.74
     },
     {
      "frame": 188,
-     "favour": 0.945
-    },
-    {
-     "frame": 212,
-     "favour": 0.104
+     "favour": 0.98
     },
     {
      "frame": 216,
-     "favour": 0.352
+     "favour": 0.25
     },
     {
      "frame": 220,
-     "favour": 0.648
+     "favour": 0.65
     },
     {
      "frame": 224,
-     "favour": 0.896
+     "favour": 0.99
     },
     {
      "frame": 248,
-     "favour": 0.055
+     "favour": 0.25
     },
     {
      "frame": 252,
-     "favour": 0.198
+     "favour": 0.4
     },
     {
      "frame": 256,
-     "favour": 0.394
+     "favour": 0.55
     },
     {
      "frame": 260,
-     "favour": 0.606
+     "favour": 0.7
     },
     {
      "frame": 264,
-     "favour": 0.802
+     "favour": 0.98
     },
     {
-     "frame": 268,
-     "favour": 0.945
+     "frame": 286,
+     "favour": 0.25
+    },
+    {
+     "frame": 290,
+     "favour": 0.55
+    },
+    {
+     "frame": 294,
+     "favour": 0.7
+    },
+    {
+     "frame": 298,
+     "favour": 0.98
+    },
+    {
+     "frame": 316,
+     "favour": 0.25
+    },
+    {
+     "frame": 320,
+     "favour": 0.55
+    },
+    {
+     "frame": 324,
+     "favour": 0.7
+    },
+    {
+     "frame": 328,
+     "favour": 0.98
     }
    ],
    "note": "every move is 3-6 drawings of 4 frames on twos; keys held 10-24 frames before the move starts; the last key is a declared long hold to the end of the shot (the field floods, the figure stays folded)"

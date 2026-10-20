@@ -4,6 +4,7 @@ import {ThreeCanvas} from '@remotion/three';
 import {useLoader} from '@react-three/fiber';
 import {BufferAttribute, BufferGeometry, DoubleSide, SRGBColorSpace, TextureLoader, type Texture} from 'three';
 import meshFile from '../../../assets/human/mesh.json';
+import swoopFile from '../../../assets/human/swoop.json';
 import {Arap} from '../motion/arap';
 import type {Joints} from '../motion';
 import type {PartName} from '../motion/partsRig';
@@ -21,6 +22,7 @@ export {PAD_SIDE, PAD_TOP, canvasH, canvasW, maskToCanvas};
  *
  * `pose` is joint positions in mask.png pixel space (humanPose.ts has the rest pose and the lift; motion.ts poseAt steps a chart).
  * `order` (front first) draws the figure as the parts rig instead (PartsFigure.tsx, row 6.9): every part its own ARAP mesh, drawn in that order; a world's own `mesh` renderer ignores it.
+ * `swoop` draws the one-piece figure without its poncho (the garment that came off in beat 4 stays off): the mesh and texture variants `cut-swoop.py` writes, for the textured mesh and every world's `mesh` renderer alike.
  * `scale`, `x`, `y` mean what they mean on HumanPuppet: the figure is placed in HumanPuppet's canvas space (skeleton.json `registration`
  * maps mask space into it) and that canvas is scaled by `scale` with its top-left at (x, y).
  */
@@ -40,24 +42,28 @@ const getSolver = (): Arap => {
 };
 const pinsOf = (joints: Joints): Float32Array => Float32Array.from(jointNames.flatMap((n) => joints[n] ?? restPose[n]!));
 
-/** The figure's texture, set up the way every renderer of the mesh needs it (unflipped, sRGB). */
-export const useFigureTexture = (): Texture => {
-  const texture = useLoader(TextureLoader, staticFile('assets/human/cutout.png'));
+/**
+ * The figure's texture, set up the way every renderer of the mesh needs it (unflipped, sRGB). `swoop` is the texture without the poncho's pixels (assets/human/cutout-swoop.png: the pixels the parts rig's owners map gives to its
+ * `poncho` part, alpha 0): the garment flip of beats-v2 is permanent, so a figure drawn after the cloak has dropped never has them back (scripts/animation/cut-swoop.py writes it).
+ */
+export const useFigureTexture = (swoop = false): Texture => {
+  const texture = useLoader(TextureLoader, staticFile(swoop ? 'assets/human/cutout-swoop.png' : 'assets/human/cutout.png'));
   useMemo(() => { texture.flipY = false; texture.colorSpace = SRGBColorSpace; texture.needsUpdate = true; }, [texture]);
   return texture;
 };
 
 /** The deformed figure geometry for `pose`, in HumanPuppet canvas pixels (y up, y = 0 at the canvas top). Re-solved every render. */
-export const useFigureGeometry = (pose: Joints): BufferGeometry => {
+export const useFigureGeometry = (pose: Joints, swoop = false): BufferGeometry => {
   const geometry = useMemo(() => {
     const g = new BufferGeometry();
     const position = new Float32Array(3 * vertexCount);
     maskToWorld(restVertices, position);
     g.setAttribute('position', new BufferAttribute(position, 3));
     g.setAttribute('uv', new BufferAttribute(Float32Array.from(meshFile.uvs), 2));
-    g.setIndex(new BufferAttribute(Uint32Array.from(meshFile.triangles), 1));
+    // `swoop`: the mesh without the triangles that are nearly all poncho, so the contour (the mesh's boundary edges) closes round what is left (swoop.json)
+    g.setIndex(new BufferAttribute(Uint32Array.from(swoop ? swoopFile.triangles : meshFile.triangles), 1));
     return g;
-  }, []);
+  }, [swoop]);
   // layout effects run before ThreeCanvas advances the frame, so the render sees this frame's positions
   useLayoutEffect(() => {
     const position = geometry.getAttribute('position') as BufferAttribute;
@@ -72,9 +78,9 @@ export const useFigureGeometry = (pose: Joints): BufferGeometry => {
 /** What a world's mesh renderer receives: the shared geometry and texture. */
 export type FigureParts = {geometry: BufferGeometry; texture: Texture};
 
-const FigureMesh: React.FC<{pose: Joints; wireframe: boolean; mesh?: (parts: FigureParts) => ReactNode}> = ({pose, wireframe, mesh}) => {
-  const texture = useFigureTexture();
-  const geometry = useFigureGeometry(pose);
+const FigureMesh: React.FC<{pose: Joints; wireframe: boolean; mesh?: (parts: FigureParts) => ReactNode; swoop: boolean}> = ({pose, wireframe, mesh, swoop}) => {
+  const texture = useFigureTexture(swoop);
+  const geometry = useFigureGeometry(pose, swoop);
   if (mesh) return <>{mesh({geometry, texture})}</>;
   return (
     <mesh geometry={geometry} frustumCulled={false}>
@@ -84,7 +90,7 @@ const FigureMesh: React.FC<{pose: Joints; wireframe: boolean; mesh?: (parts: Fig
 };
 
 /** `mesh` replaces the default textured mesh with a world's own renderer over the same geometry (src/library/worlds). */
-export const MeshFigure: React.FC<{pose?: Joints; scale?: number; x?: number; y?: number; wireframe?: boolean; mesh?: (parts: FigureParts) => ReactNode; order?: readonly PartName[]}> = ({pose = restPose, scale = 0.42, x = 0, y = 0, wireframe = false, mesh, order}) => (
+export const MeshFigure: React.FC<{pose?: Joints; scale?: number; x?: number; y?: number; wireframe?: boolean; mesh?: (parts: FigureParts) => ReactNode; order?: readonly PartName[]; swoop?: boolean}> = ({pose = restPose, scale = 0.42, x = 0, y = 0, wireframe = false, mesh, order, swoop = false}) => (
   <ThreeCanvas
     orthographic
     width={Math.round((canvasW + 2 * PAD_SIDE) * scale)}
@@ -92,6 +98,6 @@ export const MeshFigure: React.FC<{pose?: Joints; scale?: number; x?: number; y?
     style={{position: 'absolute', left: x - PAD_SIDE * scale, top: y - PAD_TOP * scale}}
     camera={{left: -PAD_SIDE, right: canvasW + PAD_SIDE, top: PAD_TOP, bottom: -canvasH, near: 0.1, far: 100, position: [0, 0, 10]}}
   >
-    {order && !mesh ? <PartsMesh pose={pose} order={order} /> : <FigureMesh pose={pose} wireframe={wireframe} mesh={mesh} />}
+    {order && !mesh ? <PartsMesh pose={pose} order={order} /> : <FigureMesh pose={pose} wireframe={wireframe} mesh={mesh} swoop={swoop} />}
   </ThreeCanvas>
 );

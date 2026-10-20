@@ -40,10 +40,15 @@
     "v3/proposals/p014-the-screenplay-28-story-points-the-film.json",
     "v3/proposals/p015-three-of-beat-4s-measure-lines-name-the.json",
     "v3/proposals/p016-the-cloak-that-falls-in-beat-4-is-the-sw.json",
+    "v3/proposals/p017-sp-1-2-asks-the-hands-to-appear-after-th.json",
+    "v3/proposals/p018-sp-2-3-asks-for-6-arrivals-on-one-frame.json",
+    "v3/proposals/p019-sp-1-2-sp-2-1-the-light-is-one-constant.json",
+    "v3/proposals/p020-sp-2-3-the-shrink-drawing-is-as-tall-as.json",
+    "v3/proposals/p021-the-frame-is-on-stage-from-frame-0-the-s.json",
     "v3/materials.json",
     "v3/materials.schema.json"
   ],
-  "inputsHash": "069af3444b43430f461178abb4c0634c43d47981b8453b2844dfb9784dc9bd9c",
+  "inputsHash": "067c5879ee37983e5fd8269f853adc6e8fa0505d4f9c2585d5689d0dd01b908b",
   "tracks": [
     {
       "name": "pacing",
@@ -536,6 +541,7 @@
             "want": "",
             "turn": "",
             "after": [
+              "human.near_frame",
               "codex.near_frame"
             ],
             "colour": "steel",
@@ -559,7 +565,9 @@
             "sees": "contact with the frame; a heel tap",
             "want": "to go through",
             "turn": "a choice",
-            "after": [],
+            "after": [
+              "human.at_frame_edge"
+            ],
             "colour": "steel",
             "register": "reverent",
             "emitter": "frame interior",
@@ -582,6 +590,7 @@
             "want": "",
             "turn": "the world changes",
             "after": [
+              "human.crosses_frame",
               "world"
             ],
             "colour": "steel → crayon",
@@ -924,20 +933,40 @@
             "codex": {
               "x": 60,
               "y": 440,
-              "scale": 1.8
+              "scale": 1.8,
+              "at": [
+                {
+                  "frame": 106,
+                  "x": 60
+                },
+                {
+                  "frame": 118,
+                  "x": 84
+                }
+              ]
             },
             "clawd": {
-              "x": 940,
+              "x": 1010,
               "y": 470,
-              "scale": 1.5
+              "scale": 1.5,
+              "at": [
+                {
+                  "frame": 110,
+                  "x": 1010
+                },
+                {
+                  "frame": 122,
+                  "x": 988
+                }
+              ]
             },
             "emitter": {
               "start": [
-                1035,
+                900,
                 402
               ],
               "end": [
-                1045,
+                910,
                 382
               ],
               "anchor": "box seam",
@@ -959,23 +988,43 @@
               "y": 40
             },
             "codex": {
-              "x": 60,
+              "x": 84,
               "y": 440,
-              "scale": 1.8
+              "scale": 1.8,
+              "at": [
+                {
+                  "frame": 330,
+                  "x": 84
+                },
+                {
+                  "frame": 338,
+                  "x": 96
+                }
+              ]
             },
             "clawd": {
-              "x": 940,
+              "x": 988,
               "y": 470,
-              "scale": 1.5
+              "scale": 1.5,
+              "at": [
+                {
+                  "frame": 334,
+                  "x": 988
+                },
+                {
+                  "frame": 346,
+                  "x": 930
+                }
+              ]
             },
             "emitter": {
               "start": [
-                1045,
-                382
+                905,
+                336
               ],
               "end": [
-                1050,
-                350
+                905,
+                336
               ],
               "anchor": "gadget dial",
               "storyPoint": "sp-2.1"
@@ -1029,8 +1078,26 @@
             "provisional": true,
             "figure": {
               "scale": 0.34,
-              "x": 395,
-              "y": 266
+              "x": 333,
+              "y": 266,
+              "at": [
+                {
+                  "frame": 814,
+                  "x": 333
+                },
+                {
+                  "frame": 836,
+                  "x": 395
+                },
+                {
+                  "frame": 864,
+                  "x": 395
+                },
+                {
+                  "frame": 896,
+                  "x": 485
+                }
+              ]
             },
             "codex": {
               "x": 110,
@@ -4778,17 +4845,17 @@
       "items": [
         {
           "start": 0,
-          "end": 42,
+          "end": 38,
           "beat": "arrival",
           "label": "rest-on-lid",
           "data": {
             "hold": 26,
-            "breakdowns": 4
+            "breakdowns": 3
           }
         },
         {
-          "start": 42,
-          "end": 66,
+          "start": 38,
+          "end": 60,
           "beat": "arrival",
           "label": "grip",
           "data": {
@@ -4797,17 +4864,17 @@
           }
         },
         {
-          "start": 66,
-          "end": 104,
+          "start": 60,
+          "end": 110,
           "beat": "arrival",
           "label": "lift",
           "data": {
             "hold": 26,
-            "breakdowns": 3
+            "breakdowns": 6
           }
         },
         {
-          "start": 104,
+          "start": 110,
           "end": 154,
           "beat": "arrival",
           "label": "awe",
@@ -4838,7 +4905,7 @@
         },
         {
           "start": 228,
-          "end": 272,
+          "end": 266,
           "beat": "everything-at-once",
           "label": "joy-b",
           "data": {
@@ -4847,12 +4914,32 @@
           }
         },
         {
-          "start": 272,
+          "start": 266,
+          "end": 300,
+          "beat": "everything-at-once",
+          "label": "joy-c",
+          "data": {
+            "hold": 20,
+            "breakdowns": 4
+          }
+        },
+        {
+          "start": 300,
+          "end": 330,
+          "beat": "everything-at-once",
+          "label": "flinch",
+          "data": {
+            "hold": 16,
+            "breakdowns": 4
+          }
+        },
+        {
+          "start": 330,
           "end": 420,
           "beat": "everything-at-once",
           "label": "shrink",
           "data": {
-            "hold": 148,
+            "hold": 90,
             "breakdowns": 0
           }
         },
@@ -5085,11 +5172,11 @@
               "anchor": "box seam",
               "path": {
                 "from": [
-                  0.8086,
+                  0.7031,
                   0.5583
                 ],
                 "to": [
-                  0.8164,
+                  0.7109,
                   0.5306
                 ]
               },
@@ -5116,12 +5203,12 @@
               "anchor": "gadget dial",
               "path": {
                 "from": [
-                  0.8164,
-                  0.5306
+                  0.707,
+                  0.4667
                 ],
                 "to": [
-                  0.8203,
-                  0.4861
+                  0.707,
+                  0.4667
                 ]
               },
               "intensity": 0.9,
@@ -7054,10 +7141,10 @@
           "start": 800,
           "end": 801,
           "beat": "the-frame",
-          "label": "p015 Three of beat 4's measure lines name the human; the staging can only move Codex and set the hand once",
+          "label": "p015 Three of beat 4's measure lines name the human, and the human now travels so they hold as written",
           "data": {
             "id": "p015",
-            "title": "Three of beat 4's measure lines name the human; the staging can only move Codex and set the hand once",
+            "title": "Three of beat 4's measure lines name the human, and the human now travels so they hold as written",
             "kind": "finding",
             "status": "open",
             "from": "director",
@@ -7067,7 +7154,7 @@
               "beat": "the-frame",
               "frame": 800
             },
-            "text": "Row 9.5 restaged beat 4 wide (D101) and all six story points pass `probe-story.py`, but three measure lines of v3/screenplay.json are not what the probe reads or what the film can show.\n\nsp-4.4 STEP says 'human x moves toward frame >= 60 px; codex contact with heap; heap displacement 4-12 px'. Its `after` key is `codex.near_frame`, which reads CODEX's x (110 -> 262 here, 152 px toward the frame); the human's placement is one number per beat (`figure` in the blocking steps at a cut with the pose, it never eases) and the pose sheet's joints carry no travel (the head goes 469 -> 263 across the six keys in the sheet's space, which is body language, not a walk). The human therefore does not move toward the frame at all. The heap's 4-12 px is measured by probe-blocking.py from the contact the blocking declares (8 px), not by the story probe.\n\nsp-4.5 THRESHOLD says 'hand within 8 px of frame edge'. True at the threshold key only (the right wrist at the frame's left edge, 590); the arms are wider at the turn, rise and step and reach 15 to 25 px into the frame's bar, which the blocking declares as a contact (human and frame). Nothing probes the 8 px.\n\nsp-4.6 THROUGH says 'human crosses frame x'. The figure's body stays left of the frame's left edge (stage x 590) on every frame of the beat; only its hands reach the bar (the figure layer's ink spans x 313 to 657 on frames 690-870, `out/animatic-05-draft-staging.txt`): the through key is a small S in place.\n\nOptions: (a) restate the three measure lines to what is probed (Codex toward the frame by 60 px; the hand at the edge on the threshold key; the figure at the frame on the through key), or (b) give the human travel: a placement key per pose key in the blocking (the figure's x stepping with the pose, as its placement already steps at a cut) or a root translation in the pose sheet, then probe the human's x. (b) is a pose-step and probe-story change, not a staging one.",
+            "text": "The first restage of row 9.5 passed all six story points of beat 4 in `probe-story.py`, but three measure lines of v3/screenplay.json were not what the probe read or what the film showed: sp-4.4 STEP 'human x moves toward frame >= 60 px' (the probe read Codex's x; the human's placement was one number per beat), sp-4.5 THRESHOLD 'hand within 8 px of frame edge' (true at the threshold key by accident, nothing probed it) and sp-4.6 THROUGH 'human crosses frame x' (the body stayed left of the frame's left edge, only the hands reached the bar). Option (b) of the first version was taken: the human travels.\n\nWhat holds now (animatic 05 draft 2). The blocking gives the human root travel, `figure.at` position keys on the canvas's top-left, the same mechanism Codex and Clawd have, read on the frame each drawing came on so the figure layer changes only where the exposure sheet has a row. Beat 4's keys sit in the pose sheet's moves, not its holds: 814 to 836 (step to threshold) 62 px toward the frame, 864 to 896 (threshold to through) 90 px more; the base `figure.x` is 333, 62 px left of where it was, so the hand reaches the frame's edge on the threshold key and not before. `probe-story.py` now reads what each line names: sp-4.4 `human.near_frame` (the human's placement x, 333 -> 395, 62 px toward the frame against the 60 needed) beside Codex's contact; sp-4.5 `human.at_frame_edge` (figure measure `edge-gap`: the figure layer's rightmost ink at x 595 on frame 840, the frame's left edge at 590, 5 px against the 8 allowed); sp-4.6 `human.crosses_frame` (figure measure `centre`: the silhouette's centre at x 454 on frame 840, the previous story point, and x 610 on frame 929, the beat's last frame, against the frame's left edge at 590). The heap's 4-12 px stays measured by probe-blocking.py from the contact the blocking declares (8 px). The crossing is read from the previous story point's frame because the body crosses the edge in the pose sheet's move into the through key (864-896) and settles in its hold; the hold itself does not glide, which the hold-band probe would read as a move.",
             "references": [
               {
                 "id": "totoro-lived-in",
@@ -7086,8 +7173,8 @@
                 ]
               }
             ],
-            "before": "sp-4.4 STEP, 4.5 THRESHOLD and 4.6 THROUGH state their measure in the human's x, the hand's gap and the frame's plane; probe-story reads codex.near_frame, the bound key and the world change",
-            "after": "probe-story passes the six story points; the human's travel toward and through the frame is not drawn or measured (open)",
+            "before": "the human has no travel: sp-4.4, 4.5 and 4.6 pass on Codex, the key and the world change, and the human's body never leaves the left of the frame",
+            "after": "probe-story reads the human on all three lines and passes them: placement 62 px toward the frame, hand 5 px from its edge, body centre from x 454 to x 610 across its left edge at 590",
             "file": "v3/proposals/p015-three-of-beat-4s-measure-lines-name-the.json"
           }
         },
@@ -7095,11 +7182,11 @@
           "start": 760,
           "end": 761,
           "beat": "the-frame",
-          "label": "p016 The cloak that falls in beat 4 is the Swoop's own poncho: is that the cloak?",
+          "label": "p016 The cloak that falls in beat 4 is the Swoop's own poncho, and the ledger says the garment flip is permanent",
           "data": {
             "id": "p016",
-            "title": "The cloak that falls in beat 4 is the Swoop's own poncho: is that the cloak?",
-            "kind": "owner-ask",
+            "title": "The cloak that falls in beat 4 is the Swoop's own poncho, and the ledger says the garment flip is permanent",
+            "kind": "finding",
             "status": "open",
             "from": "director",
             "date": "2026-10-19",
@@ -7108,7 +7195,7 @@
               "beat": "the-frame",
               "frame": 760
             },
-            "text": "D69 says the human arrives wearing the heavy Cloak (the bell-shaped, hooded left direction of human-gen-16) and becomes the Swoop; the pose sheet of beat 4 calls the cloth that drops at frame 760 'cloak', and it is the rig's `poncho` part, the diamond poncho the Swoop itself wears. No heavy Cloak was ever drawn or cut as an asset. Row 9.5 made the garment change the only way the rig can show it: from frame 760 the human is drawn as the parts rig without the poncho part, the cloak heap lies on the floor from the same frame, and the figure loses 14 % of its area ('a lighter figure'). Two consequences are open. First, the figure that is revealed is the Swoop without its diamond top: a collar piece, limbs and hair (out/animatic-05-draft-seq frame 780). Second, the one-piece mesh the contour worlds draw (a crossing's line phase, the line, crayon and shaded worlds) has no poncho to take off, so from frame ~900 and through beats 5 to 7 the poncho is back.\n\nOptions, in the vocabulary: 'hold' keeps what is drawn now (the poncho is the cloak) and accepts the second consequence for the draft (the Swoop builds in beat 5, D69's own default); 'drape' draws the heavy Cloak as a garment of its own over the Swoop before the drop (a new plate and a new part that hangs and folds under its own weight), so the poncho stays and the drop reveals the whole Swoop in every world. Default: hold, until the owner has looked at the revealed figure.",
+            "text": "D69 says the human arrives wearing the heavy Cloak and becomes the Swoop; the pose sheet of beat 4 calls the cloth that drops at frame 760 'cloak', and it is the rig's `poncho` part, the diamond poncho the Swoop itself wears. No heavy Cloak was ever drawn or cut as an asset. The ledger answers what the first version of this record asked: beats-v2.json carries `human.garment: cloak -> swoop, scope permanent` on the-frame, so the flip is permanent and the poncho does not come back. Row 9.5 drew it that way in every world. From frame 760 the parts rig draws the human without the poncho part, the heap lies on the floor from the same frame and the figure loses 14 % of its area; every other figure the film draws from then on (the crossing's line phase, the line, crayon and shaded worlds, the home settle) is the one-piece mesh without the poncho's pixels and its all-poncho triangles (`assets/human/cutout-swoop.png`, `assets/human/swoop.json`, written by `scripts/animation/cut-swoop.py`; the animatic sets `figure.swoop` on every frame from `dropsAt`). compare-renders of the same code with and without the change reads identical on frames 0-899 and different from 900 on (the crossing's reduce phase begins there); the draft's poncho had come back from frame 900. What stays true of the picture is a limit of the asset, not a decision: the plate has no torso or hips under the poncho, so the figure that is revealed is four separate pieces (head with hair and collar, two arms with their sleeves, the legs) that the rig draws overlapping. If the owner wants a body under the cloak, that is a new plate and a new part, and a ruling of its own.",
             "references": [
               {
                 "id": "spirited-away-shoes",
@@ -7125,9 +7212,144 @@
                 ]
               }
             ],
-            "before": "the figure wears its poncho through all of beat 4 and every world",
-            "after": "the rig's poncho leaves on frame 760 in the home world, the heap stays; the contour worlds still draw it",
+            "before": "the figure wears its poncho through all of beat 4's contour worlds and from frame 900 in every world after it",
+            "after": "the poncho is off from frame 760 in every world, the heap stays; a ruling is needed only if the revealed figure should have a body under the cloak",
             "file": "v3/proposals/p016-the-cloak-that-falls-in-beat-4-is-the-sw.json"
+          }
+        },
+        {
+          "start": 60,
+          "end": 61,
+          "beat": "arrival",
+          "label": "p017 sp-1.2 asks the hands to appear after the lift: the human's hands are drawn from frame 0",
+          "data": {
+            "id": "p017",
+            "title": "sp-1.2 asks the hands to appear after the lift: the human's hands are drawn from frame 0",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "arrival",
+              "frame": 60
+            },
+            "text": "sp-1.1 says the cloak covers both hands and sp-1.2 says the hands are visible after the lift, not before. In animatic 06 (out/animatic-06-draft-seq, frame 0) both hands are drawn at her chest from the first frame. The cause is in how the figure is drawn, not in the staging: only a shot whose pose sheet drops a garment (`dropsAt`) is drawn as the parts rig in a draw order that can put cloth over the hands (`animaticPlan.garmentAt`, beat 4), and s01's sheet drops nothing, so its human is the one-piece mesh with hands and forearms in front. Nothing in the blocking, the key sheet or the pose sheet can hide a hand. Two ways to meet the line: give s01 a sleeve (a part drawn over the hands until the lift, which the parts rig's `order` already knows how to place) or read the line against the rest-on-lid pose, where the forearms lie on the lid and the hands are not the point of the picture. The staging of row 9.6 cannot do either, and the first is a change to the figure's drawing (animaticPlan, parts.tsx).",
+            "references": [],
+            "before": "both hands are drawn at the chest on frame 0",
+            "after": "the hands appear on the lift (60)",
+            "file": "v3/proposals/p017-sp-1-2-asks-the-hands-to-appear-after-th.json"
+          }
+        },
+        {
+          "start": 330,
+          "end": 331,
+          "beat": "everything-at-once",
+          "label": "p018 sp-2.3 asks for 6 arrivals on one frame: the blocking holds one actor per kind and the count lists five kinds",
+          "data": {
+            "id": "p018",
+            "title": "sp-2.3 asks for 6 arrivals on one frame: the blocking holds one actor per kind and the count lists five kinds",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "everything-at-once",
+              "frame": 330
+            },
+            "text": "`blocking.actors` is a dictionary by name and `pieces.count` reads the five names stalk, arch, ring, patch and bead, so one frame can bring at most five of them and in practice fewer, because the stagger of sp-2.2 uses some of the names first. In animatic 06 the stalk comes on 232 and the arch on 244 (twelve frames apart, count 0 to 2 by 329) and the ring, the patch and the bead come on together on 330: three named props, which draw as about twenty pieces (the patch is four blocks, the bead fifteen beads), but the probe, the tables and the contacts count names. Options for the planner: instance names (`stalk-2`, matched by prefix in probe-story's count, ACTOR_NAMES, PROP_NATIVE and PROP_EXTENT) or a `count` on an actor that draws that many copies spread by a stated rule. Until one is chosen the measure line reads 3 where it asks for 6.",
+            "references": [],
+            "before": "one stalk the whole beat",
+            "after": "ring, patch and bead arrive on 330 (3 named props, about 20 drawn pieces); 6 named arrivals need instances",
+            "file": "v3/proposals/p018-sp-2-3-asks-for-6-arrivals-on-one-frame.json"
+          }
+        },
+        {
+          "start": 60,
+          "end": 61,
+          "beat": "arrival",
+          "label": "p019 sp-1.2, sp-2.1: the light is one constant emitter per beat, so it cannot widen after the lid or jump at the pop",
+          "data": {
+            "id": "p019",
+            "title": "sp-1.2, sp-2.1: the light is one constant emitter per beat, so it cannot widen after the lid or jump at the pop",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "arrival",
+              "frame": 60
+            },
+            "text": "sp-1.2 measures 'light area grows after the lid, lag of 4 frames or more' and sp-2.1 'field hue area jumps' at the pop. The animatic draws each beat's light as one emitter at a fixed radius (260 stage px, `EMITTER_RADIUS` in animaticPlan.ts) and one intensity (light.json `intensity`, `on`, `off`): the only thing that moves is the emitter's position (the blocking's emitter start to end, `follows: frame`). Nothing varies the lit area from frame to frame, so the seam stays the same size while the lid rises (out/animatic-06-draft-seq, frames 54-72) and the pop changes only what is in front of the glow. The lid, the bubble and the gadget carry beat 1 and the pop in the staging of row 9.6; the light lines are left. What would meet them: a light key track in the contract (`{frame, intensity or radius}` on the emitter, read by `emitterIntensityAt` and animaticPlan, compiled by compile-light.mjs from the blocking emitter), or the emitter list the README already allows for a handoff, which the animatic reads as a single object. The probe to write with it: area of the pixels above the glow's level against frames, with the lid's frame as its reference.",
+            "references": [],
+            "before": "a constant glow through the lift and the pop",
+            "after": "the seam widens at least 4 frames after the lid starts to rise; the field's hue area jumps on the pop",
+            "file": "v3/proposals/p019-sp-1-2-sp-2-1-the-light-is-one-constant.json"
+          }
+        },
+        {
+          "start": 330,
+          "end": 331,
+          "beat": "everything-at-once",
+          "label": "p020 sp-2.3: the shrink drawing is as tall as the joy drawings; 'height falls 15 %' passes only on beat 3's cut",
+          "data": {
+            "id": "p020",
+            "title": "sp-2.3: the shrink drawing is as tall as the joy drawings; 'height falls 15 %' passes only on beat 3's cut",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "everything-at-once",
+              "frame": 330
+            },
+            "text": "`human.small` reads the figure layer's height between frame 329 and frame 429 and finds -20.7 %. Both numbers are the cut: the figure is 720 px tall (clipped at the canvas) on every frame from 329 to 419, the `shrink` drawing included, and 571 px on frame 420, where beat 3's smaller figure begins (out/animatic-06-draft-fig-seq; measured in out/b12/measure.py output). So the line is met by the film's next beat, not by the human folding. The `shrink` key draws a head at y 208 and ankles at y 838 in key units, against 205 and 838 for the brace before it: the solver's fold has no crouch, the line-of-action bow is already declared, and the figure's scale is one number per beat (`figure.scale`, which steps at a cut and cannot be keyed). To make the human smaller inside beat 2: a scale on the `figure.at` keys that the beat-4 work added (x and y today) or a crouch on the pose spec that lowers the head and bends the knees. The window of the story point should also stop at its own beat's end (419), or the probe keeps reading the cut.",
+            "references": [],
+            "before": "720 px tall on 329 and on 419; the 20.7 % is beat 3's cut",
+            "after": "the figure's silhouette height falls 15 % or more inside 330-419",
+            "file": "v3/proposals/p020-sp-2-3-the-shrink-drawing-is-as-tall-as.json"
+          }
+        },
+        {
+          "start": 0,
+          "end": 1,
+          "beat": "arrival",
+          "label": "p021 The frame is on stage from frame 0; the script carries it in at sp-4.2",
+          "data": {
+            "id": "p021",
+            "title": "The frame is on stage from frame 0; the script carries it in at sp-4.2",
+            "kind": "finding",
+            "status": "open",
+            "from": "director",
+            "date": "2026-10-19",
+            "ruling": null,
+            "anchor": {
+              "beat": "arrival",
+              "frame": 0
+            },
+            "text": "On the beats 1-2 restage strip (and on every earlier render) the gold frame hangs at top right from frame 0. The screenplay sp-4.2 has Clawd carry the lit frame in: it is the portal, and its first appearance is the turn of beat 4. The beat-4 restage made it enter at 690, but the arrival and everything-at-once blocking still place it. Nothing checked this because no probe reads the film themes. The screenplay now carries a theme ledger (th-frame-portal: the frame prop is absent before 690 and present from 690 to 1950) and row 9.8 puts theme invariants on the blocking; the beats 1-3 blocking drops the frame as part of that row.",
+            "references": [
+              {
+                "id": "spirited-away-shoes",
+                "kind": "board card",
+                "section": "9 · Timing and acting (D88, D92, named 2026-10-17)",
+                "title": "Spirited Away (2001): Chihiro taps her heel into her shoe",
+                "borrow": [
+                  "one unneeded gesture that proves the body is real",
+                  "the pause before a step through a threshold (beat 4, the frame)"
+                ],
+                "governs": [
+                  "D92",
+                  "D89"
+                ]
+              }
+            ],
+            "before": "frame prop present in arrival, everything-at-once and cant-build blocking from frame 0",
+            "after": "frame prop on from 690 only; theme invariant th-frame-portal enforced by probe-theme",
+            "file": "v3/proposals/p021-the-frame-is-on-stage-from-frame-0-the-s.json"
           }
         }
       ]

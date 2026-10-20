@@ -14,6 +14,7 @@ it resolves to must exist on the frame; a line outside the table, or whose sourc
   box seam | gadget dial |       the xsheet emitter (the lamp: at the seam, then the gadget's dial,   a point (3 % of the width)
     gadget                         on the floor where the join is lost, rimming the structure)
   frame interior                 blocking `frame` of the frame's beat (v3/blocking/<beat>.json)     a region: 0 inside it, else the distance to its edge
+                                   AS IT STANDS ON THE FRAME (a frame carried in by Clawd travels: `at` keys and `carriedBy`, `probe_common.resolve_blocking_at`)
   the empty join | the lit join  blocking `join` of the frame's beat                                 a point
   the human                      the human's crop: blocking `figureCrop` (a real shot: the occluder     a region: 0 inside it, else the distance to its edge
                                    mask's `figure` group)
@@ -134,6 +135,13 @@ def controls(a, ctl):
     d_lamp_brighter = offset(both, {"rect": rect}, None, a.share, ctl, a.blur)
     d_interior = offset(inner(120), {"rect": rect}, None, a.share, ctl, a.blur)
     d_lamp_named = offset(both, {"x": lamp["x"], "y": lamp["y"]}, None, a.share, ctl, a.blur)
+    # a frame that travels: carried in by Clawd it stands 250 px right of where it ends on frame 30 (the blocking's `at` keys and `carriedBy`); the target is where it is on THAT frame, so the light in it passes and the same frame read against
+    # the box it ends in fails (resolve_blocking_at, the mirror of the animatic's resolveBlocking)
+    bl_walk = {"frame": {"x": 700, "y": 100, "width": 360, "height": 260, "carriedBy": "clawd"}, "clawd": {"x": 1500, "y": 300, "at": [{"frame": 10, "x": 1500}, {"frame": 50, "x": 1000}]}}
+    travelling = _blob(_field(), ((resolve_blocking_at(bl_walk, 30)["frame"]["x"] + 180) * S, 230 * S), 120)
+    t_moving, _ = resolve_target("frame interior", "story point sp-w", None, resolve_blocking_at(bl_walk, 30)); t_final, _ = resolve_target("frame interior", "story point sp-w", None, bl_walk)
+    d_travel = offset(travelling, t_moving, None, a.share, ctl, a.blur); d_final = offset(travelling, t_final, None, a.share, ctl, a.blur)
+    walk_x = (resolve_blocking_at(bl_walk, 30)["frame"]["x"], resolve_blocking_at(bl_walk, 9)["frame"]["x"], resolve_blocking_at(bl_walk, 50)["frame"]["x"])
     # D100 `eye`: a story point with eye "the human" is read before its emitter; the lamp brightest outside the human's crop FAILS, the human's own light passes, no `eye` is the lamp again
     bl = {"figureCrop": {"x": 380, "y": 0, "width": 500, "height": 720}}; pts = [{"id": "sp-c", "beat": "b", "frame": 0, "emitter": "gadget dial", "eye": "the human"}, {"id": "sp-d", "beat": "d", "frame": 0, "emitter": "gadget dial"}]
     lamp_o = {"x": 1000, "y": 300}; both_h = _blob(_blob(_field(), (lamp_o["x"] * S, lamp_o["y"] * S), 250, sigma=10.0), (640 * S, 400 * S), 120)
@@ -149,6 +157,7 @@ def controls(a, ctl):
     refused = resolve_target("the leaf", "story point sp-5.3", None, {})[1]; kind_ok = (table_kind("box seam, tiny"), table_kind("gadget, rimming the structure"), table_kind("none readable"), table_kind("gadgetry"), table_kind("the lit join, then each gate in sequence"))
     ok = (on is not None and on <= a.tolerance and off is not None and off > a.tolerance and raw > a.tolerance and moved > a.tolerance and sp <= a.tolerance and (a.blur == 0 or sp_raw > sp)
           and d_lamp_brighter > a.tolerance and d_interior <= a.tolerance and d_lamp_named <= a.tolerance
+          and d_travel <= a.tolerance and d_final > a.tolerance and walk_x == (950.0, 1200.0, 700.0)
           and l_h == "the human" and d_h_lamp > a.tolerance and d_h_own <= a.tolerance and l_d == "gadget dial" and d_d_lamp <= a.tolerance and trio_none is None
           and d_all > a.tolerance and d_reg <= a.tolerance and refused and "the leaf" in refused and kind_ok == ("emitter", "emitter", "none", None, "join"))
     return ok, (f"bright blob 10 % of the width off the emitter -> FAIL (offset {100 * off:.1f} % > {100 * a.tolerance:.0f} %); blob on the emitter -> pass ({100 * on:.1f} %); "
@@ -157,6 +166,7 @@ def controls(a, ctl):
                 f"120 lone white specks, brighter than the blob and a share of the 0.5 % ranked, are not a region: offset {100 * sp:.1f} % blurred, {100 * sp_raw:.1f} % unblurred; "
                 f"target the frame interior: a lamp brighter than the interior's light, outside it -> FAIL ({100 * d_lamp_brighter:.1f} %), the interior's light alone -> pass ({100 * d_interior:.1f} %), "
                 f"and the same frame against the lamp as the target -> pass ({100 * d_lamp_named:.1f} %), so the target is what is read; "
+                f"a frame carried in by Clawd (frame x {walk_x[1]:.0f} before his first key, {walk_x[0]:.0f} on frame 30, {walk_x[2]:.0f} where it ends) with its light inside it on frame 30: judged against the box it ends in -> FAIL ({100 * d_final:.1f} %), against the box it stands in on that frame -> pass ({100 * d_travel:.1f} %); "
                 f"a story point with eye 'the human' (read before its emitter 'gadget dial'): the lamp brightest outside the human's crop -> FAIL ({100 * d_h_lamp:.1f} %), the human's own light -> pass ({100 * d_h_own:.1f} %), "
                 f"the same frame under a point with no eye (the lamp) -> pass ({100 * d_d_lamp:.1f} %), and a blocking without the cast's crops resolves no trio; "
                 f"a pale halo in the kit's colour: masked everywhere it is eaten -> FAIL ({100 * d_all:.1f} %), masked only inside the prop's crop it is found -> pass ({100 * d_reg:.1f} %); "
@@ -234,18 +244,18 @@ def main():
     for f, p in frames.items():
         b = beat_at(tl, f); bid = b["id"] if b else None
         line, source = story_target(f, bid, points, beats) if bid else (None, "the frame is on no beat of the timeline")
-        row = xs.get(f) or {}; em = row.get("emitter")
-        tgt, why = resolve_target(line, source, em, blocking.get(bid)) if line is not None else (None, f"{source}: no target named")
+        row = xs.get(f) or {}; em = row.get("emitter"); bl_f = resolve_blocking_at(blocking.get(bid), f)      # the blocking as it stands on THIS frame: a frame carried in, the human on her way, a prop not yet on
+        tgt, why = resolve_target(line, source, em, bl_f) if line is not None else (None, f"{source}: no target named")
         if tgt is None: span_of(refused, why, f); continue
         if tgt["kind"] == "none": span_of(unreadable, f"{line!r} ({source})", f); continue
         if tgt.get("missing"): skipped += 1; continue
         if isinstance(em, dict) and em.get("strength", 1.0) < a.min_strength: fading += 1; continue
         cam = camera_of(xs, f); img = load_rgb(p)
         if tgt["kind"] in ("human", "trio"):
-            m, why = cast_mask_for(tgt, img.shape, cam, blocking.get(bid) if bid in drawn_from else None)
+            m, why = cast_mask_for(tgt, img.shape, cam, bl_f if bid in drawn_from else None)
             if m is None: span_of(refused, f"{line!r} ({source}): {why}", f); continue
             tgt = {**tgt, "mask": m}
-        region = prop_region_from_blocking(img.shape, cam, blocking[bid]) if bid in drawn_from else None
+        region = prop_region_from_blocking(img.shape, cam, bl_f) if bid in drawn_from else None
         d = offset(img, tgt, cam, a.share, everywhere if region is not None else hexes_all, a.blur, plate, owned if region is not None else None, region)
         if d is None: skipped += 1; continue
         n += 1; kinds[tgt["kind"]] = kinds.get(tgt["kind"], 0) + 1

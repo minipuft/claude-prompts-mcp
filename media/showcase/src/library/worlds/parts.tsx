@@ -221,7 +221,7 @@ export const textureWidth = (contractPx: number, figureScale: number): number =>
 const orthoResolution = (scale: number): [number, number] => [Math.round((canvasW + 2 * PAD_SIDE) * scale), Math.round((canvasH + PAD_TOP) * scale)];
 
 export const FlatFigure: React.FC<{pose: Joints; fill: number; line: LineSpec | null; blocking?: Blocking; order?: readonly PartName[]}> = ({pose, fill, line, blocking = STAGE, order}) => {
-  const {order: placedOrder, ...place} = blocking.figure;
+  const {order: placedOrder, at: _travel, ...place} = blocking.figure;
   if (fill >= 1 && !line) return <MeshFigure pose={pose} order={order ?? (placedOrder as readonly PartName[] | undefined)} {...place} />;
   return (
     <MeshFigure

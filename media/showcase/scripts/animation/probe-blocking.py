@@ -19,10 +19,12 @@ The ledger is --ledger, else the timeline's recorded ledger path, else beats-v2.
     in ascending frames, a `contacts` entry's `frame` lies inside the beat. The props apart check above reads the blocking on sampled frames of the beat (every SAMPLE_EVERY, every key frame of the figure's sheet,
     every `on`, `off` and `at` frame and the frame before it): a prop is tested only while it is on stage, Codex, Clawd and the frame where their keys put them, and the human's body as the key it holds on that frame.
     A contact with a `frame` must touch on that frame and, with `moves: {actor, by: [lo, hi]}`, the named prop's anchor must have moved by lo to hi pixels thirty frames after it.
+  - actor tables: every actor name src/library/worlds/actors.tsx draws (`ACTOR_NAMES` and the `ActorName` union) has a native size in probe_common.PROP_NATIVE (the eye trace and colour probes read it) and an extent in PROP_EXTENT
+    (props apart): a prop the renderer can draw and a table lacks stops those probes with an input error on the first beat that names it (the heap did, on the restaged beat 4).
 Control first: an actor with no position, an emitter outside the frame, a missing card, overlapping identity boxes, a beat with no file, two props that overlap undeclared, a declaration for a
 pair that does not touch, a stalk in the air, a prop off the stage, a prop that comes on after its beat has ended, a position key outside its beat and a prop that goes off before it comes on must each fail; the clean fixture must pass, and so must the same two props with their contact declared.
 """
-import argparse, copy, math, os, sys
+import argparse, copy, math, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from probe_common import *
 from fixtures import make
@@ -85,48 +87,15 @@ def overlap(a, b):
     return w > 0 and h > 0
 
 
-# ---------- time: the blocking on one frame (mirrors resolveBlocking in src/library/animation/blocking.ts) ----------
+# ---------- time: the blocking on one frame (`probe_common.resolve_blocking_at`, the mirror of resolveBlocking in src/library/animation/blocking.ts) ----------
 SAMPLE_EVERY = 10    # frames between the sampled frames of a beat
 AFTER_CONTACT = 30   # frames after a contact a shifted prop is measured at
-
-
-def smooth(t): return t * t * (3 - 2 * t)
-
-
-def placed_at(base, keys, f):
-    """Where something stands on film frame `f`: its base before the first key, the last key after it, a smooth move between two keys. `f` None or infinity: the last key (None: the base)."""
-    x, y = base["x"], base["y"]
-    if not keys or f is None or f < keys[0]["frame"]: return x, y
-    i = max(n for n, k in enumerate(keys) if k["frame"] <= f)
-    a = keys[i]; b = keys[i + 1] if i + 1 < len(keys) else None
-    ay = a.get("y", y)
-    if b is None: return a["x"], ay
-    t = smooth((f - a["frame"]) / (b["frame"] - a["frame"]))
-    return a["x"] + (b["x"] - a["x"]) * t, ay + (b.get("y", y) - ay) * t
-
-
-def resolve_at(bl, f):
-    """The blocking as it stands on frame `f`: a prop that is not on stage is gone, everything with position keys is where its keys put it, and the frame a `carriedBy: clawd` frame moves with Clawd's offset from his last key. `f` None is the file read as it is (nothing timed)."""
-    if f is None: return bl
-    out = copy.deepcopy(bl)
-    for who in ("codex", "clawd"):
-        if isinstance(bl.get(who), dict) and num(bl[who].get("x")): out[who]["x"], out[who]["y"] = placed_at(bl[who], bl[who].get("at"), f)
-    fr = bl.get("frame")
-    if isinstance(fr, dict) and num(fr.get("x")):
-        x, y = placed_at(fr, fr.get("at"), f)
-        if fr.get("carriedBy") == "clawd" and isinstance(bl.get("clawd"), dict):
-            cx, cy = placed_at(bl["clawd"], bl["clawd"].get("at"), f); ex, ey = placed_at(bl["clawd"], bl["clawd"].get("at"), math.inf) if bl["clawd"].get("at") else (bl["clawd"]["x"], bl["clawd"]["y"])
-            x, y = x + cx - ex, y + cy - ey
-        out["frame"]["x"], out["frame"]["y"] = x, y
-    if isinstance(bl.get("actors"), dict):
-        out["actors"] = {n: {**a, **dict(zip(("x", "y"), placed_at(a, a.get("at"), f)))} for n, a in bl["actors"].items() if isinstance(a, dict) and (a.get("on") is None or a["on"] <= f) and (a.get("off") is None or f < a["off"])}
-    return out
 
 
 def timed_frames(bl, beat, extra=()):
     """The frames of a beat the blocking is read on: every SAMPLE_EVERY, the frame each prop comes on and goes off (and the one before), every position key (and the one before), and `extra` (key frames of the sheet)."""
     marks = {beat["start"], beat["end"] - 1, *extra}
-    pieces = [bl.get(k) for k in ("codex", "clawd", "frame")] + [a for a in (bl.get("actors") or {}).values() if isinstance(a, dict)]
+    pieces = [bl.get(k) for k in ("codex", "clawd", "frame", "figure")] + [a for a in (bl.get("actors") or {}).values() if isinstance(a, dict)]
     for o in pieces:
         if not isinstance(o, dict): continue
         marks.update(v for v in (o.get("on"), o.get("off")) if num(v))
@@ -150,7 +119,7 @@ def time_faults(bl, beat, drops=()):
         if num(on) and on >= hi: out.append(f"the {name} comes on at frame {on}, after the beat ends at {hi}")
         if num(off) and off <= lo: out.append(f"the {name} goes off at frame {off}, before the beat starts at {lo}")
         if num(on) and num(off) and off <= on: out.append(f"the {name} goes off at frame {off}, not after it comes on at {on}")
-    for who, o in [(w, bl.get(w)) for w in ("codex", "clawd", "frame")] + [(n, a) for n, a in (bl.get("actors") or {}).items()]:
+    for who, o in [(w, bl.get(w)) for w in ("codex", "clawd", "frame", "figure")] + [(n, a) for n, a in (bl.get("actors") or {}).items()]:
         if not isinstance(o, dict) or o.get("at") is None: continue
         ks = o["at"]
         if not (isinstance(ks, list) and ks and all(isinstance(k, dict) and num(k.get("frame")) and num(k.get("x")) for k in ks)): out.append(f"the {who}'s position keys must be a list of {{frame, x, y?}}"); continue
@@ -165,7 +134,7 @@ def time_faults(bl, beat, drops=()):
 # ---------- props apart ----------
 # Extents of each placeholder prop relative to its anchor, per unit scale, as (left, top, right, bottom) in stage pixels: the bounding box of the pixels that differ between the animatic's still
 # with the prop and without it (render-props.mjs, 1280x720, camera locked), divided by the scale it stood at. The stalk is measured facing left and mirrors when it faces right.
-PROP_EXTENT = {"box": (-67, -156, 106, 1), "bubble": (-128, -132, 126, 128), "gadget": (-56, -169, 108, 69), "stalk": (-51, -333, 43, 10), "structure": (-112, -302, 112, 2), "heap": (-88, -64, 88, 4)}
+PROP_EXTENT = {"box": (-67, -156, 106, 1), "bubble": (-128, -132, 126, 128), "gadget": (-56, -169, 108, 69), "stalk": (-51, -333, 43, 10), "structure": (-112, -302, 112, 2), "heap": (-88, -64, 88, 4), "lid": (-78, -23, 108, 68), "arch": (-62, -172, 62, 3), "ring": (-53, -53, 53, 53), "patch": (-58, -90, 58, 2), "bead": (-8, -8, 148, 47)}
 STANDS = ("box", "stalk", "structure", "heap")   # anchored at a foot: it stands on the floor
 FLOOR_BAND = (-60, 260)                  # the foot's y relative to the floor line: the stage is 3/4 view, so the floor is a band, not a line
 TOUCH = 4                                # pixels two rectangles may share each way before they count as overlapping
@@ -243,7 +212,7 @@ def prop_faults(bl, figure, frames=(None,)):
     out, seen_text, touching = [], set(), set()
     floor = (bl.get("floor") or {}).get("y")
     declared = {}
-    first = resolve_at(bl, frames[0])
+    first = resolve_blocking_at(bl, frames[0])
     names_all = set(rects_of(first)) | {"human"}
     for c in bl.get("contacts") or []:
         if not (isinstance(c, dict) and c.get("a") in names_all | set(bl.get("actors") or {}) and c.get("b") in names_all | set(bl.get("actors") or {}) and c["a"] != c["b"] and isinstance(c.get("why"), str) and c["why"].strip()):
@@ -252,7 +221,10 @@ def prop_faults(bl, figure, frames=(None,)):
     def add(kind, text, f):
         if text not in seen_text: seen_text.add(text); out.append((kind, text if f is None else f"{text} (from frame {f})"))
     for f in frames:
-        cur = resolve_at(bl, f); rects = rects_of(cur); shapes = held_shapes(figure, f)
+        cur = resolve_blocking_at(bl, f); rects = rects_of(cur); shapes = held_shapes(figure, f)
+        if isinstance(bl.get("figure"), dict) and isinstance(cur.get("figure"), dict):      # the human travels (`figure.at`): the key's body is drawn where the placement stands on this frame
+            dx, dy = cur["figure"]["x"] - bl["figure"]["x"], cur["figure"]["y"] - bl["figure"]["y"]
+            if dx or dy: shapes = [(sh[0], [(x + dx, y + dy) for x, y in sh[1]], *sh[2:]) for sh in shapes]
         acts = cur.get("actors") if isinstance(cur.get("actors"), dict) else {}
         for n, a in acts.items():
             if n in PROP_EXTENT and xy(a) and num(a.get("scale")) and n in STANDS and num(floor) and not (floor + FLOOR_BAND[0] <= a["y"] <= floor + FLOOR_BAND[1]):
@@ -277,7 +249,7 @@ def prop_faults(bl, figure, frames=(None,)):
         a, b = sorted(key)
         if key not in touching: out.append(("contact", f"the contact of the {a} and the {b} ({d['why']!r}) is declared but they do not overlap" + ("" if frames == (None,) else " on any frame of the beat")))
         if num(d.get("frame")) and frames != (None,):
-            cur = resolve_at(bl, d["frame"]); rects = rects_of(cur)
+            cur = resolve_blocking_at(bl, d["frame"]); rects = rects_of(cur)
             if a in rects and b in rects:
                 w, h = overlap_amount(rects[a], rects[b])
                 if min(w, h) < -TOUCH: out.append(("contact", f"the {a} and the {b} are declared to touch on frame {d['frame']} ({d['why']!r}) and are {-min(w, h):.0f} px apart"))
@@ -286,10 +258,21 @@ def prop_faults(bl, figure, frames=(None,)):
             who = (bl.get("actors") or {}).get(mv.get("actor")) if isinstance(mv, dict) else None
             lo_hi = mv.get("by") if isinstance(mv, dict) else None
             if not (who and num(d.get("frame")) and isinstance(lo_hi, list) and len(lo_hi) == 2): out.append(("contact", f"contact {d!r}: `moves` needs a prop of `actors`, a contact `frame` and `by: [lo, hi]`")); continue
-            a0, a1 = resolve_at(bl, d["frame"] - 1)["actors"][mv["actor"]], resolve_at(bl, d["frame"] + AFTER_CONTACT)["actors"][mv["actor"]]
+            a0, a1 = resolve_blocking_at(bl, d["frame"] - 1)["actors"][mv["actor"]], resolve_blocking_at(bl, d["frame"] + AFTER_CONTACT)["actors"][mv["actor"]]
             shift = math.hypot(a1["x"] - a0["x"], a1["y"] - a0["y"])
             if not lo_hi[0] <= shift <= lo_hi[1]: out.append(("contact", f"the {mv['actor']} moves {shift:.1f} px between frame {d['frame'] - 1} and {d['frame'] + AFTER_CONTACT}; the contact declares {lo_hi[0]} to {lo_hi[1]}"))
     return out
+
+
+ACTORS_SOURCE = ("src", "library", "worlds", "actors.tsx")
+
+
+def actor_table_faults(source):
+    """Faults of the two actor tables against the actors.tsx text `source`: [text]. The names are read from `ACTOR_NAMES` and from the `ActorName` union; each must be in `probe_common.PROP_NATIVE` and in `PROP_EXTENT`."""
+    m_list = re.search(r"ACTOR_NAMES[^=]*=\s*\[([^\]]*)\]", source); m_union = re.search(r"type\s+ActorName\s*=\s*([^;]+);", source)
+    if not m_list or not m_union: return ["actors.tsx no longer declares `ACTOR_NAMES` and `type ActorName` where this probe reads them"]
+    names = set(re.findall(r"'([A-Za-z_]+)'", m_list.group(1))) | set(re.findall(r"'([A-Za-z_]+)'", m_union.group(1)))
+    return [f"actors.tsx draws {n!r} and {where} has no entry for it" for n in sorted(names) for where, table in (("probe_common.PROP_NATIVE", PROP_NATIVE), ("probe-blocking.PROP_EXTENT", PROP_EXTENT)) if n not in table]
 
 
 def check_blocking(tl, ledger, blocks, exempt, episode_root=None, skeleton=None):
@@ -320,7 +303,7 @@ def check_blocking(tl, ledger, blocks, exempt, episode_root=None, skeleton=None)
         frames = tuple(timed_frames(bl, b, [sh[3] for sh in fig if len(sh) > 3 and b["start"] <= sh[3] < b["end"]])) if not tf else (None,)
         said = set()
         for f in frames:
-            bx = identity_boxes(resolve_at(bl, f)); names = sorted(bx)
+            bx = identity_boxes(resolve_blocking_at(bl, f)); names = sorted(bx)
             for i, m in enumerate(names):
                 for n in names[i + 1:]:
                     if overlap(bx[m], bx[n]) and (m, n) not in said: said.add((m, n)); pr["boxes"].append(f"beat {b['id']!r}: the {m} box and the {n} box overlap" + ("" if f is None else f" (from frame {f})"))
@@ -383,9 +366,15 @@ def main():
     heap_beat = {**copy.deepcopy(block0["a"]), "actors": {"heap": {"x": 600, "y": 470, "scale": 1.0, "on": 20}}}
     tripped["a heap that lands on another frame than the cloak drops"] = [("props and positions timed inside their beat", False, t) for t in time_faults(heap_beat, tl0["beats"][0], [10])]
     clear_heap = time_faults(heap_beat, tl0["beats"][0], [20])
+    drawn = "export type ActorName = 'box' | 'heap' | 'lantern';\nexport const ACTOR_NAMES: readonly ActorName[] = ['box', 'heap', 'lantern'];\n"
+    walker = {**copy.deepcopy(body), "figure": {"scale": 1.0, "x": 0, "y": 0, "at": [{"frame": 0, "x": 0}, {"frame": 10, "x": 300}]}}; stands = [("lean", [(300, 300)], 40, 0)]
+    tripped["a human who travels into a prop nothing declares"] = [("props apart", False, t) for k, t in prop_faults(walker, stands, (0, 10)) if k == "overlap"]
+    still = [t for _, t in prop_faults({**walker, "figure": {k: v for k, v in walker["figure"].items() if k != "at"}}, stands, (0, 10))]
+    tripped["an actor the renderer draws that PROP_NATIVE and PROP_EXTENT lack"] = [("actor tables", False, t) for t in actor_table_faults(drawn)]
+    clear_tables = [t for t in actor_table_faults(drawn.replace("'lantern'", "'bubble'"))]
     tripped["a prop inside the human's body"] = [("props apart", False, t) for k, t in prop_faults(body, near) if k == "overlap"]
     clear_of_body = [t for _, t in prop_faults(body, far)]
-    pr.control(not clean and not clear_of_body and not clear_heap and all(tripped.values()), "; ".join(f"{n} -> {'FAIL (' + v[0][0] + ')' if v else 'NOT REFUSED'}" for n, v in tripped.items()) + f"; clean fixture, the same two overlapping props with their contact declared, two props at one place that are never on stage together, a heap that moves 8 px against a declared 4 to 12, and a heap that comes on the frame the cloak drops -> pass ({len(clean)} failures)")
+    pr.control(not clean and not clear_of_body and not clear_heap and not clear_tables and not still and all(tripped.values()), "; ".join(f"{n} -> {'FAIL (' + v[0][0] + ')' if v else 'NOT REFUSED'}" for n, v in tripped.items()) + f"; clean fixture, the same two overlapping props with their contact declared, two props at one place that are never on stage together, a heap that moves 8 px against a declared 4 to 12, a heap that comes on the frame the cloak drops, a human who stays where she is beside the same prop, and actor names every table carries -> pass ({len(clean)} failures)")
     tl, _, _, shot_note = apply_shot(a, load_timeline(a.timeline)); raw = tl["source"]
     if shot_note: pr.note(shot_note)
     lp = a.ledger or raw.get("ledger") or next((b.get("ledgerPath") for b in tl["beats"] if b.get("ledgerPath")), None) or os.path.join(os.path.dirname(os.path.abspath(a.timeline)), "beats-v2.json")
@@ -394,6 +383,11 @@ def main():
     episode_root = os.path.dirname(os.path.abspath(a.blocking_dir)); skeleton_path = os.path.join(os.path.dirname(episode_root), "assets", "human", "skeleton.json")
     checks, extra = check_blocking(tl, ledger, blocks, exempt, episode_root, read_json(skeleton_path, "skeleton registration"))
     for name, ok, text in checks: pr.check(name, ok, text)
+    actors_path = os.path.join(os.path.dirname(episode_root), *ACTORS_SOURCE)
+    if os.path.exists(actors_path):
+        faults = actor_table_faults(open(actors_path, encoding="utf8").read())
+        pr.check("actor tables", not faults, "; ".join(faults) if faults else f"every actor src/library/worlds/actors.tsx draws has a native size and an extent ({', '.join(sorted(PROP_NATIVE))})")
+    else: pr.note(f"actor tables not read: {actors_path} does not exist")
     if extra: pr.note(f"blocking files naming no beat (ignored): {extra}")
     pr.finish(f"{len(tl['beats'])} beats staged: actors placed, emitter inside the frame, a card cited, identity boxes apart, props apart")
 

@@ -22,7 +22,7 @@ const worldId = (id: string): WorldId => {
  * shot's hue. A caption strip names the world, the beat and the frame; it is review chrome over the picture, not part of the film, so the probe
  * renders turn it off (`--props='{"captions":false}'`): it covers the figure's boots, which the loop-closure probe needs to see.
  * Everything is read from `animaticPlan`, the module the exposure sheet reads. The props a beat's blocking names (`blocking.actors`) are drawn by the worlds as placeholders (`worlds/actors.tsx`);
- * `omit` leaves the named ones out, which is how the props' positive control renders a beat without its box (`probe-props.py`).
+ * `omit` leaves the named ones out, which is how the props' positive control renders a beat without its box (`probe-props.py`; a box takes its lid with it).
  *
  * `layers="figure"` (and `figure-line`) draw the human's BODY (`bodyPose`: the played chart without its derived secondaries, see `animaticPlan`), so the hold and twos probes measure the drawings the exposure sheet has rows for; the full frames draw the secondaries.
  * `layers="figure"` draws only the human, flat and filled, at the beat's blocking under the camera, on the field colour, in every frame including a crossing's: the drawing's pose
@@ -54,7 +54,8 @@ export const Animatic: React.FC<{captions?: boolean; layers?: 'all' | 'figure' |
   }
   const hue = hueOf(s.beat.id);
   const actorRoles = pairRoles(hue);
-  const blocking = omit.length && s.blocking.actors ? {...s.blocking, actors: Object.fromEntries(Object.entries(s.blocking.actors).filter(([name]) => !omit.includes(name)))} : s.blocking;
+  const left = omit.includes('box') ? [...omit, 'lid'] : omit;   // a lid goes with its box: it has nothing to open from without it
+  const blocking = omit.length && s.blocking.actors ? {...s.blocking, actors: Object.fromEntries(Object.entries(s.blocking.actors).filter(([name]) => !left.includes(name)))} : s.blocking;
   const scene = s.crossing ? (
     <Crossing from={worldId(s.crossing.fromWorld)} to={worldId(s.crossing.toWorld)} frame={frame} start={s.crossing.start} length={s.crossing.length} chart={s.heldChart} lead={[56, 0]} blocking={blocking} emitter={s.emitter} actorRoles={actorRoles} />
   ) : (

@@ -220,7 +220,7 @@ def analyse_frames(frames, tl, pairs, max_outside, min_outside_px, masks, xs=Non
         w = next((w for w in tl["windows"] if w["a"] <= f < w["b"]), None)
         img = load_rgb(p)
         em = ((xs or {}).get(f) or {}).get("emitter")
-        cam_f = camera_of(xs, f); bk = masks[4] if len(masks) > 4 and masks[4] else None; bb = (bk[2].get((beat_at(tl, f) or {}).get("id")) if bk else None)       # bk: (everywhere, owned, blocking of the beats these frames are drawn from)
+        cam_f = camera_of(xs, f); bk = masks[4] if len(masks) > 4 and masks[4] else None; bb = (resolve_blocking_at(bk[2].get((beat_at(tl, f) or {}).get("id")), f) if bk else None)       # bk: (everywhere, owned, blocking of the beats these frames are drawn from)
         glow = radiance_hue(img, em, cam_f, bk[0] if bb else masks[0], plate=masks[3] if len(masks) > 3 else None, owned=bk[1] if bb else None, region=prop_region_from_blocking(img.shape, cam_f, bb) if bb else None) if isinstance(em, dict) and em.get("x") is not None and em.get("strength", 1.0) > 0 else None
         if isinstance(em, dict) and glow is None: glow_skipped += 1
         b = beat_at(tl, f); pr_ = pairs.get(b["id"]) if b else None
