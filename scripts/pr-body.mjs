@@ -25,8 +25,11 @@
  *
  * ZERO DEPENDENCIES. Node builtins and git only.
  *
+ * The comparison base defaults as `validate-pr-body.mjs` resolves it (`GITHUB_BASE_REF`, else
+ * `origin/HEAD`); `--base` overrides.
+ *
  * Usage (from the repo root):
- *   npm run pr:body -- [--base origin/main] [--plan plans/x.md] [--out /tmp/pr-body.md]
+ *   npm run pr:body -- [--base <ref>] [--plan plans/x.md] [--out /tmp/pr-body.md]
  *   npm run pr:check -- --body-file <file> --title "<title>"   # every gate CI runs, body AND title
  */
 
@@ -35,7 +38,11 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { checkBody, DEFAULT_ADR_DIR } from "./validate-pr-body.mjs";
+import {
+  checkBody,
+  DEFAULT_ADR_DIR,
+  resolveBaseRef,
+} from "./validate-pr-body.mjs";
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -243,7 +250,7 @@ function fill(template, sections) {
 }
 
 function main() {
-  const base = readArg("--base", "origin/main");
+  const base = readArg("--base", resolveBaseRef());
   const facts = branchFacts(base);
   const plan = detectPlan(facts.files, readArg("--plan"));
   const body = fill(readFileSync(TEMPLATE, "utf8"), {
