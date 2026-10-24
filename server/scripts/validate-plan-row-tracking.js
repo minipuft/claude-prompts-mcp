@@ -1,63 +1,28 @@
 #!/usr/bin/env node
 
 /**
- * Plan rows must be checkable in every state they can be in: a ✓ must not name an untracked file,
- * a ☐ must carry the stamp that makes it re-checkable, and a ⊘ must carry the stamp that makes
- * IT re-checkable too.
+ * Plan rows are checked in two layers, and this gate runs both.
  *
- * A THIRD STATE: ⊘ (U+2298), CLOSED — VERIFIED, NO CHANGE REQUIRED
- * ✓ and ☐ do not cover a row whose work is settled but produced no edit — investigated, found
- * nothing to change, closed. Forced into ✓, that row claims an edit that never happened; forced
- * into ☐, it claims pending work that isn't. Real instance: a tier task said "strip restated guard
- * numbers from 5 prompt files"; measurement showed only 1 of the 5 actually restated a number, and
- * the other 4 correctly needed no edit — neither existing mark describes that outcome honestly.
+ * 1. INDEX TRACKING (this file). A ✓ row must not name a file that exists on disk but is not
+ *    tracked by git. Only this repository's gate can read the index, so the managed validator
+ *    leaves it here, together with the accepted-exceptions audit (`auditGrandfathered`).
+ * 2. ROW GRAMMAR (managed). The glyph vocabulary, the stamps each glyph requires, status-column
+ *    and table-contiguity parsing, and the `status:` vocabulary belong to the delivery-contract
+ *    scripts `scripts/plan-rows.mjs` and `scripts/validate-plan-rows.mjs`
+ *    (`conventions/plan-rows.md` in repository-standards). This gate imports the vocabulary and
+ *    chains the validator with `--strict-stamps` over `git ls-files -- plans`, so the scope stays
+ *    committed plans only.
  *
- * ⊘ is MARKED, like ✓ — it asserts a settled position, not an absence of one — so by this file's
- * own reasoning below it must carry a proposition a gate can read. But unlike ✓, there is no
- * artifact to check against git: by definition nothing was written, so rule 1's git-tracked check
- * answers a question a ⊘ row is not asking, and a ⊘ row is deliberately exempt from it. The stamp
- * is therefore the ONLY evidence a reader gets: `(verified YYYY-MM-DD · <reason>)`, required the
- * same way `(as of ... · flips when ...)` is required for ☐. Without it, "closed" and "forgotten"
- * look identical from here.
- *
- * WHY THE SECOND RULE EXISTS
- * The first rule shipped 2026-08-12 and was measured one day later against the same plan. Five
- * rows read ☐ while their deliverables were at HEAD, and this gate was green across all five —
- * correctly, because each lie pointed the way it does not look.
- *
- * `✓` and `☐` are not symmetric. `✓` is the MARKED form: it asserts, so it carries a date and
- * evidence, and a gate can read it. `☐` is UNMARKED — what a row looks like when nobody has
- * spoken — so it means "measured, still open" AND "never re-checked" with nothing separating
- * them. Every gate reads the asserting half because only the asserting half contains a claim.
- *
- * The tempting fix is an inverse gate that re-derives whether each ☐ is still open. That costs
- * what the original determination cost and yields circumstantial evidence (a file can change for
- * unrelated reasons). So this checks NOTATION, not world state: an open row must name its own
- * falsifier, which is nearly free to write and expensive to reconstruct a week later.
- *
- * Rule scope is `status: active` plans only. A reference or archived plan is a record, and a
- * backlog plan is speculative; stamping either is work with no reader.
- *
- * WHY NOT DIFF-SCOPED: the motivating case went stale precisely BECAUSE nobody touched it — five
- * hold points sat satisfied for nine days. A gate firing only on changed files could not have
- * caught it, so this re-reads every graded plan on every run.
- *
- * "Graded" is narrower than "every plan", in two ways worth stating rather than discovering:
- * `planFiles()` lists TRACKED files, so a plan that is not yet committed is invisible here — the
- * same HEAD-orientation the rest of this gate family has, and the reason an in-flight plan owned
- * by another session cannot be reddened by it. And `status: active` excludes reference, archived
- * and backlog plans by design.
- *
- * WHY THIS EXISTS (rule 1)
+ * WHY THE INDEX CHECK EXISTS
  * A 2026-08 audit of the Agent Plugins migration plan found SEVEN rows marked ✓ whose deliverables
  * had never been committed. `validate:all` measured 32/34 in the working tree and 7/34 at
  * HEAD for three days, because every gate read the working tree while CI checks out the commit.
  * One row asserted that `skills/` "is committed" when it was 0 tracked, 2 present.
  *
  * A ✓ had come to mean "I made the edit", not "the edit is in the repository", and nothing could
- * tell the two apart. `typecheck:committed` closes the compile half — a commit whose
- * consumers outran their providers no longer passes. It cannot close this half: an untracked
- * SCRIPT, YAML, or doc breaks nothing at compile time and still leaves the row's claim false.
+ * tell the two apart. `typecheck:committed` closes the compile half; it cannot close this half:
+ * an untracked SCRIPT, YAML, or doc breaks nothing at compile time and still leaves the row's
+ * claim false.
  *
  * WHAT IT CHECKS
  * For every table row in `plans/**` bearing ✓, every backticked path that (a) looks like a repo
@@ -70,26 +35,54 @@
  * retired one, so it is counted and skipped, never failed. A path present on disk and absent from
  * git has no innocent reading: the work exists and the repository does not have it.
  *
+ * A ⊘ row is exempt: by definition it wrote nothing, so the paths it names are ones it
+ * deliberately did not touch.
+ *
  * WHAT IT DOES NOT CLAIM
  * This does not verify that a ✓ row's work is correct, complete, or that the tracked file contains
- * what the row says. It answers one question — is the named artifact in the repository — which is
- * the question that went unasked for three days.
+ * what the row says. It answers one question — is the named artifact in the repository.
  *
- * `--self-test` proves each rule can still fail.
+ * SCOPE
+ * Every plan is re-read on every run, not only changed ones: the motivating case went stale
+ * precisely because nobody touched it. `planFiles()` lists TRACKED files, so a plan that is not
+ * yet committed is invisible here, the same HEAD-orientation the rest of this gate family has.
+ *
+ * This file imports only node builtins and the managed `../../scripts/plan-rows.mjs`: CI runs it
+ * on the lightweight routes with no `node_modules` installed.
+ *
+ * `--self-test` proves the index rule and the chained managed run can each still fail.
  */
 
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { auditExceptions, reportExceptionAudit, VERDICT } from './lib/exception-hygiene.js';
+import { readFrontmatter, STAMPS, STATUS_GLYPHS } from '../../scripts/plan-rows.mjs';
 
 const SERVER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(SERVER, '..');
 
+/** The managed row-grammar validator this gate chains (delivery-contract script). */
+const MANAGED_VALIDATOR = path.join(REPO, 'scripts', 'validate-plan-rows.mjs');
+
+/** The glyph the vocabulary names `name`; the one definition is the managed `plan-rows.mjs`. */
+function glyphNamed(name) {
+  const entry = STATUS_GLYPHS.find((candidate) => candidate.name === name);
+  if (!entry) throw new Error(`plan-rows.mjs declares no "${name}" status glyph`);
+  return entry.glyph;
+}
+
 /** Rows are markdown table rows; ✓ may sit in any cell, usually the status column. */
-const DONE_MARK = '✓';
+const DONE_MARK = glyphNamed('done');
+
+/** Closed, no change required — names files it deliberately did not touch, so rule 1 skips it. */
+const CLOSED_MARK = glyphNamed('closed-no-change');
+
+/** The unmarked status; `classifyGrandfathered` looks for it without its stamp. */
+const OPEN_MARK = glyphNamed('open');
 
 /**
  * A backticked token that looks like a path to a file in this repository.
@@ -109,44 +102,22 @@ const PATH_IN_BACKTICKS = /`([A-Za-z0-9_.\-/]+\.(?:ts|js|mjs|cjs|json|ya?ml|md|p
 /** Paths that are legitimately absent from git; naming one in a ✓ row is not a finding. */
 const IGNORED_PREFIXES = ['node_modules/', 'server/dist/', 'cli/dist/'];
 
-/** The unmarked status. Rule 2 makes it carry a proposition. */
-const OPEN_MARK = '☐';
-
-/** Closed, no change required — settled but produced no edit. Rule 3 makes it carry a stamp too. */
-const CLOSED_MARK = '⊘';
-
-/**
- * The stamp that turns an open marker into something re-checkable.
- *
- * Both halves are required and both are structural. The date alone answers "how old is this
- * belief" but not "what would change it", and the falsifier alone cannot be aged. Requiring an
- * exact phrasing is the point of a NOTATION gate: it is checkable without knowing the domain.
- */
-const OPEN_STAMP = /as of (\d{4}-\d{2}-\d{2})\s*[·|-]\s*flips when\s+\S/;
-
-/**
- * The stamp that turns a closed-no-change marker into something re-checkable.
- *
- * Same two-part shape as `OPEN_STAMP` and the same reasoning: the date alone answers "how old is
- * this belief" but not "why was nothing changed", and the reason alone cannot be aged.
- */
-const CLOSED_STAMP = /verified (\d{4}-\d{2}-\d{2})\s*[·|-]\s*\S/;
-
-/** Frontmatter status; only `active` plans are graded by rule 2. */
+/** Frontmatter `status:` of a plan, or null. */
 function planStatus(content) {
-  const match = content.match(/^---\r?\n[\s\S]*?^status:\s*(\S+)\s*$/m);
-  return match ? match[1] : null;
+  return readFrontmatter(content)?.status ?? null;
 }
 
 /**
- * Open rows that predate rule 2, kept passing so the gate could land without editing plans owned
- * by concurrent work. Each entry is itself a marker and therefore carries what retires it.
+ * Plans accepted with unstamped open rows. Each entry is itself a marker and therefore carries
+ * what retires it (`closedBy`).
  *
- * `auditGrandfathered()` below FAILS when an entry stops being necessary — the exception list is
- * the exact structure this gate's own rule warns about, and a list that only grows is how a green
- * run stops meaning anything. It delegates to the shared `exception-hygiene` vocabulary rather
- * than hand-rolling the verdicts, because that module already separates `satisfied` (delete) from
- * `unreachable` (do NOT delete — widen the scan first).
+ * `auditGrandfathered()` below FAILS when an entry stops being necessary: a list that only grows
+ * is how a green run stops meaning anything. It delegates to the shared `exception-hygiene`
+ * vocabulary rather than hand-rolling the verdicts, because that module already separates
+ * `satisfied` (delete) from `unreachable` (do NOT delete — widen the scan first).
+ *
+ * The managed validator takes no exception list, so an entry here is audited for staleness and
+ * does not itself silence a managed finding.
  */
 const GRANDFATHERED_OPEN_ROWS = [
   // Retired 2026-08-13: the P5 visibility-policy entry's closedBy arrived — every row in that
@@ -220,265 +191,6 @@ export function auditPlanText(planPath, content, tracked) {
 }
 
 /**
- * Split a markdown table row into trimmed cells, honouring `\|` escapes.
- *
- * Escaped pipes matter: plan prose regularly contains shell pipelines inside a cell
- * (`rg ... \| grep -c`), and splitting on those shifts every later column by one — which would
- * move the status column under a gate that reads it positionally.
- */
-function cellsOf(line) {
-  const trimmed = line.trim();
-  const inner = trimmed.startsWith('|') ? trimmed.slice(1) : trimmed;
-  const body = inner.endsWith('|') && !inner.endsWith('\\|') ? inner.slice(0, -1) : inner;
-  return body.split(/(?<!\\)\|/).map((cell) => cell.trim());
-}
-
-/** A markdown separator row: `| --- | :--: |`. */
-function isSeparatorRow(line) {
-  const cells = cellsOf(line);
-  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
-}
-
-/**
- * Line indices inside a fenced code block (``` ... ```), delimiter lines included.
- *
- * Plan prose routinely fences a shell pipeline for illustration (`` ` ``` `rg ... \| grep -c` ``` ``),
- * and both the delimiter and the piped example line start with characters that read as table
- * structure if a scanner does not know it is inside a fence. `auditTableContiguity` and
- * `statusColumnByLine` both walk raw lines looking for `|`-shaped content, so both need this mask
- * — a fence is presentation, not the document's row structure, and must be invisible to either
- * scanner the same way. Getting only one of them fence-aware would leave the pair disagreeing
- * about which lines are rows, which is the exact drift this row exists to close.
- */
-function fencedLineMask(lines) {
-  const fenced = new Array(lines.length).fill(false);
-  let inFence = false;
-  for (const [index, line] of lines.entries()) {
-    if (/^\s*```/.test(line)) {
-      fenced[index] = true; // the delimiter itself is fence, not table content either way
-      inFence = !inFence;
-      continue;
-    }
-    fenced[index] = inFence;
-  }
-  return fenced;
-}
-
-/**
- * Rule 4 — any block of consecutive `|`-lines must open with its own header + separator pair, or
- * the block (and everything in it) is invisible to the row parser.
- *
- * `statusColumnByLine` only recognises a table when a `|`-line is immediately followed by a
- * separator row (`| --- | ... |`); every line in between two such openings — or before the first
- * one — that it cannot attach to a header gets no status column, and the row rules here (and the
- * same parse in the managed `planRowStates`) then drop it outright rather than misreading it. Two distinct real-world shapes produce exactly that:
- *
- *  1. A blank line inserted MID-TABLE (rather than after the table's last row). This is the
- *     original P4.50 defect: a writeback inserted new rows before the paragraph following the
- *     table instead of after the table's last row, the blank line that used to close the table
- *     landed between two rows instead, and 34 of 49 rows vanished from row tracking for five days
- *     with every other gate green (`6d8da146`).
- *  2. A row-shaped line appended after PROSE or a HEADING rather than after a blank line that used
- *     to close a table — there was never a table above it for a blank line to have split. Same
- *     blind spot, different cause: the parser never saw a preceding table at all, so the narrower
- *     "must be preceded by another table row" version of this rule (its 2026-09-14 form) missed it
- *     by construction.
- *
- * Both collapse to one condition once framed at the BLOCK level rather than the blank-line level:
- * find every maximal run of consecutive `|`-lines (fenced lines end a run the same as any other
- * non-`|` line — see `fencedLineMask`), and require the run's own first two lines to be a header
- * followed by a separator. A run that already opens that way is a genuine table, however many
- * blank lines or other tables sit before it — which is also why two adjacent, unrelated tables are
- * NOT a break: the second one declares its own header + separator and does not depend on the
- * first table's column layout.
- *
- * A run whose first line IS a separator (`| --- | --- |` with nothing above it) is a different,
- * pre-existing defect — a table missing its header outright — and is left to whatever gate reads
- * malformed tables; nothing about a missing header is fixed by removing whatever precedes it.
- *
- * Runs over every plan the same way rule 1 does — this is a parse-structure defect, not a
- * lifecycle one, so it is not gated on `status: active`.
- *
- * @returns {{violations: string[]}}
- */
-export function auditTableContiguity(planPath, content) {
-  const lines = content.split('\n');
-  const fenced = fencedLineMask(lines);
-  const violations = [];
-
-  let index = 0;
-  while (index < lines.length) {
-    if (fenced[index] || !lines[index].trim().startsWith('|')) {
-      index += 1;
-      continue;
-    }
-
-    const blockStart = index;
-    while (index < lines.length && !fenced[index] && lines[index].trim().startsWith('|')) {
-      index += 1;
-    }
-    const blockEnd = index; // exclusive
-
-    const first = lines[blockStart];
-    if (isSeparatorRow(first)) continue; // missing header outright — not this rule's concern
-
-    const second = blockEnd - blockStart > 1 ? lines[blockStart + 1] : undefined;
-    const opensTable = second !== undefined && isSeparatorRow(second);
-    if (opensTable) continue;
-
-    const rowId = (cellsOf(first)[0] ?? '').replace(/[*`]/g, '').trim() || '(no id cell)';
-    violations.push(
-      `${planPath}:${blockStart + 1}: a table-row-shaped line starts a block that does not open ` +
-        'with its own header + separator pair, so the row parser reads it as "no table here" and ' +
-        `silently drops row ${rowId} and everything else in this block from row tracking. Remove ` +
-        'whatever separates it from a table above (blank line, prose, a heading), or give this ' +
-        'block its own `| ... |` header and `| --- | ... |` separator if it is truly a new table.'
-    );
-  }
-
-  return { violations };
-}
-
-/** The header cell that names the status column. `St` is this repo's convention; `Status` is spelled out elsewhere. */
-const STATUS_HEADER = /^(?:st|status)$/i;
-
-/**
- * For every line index, the status-column index of the table it belongs to.
- *
- * Why a header lookup rather than "the second cell": a row's status is identified by its COLUMN,
- * and scanning the whole row for a glyph made a row whose Status cell reads ✓ fail because its
- * Change text quoted a ☐ while describing the vocabulary (measured 2026-08-19 on three rows).
- * Position alone was rejected for the opposite failure — it silently stops grading any table
- * shaped differently, and a false negative in this gate is exactly what it exists to prevent.
- *
- * A table whose header names no status column maps to `undefined`, and the callers fall back to
- * scanning the whole row. That keeps today's coverage rather than trading a false positive for a
- * silent gap.
- *
- * Fenced lines (`fencedLineMask`) are skipped outright rather than treated as table-ending —
- * rules 2 and 3 read this map, and a fenced shell pipeline should not register as a row
- * OR silently close whatever real table happens to sit on either side of it.
- */
-function statusColumnByLine(lines) {
-  const byLine = new Array(lines.length).fill(undefined);
-  const fenced = fencedLineMask(lines);
-  let current;
-
-  for (const [index, line] of lines.entries()) {
-    if (fenced[index]) continue;
-    if (!line.trim().startsWith('|')) {
-      current = undefined;
-      continue;
-    }
-    if (isSeparatorRow(line)) continue;
-
-    const next = lines[index + 1];
-    const isHeader = next !== undefined && next.trim().startsWith('|') && isSeparatorRow(next);
-    if (isHeader) {
-      const found = cellsOf(line).findIndex((cell) => STATUS_HEADER.test(cell));
-      current = found === -1 ? undefined : found;
-      continue;
-    }
-    byLine[index] = current;
-  }
-
-  return byLine;
-}
-
-/**
- * The text a status mark must appear in for the row to count as carrying it.
- *
- * Falls back to the whole line when the table declares no status column.
- */
-function statusTextOf(line, column) {
-  if (column === undefined) return line;
-  return cellsOf(line)[column] ?? '';
-}
-
-// The row-lifecycle primitive (`planRowStates`: "what counts as a row", "what counts as closed")
-// is not defined here. Its one definition is the managed `scripts/validate-pr-body.mjs`, the
-// delivery-contract copy that `validate:delivery-contract` keeps byte-identical to the installed
-// template, which reads it to decide whether a PR advances the plan its `Plan:` footer names. This
-// file used to hold a second definition that nothing called once that validator vendored its own;
-// a second parser drifts silently, because both sides still return rows. The table helpers above
-// (`cellsOf`, `statusColumnByLine`, `fencedLineMask`) remain this gate's own, for rules 2 to 4.
-
-/**
- * Rule 2 — an open row in an ACTIVE plan must carry `as of <date> · flips when <observation>`.
- *
- * Pure, like rule 1, so the self-test feeds it fabricated plans.
- *
- * @returns {{violations: string[], stamped: number, graded: boolean}}
- */
-export function auditOpenRows(planPath, content, grandfathered = GRANDFATHERED_OPEN_ROWS) {
-  const violations = [];
-  let stamped = 0;
-
-  if (planStatus(content) !== 'active') return { violations, stamped, graded: false };
-  if (grandfathered.some((entry) => entry.plan === planPath)) {
-    return { violations, stamped, graded: false };
-  }
-
-  const openLines = content.split('\n');
-  const openStatusColumn = statusColumnByLine(openLines);
-
-  for (const [index, line] of openLines.entries()) {
-    if (!line.startsWith('|')) continue;
-    if (!statusTextOf(line, openStatusColumn[index]).includes(OPEN_MARK)) continue;
-
-    // The stamp may sit anywhere in the row, so it is matched against the whole line.
-    if (OPEN_STAMP.test(line)) {
-      stamped += 1;
-      continue;
-    }
-    violations.push(
-      `${planPath}:${index + 1}: a row marked ${OPEN_MARK} carries no stamp. An unmarked status ` +
-        'means "still open" and "never re-checked" at the same time — add ' +
-        '`(as of YYYY-MM-DD · flips when <observation>)`.'
-    );
-  }
-
-  return { violations, stamped, graded: true };
-}
-
-/**
- * Rule 3 — a closed-no-change row in an ACTIVE plan must carry `verified <date> · <reason>`.
- *
- * ⊘ means "settled, nothing to edit" — a MARKED claim like ✓, not an unmarked default like ☐. It
- * gets a stamp for the same reason ✓ gets a git check: an assertion with no mechanical way to
- * verify it is a claim nobody downstream can act on.
- *
- * Pure, like rules 1 and 2, so the self-test feeds it fabricated plans.
- *
- * @returns {{violations: string[], stamped: number, graded: boolean}}
- */
-export function auditClosedRows(planPath, content) {
-  const violations = [];
-  let stamped = 0;
-
-  if (planStatus(content) !== 'active') return { violations, stamped, graded: false };
-
-  const closedLines = content.split('\n');
-  const closedStatusColumn = statusColumnByLine(closedLines);
-
-  for (const [index, line] of closedLines.entries()) {
-    if (!line.startsWith('|')) continue;
-    if (!statusTextOf(line, closedStatusColumn[index]).includes(CLOSED_MARK)) continue;
-
-    if (CLOSED_STAMP.test(line)) {
-      stamped += 1;
-      continue;
-    }
-    violations.push(
-      `${planPath}:${index + 1}: a row marked ${CLOSED_MARK} carries no stamp. Closed-no-change ` +
-        'still asserts something checkable — add `(verified YYYY-MM-DD · <reason>)`.'
-    );
-  }
-
-  return { violations, stamped, graded: true };
-}
-
-/**
  * Classifies one grandfathered entry against the shared exception vocabulary.
  *
  * The `unreachable` branch is the one worth reading. A grandfathered plan can go inert two ways
@@ -501,13 +213,16 @@ function classifyGrandfathered(entry, planTexts) {
 
   const status = planStatus(content);
   if (status !== 'active') {
-    return { verdict: VERDICT.SATISFIED, detail: `plan is now \`${status}\`, which rule 2 skips` };
+    return {
+      verdict: VERDICT.SATISFIED,
+      detail: `plan is now \`${status}\`, which the managed open-stamp rule skips`,
+    };
   }
 
   const bare = content
     .split('\n')
     .filter((line) => line.startsWith('|') && line.includes(OPEN_MARK))
-    .filter((line) => !OPEN_STAMP.test(line));
+    .filter((line) => !STAMPS.open.test(line));
 
   return bare.length > 0
     ? { verdict: VERDICT.LOAD_BEARING }
@@ -525,22 +240,60 @@ export function auditGrandfathered(planTexts, entries = GRANDFATHERED_OPEN_ROWS)
   });
 }
 
+/** Absolute paths of the committed plans the managed validator is asked to read. */
+function committedPlanPaths() {
+  return planFiles().map((file) => path.join(REPO, file));
+}
+
+/**
+ * Runs the managed plan-row validator over explicit files, with the strict stamp rules on.
+ *
+ * Explicit paths, because with none the validator walks the plans directory and would read
+ * uncommitted plans too. The child's own output is forwarded by the caller.
+ *
+ * @param {string} root   Directory finding paths are reported relative to.
+ * @param {string[]} files Absolute plan paths; must be non-empty.
+ */
+function runManagedPlanRows(root, files) {
+  return spawnSync(
+    process.execPath,
+    [MANAGED_VALIDATOR, '--root', root, '--strict-stamps', ...files],
+    { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }
+  );
+}
+
+/** @returns {number} 0 clean, 1 findings, 2 the managed validator itself failed. */
+function chainManagedValidator(files) {
+  if (files.length === 0) {
+    console.log('✔ Managed plan-row validator: no committed plans to read.');
+    return 0;
+  }
+
+  const result = runManagedPlanRows(REPO, files);
+  if (result.error || result.status === null || result.status > 1) {
+    console.error(
+      `✖ scripts/validate-plan-rows.mjs failed to run (exit ${result.status ?? 'none'}` +
+        `${result.error ? `: ${result.error.message}` : ''}). This gate fails with it.`
+    );
+    if (result.stdout) process.stderr.write(result.stdout);
+    if (result.stderr) process.stderr.write(result.stderr);
+    return 2;
+  }
+
+  if (result.stdout) process.stdout.write(result.stdout);
+  if (result.stderr) process.stderr.write(result.stderr);
+  return result.status;
+}
+
 function run() {
   const tracked = trackedFiles();
   const doneViolations = [];
-  const openViolations = [];
-  const closedViolations = [];
-  const contiguityViolations = [];
   const planTexts = new Map();
   let skipped = 0;
   let checked = 0;
-  let stamped = 0;
-  let gradedPlans = 0;
-  let closedStamped = 0;
-  let plansChecked = 0;
 
-  for (const plan of planFiles()) {
-    plansChecked += 1;
+  const plans = planFiles();
+  for (const plan of plans) {
     const content = readFileSync(path.join(REPO, plan), 'utf8');
     planTexts.set(plan, content);
 
@@ -548,31 +301,9 @@ function run() {
     doneViolations.push(...done.violations);
     skipped += done.skipped;
     checked += done.checked;
-
-    const open = auditOpenRows(plan, content);
-    openViolations.push(...open.violations);
-    stamped += open.stamped;
-    if (open.graded) gradedPlans += 1;
-
-    const closed = auditClosedRows(plan, content);
-    closedViolations.push(...closed.violations);
-    closedStamped += closed.stamped;
-
-    const contiguity = auditTableContiguity(plan, content);
-    contiguityViolations.push(...contiguity.violations);
   }
 
   const exceptionAudit = auditGrandfathered(planTexts);
-
-  if (contiguityViolations.length > 0) {
-    console.error(`✖ Plan tables split by a blank line (${contiguityViolations.length}):`);
-    for (const violation of contiguityViolations) console.error(`  - ${violation}`);
-    console.error(
-      '\nA blank line inserted mid-table reads as "table ended" to the row parser, which then ' +
-        'drops every row after it from row tracking without ever failing — this is the P4.50 ' +
-        'defect that hid 34 of 49 rows for five days.'
-    );
-  }
 
   if (doneViolations.length > 0) {
     console.error(
@@ -585,48 +316,17 @@ function run() {
     );
   }
 
-  if (openViolations.length > 0) {
-    console.error(`\n✖ Open rows in active plans carry no stamp (${openViolations.length}):`);
-    for (const violation of openViolations) console.error(`  - ${violation}`);
-    console.error(
-      `\nA ${OPEN_MARK} asserts nothing, so nothing can re-check it. Five rows here read ` +
-        `${OPEN_MARK} while their work sat at HEAD, and this gate was green on all five.`
-    );
-  }
-
-  if (closedViolations.length > 0) {
-    console.error(
-      `\n✖ Closed-no-change rows in active plans carry no stamp (${closedViolations.length}):`
-    );
-    for (const violation of closedViolations) console.error(`  - ${violation}`);
-    console.error(
-      `\nA ${CLOSED_MARK} asserts settlement with no artifact to check against git, so the stamp ` +
-        'is the only evidence a reader gets — without it, "closed" and "forgotten" look the same.'
-    );
-  }
-
   const exceptionProblems = reportExceptionAudit('plan-row-tracking', exceptionAudit);
+  const managedStatus = chainManagedValidator(committedPlanPaths());
 
-  if (
-    doneViolations.length +
-      openViolations.length +
-      closedViolations.length +
-      contiguityViolations.length +
-      exceptionProblems >
-    0
-  )
-    return 1;
+  if (doneViolations.length + exceptionProblems > 0 || managedStatus !== 0) return 1;
 
   // Report counts rather than a bare success. A gate that checked nothing and a gate that checked
-  // everything print the same "OK" otherwise, which is how a scope regression hides — the same
-  // silent-pass shape this whole gate exists to catch.
+  // everything print the same "OK" otherwise, which is how a scope regression hides.
   console.log(
     `✔ Plan rows: ${checked} path(s) named by ${DONE_MARK} rows are tracked ` +
       `(${skipped} not on disk — renamed, deleted, or external; not decidable here); ` +
-      `${stamped} ${OPEN_MARK} row(s) stamped across ${gradedPlans} active plan(s) ` +
-      `(${GRANDFATHERED_OPEN_ROWS.length} grandfathered); ` +
-      `${closedStamped} ${CLOSED_MARK} row(s) stamped; ` +
-      `${plansChecked} plan(s) checked for table contiguity.`
+      `${plans.length} committed plan(s) passed to the managed validator.`
   );
   return 0;
 }
@@ -719,195 +419,47 @@ function selfTest() {
     console.log('✔ self-test: the path matcher still resolves a real repo path');
   }
 
-  // ---- Rule 2: the open row must carry its own falsifier -------------------------------------
+  // ---- The chained managed validator must be observed redden AND pass ------------------------
+  // The row grammar lives in `scripts/validate-plan-rows.mjs`; what this gate owns is that the
+  // chain reaches it. A temp plan outside the repository is fed through the same call `run()`
+  // makes: a bare ☐ must fail it, a clean plan must pass it, so a chain that stopped invoking the
+  // validator (or swallowed its exit) cannot stay green.
   const ACTIVE = '---\ntitle: "t"\ndate: 2026-08-12\nstatus: active\ntags: []\n---\n';
-  const openCase = (name, text, expectFail, planPath = 'plans/fake.md') => {
-    const { violations } = auditOpenRows(planPath, text);
-    const failed = violations.length > 0;
-    if (failed !== expectFail) {
-      console.error(
-        `✖ self-test: "${name}" — expected ${expectFail ? 'a finding' : 'clean'}, got the opposite`
-      );
-      failures += 1;
-    } else {
-      console.log(`✔ self-test: ${name}`);
-    }
-  };
+  const chainDir = mkdtempSync(path.join(os.tmpdir(), 'plan-row-chain-'));
+  try {
+    const chainCase = (name, text, expectedStatus) => {
+      const file = path.join(chainDir, 'plan.md');
+      writeFileSync(file, text);
+      const result = runManagedPlanRows(chainDir, [file]);
+      if (result.status !== expectedStatus) {
+        console.error(
+          `✖ self-test: "${name}" — managed validator exited ${result.status}, expected ` +
+            `${expectedStatus}${result.error ? ` (${result.error.message})` : ''}`
+        );
+        failures += 1;
+      } else {
+        console.log(`✔ self-test: ${name}`);
+      }
+    };
 
-  openCase('a bare ☐ row in an active plan is caught', `${ACTIVE}| 1.1 | ☐ | do a thing |`, true);
-  openCase(
-    'a stamped ☐ row passes',
-    `${ACTIVE}| 1.1 | ☐ (as of 2026-08-12 · flips when the token exists) | do a thing |`,
-    false
-  );
-  openCase(
-    'a date with no falsifier is still a finding — half a stamp is not a stamp',
-    `${ACTIVE}| 1.1 | ☐ (as of 2026-08-12) | do a thing |`,
-    true
-  );
-  openCase(
-    'a falsifier with no date is still a finding — an unaged belief cannot be triaged',
-    `${ACTIVE}| 1.1 | ☐ (flips when the token exists) | do a thing |`,
-    true
-  );
-  openCase(
-    'a reference plan is not graded',
-    '---\ntitle: "t"\ndate: 2026-08-12\nstatus: reference\ntags: []\n---\n| 1.1 | ☐ | x |',
-    false
-  );
-
-  // ---- Rule 3: the closed-no-change row must carry its own stamp too -------------------------
-  // --- status-column identification (2026-08-19) ------------------------------------------
-  // Three rows failed whose Status cell read ✓ while their Change text quoted a ☐ describing the
-  // glyph vocabulary. Reading the whole row cannot separate an ASSERTED status from a MENTIONED
-  // one. These pin both directions: the false positive is gone AND real open rows still fail.
-  openCase(
-    'a ✓ row whose prose merely MENTIONS ☐ is not treated as open',
-    `${ACTIVE}| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ✓ | compile ☐ rows into a submission |`,
-    false
-  );
-  openCase(
-    'a genuinely open row is still caught when the table declares a St column',
-    `${ACTIVE}| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ☐ | real pending work |`,
-    true
-  );
-  openCase(
-    'a table with NO status header falls back to whole-row scanning, not to silence',
-    `${ACTIVE}| Item | Note |\n| --- | --- |\n| thing | ☐ still pending |`,
-    true
-  );
-  openCase(
-    'an escaped pipe inside a cell does not shift the status column',
-    `${ACTIVE}| # | St | Verify |\n| --- | --- | --- |\n| 1.1 | ✓ | \`rg x \\| grep -c ☐\` |`,
-    false
-  );
-
-  const closedCase = (name, text, expectFail, planPath = 'plans/fake.md') => {
-    const { violations } = auditClosedRows(planPath, text);
-    const failed = violations.length > 0;
-    if (failed !== expectFail) {
-      console.error(
-        `✖ self-test: "${name}" — expected ${expectFail ? 'a finding' : 'clean'}, got the opposite`
-      );
-      failures += 1;
-    } else {
-      console.log(`✔ self-test: ${name}`);
-    }
-  };
-
-  closedCase(
-    'a ✓ row whose prose mentions ⊘ is not treated as closed-no-change',
-    `${ACTIVE}| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ✓ | glyphs are ☐/✓/⚠/⊘ |`,
-    false
-  );
-
-  closedCase(
-    'a bare ⊘ row in an active plan is caught',
-    `${ACTIVE}| 1.1 | ⊘ | investigated, nothing to change |`,
-    true
-  );
-  closedCase(
-    'a stamped ⊘ row passes',
-    `${ACTIVE}| 1.1 | ⊘ (verified 2026-08-17 · grep confirmed no restated number) | investigated |`,
-    false
-  );
-  closedCase(
-    'a date with no reason is still a finding — half a stamp is not a stamp',
-    `${ACTIVE}| 1.1 | ⊘ (verified 2026-08-17) | investigated |`,
-    true
-  );
-  closedCase(
-    'a reason with no date is still a finding — an unaged claim cannot be triaged',
-    `${ACTIVE}| 1.1 | ⊘ (verified · grep confirmed no restated number) | investigated |`,
-    true
-  );
-  closedCase(
-    'a reference plan is not graded for ⊘',
-    '---\ntitle: "t"\ndate: 2026-08-12\nstatus: reference\ntags: []\n---\n| 1.1 | ⊘ | x |',
-    false
-  );
-
-  // ---- Rule 4: any block of `|`-lines must open with its own header+separator pair -------------
-  const contiguityCase = (name, text, expectFail, expectedCount) => {
-    const { violations } = auditTableContiguity('plans/fake.md', text);
-    const failed = violations.length > 0;
-    if (failed !== expectFail) {
-      console.error(
-        `✖ self-test: "${name}" — expected ${expectFail ? 'a finding' : 'clean'}, got the opposite`
-      );
-      failures += 1;
-      return;
-    }
-    if (expectedCount !== undefined && violations.length !== expectedCount) {
-      console.error(
-        `✖ self-test: "${name}" — expected ${expectedCount} violation(s), got ${violations.length}`
-      );
-      failures += 1;
-      return;
-    }
-    console.log(`✔ self-test: ${name}`);
-  };
-
-  contiguityCase(
-    'a split table — a blank line lands mid-table with no header of its own — is caught once, ' +
-      'not once per row in the block (P4.50)',
-    '| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ✓ | thing |\n\n' +
-      '| 1.2 | ☐ | thing two |\n| 1.3 | ☐ | thing three |',
-    true,
-    1
-  );
-  contiguityCase(
-    'two adjacent, genuinely separate tables — the second opens its own header+separator — pass',
-    '| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ✓ | thing |\n\n' +
-      '| Foo | Bar |\n| --- | --- |\n| a | b |',
-    false
-  );
-  contiguityCase(
-    'a whole table with no blank line inside it passes',
-    '| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ✓ | thing |\n| 1.2 | ☐ | thing two |',
-    false
-  );
-  contiguityCase(
-    'a blank line between prose and the genuine table it introduces is not a break — the table ' +
-      'opens its own header+separator',
-    'Some prose.\n\n| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ☐ | thing |',
-    false
-  );
-  contiguityCase(
-    'a row-shaped line appended straight after PROSE, with no header+separator of its own, is an ' +
-      'orphan the parser cannot see — never preceded by any table row, so the narrower ' +
-      '"must follow a table row" version of this rule would have missed it',
-    'Some prose that never opened a table.\n\n| 1.5 | ☐ | orphan row |',
-    true,
-    1
-  );
-  contiguityCase(
-    'a row-shaped line appended straight after a HEADING, with no header+separator of its own, ' +
-      'is the same orphan shape as the prose case',
-    '## Heading\n\n| 1.6 | ☐ | orphan row |',
-    true,
-    1
-  );
-  contiguityCase(
-    'a table missing its header outright (starts on a separator row) is a different, ' +
-      "pre-existing defect and not this rule's concern",
-    '| --- | --- |\n| a | b |',
-    false
-  );
-  contiguityCase(
-    'pipes inside a fenced code block are not table structure — a shell pipeline shown for ' +
-      'illustration does not read as an orphan row',
-    'Some prose.\n\n```\n| 1.7 | ☐ | not a real row |\n```\n',
-    false
-  );
-  contiguityCase(
-    'a fence embedded mid-table ends the run just like a blank line would — the row after it ' +
-      'opens no header+separator of its own, so it is the same orphan shape, not a special case',
-    '| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ✓ | thing |\n' +
-      '```\nrg foo \\| grep -c bar\n```\n| 1.2 | ☐ | thing two |',
-    true,
-    1
-  );
+    chainCase(
+      'the chained managed validator refuses a bare ☐ row in an active plan',
+      `${ACTIVE}| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ${OPEN_MARK} | do a thing |\n`,
+      1
+    );
+    chainCase(
+      'the chained managed validator refuses a bare ✗ row (--strict-stamps is on)',
+      `${ACTIVE}| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ${glyphNamed('killed')} | x |\n`,
+      1
+    );
+    chainCase(
+      'the chained managed validator passes a stamped plan',
+      `${ACTIVE}| # | St | Change |\n| --- | --- | --- |\n| 1.1 | ${OPEN_MARK} (as of 2026-08-12 · flips when the token exists) | do a thing |\n`,
+      0
+    );
+  } finally {
+    rmSync(chainDir, { recursive: true, force: true });
+  }
 
   // Synthetic fixture: the live GRANDFATHERED_OPEN_ROWS list is empty in the healthy steady
   // state (2026-08-13: its one entry retired the day its closedBy arrived), so the self-test
@@ -932,18 +484,6 @@ function selfTest() {
   mkdirSync(FIXTURE_DIR, { recursive: true });
   writeFileSync(path.join(REPO, SYNTHETIC_GRANDFATHERED.plan), `${ACTIVE}| 1.1 | ☐ | x |\n`);
   try {
-    {
-      const { graded } = auditOpenRows(SYNTHETIC_GRANDFATHERED.plan, `${ACTIVE}| 1.1 | ☐ | x |`, [
-        SYNTHETIC_GRANDFATHERED,
-      ]);
-      if (graded !== false) {
-        console.error('✖ self-test: a grandfathered plan should not be graded');
-        failures += 1;
-      } else {
-        console.log('✔ self-test: a grandfathered plan is not graded');
-      }
-    }
-
     // ---- The satisfied-exception check must itself be able to fail -----------------------------
     const g = SYNTHETIC_GRANDFATHERED.plan;
     const exceptionCase = (name, texts, expectedVerdict) => {

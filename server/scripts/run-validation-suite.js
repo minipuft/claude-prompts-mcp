@@ -374,7 +374,7 @@ export const SUITE = [
     io: 'read',
     reads: ['file', 'spawn', 'tracked'],
     converse:
-      'CHECKED both polarities — a stale ✓ claims work that does not exist, a stale ☐ disclaims work that does; the second direction was added 2026-08-12 after five ☐ rows were found already at HEAD',
+      'CHECKED both polarities — the ✓-names-an-untracked-file rule here claims work that does not exist, and the chained managed `scripts/validate-plan-rows.mjs --strict-stamps` refuses a ☐ that disclaims work already at HEAD by requiring its stamp',
   },
   {
     script: 'validate:no-legacy-sidecars',
