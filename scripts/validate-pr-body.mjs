@@ -46,12 +46,12 @@
  * commitlint's job (the workflow runs commitlint on it with the repo's own config, so the two
  * cannot drift).
  *
- * ZERO DEPENDENCIES, ON PURPOSE, AND SELF-CONTAINED. The workflow runs this before any install so
- * it works on the docs route, and this file has zero imports outside `node:` built-ins — including
- * the plan-row lifecycle primitive (`planRowStates`), which is defined and exported here rather
- * than imported from a sibling repository, so a consumer of this template never reaches outside
- * its own tree. `scripts/pr-body.mjs` imports `checkBody` (and, transitively, `planRowStates`) from
- * this one file, so the generator and the gate share one definition of "ready".
+ * ZERO DEPENDENCIES, ON PURPOSE. The workflow runs this before any install so it works on the
+ * docs route: its only import outside `node:` built-ins is the sibling managed `plan-rows.mjs`,
+ * which owns the plan-row lifecycle primitive (`planRowStates`) and the status vocabulary, so a
+ * consumer of this template never reaches outside its own `scripts/` directory and every plan
+ * reader shares one parser. `scripts/pr-body.mjs` imports `checkBody` (and, transitively,
+ * `planRowStates`) from this file, so the generator and the gate share one definition of "ready".
  *
  * Usage:
  *   node scripts/validate-pr-body.mjs --body-file <path> --title "<pr title>"
@@ -72,6 +72,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { NON_FINAL_STATUSES, planRowStates } from "./plan-rows.mjs";
+
+/** Non-final plan statuses and the row-lifecycle primitive, re-exported from `plan-rows.mjs`. */
+export { NON_FINAL_STATUSES, planRowStates };
+
 /**
  * Fallback required-section names, used only when this checkout has no
  * `.github/pull_request_template.md` to derive them from (see `deriveRequiredSections` below).
@@ -86,15 +91,6 @@ export const DEMONSTRATION_SECTION = "Demonstration";
 export const STILL_OPEN_SECTION = "Still open";
 export const DEMONSTRATION_TYPES = new Set(["feat", "fix", "perf", "refactor"]);
 export const WORD_BUDGET = 400;
-/** Non-final plan statuses; anything else (reference, done, complete, closed…) is final. */
-export const NON_FINAL_STATUSES = new Set([
-  "active",
-  "backlog",
-  "proposal",
-  "draft",
-  "loaded",
-  "reserved",
-]);
 /** Default ADR directory when `.delivery-contract.json` is absent or names none. */
 export const DEFAULT_ADR_DIR = "docs/adr";
 
@@ -102,129 +98,6 @@ const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-
-// ---------------------------------------------------------------------------------------------
-// Plan row lifecycle primitive. This template is the ONE definition of "what counts as a row" and
-// "what counts as closed". A consumer's own plan-row gate that reads the same tables must agree
-// with it rather than carry a second parser. It is not imported across repositories because the
-// managed copy is what ships: every consumer receives this file byte-identical.
-// ---------------------------------------------------------------------------------------------
-
-/** Rows are markdown table rows; ✓ may sit in any cell, usually the status column. */
-const DONE_MARK = "✓";
-/** The unmarked status. An open row asserts nothing yet. */
-const OPEN_MARK = "☐";
-/** Closed, no change required — settled but produced no edit. */
-const CLOSED_MARK = "⊘";
-/** Killed — judged not worth its cost. */
-const KILLED_MARK = "✗";
-const TERMINAL_MARKS = [DONE_MARK, CLOSED_MARK, KILLED_MARK];
-
-function cellsOf(line) {
-  const trimmed = line.trim();
-  const inner = trimmed.startsWith("|") ? trimmed.slice(1) : trimmed;
-  const body =
-    inner.endsWith("|") && !inner.endsWith("\\|") ? inner.slice(0, -1) : inner;
-  return body.split(/(?<!\\)\|/).map((cell) => cell.trim());
-}
-
-/** A markdown separator row: `| --- | :--: |`. */
-function isSeparatorRow(line) {
-  const cells = cellsOf(line);
-  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
-}
-
-/** Line indices inside a fenced code block (``` ... ```), delimiter lines included. */
-function fencedLineMask(lines) {
-  const fenced = new Array(lines.length).fill(false);
-  let inFence = false;
-  for (const [index, line] of lines.entries()) {
-    if (/^\s*```/.test(line)) {
-      fenced[index] = true;
-      inFence = !inFence;
-      continue;
-    }
-    fenced[index] = inFence;
-  }
-  return fenced;
-}
-
-/** The header cell that names the status column. `St` is this repo's convention; `Status` is spelled out elsewhere. */
-const STATUS_HEADER = /^(?:st|status)$/i;
-
-/** For every line index, the status-column index of the table it belongs to. */
-function statusColumnByLine(lines) {
-  const byLine = new Array(lines.length).fill(undefined);
-  const fenced = fencedLineMask(lines);
-  let current;
-
-  for (const [index, line] of lines.entries()) {
-    if (fenced[index]) continue;
-    if (!line.trim().startsWith("|")) {
-      current = undefined;
-      continue;
-    }
-    if (isSeparatorRow(line)) continue;
-
-    const next = lines[index + 1];
-    const isHeader =
-      next !== undefined && next.trim().startsWith("|") && isSeparatorRow(next);
-    if (isHeader) {
-      const found = cellsOf(line).findIndex((cell) => STATUS_HEADER.test(cell));
-      current = found === -1 ? undefined : found;
-      continue;
-    }
-    byLine[index] = current;
-  }
-
-  return byLine;
-}
-
-/** The text a status mark must appear in for the row to count as carrying it. */
-function statusTextOf(line, column) {
-  if (column === undefined) return line;
-  return cellsOf(line)[column] ?? "";
-}
-
-/**
- * Every gradable plan row, as `{ id, state, line }`, where `state` is `open`, `terminal`, or
- * `unmarked`. `unmarked` counts as unfinished wherever a caller reduces to a boolean — a row
- * nobody has spoken for cannot certify that a plan is complete.
- *
- * A row is skipped when its table declares no status column, when its first cell is empty (an id
- * is what lets the same row be recognised on both sides of a diff), or when it sits inside a
- * fenced code block.
- *
- * @param {string} content
- * @returns {{ id: string, state: 'open' | 'terminal' | 'unmarked', line: number }[]}
- */
-export function planRowStates(content) {
-  const lines = content.split("\n");
-  const statusColumn = statusColumnByLine(lines);
-  const rows = [];
-
-  for (const [index, line] of lines.entries()) {
-    if (!line.trim().startsWith("|")) continue;
-    if (isSeparatorRow(line)) continue;
-
-    const column = statusColumn[index];
-    if (column === undefined) continue;
-
-    const id = (cellsOf(line)[0] ?? "").replace(/[*`]/g, "").trim();
-    if (!id) continue;
-
-    const status = statusTextOf(line, column);
-    const state = status.includes(OPEN_MARK)
-      ? "open"
-      : TERMINAL_MARKS.some((mark) => status.includes(mark))
-        ? "terminal"
-        : "unmarked";
-
-    rows.push({ id, state, line: index + 1 });
-  }
-
-  return rows;
-}
 
 // ---------------------------------------------------------------------------------------------
 // Body checks
