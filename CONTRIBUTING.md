@@ -430,7 +430,8 @@ title, which is how #283 failed on `subject-case` after passing locally._
 `scripts/vendor/conventional-commits-parser.cjs`, `scripts/adr.mjs`,
 `scripts/validate-github-action-pins.mjs`, `scripts/validate-required-contexts.mjs`,
 `scripts/validate-lockfile-sync.mjs`, `scripts/validate-git-hooks-active.mjs`,
-`scripts/create-worktree.mjs`, `scripts/merge-unreleased-changelog.mjs`, `commitlint.rules.mjs`,
+`scripts/create-worktree.mjs`, `scripts/merge-unreleased-changelog.mjs`, `scripts/plan-rows.mjs`,
+`scripts/validate-plan-rows.mjs`, `commitlint.rules.mjs`,
 `.husky/commit-msg` and `.github/workflows/pr-conventions.yml` are managed copies of the fleet delivery contract
 (`minipuft/repository-standards`), at the version `.delivery-contract.json` records; this
 repository stays on the latest version. Change them upstream, never in place:
