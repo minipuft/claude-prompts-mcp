@@ -1,0 +1,19 @@
+{
+ "valid": true,
+ "path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/pieces/muse-03.png",
+ "source": "/home/minipuft/.codex/generated_images/01a14227-e22a-76e3-918d-b8b330f532a6/exec-6f27441e-2d84-4d4f-9c65-f90abdedfa1a.png",
+ "sha256": "fd765b42ecb903cf32d83771370cb233739d948de69b332c74ef1589b9f49e0a",
+ "bytes": 718757,
+ "referenced_image_paths": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/LYCZ7B8LTHX9V.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/LYCYY9LR7XD55.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-green-cat-lights.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/human-model.png"
+ ],
+ "tool_arguments": {
+  "raw": "{\n  \"prompt\": \"Use case: stylized-concept. Create ONE 16:9 design variant sheet for movable props of a silent hand-drawn animated film. Variant muse-03, Line family (do not print this name). Pure black field #000000. All seven family members at ONE consistent scale on ONE implied baseline in ONE horizontal row, generous black separation, no overlaps, no drawn baseline. Left to right: (1) a curling stalk with a flag leaf, (2) a pointed arch gate with a distinct keystone, (3) a ring framework expressed as a receding turned frame of concentric lines, (4) a block, (5) an upright held-up rectangular frame representing prompt_engine, (6) a soft ground patch, (7) a beaded light string chain suspended between two additional curling stalk supports. Treat the two support stalks and suspended chain as the seventh grouped member. Keep every member fully visible with margins. The ground patch rests at the same implied baseline. Every member is mostly thin lit lines: stalk and arch as luminous edges, ring as concentric lines, block and upright frame as spare edge structures, patch as a delicate closed flattened contour, chain as a web of beaded lines hanging in graceful catenaries between its su"
+ },
+ "summary": {
+  "references": 4
+ }
+}

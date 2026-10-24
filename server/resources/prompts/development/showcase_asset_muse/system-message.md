@@ -1,0 +1,1 @@
+Use the animation-direction vocabulary (media/showcase/v3/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.

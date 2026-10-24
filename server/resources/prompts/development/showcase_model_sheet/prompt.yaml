@@ -1,0 +1,32 @@
+id: showcase_model_sheet
+name: Showcase Model Sheet
+description: "Once per character after the owner's pick (D72): generate the
+  model sheet through the imagegen tool from the approved plate and its board
+  cards (turnaround, construction, proportion ruler, expression states, hands),
+  measure it against the clean-up standard, and write
+  assets/<character>/model.json as the identity contract every key sheet is
+  checked against."
+category: development
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: character
+    type: string
+    description: Character id (assets/<character>/), e.g. human, cloak, codex, clawd.
+    required: true
+  - name: pick
+    type: string
+    description: Absolute path of the owner-approved plate (the pick from the muse sheet).
+    required: true
+  - name: cards
+    type: string
+    description: Board card ids the pick cites (v3/references/board.json); their
+      files are the references.
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory.
+    required: false
+    defaultValue: media/showcase
+tools:
+  - imagegen
+systemMessageFile: system-message.md

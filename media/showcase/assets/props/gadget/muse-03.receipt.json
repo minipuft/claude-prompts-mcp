@@ -1,0 +1,19 @@
+{
+ "valid": true,
+ "path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/gadget/muse-03.png",
+ "source": "/home/minipuft/.codex/generated_images/01a14226-ac8f-7e30-b1ef-5788986d5e6e/exec-9a190a99-33c9-4f6c-a4f8-48e7d25ddf0b.png",
+ "sha256": "d4ec7671c37f60efdc480c8bbcde1b18de9ea2e85e0900fad97ca2d3db8724e1",
+ "bytes": 1305892,
+ "referenced_image_paths": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFIYY3RT6SJS2.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MTR8RSMQ452E8.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-green-cat-lights.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/human-model.png"
+ ],
+ "tool_arguments": {
+  "raw": "{\n  \"prompt\": \"Use case: stylized-concept. Create ONE 16:9 design variant sheet for a prop in a silent hand-drawn animated film, variant muse-03 'Radial hybrid'. Pure black field (#000000). No text, labels, numbers, UI, baseline mark, or watermark.\\nSubject: the gadget, raw capability, a hybrid universe-simulator machine with familiar parts in an impossible whole, organic and mechanical at once, in the spirit of The Midnight Gospel. A pot-bellied creature-machine, part kettle, part plant, part loom, with a funnel for a mouth, a long swooping neck, large handlike grippers, and a ring of tapered fins radiating from its dial like a burst. Not a button-covered device, not an orb. The dial is its ONE AND ONLY emitter. This is a movable-parts design reference for the prop currently hand-coded in Gadget.tsx.\\nLayout: show the SAME machine exactly twice, equal scale, on one implied baseline: left dormant, right with its dial open and light pouring out. Preserve identical body, neck, funnel mouth, grippers, fins, and supports in both states. Leave black negative space between the two silhouettes and around the sheet edges. Both machines fully visible. On the right, the open dial emits a str"
+ },
+ "summary": {
+  "references": 4
+ }
+}

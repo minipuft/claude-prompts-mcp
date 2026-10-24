@@ -1,0 +1,87 @@
+### Original Request Intent
+
+This step was given the following request. Your work must satisfy this intent:
+
+- **shot**: s01-arrival-overwhelm
+- **output_root**: media/showcase
+- **brief**: First demo of the film's intro, beats arrival (frames 0-180) and everything-at-once (180-420) of v3/beats-v2.json, home world, 420 frames at 30 fps (v3/timeline.json wins over shots.json's older 0-330...
+- **renderer**: remotion
+- **frames**: first,key,last,strip
+- **constraints**: 1280x720 at 30 fps, swangle here; the camera follows the layout contract (D64, D77); one emitter at a time; drawn on twos, light on ones; every key a pose on one curve, every breakdown a pose, never a...
+
+Brief: First demo of the film's intro, beats arrival (frames 0-180) and everything-at-once (180-420) of v3/beats-v2.json, home world, 420 frames at 30 fps (v3/timeline.json wins over shots.json's older 0-330). Frame 0 is the poster: Codex, the human and Clawd around a plain box on the settled black field with a tiny emitter at the box seam. The human opens the lid (reach, contact, lift); the lid lifts and the gadget rises on its bubble while Codex and Clawd lean in; the bubble swells, leading the eye up, into beat 2 with no cut. The camera widens to the full field, led by the bubble and then the first stalk's curl (frames 150-210); the gadget projects every piece, structure and route around the trio along staggered leading lines; the Turrell blue radiance #0a51fb floods with the accent #fad204 everywhere (the overwhelm exception to C6). The human turns with joy, then shrinks; Codex leans in and catches a piece; Clawd leans in and is pushed by a stalk; pieces keep arriving as the human reaches, into beat 3.
+Shot: s01-arrival-overwhelm · renderer: remotion · frames: first,key,last,strip
+Production root: media/showcase
+Previous handoff (key sheet):
+**Summary**: The key sheet `v3/keys/s01-arrival-overwhelm.json` is submitted as it stands on disk, byte-identical to the pre-drive backup (`cmp` clean). No plates were rebuilt this step.
+
+## Context
+Read `v3/poses/s01-arrival-overwhelm.json` and `v3/keys/s01-arrival-overwhelm.json`.
+
+## Analysis
+All eight keys are the run 5 keys, including `awe` with its declared S spine.
+
+## Goals
+Have the `animation-key-fit` check run on the key sheet as it stands.
+
+## Execution
+No edits. `python3 scripts/animation/probe-poses.py v3/poses v3/keys v3/charts --joints keys` exits 0 by hand.
+
+## Evaluation
+Done: the keys probe passes by hand. Not done: no plates rebuilt.
+
+**GATE_REVIEW: PASS - the key sheet reads as declared on every key.**
+
+HANDOFF RESULT
+node: keys
+Proposed Gate Review:
+- Animation Key Fit: PASS — the keys probe exits 0 on the sheet as it stands.
+
+Read the shot row in `v3/shots.json`, the chart `v3/charts/<shot>.json` and each actor's key plates under `assets/<actor>/keys/<shot>/` (a missing plate or chart is BLOCKED). Pose-to-pose (D72, D83): the composition plays the pose chart (`poseChartFrom` over `v3/poses/<shot>.json` and the registered key sheet; a missing pose sheet is BLOCKED, run animation_poses): each key plate held for its charted hold with its moving hold, every breakdown a pose (passing position on an arc, anticipation, overshoot, settle), secondaries lagging by their declared drawings, stepped on twos, drawing nothing new; a shot that needs a pose no key supplies is sent back to the key sheet, never approximated by rotating parts. Remotion path: render at the frame set with `npx remotion still` / `npx remotion render --frames` on the pinned `swangle` renderer into `out/<shot>-f###.png` and `out/<shot>-strip.png` (consecutive frames tiled with ffmpeg); render the key frame twice and record both sha256 (C12); measure per-frame pixel change across the strip for the drawn and light regions (C16, C18); render the figure-only layer as a png sequence to `out/<shot>-figure-seq/` (`--props='{"captions":false}'`), write the joints dump (`npm run joints -- <shot>`) and run `python3 scripts/animation/probe-inbetweens.py out/<shot>-figure-seq --joints out/<shot>-joints.json --poses v3/poses/<shot>.json` (C23, C32, C33: holds, one-sided arcs with monotone progress, eased spacing, overlap, moving holds; the gate runs the same probe over every pose sheet), quoting its control and summary lines; overlay each key frame on the model sheet (C20); render the head at its on-screen size for the identity pass (D70); sample one pixel per identity pigment (C1). Blender path: only when `renderer` is blender AND the request names `tool:blender_render`; a refusal is BLOCKED, not a render. A single still cannot prove motion. Write `out/<shot>-probes.json` with every measurement and the receipt skeleton (Changed, Grades left empty, Controls, Owner, Next). Never describe a frame you did not open.
+
+Return: Frames Rendered (path, sha256 prefix); Probes (determinism, twos/ones change %, inbetween probe lines per check, model-sheet overlay, identity samples, identity pass); Receipt Skeleton Path; Renderer Used; Concerns.
+
+---
+
+## Inline Gates
+
+### Checks
+
+- **Animation Inbetween Probes** — check: runs `python3 scripts/animation/probe-all.py --shots v3/poses --frames-root out --joints-root out`
+
+### Reminders
+
+### Framework Compliance
+**CAGEERF Framework Guidelines:**
+- Include Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework considerations
+- Structure responses according to framework principles
+- Include systematic thinking and framework awareness
+- Show iterative improvement and refinement processes
+
+Attest reminders in the verdict's `reminders` field; checks are recorded by the engine.
+
+---
+
+---
+
+### Required Response Format
+
+**Summary**: What was implemented (2-3 sentences)
+
+**Required Sections** — emit these headers verbatim; they are graded structurally:
+- `## Context` (required)
+- `## Analysis` (required)
+- `## Goals` (required)
+- `## Execution` (required)
+- `## Evaluation` (optional)
+- `## Refinement` (optional)
+
+**Gate Coverage**:
+- [1] PASS|FAIL: rationale
+- [2] PASS|FAIL: rationale
+
+**GATE_REVIEW: PASS|FAIL - overall assessment**
+
+Chain: chain-showcase_shot#1
+→ Progress 5/7
+Next: chain_id="chain-showcase_shot#1", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"

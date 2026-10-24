@@ -1,0 +1,24 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_animatic#1",
+    "user_response": "**Summary**: Wrote the study `v3/studies/animatic-02.md` in the rubric's receipt shape, filed 13 copies under `v3/studies/animatic-02/` with sha256 prefixes, and composed the contact strip `out/animatic-02-contact.png`. No script, shot, ruling or board file was changed, because this is an episode pass with no owner answer yet.\n\n## Context\nEpisode pass of `animation_animatic`; the handoff-artifacts gate reads an `artifacts:` line under `done` and checks each path from the server root (`../media/showcase/...`). I ran the same script by hand against the paths below: exit 0, `ok` per path; and against a missing path: exit 1, `handoff-artifacts: not found where the check ran` (the control).\n\n## Analysis\ndone — artifacts: ../media/showcase/v3/studies/animatic-02.md ../media/showcase/out/animatic-02-contact.png ../media/showcase/v3/studies/animatic-02/contact-strip.png ../media/showcase/v3/studies/animatic-02/animatic-02.mp4 ../media/showcase/v3/studies/animatic-02/probe-all.txt\n\nFiled (path under `v3/studies/animatic-02/` · sha256 prefix): `animatic-02.mp4` f1daee09a10e (copy of `out/animatic-01.mp4`, 65.000 s, 1950 frames); `contact-strip.png` 01298a29d8d6; `crossing-f1150.png` 089b106ebb8c; `the-frame-f780.png` 5625ecc19b0d; `staging-0090.png` 5f9123b91f03; `staging-0990.png` d701003481a1; `staging-1230.png` 2113e7fe19e3; `staging-1470.png` 24b827ee2d88; `probe-all.txt` 0d735fa84b55; `determinism-sample-60.txt` 52d2ea782528; `determinism-full-new-vs-old.txt` 83d18b6bfe0c; `render-times.txt` 2d767d169951. The study holds, per beat, what the viewer sees; the probe table (claim, command, control, measured); the provisional parts; wall time; the before and after against scaffold 01 (2 of 7 to 7 of 7); the grades; two owner questions with defaults; and the fixes.\n\n## Goals\nThe study, its copies and the strip exist, are in reader voice, and name every failure, including the ones the probes pass.\n\n## Execution\nScript Feed: none. `v3/shots.json` `measured` is per shot and this pass covers the whole episode; `v3/script.md` frame ranges would be rewritten by it, which the step forbids without a dated per-beat note and I have no per-beat change. Rulings Recorded: none (the Owner section is unanswered). Board Rebuilt: no (no card changed, `npm run board` not run). The plan's `## Now` block was not updated: this worker may not write under `plans/`; the planner owns it.\n\n## Evaluation\nExisting-file check: `ls` of the study, the strip and the copies, and the artifacts script run by hand with its negative control. Not verified: that the owner will find the questions answerable without watching the mp4.\n\n## Refinement\nConcerns: (1) the grade step's reply said the contact strip showed the raised-arms pose in 9 of 12 frames; recounted, it is 8 of 12, and the study says 8. (2) The first drive was killed by the 30 minute background limit after step 4 and replayed from the saved replies; the receipt dirs are `evidence/drive-*` (two). (3) No gate check ran in the engine for steps 2, 3, 4, 5 and 6 of this drive; step 7's engine check is whatever follows this reply.\n",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "study, copies and strip exist; artifacts script run by hand exit 0 with a negative control exit 1",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "Handoff Artifacts Exist: node check-artifacts.js by hand from the server root printed ok for each named path, exit 0; a missing path exits 1"
+        }
+      ],
+      "reminders": {
+        "satisfied": [
+          "framework-compliance"
+        ],
+        "not_applicable": []
+      }
+    }
+  }
+}

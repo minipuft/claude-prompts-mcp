@@ -1,0 +1,31 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Created**: Showcase Asset Muse (showcase_asset_muse)\n\n📝 Between-iteration muse for one showcase asset: design_muse on the filed references and the existing cast, then 3+ variants rendered side by side in the substrate, then a rubric grade. No asset enters a scene without it (D55).\n🧠 chain\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse/user-message.md\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "create",
+    "valid": true,
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "create",
+      "id": "showcase_asset_muse",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse/prompt.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse/user-message.md"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 1
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Created**: Showcase Asset Muse (showcase_asset_muse)\n\n📝 Between-iteration muse for one showcase asset: design_muse on the filed references and the existing cast, then 3+ variants rendered side by side in the substrate, then a rubric grade. No asset enters a scene without it (D55).\n🧠 chain\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse/user-message.md\n"
+  },
+  "isError": false
+}

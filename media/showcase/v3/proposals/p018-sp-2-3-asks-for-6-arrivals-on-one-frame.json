@@ -1,0 +1,17 @@
+{
+  "id": "p018",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "everything-at-once",
+    "frame": 330
+  },
+  "title": "sp-2.3 asks for 6 arrivals on one frame: the blocking holds one actor per kind and the count lists five kinds",
+  "text": "`blocking.actors` is a dictionary by name and `pieces.count` reads the five names stalk, arch, ring, patch and bead, so one frame can bring at most five of them and in practice fewer, because the stagger of sp-2.2 uses some of the names first. In animatic 06 the stalk comes on 232 and the arch on 244 (twelve frames apart, count 0 to 2 by 329) and the ring, the patch and the bead come on together on 330: three named props, which draw as about twenty pieces (the patch is four blocks, the bead fifteen beads), but the probe, the tables and the contacts count names. Options for the planner: instance names (`stalk-2`, matched by prefix in probe-story's count, ACTOR_NAMES, PROP_NATIVE and PROP_EXTENT) or a `count` on an actor that draws that many copies spread by a stated rule. Until one is chosen the measure line reads 3 where it asks for 6.",
+  "references": [],
+  "before": "one stalk the whole beat",
+  "after": "ring, patch and bead arrive on 330 (3 named props, about 20 drawn pieces); 6 named arrivals need instances",
+  "status": "open",
+  "ruling": null
+}

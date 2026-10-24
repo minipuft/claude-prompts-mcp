@@ -1,0 +1,32 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Created**: Showcase Story (showcase_story)\n\n📝 Write an evidence-backed silent product story, exact screen copy and timed beats after a reference-direction handoff.\n🧠 single\n\n🔒 **Gate Configuration Applied**:\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_story\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_story/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_story/user-message.md\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_story/system-message.md\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "create",
+    "valid": true,
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "create",
+      "id": "showcase_story",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_story",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_story/prompt.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_story/user-message.md",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_story/system-message.md"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 1
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Created**: Showcase Story (showcase_story)\n\n📝 Write an evidence-backed silent product story, exact screen copy and timed beats after a reference-direction handoff.\n🧠 single\n\n🔒 **Gate Configuration Applied**:\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_story\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_story/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_story/user-message.md\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_story/system-message.md\n"
+  },
+  "isError": false
+}

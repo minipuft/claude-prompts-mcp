@@ -1,0 +1,7 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_pipeline#1",
+    "user_response": "SMOKE: recorded validation fixture. SMOKE_MOTION_RESULT_7D3A\nNo creative or implementation work was performed. This is a literal result-propagation probe, not a worker execution receipt.\n\nHANDOFF RESULT\nnode: motion"
+  }
+}

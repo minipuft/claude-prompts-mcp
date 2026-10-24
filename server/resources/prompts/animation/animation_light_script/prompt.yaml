@@ -1,0 +1,31 @@
+id: animation_light_script
+name: Animation Light and Colour Script
+description: "Step 3: write light.json, the light track per beat (hue pair,
+  emitter path and intensity, radiance level, handoffs) and the colour path
+  across every crossing, from the shots' D74 hue pairs and the ledger's effects;
+  checked before any render."
+category: animation
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: episode_root
+    type: string
+    description: Episode directory holding the beat ledger (beats-v2.json or
+      beats.json), contracts (timeline.json, blocking/, keys/, light.json,
+      worlds/), rubric.md and studies/ (e.g. media/showcase/v3).
+    required: true
+  - name: renderer
+    type: string
+    description: "The rendering project root (Remotion here): where `npm run
+      animatic`, `npm run xsheet` and scripts/animation/ live."
+    required: false
+    defaultValue: media/showcase
+  - name: context
+    type: string
+    description: Owner notes, rulings or the previous step's result.
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory for studies and receipts.
+    required: false
+    defaultValue: media/showcase
+systemMessageFile: system-message.md

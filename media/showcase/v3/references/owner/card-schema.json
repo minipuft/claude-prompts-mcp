@@ -1,0 +1,66 @@
+{
+ "note": "Reference cards for the showcase film. Facet vocabularies and the required set per section come from the inspiration skill (eagle_board.py FACET_VOCAB / DEFAULT_REQUIRED); this file overrides them for the project. A pick cited by a contract (blocking card, pose sheet, layout, light script) must have its section's facets filled, and every use is recorded with `eagle_board.py apply <ID> --to <contract>#<key> --note ... --receipt ...` so `ledger` can say which reference led to which change. D88-D92 (2026-10-17): acting, timing and world.detail facets added; every light pick names what its light pushes (D91).",
+ "required": {
+  "acting": [
+   "acting.register",
+   "acting.timing",
+   "acting.contact",
+   "pose.lineOfAction",
+   "light.pushes"
+  ],
+  "timing": [
+   "acting.timing",
+   "acting.register",
+   "camera.move"
+  ],
+  "light": [
+   "light.source",
+   "light.direction",
+   "light.contrast",
+   "light.pushes",
+   "colour.scheme",
+   "fx",
+   "composition.scale"
+  ]
+ },
+ "vocab": {
+  "acting.register": [
+   "warm",
+   "playful",
+   "inviting",
+   "reverent",
+   "comic",
+   "tense",
+   "neutral"
+  ],
+  "acting.timing": [
+   "snap",
+   "hold-heavy",
+   "float",
+   "even",
+   "staggered"
+  ],
+  "acting.contact": [
+   "weighted",
+   "light",
+   "none"
+  ],
+  "world.detail": [
+   "child-notices",
+   "set-dressing",
+   "bare"
+  ],
+  "light.pushes": [
+   "curiosity",
+   "delight",
+   "overwhelm",
+   "frustration",
+   "wonder",
+   "play",
+   "focus",
+   "satisfaction",
+   "contentment",
+   "none"
+  ]
+ }
+}

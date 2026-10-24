@@ -1,0 +1,18 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "❌ **Prompt update conflict**: expected version 2, but 'showcase_pipeline' is now version 0.\n\nNothing was written and no version was consumed. Inspect the prompt again, reapply the intended edit, and resend with expected_version:0."
+    }
+  ],
+  "structuredContent": {
+    "action": "update",
+    "conflict": true,
+    "id": "showcase_pipeline",
+    "expected_version": 2,
+    "current_version": 0,
+    "mutated": false,
+    "message": "❌ **Prompt update conflict**: expected version 2, but 'showcase_pipeline' is now version 0.\n\nNothing was written and no version was consumed. Inspect the prompt again, reapply the intended edit, and resend with expected_version:0."
+  },
+  "isError": true
+}

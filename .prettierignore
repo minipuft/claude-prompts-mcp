@@ -48,3 +48,10 @@ plans/reference/sqlite-layer-remediation-2026-08-03.md
 # server/scripts/generate-contracts.ts owns their formatting; a prettier rewrite here
 # would be reverted on the next generate:contracts run and fail validate:contracts.
 hooks/lib/_generated/*.json
+
+# The showcase film's working tree: contracts, exposure sheets, probe outputs, receipts and
+# reference ledgers are written by its scripts, probes and the MCP client (JSON.stringify and
+# json.dump), and Prettier reflows what they emit. The film is authored on its own branch and held
+# there until the demo and release are ready; formatting its artifacts by hand would make every
+# regeneration a diff.
+media/showcase/

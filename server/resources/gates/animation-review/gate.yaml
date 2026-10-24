@@ -1,0 +1,15 @@
+id: animation-review
+name: Animation Review Rubric
+type: guidance
+description: "Advisory (no control, says so): grade the animatic against the
+  episode's rubric by criterion id with cited evidence; TASTE rows carry one
+  question with a default for the owner."
+guidanceFile: guidance.md
+activation:
+  prompt_categories:
+    - animation
+  explicit_request: true
+subject: animation-review
+severity: medium
+enforcementMode: advisory
+gate_type: custom

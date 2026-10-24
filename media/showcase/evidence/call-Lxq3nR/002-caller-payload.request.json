@@ -1,0 +1,82 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "create",
+    "id": "showcase_model_sheet",
+    "name": "Showcase Model Sheet",
+    "category": "development",
+    "description": "Once per character after the owner's pick (D72): generate the model sheet through the imagegen tool from the approved plate and its board cards (turnaround, construction, proportion ruler, expression states, hands), measure it against the clean-up standard, and write assets/<character>/model.json as the identity contract every key sheet is checked against.",
+    "arguments": [
+      {
+        "name": "character",
+        "type": "string",
+        "required": true,
+        "description": "Character id (assets/<character>/), e.g. human, cloak, codex, clawd."
+      },
+      {
+        "name": "pick",
+        "type": "string",
+        "required": true,
+        "description": "Absolute path of the owner-approved plate (the pick from the muse sheet)."
+      },
+      {
+        "name": "cards",
+        "type": "string",
+        "required": false,
+        "description": "Board card ids the pick cites (v3/references/board.json); their files are the references."
+      },
+      {
+        "name": "output_root",
+        "type": "string",
+        "required": false,
+        "defaultValue": "media/showcase",
+        "description": "Caller-owned production artifact directory."
+      }
+    ],
+    "user_message_template": "Character: {{character}}\nApproved pick: {{pick}}\nBoard cards: {{cards | default(\"the cards the pick's study receipt cites\")}}\nProduction root: {{output_root}}\n\nRead `v3/creative-spec.md` (D65–D72 and the Craft baseline section: the model sheet is the identity contract; the clean-up standard) and `v3/rubric.md` (C20–C22). Generate ONE model sheet through the `imagegen` tool (`tool:imagegen`), never by hand: `references` are the absolute paths of the pick and the cited card files; the `prompt` asks for a pure black field, five flat colors with identity pigments by hex, pale contour one step lighter, and this layout at one scale on one baseline: row 1 turnaround front / three-quarter / side; row 2 the same three views as construction volumes (spheres, cylinders, wedges) with a proportion ruler in heads at the left; row 3 the expression states neutral, blink, open mouth, look (D70) and a hands row (open, point, grip, hold); every cell numbered. `out` is `out/<character>-model-<NN>.png`. Measure on the plate: head count per view, limb lengths per view as ratios of height, scale agreement between views (reject above 5 % and regenerate once naming the drift), contour weight in px against 1/120 of figure height ± 20 %, taper and closure (C22). Lay the sheet and its measurements into the `ModelSheet` composition and render one still. Write `assets/<character>/model.json` (views, heads, limb ratios, contour weight, sha256 of the plate, the generation receipt). Cut nothing here. Do not pick: the owner approves the sheet from the still, and until then it is provisional.\n\nReturn: Views (cell, measured heads and ratios); Scale Agreement; Clean-up Measured; Sheet Path; model.json Path; Generation Receipt; Rejected Generations; Concerns.",
+    "tools": [
+      {
+        "id": "imagegen",
+        "name": "Image Generation (codex exec)",
+        "description": "Draw one asset with Codex's image tool from board images as references (D65/D66); copies the result to `out` unchanged and returns prompt, referenced_image_paths, source path and sha256; refuses on a missing file.",
+        "runtime": "python",
+        "script": "#!/usr/bin/env python3\n\"\"\"imagegen: draw one asset with Codex's image tool from board images (D65/D66).\nstdin JSON: {prompt, references: [abs paths], out: abs png path, workdir?}\nRuns `codex exec --skip-git-repo-check -C <workdir> -i ref... -- \"<prompt>\"` (the `--` is required or the prompt is read from stdin),\nparses the generated path Codex prints, copies it to `out` unchanged, and returns {valid, path, sha256, bytes, referenced_image_paths}.\nRefuses, never fabricates: a missing file or a missing path in the output is valid:false with the reason.\"\"\"\nimport hashlib, json, os, re, shutil, subprocess, sys, tempfile\ndata = json.load(sys.stdin)\nprompt = data.get(\"prompt\", \"\").strip(); refs = data.get(\"references\", []); out = data.get(\"out\")\nif not prompt or not out: print(json.dumps({\"valid\": False, \"errors\": [\"prompt and out are required\"]})); sys.exit(0)\nmissing = [r for r in refs if not os.path.isfile(r)]\nif missing: print(json.dumps({\"valid\": False, \"errors\": [f\"reference missing: {m}\" for m in missing]})); sys.exit(0)\nif not shutil.which(\"codex\"): print(json.dumps({\"valid\": False, \"errors\": [\"codex CLI not on PATH\"]})); sys.exit(0)\nworkdir = data.get(\"workdir\") or tempfile.mkdtemp(prefix=\"imagegen-\")\nask = (\"Use your image generation tool exactly once, with every attached image as a reference, for this request:\\n\" + prompt +\n       \"\\nThen print only: the absolute path of the generated file on one line, and on the next lines a JSON object with the exact tool arguments you used (prompt, referenced_image_paths, transparent_background).\")\ncmd = [\"codex\", \"exec\", \"--skip-git-repo-check\", \"-C\", workdir]\nfor r in refs: cmd += [\"-i\", r]\ncmd += [\"--\", ask]\ntry:\n    run = subprocess.run(cmd, capture_output=True, text=True, timeout=int(data.get(\"timeout\", 280)))\nexcept subprocess.TimeoutExpired:\n    print(json.dumps({\"valid\": False, \"errors\": [\"codex exec timed out\"]})); sys.exit(0)\ntext = run.stdout + \"\\n\" + run.stderr\npaths = re.findall(r\"(/[^\\s'\\\"`]+\\.png)\", text)\npaths = [p for p in paths if os.path.isfile(p) and \"generated_images\" in p]\nif not paths: print(json.dumps({\"valid\": False, \"errors\": [\"no generated file path found in codex output\", text[-600:]]})); sys.exit(0)\nsrc = paths[-1]\nargs = None\nm = re.search(r\"\\{[\\s\\S]*\\\"referenced_image_paths\\\"[\\s\\S]*?\\}\\s*$\", text.strip()) or re.search(r\"\\{[\\s\\S]*\\\"referenced_image_paths\\\"[\\s\\S]*\\}\", text)\nif m:\n    try: args = json.loads(m.group(0))\n    except Exception: args = {\"raw\": m.group(0)[:1200]}\nos.makedirs(os.path.dirname(out), exist_ok=True)\nshutil.copyfile(src, out)\nraw = open(out, \"rb\").read()\nprint(json.dumps({\"valid\": True, \"path\": out, \"source\": src, \"sha256\": hashlib.sha256(raw).hexdigest(), \"bytes\": len(raw), \"referenced_image_paths\": refs, \"tool_arguments\": args, \"summary\": {\"references\": len(refs)}}))\n",
+        "timeout": 295000,
+        "trigger": "explicit",
+        "confirm": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "description": "The generation request; names which reference supplies which property."
+            },
+            "references": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Absolute paths of board images (v3/references/*) attached as references."
+            },
+            "out": {
+              "type": "string",
+              "description": "Absolute output PNG path under media/showcase/out/."
+            },
+            "workdir": {
+              "type": "string"
+            },
+            "timeout": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "prompt",
+            "references",
+            "out"
+          ]
+        }
+      }
+    ]
+  }
+}

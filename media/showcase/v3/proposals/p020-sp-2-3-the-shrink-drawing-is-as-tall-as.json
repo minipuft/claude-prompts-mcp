@@ -1,0 +1,17 @@
+{
+  "id": "p020",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "everything-at-once",
+    "frame": 330
+  },
+  "title": "sp-2.3: the shrink drawing is as tall as the joy drawings; 'height falls 15 %' passes only on beat 3's cut",
+  "text": "`human.small` reads the figure layer's height between frame 329 and frame 429 and finds -20.7 %. Both numbers are the cut: the figure is 720 px tall (clipped at the canvas) on every frame from 329 to 419, the `shrink` drawing included, and 571 px on frame 420, where beat 3's smaller figure begins (out/animatic-06-draft-fig-seq; measured in out/b12/measure.py output). So the line is met by the film's next beat, not by the human folding. The `shrink` key draws a head at y 208 and ankles at y 838 in key units, against 205 and 838 for the brace before it: the solver's fold has no crouch, the line-of-action bow is already declared, and the figure's scale is one number per beat (`figure.scale`, which steps at a cut and cannot be keyed). To make the human smaller inside beat 2: a scale on the `figure.at` keys that the beat-4 work added (x and y today) or a crouch on the pose spec that lowers the head and bends the knees. The window of the story point should also stop at its own beat's end (419), or the probe keeps reading the cut.",
+  "references": [],
+  "before": "720 px tall on 329 and on 419; the 20.7 % is beat 3's cut",
+  "after": "the figure's silhouette height falls 15 % or more inside 330-419",
+  "status": "open",
+  "ruling": null
+}

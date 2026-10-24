@@ -1,0 +1,421 @@
+{
+  "revision": "shots-04 · 2026-10-19 · shot ranges are the 65 s timeline's beats (s01 beats 1-2, s02 3-4, s03 5-7, s04 8); D69 cloak→swoop transition on s02; human sheet accepted",
+  "fps": 30,
+  "beats": "v3/beats.json",
+  "shots": [
+    {
+      "id": "s01-arrival-overwhelm",
+      "beat": [
+        "arrival",
+        "everything-at-once"
+      ],
+      "title": "Poster, lid lifts, bubble swells, pops, everything projects",
+      "frames": [
+        0,
+        420
+      ],
+      "camera": "medium-wide on the trio and box, widening to the full field",
+      "move": {
+        "type": "widen",
+        "led_by": "the bubble swelling, then the first stalk's curl projecting upward and outward",
+        "frames": [
+          150,
+          210
+        ]
+      },
+      "actors": [
+        "human",
+        "box",
+        "bubble",
+        "gadget",
+        "codex",
+        "clawd",
+        "stalk",
+        "arch",
+        "ring",
+        "patch",
+        "string"
+      ],
+      "emitter": "box seam → gadget dial (one emitter at a time; the seam hands off to the dial at the pop)",
+      "join": null,
+      "objects": [
+        "box",
+        "bubble",
+        "gadget",
+        "human",
+        "codex",
+        "clawd",
+        "stalk",
+        "arch",
+        "ring",
+        "patch",
+        "string"
+      ],
+      "cards": [
+        "owner-board",
+        "seuss-no-one-youer",
+        "gospel-trailer-16",
+        "gospel-trailer-72",
+        "gospel-junkyard",
+        "seuss-freebird"
+      ],
+      "cut_justification": null,
+      "measured": {
+        "date": "2026-10-15",
+        "study": "v3/studies/s01-05.md",
+        "frames": [
+          0,
+          420
+        ],
+        "source": "v3/timeline.json: arrival 0-180, everything-at-once 180-420, no crossing; the older 0-330 above is retired",
+        "beats": {
+          "arrival": [
+            0,
+            180
+          ],
+          "everything-at-once": [
+            180,
+            420
+          ]
+        },
+        "camera": "locked 0-150, widen 150-210 on ones from (640,360,x1) to (604,103,x0.6), held to 420 (v3/layouts/s01-arrival-overwhelm.json cameraPose)",
+        "emitter": "box seam 0-177, gadget dial 182-419 (gap 4)",
+        "keys": "K1 0, K2 42, K3 66, K4 104, K5 154, K6 190, K7 228, K8 272 (held to 420, declared 148); 28 breakdowns on twos from the pose sheet (3 moves authored world-space)",
+        "lag": "pop 180, lamp 182, flood 184",
+        "pieces": "50, launched 186-385, staggered 3-5 frames",
+        "render": "out/s01-02.mp4, 420 frames, 1280x720 at 30 fps"
+      },
+      "hue": {
+        "radiance": "#0a51fb",
+        "accent": "#fad204",
+        "ruling": "D74",
+        "board": "board-06 §7"
+      }
+    },
+    {
+      "id": "s02-cant-build-frame",
+      "beat": [
+        "cant-build",
+        "the-frame"
+      ],
+      "title": "Reaches fail; the frame rises; the cloak falls and the Swoop looks through",
+      "frames": [
+        420,
+        930
+      ],
+      "camera": "medium on the human, panning right to Clawd and the raised frame",
+      "move": {
+        "type": "pan",
+        "led_by": "the stalk sliding back along the ground toward Clawd, then the frame's left bar as it rises",
+        "frames": [
+          470,
+          500
+        ]
+      },
+      "actors": [
+        "human",
+        "stalk",
+        "patch",
+        "arch",
+        "codex",
+        "clawd",
+        "frame"
+      ],
+      "emitter": "gadget dial, lost → the frame interior",
+      "join": null,
+      "objects": [
+        "human",
+        "stalk",
+        "patch",
+        "arch",
+        "codex",
+        "clawd",
+        "frame",
+        "ring",
+        "string"
+      ],
+      "cards": [
+        "lin-unravel",
+        "lin-chicory",
+        "chetas",
+        "seuss-nested-frames",
+        "seuss-archbishop-katz",
+        "klaus-lighting",
+        "lin-katamari"
+      ],
+      "cut_justification": null,
+      "measured": null,
+      "transition_event": "cloak → swoop (D69): the heavy cloak drops as the human turns to the frame, one move with anticipation; the swoop figure is revealed under it, hands first",
+      "hue": {
+        "radiance": "#17263a",
+        "accent": "#457ca4",
+        "ruling": "D74",
+        "board": "board-06 §7"
+      }
+    },
+    {
+      "id": "s03-scaffold",
+      "beat": [
+        "art-world",
+        "crossing"
+      ],
+      "beats_note": "frames 930-1650 hold beats 5-7 (art-world, crossing, programming-world). programming-world is not listed in `beat` because it wears the s02 hue pair by the ledger (timeline radiance: s02 accent as the world's hue) and `beat` is what lightPlan, compile-light and probe-colour read as 'beats wearing this shot's pair'; the shot of a frame comes from `frames`",
+      "title": "Six joins through the frame; a slow push along the beaded string",
+      "frames": [
+        930,
+        1650
+      ],
+      "camera": "through-frame view, pushing in slowly as the structure gains depth",
+      "move": {
+        "type": "push",
+        "led_by": "the beaded light string from the first stalk toward the arch and the rings behind it",
+        "frames": null
+      },
+      "actors": [
+        "human",
+        "patch",
+        "stalk",
+        "string",
+        "arch",
+        "ring",
+        "gadget",
+        "frame"
+      ],
+      "emitter": "the lit join of the moment",
+      "join": "patch 634 · stalk 698 · string 786 · arch keystone 882 · ring 920 · second patch seam 982",
+      "objects": [
+        "human",
+        "patch",
+        "stalk",
+        "string",
+        "arch",
+        "ring",
+        "gadget",
+        "frame"
+      ],
+      "cards": [
+        "seuss-no-one-youer",
+        "seuss-green-cat-lights",
+        "seuss-archbishop-katz",
+        "seuss-nested-frames",
+        "lin-tiny-glade",
+        "lcslates",
+        "lin-chicory"
+      ],
+      "cut_justification": null,
+      "measured": null,
+      "hue": {
+        "radiance": "#e1750c",
+        "accent": "#fad204",
+        "ruling": "D74",
+        "board": "board-06 §7"
+      }
+    },
+    {
+      "id": "s04-settle",
+      "beat": [
+        "home-settle"
+      ],
+      "title": "Pull back along the structure's silhouette to the second poster",
+      "frames": [
+        1650,
+        1950
+      ],
+      "camera": "pulling back to a wide with the structure centered and the trio at its base",
+      "move": {
+        "type": "pull",
+        "led_by": "the structure's outer silhouette and the frame's edge set down against it",
+        "frames": null
+      },
+      "actors": [
+        "human",
+        "codex",
+        "clawd",
+        "frame",
+        "gadget"
+      ],
+      "emitter": "gadget, rimming the structure",
+      "join": null,
+      "objects": [
+        "human",
+        "codex",
+        "clawd",
+        "frame",
+        "gadget",
+        "structure"
+      ],
+      "cards": [
+        "seuss-green-cat-lights",
+        "owner-board",
+        "lin-adventure-time",
+        "shfred"
+      ],
+      "cut_justification": null,
+      "measured": null,
+      "hue": {
+        "radiance": "#a63a2e",
+        "accent": "#f8c496",
+        "ruling": "D74",
+        "board": "board-06 §7"
+      }
+    }
+  ],
+  "object_inventory": [
+    {
+      "object": "human",
+      "job": "resource_manager: the hands that place and lift pieces",
+      "kind": "character",
+      "sheet_accepted": "human-gen-16 middle (Swoop), owner 2026-10-13; cloak = left direction as the arrival costume; face sheet pending",
+      "cards": [
+        "seuss-cat-stairway",
+        "lin-fosters",
+        "seuss-no-one-youer",
+        "seuss-archbishop-katz",
+        "chetas",
+        "codex-official",
+        "clawd-official"
+      ],
+      "muse_command": ">>showcase_asset_muse asset:\"human: resource_manager: the hands that place and lift pieces\" constraints:\"cite board cards seuss-cat-stairway, lin-fosters, seuss-no-one-youer, seuss-archbishop-katz, chetas, codex-official, clawd-official; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed\""
+    },
+    {
+      "object": "box",
+      "job": "the package; opens into the bubble",
+      "kind": "prop",
+      "sheet_accepted": null,
+      "sheet_proposed": "assets/props/box/muse.json",
+      "cards": [
+        "owner-board",
+        "seuss-no-one-youer"
+      ],
+      "muse_command": ">>showcase_asset_muse asset:\"box: the package; opens into the bubble\" constraints:\"cite board cards owner-board, seuss-no-one-youer; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed\""
+    },
+    {
+      "object": "bubble",
+      "job": "capability seen through glass; swells from the box, pops",
+      "kind": "prop",
+      "sheet_accepted": null,
+      "sheet_proposed": "assets/props/bubble/muse.json",
+      "cards": [
+        "gospel-trailer-16",
+        "seuss-nested-frames",
+        "cloudysky-guide"
+      ],
+      "muse_command": ">>showcase_asset_muse asset:\"bubble: capability seen through glass; swells from the box, pops\" constraints:\"cite board cards gospel-trailer-16, seuss-nested-frames, cloudysky-guide; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed\""
+    },
+    {
+      "object": "gadget",
+      "job": "raw capability: the hybrid universe-simulator machine",
+      "kind": "prop",
+      "sheet_accepted": null,
+      "sheet_proposed": "assets/props/gadget/muse.json",
+      "cards": [
+        "gospel-junkyard",
+        "gospel-trailer-16",
+        "seuss-green-cat-lights",
+        "lin-katamari"
+      ],
+      "muse_command": ">>showcase_asset_muse asset:\"gadget: raw capability: the hybrid universe-simulator machine\" constraints:\"cite board cards gospel-junkyard, gospel-trailer-16, seuss-green-cat-lights, lin-katamari; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed\""
+    },
+    {
+      "object": "frame",
+      "job": "prompt_engine: the frame held up, interior someplace else",
+      "kind": "prop",
+      "sheet_accepted": null,
+      "sheet_proposed": "assets/props/pieces/muse.json",
+      "cards": [
+        "seuss-nested-frames",
+        "seuss-archbishop-katz",
+        "klaus-lighting"
+      ],
+      "muse_command": ">>showcase_asset_muse asset:\"frame: prompt_engine: the frame held up, interior someplace else\" constraints:\"cite board cards seuss-nested-frames, seuss-archbishop-katz, klaus-lighting; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed\""
+    },
+    {
+      "object": "stalk",
+      "job": "prompt: a curling stalk with a flag leaf",
+      "kind": "prop",
+      "sheet_accepted": null,
+      "sheet_proposed": "assets/props/pieces/muse.json",
+      "cards": [
+        "seuss-no-one-youer",
+        "seuss-freebird"
+      ],
+      "muse_command": ">>showcase_asset_muse asset:\"stalk: prompt: a curling stalk with a flag leaf\" constraints:\"cite board cards seuss-no-one-youer, seuss-freebird; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed\""
+    },
+    {
+      "object": "string",
+      "job": "chain: stalks joined by a beaded light string",
+      "kind": "prop",
+      "sheet_accepted": null,
+      "sheet_proposed": "assets/props/pieces/muse.json",
+      "cards": [
+        "seuss-green-cat-lights",
+        "lcslates"
+      ],
+      "muse_command": ">>showcase_asset_muse asset:\"string: chain: stalks joined by a beaded light string\" constraints:\"cite board cards seuss-green-cat-lights, lcslates; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed\""
+    },
+    {
+      "object": "arch",
+      "job": "gate: a pointed arch with a keystone pulse",
+      "kind": "prop",
+      "sheet_accepted": null,
+      "sheet_proposed": "assets/props/pieces/muse.json",
+      "cards": [
+        "seuss-archbishop-katz"
+      ],
+      "muse_command": ">>showcase_asset_muse asset:\"arch: gate: a pointed arch with a keystone pulse\" constraints:\"cite board cards seuss-archbishop-katz; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed\""
+    },
+    {
+      "object": "patch",
+      "job": "category: a soft ground patch joining at seams",
+      "kind": "prop",
+      "sheet_accepted": null,
+      "sheet_proposed": "assets/props/pieces/muse.json",
+      "cards": [
+        "seuss-cat-stairway",
+        "gospel-hallway"
+      ],
+      "muse_command": ">>showcase_asset_muse asset:\"patch: category: a soft ground patch joining at seams\" constraints:\"cite board cards seuss-cat-stairway, gospel-hallway; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed\""
+    },
+    {
+      "object": "ring",
+      "job": "framework: a receding turned frame inside the interior",
+      "kind": "prop",
+      "sheet_accepted": null,
+      "sheet_proposed": "assets/props/pieces/muse.json",
+      "cards": [
+        "seuss-nested-frames"
+      ],
+      "muse_command": ">>showcase_asset_muse asset:\"ring: framework: a receding turned frame inside the interior\" constraints:\"cite board cards seuss-nested-frames; five-role flat SVG on black; Seuss contour; Midnight Gospel stipple; identity pigments fixed\""
+    },
+    {
+      "object": "codex",
+      "job": "companion, identity pigments fixed; construction morphs to the world (D63); variants cite the official sprite for pigments and recognizable features only",
+      "kind": "character",
+      "sheet_accepted": null,
+      "cards": [
+        "codex-official",
+        "lin-adventure-time"
+      ],
+      "muse_command": ">>showcase_asset_muse asset:\"codex: companion, identity pigments fixed; construction morphs to the world (D63); variants cite the official sprite for pigments and recognizable features only\" constraints:\"cite board cards codex-official, lin-adventure-time, seuss-cat-stairway, gospel-hallway; keep identity pigments; Seuss contour; Midnight Gospel stipple; silhouette may change\""
+    },
+    {
+      "object": "clawd",
+      "job": "companion, identity pigments fixed; construction morphs to the world (D63); variants cite the official sprite for pigments and recognizable features only",
+      "kind": "character",
+      "sheet_accepted": null,
+      "cards": [
+        "clawd-official",
+        "lin-adventure-time"
+      ],
+      "muse_command": ">>showcase_asset_muse asset:\"clawd: companion, identity pigments fixed; construction morphs to the world (D63); variants cite the official sprite for pigments and recognizable features only\" constraints:\"cite board cards clawd-official, lin-adventure-time, seuss-cat-stairway, gospel-hallway; keep identity pigments; Seuss contour; Midnight Gospel stipple; silhouette may change\""
+    }
+  ],
+  "rules": [
+    "no hard cut unless cut_justification is filled (D64); shot boundaries are camera moves along a leading line",
+    "a move has hold, anticipation, action, settle like an actor; drawn layer on twos during a move, light continuous",
+    "one emitter at a time; a hand-off between emitters is a lag-chain event, not a second emitter",
+    "frames provisional until measured",
+    "cards cite v3/references/board.json ids",
+    "the muse runs per object from object_inventory, never inside the chain"
+  ]
+}

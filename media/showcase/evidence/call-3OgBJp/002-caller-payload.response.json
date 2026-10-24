@@ -1,0 +1,30 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Updated**: Animation Animatic Render (animation_animatic_render)\n\nUpdated prompt: animation_animatic_render\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +1 additions, -0 deletions\n\n```diff\n===================================================================\n--- a/animation/animation_animatic_render/prompt.yaml\n+++ b/animation/animation_animatic_render/prompt.yaml\n@@ -28,3 +28,4 @@\n     description: Caller-owned production artifact directory for studies and receipts.\n     required: false\n     defaultValue: media/showcase\n+systemMessageFile: system-message.md\n\n```\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic_render\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic_render/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic_render/system-message.md\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "update",
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "update",
+      "id": "animation_animatic_render",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic_render",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic_render/prompt.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic_render/system-message.md"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 2
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Updated**: Animation Animatic Render (animation_animatic_render)\n\nUpdated prompt: animation_animatic_render\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +1 additions, -0 deletions\n\n```diff\n===================================================================\n--- a/animation/animation_animatic_render/prompt.yaml\n+++ b/animation/animation_animatic_render/prompt.yaml\n@@ -28,3 +28,4 @@\n     description: Caller-owned production artifact directory for studies and receipts.\n     required: false\n     defaultValue: media/showcase\n+systemMessageFile: system-message.md\n\n```\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic_render\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic_render/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic_render/system-message.md\n"
+  },
+  "isError": false
+}

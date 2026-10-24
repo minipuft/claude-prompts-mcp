@@ -1,0 +1,194 @@
+[
+ {
+  "key": "K1",
+  "name": "paper",
+  "plate": "assets/human/keys/s03-scaffold/K1.png",
+  "family": "home",
+  "cropPx": [
+   243,
+   436
+  ],
+  "baselineInCrop": 432,
+  "scale": 0.4745,
+  "originMask": [
+   65,
+   41
+  ]
+ },
+ {
+  "key": "K2",
+  "name": "take",
+  "plate": "assets/human/keys/s03-scaffold/K2.png",
+  "family": "home",
+  "cropPx": [
+   350,
+   430
+  ],
+  "baselineInCrop": 427,
+  "scale": 0.4745,
+  "originMask": [
+   63,
+   51
+  ]
+ },
+ {
+  "key": "K3",
+  "name": "draw",
+  "plate": "assets/human/keys/s03-scaffold/K3.png",
+  "family": "home",
+  "cropPx": [
+   374,
+   420
+  ],
+  "baselineInCrop": 418,
+  "scale": 0.4745,
+  "originMask": [
+   35,
+   71
+  ]
+ },
+ {
+  "key": "K4",
+  "name": "draw-b",
+  "plate": "assets/human/keys/s03-scaffold/K4.png",
+  "family": "home",
+  "cropPx": [
+   321,
+   466
+  ],
+  "baselineInCrop": 464,
+  "scale": 0.4745,
+  "originMask": [
+   5,
+   -26
+  ]
+ },
+ {
+  "key": "K5",
+  "name": "real",
+  "plate": "assets/human/keys/s03-scaffold/K5.png",
+  "family": "home",
+  "cropPx": [
+   357,
+   483
+  ],
+  "baselineInCrop": 481,
+  "scale": 0.4745,
+  "originMask": [
+   -145,
+   -62
+  ]
+ },
+ {
+  "key": "K6",
+  "name": "carry",
+  "plate": "assets/human/keys/s03-scaffold/K6.png",
+  "family": "home",
+  "cropPx": [
+   353,
+   434
+  ],
+  "baselineInCrop": 430,
+  "scale": 0.4745,
+  "originMask": [
+   90,
+   45
+  ]
+ },
+ {
+  "key": "K7",
+  "name": "reduce",
+  "plate": "assets/human/keys/s03-scaffold/K7.png",
+  "family": "home",
+  "cropPx": [
+   331,
+   507
+  ],
+  "baselineInCrop": 504,
+  "scale": 0.4745,
+  "originMask": [
+   -70,
+   -111
+  ]
+ },
+ {
+  "key": "K8",
+  "name": "reroute",
+  "plate": "assets/human/keys/s03-scaffold/K8.png",
+  "family": "home",
+  "cropPx": [
+   324,
+   494
+  ],
+  "baselineInCrop": 491,
+  "scale": 0.4745,
+  "originMask": [
+   -8,
+   -84
+  ]
+ },
+ {
+  "key": "K9",
+  "name": "grid",
+  "plate": "assets/human/keys/s03-scaffold/K9.png",
+  "family": "home",
+  "cropPx": [
+   352,
+   432
+  ],
+  "baselineInCrop": 429,
+  "scale": 0.4745,
+  "originMask": [
+   57,
+   47
+  ]
+ },
+ {
+  "key": "K10",
+  "name": "join",
+  "plate": "assets/human/keys/s03-scaffold/K10.png",
+  "family": "home",
+  "cropPx": [
+   382,
+   428
+  ],
+  "baselineInCrop": 425,
+  "scale": 0.4745,
+  "originMask": [
+   98,
+   55
+  ]
+ },
+ {
+  "key": "K11",
+  "name": "run",
+  "plate": "assets/human/keys/s03-scaffold/K11.png",
+  "family": "home",
+  "cropPx": [
+   240,
+   491
+  ],
+  "baselineInCrop": 488,
+  "scale": 0.4745,
+  "originMask": [
+   63,
+   -78
+  ]
+ },
+ {
+  "key": "K12",
+  "name": "return",
+  "plate": "assets/human/keys/s03-scaffold/K12.png",
+  "family": "home",
+  "cropPx": [
+   321,
+   422
+  ],
+  "baselineInCrop": 419,
+  "scale": 0.4745,
+  "originMask": [
+   -12,
+   67
+  ]
+ }
+]

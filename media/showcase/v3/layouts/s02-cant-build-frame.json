@@ -1,0 +1,135 @@
+{
+  "shot": "s02-cant-build-frame",
+  "sheet": "assets/layouts/s02-layout-01.png",
+  "sheetSha256": "e9cdf04fec84cd6211f2f5b385f3c349a5d92cf65cb2c24ab6b58de52d5a5f98",
+  "camera": {
+    "start": "medium on the human mid-reach, the stalk curling away right, the dial's glow on the floor, Codex small at frame left",
+    "end": "the raised frame at frame right held by Clawd, its interior the only light; the human in silhouette looking through it; the dropped cloak on the floor",
+    "move": "pan right",
+    "ledBy": "the stalk sliding back along the ground toward Clawd, then the frame's left bar as it rises"
+  },
+  "cameraPose": {
+    "span": [
+      690,
+      895
+    ],
+    "start": {},
+    "end": {
+      "x": 690,
+      "y": 360,
+      "zoom": 1
+    }
+  },
+  "hue": {
+    "radiance": "#17263a",
+    "accent": "#457ca4"
+  },
+  "emitter": {
+    "start": "gadget dial on the floor",
+    "end": "the frame interior",
+    "startXY": [
+      0.345,
+      0.886
+    ],
+    "endXY": [
+      0.6,
+      0.481
+    ]
+  },
+  "figure": {
+    "actor": "human",
+    "startHeightPct": 63.4,
+    "endHeightPct": null,
+    "heads": 8.0,
+    "note": "panel 1: tallest ink component = the human bent in the reach (63 % of frame height). panel 2: the tallest component (96 %) merges the human, the frame and Clawd where the hand touches the frame, so the human's own height is unmeasured by the script; by eye the standing human is about 72 % and the frame interior is the emitter at (0.60, 0.48).",
+    "endComponentPct": 96.0
+  },
+  "panels": [
+    {
+      "n": 1,
+      "what": "frame at move start (f330): reach, lost dial"
+    },
+    {
+      "n": 2,
+      "what": "frame at move end (f600): raised frame lit, human looks through"
+    },
+    {
+      "n": 3,
+      "what": "staging plan: camera wedge, pan arrow right, leading line stalk \u2192 frame bar, two emitter suns"
+    },
+    {
+      "n": 4,
+      "what": "scale strip: human at panel-1 and panel-2 size on one baseline, head ruler, radiance and accent swatches"
+    }
+  ],
+  "cards": [
+    "eagle-lxu2uuohr9v2c",
+    "eagle-mfp3wx8x3lix2",
+    "eagle-mf83t1h77o7bm",
+    "eagle-lyio3is7tokub",
+    "eagle-mtr8sl3r48no7",
+    "seuss-nested-frames"
+  ],
+  "receipt": "evidence/call-CP9gtK + imagegen-layout-s02-01.json",
+  "measured": {
+    "panels": [
+      {
+        "n": 1,
+        "box": [
+          14,
+          26,
+          821,
+          454
+        ],
+        "inner_h": 429,
+        "figure_h_px": 272,
+        "figure_h_pct": 63.4,
+        "figure_box": {
+          "x": [
+            32,
+            546
+          ],
+          "y": [
+            155,
+            426
+          ],
+          "area": 35493
+        },
+        "emitter": {
+          "x_frac": 0.345,
+          "y_frac": 0.886,
+          "pixels": 766
+        }
+      },
+      {
+        "n": 2,
+        "box": [
+          825,
+          26,
+          1656,
+          454
+        ],
+        "inner_h": 429,
+        "figure_h_px": 412,
+        "figure_h_pct": 96.0,
+        "figure_box": {
+          "x": [
+            80,
+            693
+          ],
+          "y": [
+            15,
+            426
+          ],
+          "area": 63711
+        },
+        "emitter": {
+          "x_frac": 0.6,
+          "y_frac": 0.481,
+          "pixels": 3056
+        }
+      }
+    ]
+  },
+  "provisional": true
+}

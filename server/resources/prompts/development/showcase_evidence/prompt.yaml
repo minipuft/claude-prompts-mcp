@@ -1,0 +1,41 @@
+id: showcase_evidence
+name: Showcase Evidence
+description: "File a graded shot: copy the stills and strip under v3/studies
+  with sha256, save the five-part receipt, write the measured frame range back
+  into v3/shots.json and the beat's range in v3/script.md, and update the plan's
+  Now block; a ruling that landed adds a board card."
+category: development
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: brief
+    type: string
+    description: Audience, product goal and desired silent showcase outcome.
+    required: true
+  - name: context
+    type: string
+    description: Prior step output; read shared chain history for earlier evidence
+      and decisions.
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory.
+    required: false
+    defaultValue: media/showcase
+  - name: shot
+    type: string
+    description: Shot id from v3/shots.json.
+    required: true
+artifacts:
+  produces:
+    - docs
+    - plan
+gateConfiguration:
+  exclude:
+    - api-documentation
+    - creed-fidelity
+    - information-placement
+    - plan-quality
+    - product-positioning-fidelity
+    - prose-hygiene
+    - semantic-discoverability
+systemMessageFile: system-message.md

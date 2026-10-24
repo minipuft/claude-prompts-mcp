@@ -1,0 +1,11 @@
+{
+  "evidenceClass": "explicitly labeled smoke fixture",
+  "chainId": "chain-showcase_pipeline#1",
+  "handoffSentinel": "SMOKE_REFERENCE_HANDOFF_7D3A",
+  "sentinelPresent": false,
+  "storyTemplatePresent": false,
+  "briefPresent": true,
+  "gateVerdictSubmitted": false,
+  "creativeProductionExecuted": false,
+  "beforeSessionResponseRecorded": true
+}

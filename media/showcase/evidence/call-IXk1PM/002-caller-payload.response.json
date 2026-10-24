@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ Gate 'showcase-asset-muse' created successfully\n\n📁 Files created:\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/showcase-asset-muse\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/showcase-asset-muse/gate.yaml\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/showcase-asset-muse/guidance.md\n\n🔄 Registered in the gate registry — ready to use now"
+    }
+  ],
+  "isError": false
+}

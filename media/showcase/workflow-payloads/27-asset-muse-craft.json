@@ -1,0 +1,24 @@
+{
+ "name": "resource_manager",
+ "arguments": {
+  "resource_type": "prompt",
+  "action": "update",
+  "id": "showcase_asset_muse",
+  "arguments": [
+   {
+    "name": "asset",
+    "type": "string",
+    "required": true,
+    "description": "The asset's job in the script's resource vocabulary."
+   },
+   {
+    "name": "constraints",
+    "type": "string",
+    "required": false,
+    "defaultValue": "Generated sheets only (D65/D66), pure black field, five flat roles with identity pigments pinned, pale contour, clean-up standard (D72); variants must sit between the board cards cited and the existing cast. The owner's pick then gets a model sheet (showcase_model_sheet) before any key sheet; nothing is animated by generation (D68).",
+    "description": "The style envelope the variants must stay inside."
+   }
+  ],
+  "description": "Between-iteration muse for one showcase asset: design_muse on the board and the existing cast, then 3+ generated sheets side by side in the substrate, then a rubric grade. No asset enters a scene without it (D55); the pick proceeds to a model sheet (D72)."
+ }
+}

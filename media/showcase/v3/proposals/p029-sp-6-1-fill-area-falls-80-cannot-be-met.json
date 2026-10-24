@@ -1,0 +1,17 @@
+{
+  "id": "p029",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "crossing",
+    "frame": 1240
+  },
+  "title": "sp-6.1: `fill area falls >= 80 %` cannot be met: reduced by f1239, and paper to lines is 21 % to 10 % ink",
+  "text": "The recipe `{kind: picture, measure: ink-share, expect: falls, min: 0.8}` reads the share of pixels that are not the field colour on f1239 and f1299. Two measured facts: (1) the crossing out of the art world is the window 1195-1265 (`v3/timeline.json` crossings), its thirds reduce 1195-1218, hold the line world 1218-1242 and refill 1242-1265, so f1239 is already a line frame: 8.4 % of the picture is ink on f1239, 10.1 % on f1299 (+20 %); the fills drained 22 frames before the story point's own frame 1240. (2) Even read against the last full paper frame the fall is 21.1 % on f1190 to 10.1 % on f1299 = 52 %, because the line world draws the arch, the floor's ticks, both cast contours and the stalk as lines and the measure counts line pixels as ink; a fall of 80 % from a picture that is 21 % ink needs the line world to be under 4 %. Either the measure counts area that is filled (pixels in regions wider than the line: a morphological opening of the ink), or the bar is lower (50 %), and the crossing window moves to start on 1240 so the reduce happens inside the story point. Not edited here: the screenplay and the timeline are the planner's. Ruled by the director in the screenplay: sp-6.1 now asks for a 50 % fall of ink share from the reduce's start (f1195), the most paper ever covers being 21 % of the picture.",
+  "references": [],
+  "before": "f1239 8.4 %, f1299 10.1 % (+20 %)",
+  "after": "a measure that sees fills drain, on a window that holds the reduce",
+  "status": "open",
+  "ruling": null
+}

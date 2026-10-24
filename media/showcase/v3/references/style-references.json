@@ -1,0 +1,203 @@
+[
+  {
+    "path": "style-board-2026-10-06.png",
+    "source": "owner-supplied board, attached in chat 2026-10-06, copied unchanged",
+    "bytes": 2190351,
+    "sha256": "34ff7d062b4ab5d1bf4d2598d6c07085652480bd2a2e51430028c5c686fdc061",
+    "pixels": "1924x1429 RGB",
+    "regions": {
+      "top-left painting": "color palette mood: maximalist, saturated, dense ornament; the overwhelm state",
+      "two sticker sheets": "asset recipe: grayscale value pass first, then 2 main + 1 shadow + 1 light + 1 accent per asset, bold outline, flat fills",
+      "three cloaked figures": "animation style: additive light on a black field, iridescent fill inside a flat silhouette, speckle grain, one hot emitter, sparse motes, lens flare"
+    },
+    "kind": "owner reference board; properties transfer, no copied figures"
+  },
+  {
+    "path": "../../v2/references/mind-game.jpg",
+    "role": "gadget construction reference: riveted junk machines built from familiar parts into an impossible whole (owner ruling D43)",
+    "kind": "existing reference, role extended 2026-10-06"
+  },
+  {
+    "path": "midnight-gospel-junkyard.jpg",
+    "source": "owner-supplied 2026-10-07, filename hero-cobb-midnight-aiga.jpg (AIGA Eye on Design feature still)",
+    "bytes": 237578,
+    "sha256": "d90526904416acf1772cf4a16e42e393fb42eb2ef5d07bc0f664c167cc6bdcb5",
+    "pixels": "1200x750 RGB",
+    "role": "world grammar + shadow: piles of familiar objects compose an alien place (D43/D49); flat fills with coarse airbrushed/stippled gradients, hue shifts within a form (magenta to violet, cyan to lime), thin colored outlines, pink-to-magenta grained sky; shadows are density gradients toward contact",
+    "kind": "The Midnight Gospel (Pendleton Ward, Duncan Trussell; Titmouse), reference properties only, no copied figures"
+  },
+  {
+    "path": "midnight-gospel-cosmos.jpg",
+    "source": "owner-supplied 2026-10-07, filename MV5B…jpg (IMDb media still)",
+    "bytes": 284207,
+    "sha256": "5224c5b8c8dfdd88e936442cdd1a27d543fcf7d06dda26fd140d99d2f2259352",
+    "pixels": "1365x767 RGB",
+    "role": "grain at two scales: fine speckle over a rainbow-smeared field plus sparse larger splatter dots of varying size; characters carry a soft rim/halo; the overwhelm and inside-the-frame texture",
+    "kind": "The Midnight Gospel (Pendleton Ward, Duncan Trussell; Titmouse), reference properties only, no copied figures"
+  },
+  {
+    "path": "midnight-gospel-hallway.jpg",
+    "source": "owner-supplied 2026-10-07, filename p18224453_e_h9_aa.jpg (TV listing thumbnail, low resolution)",
+    "bytes": 26770,
+    "sha256": "c15ae13a4b289341bff860577c710e4e855444ff8985d7d0b9df36675db904a6",
+    "pixels": "352x264 RGB",
+    "role": "soft blobby architecture with pastel multi-hue gradients and stipple grading; flat characters with thin outlines; warm/cool shift inside one object",
+    "kind": "The Midnight Gospel (Pendleton Ward, Duncan Trussell; Titmouse), reference properties only, no copied figures"
+  },
+  {
+    "path": "seuss-no-one-youer.jpg",
+    "source": "owner-supplied 2026-10-07; file titled \"There Is No One Alive That Is You-er Than You\", Dr. Seuss Secret Art / Midnight Paintings",
+    "bytes": 504875,
+    "sha256": "83273beb30077b2b16861ff816cdf11380059b8d05fedcb64ac926c1da8f4060",
+    "pixels": "1920x1271 RGB",
+    "role": "ARCHITECTURE: swooping organic towers and clock-stalks over a black field, saturated blue masses, pale thin outlines, a single blue cloud as the only large light mass; curling stalks with flag leaves; sparse colored stars",
+    "kind": "Dr. Seuss Midnight Paintings; reference properties only, no copied figures or compositions"
+  },
+  {
+    "path": "seuss-cat-stairway.jpg",
+    "source": "owner-supplied 2026-10-07; photo by Brandt Eisner, Instagram 2025-02-12, of a Seuss painting",
+    "bytes": 99730,
+    "sha256": "2abf522d5c27a45d27b7a5231e3bc2790b283f9ce352bb3a4aabb025636f986c",
+    "pixels": "640x611 RGB",
+    "role": "ARCHITECTURE + SHAPE: stepped striped stairway, stacked zigzag planes, feathered organic masses; outlines as colored contour strokes, not black; figure silhouette language for new assets",
+    "kind": "Dr. Seuss Midnight Paintings; reference properties only, no copied figures or compositions"
+  },
+  {
+    "path": "seuss-archbishop-katz.jpg",
+    "source": "owner-supplied 2026-10-07; \"Archbishop Katz\", Dr. Seuss Secret Art",
+    "bytes": 358871,
+    "sha256": "d215a5f6cdd96ec54ea6c730e00ae3e9d738dd62d002ae67715435eda51182df",
+    "pixels": "1200x1200 RGB",
+    "role": "ARCHITECTURE: a cathedral of interlocking pointed arches in mauve, blue, black and cream; flat five-role-like fills with black as a positive shape; a small figure for scale at the base",
+    "kind": "Dr. Seuss Midnight Paintings; reference properties only, no copied figures or compositions"
+  },
+  {
+    "path": "seuss-freebird.webp",
+    "source": "owner-supplied 2026-10-07; \"Freebird\", Dr. Seuss Secret Art",
+    "bytes": 122740,
+    "sha256": "1374de98242f88af44bc7e711acc9e064b66ca989956814522beb166b9bffcd4",
+    "pixels": "1200x1200 RGB",
+    "role": "MOTION SHAPE: swirled teal/blue wave masses with cream highlight sweeps; one small warm figure with long trailing lines",
+    "kind": "Dr. Seuss Midnight Paintings; reference properties only, no copied figures or compositions"
+  },
+  {
+    "path": "seuss-nested-frames.png",
+    "source": "owner-supplied 2026-10-07; nested golden frames on black, Dr. Seuss Secret Art (title not in file)",
+    "bytes": 316939,
+    "sha256": "2bcb8ff2e841b0afc7a251ea2e155388d40fcab1098788970614bc016fbdb713",
+    "pixels": "339x433 RGB",
+    "role": "FRAME INTERIOR CONSTRUCTION (D42): receding hand-drawn frames, each slightly turned, on a black field with faint curling filigree; the infinite inside the tool",
+    "kind": "Dr. Seuss Midnight Paintings; reference properties only, no copied figures or compositions"
+  },
+  {
+    "path": "seuss-green-cat-lights.webp",
+    "source": "owner-supplied 2026-10-07; \"Green Cat with Lights\", Dr. Seuss Secret Art",
+    "bytes": 328906,
+    "sha256": "6e83d0cb09341c8605535dd082c3d03a449cc75b0519995673b8a71a4ee68f8e",
+    "pixels": "1200x1200 RGB",
+    "role": "LIGHT: strings of dotted lights draped over dark feathered masses; motes as beaded lines, not scattered points",
+    "kind": "Dr. Seuss Midnight Paintings; reference properties only, no copied figures or compositions"
+  },
+  {
+    "path": "midnight-gospel-bg-pecini-01.jpg",
+    "url": "https://oliviapecini.myportfolio.com/the-midnight-gospel-background-paint",
+    "source": "Olivia Pecini portfolio, first image; color by Pecini over Titmouse layout line art, AD Jesse Moynihan",
+    "bytes": 6154069,
+    "sha256": "c7adb5048427b7e0a37a720c616ad0ea36f91dd886a4741098d7388f78ed89ca",
+    "role": "SHADOW/GRAIN: how a painted Midnight Gospel background grades, density of marks not opacity; line and color as separate passes",
+    "kind": "The Midnight Gospel background paint; reference properties only"
+  },
+  {
+    "path": "cloudysky-visual-guide.png",
+    "url": "file:///home/minipuft/Applications/cloudySky/img/visualGuide.png",
+    "source": "owner's cloudySky repo, docs/DESIGN_BIBLE.md canonical moodboard, copied unchanged 2026-10-12",
+    "bytes": 5500012,
+    "sha256": "af396617a2f5174317187267bf1869c87ab03ea4fc6a7911280bc828135c17bd",
+    "role": "LIGHT DOCTRINE: identity vs field pigments, grade as token morph, scarce emitter, force-with-memory light",
+    "kind": "owner's own project; transfers the five contracts, not its UI floors"
+  },
+  {
+    "path": "yt-0kQWAqjFJS0.mp4",
+    "url": "https://www.youtube.com/watch?v=0kQWAqjFJS0",
+    "source": "The Midnight Gospel official trailer, Netflix; yt-dlp 2026-10-12, <=480p private study copy; stills at 16/24/72/88/104 s",
+    "bytes": 8582831,
+    "sha256": "9a0131595e205d10d943ba75461f6be51fecbddb4c8794f0611fc7f95881e5c8",
+    "role": "MOTION + MOOD: emitter in a speckled field, overwhelm architecture, flat characters on twos against held backgrounds",
+    "kind": "video reference, private study copy; the public URL is the reference",
+    "duration_s": 144.301
+  },
+  {
+    "path": "yt-nTcblxN8TGQ.mp4",
+    "url": "https://www.youtube.com/watch?v=nTcblxN8TGQ",
+    "source": "KLAUS lighting time-lapse, SPA Studios; yt-dlp 2026-10-12, <=480p private study copy; stills at 20 s (pre-lighting) and 1200 s (lit)",
+    "bytes": 34404902,
+    "sha256": "d630f8ec51d6b451ba97b3ce0d5d64917e7e5dac630d0dc777c3712923a80046",
+    "role": "LIGHT LAYER: light painted as a separate pass over finished 2D drawings with its own timing",
+    "kind": "video reference, private study copy",
+    "duration_s": 1289.621
+  },
+  {
+    "path": "yt-it3PGEcaobk.mp4",
+    "url": "https://www.youtube.com/watch?v=it3PGEcaobk",
+    "source": "2D Animation Tutorial - Line Boil; yt-dlp 2026-10-12, <=480p private study copy; still at 90 s",
+    "bytes": 9772074,
+    "sha256": "47b5157d551128f4fd420dc7b61488aeac7cba7bad3e15e94ec8c248300d4ff3",
+    "role": "BOIL: three traced drawings looping at a low rate (D52); the shimmer control is a per-frame reseed",
+    "kind": "video reference, private study copy",
+    "duration_s": 393.741
+  },
+  {
+    "path": "yt-9jH0wDp5GnQ.jpg",
+    "url": "https://www.youtube.com/watch?v=9jH0wDp5GnQ",
+    "source": "YouTube hqdefault thumbnail, Noodle: How Spider-Verse Broke The Rules of 3D Animation; no local video copy",
+    "bytes": 26154,
+    "sha256": "e9dcae03b253a7f5cd49f818621ac5c5e5e91e7454a58cba470545c872182036",
+    "role": "TWOS: poses on twos while the world runs on ones; ones only when earned",
+    "kind": "thumbnail only; external link"
+  },
+  {
+    "path": "x-kevinngo-2105428751.mp4",
+    "url": "https://x.com/kevin_t_ngo/status/2105428751115071642",
+    "source": "owner-supplied X post (D35), CDN rendition re-fetched 2026-10-12; still at 20 s",
+    "bytes": 36531363,
+    "sha256": "40423fda867ef315a328a0f75936a5baa68dec5efefd6a37e2347542d9433e57",
+    "role": "MATERIAL COHERENCE: one medium governs characters, environment and feedback marks",
+    "kind": "owner-supplied reference; creator method claims unverified",
+    "duration_s": 73.621333
+  },
+  {
+    "path": "x-shfred-2102495989.mp4",
+    "url": "https://x.com/shfred0/status/2102495989194236158",
+    "source": "owner-supplied X post (D35), CDN rendition re-fetched 2026-10-12; still at 8 s",
+    "bytes": 8896120,
+    "sha256": "c59b0c25684360ee25bf0ae8c2fabdbf08afad897c7812b398eded470409b461",
+    "role": "EDIT LAYER: progression by cut and reframe, positive/negative mass",
+    "kind": "owner-supplied reference; creator method claims unverified",
+    "duration_s": 30.171667
+  },
+  {
+    "path": "x-lcslates-2102503030.mp4",
+    "url": "https://x.com/LCSlates/status/2102503027340988559",
+    "source": "owner-supplied X post (D35), CDN rendition re-fetched 2026-10-12; still at 38 s",
+    "bytes": 53169226,
+    "sha256": "be992c7d91e70edc21ac2bac812ea3448b52b32aa1f23d5d523ffa3366038046",
+    "role": "WORLD LAYER: a piece transforms the way its material allows; a join clicks, never fades",
+    "kind": "owner-supplied reference; creator method claims unverified",
+    "duration_s": 80.042667
+  },
+  {
+    "path": "x-chetas-2101599959.mp4",
+    "url": "https://x.com/chetaslua/status/2101599959367999968",
+    "source": "owner-supplied X post (D35), CDN rendition re-fetched 2026-10-12; still at 20 s",
+    "bytes": 82311822,
+    "sha256": "b08ff286e182a3fec1e6ecfcb848c0bfdbf15b96125a45f7321889b7c206cfde",
+    "role": "EXPRESSION: line and fill economy for personality",
+    "kind": "owner-supplied reference; creator method claims unverified",
+    "duration_s": 55.36
+  },
+  {
+    "path": "board.json",
+    "role": "BOARD SSOT: every card on board.html/board.png with what it borrows, what it refuses and the rulings/criteria it governs; build with `npm run board` (scripts/build-board.mjs asserts every path exists)",
+    "kind": "generated-from manifest, 2026-10-12"
+  }
+]

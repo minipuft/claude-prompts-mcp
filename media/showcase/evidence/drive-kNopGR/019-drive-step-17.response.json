@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "\n## ⚠️ Retry Limit Reached\n\nThe following gates failed after 2 attempts: **handoff-artifacts, framework-compliance**\n\n### Choose an action:\n\n| Action | Description |\n|--------|-------------|\n| `gate_action: \"retry\"` | Reset retry count and try again with improvements |\n| `gate_action: \"skip\"` | Skip this gate check and continue the chain |\n| `gate_action: \"abort\"` | Stop chain execution entirely |\n\n**To continue**, include one of the above in your next call.\n\n---\n\n### Required Response Format\n\n**Summary**: What was implemented (2-3 sentences)\n\n**Required Sections** — emit these headers verbatim; they are graded structurally:\n- `## Context` (required)\n- `## Analysis` (required)\n- `## Goals` (required)\n- `## Execution` (required)\n- `## Evaluation` (optional)\n- `## Refinement` (optional)\n\n**Gate Coverage**:\n- [1] PASS|FAIL: rationale\n- [2] PASS|FAIL: rationale\n\n**GATE_REVIEW: PASS|FAIL - overall assessment**\n\n## Shell Verification Results\n\n### Handoff Artifacts Exist — FAILED\n\n**Command:** `node /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/handoff-artifacts/check-artifacts.js`\n**Exit Code:** -1\n**Duration:** 0ms\n\n```\nShell verification refused: command is not in MCP_SHELL_VERIFY_ALLOWLIST. Add it exactly, or add a prefix entry ending in '*' that covers it.\n```\n\nChain: chain-animation_animatic#1\n→ Progress 6/6\nNext: chain_id=\"chain-animation_animatic#1\", gate_action=\"retry\" | gate_action=\"skip\" | cancel: true"
+    }
+  ],
+  "isError": false
+}

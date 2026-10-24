@@ -1,0 +1,44 @@
+{
+ "ranges": [
+  {
+   "range": [
+    1,
+    150
+   ],
+   "oddMeanChangedPx": 175.6,
+   "evenMeanChangedPx": 8547.8,
+   "oddMax": 2679,
+   "oddFramesOver50px": 7
+  },
+  {
+   "range": [
+    150,
+    210
+   ],
+   "oddMeanChangedPx": 41640.0,
+   "evenMeanChangedPx": 51378.3,
+   "oddMax": 90492,
+   "oddFramesOver50px": 30
+  },
+  {
+   "range": [
+    210,
+    262
+   ],
+   "oddMeanChangedPx": 2.9,
+   "evenMeanChangedPx": 78832.9,
+   "oddMax": 71,
+   "oddFramesOver50px": 1
+  },
+  {
+   "range": [
+    262,
+    420
+   ],
+   "oddMeanChangedPx": 0.6,
+   "evenMeanChangedPx": 54704.1,
+   "oddMax": 33,
+   "oddFramesOver50px": 0
+  }
+ ]
+}

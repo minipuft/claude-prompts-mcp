@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "❌ 'detail' is not a parameter of resource_type:\"gate\" — it is read only by resource_type:\"prompt\".\n\nIt was accepted and ignored before, which reported a change that never happened. Re-send it with resource_type:\"prompt\", or drop it from this call."
+    }
+  ],
+  "isError": true
+}

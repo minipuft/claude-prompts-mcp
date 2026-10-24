@@ -1,0 +1,19 @@
+{
+ "valid": true,
+ "path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/gadget/muse-02.png",
+ "source": "/home/minipuft/.codex/generated_images/01a14225-c790-7581-aa07-ac8ec377f5e0/exec-b71b19b2-a225-46c6-8e9c-9e8905ff28f4.png",
+ "sha256": "d851339326bfa95e6293f37d8619716b06d571160d69c9a0d9878dc1c6048f41",
+ "bytes": 1308808,
+ "referenced_image_paths": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-nested-frames.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFP3WX8X3LIX2.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFI6QTUOYA66U.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/codex-official.png"
+ ],
+ "tool_arguments": {
+  "raw": "{\n  \"prompt\": \"Create ONE 16:9 design variant sheet for a prop of a silent hand-drawn animated film. Variant muse-02, Doorway engine (do not print this name). Pure black field #000000. Show the SAME machine twice, equal scale, on one shared baseline: LEFT dormant, RIGHT with its dial doorway open and light pouring out. No baseline drawn. Keep both silhouettes fully visible with generous black separation and margins.\\nASSET: the gadget, raw capability: a hybrid universe-simulator machine, familiar parts assembled into an impossible whole, organic and mechanical at once, surreal animation in the spirit of The Midnight Gospel. Not a device with buttons, not an orb. A machine built as a stack of receding hand-drawn doorways and windows, each slightly turned, with a belly lamp, organs and gears as curling stalks. Its dial is a doorway of light and is the ONE emitter; integrate the belly lamp with this same dial chamber, no second light source. Design sits between a rounded soft cloud-and-prompt silhouette with a glyph window, and eccentric receding painted frames. The glyph window is an abstract cast property, not text or a UI. Dormant and activated versions must have identical structur"
+ },
+ "summary": {
+  "references": 4
+ }
+}

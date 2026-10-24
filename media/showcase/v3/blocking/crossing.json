@@ -1,0 +1,200 @@
+{
+  "id": "crossing",
+  "provisional": true,
+  "derivedFrom": "restaged 2026-10-20 (row 9.6, beat 6): the world is lines (sp-6.1); Clawd steps up-stage, the stalk walks on with her, a grid appears at the right and the stalk's lines reach it, and Codex strides past Clawd down-stage and takes the lead (sp-6.2)",
+  "figure": {
+    "scale": 0.58,
+    "x": 452,
+    "y": 85
+  },
+  "codex": {
+    "x": 925,
+    "y": 500,
+    "scale": 0.9,
+    "at": [
+      {
+        "frame": 1300,
+        "x": 925,
+        "y": 500
+      },
+      {
+        "frame": 1349,
+        "x": 1100,
+        "y": 540
+      }
+    ]
+  },
+  "clawd": {
+    "x": 1075,
+    "y": 500,
+    "scale": 0.8,
+    "at": [
+      {
+        "frame": 1240,
+        "x": 1075,
+        "y": 500
+      },
+      {
+        "frame": 1270,
+        "x": 1075,
+        "y": 330
+      }
+    ]
+  },
+  "frame": {
+    "x": 1040,
+    "y": 50,
+    "width": 230,
+    "height": 190
+  },
+  "blocks": [
+    {
+      "x": 140,
+      "y": 618,
+      "width": 56,
+      "height": 42,
+      "role": "main1"
+    },
+    {
+      "x": 196,
+      "y": 618,
+      "width": 56,
+      "height": 42,
+      "role": "main2"
+    }
+  ],
+  "join": {
+    "x": 196,
+    "y": 639
+  },
+  "arch": {
+    "x": 30,
+    "y": 40,
+    "width": 340,
+    "height": 430,
+    "opening": 0.6,
+    "top": 70
+  },
+  "gates": [
+    {
+      "x": 150,
+      "y": 388,
+      "r": 22
+    },
+    {
+      "x": 235,
+      "y": 382,
+      "r": 28
+    },
+    {
+      "x": 325,
+      "y": 376,
+      "r": 34
+    }
+  ],
+  "floor": {
+    "y": 480
+  },
+  "figureCrop": {
+    "x": 380,
+    "y": 0,
+    "width": 500,
+    "height": 720
+  },
+  "beat": "crossing",
+  "shot": "s03-scaffold",
+  "emitter": {
+    "start": [
+      800,
+      274
+    ],
+    "end": [
+      800,
+      274
+    ],
+    "anchor": "the piece's lines (the carried stalk), reaching the grid",
+    "storyPoint": "sp-6.1",
+    "at": [
+      {
+        "frame": 1230,
+        "radius": 60
+      }
+    ]
+  },
+  "card": "eagle-mf83t1h77o7bm",
+  "cardNote": "provisional: board \u00a78 \"Red corridor, converging lines\" for the leading line of the crossing",
+  "cutIn": true,
+  "cutOut": true,
+  "actors": {
+    "heap": {
+      "x": 418,
+      "y": 602,
+      "scale": 1.0
+    },
+    "stalk": {
+      "x": 854,
+      "y": 264,
+      "scale": 0.55,
+      "facing": "right",
+      "carriedBy": "human",
+      "openAt": [
+        {
+          "frame": 1230,
+          "value": 1
+        }
+      ],
+      "lit": {
+        "from": 1230,
+        "offset": [
+          25,
+          -300
+        ]
+      },
+      "at": [
+        {
+          "frame": 1230,
+          "x": 854,
+          "y": 264
+        },
+        {
+          "frame": 1244,
+          "x": 732,
+          "y": 418
+        },
+        {
+          "frame": 1292,
+          "x": 732,
+          "y": 418
+        },
+        {
+          "frame": 1304,
+          "x": 752,
+          "y": 257
+        },
+        {
+          "frame": 1334,
+          "x": 790,
+          "y": 262
+        }
+      ]
+    },
+    "grid": {
+      "x": 920,
+      "y": 470,
+      "scale": 1.0,
+      "on": 1296
+    }
+  },
+  "contacts": [
+    {
+      "a": "human",
+      "b": "stalk",
+      "why": "she carries the stalk with her (sp-5.4 on)"
+    },
+    {
+      "a": "grid",
+      "b": "stalk",
+      "why": "the stalk's lines reach the grid (sp-6.2)"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+ "shot": "s01-arrival-overwhelm",
+ "run": 2,
+ "frames": {
+  "000": "4fd7a328a17eb30d",
+  "042": "57a3ca6e34a22ad4",
+  "066": "e9b1888a95e1b971",
+  "104": "e453b6d971256a77",
+  "154": "ba8652b452400e96",
+  "190": "1d3b8b86d345f311",
+  "228": "10943ec15dd76f64",
+  "272": "9a91dc42fcbf1146",
+  "330": "36b59964fa7b28e4",
+  "419": "6d308d7dfe2ee4da"
+ },
+ "determinism": {
+  "frame0": [
+   "4fd7a328a17eb30d",
+   "4fd7a328a17eb30d"
+  ],
+  "frame154": [
+   "ba8652b452400e96",
+   "ba8652b452400e96"
+  ]
+ },
+ "probeAllShots": "pass: probe-all --shots - 3 of 3 probe runs passed, 0 shot(s) skipped",
+ "mp4": {
+  "path": "out/s01-02.mp4",
+  "sha256": "6fc9643cc99f11f0",
+  "frames": 420
+ },
+ "strip": "out/s01-02-strip.png",
+ "keysTable": "key          declared       measured                twin  status\nrest-on-lid  C 0.06 -1      C 0.094 +1              0.66  accepted\n             flag: the spine bows right, the declaration left\ngrip         C 0.10 -1      C 0.101 +1              0.60  REJECTED: weight on R at 0.60: the root is at x 260, expected 349 between the ankles (256, 411); 58% of the stance away, over 25%\n             flag: the spine bows right, the declaration left\nlift         C 0.06 +1      I 0.035 -1              0.20  REJECTED: declared line of action C, the key sheet draws I (bow 0.035 of the figure, sign -1); the spine bows 0.035 of the figure, under 0.06 \n             flag: the spine bows left, the declaration right\nawe          S 0.10 -1      C 0.051 +1              0.84  REJECTED: declared line of action S, the key sheet draws C (bow 0.051 of the figure, sign +1); the spine bows 0.051 of the figure, under 0.06 \n             flag: the spine bows right, the declaration left\nbrace        C 0.08 +1      I 0.013 -1              0.26  REJECTED: declared line of action C, the key sheet draws I (bow 0.013 of the figure, sign -1); the spine bows 0.013 of the figure, under 0.06 \njoy-a        C 0.12 -1      I 0.033 +1              0.00  REJECTED: declared line of action C, the key sheet draws I (bow 0.033 of the figure, sign +1); the spine bows 0.033 of the figure, under 0.06 \n             flag: the spine bows right, the declaration left\njoy-b        S 0.12 +1      C 0.048 +1              0.11  REJECTED: declared line of action S, the key sheet draws C (bow 0.048 of the figure, sign +1); the spine bows 0.048 of the figure, under 0.06 \nshrink       C 0.14 -1      C 0.072 -1              0.68  accepted\n             flag: measured bow 0.072 is more than 0.02 under the declared 0.14\nwrote v3/keys/s01-arrival-overwhelm.json\n",
+ "receiptSkeleton": {
+  "Changed": [],
+  "Grades": [],
+  "Controls": [],
+  "Owner": [],
+  "Next": []
+ }
+}

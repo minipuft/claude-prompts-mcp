@@ -1,0 +1,247 @@
+{
+  "beats": {
+    "arrival": {
+      "pair": {
+        "radiance": "#0a51fb",
+        "accent": "#fad204"
+      },
+      "radiance": "settled",
+      "grain": "low",
+      "emitter": {
+        "anchor": "box seam",
+        "start": [
+          0.7031,
+          0.5583
+        ],
+        "end": [
+          0.7109,
+          0.5306
+        ],
+        "intensity": 0.824,
+        "colour": "#eff3ff",
+        "on": 0,
+        "off": 178
+      }
+    },
+    "everything-at-once": {
+      "pair": {
+        "radiance": "#0a51fb",
+        "accent": "#fad204"
+      },
+      "radiance": "floods, Turrell blue (D74 s01)",
+      "grain": "rising",
+      "emitter": {
+        "anchor": "gadget dial",
+        "start": [
+          0.707,
+          0.4667
+        ],
+        "end": [
+          0.707,
+          0.4667
+        ],
+        "intensity": 0.9,
+        "colour": "#d1dffe",
+        "on": 180,
+        "off": 418
+      }
+    },
+    "cant-build": {
+      "pair": {
+        "radiance": "#17263a",
+        "accent": "#457ca4"
+      },
+      "radiance": "Styx steel (D74 s02), noisy",
+      "grain": "high",
+      "emitter": {
+        "anchor": "gadget dial, lost on the floor (the join)",
+        "start": [
+          0.3211,
+          0.8861
+        ],
+        "end": [
+          0.3211,
+          0.8861
+        ],
+        "intensity": 0.9,
+        "colour": "#d5e0ee",
+        "on": 420,
+        "off": 628
+      }
+    },
+    "the-frame": {
+      "pair": {
+        "radiance": "#17263a",
+        "accent": "#457ca4"
+      },
+      "radiance": "narrows to the frame",
+      "grain": "falling",
+      "emitter": {
+        "anchor": "frame interior",
+        "start": [
+          0.6094,
+          0.5417
+        ],
+        "end": [
+          0.625,
+          0.5556
+        ],
+        "intensity": 0.9,
+        "colour": "#d5e0ee",
+        "on": 630,
+        "off": 928
+      }
+    },
+    "art-world": {
+      "pair": {
+        "radiance": "#e1750c",
+        "accent": "#fad204"
+      },
+      "radiance": "warm, s03 amber (D74) on a paper-coloured field, not black",
+      "grain": "paper tooth",
+      "emitter": {
+        "anchor": "the crayon, then the drawn line, then the stalk's leaf (the piece as it is made)",
+        "start": [
+          0.8672,
+          0.7222
+        ],
+        "end": [
+          0.8672,
+          0.7222
+        ],
+        "intensity": 0.9,
+        "colour": "#fbdab9",
+        "on": 930,
+        "off": 1228
+      }
+    },
+    "crossing": {
+      "pair": {
+        "radiance": "#e1750c",
+        "accent": "#fad204"
+      },
+      "radiance": "a faint lantern on the carried piece's lines only; the rest is lines",
+      "grain": "none",
+      "emitter": {
+        "anchor": "the piece's lines (the carried stalk), reaching the grid",
+        "start": [
+          0.625,
+          0.3806
+        ],
+        "end": [
+          0.625,
+          0.3806
+        ],
+        "intensity": 0.9,
+        "colour": "#fbdab9",
+        "on": 1230,
+        "off": 1348
+      }
+    },
+    "programming-world": {
+      "pair": {
+        "radiance": "#17263a",
+        "accent": "#457ca4"
+      },
+      "radiance": "cold cyan on black, s02 accent as the world's hue",
+      "grain": "none",
+      "emitter": {
+        "anchor": "the join (empty, then lit), then the running bead, then the frame's interior",
+        "start": [
+          0.625,
+          0.3806
+        ],
+        "end": [
+          0.625,
+          0.3806
+        ],
+        "intensity": 0.9,
+        "colour": "#c5e4f0",
+        "on": 1350,
+        "off": 1648
+      }
+    },
+    "home-settle": {
+      "pair": {
+        "radiance": "#a63a2e",
+        "accent": "#f8c496"
+      },
+      "radiance": "Soup! coral (D74 s04)",
+      "grain": "low",
+      "emitter": {
+        "anchor": "gadget, rimming the structure",
+        "start": [
+          0.8047,
+          0.5556
+        ],
+        "end": [
+          0.8359,
+          0.5556
+        ],
+        "intensity": 0.9,
+        "colour": "#f4d9d6",
+        "on": 1650,
+        "off": 1950
+      }
+    }
+  },
+  "crossings": [
+    {
+      "from": "the-frame",
+      "to": "art-world",
+      "frames": [
+        895,
+        965
+      ],
+      "path": [
+        "#d5e0ee",
+        "#d9cff1",
+        "#f4c8f2",
+        "#f7c1cd",
+        "#fbdab9"
+      ]
+    },
+    {
+      "from": "art-world",
+      "to": "crossing",
+      "frames": [
+        1195,
+        1265
+      ],
+      "path": [
+        "#fbdab9",
+        "#fbdab9"
+      ]
+    },
+    {
+      "from": "crossing",
+      "to": "programming-world",
+      "frames": [
+        1315,
+        1385
+      ],
+      "path": [
+        "#fbdab9",
+        "#ecf8bc",
+        "#c5f5bf",
+        "#c2f3de",
+        "#c5e4f0"
+      ]
+    },
+    {
+      "from": "programming-world",
+      "to": "home-settle",
+      "frames": [
+        1615,
+        1685
+      ],
+      "path": [
+        "#c5e4f0",
+        "#c9caf1",
+        "#e7cef2",
+        "#f3d2e6",
+        "#f4d9d6"
+      ]
+    }
+  ]
+}

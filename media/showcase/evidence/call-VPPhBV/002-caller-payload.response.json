@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ Gate 'animation-render-manifest' created successfully\n\n📁 Files created:\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/animation-render-manifest\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/animation-render-manifest/gate.yaml\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/animation-render-manifest/guidance.md\n\n🔄 Registered in the gate registry — ready to use now"
+    }
+  ],
+  "isError": false
+}

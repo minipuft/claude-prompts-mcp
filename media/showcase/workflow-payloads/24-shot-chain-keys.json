@@ -1,0 +1,72 @@
+{
+ "name": "resource_manager",
+ "arguments": {
+  "resource_type": "prompt",
+  "action": "update",
+  "id": "showcase_shot",
+  "description": "Once per shot (D72 pose-to-pose): timing chart with the key list, the key sheet generated from the model sheet and cut into key plates, a multi-frame render study where the puppet holds and inbetweens between keys (Remotion, or Blender when tool:blender_render is named), the rubric grade behind the showcase-review gate, and the evidence step that files the receipt and feeds the measured range back into shots.json and the script.",
+  "chain_steps": [
+   {
+    "id": "motion",
+    "promptId": "showcase_motion",
+    "stepName": "Timing Table",
+    "inputMapping": {
+     "brief": "brief",
+     "constraints": "constraints",
+     "context": "shot",
+     "output_root": "output_root"
+    }
+   },
+   {
+    "id": "keys",
+    "promptId": "showcase_key_sheet",
+    "stepName": "Key Sheet",
+    "inputMapping": {
+     "shot": "shot",
+     "context": "previous_step_result",
+     "output_root": "output_root"
+    },
+    "delegated": true
+   },
+   {
+    "id": "render",
+    "promptId": "showcase_render_study",
+    "stepName": "Render Study",
+    "inputMapping": {
+     "brief": "brief",
+     "shot": "shot",
+     "renderer": "renderer",
+     "frames": "frames",
+     "context": "previous_step_result",
+     "output_root": "output_root"
+    }
+   },
+   {
+    "id": "grade",
+    "promptId": "showcase_review",
+    "stepName": "Rubric Grade",
+    "inputMapping": {
+     "brief": "brief",
+     "constraints": "constraints",
+     "context": "previous_step_result",
+     "motion_contract": "step1_result",
+     "output_root": "output_root"
+    },
+    "inlineGateIds": [
+     "showcase-review"
+    ]
+   },
+   {
+    "id": "evidence",
+    "promptId": "showcase_evidence",
+    "stepName": "File and Feed Back",
+    "inputMapping": {
+     "brief": "brief",
+     "shot": "shot",
+     "context": "previous_step_result",
+     "output_root": "output_root"
+    }
+   }
+  ]
+ }
+}

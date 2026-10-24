@@ -1,0 +1,130 @@
+{
+ "K1": {
+  "name": "rest-on-lid",
+  "reachRatios": {
+   "wristL": 1.045,
+   "wristR": 0.99,
+   "ankleL": 0.836,
+   "ankleR": 0.832
+  },
+  "longestReach": "wristL",
+  "longestReachPct": 104.5,
+  "over105": [],
+  "spineRatio": 1.046,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K1.png"
+ },
+ "K2": {
+  "name": "grip",
+  "reachRatios": {
+   "wristL": 0.752,
+   "wristR": 0.732,
+   "ankleL": 0.756,
+   "ankleR": 0.807
+  },
+  "longestReach": "ankleR",
+  "longestReachPct": 80.7,
+  "over105": [],
+  "spineRatio": 1.09,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K2.png"
+ },
+ "K3": {
+  "name": "lift",
+  "reachRatios": {
+   "wristL": 0.54,
+   "wristR": 0.741,
+   "ankleL": 1.165,
+   "ankleR": 0.98
+  },
+  "longestReach": "ankleL",
+  "longestReachPct": 116.5,
+  "over105": [
+   "ankleL"
+  ],
+  "spineRatio": 1.051,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K3.png"
+ },
+ "K4": {
+  "name": "awe",
+  "reachRatios": {
+   "wristL": 1.44,
+   "wristR": 1.224,
+   "ankleL": 1.191,
+   "ankleR": 1.266
+  },
+  "longestReach": "wristL",
+  "longestReachPct": 144.0,
+  "over105": [
+   "ankleL",
+   "ankleR",
+   "wristL",
+   "wristR"
+  ],
+  "spineRatio": 0.973,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K4.png"
+ },
+ "K5": {
+  "name": "brace",
+  "reachRatios": {
+   "wristL": 0.338,
+   "wristR": 0.314,
+   "ankleL": 0.911,
+   "ankleR": 0.985
+  },
+  "longestReach": "ankleR",
+  "longestReachPct": 98.5,
+  "over105": [],
+  "spineRatio": 0.947,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K5.png"
+ },
+ "K6": {
+  "name": "joy-a",
+  "reachRatios": {
+   "wristL": 1.275,
+   "wristR": 0.824,
+   "ankleL": 1.153,
+   "ankleR": 0.902
+  },
+  "longestReach": "wristL",
+  "longestReachPct": 127.5,
+  "over105": [
+   "ankleL",
+   "wristL"
+  ],
+  "spineRatio": 0.897,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K6.png"
+ },
+ "K7": {
+  "name": "joy-b",
+  "reachRatios": {
+   "wristL": 1.155,
+   "wristR": 0.891,
+   "ankleL": 1.089,
+   "ankleR": 1.096
+  },
+  "longestReach": "wristL",
+  "longestReachPct": 115.5,
+  "over105": [
+   "ankleL",
+   "ankleR",
+   "wristL"
+  ],
+  "spineRatio": 0.843,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K7.png"
+ },
+ "K8": {
+  "name": "shrink",
+  "reachRatios": {
+   "wristL": 0.913,
+   "wristR": 1.125,
+   "ankleL": 0.935,
+   "ankleR": 0.87
+  },
+  "longestReach": "wristR",
+  "longestReachPct": 112.5,
+  "over105": [
+   "wristR"
+  ],
+  "spineRatio": 0.761,
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K8.png"
+ }
+}

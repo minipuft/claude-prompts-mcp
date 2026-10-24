@@ -1,0 +1,229 @@
+{
+ "note": "Skeleton SSOT for the mesh rig (D73), AnimatedDrawings char_cfg shape: skeleton[{name, loc, parent}], width, height. loc is in assets/human/mask.png pixel space (the same space as mesh.json); the figure is part00, region [31,30,621,952).",
+ "width": 1536,
+ "height": 1024,
+ "skeleton": [
+  {
+   "name": "root",
+   "loc": [
+    349,
+    475
+   ],
+   "parent": null
+  },
+  {
+   "name": "torso",
+   "loc": [
+    348,
+    213
+   ],
+   "parent": "root"
+  },
+  {
+   "name": "neck",
+   "loc": [
+    352,
+    195
+   ],
+   "parent": "torso"
+  },
+  {
+   "name": "head",
+   "loc": [
+    347,
+    176
+   ],
+   "parent": "neck"
+  },
+  {
+   "name": "shoulderL",
+   "loc": [
+    306,
+    252
+   ],
+   "parent": "torso"
+  },
+  {
+   "name": "elbowL",
+   "loc": [
+    263,
+    363
+   ],
+   "parent": "shoulderL"
+  },
+  {
+   "name": "wristL",
+   "loc": [
+    183,
+    452
+   ],
+   "parent": "elbowL"
+  },
+  {
+   "name": "shoulderR",
+   "loc": [
+    396,
+    252
+   ],
+   "parent": "torso"
+  },
+  {
+   "name": "elbowR",
+   "loc": [
+    443,
+    365
+   ],
+   "parent": "shoulderR"
+  },
+  {
+   "name": "wristR",
+   "loc": [
+    506,
+    455
+   ],
+   "parent": "elbowR"
+  },
+  {
+   "name": "hipL",
+   "loc": [
+    319,
+    475
+   ],
+   "parent": "root"
+  },
+  {
+   "name": "kneeL",
+   "loc": [
+    281,
+    655
+   ],
+   "parent": "hipL"
+  },
+  {
+   "name": "ankleL",
+   "loc": [
+    241,
+    835
+   ],
+   "parent": "kneeL"
+  },
+  {
+   "name": "hipR",
+   "loc": [
+    376,
+    475
+   ],
+   "parent": "root"
+  },
+  {
+   "name": "kneeR",
+   "loc": [
+    399,
+    645
+   ],
+   "parent": "hipR"
+  },
+  {
+   "name": "ankleR",
+   "loc": [
+    426,
+    838
+   ],
+   "parent": "kneeR"
+  },
+  {
+   "name": "ponchoPoint",
+   "loc": [
+    355,
+    470
+   ],
+   "parent": "torso"
+  }
+ ],
+ "joint_provenance": {
+  "root": {
+   "basis": "guess",
+   "note": "crotch, midpoint of the two leg tops; rig has no root pivot (rig root is the torso)"
+  },
+  "torso": {
+   "basis": "derived",
+   "note": "rig torso pivot (148,34) inside part01 + template match of part01 in part00 at (169,149), normSSD 0.53"
+  },
+  "neck": {
+   "basis": "guess",
+   "note": "top of the collar; rig neck part matched the wrong place (normSSD 0.77, found a boot cuff)"
+  },
+  "head": {
+   "basis": "derived",
+   "note": "rig head pivot (48,100) inside part11 + template match of part11 in part00 at (268,46), normSSD 0.55; the head base / chin joint"
+  },
+  "shoulderL": {
+   "basis": "guess",
+   "note": "outer shoulder bump of the poncho; the joint itself is hidden under the cloth, and rig armL_up pivot is the top of a separate sleeve cutout that part00 does not contain"
+  },
+  "elbowL": {
+   "basis": "guess",
+   "note": "where the arm leaves the poncho hem; the upper arm is hidden under the cloth, rig has an elbow pivot but the part00 arm is one straight spread limb"
+  },
+  "wristL": {
+   "basis": "guess",
+   "note": "where the arm meets the palm; rig handL pivot is the top of the separate hand cutout (template match normSSD 1.03, unusable)"
+  },
+  "shoulderR": {
+   "basis": "guess",
+   "note": "mirror of shoulderL about the collar"
+  },
+  "elbowR": {
+   "basis": "guess",
+   "note": "where the arm leaves the poncho hem"
+  },
+  "wristR": {
+   "basis": "guess",
+   "note": "where the arm meets the palm (handR template match normSSD 1.07, unusable)"
+  },
+  "hipL": {
+   "basis": "guess",
+   "note": "top of the image-left leg under the poncho tip; rig legL pivot is the top of a separate leg cutout (match normSSD 0.66)"
+  },
+  "kneeL": {
+   "basis": "guess",
+   "note": "mid-leg; the rig has no knee (leg is one part, boot a second part)"
+  },
+  "ankleL": {
+   "basis": "guess",
+   "note": "cuff of the image-left boot; rig bootL pivot is the top of a separate boot cutout (match normSSD 0.50)"
+  },
+  "hipR": {
+   "basis": "guess",
+   "note": "top of the image-right leg; rig legR pivot (match normSSD 0.51)"
+  },
+  "kneeR": {
+   "basis": "guess",
+   "note": "mid-leg; the rig has no knee"
+  },
+  "ankleR": {
+   "basis": "guess",
+   "note": "cuff of the image-right boot; rig bootR pivot (match normSSD 0.50)"
+  },
+  "ponchoPoint": {
+   "basis": "guess",
+   "note": "lowest point of the poncho; a cloth anchor, never posed, so the poncho does not follow the arms (not an anatomical joint; not in the rig)"
+  }
+ },
+ "registration": {
+  "note": "mask space -> HumanPuppet canvas space (the 600 px wide rig canvas HumanPuppet draws in): canvas = scale * (p - originMask) + originCanvas. Scale matches the assembled puppet's footprint height (986 px, y 20..1006 from rig.json parts); x aligns the head joint with rig.json head pivot x 348. The figure is the part00 drawing (arms spread, legs apart), not the assembled puppet's arms-down rest, so the footprints agree in height, top and head x, not in every limb.",
+  "originMask": [
+   31,
+   30
+  ],
+  "scale": 1.069414,
+  "originCanvas": [
+   10.065,
+   20
+  ],
+  "canvas": [
+   700,
+   1010
+  ]
+ }
+}

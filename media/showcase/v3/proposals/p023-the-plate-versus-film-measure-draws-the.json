@@ -1,0 +1,17 @@
+{
+  "id": "p023",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "cant-build",
+    "frame": 432
+  },
+  "title": "The plate-versus-film measure draws the s01 sheet whatever shot `npm run plates` names",
+  "text": "`plates-from-poses.mjs` ends by rendering `KeyFilmS01` and running `measure-keys.py <shot>`; `KeyFilmS01.tsx` imports v3/keys/s01-arrival-overwhelm.json and shotS01Plan's sheet, so for any other shot its control reads `control FILM: key ready: film rig as drawn -> mad 98.08, worst centroid handR 41.24 px (pass False)` and the run ends `refused: the plate-versus-film measure did not trip its control`. Plates and the key sheet are written before that step, so `probe-poses.py` reads them, but `measured` (C20, C21, C22, C31, the hinge measure and the film measure) is never written for s02-the-frame or s02-cant-build: neither key sheet carries one. The film component needs the shot's keys and lead arms (the pose sheet of the shot) instead of the s01 constants.",
+  "references": [],
+  "before": "npm run plates -- s02-cant-build: plates written, measure refused, no `measured` on any key",
+  "after": "the film step draws the named shot's keys and the measure writes `measured` for it",
+  "status": "open",
+  "ruling": null
+}

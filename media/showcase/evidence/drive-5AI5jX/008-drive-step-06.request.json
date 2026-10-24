@@ -1,0 +1,23 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_animatic#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "The engine ran probe-colour.py --contract v3/light.json --timeline v3/timeline.json after the answer: exit 0 in 209 ms. The two whole-film colour failures (radiance hue on 1428-1515, the 1615-1685 crossing read on frames) are named in the answer and are not this gate's contract.",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "Animation Colour Script: engine shell verification PASSED exit 0 in 209 ms (one pair per beat, one emitter at a time, emitter colours inside the pair, 4 crossings monotonic)"
+        }
+      ],
+      "reminders": {
+        "satisfied": [
+          "framework-compliance"
+        ],
+        "not_applicable": []
+      }
+    }
+  }
+}

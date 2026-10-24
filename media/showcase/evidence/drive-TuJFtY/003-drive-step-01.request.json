@@ -1,0 +1,19 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_shot#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "numbering probe",
+      "reminders": {
+        "satisfied": [],
+        "not_applicable": [
+          {
+            "id": "api-documentation",
+            "reason": "not docs; layout sheet only"
+          }
+        ]
+      }
+    }
+  }
+}

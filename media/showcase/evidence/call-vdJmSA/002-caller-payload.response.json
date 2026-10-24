@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🚦 Gate: Animation Story Contract\n\n📋 Details:\n  - ID: animation-story-contract\n  - Type: ✓ validation\n  - Description: Check-tier gate on the chain's first step (row 9.8): the screenplay holds its contract and the film's themes hold on the staging before a beat is timed, so a beat whose story points lack a want or a turn, a recipe for every measure clause, or a theme cannot enter posing. Two probes run in order, both without frames: probe-screenplay.py (shape, themes and their tags, recipes, want and turn, current renders) and probe-theme.py (the frame is carried in at sp-4.2 and on no frame before, the gadget is seen only through glass, one lit join at a time, every light line resolves to a target the eye trace measures). The frames-reading probe-story.py stays on `animation-story`, which runs where there are frames to read.\n  - Severity: high\n  - Enforcement Mode: blocking\n  - Classification: custom\n\n📝 Guidance:\nGround truth by exit code (D81, row 9.8). Two commands run in `media/showcase`: `python3 scripts/animation/probe-screenplay.py v3/screenplay.json`, then `python3 scripts/animation/probe-theme.py v3/screenplay.json`. Each prints its control first and refuses to report if a control does not trip. On FAIL quote each failing line with its story point id (sp-<beat>.<n>) or theme id (th-*), open the file and field it names, and change what it names: a story point with no recipe, theme, want or turn go..."
+    }
+  ],
+  "isError": false
+}

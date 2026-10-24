@@ -1,0 +1,19 @@
+{
+ "valid": true,
+ "path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/bubble/muse-02.png",
+ "source": "/home/minipuft/.codex/generated_images/01a14226-d853-7582-a7df-896ce81c2044/exec-c877802f-9bf5-4066-b11a-d35e627a9e6d.png",
+ "sha256": "4559f52cf760eec9735197974fc4a6a3b2274b43a5f35086687f9148c437749f",
+ "bytes": 1129168,
+ "referenced_image_paths": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MRAM46LYMIGKO.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-green-cat-lights.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/human-model.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFJFTELGH6FD8.png"
+ ],
+ "tool_arguments": {
+  "raw": "{\n  \"prompt\": \"Create ONE 16:9 design variant sheet for a separable prop in a silent hand-drawn animated film. Variant muse-02, Volume bubble (do not print this name). Pure solid black field #000000. Show the SAME bubble in THREE states arranged left to right on one implied baseline, with ample black separation: small and whole; swollen with a small world inside; burst ring with flying fragments. No drawn baseline. The bubble is capability seen through glass: it swells out of a box, holds a small world with rays, then pops. Focus the sheet on the bubble asset, not a scene or character. Nested glowing ovals expressed solely as crisp flat bands create light as volume. The small world is a legible dark-blue silhouette inside the innermost oval, with a single cream radiant core behind it; silhouette remains solid and never whites out. Same form language throughout all three states, larger middle state. Burst state has a broken oval ring and discrete flying curved shards with swooping tapered tips. Every movable element is a closed flat shape, suitable for cutting and moving later; keep fragments isolated and silhouettes clear.\\nUse attached images ONLY for these properties, never copy "
+ },
+ "summary": {
+  "references": 4
+ }
+}

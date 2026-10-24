@@ -1,0 +1,10 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "category",
+    "action": "create",
+    "id": "animation",
+    "name": "Animation",
+    "description": "Project-agnostic animation production resources (D80–D82): the per-episode animatic chain, its track prompts and its probe gates. Parameterized by episode_root (where the ledger, contracts and studies live) and renderer (the rendering project); the showcase is the first episode."
+  }
+}

@@ -1,0 +1,35 @@
+{
+ "plate": "out/world-shaded-01.png",
+ "size": [
+  1224,
+  1285
+ ],
+ "field": "#02050b",
+ "contour_px": 2.0,
+ "contour_target_px": 3.61,
+ "torso_dominant_colours": 8,
+ "torso_minor_colours": 26,
+ "fills": "stepped",
+ "identity_pigments": {
+  "codex": {
+   "hex": "#4f7df2",
+   "fraction": 0.01875
+  },
+  "codex_accent": {
+   "hex": "#9fe8ff",
+   "fraction": 0.0373
+  },
+  "clawd": {
+   "hex": "#e8694a",
+   "fraction": 0.00545
+  },
+  "skin": {
+   "hex": "#67b479",
+   "fraction": 0.01467
+  },
+  "skin_shadow": {
+   "hex": "#c885c2",
+   "fraction": 0.01451
+  }
+ }
+}

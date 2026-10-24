@@ -1,0 +1,29 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Updated**: Showcase Shot (showcase_shot)\n\nUpdated prompt: showcase_shot\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +7 additions, -1 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_shot/prompt.yaml\n+++ b/development/showcase_shot/prompt.yaml\n@@ -45,6 +45,12 @@\n     required: false\n     defaultValue: media/showcase\n chainSteps:\n+  - promptId: showcase_layout_sheet\n+    inputMapping:\n+      shot: shot\n+      output_root: output_root\n+    id: layout\n+    stepName: Cinematography Sheet\n   - promptId: showcase_motion\n     inputMapping:\n       brief: brief\n@@ -76,7 +82,7 @@\n       brief: brief\n       constraints: constraints\n       context: previous_step_result\n-      motion_contract: step1_result\n+      motion_contract: step2_result\n       output_root: output_root\n     inlineGateIds:\n       - showcase-review\n\n```\n\n🧠 chain\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_shot\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_shot/prompt.yaml\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "update",
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "update",
+      "id": "showcase_shot",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_shot",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_shot/prompt.yaml"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 2
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Updated**: Showcase Shot (showcase_shot)\n\nUpdated prompt: showcase_shot\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +7 additions, -1 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_shot/prompt.yaml\n+++ b/development/showcase_shot/prompt.yaml\n@@ -45,6 +45,12 @@\n     required: false\n     defaultValue: media/showcase\n chainSteps:\n+  - promptId: showcase_layout_sheet\n+    inputMapping:\n+      shot: shot\n+      output_root: output_root\n+    id: layout\n+    stepName: Cinematography Sheet\n   - promptId: showcase_motion\n     inputMapping:\n       brief: brief\n@@ -76,7 +82,7 @@\n       brief: brief\n       constraints: constraints\n       context: previous_step_result\n-      motion_contract: step1_result\n+      motion_contract: step2_result\n       output_root: output_root\n     inlineGateIds:\n       - showcase-review\n\n```\n\n🧠 chain\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_shot\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_shot/prompt.yaml\n"
+  },
+  "isError": false
+}

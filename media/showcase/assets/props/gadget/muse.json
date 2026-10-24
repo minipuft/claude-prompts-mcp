@@ -1,0 +1,140 @@
+{
+  "asset": "gadget",
+  "covers": [
+    "gadget"
+  ],
+  "status": "proposed",
+  "picked": null,
+  "job": "the gadget: raw capability, a hybrid universe-simulator machine in the spirit of The Midnight Gospel, familiar parts in an impossible whole, organic and mechanical at once; not a device with buttons, not an orb; its dial is the one emitter; hand-coded today in Gadget.tsx",
+  "prompt": {
+    "chain": ">>showcase_asset_muse",
+    "payload": "workflow-payloads/71-muse-gadget.json",
+    "tool": "imagegen (showcase_asset_sheet tools/imagegen/script.py, codex exec)",
+    "common": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.",
+    "variant_prompts": {
+      "muse-01": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the gadget: raw capability, a hybrid universe-simulator machine in the spirit of The Midnight Gospel, familiar parts in an impossible whole, organic and mechanical at once; not a device with buttons, not an orb; its dial is the one emitter; hand-coded today in Gadget.tsx.\nLAYOUT: Show the SAME machine twice on one baseline: left dormant, right with its dial open and light pouring out. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: Dr. Seuss Midnight Painting: swooping organic lobes, curling stalks with flag leaves and pale thin contour on black.\nImage 2: Dr. Seuss Midnight Painting: curling stalks with flag leaves.\nImage 3: owner card MFJFTELGH6FD8: a single radiant core behind a flat silhouette, the shape never whites out.\nImage 4: the Clawd companion: take only its stubby blocky body, flat plates and small dark slit marks as the cast property.\nVARIANT muse-01 'Clock-stalk machine': Stacked blobby lobes like a clock-stalk with a crooked funnel, a curled antenna with a flag leaf, a round dial as the emitter and stub legs. The design sits between clawd (stubby plated legs and body blocks) and the Seuss paintings.",
+      "muse-02": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the gadget: raw capability, a hybrid universe-simulator machine in the spirit of The Midnight Gospel, familiar parts in an impossible whole, organic and mechanical at once; not a device with buttons, not an orb; its dial is the one emitter; hand-coded today in Gadget.tsx.\nLAYOUT: Show the SAME machine twice on one baseline: left dormant, right with its dial open and light pouring out. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: Dr. Seuss Midnight Painting: receding hand-drawn frames, each slightly turned.\nImage 2: owner card MFP3WX8X3LIX2: a lit doorway in a dark field, the interior the only emitter.\nImage 3: owner card MFI6QTUOYA66U: windows framing characters inside architecture.\nImage 4: the Codex companion: take only its rounded soft cloud-and-prompt silhouette and its screen-glyph window as the cast property.\nVARIANT muse-02 'Doorway engine': A machine built as a stack of turned doorways and windows with a belly lamp, organs and gears as curling stalks, the dial a doorway of light. The design sits between codex (rounded cloud silhouette and glyph window) and the Seuss paintings.",
+      "muse-03": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the gadget: raw capability, a hybrid universe-simulator machine in the spirit of The Midnight Gospel, familiar parts in an impossible whole, organic and mechanical at once; not a device with buttons, not an orb; its dial is the one emitter; hand-coded today in Gadget.tsx.\nLAYOUT: Show the SAME machine twice on one baseline: left dormant, right with its dial open and light pouring out. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: owner card MFIYY3RT6SJS2: a radial burst with a tiny figure at its centre.\nImage 2: owner card MTR8RSMQ452E8: one hard blue flame lights the form on black, the rest unlit.\nImage 3: Dr. Seuss Midnight Painting: light as strings of beads strung between forms.\nImage 4: the human's model sheet: take only its long swooping neck-and-hair line, tapered tips and thin pale contour as the cast property.\nVARIANT muse-03 'Radial hybrid': A pot-bellied creature-machine with a ring of fins radiating from its dial like a burst, part kettle, part plant, part loom, a funnel for a mouth. The design sits between human (long swoop line, large hands as grippers) and the Seuss paintings."
+    },
+    "chain_receipt": "evidence/drive-Hwxy2c",
+    "mailbox": "mailbox/muse-gadget"
+  },
+  "variants": [
+    {
+      "id": "muse-01",
+      "title": "Clock-stalk machine",
+      "image": "assets/props/gadget/muse-01.png",
+      "sha256": "55c4203e11cd5d4f417e3a1e84c70042516ccf78d1560ffad521a6c5eed04f76",
+      "design": "Stacked blobby lobes like a clock-stalk with a crooked funnel, a curled antenna with a flag leaf, a round dial as the emitter and stub legs.",
+      "borrows": [
+        {
+          "card": "MFJFTELGH6FD8",
+          "facet": "light.source",
+          "value": "single-emitter",
+          "property": "the dial is the single radiant core behind the machine's silhouette"
+        },
+        {
+          "card": "MFJFTELGH6FD8",
+          "facet": "fx",
+          "value": "burst",
+          "property": "a burst from the dial stays behind the form"
+        }
+      ],
+      "cast_property": {
+        "cast": "clawd",
+        "property": "stubby plated legs and body blocks"
+      },
+      "board_cards": [
+        "seuss-no-one-youer",
+        "seuss-freebird",
+        "clawd-official"
+      ],
+      "reference_images": [
+        "assets/props/_refs/seuss-no-one-youer.png",
+        "assets/props/_refs/seuss-freebird.png",
+        "assets/props/_refs/MFJFTELGH6FD8.png",
+        "assets/props/_refs/clawd-official.png"
+      ],
+      "generation_receipt": "assets/props/gadget/muse-01.receipt.json",
+      "request": "assets/props/gadget/muse-01.request.json",
+      "observed": "funnel, curled antenna with a flag leaf, belly dial as the emitter, plated legs: the closest to the hand-coded gadget, with the dial burst behind the form"
+    },
+    {
+      "id": "muse-02",
+      "title": "Doorway engine",
+      "image": "assets/props/gadget/muse-02.png",
+      "sha256": "d851339326bfa95e6293f37d8619716b06d571160d69c9a0d9878dc1c6048f41",
+      "design": "A machine built as a stack of turned doorways and windows with a belly lamp, organs and gears as curling stalks, the dial a doorway of light.",
+      "borrows": [
+        {
+          "card": "MFP3WX8X3LIX2",
+          "facet": "composition.framing",
+          "value": "doorway",
+          "property": "a lit doorway in a dark field, the interior the only emitter"
+        },
+        {
+          "card": "MFI6QTUOYA66U",
+          "facet": "composition.framing",
+          "value": "window",
+          "property": "windows framing parts inside the architecture"
+        }
+      ],
+      "cast_property": {
+        "cast": "codex",
+        "property": "rounded cloud silhouette and glyph window"
+      },
+      "board_cards": [
+        "seuss-nested-frames",
+        "codex-official"
+      ],
+      "reference_images": [
+        "assets/props/_refs/seuss-nested-frames.png",
+        "assets/props/_refs/MFP3WX8X3LIX2.png",
+        "assets/props/_refs/MFI6QTUOYA66U.png",
+        "assets/props/_refs/codex-official.png"
+      ],
+      "generation_receipt": "assets/props/gadget/muse-02.receipt.json",
+      "request": "assets/props/gadget/muse-02.request.json",
+      "observed": "a stack of turned doorways with gears, bell feet and a dial door that opens onto a lit path; the light path spills past the frame edge on the right"
+    },
+    {
+      "id": "muse-03",
+      "title": "Radial hybrid",
+      "image": "assets/props/gadget/muse-03.png",
+      "sha256": "d4ec7671c37f60efdc480c8bbcde1b18de9ea2e85e0900fad97ca2d3db8724e1",
+      "design": "A pot-bellied creature-machine with a ring of fins radiating from its dial like a burst, part kettle, part plant, part loom, a funnel for a mouth.",
+      "borrows": [
+        {
+          "card": "MFIYY3RT6SJS2",
+          "facet": "composition.framing",
+          "value": "radial",
+          "property": "a radial burst around a tiny centre"
+        },
+        {
+          "card": "MTR8RSMQ452E8",
+          "facet": "light.source",
+          "value": "single-emitter",
+          "property": "one hard flame lights the form on black"
+        }
+      ],
+      "cast_property": {
+        "cast": "human",
+        "property": "long swoop line, large hands as grippers"
+      },
+      "board_cards": [
+        "seuss-green-cat-lights",
+        "human-model"
+      ],
+      "reference_images": [
+        "assets/props/_refs/MFIYY3RT6SJS2.png",
+        "assets/props/_refs/MTR8RSMQ452E8.png",
+        "assets/props/_refs/seuss-green-cat-lights.png",
+        "assets/props/_refs/human-model.png"
+      ],
+      "generation_receipt": "assets/props/gadget/muse-03.receipt.json",
+      "request": "assets/props/gadget/muse-03.request.json",
+      "observed": "a pot-bellied creature-machine with a funnel neck, fins radiating from the dial and gripper hands; the strangest transfer, thin limbs will not hold at 64 px"
+    }
+  ],
+  "grade": "assets/props/gadget/grade.md"
+}

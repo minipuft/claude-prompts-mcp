@@ -1,0 +1,33 @@
+id: showcase-asset-muse
+name: Showcase Asset Muse
+type: validation
+description: "Check-tier gate on the render step (C19, D55): every prop a shot's
+  inventory names has a muse sheet with 3+ rendered variants, each citing a
+  reference card from the owner library (by facet) and one existing cast
+  property; a prop with no sheet, a sheet with 2 variants or a variant citing an
+  unknown card is refused before render. Acceptance (`sheet_accepted`) is
+  tracked, not gated."
+guidanceFile: guidance.md
+pass_criteria:
+  - type: shell_verify
+    shell_command:
+      - python3
+      - scripts/animation/probe-muse.py
+      - v3/shots.json
+      - assets/props
+    shell_timeout: 120000
+    shell_working_dir: ../media/showcase
+    shell_max_attempts: 1
+    shell_preset: full
+activation:
+  prompt_categories:
+    - animation
+    - development
+  explicit_request: true
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+subject: showcase-asset-muse
+severity: high
+enforcementMode: blocking
+gate_type: custom

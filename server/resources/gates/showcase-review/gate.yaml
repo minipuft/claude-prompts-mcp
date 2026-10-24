@@ -1,0 +1,15 @@
+id: showcase-review
+name: Showcase Review Rubric
+type: guidance
+description: Reminder that a showcase render is graded against
+  media/showcase/v3/rubric.md by criterion id with cited evidence, never by
+  impression.
+guidanceFile: guidance.md
+activation:
+  prompt_categories:
+    - development
+  explicit_request: true
+subject: showcase-review
+severity: medium
+enforcementMode: advisory
+gate_type: custom
