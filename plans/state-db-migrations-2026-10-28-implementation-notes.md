@@ -24,10 +24,12 @@ tags: []
 - F4 (2026-10-28): the ADR index in `docs/adr/README.md` is generated (`node scripts/adr.mjs index`, checked by `adr.mjs check`); never hand-edit it.
 - F5 (2026-10-28): ADR 0002, which 0005 cites as the downgrade rule, is still `proposed` in the index although the engine enforces it. Owner question, not a row.
 - F6 (2026-10-28): four integration tests seed v1/v27/v28 databases, so the floor turns their upgrades into refusals (measured by `rg "VALUES \((\d+)\)" tests`); row 1.4 now owns them. The upgrade path cannot be exercised while 35 is the only version, so row 1.2 adds an injectable `schemaVersion`/`durableMigrations` engine config.
+- F7 (2026-10-28): the lock gate could not bootstrap — `--update` refuses a same-version mismatch, so a missing lock had no creator; row 1.5 added. The fingerprint covers tables and indexes only; the engine defines no triggers (`rg "CREATE TRIGGER" sqlite-engine.ts` → 0).
 
 ## Deviations
 
 - DEV-T2-1 (2026-10-28): the briefed commit subject `docs(adr): …` was refused by commitlint (`adr` is not an allowed scope; capitalised ADR fails subject-case); landed as `docs: the record of why runtime state lives in one SQLite file is accepted`. Later briefs carry the scope list from `commitlint.config.mjs`.
 - DEV-T1-1 (2026-10-28): `DurableRow` is `Readonly<Record<string, unknown>>`, not `SQLInputValue`, matching the engine snapshot rows; `planDurableMigrations` also throws on from > to and validates the registry before the floor check. Accepted.
+- DEV-T1-3 (2026-10-28): check (a) (stale lock version) suppresses (b); `--update` also refuses a SCHEMA_VERSION below the lock. Accepted.
 
 ## Receipts
