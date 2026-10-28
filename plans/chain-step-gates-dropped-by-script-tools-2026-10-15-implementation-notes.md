@@ -40,3 +40,7 @@ tags: [gates, chains]
   in row 2.4): cloudySky has no resource workspace to move them into.
 - Third shape (system_message update without a yaml pointer): not started.
 - Retake of the hero demo against this branch's dist: retry scenario, shorter feature string.
+
+## 2026-10-28 — publish ruling
+
+- Owner ruling 2026-10-28: approve the cut, split the branch into one PR per outcome and open them; the framework removal (RADIANT, liquescent) follows immediately after the split as its own slice. `publish: push`; merging is the owner's call on review.

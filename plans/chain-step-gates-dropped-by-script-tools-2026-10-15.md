@@ -3,7 +3,7 @@ title: A chain step that binds a script tool silently drops its inline gates
 date: 2026-10-15
 status: active
 type: plan
-publish: none
+publish: push · owner ruling 2026-10-28 ("the cut and PR split"): open the PR, no merge until review
 tags: [gates, chains]
 ---
 
