@@ -90,7 +90,7 @@ def _extract_server_schema() -> tuple[str, int]:
         segments.append(source[seg_start:end])
         start = source.find(marker, end)
 
-    ddl = "\n".join(segments).replace("${SCHEMA_VERSION}", version_match.group(1))
+    ddl = "\n".join(segments)
     if "${" in ddl:
         raise AssertionError("engine DDL carries an interpolation this extractor cannot resolve")
 
@@ -153,9 +153,12 @@ def state_db(tmp_path, monkeypatch):
     runtime_state.mkdir(parents=True)
     db_path = runtime_state / "state.db"
 
-    ddl, _version = _extract_server_schema()
+    ddl, version = _extract_server_schema()
     conn = sqlite3.connect(db_path)
     conn.executescript(ddl)
+    # The engine binds this row after the DDL literal (a parameterized INSERT), so the extracted
+    # DDL does not carry it; seed the version the extractor read from SCHEMA_VERSION.
+    conn.execute("INSERT OR IGNORE INTO schema_version (version) VALUES (?)", (version,))
     conn.commit()
 
     monkeypatch.setenv("MCP_WORKSPACE", str(workspace))
@@ -226,6 +229,9 @@ class TestSchemaParity:
         _ddl, version = _extract_server_schema()
         seeded = state_db.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
         assert seeded == version
+        # The fixture seeds the row itself, so also pin that the engine still binds one after the DDL.
+        engine = SQLITE_ENGINE_TS.read_text(encoding="utf-8")
+        assert "INSERT OR IGNORE INTO schema_version (version) VALUES (?)" in engine
 
     def test_run_status_is_not_null_because_the_reader_has_no_null_branch(self, state_db):
         """`_load_from_execution_view` filters `run_status NOT IN (terminal)` with no NULL branch.

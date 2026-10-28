@@ -438,9 +438,15 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    // `spawn` is a TEXTUAL match, not a behavioural one: the SPAWN substrate pattern includes
+    // `\bnpm run\b`, and validate-table-contracts.ts carries that literal in the `--update`
+    // command it prints (UPDATE_COMMAND). The script spawns no process. `file` is real: it builds
+    // an engine on a temp file to fingerprint the durable schema, and reads the committed lock.
+    // Declared rather than worked around, because the detector is textual by design and omitting
+    // a matched substrate fails.
     script: 'validate:table-contracts',
     io: 'read',
-    reads: ['declared'],
+    reads: ['file', 'spawn'],
     converse:
       'CHECKED — set-equality against the embedded DDL is bidirectional by construction: a contract without a table and a table without a contract both fail',
   },

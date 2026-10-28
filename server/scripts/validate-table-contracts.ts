@@ -278,16 +278,16 @@ export function planLockUpdate(input: {
 function serializeLock(lock: DurableSchemaLock): string {
   const sorted = (tables: DurableFingerprint): DurableFingerprint =>
     Object.fromEntries(Object.entries(tables).sort(([a], [b]) => a.localeCompare(b)));
-  const out: Record<string, unknown> = {
+  const out: DurableSchemaLock = {
     schemaVersion: lock.schemaVersion,
     tables: sorted(lock.tables),
+    ...(lock.previous !== undefined && {
+      previous: {
+        schemaVersion: lock.previous.schemaVersion,
+        tables: sorted(lock.previous.tables),
+      },
+    }),
   };
-  if (lock.previous !== undefined) {
-    out.previous = {
-      schemaVersion: lock.previous.schemaVersion,
-      tables: sorted(lock.previous.tables),
-    };
-  }
   return `${JSON.stringify(out, null, 2)}\n`;
 }
 

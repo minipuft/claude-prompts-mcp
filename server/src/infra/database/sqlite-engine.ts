@@ -1535,9 +1535,10 @@ export class SqliteEngine implements DatabasePort {
       CREATE INDEX IF NOT EXISTS idx_execution_records_started ON execution_records(started_at);
       CREATE INDEX IF NOT EXISTS idx_execution_records_tenant ON execution_records(tenant_id);
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_run_status ON chain_sessions(run_status);
-
-      INSERT OR IGNORE INTO schema_version (version) VALUES (${this.targetVersion});
     `);
+    // Bound, not interpolated: the DDL literal above is read verbatim by the Python hook fixtures
+    // (hooks/tests/test_db_reader.py), which refuse any interpolation they cannot resolve.
+    this.run('INSERT OR IGNORE INTO schema_version (version) VALUES (?)', [this.targetVersion]);
     this.applyViews();
   }
 
