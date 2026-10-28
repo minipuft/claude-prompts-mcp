@@ -626,9 +626,9 @@ describe('every registry gate.yaml satisfies GateDefinitionSchema', () => {
 
   test('the registry has not silently lost or gained gates', () => {
     // Guards the fixture itself: a count assertion below only means something if this
-    // enumeration still finds all 26 directories carrying a `subject:` (25 from row 0.6,
+    // enumeration still finds all 25 directories carrying a `subject:` (24 from row 0.6 after creed-fidelity left the bundle,
     // plus `handoff-artifacts`).
-    expect(gateIds.length).toBe(26);
+    expect(gateIds.length).toBe(25);
   });
 
   test.each(gateIds)('%s: valid against the schema, with a kebab-case subject', (gateId) => {
