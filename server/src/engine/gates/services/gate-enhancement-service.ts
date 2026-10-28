@@ -7,7 +7,7 @@ import {
   withStepGates,
 } from './chain-step-gate-bindings.js';
 import { DEFAULT_FRAMEWORK_GATE_ID, GateSetResolver } from './gate-set-resolver.js';
-import { suppressingModifier } from './gate-suppression-refusal.js';
+import { declaredStepGateCount, suppressingModifier } from './gate-suppression-refusal.js';
 import { liveNodeIds } from './run-step-view.js';
 import {
   resolvedInlineGateIds,
@@ -533,6 +533,7 @@ export class GateEnhancementService {
     }
 
     if (this.shouldSkip(step.executionPlan?.modifiers)) {
+      this.assertSkippedStepDeclaresNoGates(step);
       // Row 4.5 (P5-F4 residual, DEV-T4-10, owner-ruled 2026-08-13). A modifier-skipped step
       // produces no output, so there is nothing to review. Write the same positive-empty-list
       // convention the "no applicable gates" case below uses rather than leaving the field unset
@@ -585,6 +586,25 @@ export class GateEnhancementService {
 
     const applied = await this.enhanceStepPrompt(step, prompt, gateIds, stepFrameworkId, input);
     return { applied, accepted: resolution.accepted };
+  }
+
+  /**
+   * Stage 11 only reaches the chain walk when the call itself withholds no gate, so a step plan
+   * that carries `clean` or `framework` here took it from a default (the script-tool `clean`), not
+   * from the client. Skipping then drops the step's own declared gates without a word; refuse
+   * instead, naming the step and the modifier.
+   */
+  private assertSkippedStepDeclaresNoGates(step: ChainStepPrompt): void {
+    const declared = declaredStepGateCount(step);
+    const modifier = suppressingModifier(step.executionPlan?.modifiers);
+    if (declared === 0 || modifier === undefined) {
+      return;
+    }
+    throw new Error(
+      `Chain step ${step.stepNumber} (${step.promptId}) declares ${declared} inline gate(s) but its ` +
+        `plan carries ${modifier}, which would run the step without them. The call did not ` +
+        `request ${modifier}; remove the modifier from the step plan or the gates from the step.`
+    );
   }
 
   /**

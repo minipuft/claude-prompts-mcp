@@ -1,6 +1,7 @@
 // @lifecycle canonical - Plans operator execution order and dependencies.
 import { CategoryExtractor } from './category-extractor.js';
 import { GateSetResolver } from '../../gates/services/gate-set-resolver.js';
+import { declaredStepGateCount } from '../../gates/services/gate-suppression-refusal.js';
 import { resolveDeclaredArtifacts } from '../../gates/utils/artifact-kinds.js';
 import { isFrameworkInjected } from '../pipeline/decisions/injection/index.js';
 
@@ -223,7 +224,9 @@ export class ExecutionPlanner {
       if (gateOverrides !== undefined) {
         stepPlanOptions.gateOverrides = gateOverrides;
       }
-      stepPlanOptions.gatesRequested = gatesRequested;
+      // A step that declares gates asked for them whatever the call said: the call-level flag
+      // alone let the script-tool default set `clean` on a gated step, which stage 11 then skipped.
+      stepPlanOptions.gatesRequested = gatesRequested || declaredStepGateCount(step) > 0;
 
       const stepPlan = await this.createPlan(stepPlanOptions);
       stepPlans.push(stepPlan);
@@ -323,7 +326,7 @@ export class ExecutionPlanner {
    * @param modifierResolution - Current modifier resolution (mutated in place)
    * @param convertedPrompt - The prompt being executed
    * @param parsedCommand - User's parsed command (to detect explicit modifiers)
-   * @param gatesRequested - Whether the call itself requested a gate
+   * @param gatesRequested - Whether the call, or for a chain step the step itself, requested a gate
    */
   private applyScriptToolDefaults(
     modifierResolution: { modifiers?: ExecutionModifiers },

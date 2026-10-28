@@ -117,6 +117,11 @@ Criteria gates use inline text criteria that Claude evaluates against its own ou
 4. A blocking FAIL holds the step for correction within its retry budget
 5. After retry exhaustion, resolve the review with an accepted `gate_action`
 
+A step's own inline gates (`inlineGateIds`, `inlineGateCriteria`) run whether or not its prompt
+binds a script tool. The `%clean` default that script-tool prompts get is applied only to a step
+that declares no gate, and a step plan that carries both a declared gate and `clean` fails by name
+instead of running the step ungated.
+
 ## Shell Verification Gates (Ground Truth)
 
 Shell verification uses actual command execution for validation—exit code 0 = PASS, non-zero = FAIL.
