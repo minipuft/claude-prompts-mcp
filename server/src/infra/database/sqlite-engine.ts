@@ -735,7 +735,8 @@ export class SqliteEngine implements DatabasePort {
    * refuses an existing target, so it writes a `.tmp` (any stale one removed first) and renames it
    * over the backup. Another process may upgrade the file between this peek and the write lock;
    * that costs one extra backup of a file that was then still at `version`, which is acceptable.
-   * A failure throws: an upgrade that could not be backed up does not start.
+   * A failure to write the new backup throws: an upgrade that could not be backed up does not
+   * start. Deleting older backups is best-effort (see `removeOtherUpgradeBackups`).
    */
   private backupBeforeUpgrade(version: number): string | null {
     const upgradeDue = version >= MIGRATION_FLOOR && version < this.targetVersion;
@@ -760,14 +761,25 @@ export class SqliteEngine implements DatabasePort {
     return backupPath;
   }
 
-  /** Delete every `<basename>.v*.bak` beside the database except `kept`: the latest one only. */
+  /**
+   * Delete every `<basename>.v*.bak` beside the database except `kept`: the latest one only.
+   *
+   * Best-effort: `kept` already exists, so it is the way back, and a stale copy that cannot be
+   * deleted (permissions, a directory in its place) only costs disk. Each failure is warned about
+   * by file and the sweep continues, so it never refuses an upgrade that has its backup.
+   */
   private removeOtherUpgradeBackups(kept: string): void {
     const directory = path.dirname(this.dbPath);
     const base = path.basename(this.dbPath);
     for (const name of fs.readdirSync(directory)) {
       const candidate = path.join(directory, name);
-      if (candidate !== kept && isUpgradeBackupOf(base, name)) {
+      if (candidate === kept || !isUpgradeBackupOf(base, name)) continue;
+      try {
         fs.rmSync(candidate, { force: true });
+      } catch (error) {
+        this.logger.warn(
+          `Could not delete the older upgrade backup ${candidate}: ${messageOf(error)}`
+        );
       }
     }
   }
