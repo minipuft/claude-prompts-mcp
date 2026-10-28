@@ -17,11 +17,8 @@ import { dirname } from 'node:path';
 import type { HistoryRowRequest } from './version-history-types.js';
 import type { DatabaseSync } from 'node:sqlite';
 
-import {
-  configFileFormat,
-  findWorkspaceConfigFiles,
-  parseConfigText,
-} from '#shared/utils/config-file-format.js';
+import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
+import { selectLaunchConfigFile } from '#shared/utils/config-file-selection.js';
 import { deriveProjectScopeId } from '#shared/utils/project-scope.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
 
@@ -33,9 +30,9 @@ import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.j
  * comes from `identity.launchDefaults`, resolved at ITS launch from `--workspace-id`, its
  * config file, or its own `CLAUDE_PROJECT_DIR`/cwd (`applyRuntimeIdentityOverrides`,
  * `runtime/context.ts`) — none of which this process can observe. What it CAN observe: the
- * same `identity.launchDefaults.workspaceId` if the workspace's config file sets it explicitly
- * (`readConfiguredWorkspaceId`, matching rung 2 of the server's precedence), and its own
- * `CLAUDE_PROJECT_DIR`/cwd, which matches the server's only when both processes share an
+ * same `identity.launchDefaults.workspaceId` if the config file the server would read sets it
+ * explicitly (`readConfiguredWorkspaceId`, matching rung 2 of the server's precedence), and its
+ * own `CLAUDE_PROJECT_DIR`/cwd, which matches the server's only when both processes share an
  * environment (e.g. launched from the same shell/session) or happen to share a cwd.
  *
  * **This is a guess, not the answer, and `runSqlite` does not trust it blindly.** A `--workspace-id`
@@ -57,14 +54,18 @@ export function resolveTenantId(dbPath: string): string {
 }
 
 /**
- * Read `identity.launchDefaults.workspaceId` from the config file beside runtime-state.
+ * Read `identity.launchDefaults.workspaceId` from the config file the server would read from this
+ * environment: `MCP_CONFIG_PATH`, then the project's `.claude-prompts/` config, then the one
+ * beside runtime-state (`selectLaunchConfigFile`, owner ruling R1).
  *
  * Either config name counts, in the same precedence the server reads them, and the text parses in
  * whichever dialect its extension declares — a workspace id commented around in a `config.jsonc`
- * would otherwise read as absent and silently scope this process's history to `'default'`.
+ * would otherwise read as absent and silently scope this process's history to `'default'`. A
+ * project config that sets the id outranks the workspace's, as it does on the server; reading only
+ * the workspace's would scope history to an id the running server never uses.
  */
 function readConfiguredWorkspaceId(dbPath: string): string | undefined {
-  const configPath = findWorkspaceConfigFiles(dirname(dirname(dbPath)))[0];
+  const configPath = selectLaunchConfigFile(dirname(dirname(dbPath)))?.path;
   try {
     if (configPath === undefined) {
       return undefined;

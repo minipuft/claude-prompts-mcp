@@ -85,6 +85,46 @@ export function resourceLookupOrder(
 }
 
 /**
+ * The roots a flat-layout loader holds: its primary and the WHOLE lookup order, primary included
+ * (`ResourceRoots.lookupDirs` is the producing end).
+ */
+interface LoaderRoots {
+  primary: string;
+  lookupDirs: readonly string[];
+}
+
+/**
+ * How a loader asks for its roots again. The composition root hands one to each loader, built from
+ * the same `resolveResourceRoots` that configured it, so a loader that re-resolves never states an
+ * order of its own: it takes whatever {@link resourceRootPrecedence} produces now.
+ */
+export type LoaderRootsSource = () => LoaderRoots;
+
+/**
+ * What a loader keeps of the roots it was given: the lookup order, and the directories beside its
+ * primary that it reports and watches.
+ *
+ * The lookup order is built from the RAW list, before the filter that yields `besideDirs`: the
+ * primary's rank is a position in that list, and filtering it out first would drop it to the end,
+ * behind the bundled tree. `besideDirs` keeps absent directories — a workspace overlay created
+ * while the server runs must be watched, and the observer arms on it once it appears.
+ */
+export function deriveLoaderRoots(
+  primary: string,
+  lookupDirs: readonly string[] = []
+): { lookupDirs: string[]; besideDirs: string[] } {
+  return {
+    lookupDirs: resourceLookupOrder(primary, lookupDirs),
+    besideDirs: lookupDirs.filter((dir) => dir !== primary),
+  };
+}
+
+/** Whether two lookup orders name the same directories in the same order. */
+export function sameLookupOrder(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((dir, index) => dir === b[index]);
+}
+
+/**
  * The directory to load `id` from under one root, or `undefined` when that root does not hold it.
  *
  * Two layouts, and the return value is the BASE the entry point sits one level below — which for a

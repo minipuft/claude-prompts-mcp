@@ -835,6 +835,51 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     ]);
   });
 
+  it('answers every type from the project on the first call after .claude-prompts/ appears, and from the workspace again once it is gone', () => {
+    const resolver = resolverWithDiscovery();
+    const projectWorkspace = path.join(project, '.claude-prompts');
+
+    // Positive control: every type has been asked once, so the answers below come from a cache
+    // that was warm when the directory appeared, not from a first resolution.
+    expect(directoriesOf(resolver)).toEqual(expectedUnder(path.join(workspace, 'resources')));
+    expect(resolver.getProjectWorkspace()).toBeUndefined();
+
+    mkdirSync(projectWorkspace);
+    expect(directoriesOf(resolver)).toEqual(
+      expectedUnder(path.join(projectWorkspace, 'resources'))
+    );
+    // Resolution names the directory; only a write creates it.
+    expect(readdirSync(projectWorkspace)).toEqual([]);
+
+    rmSync(projectWorkspace, { recursive: true });
+    expect(directoriesOf(resolver)).toEqual(expectedUnder(path.join(workspace, 'resources')));
+  });
+
+  it('moves the primary and the precedence together: the workspace copy is the overlay once the project appears', () => {
+    const resolver = resolverWithDiscovery();
+    const projectGates = path.join(project, '.claude-prompts', 'resources', 'gates');
+    const workspaceGates = path.join(workspace, 'resources', 'gates');
+
+    const before = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
+    expect(before.lookupDirs.slice(0, 2)).toEqual([workspaceGates, projectGates]);
+
+    mkdirSync(path.join(project, '.claude-prompts'));
+    const after = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
+    expect(after.primary).toBe(projectGates);
+    expect(after.lookupDirs.slice(0, 2)).toEqual([projectGates, workspaceGates]);
+  });
+
+  it('keeps an explicit MCP_RESOURCES_PATH boundary when .claude-prompts/ appears later', () => {
+    const resources = path.join(dir, 'explicit-resources');
+    mkdirSync(resources);
+    process.env['MCP_RESOURCES_PATH'] = resources;
+    const resolver = resolverWithDiscovery();
+
+    expect(directoriesOf(resolver)).toEqual(expectedUnder(resources));
+    mkdirSync(path.join(project, '.claude-prompts'));
+    expect(directoriesOf(resolver)).toEqual(expectedUnder(resources));
+  });
+
   describe('by transport, built through createPathResolver', () => {
     let savedProjectDir: string | undefined;
 

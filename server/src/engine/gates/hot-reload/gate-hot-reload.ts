@@ -152,17 +152,32 @@ export class GateHotReloadCoordinator {
    * announced as gone. Only `yaml-runtime` entries are considered, so a `temporary` gate or one
    * registered in code is never mistaken for a missing file.
    *
+   * The loader's roots are taken again first. A late directory can be the root that now outranks
+   * the one a registered gate was served from (a project `.claude-prompts/` created while the
+   * server ran becomes the primary), and the per-file events for it arrived before the roots
+   * moved. When the lookup order changed, every gate still on disk is therefore loaded again from
+   * the root that wins now.
+   *
    * @returns the ids that were unregistered
    */
   async reconcile(): Promise<string[]> {
+    const rootsMoved = this.loader.refreshRoots();
     const removed: string[] = [];
     for (const entry of this.registry.getGuideEntries(false)) {
       const gateId = entry.guide.gateId.toLowerCase();
-      if (entry.source !== 'yaml-runtime' || this.loader.gateExists(gateId)) {
+      if (entry.source !== 'yaml-runtime') {
         continue;
       }
-      await this.handleGateDeletion(gateId);
-      removed.push(gateId);
+      if (!this.loader.gateExists(gateId)) {
+        await this.handleGateDeletion(gateId);
+        removed.push(gateId);
+        continue;
+      }
+      if (rootsMoved) {
+        // One gate refusing to load must not leave the rest on the old order; the failure is
+        // already logged and counted by `handleGateReload`.
+        await this.handleGateReload(gateId).catch(() => undefined);
+      }
     }
     return removed;
   }

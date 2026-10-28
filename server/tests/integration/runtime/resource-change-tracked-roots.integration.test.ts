@@ -189,6 +189,58 @@ describe('the change tracker spans operator roots, one file per id', () => {
     }
   });
 
+  it('judges which copy serves by the roots as they are now, after a project .claude-prompts/ appears', async () => {
+    const projectDir = path.join(TEST_DIR, 'project');
+    const projectPrompts = path.join(projectDir, '.claude-prompts', 'resources', 'prompts');
+    const resolver = new PathResolver({
+      cli: {},
+      packageRoot: PACKAGE_ROOT,
+      projectDiscovery: true,
+      projectLaunch: { env: { CLAUDE_PROJECT_DIR: projectDir }, cwd: TEST_DIR },
+    });
+    // Read through the resolver on every call, as the server's config loader does.
+    const moving = {
+      getResolvedPromptsDirectory: () => resolver.getPromptsPath(),
+      getGatesDirectory: () => resolver.getGatesPath(),
+    } as unknown as ConfigLoader;
+    const built = buildResourceChangeTrackerAuxiliaryReloadConfig(logger, moving, resolver);
+    if (built === undefined) throw new Error('tracker registration was not built');
+
+    try {
+      await writePrompt(PRIMARY, 'general/dup', 'WORKSPACE-COPY');
+      // Registered before the project directory exists: the workspace is the primary, and the
+      // project's folder is a root that does not exist yet, ranked below it.
+      expect(trackedResourceRoots(moving, resolver).prompt).toEqual([
+        PRIMARY,
+        projectPrompts,
+        OVERLAY,
+      ]);
+      await compareResourceBaseline(tracker, trackedResourceRoots(moving, resolver), logger);
+
+      // The directory appears holding its own copy of the id, and now outranks the workspace.
+      const projectFile = await writePrompt(projectPrompts, 'general/dup', 'PROJECT-COPY');
+      expect(trackedResourceRoots(moving, resolver).prompt).toEqual([
+        projectPrompts,
+        PRIMARY,
+        OVERLAY,
+      ]);
+      await built.handler({
+        type: 'prompt_changed',
+        reason: 'test',
+        affectedFiles: [projectFile],
+        changeType: 'added',
+        timestamp: Date.now(),
+        requiresFullReload: false,
+      });
+
+      // Served now, so the id's content changed. Under the order held at registration the project
+      // copy ranked below the workspace's and the event was dropped as shadowed.
+      expect(rowsFor('dup').slice(1)).toEqual([{ operation: 'modified', file_path: projectFile }]);
+    } finally {
+      await rm(projectDir, { recursive: true, force: true, maxRetries: 5 });
+    }
+  });
+
   it('reconciles a removal that no file event reported', async () => {
     const soloFile = await writePrompt(OVERLAY, 'general/solo', 'OVERLAY-ONLY');
     await writePrompt(PRIMARY, 'general/kept', 'KEPT');

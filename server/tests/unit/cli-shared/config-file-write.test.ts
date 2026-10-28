@@ -72,16 +72,28 @@ const HAND_AUTHORED_JSON = `{
 `;
 
 describe('config file write path', () => {
+  // `resolveConfigPath` reads the project directory and `MCP_CONFIG_PATH` from the process, as the
+  // server does. Pin both so an ambient project with its own `.claude-prompts/config.jsonc` (or an
+  // exported `MCP_CONFIG_PATH`) cannot redirect these cases away from the temp workspace.
+  const savedEnv = new Map<string, string | undefined>(
+    ['CLAUDE_PROJECT_DIR', 'MCP_CONFIG_PATH'].map((key) => [key, process.env[key]])
+  );
   let tempDir: string;
   let configPath: string;
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'cpm-config-write-'));
     configPath = join(tempDir, 'config.json');
+    process.env['CLAUDE_PROJECT_DIR'] = tempDir;
+    delete process.env['MCP_CONFIG_PATH'];
   });
 
   afterEach(() => {
     rmSync(tempDir, { recursive: true, force: true });
+    for (const [key, value] of savedEnv) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   });
 
   /** Writes `document` as the config file and returns the raw text after `key` is set to `value`. */

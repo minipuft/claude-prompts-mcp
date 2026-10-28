@@ -76,13 +76,12 @@ def load_context_isolation_config() -> dict:
     """
     Load Ralph context isolation config from the user's config file.
 
-    `config_loader.load_config()` owns the lookup (`MCP_WORKSPACE`, then
-    `${CLAUDE_PLUGIN_DATA}`, then the packaged `server/` directory; `config.jsonc`
-    before `config.json` in each) and the parse (comment/trailing-comma stripping for
-    `.jsonc`, strict for `.json`), falling back to `DEFAULT_CONFIG` -- which carries no
-    `verification` section, so the `.get(..., {})` defaults below apply -- on any read
-    or parse failure. This hook never refuses to run because the operator's config is
-    missing or malformed.
+    `config_loader.load_config()` owns the lookup (`get_config_path()`: the server's own
+    order, project `.claude-prompts/` config included) and the parse
+    (comment/trailing-comma stripping for `.jsonc`, strict for `.json`), falling back to
+    `DEFAULT_CONFIG` -- which carries no `verification` section, so the `.get(..., {})`
+    defaults below apply -- on any read or parse failure. This hook never refuses to run
+    because the operator's config is missing or malformed.
 
     Config paths:
     - verification.inContextAttempts: Number of in-context attempts before spawning

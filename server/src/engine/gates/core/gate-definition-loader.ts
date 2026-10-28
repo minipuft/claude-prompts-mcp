@@ -27,7 +27,12 @@ import {
 } from './gate-schema.js';
 
 import { ResourceQuarantine, type QuarantineView } from '#shared/utils/resource-quarantine.js';
-import { resourceEntryRoots, resourceLookupOrder } from '#shared/utils/resource-root-lookup.js';
+import {
+  deriveLoaderRoots,
+  resourceEntryRoots,
+  sameLookupOrder,
+  type LoaderRootsSource,
+} from '#shared/utils/resource-root-lookup.js';
 import { loadYamlFileSync, discoverNestedYamlDirectories } from '#shared/utils/yaml/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -52,6 +57,12 @@ export interface GateDefinitionLoaderConfig {
    * first — see `resourceLookupOrder`.
    */
   additionalGatesDirs?: string[];
+  /**
+   * Resolves the roots again. Present when the roots can move while the server runs (a project
+   * `.claude-prompts/` created late becomes the primary); {@link GateDefinitionLoader.refreshRoots}
+   * is the only caller, and the reconciliation after a late directory is the only caller of that.
+   */
+  rootsSource?: LoaderRootsSource;
   /** Enable caching of loaded definitions (default: true) */
   enableCache?: boolean;
   /** Log debug information */
@@ -84,7 +95,8 @@ export class GateDefinitionLoader {
   private gatesDir: string;
   private additionalGatesDirs: string[];
   /** Every root this loader consults for an id, highest precedence first. */
-  private readonly lookupDirs: string[];
+  private lookupDirs: string[];
+  private readonly rootsSource: LoaderRootsSource | undefined;
   private enableCache: boolean;
   private debug: boolean;
   /**
@@ -98,16 +110,13 @@ export class GateDefinitionLoader {
 
   constructor(config: GateDefinitionLoaderConfig = {}) {
     this.gatesDir = config.gatesDir ?? this.resolveGatesDir();
-    // Built from the RAW list, before the filter below: the primary's rank is a position in that
-    // list, and filtering it out first would drop it to the end — behind the bundled tree.
-    this.lookupDirs = resourceLookupOrder(this.gatesDir, config.additionalGatesDirs ?? []);
-    // Reported and watched, not looked up: the directories BESIDE the primary, so
-    // `getWatchDirectories()` does not repeat it. Absent ones stay in — a workspace overlay created
-    // while the server runs must be watched, and the observer arms on it once it appears. Filtering
-    // by existence here, once, left such an overlay unwatched until a restart.
-    this.additionalGatesDirs = (config.additionalGatesDirs ?? []).filter(
-      (dir) => dir !== this.gatesDir
-    );
+    // `additionalGatesDirs` is the directories BESIDE the primary, reported and watched so
+    // `getWatchDirectories()` does not repeat it. Absent ones stay in: filtering by existence
+    // here, once, left a workspace overlay created while the server runs unwatched until a restart.
+    const roots = deriveLoaderRoots(this.gatesDir, config.additionalGatesDirs ?? []);
+    this.lookupDirs = roots.lookupDirs;
+    this.additionalGatesDirs = roots.besideDirs;
+    this.rootsSource = config.rootsSource;
     this.enableCache = config.enableCache ?? true;
     this.debug = config.debug ?? false;
 
@@ -237,6 +246,30 @@ export class GateDefinitionLoader {
    */
   getWatchDirectories(): string[] {
     return [this.gatesDir, ...this.additionalGatesDirs];
+  }
+
+  /**
+   * Take the roots from {@link GateDefinitionLoaderConfig.rootsSource} again, and drop every
+   * cached definition when they differ from the ones held: a cached gate was served from the root
+   * that won under the OLD order.
+   *
+   * The set of directories does not change (a root that becomes the primary was already an
+   * overlay candidate), only their rank, so the watch set stays valid.
+   *
+   * @returns whether the lookup order changed; `false` for a loader with no source
+   */
+  refreshRoots(): boolean {
+    if (this.rootsSource === undefined) return false;
+    const next = this.rootsSource();
+    const roots = deriveLoaderRoots(next.primary, next.lookupDirs);
+    if (next.primary === this.gatesDir && sameLookupOrder(roots.lookupDirs, this.lookupDirs)) {
+      return false;
+    }
+    this.gatesDir = next.primary;
+    this.lookupDirs = roots.lookupDirs;
+    this.additionalGatesDirs = roots.besideDirs;
+    this.cache.clear();
+    return true;
   }
 
   // ============================================================================
