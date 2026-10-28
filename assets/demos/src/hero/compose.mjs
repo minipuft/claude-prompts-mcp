@@ -59,13 +59,17 @@ if (ah !== bh) throw new Error(`track heights differ: session ${ah}, trace ${bh}
 
 const filters = [];
 // Session track: 24 fps for a smooth slide, title card, one caption per beat.
-let a = ["[0:v]fps=24"];
+// A caption bar under the frame: captions and the legend share it, outside the terminal and above
+// the strip a video player covers with its controls (measured 2026-10-28: the player's control bar
+// hid the bottom captions and the pane's last line). Two rows, then dead space the controls may cover.
+const BAR = Number(beats.captionBar ?? 120);
+let a = [`[0:v]fps=24,pad=w=iw:h=ih+${BAR}:color=black`];
 const title = beats.title ?? [];
-title.forEach((line, i) => a.push(box(line, { size: i === 0 ? 30 : 20, font: i === 0 ? FONT_BOLD : FONT, x: "(w-text_w)/2", y: `(h-text_h)/2${i === 0 ? "-28" : "+22"}`, enable: `lt(t,${beats.titleSeconds ?? 2.6})`, box: "black@0.78", pad: 14 })));
+title.forEach((line, i) => a.push(box(line, { size: i === 0 ? 30 : 20, font: i === 0 ? FONT_BOLD : FONT, x: "(w-text_w)/2", y: `(${ah}-text_h)/2${i === 0 ? "-28" : "+22"}`, enable: `lt(t,${beats.titleSeconds ?? 2.6})`, box: "black@0.78", pad: 14 })));
 for (const [ref, text] of Object.entries(beats.captions ?? {})) {
   if (markers[ref] === undefined) continue;
   const s = at(ref) + (ref === "open" ? (beats.titleSeconds ?? 2.6) : 0);
-  a.push(box(text, { size: 22, font: FONT_BOLD, color: "#ffd866", x: 26, y: "h-text_h-40", enable: `between(t,${s.toFixed(2)},${(s + (beats.captionSeconds ?? 3.5)).toFixed(2)})` }));
+  a.push(box(text, { size: 20, font: FONT_BOLD, color: "#ffd866", x: 26, y: `${ah + 16}`, box: "black@0", pad: 6, enable: `between(t,${s.toFixed(2)},${(s + (beats.captionSeconds ?? 3.5)).toFixed(2)})` }));
 }
 // Trace track: one copy per scene, each with its own caption, slid in over the session.
 const scenes = (beats.scenes ?? []).filter((sc) => {
@@ -91,6 +95,17 @@ const rowY = (r, cell) => Math.round(pad + r * cell);
 const dimmed = []; const traceOutlines = scenes.map(() => []);
 scenes.forEach((sc, i) => {
   const on = `enable='between(t,${sc.s.toFixed(2)},${(sc.e + SLIDE).toFixed(2)})'`;
+  const onExpr = `between(t,${sc.s.toFixed(2)},${(sc.e + SLIDE).toFixed(2)})`;
+  // The pane's caption and the colour legend sit on the bar under the pane, on the same two rows
+  // as the session caption, for as long as the pane is in.
+  if (sc.caption) a.push(box(sc.caption, { size: 17, font: FONT_BOLD, color: "#78dce8", x: aw - bw + 14, y: `${ah + 18}`, box: "black@0", pad: 6, enable: onExpr }));
+  if ((sc.legend ?? beats.legend) && beats.highlightColors) {
+    let lx = aw - bw + 14;
+    for (const [kind, color] of Object.entries(beats.highlightColors)) {
+      a.push(box(kind, { size: 15, font: FONT_BOLD, color, x: lx, y: `${ah + 54}`, box: "black@0", pad: 4, enable: onExpr }));
+      lx += kind.length * 9 + 22;   // Fira Code bold 15 is ~9 px per character
+    }
+  }
   const hls = sc.highlights ?? [];
   // Session: the frame is frozen, so one lookup at the marker gives the rows for the whole scene.
   const found = [];
@@ -144,18 +159,7 @@ scenes.forEach((sc, i) => {
     const w = cols ? Math.round(cols[1] * cellB_w) : bw - 16;
     return mark(style, x, rowY(r0, cellB), rowY(r1, cellB), w, color, `enable='between(t,${start.toFixed(2)},${(end + 0.3).toFixed(2)})'`);
   });
-  // A legend names the colours, one word each, above the caption.
-  // A legend names the colours, one word each, on a band above the caption; words are laid
-  // out by their length (Fira Code bold 15 is ~9 px per character).
-  let lx = 14; const legend = [];
-  if ((sc.legend ?? beats.legend) && beats.highlightColors) {
-    legend.push(`drawbox=x=0:y=ih-84:w=iw:h=84:color=black@0.82:t=fill`);
-    for (const [kind, color] of Object.entries(beats.highlightColors)) {
-      legend.push(box(kind, { size: 15, font: FONT_BOLD, color, x: lx, y: "h-text_h-52", enable: "1", box: "black@0.0", pad: 4 }));
-      lx += kind.length * 9 + 22;
-    }
-  }
-  const chain = [...outlines, ...legend, sc.caption ? box(sc.caption, { size: 17, font: FONT_BOLD, color: "#78dce8", x: 14, y: "h-text_h-16", enable: "1", box: "black@0.8" }) : "null"];
+  const chain = outlines.length ? outlines : ["null"];
   const captioned = `[b${i}]${chain.join(",")}[c${i}]`;
   filters.push(captioned);
   const x = `W-w*if(lt(t\\,${sc.e.toFixed(2)})\\,min(1\\,(t-${sc.s.toFixed(2)})/${SLIDE})\\,1-min(1\\,(t-${sc.e.toFixed(2)})/${SLIDE}))`;
