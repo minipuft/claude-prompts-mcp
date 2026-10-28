@@ -32,6 +32,10 @@ When the server runs inside that project over STDIO, resources in `.claude-promp
 
 The server finds the project directory the same way it derives the project scope: `CLAUDE_PROJECT_DIR` if set, otherwise the working directory. The HTTP transport does not look at the project directory, because one HTTP process serves many projects; use Option A or B there.
 
+A `.claude-prompts/` directory created while the server is running is picked up without a
+restart for new resources. Which copy wins when the same id also exists in your workspace, and
+where new resources are written, follow on the next start.
+
 ## Where created resources are saved
 
 Prompts, gates, and frameworks you create through `resource_manager` are written to one folder per type:

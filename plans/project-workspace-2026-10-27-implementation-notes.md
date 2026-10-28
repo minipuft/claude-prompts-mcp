@@ -17,6 +17,8 @@ tags: [resources, workspace, cli, docs]
 
 ## Deviations
 
+- DEV-T1-2 (2026-10-27, row 1.3): the brief named `server/src/infra/config/` as the loader; the worker found it in `runtime/paths.ts` and edited there; a refusal for an unreadable project config was added beyond the brief (same class as the workspace refusal, so accepted).
+
 - DEV-T2-3 (2026-10-27, row 2.3): R7 said cloudySky receives the gate on a local branch of its own; cloudySky is on `feat/open-work-2026-09` with unrelated modified files owned by another session, so the planner did not move that HEAD. `.claude-prompts/` sits untracked there for the owner to commit.
 
 - DEV-T1-1 (2026-10-27, row 1.1): the row's 5-file bound was widened to the precedence statement, the prompt loader and the tests pinning the old order, under R9; the worker added a public `getProjectWorkspace()` and a `projectLaunch` injection the brief did not name (needed by 1.2 and 1.3 and by the tests).
@@ -25,6 +27,10 @@ tags: [resources, workspace, cli, docs]
 - DEV-T2-2 (2026-10-27, row 2.1): `cli/` resolves no prettier config of its own and a bare `prettier --write` rewrote `cli.ts` to double quotes; the worker restored the file and formatted the test with `--config server/.prettierrc.json`. `validate:format` does not cover `cli/**/*.ts`. A brief for a cli row names the config.
 
 ## Findings
+
+- F7 (rows 1.4/1.2): `--transport=both` opens the HTTP listener as well, so it is treated as HTTP for discovery (ruled, R4 reading). The type getters cache their primary at first use, so a `.claude-prompts/` created at runtime hot-loads new ids but precedence over a same-id workspace copy and the write destination apply from the next start; ruled: document, do not invalidate caches in this cut (the loaders' fixed roots would disagree with a moved primary). `createPathResolver` has no production caller; `runtime/context.ts` builds the resolver itself and now determines the transport before the path refusal, so an unsupported transport refuses before a bad workspace path does (untested ordering).
+
+- F6 (row 1.3): config-file selection lives in `runtime/paths.ts` (`resolveDefaultConfigPath`), not `infra/config/` as the row and brief said; the worker edited paths.ts with anchored changes while rows 1.4/1.2 edited the same file (planner splits by hunk). Three readers of config files do not see a project config: `cpm config` (`cli-shared/config-operations.ts`), the version-history scope (`cli-shared/version-history-scope.ts`) and the Python hooks resolve from the workspace only; `src/index.ts:593` probes the workspace files directly. Not in this slice; row 2.6 (backlog) added so the gap is a row, not prose.
 
 - F5 (row 2.3): after the move, `rg creed-fidelity server/` still hits `resources/prompts/development/strategic_worker/prompt.yaml:55` (a `gateConfiguration.exclude` entry) and `resources/gates/math-fidelity/guidance.md:25` (prose). Ruled: both stay — in a project that ships the gate the exclude still keeps it off worker briefs, and bundled resources are edited through the MCP tools, not by hand. The row's artifact check is corrected to "no bundled gate FOLDER named creed-fidelity"; name-based readers were the pre-dispatch probe the row lacked.
 
