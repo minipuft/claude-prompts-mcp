@@ -32,5 +32,6 @@ tags: []
 - DEV-T1-1 (2026-10-28): `DurableRow` is `Readonly<Record<string, unknown>>`, not `SQLInputValue`, matching the engine snapshot rows; `planDurableMigrations` also throws on from > to and validates the registry before the floor check. Accepted.
 - DEV-T1-3 (2026-10-28): check (a) (stale lock version) suppresses (b); `--update` also refuses a SCHEMA_VERSION below the lock. Accepted.
 - DEV-T1-5 (2026-10-28): a lock re-created by `--update` after deletion is seeded at the current version with no step check, so a deleted lock can be re-seeded over a drifted schema; accepted, because the deletion and re-seed show as a lock-file diff in review. Malformed lock JSON still throws from `JSON.parse` (a loud failure, accepted).
+- DEV-T1-2 (2026-10-28): the worker exported `declaredDroppedColumns` from durable-migrations.ts so the engine and `undeclaredColumnLoss` share one rule, and corrected that module's header. The constructor refuses a non-integer `schemaVersion`. `getInstance` ignores a different `schemaVersion`/`durableMigrations` on a second call (tests must `shutdownInstance()` between targets). Accepted; deleting older backups blocking the upgrade became row 1.6.
 
 ## Receipts
