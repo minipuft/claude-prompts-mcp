@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 35,
+  "tables": {
+    "objects": "dcce04f9df6ea6f37b4e98f40947e0ea3393045a8f8165772eac95066e9c5416",
+    "skills_sync_manifests": "d1abd837d7db1de57bbda28f3c26a991eaf4d1220c2570b0595644ca24f9a9de",
+    "version_entries": "2df2361333ce00dbd9ec592d38b4a03571233f4a0bf0c8dfbc6a19e00b37f485",
+    "version_history": "2cf7de124d05f99a3217b48d1001a6d2ec6c72c3b8dbc3777fff275e60f083af"
+  }
+}
