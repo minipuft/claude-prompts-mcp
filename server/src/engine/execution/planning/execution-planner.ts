@@ -393,7 +393,7 @@ export class ExecutionPlanner {
    */
   private requiresFramework(frameworkEnabled: boolean, hasFrameworkOverride: boolean): boolean {
     // Framework context required when enabled in config (normal resolution), or
-    // when a symbolic `@` override was detected. This supports BOTH system
+    // when a symbolic `^` override was detected. This supports BOTH system
     // prompt injection AND gate filtering.
     return frameworkEnabled || hasFrameworkOverride;
   }

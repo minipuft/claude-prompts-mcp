@@ -1,10 +1,11 @@
 // @lifecycle canonical - Validates operator metadata and arguments.
+import { deprecatedFrameworkSigilNote } from '../../parsers/operator-patterns.js';
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { FrameworkValidator } from '../../../frameworks/framework-validator.js';
 import type { PromptRequestContext } from '../../context/index.js';
-import type { SymbolicOperator } from '../../parsers/types/operator-types.js';
+import type { FrameworkOperator, SymbolicOperator } from '../../parsers/types/operator-types.js';
 
 /**
  * Pipeline Stage 06: Operator Validation
@@ -13,7 +14,9 @@ import type { SymbolicOperator } from '../../parsers/types/operator-types.js';
  * ensuring framework overrides are valid before execution planning.
  *
  * Dependencies: context.parsedCommand, context.parsedCommand.operators
- * Output: Validated operators (framework names normalized) + delegation flags normalized
+ * Output: Validated operators (framework names normalized) + delegation flags normalized + the
+ * advisory line for a framework operator spelled with a deprecated sigil
+ * (`state.framework.operatorSpellingNote`)
  * Can Early Exit: Yes — FOUR exits, in order (measured 2026-08-12; this block read
  * `Can Early Exit: No` until then, and the stale marker sat directly above the exit that hid
  * P5-F5 for two phases — P6-F5):
@@ -84,10 +87,33 @@ export class OperatorValidationStage extends BasePipelineStage {
         });
       }
 
+      this.noteDeprecatedFrameworkSpelling(context, operators);
+
       this.logExit({ normalizedFrameworkOperators });
     } catch (error) {
       this.handleError(error, 'Operator validation failed');
     }
+  }
+
+  /**
+   * A framework operator typed with a deprecated sigil still runs; the caller is told, once, which
+   * spelling to use. Reached only after validation succeeded, so a refused framework carries its
+   * refusal and no note. The wording is `deprecatedFrameworkSigilNote`'s; this names the step.
+   */
+  private noteDeprecatedFrameworkSpelling(
+    context: PromptRequestContext,
+    operators: SymbolicOperator[]
+  ): void {
+    const operator = operators.find(
+      (candidate): candidate is FrameworkOperator => candidate.type === 'framework'
+    );
+    if (operator === undefined) return;
+
+    const note = deprecatedFrameworkSigilNote(operator.sigil, operator.frameworkId);
+    if (note === null) return;
+
+    context.state.framework.operatorSpellingNote = note;
+    context.diagnostics.warn(this.name, note, { sigil: operator.sigil });
   }
 
   private normalizeFrameworkOperators(

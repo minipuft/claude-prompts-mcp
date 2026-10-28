@@ -47,7 +47,7 @@ export const prompt_engineParameters: ToolParameter[] = [
     status: 'working',
     compatibility: 'canonical',
     examples: [
-      "@CAGEERF #analytical >>analyze topic:'metrics' --> >>report :: 'cite sources'",
+      "^CAGEERF #analytical >>analyze topic:'metrics' --> >>report :: 'cite sources'",
       ">>fix-bug :: verify:'npm test' :full loop:true",
       ">>brainstorm * 5 topic:'product ideas'",
       ">>strategic_implement * 3 plan_path:'./plan.md'",

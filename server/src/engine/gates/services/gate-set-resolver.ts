@@ -389,7 +389,7 @@ export class GateSetResolver {
    * (ADR 0001: this class is the one owner of gate-set resolution).
    *
    * Fails OPEN whenever `GateManager` cannot answer — mirrors `SymbolicCommandParser`'s posture
-   * for `@framework` operators (an empty/absent registered-id set means "cannot judge," not
+   * for `^framework` operators (an empty/absent registered-id set means "cannot judge," not
    * "reject everything"; see `detectOperators`). "Cannot answer" covers two cases: no
    * `GateManager` was wired at all, AND a `GateManager` that exists but has not finished
    * `initialize()` yet — `GateManager.has()` throws in the latter case

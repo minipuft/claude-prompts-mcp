@@ -15,9 +15,9 @@ export interface FrameworkDecisionInput {
     judge?: boolean;
   };
   /**
-   * Framework override from the @ operator in the command. This is also how a
+   * Framework override from the ^ operator in the command (or its deprecated @ spelling). This is also how a
    * judge-phase framework choice arrives — the judge menu instructs the client to
-   * re-invoke with `@<framework>`, so there is no separate client-selection input.
+   * re-invoke with `^<framework>`, so there is no separate client-selection input.
    */
   operatorOverride?: string;
   /** Global active framework from framework context */
@@ -33,7 +33,7 @@ export interface FrameworkDecisionInput {
  *
  * Resolution Priority:
  * 1. Modifiers (%clean, %lean) - disable framework
- * 2. @ operator override - explicit user intent, including a judge-phase choice
+ * 2. ^ operator override - explicit user intent, including a judge-phase choice
  * 3. Global active framework - system default
  *
  * @example
@@ -125,7 +125,7 @@ export class FrameworkDecisionAuthority {
       };
     }
 
-    // Priority 2: @ operator override (explicit user intent, incl. judge-phase choice)
+    // Priority 2: ^ operator override (explicit user intent, incl. judge-phase choice)
     if (input.operatorOverride) {
       return {
         shouldApply: true,

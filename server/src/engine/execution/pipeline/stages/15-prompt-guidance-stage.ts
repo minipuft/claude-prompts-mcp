@@ -25,7 +25,7 @@ type GuidanceStore = Record<string, PromptGuidanceResult>;
  *
  * Client selection read by this stage: `context.state.framework.clientSelectedStyle`,
  * written by JudgeSelectionStage from the `#style` operator. The framework and gate
- * halves of a judge selection re-enter as `@framework` and `::`, which reach
+ * halves of a judge selection re-enter as `^framework` and `::`, which reach
  * FrameworkResolutionStage and GateEnhancementStage through `parsedCommand` — this
  * stage does not see them.
  */

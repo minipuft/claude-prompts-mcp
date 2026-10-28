@@ -25,7 +25,7 @@ type FrameworkEnabledProvider = (scope: StateStoreOptions | undefined) => boolea
  * Pipeline Stage 12: Framework Resolution
  *
  * Injects framework-specific system prompts and framework context,
- * supporting both default framework and temporary overrides via symbolic operators (@).
+ * supporting both default framework and temporary overrides via symbolic operators (^).
  *
  * Dependencies: context.executionPlan, context.convertedPrompt
  * Output: context.frameworkContext (framework, system prompts)
@@ -92,7 +92,7 @@ export class FrameworkResolutionStage extends BasePipelineStage {
 
     // Check if framework is disabled by modifiers (%clean, %lean)
     if (!decision.shouldApply && decision.source === 'disabled') {
-      // Allow @ operator override even when framework system is globally disabled
+      // Allow ^ operator override even when framework system is globally disabled
       const hasFrameworkOverride = Boolean(context.parsedCommand?.executionPlan?.frameworkOverride);
 
       if (!this.frameworkEnabled(context.getScopeOptions()) && !hasFrameworkOverride) {

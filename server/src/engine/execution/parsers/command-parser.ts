@@ -174,7 +174,8 @@ export class UnifiedCommandParser {
   /**
    * @param logger - Logger instance
    * @param isRegisteredFramework - Optional lookup, asked on every parse. When provided, only
-   *   @framework operators it accepts are detected; any other @word stays literal text.
+   *   ^framework operators (and the deprecated @framework spelling) it accepts are detected; any
+   *   other ^word or @word stays literal text.
    */
   constructor(logger: Logger, isRegisteredFramework?: FrameworkIdLookup) {
     this.logger = logger;
@@ -717,7 +718,7 @@ export class UnifiedCommandParser {
  * Factory function to create unified command parser
  * @param logger - Logger instance
  * @param isRegisteredFramework - Optional lookup, asked on every parse. When provided, only
- *   @framework operators it accepts are detected.
+ *   ^framework operators (and the deprecated @framework spelling) it accepts are detected.
  */
 export function createUnifiedCommandParser(
   logger: Logger,

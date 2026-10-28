@@ -228,7 +228,7 @@ function renderGatesGuide(): string {
   sections.push(`- Named gates (\`:: security:"..."\`) appear with their ID in output
 - Use canonical gates for consistent, reusable validation
 - Combine multiple criteria: \`:: "check A, verify B"\`
-- Gates work with frameworks: \`@CAGEERF >>prompt :: code-quality\``);
+- Gates work with frameworks: \`^CAGEERF >>prompt :: code-quality\``);
 
   return sections.join('\n\n');
 }
