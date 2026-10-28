@@ -1,0 +1,220 @@
+---
+title: state.db durable migrations and one isolating scope column
+date: 2026-10-28
+status: active
+type: plan
+publish: push (2026-10-28, owner "lets proceed with both PRs"; open both PRs, merge on the owner's word)
+initiative_branch: feat/state-db-durable-migrations
+worker_cap: 2
+planner_session: state-db-migrations
+tags: [database, persistence, identity, hooks, adr]
+---
+
+# state.db durable migrations and one isolating scope column
+
+## Now (2026-10-28)
+
+Goal: durable rows survive a schema change only through a declared, tested step; every row is isolated by one location column, with `tenant_id` reserved for the owner.
+Slice: PR1 (T1–T2) on `feat/state-db-durable-migrations`, worktree `../claude-prompts-mcp-state-migrations`, cut from origin/main a3b5aa94.
+Next decision: Q3–Q5 (owner) before T3; PR2 starts after #516 and #519 merge.
+Constraint: the shared checkout's HEAD belongs to another session — no edits there.
+
+## Intent
+
+**Work type**: refactor, secondary bug_fix · **Risk**: high — durable rows (rollback history, sync manifests that drive deletions) are rewritten.
+
+Current state: `restoreDurableTables` (`sqlite-engine.ts:1088`) carries only columns whose names exist in the new table, so a renamed durable column silently takes its default or throws on NOT NULL. Scope ids are the cwd basename (`project-scope.ts:41`): the same repo started from `server/` has its own history (34 live rows), worktrees split, same-named projects collide. `tenant_id` equals `workspace_id` on every row, `organization_id` is NULL except where a writer stores the workspace name, and `chain_sessions` isolates on a third column, `continuity_scope_id`.
+
+Desired state: ordered pure migration steps over the durable snapshot, a strict restore, a floor, a pre-upgrade backup, and a gate that fails a durable DDL change without a step (PR1). One isolating `workspace_id` derived from the git common dir, `tenant_id = 'local'` until auth exists, durable rows re-keyed at v36 (PR2).
+
+Non-goals: auth or permissions, down migrations, ORM or external migration tools, renaming TypeScript identity types.
+
+## Existing systems
+
+| System                                                             | Where                                                                                            | Use                                                                          |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| Snapshot → drop → applySchema → restore, one `BEGIN IMMEDIATE` txn | `sqlite-engine.ts:889-1124`                                                                      | Steps run between snapshot and restore                                       |
+| Pure transform over snapshot rows                                  | `renumberDuplicateVersionHistory` `:570`, `normalizeVersionHistorySnapshot` `:1063`              | Sibling shape for steps; deleted (v28 invariant, unreachable above floor 35) |
+| Version-pinned exclusion + validator                               | `DROPPED_ON_THIS_BUMP` `:464`, `DROPPED_AT_VERSION` `:481`, `validate-table-contracts.ts:70,106` | Superseded by steps; deleted with its checks                                 |
+| Posture SSOT                                                       | `table-contracts.ts:539` `DURABLE_TABLE_NAMES`                                                   | Decides which tables are snapshotted                                         |
+| Downgrade refusal                                                  | ADR 0002                                                                                         | Unchanged; the floor is its counterpart for old databases                    |
+| Adopt-legacy-when-empty                                            | `framework-state-store.ts:380-420`                                                               | Sibling rule for PR2 legacy adoption                                         |
+| Config history keyed by path digest                                | `config-scope.ts:63,94`                                                                          | Reused as the config file's location id                                      |
+| Full project path                                                  | `deriveProjectDir` (open PR #516)                                                                | PR2 derivation builds on it                                                  |
+
+Downstream: gemini-prompts imports `load_active_chain_state` and reads only `current_step`, `pending_gate`, `pending_shell_verify`; minipuft-plugins and opencode-prompts read none of the scope columns.
+
+## Design decisions
+
+| Decision                | Chosen                                                                                                                                                                                                                                                                     | Rejected                     | Why                                                                               |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------- |
+| Step form               | pure `migrate(snapshot) → snapshot` between snapshot and restore                                                                                                                                                                                                           | live ALTER / 12-step rebuild | one DDL source (applySchema); PK changes cost nothing; unit-testable without a db |
+| Silent column loss      | strict restore: a snapshot column missing from the new table throws unless a step for this bump lists it in `droppedColumns`                                                                                                                                               | intersection                 | the defect class becomes a startup failure at its cause                           |
+| Floor                   | `MIGRATION_FLOOR = 35`; below it refuse with path, versions, remedy                                                                                                                                                                                                        | today's lossy recreate       | partial carry-over is the defect                                                  |
+| Backup                  | version peek before BEGIN; floor ≤ v < SCHEMA_VERSION → `VACUUM INTO <db>.v<v>.bak`, replacing the previous one; failure throws                                                                                                                                            | inside txn; keep all         | SQLite refuses VACUUM inside a txn; latest-only bounds disk                       |
+| Drift gate              | `durable-schema.lock.json`: sha256 per durable table of normalized `sqlite_master` DDL and indexes from a `:memory:` applySchema; a mismatch needs SCHEMA_VERSION > lock version and a step `toVersion === SCHEMA_VERSION` naming every changed table; `--update` rewrites | hand-kept list               | catches the bump that forgets its step                                            |
+| Version authority       | existing `schema_version` table                                                                                                                                                                                                                                            | `PRAGMA user_version`        | already validated authority; switching splits it                                  |
+| Workspace id (PR2)      | `<label>-<8 hex of sha256(realpath(git common dir))>`; outside git, hash of the directory's realpath; `--workspace-id` verbatim                                                                                                                                            | label column; raw path       | legible and collision-free in one column; no path in logs                         |
+| Git common dir          | fs walk: `.git` dir → itself; `.git` file → `gitdir:` → `commondir`                                                                                                                                                                                                        | spawn `git`                  | no child process at startup; worktrees resolve to the main checkout               |
+| Config history (PR2)    | `config:<digest>` stays as the location value in `workspace_id`                                                                                                                                                                                                            | own column                   | a config file is a location; one isolating column per table stays true            |
+| organization_id (PR2)   | column dropped; `--organization-id` and auth claims feed `tenant_id` (default `'local'`)                                                                                                                                                                                   | delete the flag              | CLI flags are in the major-version contract                                       |
+| Basename-era rows (PR2) | v36 step writes `workspace_id = legacy:<old tenant_id>` (config rows unchanged), `tenant_id = 'local'`; a workspace with zero rows adopts `legacy:<its label>` once                                                                                                        | guess a mapping in the step  | the migrating process cannot know other projects' roots                           |
+| chain_sessions (PR2)    | drop `continuity_scope_id`; `workspace_id NOT NULL`; `UNIQUE(run_owner_pid, chain_id, workspace_id)`; db_reader selects `workspace_id AS continuity_scope_id, NULL AS organization_id`                                                                                     | rename dataclass fields      | `hooks/lib` return shapes are in-contract                                         |
+
+### Interfaces
+
+```ts
+// server/src/infra/database/durable-migrations.ts
+export type DurableRow = Readonly<Record<string, SQLInputValue>>;
+export type DurableSnapshot = ReadonlyMap<string, readonly DurableRow[]>;
+export interface DurableMigration {
+  readonly toVersion: number; // runs when upgrading across toVersion-1 → toVersion
+  readonly tables: readonly string[]; // durable tables it rewrites; the gate reads this
+  readonly droppedColumns?: Readonly<Record<string, readonly string[]>>;
+  readonly summary: string;
+  migrate(snapshot: DurableSnapshot): DurableSnapshot;
+}
+export const MIGRATION_FLOOR = 35;
+export const DURABLE_MIGRATIONS: readonly DurableMigration[];
+export type MigrationPlan =
+  | { kind: "steps"; steps: readonly DurableMigration[] }
+  | { kind: "below-floor"; from: number; floor: number };
+export function planDurableMigrations(
+  from: number,
+  to: number,
+  registry?: readonly DurableMigration[],
+): MigrationPlan;
+export function applyDurableMigrations(
+  snapshot: DurableSnapshot,
+  steps: readonly DurableMigration[],
+): DurableSnapshot;
+export function undeclaredColumnLoss(
+  table: string,
+  snapshotColumns: readonly string[],
+  newColumns: ReadonlySet<string>,
+  steps: readonly DurableMigration[],
+): string[];
+
+// server/src/shared/utils/project-scope.ts (PR2)
+export function resolveGitCommonDir(start: string): string | undefined;
+export function deriveWorkspaceId(dir: string): {
+  id: string;
+  label: string;
+  source: "git-common-dir" | "path";
+};
+```
+
+Read before implementing (origin/main a3b5aa94): `sqlite-engine.ts:889-1124` and `:1146-1440`; `table-contracts.ts:539`; `validate-table-contracts.ts:64-140, 342-466`; `tests/integration/database/{schema-recreate-atomicity,durable-round-trip}.test.ts`; `shared/utils/{project-scope,request-identity-scope,config-scope}.ts`; `framework-state-store.ts:380-420`; `hooks/lib/db_reader.py:259-330`; `hooks/lib/session_state.py:60-130`.
+
+## Tier T1 — migration mechanism wired, gated and tested (PR1)
+
+| #   | St  | File                                                                                                                         | Change                                                                                                                                                                                                                                                                                                                                         | ~Lines   | Depends | Verify                                                                                                                                                  | Justification                                                                                                                      |
+| --- | --- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1 | ☐   | `server/src/infra/database/durable-migrations.ts` (new), `server/tests/unit/infra/database/durable-migrations.test.ts` (new) | Types, `MIGRATION_FLOOR`, empty `DURABLE_MIGRATIONS`, `planDurableMigrations`, `applyDurableMigrations`, `undeclaredColumnLoss` — pure                                                                                                                                                                                                         | +140     | —       | unit test: below floor, empty range, ordered steps, `droppedColumns` allowance; `npm run typecheck`                                                     | engine is 1778 lines and the gate script reads the registry (as of 2026-10-28 · flips when the unit test passes on the row branch) |
+| 1.2 | ☐   | `server/src/infra/database/sqlite-engine.ts`                                                                                 | `bringSchemaCurrent` takes the plan: below floor throws (path, have, floor, remedy); snapshot → steps → drop → applySchema → strict restore; version peek + `VACUUM INTO` before BEGIN; delete `normalizeVersionHistorySnapshot`, `renumberDuplicateVersionHistory`, `DROPPED_ON_THIS_BUMP`, `DROPPED_AT_VERSION` and the comments citing them | +60/−120 | 1.1     | `rg "DROPPED_ON_THIS_BUMP\|DROPPED_AT_VERSION\|renumberDuplicateVersionHistory" server/src` → 0; schema-recreate-atomicity and durable-round-trip pass  | superseded code goes in the same PR (as of 2026-10-28 · flips when the rg is empty and both suites pass)                           |
+| 1.3 | ☐   | `server/scripts/validate-table-contracts.ts`, `server/src/infra/database/durable-schema.lock.json` (new)                     | Replace the bump-exclusion checks with the lock check and `--update`; self-test cases: unchanged, changed without step (fails), changed with step, durable-set change                                                                                                                                                                          | +120/−90 | 1.1     | `npm run validate:table-contracts && npm run validate:table-contracts:self-test`; planted column add to `version_history` fails the gate, then reverted | the committed baseline the gate compares against (as of 2026-10-28 · flips when the self-test passes and the planted change fails) |
+| 1.4 | ☐   | `server/tests/integration/database/durable-migrations.test.ts` (new); tests citing deleted symbols                           | Below-floor refusal text; backup exists and opens at the old version; planted rename without a step throws and leaves the file at the old version; a registered test step re-keys fixture rows (`server`, `default`, `config:<digest>`); migrated-from-v35 `table_info` + `index_list` equal fresh                                             | +220     | 1.2     | `npx jest tests/integration/database/durable-migrations.test.ts`; `rg "DROPPED_ON_THIS_BUMP\|renumberDuplicate" server/tests` → 0                       | one file per behavior area, sibling of schema-recreate-atomicity (as of 2026-10-28 · flips when the suite passes)                  |
+
+Tier T1 gate: `cd server && npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run validate:all`
+
+## Tier T2 — decision record and docs describe current state (PR1)
+
+| #   | St  | File                                                                                                          | Change                                                                                                                                                                                                                                                                                                                                          | ~Lines  | Depends | Verify                                                                            | Justification                                                             |
+| --- | --- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| 2.1 | ☐   | `docs/adr/0005-runtime-state-lives-in-one-sqlite-file.md` (new), `docs/adr/README.md`                         | From the template: context (JSON files hard to track and manage, grew long, performance expected to degrade — not measured), options (JSON / per-project db / db server / one shared SQLite), decision, consequences (scope bugs are privacy bugs; caches rebuilt, durable data migrated; floor; backup; `cpm` shares `SqliteEngine`; ADR 0002) | +90     | —       | the README index lists 0005; `npm run validate:all` docs checks                   | one ADR per file (as of 2026-10-28 · flips when the index lists 0005)     |
+| 2.2 | ☐   | `docs/architecture/sqlite-persistence.md`, `CLAUDE.md` (Runtime State), `.claude/rules/sqlite-persistence.md` | "Four Tables Are Durable" and "One-Time Durable Exclusions" become "Durable tables migrate, caches rebuild"; drop "Prefer this over engine-resident migration code"; the CLAUDE.md recreate sentence matches                                                                                                                                    | +60/−70 | —       | `rg "DROPPED_ON_THIS_BUMP\|engine-resident migration" docs CLAUDE.md .claude` → 0 | docs and code in lockstep (as of 2026-10-28 · flips when the rg is empty) |
+
+Tier T2 gate: `npm run build && npm run verify:mcp`, then from the repo root `npm run pr:check -- --body-file <body> --title "<title>"`
+
+## Tier T3 — stable workspace identity and the v36 step (PR2, after #516 and #519 merge)
+
+| #   | St  | File                                                                                                                                                                                      | Change                                                                                                                                                                                                                                                   | ~Lines   | Depends | Verify                                                                                                                                                                             | Justification                                                                                                |
+| --- | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 3.1 | ☐   | `server/src/shared/utils/project-scope.ts`, `server/src/runtime/{options,context}.ts`, `server/src/cli-shared/version-history-scope.ts`, `server/tests/unit/shared/project-scope.test.ts` | `resolveGitCommonDir` and `deriveWorkspaceId` on top of `deriveProjectDir`; callers switch; `--workspace-id` verbatim                                                                                                                                    | +90      | —       | unit: repo root, `server/` subdir, linked worktree (`.git` file fixture), non-git dir, symlinked path                                                                              | extends the canonical derivation module (as of 2026-10-28 · flips when #516 merges and the unit test passes) |
+| 3.2 | ☐   | `sqlite-engine.ts` (DDL), `durable-migrations.ts`, `durable-schema.lock.json`, `table-contracts.ts`, `server/tests/integration/database/schema-v36.test.ts` (new)                         | SCHEMA_VERSION 36; drop `organization_id` (6 tables); `tenant_id DEFAULT 'local'`; objects and version_entries gain `workspace_id` with PK/FK `(tenant_id, workspace_id, hash)`; chain_sessions and kv_state as in Design; the v36 step; lock `--update` | +120/−40 | 3.1     | fixture with live-shaped rows (repo name ×N, `server`, `default`, `config:`, a worktree name) → every row carried with its specified key, FK intact; equivalence test passes at 36 | first real migration (as of 2026-10-28 · flips when schema-v36 passes)                                       |
+
+Tier T3 gate: `cd server && npm run typecheck && npm run validate:table-contracts`
+
+## Tier T4 — every writer and reader uses one isolating column (PR2)
+
+| #   | St  | File                                                                                                                                                                                                                                                                                                                 | Change                                                                                                                                                                                                      | ~Lines | Depends | Verify                                                                                                  | Justification                                                                                     |
+| --- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| 4.1 | ☐   | `server/src/modules/versioning/version-history-service.ts`, `server/src/cli-shared/{version-history-rows,version-history,object-store,config-checkpoint,config-restore}.ts`, `server/src/shared/utils/config-scope.ts`, `server/src/infra/database/version-tree-fsck.ts` and the engine's `repairVersionTrees` query | Filter and insert on `workspace_id`; `tenant_id` bound to the resolved tenant; `configTenantId` → `configWorkspaceId`                                                                                       | ±160   | —       | versioning, cli-shared and config-history suites; remaining `tenant_id` hits are tenant binds only      | isolation lives in one column (as of 2026-10-28 · flips when the suites pass)                     |
+| 4.2 | ☐   | `server/src/infra/database/stores/sqlite-store.ts`, `server/src/engine/frameworks/framework-state-store.ts`, `server/src/engine/gates/gate-state-store.ts`, `server/src/modules/text-refs/argument-history-tracker.ts`                                                                                               | kv_state keyed by `workspace_id`; legacy `'default'` copy rule unchanged                                                                                                                                    | ±60    | —       | framework and gate state persistence suites, including per-scope load at startup                        | same (as of 2026-10-28 · flips when #519 merges and the suites pass)                              |
+| 4.3 | ☐   | `server/src/modules/chains/{execution-record-store,manager}.ts`, the run registry's workspace compare, `server/src/infra/observability/tracking/resource-change-tracker.ts`, `server/src/shared/utils/{request-identity-scope,request-identity-resolver}.ts`, `server/src/runtime/options.ts`                        | Stop writing `organization_id` (locate the source that writes the workspace name into it first); `resolveTenantId(scope) = organizationId ?? 'local'`; `organizationId` leaves the workspace fallback chain | ±90    | —       | execution-record, run-registry handoff refusal and identity resolver suites; unit for `resolveTenantId` | org is the "who" (as of 2026-10-28 · flips when the suites pass)                                  |
+| 4.4 | ☐   | `hooks/lib/db_reader.py`, `hooks/lib/session_state.py`, `hooks/tests/*`                                                                                                                                                                                                                                              | Select `workspace_id AS continuity_scope_id, NULL AS organization_id`; dataclass fields unchanged                                                                                                           | ±15    | —       | Python steps of `validate:all`; headless `claude -p` probe reads an active chain from a v36 db          | `hooks/lib` shapes are in-contract (as of 2026-10-28 · flips when pytest and the live probe pass) |
+| 4.5 | ☐   | `version-history-service.ts` (adoption), `server/tests/integration/versioning/legacy-adoption.test.ts` (new)                                                                                                                                                                                                         | A workspace with zero version_history rows re-keys `legacy:<label>` rows in version_history, version_entries and objects in one txn and logs the count                                                      | +70    | 4.1     | adopts once, idempotent, skips when own rows exist; collision behavior documented                       | sibling of the FrameworkStateStore rule (as of 2026-10-28 · flips when the test passes)           |
+
+Tier T4 gate: `cd server && npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run validate:all`
+
+## Tier T5 — docs and a live upgrade of real data (PR2)
+
+| #   | St  | File                                                                                                                                 | Change                                                                                                                                                                                                                                                                                                                                | ~Lines | Depends | Verify                                                                                       | Justification                                                                                   |
+| --- | --- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 5.1 | ☐   | `docs/architecture/sqlite-persistence.md`, `docs/guides/identity-scope.md`, `CLAUDE.md` (state.db paragraphs), ADR 0005 consequences | Current state: tenant = owner, workspace = location id, config digest as a location, legacy adoption, the collision limit                                                                                                                                                                                                             | ±120   | —       | `rg "three incompatible meanings\|continuity_scope_id" docs CLAUDE.md` → 0                   | docs and code in lockstep (as of 2026-10-28 · flips when the rg is empty)                       |
+| 5.2 | ☐   | live drive, no source                                                                                                                | Copy the plugin's `state.db` into a scratch `MCP_RUNTIME_ROOT` under `~/.cache`; build; start `dist/` from the repo root, from `server/`, and from a linked worktree; read history for a prompt with legacy rows; confirm the `.v35.bak`, 95/95 version_history rows, one workspace id across the three launches, and the hooks probe | 0      | 5.1     | receipts in implementation-notes: row counts before and after, the three ids, history output | the client flow, not only green gates (as of 2026-10-28 · flips when the receipts are recorded) |
+
+Tier T5 gate: `npm run build && npm run verify:mcp`, then from the repo root `npm run pr:check -- --body-file <body> --title "<title>"`
+
+## Dispatch
+
+| Row | Tier   | Effort | Failure shape                                        | branch_mode |
+| --- | ------ | ------ | ---------------------------------------------------- | ----------- |
+| 1.1 | sonnet | high   | wrong output                                         | own-branch  |
+| 1.2 | opus   | high   | wrong approach (txn ordering, VACUUM outside txn)    | own-branch  |
+| 1.3 | sonnet | high   | wrong output                                         | own-branch  |
+| 1.4 | sonnet | high   | wrong output                                         | own-branch  |
+| 2.1 | sonnet | medium | wrong output                                         | own-branch  |
+| 2.2 | sonnet | medium | wrong lookup                                         | own-branch  |
+| 3.1 | sonnet | high   | wrong output                                         | own-branch  |
+| 3.2 | opus   | high   | wrong approach (PK/FK reshape over durable data)     | own-branch  |
+| 4.1 | opus   | high   | wrong approach (a missed filter cross-reads history) | own-branch  |
+| 4.2 | sonnet | high   | wrong output                                         | own-branch  |
+| 4.3 | sonnet | high   | wrong lookup                                         | own-branch  |
+| 4.4 | sonnet | medium | wrong output                                         | own-branch  |
+| 4.5 | opus   | high   | wrong approach (concurrent adoption)                 | own-branch  |
+| 5.1 | sonnet | medium | wrong lookup                                         | own-branch  |
+| 5.2 | opus   | high   | wrong approach (must observe, not assume)            | own-branch  |
+
+## Open Questions
+
+| Id  | Status                       | Precedes | Default                                                                                                               | Alternative                                                   |
+| --- | ---------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Q1  | RULED → implementation notes | T1       | refuse upgrades from below v35                                                                                        | today's lossy recreate                                        |
+| Q2  | RULED → implementation notes | T1       | steps are pure snapshot transforms                                                                                    | live ALTER / rebuild steps                                    |
+| Q3  | OPEN                         | T3       | workspace id `<label>-<8hex>` in one column                                                                           | hash plus a separate label column                             |
+| Q4  | OPEN                         | T3       | config digest stays in `workspace_id` as a location                                                                   | its own column                                                |
+| Q5  | OPEN                         | 4.5      | `legacy:<name>` rows adopted by the first workspace with that label and no rows (first boot wins on a name collision) | no adoption; legacy rows readable via `source_workspace` only |
+| Q6  | RULED → implementation notes | T1       | push both branches and open both PRs; merge on the owner's word                                                       | stop at push                                                  |
+
+## Validation
+
+| What                                                              | Type                              | Location                                                | Why                                  |
+| ----------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------- | ------------------------------------ |
+| plan/apply/undeclared-loss decisions                              | unit                              | `tests/unit/infra/database/durable-migrations.test.ts`  | pure functions                       |
+| floor, backup, strict restore rollback, re-key, fresh == migrated | integration                       | `tests/integration/database/durable-migrations.test.ts` | real node:sqlite file, txn semantics |
+| lock gate                                                         | script self-test + planted change | `validate-table-contracts.ts --self-test`               | the gate must be shown to fire       |
+| v36 carry-over of live-shaped rows                                | integration                       | `tests/integration/database/schema-v36.test.ts`         | durable data is the risk             |
+| workspace derivation                                              | unit                              | `tests/unit/shared/project-scope.test.ts`               | fs edge cases                        |
+| legacy adoption                                                   | integration                       | `tests/integration/versioning/legacy-adoption.test.ts`  | multi-table txn                      |
+| hooks read a v36 db                                               | pytest + headless probe           | `hooks/tests`, live                                     | cross-process join                   |
+| real data upgrade                                                 | live drive                        | row 5.2                                                 | the consumer flow                    |
+
+| Done when                                       | Validation              | Pass condition                             |
+| ----------------------------------------------- | ----------------------- | ------------------------------------------ |
+| A durable DDL change without a step cannot land | planted change          | gate fails and startup throws              |
+| An upgrade loses no durable row                 | v36 fixture + live copy | 95/95 rows; every key as specified         |
+| One project, one history                        | live drive              | the same id from root, `server/`, worktree |
+| Local gates                                     | T1/T4 gate commands     | all green; CI `test:all` green on each PR  |
+
+## Risks
+
+| Risk                                                    | Impact | Mitigation                                                                                 | Rollback                                                                                              |
+| ------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| A v36 re-key bug cross-assigns history between projects | high   | fixture with live-shaped rows; live drive on a copy; adoption only into an empty workspace | `.v35.bak` plus a pre-v36 release (downgrade refusal blocks the new binary from reading the old file) |
+| Strict restore blocks startup on an unforeseen column   | medium | equivalence test; the error names the table and columns                                    | add the step or `droppedColumns`; patch release                                                       |
+| The floor strands users on old databases                | low    | the message names the remedy                                                               | move `state.db` aside                                                                                 |
+| Two same-named projects adopt each other's legacy rows  | low    | first-boot-wins documented; ids after v36 are unique                                       | `source_workspace` read; manual re-key                                                                |
+| Conflicts with the open #516/#519 stack                 | medium | PR2 cut after both merge                                                                   | —                                                                                                     |
+
+Release: `feat(runtime)` for PR1 ("a durable table change ships only with a migration step"), `fix(runtime)` for PR2 ("one repository has one version history across its subdirectories and worktrees"). Changelog lines come from the squash commits.
