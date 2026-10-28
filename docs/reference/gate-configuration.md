@@ -77,12 +77,12 @@ can copy the exact spelling into `harnessCovers` rather than guessing at it.
 
 When does this gate apply automatically?
 
-| Field               | Type             | Description                                                 |
-| ------------------- | ---------------- | ----------------------------------------------------------- |
-| `prompt_categories` | `string[]`       | Auto-apply to prompts in these folders (e.g., `code`).      |
-| `explicit_request`  | `boolean`        | If `true`, only applies when user asks (e.g., `pr-review`). |
-| `framework_context` | `string[]`       | Applies when using these frameworks (e.g., `CAGEERF`).      |
-| `artifacts`         | `ArtifactKind[]` | When present, DECIDES activation alone — see below.         |
+| Field               | Type             | Description                                                                                             |
+| ------------------- | ---------------- | ------------------------------------------------------------------------------------------------------- |
+| `prompt_categories` | `string[]`       | Auto-apply to prompts in these folders (e.g., `code`).                                                  |
+| `explicit_request`  | `boolean`        | If `true`, only applies when user asks (e.g., `pr-review`).                                             |
+| `framework_context` | `string[]`       | Applies only under these frameworks (e.g., `CAGEERF`); no framework in context means it does not apply. |
+| `artifacts`         | `ArtifactKind[]` | When present, DECIDES activation alone — see below.                                                     |
 
 ### Example
 

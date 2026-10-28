@@ -449,7 +449,8 @@ export class GateEnhancementService {
       context,
       steps,
       runStepView,
-      frameworkGateIds
+      frameworkGateIds,
+      this.getActiveFrameworkId(context)
     );
     let stepBindings = chainPromptBindings(chainGates, runWide);
     context.state.gates.gatedStepNumbers = [];
@@ -1167,7 +1168,8 @@ export class GateEnhancementService {
       context,
       gateContext.steps,
       runStepView,
-      settings.frameworkGateIds
+      settings.frameworkGateIds,
+      activeFrameworkId
     );
     let stepBindings = chainPromptBindings(chainGates, runWide);
     for (const step of gateContext.steps) {
