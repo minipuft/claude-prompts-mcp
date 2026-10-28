@@ -179,10 +179,13 @@ Re-injects active chain state after compaction. Recovery is scoped to the chain 
 
 ### Output Format
 
-Set in your config file (`config.jsonc`, or `config.json`) — hooks resolve `MCP_WORKSPACE`, then
-`${CLAUDE_PLUGIN_DATA}`, then the packaged `server/` directory, trying `config.jsonc` before
-`config.json` in each and using the first file found; an unreadable or malformed file falls back to
-the default below rather than making a hook refuse to run:
+Set in your config file (`config.jsonc`, or `config.json`) — hooks read the file the server reads,
+in its order: `MCP_CONFIG_PATH`, then the project's `.claude-prompts/` (under `CLAUDE_PROJECT_DIR`,
+else the working directory), then `MCP_WORKSPACE`, then `${CLAUDE_PLUGIN_DATA}`, then the packaged
+`server/` directory, trying `config.jsonc` before `config.json` in each directory and using the
+first file found (see [Which File Is Read](../docs/reference/configuration.md#which-file-is-read));
+an unreadable or malformed file falls back to the default below rather than making a hook refuse
+to run:
 
 ```json
 {

@@ -353,7 +353,7 @@ refused before anything is written: no file changes and no row appears.
 
 ### config
 
-Manage your workspace config file — `config.jsonc` by default, `config.json` still read if that is what your workspace has (read, write, validate, reset).
+Manage the config file the server reads — `config.jsonc` by default, `config.json` still read if that is what you have (read, write, validate, reset). `cpm config` takes that file in the server's order — `MCP_CONFIG_PATH`, then the project's `.claude-prompts/config.jsonc` or `config.json` (the project is `CLAUDE_PROJECT_DIR`, else the directory you run `cpm` in), then the workspace's `config.jsonc` or `config.json` — see [Which File Is Read](../reference/configuration.md#which-file-is-read). A `set` or `reset` writes the file it would read, so a command run inside a project edits the project's config exactly where the server running there reads it; with no config present, `reset` creates `config.jsonc` in the project's `.claude-prompts/` when that folder exists, else in the workspace.
 
 ```bash
 cpm config list --workspace server                  # Display full config
@@ -375,13 +375,13 @@ cpm config keys                                     # List all valid config keys
 
 Keys use dot-notation (e.g., `gates.enabled`, `server.port`, `logging.level`). The `set` subcommand creates a timestamped backup before writing and warns when a key requires server restart. The `--json` and `-w` flags work with all subcommands.
 
-Every message names the file it acted on, by its real name (`config.jsonc` or `config.json`, whichever your workspace has): `cpm config get` on a missing key reports `Key '<key>' not found in <file>`, `validate` reports `<file> is valid` (or `validation failed:` with the list of problems), and `reset` reports `<file> reset to defaults`.
+Every message names the file it acted on, by its real name (`config.jsonc` or `config.json`, whichever it found): `cpm config get` on a missing key reports `Key '<key>' not found in <file>`, `validate` reports `<file> is valid` (or `validation failed:` with the list of problems), and `reset` reports `<file> reset to defaults`.
 
 Exit codes: `0` success, `1` error or validation failure.
 
 #### config.jsonc
 
-`config.jsonc` accepts `//` and `/* */` comments and a trailing comma before `}`/`]` — nothing else beyond JSON. A plain `config.json` is still read if that is what you have; it stays strict JSON, so a comment inside one is a parse error. Within a workspace, `config.jsonc` is tried first, then `config.json`.
+`config.jsonc` accepts `//` and `/* */` comments and a trailing comma before `}`/`]` — nothing else beyond JSON. A plain `config.json` is still read if that is what you have; it stays strict JSON, so a comment inside one is a parse error. Within the project's `.claude-prompts/` and within a workspace, `config.jsonc` is tried first, then `config.json`.
 
 `cpm init` writes `config.jsonc` with `$schema` and `"version": 5` live, and every other setting commented out, showing its current value, its default and its permitted values — generated straight from the schema, so the file can never describe a setting the server does not have. An excerpt:
 

@@ -75,6 +75,25 @@ def get_workspace_root() -> Path | None:
     return None
 
 
+def get_project_dir() -> Path | None:
+    """Get the project directory: CLAUDE_PROJECT_DIR, else the working directory.
+
+    Mirrors the server's `deriveProjectDir` (`server/src/shared/utils/project-scope.ts`): the
+    variable counts when it is set to more than whitespace, and the working directory is the
+    fallback. Distinct from `get_workspace_root()`, which answers where the PACKAGED plugin
+    lives; a project's own `.claude-prompts/` sits directly under this directory.
+
+    Returns None only when the working directory no longer exists.
+    """
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
+    if project_dir and project_dir.strip():
+        return Path(project_dir.strip())
+    try:
+        return Path.cwd()
+    except OSError:
+        return None
+
+
 def get_server_dir(fallback: Path) -> Path:
     """Get the server directory (contains resources, config, etc.)."""
     workspace = get_workspace_root()

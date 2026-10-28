@@ -2,8 +2,9 @@
 Tests for hooks/lib/config_loader.py's config.jsonc/config.json lookup.
 
 Covers:
-- Directory lookup order: MCP_WORKSPACE, then CLAUDE_PLUGIN_DATA, then the packaged
-  server/ directory
+- Lookup order: MCP_CONFIG_PATH, then the project's .claude-prompts/ directory
+  (CLAUDE_PROJECT_DIR, else the working directory), then MCP_WORKSPACE, then
+  CLAUDE_PLUGIN_DATA, then the packaged server/ directory
 - config.jsonc beats config.json within one directory
 - The comment/trailing-comma stripper: real strips, string-content preservation
   (byte-for-byte), and the strict .json positive control
@@ -36,6 +37,11 @@ _spec.loader.exec_module(ralph_stop)
 def lookup_dirs(tmp_path, monkeypatch):
     """Three distinct, existing, empty directories wired to the three lookup roots.
 
+    The project directory is pinned to an empty directory of its own and MCP_CONFIG_PATH
+    is cleared: both are read from the environment, so an ambient project holding a
+    `.claude-prompts/config.jsonc` (this checkout's own CLAUDE_PROJECT_DIR in a Claude
+    Code session) would otherwise answer before any of the roots below.
+
     `workspace` doubles as both the MCP_WORKSPACE-direct candidate AND the parent of
     the packaged candidate: once MCP_WORKSPACE resolves via workspace.get_workspace_root(),
     workspace.get_server_dir() answers `<workspace>/server` -- the same derivation
@@ -48,10 +54,20 @@ def lookup_dirs(tmp_path, monkeypatch):
     plugin_data = tmp_path / "plugin-data"
     plugin_data.mkdir()
 
+    project = tmp_path / "project"
+    project.mkdir()
+
     monkeypatch.setenv("MCP_WORKSPACE", str(workspace))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(plugin_data))
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(project))
+    monkeypatch.delenv("MCP_CONFIG_PATH", raising=False)
 
-    return {"workspace": workspace, "plugin_data": plugin_data, "packaged": workspace / "server"}
+    return {
+        "workspace": workspace,
+        "plugin_data": plugin_data,
+        "packaged": workspace / "server",
+        "project": project,
+    }
 
 
 class TestLookupOrder:
@@ -90,6 +106,108 @@ class TestLookupOrder:
         resolved = config_loader.get_config_path()
         assert resolved == lookup_dirs["workspace"] / "config.jsonc"
         assert config_loader.load_config()["source"] == "jsonc"
+
+
+class TestProjectConfig:
+    """The project's `.claude-prompts/` config outranks every workspace root, as on the server."""
+
+    @staticmethod
+    def _project_workspace(lookup_dirs) -> Path:
+        project_workspace = lookup_dirs["project"] / ".claude-prompts"
+        project_workspace.mkdir()
+        return project_workspace
+
+    def test_project_config_beats_workspace_plugin_data_and_packaged(self, lookup_dirs):
+        (lookup_dirs["workspace"] / "config.jsonc").write_text(json.dumps({"source": "workspace"}))
+        (lookup_dirs["plugin_data"] / "config.json").write_text(json.dumps({"source": "plugin_data"}))
+        (lookup_dirs["packaged"] / "config.json").write_text(json.dumps({"source": "packaged"}))
+        project_workspace = self._project_workspace(lookup_dirs)
+
+        # Control: the project folder exists but holds no config, so the workspace answers.
+        assert config_loader.get_config_path() == lookup_dirs["workspace"] / "config.jsonc"
+
+        (project_workspace / "config.jsonc").write_text(
+            '{\n  // the project\'s own hook settings\n  "hooks": {"expandedOutput": false},\n}\n'
+        )
+
+        assert config_loader.get_config_path() == project_workspace / "config.jsonc"
+        assert config_loader.load_config() == {"hooks": {"expandedOutput": False}}
+        assert config_loader.is_expanded_output() is False
+
+    def test_project_config_json_is_read_only_without_a_config_jsonc(self, lookup_dirs):
+        (lookup_dirs["workspace"] / "config.jsonc").write_text(json.dumps({"source": "workspace"}))
+        project_workspace = self._project_workspace(lookup_dirs)
+        (project_workspace / "config.json").write_text(json.dumps({"source": "project-json"}))
+
+        assert config_loader.get_config_path() == project_workspace / "config.json"
+
+        (project_workspace / "config.jsonc").write_text(json.dumps({"source": "project-jsonc"}))
+        assert config_loader.get_config_path() == project_workspace / "config.jsonc"
+
+    def test_no_project_folder_reads_the_workspace_as_before(self, lookup_dirs):
+        # The control: the same trees without `.claude-prompts/` resolve exactly as they did.
+        (lookup_dirs["workspace"] / "config.json").write_text(json.dumps({"source": "workspace"}))
+
+        assert config_loader.get_config_path() == lookup_dirs["workspace"] / "config.json"
+
+    def test_project_directory_falls_back_to_the_working_directory(self, lookup_dirs, monkeypatch, tmp_path):
+        project_workspace = self._project_workspace(lookup_dirs)
+        (project_workspace / "config.jsonc").write_text(json.dumps({"source": "project"}))
+        (lookup_dirs["workspace"] / "config.jsonc").write_text(json.dumps({"source": "workspace"}))
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR")
+
+        monkeypatch.chdir(lookup_dirs["project"])
+        assert config_loader.get_config_path() == project_workspace / "config.jsonc"
+
+        # Control: from a directory with no project folder, the workspace answers.
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+        assert config_loader.get_config_path() == lookup_dirs["workspace"] / "config.jsonc"
+
+    def test_blank_project_directory_variable_counts_as_unset(self, lookup_dirs, monkeypatch):
+        project_workspace = self._project_workspace(lookup_dirs)
+        (project_workspace / "config.jsonc").write_text(json.dumps({"source": "project"}))
+        (lookup_dirs["workspace"] / "config.jsonc").write_text(json.dumps({"source": "workspace"}))
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", "   ")
+        monkeypatch.chdir(lookup_dirs["workspace"])
+
+        assert config_loader.get_config_path() == lookup_dirs["workspace"] / "config.jsonc"
+
+    def test_explicit_config_path_beats_the_project_config(self, lookup_dirs, monkeypatch, tmp_path):
+        project_workspace = self._project_workspace(lookup_dirs)
+        (project_workspace / "config.jsonc").write_text(json.dumps({"source": "project"}))
+        explicit = tmp_path / "explicit.json"
+        explicit.write_text(json.dumps({"source": "explicit"}))
+        monkeypatch.setenv("MCP_CONFIG_PATH", str(explicit))
+
+        assert config_loader.get_config_path() == explicit
+        assert config_loader.load_config()["source"] == "explicit"
+
+    def test_missing_explicit_config_path_is_skipped_not_fatal(self, lookup_dirs, monkeypatch, tmp_path):
+        project_workspace = self._project_workspace(lookup_dirs)
+        (project_workspace / "config.jsonc").write_text(json.dumps({"source": "project"}))
+        monkeypatch.setenv("MCP_CONFIG_PATH", str(tmp_path / "does-not-exist.json"))
+
+        assert config_loader.get_config_path() == project_workspace / "config.jsonc"
+
+    def test_malformed_project_config_falls_back_to_defaults_not_the_workspace(self, lookup_dirs):
+        # A file found but unparsable is not retried against the next root.
+        (lookup_dirs["workspace"] / "config.jsonc").write_text(json.dumps({"source": "workspace"}))
+        project_workspace = self._project_workspace(lookup_dirs)
+        (project_workspace / "config.jsonc").write_text("{ not valid json even after stripping")
+
+        assert config_loader.load_config() == config_loader.DEFAULT_CONFIG
+
+    def test_ralph_stop_reads_its_settings_from_the_project_config(self, lookup_dirs):
+        project_workspace = self._project_workspace(lookup_dirs)
+        (project_workspace / "config.jsonc").write_text(
+            '{"verification": {"inContextAttempts": 9, "isolation": {"enabled": false}}}'
+        )
+
+        config = ralph_stop.load_context_isolation_config()
+        assert config["inContextThreshold"] == 9
+        assert config["enabled"] is False
 
 
 class TestStripJsoncComments:
