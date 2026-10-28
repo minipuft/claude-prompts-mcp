@@ -716,6 +716,7 @@ prompt_engine(command:">>bugfix :: verify:'npm test' :full loop:true")
 
 1. The command runs after each answer — never on the call that renders the prompt, even when that call carries a `user_response`, because nothing has been answered yet. On a chain, every step's answer is checked and each step gets its own attempt budget (`max:N` bounds each step); the chain completes only when the last step's check passes.
 2. A chain step is held while its check is pending: the run stays on that step until the check passes or a `gate_action` moves it.
+   A `gate_verdict` sent in the same call as the answer grades the step once: when the check passes, the step advances in that call and the reply shows the result under `Shell Verification Results`; when it fails, the reply is the bounce-back and the step stays held.
 3. If FAIL + attempts remain → bounce-back (Claude retries automatically)
 4. If FAIL + max reached → escalation (user chooses `retry`/`skip` via `gate_action`; `abort` stops the whole run at any time). Answering again after the attempts are spent re-shows the escalation without running the command.
 5. When a step has both an exhausted gate review and a pending check, a `retry` or `skip` action answers the review only. After a `skip`, the check still holds the step and the reply says so; answer again to re-run it, or send `skip` again to skip the check.

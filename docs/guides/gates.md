@@ -134,6 +134,11 @@ A verdict sent alone is judged on the result recorded when the answer was captur
 2026-10-21 the one-call form opened the review without running anything, and a `PASS` cleared a
 `shell_verify` gate that had never run.
 
+An inline `:: verify:"command"` check works the same way on a chain step: the command runs on the
+call that answers the step, a `PASS` sent with the answer grades the step once, and a passing
+command releases the step in that same call. The reply carries the passing result under `Shell
+Verification Results`, and no second review of the step opens to ask for the verdict again.
+
 ### Syntax
 
 ```bash
