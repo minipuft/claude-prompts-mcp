@@ -21,9 +21,14 @@ and accepted exceptions. When prose differs, the contract module wins.
 - Only `SqliteEngine.applySchema()` may create tables in `state.db`; alternate clients may write
   data but must share the engine-owned DDL and `shared/utils/project-scope.ts` scope derivation.
 - A schema bump snapshots and restores durable tables. Do not skip their drop: `CREATE TABLE IF NOT
-EXISTS` would preserve obsolete DDL. A new required durable column needs an explicit migration.
-- `DROPPED_ON_THIS_BUMP` is a one-version deletion instrument. Keep it aligned with
-  `DROPPED_AT_VERSION`, then empty it on the next bump.
+EXISTS` would preserve obsolete DDL. The restore is strict: a column that vanishes without a
+  `droppedColumns` entry throws and rolls back.
+- A durable table's schema change bumps `SCHEMA_VERSION`, adds a `DurableMigration` naming the table
+  to `DURABLE_MIGRATIONS` (`toVersion` = the new version), then runs
+  `npm run validate:table-contracts -- --update` to rewrite `durable-schema.lock.json`. A required
+  column with no default needs a step that supplies it. Never edit the lock by hand.
+- Upgrades start at `MIGRATION_FLOOR`: an older file is refused unchanged, and each upgrade is
+  backed up to `<db>.v<version>.bak` first.
 - Scope reads and writes together. `run_owner_pid` is process lifetime; `workspace_id`/`tenant_id`
   are isolation dimensions. Do not infer one from the other.
 - Defaulted columns evade the phantom-column writer check. Avoid a default when a missing writer
