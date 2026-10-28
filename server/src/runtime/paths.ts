@@ -337,9 +337,13 @@ export class PathResolver {
     }
 
     this.getConfigPath();
-    if (workspace !== undefined && this.readExplicitConfigSource() === undefined) {
-      this.assertSingleWorkspaceConfig(workspace);
-      this.assertUsableWorkspaceConfig(workspace);
+    if (this.readExplicitConfigSource() === undefined) {
+      // The project directory outranks the workspace, so its config is judged first.
+      this.assertUsableProjectConfig();
+      if (workspace !== undefined) {
+        this.assertSingleWorkspaceConfig(workspace);
+        this.assertUsableWorkspaceConfig(workspace);
+      }
     }
   }
 
@@ -382,6 +386,38 @@ export class PathResolver {
     );
   }
 
+  /**
+   * The project's `.claude-prompts/` naming both `config.jsonc` and `config.json` is ambiguous
+   * for the same reason a workspace is, and is refused the same way. No operator setting names the
+   * project directory (it is discovered), so the message names the directory and both files rather
+   * than a flag. A project config it holds must also be readable: resolving to a file and then
+   * booting on built-in defaults because it was not is the failure `getConfigPath` exists to prevent.
+   */
+  private assertUsableProjectConfig(): void {
+    const projectWorkspace = this.getProjectWorkspace();
+    if (projectWorkspace === undefined) return;
+    const found = findWorkspaceConfigFiles(projectWorkspace);
+    if (found.length >= 2) {
+      const [jsoncPath, jsonPath] = found as [string, string];
+      throw new PathSettingError(
+        [
+          `Refusing to start: the project workspace ${projectWorkspace} holds both config.jsonc (${jsoncPath}) and config.json (${jsonPath}).`,
+          `Expected a single config file there, or keep config.jsonc, the current name, and remove config.json (also still read).`,
+        ].join('\n')
+      );
+    }
+    const [config] = found;
+    if (config === undefined) return;
+    const problem = describeUnusableConfigFile(config);
+    if (problem === undefined) return;
+    throw new PathSettingError(
+      [
+        `Refusing to start: the project workspace ${projectWorkspace} holds a config file ${config} that ${problem}.`,
+        `Expected a readable JSON config file there, or move it out of the project workspace to use the next config in the order.`,
+      ].join('\n')
+    );
+  }
+
   /** A config file the workspace holds must be usable; one it does not hold falls back to the packaged config. */
   private assertUsableWorkspaceConfig(workspace: WorkspaceSource): void {
     const { resolved, origin } = this.resolveDefaultConfigPath();
@@ -406,10 +442,11 @@ export class PathResolver {
    * Priority:
    *   1. --config CLI flag
    *   2. MCP_CONFIG_PATH environment variable
-   *   3. ${workspace}/config.jsonc, else ${workspace}/config.json (if workspace differs from
-   *      package and either file exists — `.jsonc` wins when both are present, though
-   *      `assertUsablePathSettings` refuses startup on that ambiguity before this ever runs)
-   *   4. ${packageRoot}/config.json (default — the packaged file keeps its `.json` name)
+   *   3. ${project}/.claude-prompts/config.jsonc, else config.json (project discovery on and
+   *      the directory holds either)
+   *   4. ${workspace}/config.jsonc, else ${workspace}/config.json (if workspace differs from
+   *      package and either file exists)
+   *   5. ${packageRoot}/config.json (default — the packaged file keeps its `.json` name)
    *
    * An explicit path (1 or 2) that is not a readable config file throws `PathSettingError`, parsed
    * by extension (`.jsonc` tolerant of comments and a trailing comma, everything else strict
@@ -461,23 +498,32 @@ export class PathResolver {
   /** The config an explicit path's removal falls back to, with a caveat when that file is unusable too. */
   private describeDefaultConfigFallback(): PathFallback {
     const { resolved, origin } = this.resolveDefaultConfigPath();
-    if (origin !== 'workspace') return { label: 'the packaged default', resolved };
+    if (origin === 'package') return { label: 'the packaged default', resolved };
     const caveat = describeUnusableConfigFile(resolved);
-    return { label: 'the workspace config', resolved, ...(caveat !== undefined && { caveat }) };
+    const label = origin === 'project' ? 'the project config' : 'the workspace config';
+    return { label, resolved, ...(caveat !== undefined && { caveat }) };
   }
 
   /**
-   * Where config resolves when nothing names a path: the workspace file if present, else the
-   * package's. `origin` is what every caller branches on — `'workspace'` vs `'package'` — kept
+   * Where config resolves when nothing names a path: the project's `.claude-prompts/` file if
+   * present, else the workspace's, else the package's. `origin` is what every caller branches on
+   * — `'project'`, `'workspace'` or `'package'` — kept
    * separate from `source`, the human-readable label passed to {@link logResolution}, so that
    * label can name whichever filename was actually found without becoming the thing callers
    * compare against.
    */
   private resolveDefaultConfigPath(): {
     resolved: string;
-    origin: 'workspace' | 'package';
+    origin: 'project' | 'workspace' | 'package';
     source: string;
   } {
+    const projectWorkspace = this.getProjectWorkspace();
+    if (projectWorkspace !== undefined) {
+      const [first] = findWorkspaceConfigFiles(projectWorkspace);
+      if (first !== undefined) {
+        return { resolved: first, origin: 'project', source: `project ${basename(first)}` };
+      }
+    }
     const workspace = this.getWorkspace();
     if (workspace !== this.config.packageRoot) {
       const [first] = findWorkspaceConfigFiles(workspace);
