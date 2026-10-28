@@ -88,7 +88,7 @@ export function resourceLookupOrder(
  * The roots a flat-layout loader holds: its primary and the WHOLE lookup order, primary included
  * (`ResourceRoots.lookupDirs` is the producing end).
  */
-export interface LoaderRoots {
+interface LoaderRoots {
   primary: string;
   lookupDirs: readonly string[];
 }
