@@ -121,6 +121,14 @@ Criteria gates use inline text criteria that Claude evaluates against its own ou
 
 Shell verification uses actual command execution for validation—exit code 0 = PASS, non-zero = FAIL.
 
+The command runs on the call that answers the step, against the answer it carries. Send
+`user_response` alone and the reply shows the result under `Shell Verification Results` and asks
+for the verdict; send `user_response` and `gate_verdict` in one call and the command runs before
+the verdict lands, so a `PASS` over a failing command is refused and the run stays on the step.
+A verdict sent alone is judged on the result recorded when the answer was captured. Before
+2026-10-21 the one-call form opened the review without running anything, and a `PASS` cleared a
+`shell_verify` gate that had never run.
+
 ### Syntax
 
 ```bash

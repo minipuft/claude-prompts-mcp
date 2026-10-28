@@ -125,6 +125,14 @@ export interface PendingShellVerification {
  * Shell verification executor configuration.
  */
 export interface ShellVerifyExecutorConfig {
+  /**
+   * Observes every `execute` outcome: a command that ran (exit code, duration) and a command
+   * the operator controls refused. The composition root logs these, so an operator who
+   * allowlisted a command can see each time a gate ran it, from either transport, in the
+   * server log. `cwd` is the directory the command ran in, absent when it never ran. Absent
+   * observer, nothing is observed; the result is unchanged either way.
+   */
+  onExecuted?: (gate: ShellVerifyGate, result: ShellVerifyResult, cwd?: string) => void;
   /** Default timeout in milliseconds */
   defaultTimeout?: number;
   /** Maximum allowed timeout in milliseconds */
