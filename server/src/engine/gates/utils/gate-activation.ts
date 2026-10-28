@@ -173,7 +173,7 @@ function checkRegularGateActivation(
 
   // Declared framework rules require a matching framework in the context, whatever the
   // gate_type: an absent framework is a mismatch, exactly as in the framework-gate branch.
-  // Reading it as "unconstrained" attached a RADIANT-only category gate to a run under ReACT.
+  // Reading it as "unconstrained" attached a RADIANT-only category gate to a run under ReACT (historical example; RADIANT no longer ships).
   if (!checkFrameworkContext(activation, context)) {
     return false;
   }
