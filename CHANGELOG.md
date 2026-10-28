@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **The `creed-fidelity` gate no longer ships in the bundle.** It is a CloudySky design-bible gate and lives in that project's `.claude-prompts/` workspace now. If you relied on it, copy its folder (`gate.yaml` and `guidance.md`) into your own workspace or your project's `.claude-prompts/resources/gates/`.
 - **`npm run sync` and `npm run dev` (the plugin-cache copy script) are gone.** Load the checkout directly with `npm run dev:claude`, which runs `claude --plugin-dir` and takes hooks, manifest and server from the checkout instead of imitating them in the marketplace cache.
 
 ### Fixed
