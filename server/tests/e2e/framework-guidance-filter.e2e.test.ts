@@ -1,10 +1,10 @@
 // @lifecycle test - P6.290 / R178 and P6.291 / R179: the gate guidance filter matches a framework whatever casing its id arrives in, and keeps the generic lines for every framework, over Streamable HTTP and STDIO.
 /**
  * P6.290 / R178. MEASURED 2026-10-04 on `ebe8936fb` (this harness's fixtures, Streamable HTTP): a
- * gate whose guidance names frameworks only in their authored casing (`- ReACT:`, `- Radiant:`)
- * rendered both lines, unfiltered and unheaded, under ReACT and under RADIANT alike. The filter's
+ * gate whose guidance names frameworks only in their authored casing (`- ReACT:`, `- Scamper:`)
+ * rendered both lines, unfiltered and unheaded, under ReACT and under SCAMPER alike. The filter's
  * line match was case-insensitive, but `hasFrameworkSpecificContent` compared the upper-cased
- * identifiers (`REACT`, `RADIANT`) case-sensitively, so the filter never ran on that guidance. The
+ * identifiers (`REACT`, `SCAMPER`) case-sensitively, so the filter never ran on that guidance. The
  * shipped `framework-compliance` guidance hid it: its upper-case `- CAGEERF:` line let the check
  * pass for every framework.
  *
@@ -86,7 +86,7 @@ const authorFixtures = async (tool: Tool): Promise<void> => {
     id: MIXED_GATE,
     name: 'P290 Mixed',
     description: 'guidance naming frameworks only in their authored casing',
-    guidance: '- ReACT: REACT-LINE-290\n- Radiant: RADIANT-LINE-290',
+    guidance: '- ReACT: REACT-LINE-290\n- Scamper: SCAMPER-LINE-290',
   });
   await author({
     resource_type: 'prompt',
@@ -148,7 +148,7 @@ const harness = (tool: Tool) => {
   const unfilteredUnderUnnamed = async () => {
     await switchTo('cageerf');
     expect(await mixedSection()).toBe(
-      '### P290 Mixed\n- ReACT: REACT-LINE-290\n- Radiant: RADIANT-LINE-290'
+      '### P290 Mixed\n- ReACT: REACT-LINE-290\n- Scamper: SCAMPER-LINE-290'
     );
   };
 
@@ -218,11 +218,11 @@ describe('Streamable HTTP: the guidance filter matches a framework in any casing
   });
 
   test('under ReACT the mixed-case gate renders ReACT line alone, headed as authored', async () => {
-    await twins.filteredUnder('react', 'ReACT', 'REACT-LINE-290', 'RADIANT-LINE-290');
+    await twins.filteredUnder('react', 'ReACT', 'REACT-LINE-290', 'SCAMPER-LINE-290');
   }, 120000);
 
-  test('under RADIANT the mixed-case gate renders the Radiant line alone, headed as authored', async () => {
-    await twins.filteredUnder('radiant', 'Radiant', 'RADIANT-LINE-290', 'REACT-LINE-290');
+  test('under SCAMPER the mixed-case gate renders the Scamper line alone, headed as authored', async () => {
+    await twins.filteredUnder('scamper', 'Scamper', 'SCAMPER-LINE-290', 'REACT-LINE-290');
   }, 120000);
 
   test('control: under CAGEERF, which the guidance never names, both lines stay unheaded', async () => {
@@ -319,7 +319,7 @@ describe('STDIO: the guidance filter matches a framework in any casing (P6.290, 
   });
 
   test('over STDIO under ReACT the mixed-case gate renders ReACT line alone, headed as authored', async () => {
-    await twins.filteredUnder('react', 'ReACT', 'REACT-LINE-290', 'RADIANT-LINE-290');
+    await twins.filteredUnder('react', 'ReACT', 'REACT-LINE-290', 'SCAMPER-LINE-290');
   }, 120000);
 
   test('control over STDIO: under CAGEERF both lines stay unheaded', async () => {
