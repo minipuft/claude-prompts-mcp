@@ -11,8 +11,8 @@
  * STDIO every render failed. A restart read the selection against the bundled frameworks and
  * replaced it with the first one available.
  *
- * The configured default here is `radiant`, which is neither the built-in default nor the first
- * framework available, so a fallback to either of those cannot pass for the configured one.
+ * The configured default here is `scamper`, which is neither the built-in default (`cageerf`) nor
+ * the first framework available (`5w1h`), so a fallback to either of those cannot pass for the configured one.
  */
 
 import { afterEach, describe, expect, it } from '@jest/globals';
@@ -34,7 +34,7 @@ import {
 } from './helpers/http-mcp-client.js';
 
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const CONFIGURED_DEFAULT = 'radiant';
+const CONFIGURED_DEFAULT = 'scamper';
 const PROMPT_ID = 'framework_selection_probe';
 const PROMPT_BODY = 'framework selection probe body';
 const FRAMEWORK_ID = 'selection_probe_fw';
@@ -291,18 +291,19 @@ async function switchTo(session: McpSession, frameworkId: string): Promise<void>
 }
 
 /**
- * A full answer under `radiant` (this file's configured default): every required section, carrying
- * a term its guard asks for. Since R170 an answer failing its phase guard holds the run, so a step
- * a twin means to pass must conform; CAGEERF headers failed radiant's guards and only moved on while
+ * A full answer under `scamper` (this file's configured default): every required section, long
+ * enough for its guard. Since R170 an answer failing its phase guard holds the run, so a step a
+ * twin means to pass must conform; CAGEERF headers failed scamper's guards and only moved on while
  * the run advanced ungraded.
  */
-const RADIANT_SECTIONS = [
-  ['Reference the Vision', 'the album vision and its atmosphere'],
-  ['Articulate Goals', 'the goal and the mood it must reach'],
-  ['Draw the Palette', 'an OKLCH palette read from the album light'],
-  ['Infuse Atmosphere & Motion', 'motion that follows the audio energy'],
-  ['Anchor to Surfaces', 'each token on its surface and focal selector'],
-  ['Test in the Living Client', 'verify the result live over CDP'],
+const SCAMPER_SECTIONS = [
+  ['Substitute', 'what the current approach could swap for an alternative'],
+  ['Combine', 'which parts of the idea merge into one'],
+  ['Adapt', 'what the idea can borrow from another context'],
+  ['Modify', 'which part to enlarge, shrink or emphasize'],
+  ['Put to Other Uses', 'another audience that could use the result'],
+  ['Eliminate', 'the step or feature that can be removed'],
+  ['Reverse', 'the order of the steps run from the end'],
 ]
   .map(([header, topic]) => `## ${header}\n${`This section covers ${topic}, in full. `.repeat(4)}`)
   .join('\n\n');
@@ -475,7 +476,7 @@ describe.each([
         'system_control action': label,
       });
       expect({ started, switched, systemOff }).toEqual({
-        started: everyText('RADIANT'),
+        started: everyText('SCAMPER'),
         switched: everyText('ReACT'),
         systemOff: everyText('none'),
       });
@@ -806,7 +807,7 @@ describe('P6.198: a framework override needs no system toggle on a step added mi
  * steps read the toggle on every call.
  */
 describe('R158: the framework toggle decides a run at its first call (Streamable HTTP)', () => {
-  const SECTIONS = RADIANT_SECTIONS;
+  const SECTIONS = SCAMPER_SECTIONS;
   const PASS = { overall: 'PASS', rationale: 'ok' };
   const STRUCTURAL_REVIEW = '**Structural Review Required**';
   const rendersNoFramework = (text: string) =>
@@ -943,10 +944,11 @@ describe.each([
       return session;
     }
 
-    /** What radiant, the configured default, renders into a single prompt: system prompt, sections. */
-    const RADIANT_MARKERS = [
-      'operating under the RADIANT Design Framework',
-      '`## Reference the Vision`',
+    /** What scamper, the configured default, renders into a single prompt: system prompt, sections. */
+    const SCAMPER_MARKERS = [
+      'operating under the SCAMPER Framework',
+      '`## Substitute`',
+      '`## Put to Other Uses`',
       '**Required Sections**',
     ];
     const found = (text: string, markers: readonly string[]) =>
@@ -966,7 +968,7 @@ describe.each([
       expect(run.isError).toBe(false);
       expect(run.text).toContain('BODY-p283_single');
       expect(found(run.text, FRAMEWORK_MARKERS)).toEqual([]);
-      expect(found(run.text, RADIANT_MARKERS)).toEqual([]);
+      expect(found(run.text, SCAMPER_MARKERS)).toEqual([]);
     }, 120000);
 
     it('P6.283 control: the same prompt with the framework system enabled renders its framework', async () => {
@@ -976,14 +978,14 @@ describe.each([
 
       expect(run.isError).toBe(false);
       expect(run.text).toContain('BODY-p283_single');
-      expect(found(run.text, RADIANT_MARKERS)).toEqual(RADIANT_MARKERS);
+      expect(found(run.text, SCAMPER_MARKERS)).toEqual(SCAMPER_MARKERS);
     }, 120000);
   }
 );
 
 /**
  * P6.284 / R176. MEASURED 2026-10-04 on `dbcc722c5` (driven by the twins below before the fix, both
- * transports): a run started under `radiant` (this file's configured default) kept radiant on its
+ * transports): a run started under `scamper` (this file's configured default) kept scamper on its
  * planned steps after the active framework was switched to ReACT through `system_control`, but the
  * steps it added later (the inserted investigation step and the remainder `r1`) rendered ReACT,
  * and the phase guard graded under ReACT. The run's framework decision was recomputed on every call
@@ -1001,8 +1003,8 @@ describe.each([
   (_transport, starter) => {
     const PASS = { overall: 'PASS', rationale: 'ok' };
     const STRUCTURAL_REVIEW = '**Structural Review Required**';
-    /** What radiant, the run's framework, renders: its block and its first required section. */
-    const RADIANT_MARKERS = ['RADIANT Design Framework Active', '`## Reference the Vision`'];
+    /** What scamper, the run's framework, renders: its block and its first required section. */
+    const SCAMPER_MARKERS = ['SCAMPER Framework Active', '`## Substitute`'];
     /**
      * What ReACT, the framework switched to, renders: its block and every required section. Not
      * the bare name: the framework-compliance guidance lists every framework by name under any.
@@ -1051,9 +1053,9 @@ describe.each([
     };
 
     /**
-     * Four planned steps under radiant; ReACT switched in after the first answer; a blocking unknown
+     * Four planned steps under scamper; ReACT switched in after the first answer; a blocking unknown
      * on step 3 inserting an investigation step, and a remainder `r1`. Every answer conforms to
-     * radiant, the framework the run started under.
+     * scamper, the framework the run started under.
      */
     async function runSwitchedMidRun(session: McpSession) {
       const first = await session.callTool('prompt_engine', {
@@ -1063,7 +1065,7 @@ describe.each([
       const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(first.text)?.[1];
       const call = (args: Record<string, unknown>) =>
         session.callTool('prompt_engine', { chain_id: chainId, ...args });
-      const answer = (label: string) => `${label}\n${RADIANT_SECTIONS}`;
+      const answer = (label: string) => `${label}\n${SCAMPER_SECTIONS}`;
       const second = await call({ user_response: answer('A1 out'), gate_verdict: PASS });
       await switchTo(session, 'react');
       expect(await activeFramework(session)).toBe('react');
@@ -1092,8 +1094,8 @@ describe.each([
     it('(a) every render of a run started before the switch carries its framework and none of the new one', async () => {
       const { session, runtimeRoot } = await sessionWithPrompts();
       const { chainId, renders: run } = await runSwitchedMidRun(session);
-      // The run state, not only the text: the run records radiant, while ReACT is now active.
-      expect(recordedFramework(runtimeRoot, chainId)).toBe('radiant');
+      // The run state, not only the text: the run records scamper, while ReACT is now active.
+      expect(recordedFramework(runtimeRoot, chainId)).toBe('scamper');
       expect(await activeFramework(session)).toBe('react');
       expect(run.third.text).toContain('BODY-p284_s');
       expect(run.inserted.text).toContain('## Investigate: rest undecided');
@@ -1103,14 +1105,14 @@ describe.each([
       for (const [name, render] of Object.entries(renders)) {
         expect({ name, react: found(render.text, REACT_MARKERS) }).toEqual({ name, react: [] });
       }
-      // Radiant on the first render, on a planned step rendered after the switch and on both added
+      // Scamper on the first render, on a planned step rendered after the switch and on both added
       // steps. The block renders only where the injection frequency puts it (steps 1 and 4: the
-      // inserted step); every step declares radiant's sections.
-      expect(found(run.first.text, RADIANT_MARKERS)).toEqual(RADIANT_MARKERS);
-      expect(run.third.text).toContain('`## Reference the Vision`');
-      expect(run.inserted.text).toContain('RADIANT Design Framework Active');
-      expect(run.contributed.text).toContain('`## Reference the Vision`');
-      // The phase guard grades radiant answers under radiant: none is held for review.
+      // inserted step); every step declares scamper's sections.
+      expect(found(run.first.text, SCAMPER_MARKERS)).toEqual(SCAMPER_MARKERS);
+      expect(run.third.text).toContain('`## Substitute`');
+      expect(run.inserted.text).toContain('SCAMPER Framework Active');
+      expect(run.contributed.text).toContain('`## Substitute`');
+      // The phase guard grades scamper answers under scamper: none is held for review.
       for (const render of [run.third, run.inserted, run.fourth, run.contributed]) {
         expect(render.text).not.toContain(STRUCTURAL_REVIEW);
       }
@@ -1127,7 +1129,7 @@ describe.each([
 
       expect(fresh.isError).toBe(false);
       expect(found(fresh.text, REACT_MARKERS)).toEqual(REACT_MARKERS);
-      expect(found(fresh.text, RADIANT_MARKERS)).toEqual([]);
+      expect(found(fresh.text, SCAMPER_MARKERS)).toEqual([]);
     }, 120000);
   }
 );
