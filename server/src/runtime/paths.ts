@@ -817,6 +817,23 @@ export function parsePathCliOptions(cliArgs: ServerCliArgs): PathResolverCliOpti
 }
 
 // ============================================================================
+// Transport and Project Discovery
+// ============================================================================
+
+/**
+ * Whether a server on `transport` may look for the launch's project `.claude-prompts/` (R4).
+ *
+ * Only a STDIO process serves one project: the client launches it from that project. An HTTP
+ * process (`streamable-http`, or `both`, which opens the HTTP listener too) serves many projects
+ * from one working directory, so the directory it started in names none of them. An absent value
+ * is STDIO, the default `resolveRuntimeLaunchOptions` applies. Callers pass the mode
+ * `TransportRouter.determineTransport` returns, which has already mapped an invalid value to STDIO.
+ */
+export function discoversProjectOver(transport: string | undefined): boolean {
+  return transport === undefined || transport === 'stdio';
+}
+
+// ============================================================================
 // Factory Function
 // ============================================================================
 
@@ -839,5 +856,6 @@ export function createPathResolver(
     cli,
     packageRoot,
     debug,
+    projectDiscovery: discoversProjectOver(cliArgs.transport),
   });
 }

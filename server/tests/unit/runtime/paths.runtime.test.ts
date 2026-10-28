@@ -822,4 +822,42 @@ describe('PathResolver resolves the project directory as a resource root', () =>
       path.join(packageRoot, 'resources', 'gates'),
     ]);
   });
+
+  describe('by transport, built through createPathResolver', () => {
+    let savedProjectDir: string | undefined;
+
+    beforeEach(() => {
+      savedProjectDir = process.env['CLAUDE_PROJECT_DIR'];
+      process.env['CLAUDE_PROJECT_DIR'] = project;
+      mkdirSync(path.join(project, '.claude-prompts'));
+    });
+
+    afterEach(() => {
+      if (savedProjectDir === undefined) delete process.env['CLAUDE_PROJECT_DIR'];
+      else process.env['CLAUDE_PROJECT_DIR'] = savedProjectDir;
+    });
+
+    const resolverFor = (...args: string[]) =>
+      createPathResolver(parseServerCliArgs(args), packageRoot);
+
+    it('makes the project the primary under --transport=stdio, and when no transport is named', () => {
+      for (const resolver of [resolverFor('--transport=stdio'), resolverFor()]) {
+        expect(resolver.getProjectWorkspace()).toBe(path.join(project, '.claude-prompts'));
+        expect(resolver.getGatesPath()).toBe(
+          path.join(project, '.claude-prompts', 'resources', 'gates')
+        );
+      }
+    });
+
+    it('ignores the same project directory under --transport=streamable-http and --transport=both', () => {
+      for (const transport of ['streamable-http', 'both']) {
+        const resolver = resolverFor(`--transport=${transport}`);
+        expect(resolver.getProjectWorkspace()).toBeUndefined();
+        expect(resolver.getGatesPath()).toBe(path.join(workspace, 'resources', 'gates'));
+        expect(resolver.getOverlayResourceCandidates('gates')).not.toContain(
+          path.join(project, '.claude-prompts', 'resources', 'gates')
+        );
+      }
+    });
+  });
 });

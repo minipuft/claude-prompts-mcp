@@ -15,7 +15,7 @@ import {
   type ProjectScopeDerivation,
   type RuntimeLaunchOptions,
 } from './options.js';
-import { PathResolver } from './paths.js';
+import { discoversProjectOver, PathResolver } from './paths.js';
 import { resolvePackageRoot } from './startup.js';
 
 import type { Config, ConfigManager, TransportMode } from '#shared/types/index.js';
@@ -102,10 +102,20 @@ export async function createRuntimeFoundation(
     verbose: options.verbose,
   });
 
+  // Decided before the PathResolver: only a single-project STDIO process looks for the project's
+  // own `.claude-prompts/` (R4), and an invalid value falls back to STDIO here, so the resolver
+  // reads the transport this process will actually serve.
+  const transport = TransportRouter.determineTransport(options.transport);
+
   // Create PathResolver with pre-parsed CLI path options and package root
   const pathResolver =
     dependencies.pathResolver ??
-    new PathResolver({ cli: options.paths, packageRoot: serverRoot, debug: options.verbose });
+    new PathResolver({
+      cli: options.paths,
+      packageRoot: serverRoot,
+      debug: options.verbose,
+      projectDiscovery: discoversProjectOver(transport),
+    });
 
   // Refuse an unusable workspace, resources path or config before anything below reads, watches or
   // creates one — the logs mkdir would otherwise create a missing workspace. Both transports pass
@@ -138,7 +148,6 @@ export async function createRuntimeFoundation(
   }
   await serviceOrchestrator.startService('config-watcher');
 
-  const transport = TransportRouter.determineTransport(options.transport);
   const loggingConfig = configManager.getLoggingConfig();
 
   // Log level can be overridden via CLI flag
