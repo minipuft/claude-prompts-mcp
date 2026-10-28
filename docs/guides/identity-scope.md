@@ -180,6 +180,11 @@ printed in logs.
 Explicit configuration always outranks derivation, so setting `--workspace-id` cannot be
 overwritten by the directory the server happens to start in.
 
+Under STDIO the same directory is where the server looks for a project's own resources in
+`.claude-prompts/` (see [Custom Resources](custom-resources.md#option-c--project-workspace)).
+HTTP serves many projects from one process, so it does not read the project directory and never
+loads `.claude-prompts/`.
+
 The resolved value and its source are reported once at startup:
 
 ```
