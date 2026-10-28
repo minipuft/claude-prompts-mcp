@@ -27,4 +27,3 @@ tags: [frameworks, resources, cloudySky]
 
 - B1–B5 ran as five parallel workers on disjoint files (one over the default spawn cap, accepted because the files were disjoint and the tree guard was the only cross-talk: it printed other workers' edits at teardown, never a failure of the file under test). Every B row chose `scamper` where a second bundled framework with guards was needed; B2 found that the guidance filter only strips a line naming a framework that is still bundled, so a free-text twin would not have proved the case.
 - Closure: all six rows terminal; plan retired to `plans/archive/`; `publish: push` under the owner's 2026-10-28 ruling.
-
