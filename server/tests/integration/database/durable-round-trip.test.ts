@@ -204,9 +204,10 @@ describe('every durable table survives a schema recreate', () => {
     expect(DURABLE_TABLE_NAMES.length).toBeGreaterThan(0);
   });
 
-  it('carries every durable row across the recreate, byte-identical', async () => {
+  it('carries every durable row across an upgrade, byte-identical', async () => {
     const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
     await engine.initialize();
+    const currentVersion = engine.getSchemaVersion();
 
     // Seed over SEEDED_TABLES, not DURABLE_TABLE_NAMES: a table wrongly demoted to `ephemeral`
     // must still be seeded and still be checked below, or the demotion hides itself.
@@ -224,14 +225,17 @@ describe('every durable table survives a schema recreate', () => {
       before.set(table, normalise(engine.query(`SELECT * FROM "${table}"`)));
     }
 
-    // The seam: a stale schema_version row makes the next open take the version-mismatch branch,
-    // which is snapshot → drop → recreate → restore, exactly as a real bump would.
-    engine.run(`DELETE FROM schema_version`);
-    engine.run(`INSERT INTO schema_version (version) VALUES (1)`);
     await engine.shutdown();
 
-    const reopened = await SqliteEngine.getInstance(logger as never, { dbPath });
+    // The seam: an engine one version ahead with no migration steps takes the upgrade branch —
+    // snapshot → drop → recreate → strict restore — exactly as the next real bump would.
+    const reopened = await SqliteEngine.getInstance(logger as never, {
+      dbPath,
+      schemaVersion: currentVersion + 1,
+      durableMigrations: [],
+    });
     await reopened.initialize();
+    expect(reopened.getSchemaVersion()).toBe(currentVersion + 1);
 
     for (const table of SEEDED_TABLES) {
       const after = normalise(reopened.query(`SELECT * FROM "${table}"`));

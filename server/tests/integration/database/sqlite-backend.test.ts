@@ -334,6 +334,8 @@ describe('Schema version bump', () => {
   const testDir = testScratchPath('sqlite-schema-bump');
   const dbPath = path.join(testDir, 'runtime-state', 'state.db');
   let engine: SqliteEngine;
+  let targetVersion: number;
+  let restoredHistoryId: number;
 
   beforeAll(async () => {
     await fs.rm(testDir, { recursive: true, force: true });
@@ -343,6 +345,7 @@ describe('Schema version bump', () => {
       dbPath: path.join(testDir, 'runtime-state', 'state.db'),
     });
     await engine.initialize();
+    targetVersion = engine.getSchemaVersion() + 1;
 
     // A durable row: a resource snapshot backing rollback. Exists nowhere else.
     engine.run(
@@ -388,14 +391,19 @@ describe('Schema version bump', () => {
       'Discarded',
     ]);
 
-    // Simulate a DB written by an older server build, then reopen so ensureSchema
-    // takes the version-mismatch branch on the next initialize().
-    engine.run(`DELETE FROM schema_version`);
-    engine.run(`INSERT INTO schema_version (version) VALUES (?)`, [1]);
+    restoredHistoryId = Number(
+      engine.queryOne<{ id: number }>(
+        `SELECT id FROM version_history WHERE resource_id = 'survives-bump'`
+      )?.id
+    );
     await engine.shutdown();
 
+    // Reopen with an engine one version ahead and no migration steps, so ensureSchema takes the
+    // upgrade branch against today's DDL exactly as the next real bump would.
     engine = await SqliteEngine.getInstance(mockLogger as any, {
       dbPath: path.join(testDir, 'runtime-state', 'state.db'),
+      schemaVersion: targetVersion,
+      durableMigrations: [],
     });
     await engine.initialize();
   });
@@ -407,16 +415,13 @@ describe('Schema version bump', () => {
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
-  it('recreates the schema at the current version', () => {
-    expect(engine.getSchemaVersion()).toBe(35);
+  it('recreates the schema at the target version', () => {
+    expect(engine.getSchemaVersion()).toBe(targetVersion);
   });
 
   it('preserves version_history rows across the recreate', () => {
-    // Flipped back at v19, exactly as the v18 version of this test said it would be.
-    // `DROPPED_ON_THIS_BUMP` held version_history for one bump — pre-Tier-4 rows carried the
-    // literal `tenant_id = 'default'`, could not be attributed to a workspace, and were
-    // unreachable to a scoped read. That exclusion was retired here, so the table is durable
-    // again and its rows are carried by snapshot/restore.
+    // version_history is durable: its rows back rollback and exist nowhere else, so the upgrade
+    // carries them by snapshot/restore rather than letting the recreate drop them.
     const row = engine.queryOne<{ resource_id: string }>(
       `SELECT resource_id FROM version_history WHERE resource_id = ?`,
       ['survives-bump']
@@ -444,9 +449,20 @@ describe('Schema version bump', () => {
   });
 
   it('leaves AUTOINCREMENT able to allocate past the restored ids', () => {
-    // The restore carries explicit ids, so sqlite_sequence must be re-seeded from them
-    // or the next insert collides on the primary key. Asserted against a table that IS
-    // carried — version_history is excluded on this bump, so it would prove nothing here.
+    // The restore carries explicit ids, so the next allocated id must land past them or the
+    // next insert collides on the primary key. version_history is the carried table with an
+    // AUTOINCREMENT key; skills_sync_manifests (a composite key) must also accept a new row.
+    engine.run(
+      `INSERT INTO version_history
+         (tenant_id, resource_type, resource_id, version, snapshot, created_at)
+       VALUES ('default', 'prompt', 'after-bump', 1, '{}', ?)`,
+      [new Date().toISOString()]
+    );
+    const allocated = engine.queryOne<{ id: number }>(
+      `SELECT id FROM version_history WHERE resource_id = 'after-bump'`
+    );
+    expect(Number(allocated?.id)).toBeGreaterThan(restoredHistoryId);
+
     engine.run(
       `INSERT INTO skills_sync_manifests
          (client, scope, resource_key, resource_id, resource_type, source_hash, output_hash,

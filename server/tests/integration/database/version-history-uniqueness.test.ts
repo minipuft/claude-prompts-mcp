@@ -9,20 +9,20 @@
  * claiming to be v1. Every reader of this table selects by version: `getVersion`, `compareVersions`
  * and `rollback` would then restore whichever of the two SQLite returned first.
  *
- * Three properties are pinned here, one per failure the fix has to own:
- *   a. a v27 database ALREADY holding duplicates opens under v28 with every row present and every
- *      key unique — the migration renumbers rather than throwing or discarding, and the fixture is
- *      hand-written SQL so it cannot inherit the new writer's correctness;
- *   b. a rename onto an id with existing history continues after that id's newest version;
- *   c. a duplicate INSERT is refused outright — the positive control for the index, and the gate
+ * Five properties are pinned here, one per failure the fix has to own:
+ *   a. a rename onto an id with existing history continues after that id's newest version;
+ *   b. a duplicate INSERT is refused outright — the positive control for the index, and the gate
  *      that catches a future writer of this shape that nobody enumerated;
- *   d. two connections saving one resource produce contiguous distinct versions and no UNIQUE
+ *   c. two connections saving one resource produce contiguous distinct versions and no UNIQUE
  *      failure — the `MAX(version)`-then-INSERT pair is one unit under the write lock. The
  *      interleave is injected at the maximum-version read rather than raced, so the test carries no
  *      timing dependence;
- *   e. a writer meeting a lock held by another PROCESS waits for it and lands, where the same write
+ *   d. a writer meeting a lock held by another PROCESS waits for it and lands, where the same write
  *      with no timeout is refused — the control that also proves the lock was genuinely held;
- *   f. the engine's own connection carries that timeout, rather than SQLite's default of 0.
+ *   e. the engine's own connection carries that timeout, rather than SQLite's default of 0.
+ *
+ * A database old enough to still hold duplicates predates the migration floor and is refused at
+ * startup, so no case here opens one.
  */
 
 import { spawn } from 'node:child_process';
@@ -49,34 +49,6 @@ const logger = {
   debug: jest.fn() as jest.Mock,
 };
 
-/** The v27 shape of the two tables this migration reads — no unique index, by definition. */
-const V27_DDL = `
-  CREATE TABLE schema_version (
-    version INTEGER PRIMARY KEY,
-    applied_at TEXT DEFAULT (datetime('now'))
-  );
-  CREATE TABLE version_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tenant_id TEXT NOT NULL DEFAULT 'default',
-    organization_id TEXT,
-    workspace_id TEXT,
-    resource_type TEXT NOT NULL,
-    resource_id TEXT NOT NULL,
-    version INTEGER NOT NULL,
-    snapshot TEXT NOT NULL,
-    diff_summary TEXT DEFAULT '',
-    description TEXT DEFAULT '',
-    created_at TEXT NOT NULL
-  );
-`;
-
-interface KeyRow {
-  resource_id: string;
-  version: number;
-  description: string;
-  created_at: string;
-}
-
 describe('version_history uniqueness', () => {
   let testDir: string;
   let dbPath: string;
@@ -90,79 +62,6 @@ describe('version_history uniqueness', () => {
   afterEach(async () => {
     await SqliteEngine.shutdownInstance();
     await fs.rm(testDir, { recursive: true, force: true });
-  });
-
-  describe('a v27 database carrying duplicates', () => {
-    /**
-     * Hand-written v27 rows, NOT produced by the writer under test: two `p` histories merged by a
-     * rename (two v1s and two v2s, interleaved in time), plus an untouched neighbour that must
-     * survive with its own numbering intact.
-     */
-    function seedV27Duplicates(): void {
-      const db = new DatabaseSync(dbPath);
-      db.exec(V27_DDL);
-      db.exec('INSERT INTO schema_version (version) VALUES (27)');
-      const insert = db.prepare(
-        `INSERT INTO version_history
-           (tenant_id, organization_id, workspace_id, resource_type, resource_id,
-            version, snapshot, diff_summary, description, created_at)
-         VALUES ('ws', NULL, 'ws', 'prompt', ?, ?, ?, '', ?, ?)`
-      );
-      // resource_id, version, description, created_at — ordered so the two sequences interleave.
-      const rows: Array<[string, number, string, string]> = [
-        ['p', 1, 'old-a-1', '2026-01-01T00:00:00.000Z'],
-        ['p', 1, 'old-b-1', '2026-01-02T00:00:00.000Z'],
-        ['p', 2, 'old-a-2', '2026-01-03T00:00:00.000Z'],
-        ['p', 2, 'old-b-2', '2026-01-04T00:00:00.000Z'],
-        ['q', 1, 'neighbour-1', '2026-01-05T00:00:00.000Z'],
-        ['q', 2, 'neighbour-2', '2026-01-06T00:00:00.000Z'],
-      ];
-      for (const [resourceId, version, description, createdAt] of rows) {
-        insert.run(resourceId, version, JSON.stringify({ description }), description, createdAt);
-      }
-      db.close();
-    }
-
-    function readKeys(): KeyRow[] {
-      const db = new DatabaseSync(dbPath);
-      const rows = db
-        .prepare(
-          `SELECT resource_id, version, description, created_at FROM version_history
-           ORDER BY resource_id, version`
-        )
-        .all() as unknown as KeyRow[];
-      db.close();
-      return rows;
-    }
-
-    it('opens under v28 with every row present and every key unique', async () => {
-      seedV27Duplicates();
-
-      const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
-      await engine.initialize();
-      await engine.shutdown();
-
-      const rows = readKeys();
-      expect(rows).toHaveLength(6);
-
-      const keys = rows.map((row) => `${row.resource_id}@${row.version}`);
-      expect(new Set(keys).size).toBe(6);
-
-      // Renumbering is by existing timestamp, so the merged sequence keeps its chronology and the
-      // untouched neighbour keeps the numbers it already had.
-      expect(rows.filter((row) => row.resource_id === 'p').map((row) => row.description)).toEqual([
-        'old-a-1',
-        'old-b-1',
-        'old-a-2',
-        'old-b-2',
-      ]);
-      expect(rows.filter((row) => row.resource_id === 'p').map((row) => row.version)).toEqual([
-        1, 2, 3, 4,
-      ]);
-      expect(rows.filter((row) => row.resource_id === 'q').map((row) => row.version)).toEqual([
-        1, 2,
-      ]);
-    });
   });
 
   describe('renaming onto an id that already has history', () => {
