@@ -95,13 +95,13 @@ export class JudgeMenuFormatter {
       '```',
       `prompt_engine({`,
       `  command: "${escapedCommand}${
-        operatorContext.hasFrameworkOperator ? '' : ' @<framework>'
+        operatorContext.hasFrameworkOperator ? '' : ' ^<framework>'
       } :: <gate_id or criteria> #<analytical|procedural|creative|reasoning>"`,
       `})`,
       '```',
       '',
       '**Notes:**',
-      '- Use `@Framework` to set framework, `::` for gates, and `#id` for response style (e.g., `#analytical`).',
+      '- Use `^Framework` to set framework, `::` for gates, and `#id` for response style (e.g., `#analytical`).',
       '- Use `%judge` only for the judge phase; follow-up calls should rely on inline operators.',
     ];
 

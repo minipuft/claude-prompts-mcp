@@ -18,7 +18,7 @@ LLM Output → Section Splitter → Phase Guard Evaluator → Result
 
 Phase guards activate when ALL of these are true:
 
-1. A framework is active (via `@CAGEERF`, `@5W1H`, etc.)
+1. A framework is active (via `^CAGEERF`, `^5W1H`, etc.)
 2. The framework's `phases.yaml` has processing steps with `section_header` + `guards`
 3. Phase guards mode is not `off` in config
 4. The execution carries a session — a chain step, or a single prompt with explicit `gates`, a `gate` operator, or `chainSteps` (any of which sets `executionPlan.requiresSession`). Phase guards are not chain-exclusive: a gated single prompt reaches Stage 19 the same way a chain step does

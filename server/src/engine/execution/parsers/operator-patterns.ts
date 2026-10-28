@@ -56,3 +56,38 @@ export const IMPLEMENTED_OPERATORS = contract.operators
 export const RESERVED_OPERATORS: ReadonlyMap<string, string> = new Map(
   contract.operators.filter((op) => op.status === 'reserved').map((op) => [op.id, op.symbol])
 );
+
+/** The framework operator's canonical sigil (`^`), from the registry. */
+export const FRAMEWORK_SIGIL: string = OPERATOR_PATTERNS.framework.symbol;
+
+/**
+ * Spellings of the framework operator that still parse but are no longer canonical (`@`),
+ * from the registry's `deprecatedSymbols`. An alias is accepted, never refused.
+ */
+export const DEPRECATED_FRAMEWORK_SIGILS: readonly string[] = contract.operators.flatMap((op) =>
+  op.id === 'framework' && 'deprecatedSymbols' in op ? (op.deprecatedSymbols ?? []) : []
+);
+
+/**
+ * Regex character class matching every accepted framework sigil, canonical and deprecated, for
+ * the sites that strip a framework prefix from a command or chain step. Derived rather than
+ * written as `[@^]`, so a spelling the registry adds or retires reaches those sites too.
+ */
+export const FRAMEWORK_SIGIL_CLASS = `[${[FRAMEWORK_SIGIL, ...DEPRECATED_FRAMEWORK_SIGILS]
+  .map((sigil) => sigil.replace(/[\\\]^-]/g, '\\$&'))
+  .join('')}]`;
+
+/**
+ * The one advisory line a command owes its caller when it spelled the framework operator with a
+ * deprecated sigil, or `null` when the sigil is canonical (or not a framework sigil at all).
+ *
+ * Pure so the wording lives beside the registry that names the spellings. `frameworkId` is the id
+ * as typed, so the line shows the exact replacement to paste.
+ */
+export function deprecatedFrameworkSigilNote(sigil: string, frameworkId: string): string | null {
+  if (!DEPRECATED_FRAMEWORK_SIGILS.includes(sigil)) return null;
+  return (
+    `Deprecated spelling: \`${sigil}${frameworkId}\` still works, but the framework operator is ` +
+    `\`${FRAMEWORK_SIGIL}${frameworkId}\`; \`${sigil}\` is removed at the next major.`
+  );
+}

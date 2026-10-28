@@ -41,7 +41,7 @@ import { getDefaultStyleDefinitionLoader } from '#modules/formatting/core/style-
  * One framework's tool guidance, with the name it is shown under.
  *
  * `label` is the framework's `type` (e.g. `CAGEERF`, `ReACT`) — the spelling a client types after
- * `@`/`^` — so the server, not each framework's prose, decides how the guidance is introduced.
+ * `^` — so the server, not each framework's prose, decides how the guidance is introduced.
  */
 export interface FrameworkToolOverlay {
   label: string;

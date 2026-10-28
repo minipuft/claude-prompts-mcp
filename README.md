@@ -176,7 +176,7 @@ Four primitives you author, version, and compose. The bundled set ships 52 promp
 | --------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
 | Prompt template | `>>`   | Versioned YAML with named arguments; hot-reload on save                                                                                                                                                                  | `>>review target:'src/auth/'`                |
 | Gate            | `::`   | Validation criterion the AI checks its own output against; blocking or advisory; can shell-verify                                                                                                                        | `:: 'cite sources'` · `:: verify:"npm test"` |
-| Framework       | `@`    | Reasoning framework that shapes how the AI works through the problem; plug in your own or use built-ins like `@ReACT`, `@5W1H`, or the project's own `@CAGEERF` scaffold ([Frameworks Guide](docs/guides/frameworks.md)) | `@ReACT` · `@your_framework`                 |
+| Framework       | `^`    | Reasoning framework that shapes how the AI works through the problem; plug in your own or use built-ins like `^ReACT`, `^5W1H`, or the project's own `^CAGEERF` scaffold ([Frameworks Guide](docs/guides/frameworks.md)) | `^ReACT` · `^your_framework`                 |
 | Style           | `#`    | Output formatting and tone                                                                                                                                                                                               | `#analytical` · `#procedural`                |
 
 Prompts, gates, and frameworks are managed through the `resource_manager` tool. Your AI creates, edits, versions, and rolls them back through MCP, no file editing required. Styles are managed with the bundled `cpm` CLI. Failed gate checks can retry automatically or pause for your decision ([Gates Guide](docs/guides/gates.md)). Build your first primitive: [Prompt Authoring Tutorial](docs/tutorials/build-first-prompt.md).
@@ -204,7 +204,7 @@ Most users invoke these via `>>` syntax in conversation; hooks construct the act
 <!-- illustrative-prompts: security_scan implementation -->
 
 ```
->>review target:'src/auth/' @ReACT :: 'cite sources'
+>>review target:'src/auth/' ^ReACT :: 'cite sources'
   --> security_scan :: verify:"npm test"
   ==> implementation
 ```
@@ -212,7 +212,7 @@ Most users invoke these via `>>` syntax in conversation; hooks construct the act
 Read top-to-bottom:
 
 - `>>review target:'src/auth/'` runs the `review` prompt against your auth folder.
-- `@ReACT` overlays the ReACT reasoning framework on this step.
+- `^ReACT` overlays the ReACT reasoning framework on this step.
 - `:: 'cite sources'` adds a gate the AI must satisfy (cite sources, or retry).
 - `--> security_scan :: verify:"npm test"` chains to step 2, which must pass `npm test` before producing output.
 - `==> implementation` hands the final step off to a client-native agent (a subagent in Claude Code).
@@ -223,14 +223,14 @@ Validation runs between steps, not only at the end. For the full operator gramma
 
 <div align="center">
 
-<video src="https://github.com/user-attachments/assets/1e07e626-de22-436d-b07d-8b282f2a5e13" width="720" autoplay loop muted playsinline controls title="One Claude Code session, with a side panel showing what the hooks and the server do: npm test fails, >>status is routed by the hook, resource_manager creates a prompt, a two-step chain runs it under @ReACT, the server runs npm test as the gate, and the review step approves the result"></video>
+<video src="https://github.com/user-attachments/assets/3123e6c5-e890-4e03-8e35-ebfc0467125b" width="720" autoplay loop muted playsinline controls title="One Claude Code session, with a side panel showing what the hooks and the server do: npm test fails, >>status is routed by the hook, resource_manager creates a prompt, a two-step chain runs it under ^ReACT, the server runs npm test as the gate, and the review step approves the result"></video>
 
 <details>
 <summary>No video player here? Open the GIF.</summary>
-<img src="assets/demos/hero-demo.gif" alt="One Claude Code session, with a side panel showing what the hooks and the server do: npm test fails, >>status is routed by the hook, resource_manager creates a prompt, a two-step chain runs it under @ReACT, the server runs npm test as the gate, and the review step approves the result" width="720" />
+<img src="assets/demos/hero-demo.gif" alt="One Claude Code session, with a side panel showing what the hooks and the server do: npm test fails, >>status is routed by the hook, resource_manager creates a prompt, a two-step chain runs it under ^ReACT, the server runs npm test as the gate, and the review step approves the result" width="720" />
 </details>
 
-<sub>Recorded live in Claude Code on Sonnet, sped up, nothing re-ordered or retyped. The side panel is a second recording of the same moments, shown while the session pauses: what each hook did and the server's own <code>npm test</code> run for the gate. The tests are red, the AI authors a prompt through <code>resource_manager</code>, a two-step chain implements under <code>@ReACT</code>, the <code>verify:"npm test"</code> gate passes, and <code>review</code> approves. Replay the source yourself: <code>asciinema play assets/demos/src/hero/hero.cast</code> (recorder and storyboard beside it).</sub>
+<sub>Recorded live in Claude Code on Sonnet, sped up, nothing re-ordered or retyped. The side panel is a second recording of the same moments, shown while the session pauses: what each hook did and the server's own <code>npm test</code> run for the gate. The tests are red, the AI authors a prompt through <code>resource_manager</code>, a two-step chain implements under <code>^ReACT</code>, the <code>verify:"npm test"</code> gate passes, and <code>review</code> approves. Replay the source yourself: <code>asciinema play assets/demos/src/hero/hero.cast</code> (recorder and storyboard beside it).</sub>
 
 </div>
 

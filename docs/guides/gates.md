@@ -513,7 +513,7 @@ Gates can be combined with other operators:
 
 ```bash
 # Framework + Gate
-@CAGEERF >>analyze :: "comprehensive analysis"
+^CAGEERF >>analyze :: "comprehensive analysis"
 
 # Chain + Gate (gate applies to final step)
 >>research --> >>analyze :: "cite sources"

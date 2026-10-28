@@ -200,9 +200,10 @@ export class PromptExecutor {
     this.gateManager = gateManager; // Store for registry-based gate selection
     this.responseFormatter = new ResponseFormatter();
     this.executionPlanner = new ExecutionPlanner(logger);
-    // `@id` detection asks the framework manager on every parse, so a framework created, updated
-    // or deleted while the server runs is recognized the same moment the rest of the server sees
-    // it. Until the manager arrives, every `@word` is treated as a framework operator.
+    // `^id` detection (and the deprecated `@id` spelling) asks the framework manager on every
+    // parse, so a framework created, updated or deleted while the server runs is recognized the
+    // same moment the rest of the server sees it. Until the manager arrives, every `^word` or
+    // `@word` is treated as a framework operator.
     this.parsingSystem = createParsingSystem(
       logger,
       (normalizedId) =>

@@ -109,7 +109,7 @@ export class FrameworkValidator {
       : 'none registered';
 
     const message = sanitized
-      ? `Framework '@${sanitized}' not found. Available frameworks: ${availableList}. ` +
+      ? `Framework '^${sanitized}' not found. Available frameworks: ${availableList}. ` +
         `Use system_control({ action: "framework", operation: "list" }) for details.`
       : `Framework identifier is required. Available frameworks: ${availableList}. ` +
         `Use system_control({ action: "framework", operation: "list" }) for details.`;
@@ -122,7 +122,7 @@ export class FrameworkValidator {
     options: FrameworkValidationOptions
   ): ValidationError {
     const message =
-      `Framework '@${frameworkId}' is currently disabled. ` +
+      `Framework '^${frameworkId}' is currently disabled. ` +
       `Use system_control({ action: "framework", operation: "list" }) to review enabled frameworks or re-enable it before retrying.`;
 
     const context = this.buildErrorContext(frameworkId, options);
@@ -141,7 +141,7 @@ export class FrameworkValidator {
     const availableFrameworks = this.frameworkManager.getFrameworkIds(true);
     const defaultSuggestions = [
       'Run system_control({ action: "framework", operation: "list" }) to review available frameworks',
-      'Ensure the framework prefix matches the registry entry (e.g., @CAGEERF)',
+      'Ensure the framework prefix matches the registry entry (e.g., ^CAGEERF)',
     ];
 
     return {

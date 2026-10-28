@@ -1,7 +1,7 @@
 {
   "tool": "prompt_engine",
   "version": 1,
-  "summary": "Execute prompts/chains with tool checks and bound semantic report acceptance. >>prompt_id | * N | -->chain | :: verify:\"cmd\" :full loop:true | @Framework | %modifiers",
+  "summary": "Execute prompts/chains with tool checks and bound semantic report acceptance. >>prompt_id | * N | -->chain | :: verify:\"cmd\" :full loop:true | ^Framework | %modifiers",
   "toolDescription": {
     "description": "🚀 PROMPT ENGINE: Execute prompts with framework guidance, tool checks and bound semantic reports.\n\nSYNTAX:\n- >>prompt_id key:\"value\"              # Run prompt with arguments\n- >>prompt * N                         # Repeat N times (chain shorthand)\n- >>step1 --> >>step2                  # Chain multiple steps\n- ^Framework >>prompt                  # Apply framework (CAGEERF, ReACT, etc.); @ deprecated\n- :: verify:\"npm test\" :full          # Shell validation (5 attempts, 5min)\n- :: verify:\"cmd\" loop:true            # Autonomous until pass\n\nREPETITION:\n- * N unfolds to chain with SAME args (>>p arg * 3 = >>p arg --> >>p arg --> >>p arg)\n- For DIFFERENT args per step, use explicit chain: >>p arg1 --> >>p arg2\n- Each step receives previous output via context propagation\n\nPRESETS: :fast (1 try), :full (5 tries), :extended (10 tries)\nMODIFIERS (one per command): %clean (no injection/gates), %lean (gates only), %judge (preview), %framework (force framework, no gates)\n",
     "shortDescription": "Execute prompts with validation and framework",
@@ -27,7 +27,7 @@
         "APPEND (--> as the FIRST token, with chain_id): '--> >>next_step' extends the RUNNING chain named by chain_id instead of starting a new one. This is the only form that may be sent together with chain_id; 'chain_id' + '>>x' is still rejected. It is the string spelling of remainder:{mode:'append'} and takes the same path — same admissibility (a blocking unknown must be open), same validation, same caps, same recorded provenance. '==>' inside an append fragment delegates the step that FOLLOWS it, exactly as in a full chain. '::' is refused there: a raw gate token is resolved against the gate registry at parse time, which an appended node has already passed, so bind the gate with the 'gates' parameter and its target_step_id instead."
       ],
       "examples": [
-        "@CAGEERF #analytical >>analyze topic:'metrics' --> >>report :: 'cite sources'",
+        "^CAGEERF #analytical >>analyze topic:'metrics' --> >>report :: 'cite sources'",
         ">>fix-bug :: verify:'npm test' :full loop:true",
         ">>brainstorm * 5 topic:'product ideas'",
         ">>strategic_implement * 3 plan_path:'./plan.md'",

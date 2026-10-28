@@ -23,7 +23,7 @@ Input Command
 
 | Strategy     | Confidence | Handles                                          | Detection                   |
 | ------------ | ---------- | ------------------------------------------------ | --------------------------- |
-| **Symbolic** | 0.97       | Operators: `-->`, `::`, `@`, `+`, `?`, `#`, `*N` | Regex for operator patterns |
+| **Symbolic** | 0.97       | Operators: `-->`, `::`, `^`, `+`, `?`, `#`, `*N` | Regex for operator patterns |
 | **Simple**   | 0.95       | `>>prompt args` or `prompt args`                 | Starts with prompt name     |
 | **JSON**     | 0.90       | `{"prompt": "...", "args": {...}}`               | Starts with `{`             |
 
@@ -59,6 +59,8 @@ const hasConditionalOperator = /\s*\?\s*["'](.+?)["']\s*:\s*(?:>>)?\s*([A-Za-z0-
 | Repetition  | `*N`        | `/\s+\*\s*(\d+)/`                                          | Implemented | `>>prompt *3`          |
 | Parallel    | `+`         | `/\s*\+\s*/`                                               | Reserved    | `>>a + >>b + >>c`      |
 | Conditional | `?`         | `/\s*\?\s*["'](.+?)["']\s*:\s*(?:>>)?\s*([A-Za-z0-9_-]+)/` | Reserved    | `? "cond" : >>branch`  |
+
+**`^` is the framework operator; `@` is a deprecated spelling that still parses.** `@` collides with the file-mention trigger in the harnesses that host this server, so the registry (`operators.json`, `deprecatedSymbols`) names `^` canonical and `@` an alias. A command that spells the framework with `@` runs unchanged and its reply carries one advisory line naming the `^` spelling (`OperatorValidationStage` records it, `ResponseAssembler` renders it); `@` is removed at the next major. A `^word` or `@word` that names no registered framework (`@docs/`, `@mention`) stays literal text.
 
 ### Reserved vs Implemented
 

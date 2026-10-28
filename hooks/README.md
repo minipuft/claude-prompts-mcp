@@ -45,7 +45,7 @@ contract.
 
 ### `prompt-suggest.py` (UserPromptSubmit)
 
-Triggers on every user message. Detects `>>prompt` syntax and suggests the correct `prompt_engine` call.
+Triggers on every user message. Detects `>>prompt` syntax and suggests the correct `prompt_engine` call. The framework operator is `^` (`^CAGEERF >>analyze`); the hook still detects `@` as a deprecated alias and renders either as `^`.
 
 Annotations preserve whole slash-qualified references and typed case; display resolves through
 the authored catalog ID. Quoted markers and delimiters do not create invocations or chain previews.
@@ -57,7 +57,7 @@ routed to `prompt_engine` like a known prompt, never reported as unknown; the li
 **Output:**
 
 ```text
-[>>] diagnose | scope:"auth" [chain:3steps, @CAGEERF]
+[>>] diagnose | scope:"auth" [chain:3steps, ^CAGEERF]
 [Chain Workflow] 3 steps:
   1. initial_scan: Initial Scan (1/3)
   2. deep_dive: Deep Dive (2/3)

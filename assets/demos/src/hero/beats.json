@@ -49,7 +49,7 @@
       "hold": 5.0,
       "freeze": true,
       "spread": 3.2,
-      "caption": "hook: 2 steps \u00b7 @ReACT \u00b7 shell gate",
+      "caption": "hook: 2 steps \u00b7 ^ReACT \u00b7 shell gate",
       "highlights": [
         {
           "track": "session",
@@ -89,7 +89,7 @@
         },
         {
           "track": "trace",
-          "match": "@ReACT",
+          "match": "\\^ReACT",
           "text": true,
           "kind": "framework"
         },
@@ -137,13 +137,13 @@
       "highlights": [
         {
           "track": "session",
-          "match": "failed the gate",
-          "rows": 2,
+          "match": "Gate failure:|failed the gate",
+          "rows": 3,
           "kind": "gate"
         },
         {
           "track": "session",
-          "match": "verdict was approve|Review (verdict|notes)|[Aa]pprove",
+          "match": "Review step:|verdict was approve|Review (verdict|notes)",
           "kind": "prompt"
         },
         {

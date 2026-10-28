@@ -1,10 +1,13 @@
 // @lifecycle canonical - Shared helpers for command parsing normalization.
-import { OPERATOR_PATTERNS } from './operator-patterns.js';
+import { FRAMEWORK_SIGIL_CLASS, OPERATOR_PATTERNS } from './operator-patterns.js';
 
 import { isAcceptedPromptReference } from '#shared/utils/resource-ids.js';
 
 /** Framework operator core match, from the operators.json registry (SSOT). */
 const FRAMEWORK_OPERATOR_PATTERN = OPERATOR_PATTERNS.framework.pattern;
+
+/** A leading `>>` that precedes a framework operator (`>> ^CAGEERF …`), sigils from the registry. */
+const FRAMEWORK_PREFIX_AFTER_MARKER = new RegExp(`^>>\\s*${FRAMEWORK_SIGIL_CLASS}`);
 
 export const PROMPT_INVOCATION_MARKER_PATTERN = /(?<!>)>>/g;
 export const PROMPT_SELECTOR_PREFIX_PATTERN = /^\s*(?:>>|\/)?\s*/;
@@ -72,8 +75,7 @@ export function normalizeSymbolicPrefixes(command: string): {
     });
   }
 
-  const frameworkPrefixPattern = /^>>\s*@/;
-  if (frameworkPrefixPattern.test(normalized)) {
+  if (FRAMEWORK_PREFIX_AFTER_MARKER.test(normalized)) {
     normalized = normalized.replace(/^>>\s*/, '');
     hadPrefixes = true;
   }
@@ -146,19 +148,21 @@ export function isPositionInsideQuotes(str: string, position: number): boolean {
  * Result of finding a framework operator outside quotes.
  */
 export interface FrameworkOperatorMatch {
-  /** The framework ID (without @) */
+  /** The framework ID (without its sigil) */
   frameworkId: string;
+  /** The sigil as typed: the canonical `^`, or a deprecated spelling the registry still accepts */
+  sigil: string;
   /** Position in the string where the match starts */
   position: number;
-  /** The full matched string including @ and any leading whitespace */
+  /** The full matched string including the sigil and any leading whitespace */
   fullMatch: string;
 }
 
 /**
- * Find a framework operator (@word) outside of quoted strings.
+ * Find a framework operator (`^word`, or the deprecated `@word`) outside of quoted strings.
  * Returns the first match found, or null if no framework operator exists outside quotes.
  *
- * Automatically skips @word patterns that look like file paths or references:
+ * Automatically skips sigil-word patterns that look like file paths or references:
  * - Contains '/' (e.g., @docs/path, @src/file)
  * - Contains '.' (e.g., @file.md, @config.json)
  *
@@ -203,6 +207,7 @@ export function findFrameworkOperatorOutsideQuotes(str: string): FrameworkOperat
 
     return {
       frameworkId,
+      sigil: match[0].trimStart().charAt(0),
       position,
       fullMatch: match[0],
     };

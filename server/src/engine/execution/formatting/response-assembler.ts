@@ -152,7 +152,10 @@ export class ResponseAssembler {
       sections.push(context.gateInstructions);
     }
 
-    sections.push(...this.buildAdvisoryWarnings(context));
+    sections.push(
+      ...this.buildAdvisoryWarnings(context),
+      ...this.buildOperatorSpellingNote(context)
+    );
 
     // Gate review CTA (only when gate content active) or final completion
     const gateReviewCTA = gateActive ? this.buildGateReviewCTA(context) : null;
@@ -219,7 +222,10 @@ export class ResponseAssembler {
       sections.push(context.gateInstructions);
     }
 
-    sections.push(...this.buildAdvisoryWarnings(context));
+    sections.push(
+      ...this.buildAdvisoryWarnings(context),
+      ...this.buildOperatorSpellingNote(context)
+    );
 
     // Declared section headers (Tier 2.5, OQ-1) — same block the chain path renders via
     // buildResponseFormatSection. A gated single prompt (explicit `gates`, a `gate` operator, or
@@ -1317,6 +1323,15 @@ export class ResponseAssembler {
   }
 
   /**
+   * The advisory line for a framework operator typed with a deprecated sigil. It reports the
+   * command itself, not a gate, so it renders whether or not gate content is suppressed.
+   */
+  private buildOperatorSpellingNote(context: PromptRequestContext): string[] {
+    const note = context.state.framework.operatorSpellingNote;
+    return note === undefined ? [] : [note];
+  }
+
+  /**
    * Central gate content suppression check.
    * Returns true when gate-related content (CTAs, validation info,
    * instructions, advisory warnings) should NOT appear in the response.
@@ -1559,7 +1574,7 @@ export class ResponseAssembler {
     if (fwDecision?.source === 'operator' && fwDecision.frameworkId != null) {
       return `^${fwDecision.frameworkId}`;
     }
-    // Fallback: show @FRAMEWORK from parser when user typed it,
+    // Fallback: show ^FRAMEWORK from parser when user typed it,
     // even if decision authority disabled it (e.g., implicit %clean on script-tool prompts)
     const operatorOverride = context.parsedCommand?.executionPlan?.frameworkOverride;
     return operatorOverride ? `^${operatorOverride.toLowerCase()}` : null;
