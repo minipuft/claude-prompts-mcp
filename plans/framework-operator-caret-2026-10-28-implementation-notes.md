@@ -28,4 +28,8 @@ tags: [parsers, hooks, docs, contracts]
 ## 2026-10-28 — row 2.1 take recorded
 
 - Take 5 (sonnet) against the dist built from `62371444` with the hook at `d910e294`: the trace pane prints `^ReACT` on the typed line, the operators line (`chain (2 steps) | ^ReACT | gates: ver…`) and the gate-enforce line; no `@ReACT` anywhere in either cast. Again a real retry: `failed · exit 1` on the first answer, `passed · exit 0` on the second, step 2 opened in that call; the model ran no tests and narrated it ("Gate failure: The first npm test run failed … I fixed both and the second run passed. I wrote the first version without reading the tests", "The review approved the change", "I didn't run the tests myself"). Markers (real s): open 0.0 · status 6.8 · author 14.4 · run 23.6 · verdict 38.4 · complete 59.5 · end 64.5. Final-scene highlights re-matched to the new wording; rendering.
+
+## 2026-10-28 — publish ruling
+
+- Owner ruling 2026-10-28: approve the cut, split the branch into one PR per outcome and open them; the framework removal (RADIANT, liquescent) follows immediately after the split as its own slice. `publish: push`; merging is the owner's call on review.
   (none yet)

@@ -3,7 +3,7 @@ title: "`^` is the framework operator; `@` is a deprecated alias"
 date: 2026-10-28
 status: active
 type: plan
-publish: none
+publish: push · owner ruling 2026-10-28 ("the cut and PR split"): open the PR, no merge until review
 tags: [parsers, hooks, docs, contracts]
 ---
 
