@@ -20,17 +20,11 @@ import {
 
 import type { FrameworkGuide } from '../../../../src/engine/frameworks/types/index.js';
 
-// The 7 frameworks the phase-guard declaration contract plan measured as
-// declaring `guards:` in phases.yaml (plans/phase-guard-declaration-contract-2026-08-15.md).
-const GUARDED_BUNDLED_FRAMEWORK_IDS = [
-  '5w1h',
-  'cageerf',
-  'focus',
-  'liquescent',
-  'radiant',
-  'react',
-  'scamper',
-];
+// The 5 bundled frameworks that declare `guards:` in phases.yaml. The phase-guard declaration
+// contract plan (plans/phase-guard-declaration-contract-2026-08-15.md) measured 7; `liquescent`
+// and `radiant` have since left the bundle for cloudySky's project workspace, where
+// `cpm validate --all` covers them. `verify` is the sixth shipped framework and declares none.
+const GUARDED_BUNDLED_FRAMEWORK_IDS = ['5w1h', 'cageerf', 'focus', 'react', 'scamper'];
 
 describe('YAML Framework Loading', () => {
   beforeAll(() => {
@@ -221,7 +215,7 @@ describe('YAML Framework Loading', () => {
       expect(definition?.id).toBe('guarded-with-header');
     });
 
-    it('loads all 7 bundled guarded frameworks clean with the phases validator live', () => {
+    it('loads all 5 bundled guarded frameworks clean with the phases validator live', () => {
       resetDefaultRuntimeLoader();
       const loader = getDefaultRuntimeLoader();
       const ids = loader.discoverFrameworks();

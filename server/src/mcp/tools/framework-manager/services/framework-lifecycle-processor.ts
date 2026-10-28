@@ -814,7 +814,7 @@ export class FrameworkLifecycleProcessor {
    * may proceed. Checked before anything is removed.
    *
    * A framework that ships with the package. This asked a hardcoded four-id literal until
-   * 2026-09-07 while eight ship, so `focus`, `liquescent`, `radiant` and `verify` fell through to
+   * 2026-09-07 while eight shipped (six ship since 2026-10-28), so `focus`, `liquescent`, `radiant` and `verify` fell through to
    * `fs.rm` and were deleted FROM THE BUNDLED TREE in a default install. The bundled-tree check in
    * `handleDelete` could not cover them, because it sits inside `if (!existsSync(frameworkDir))`
    * and those directories exist at the configured root. The owner of framework validity answers

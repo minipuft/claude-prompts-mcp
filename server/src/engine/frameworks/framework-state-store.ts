@@ -263,10 +263,12 @@ export class FrameworkStateStore extends EventEmitter {
       // Validated against the frameworks the server actually has, workspace ones included.
       const persistedFramework = this.getOrCreateScopedState().activeFramework;
       if (frameworkManager.getFramework(persistedFramework) === undefined) {
+        // "Active", not "Persisted": a scope with no row starts on `frameworks.defaultFramework`,
+        // so this fires for a config naming an unregistered default with nothing persisted at all.
         await this.selectConfiguredDefault(
           frameworkManager,
           undefined,
-          `Persisted framework '${persistedFramework}' not found`
+          `Active framework '${persistedFramework}' not found`
         );
       }
 

@@ -83,7 +83,7 @@ export class FrameworkDraftValidator {
    * which rolled the files back and reported only that the state was invalid. The two layers
    * disagreed about the same payload, and the operator learned it from a rollback.
    *
-   * The verifier is not the deviation: all 8 shipped frameworks satisfy it, and
+   * The verifier is not the deviation: all six shipped frameworks satisfy it, and
    * `RuntimeFrameworkLoader` (`validateOnLoad` defaults true) runs the same schema at load, so
    * relaxing the verifier would only move the rejection to registration. What was wrong is that
    * this method hard-required a field whose shape it declined to check.

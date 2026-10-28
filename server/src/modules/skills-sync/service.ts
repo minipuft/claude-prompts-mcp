@@ -796,7 +796,7 @@ async function readOptionalFile(filePath: string): Promise<string | null> {
  *
  * Two declarations reach the same conclusion and BOTH are needed. `gate_type: 'framework'`
  * catches `framework-compliance`. `framework_context` catches `creed-fidelity`, which declares
- * `gate_type: category` while naming RADIANT. `isGateActiveForContext` now reads an ABSENT
+ * `gate_type: category` while naming RADIANT (a framework since removed from the bundle; kept as the measured example of the past defect). `isGateActiveForContext` now reads an ABSENT
  * framework as a mismatch for every gate_type, so a runtime selection is already correct; the
  * export still has to decide for itself, because it never builds an activation context at all,
  * and a skill that has no RADIANT anywhere cannot honour the gate.

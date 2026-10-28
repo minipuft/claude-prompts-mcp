@@ -118,7 +118,7 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 //     "dynamicToolDescriptions": true,
 
 //     — Framework a scope falls back to when it has no persisted state row. Set per project to
-//       pin a repo to one framework (e.g. 'RADIANT' for design work). A runtime framework
+//       pin a repo to one framework (e.g. 'SCAMPER' for ideation work). A runtime framework
 //       switch overrides this for that scope and persists.
 //     — default: "CAGEERF"
 //     "defaultFramework": "CAGEERF",

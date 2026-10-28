@@ -99,7 +99,7 @@ Resources are **4-30x more token efficient** than equivalent tool calls:
 | ----------------- | ------------------- | ----------- | ------- |
 | List 52 prompts   | ~4500 chars         | ~2800 chars | **38%** |
 | List 26 gates     | ~600 chars          | ~400 chars  | **33%** |
-| List 8 frameworks | ~350 chars          | ~200 chars  | **43%** |
+| List 6 frameworks | ~350 chars          | ~200 chars  | **43%** |
 | Pipeline metrics  | ~15KB (raw samples) | ~500 bytes  | **97%** |
 
 </details>

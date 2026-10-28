@@ -715,7 +715,7 @@ export class ChainOperatorExecutor {
     }
 
     // Framework display names are inconsistent about the word: "C.A.G.E.E.R.F Framework" and
-    // "SCAMPER Framework" carry it, "LIQUESCENT Creative Flow" does not. Appending it
+    // "SCAMPER Framework" carry it, "V.E.R.I.F.Y Resume Audit" does not. Appending it
     // unconditionally reads "… Framework Framework Active"; the previous literal hardcoded that
     // doubling with no name at all.
     const heading = /\bframeworks?\b/i.test(frameworkName)

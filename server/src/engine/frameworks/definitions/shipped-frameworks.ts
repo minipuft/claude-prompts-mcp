@@ -5,9 +5,11 @@
  *
  * WHY THIS EXISTS. The same four ids were written out by hand in two places — the registry's
  * built-in load list and the MCP deletion guard — and both had gone stale against a tree that
- * ships eight. Measured 2026-09-07: `resources/frameworks/` holds `5w1h`, `cageerf`, `focus`,
+ * shipped eight. Measured 2026-09-07: `resources/frameworks/` held `5w1h`, `cageerf`, `focus`,
  * `liquescent`, `radiant`, `react`, `scamper`, `verify`, while both literals named only the first
- * four in load order. Two consequences, and the second is destructive:
+ * four in load order. The package now ships six — `liquescent` and `radiant` are CloudySky-specific
+ * and live in that project's `.claude-prompts/resources/frameworks/` — and the shape of the
+ * failure is unchanged. Two consequences, and the second is destructive:
  *
  *   · `focus`, `liquescent`, `radiant` and `verify` loaded through the discovery pass rather than
  *     the built-in pass, so every surface reading `isBuiltIn` reported them as operator-created.
@@ -31,8 +33,6 @@ export const SHIPPED_FRAMEWORK_IDS = [
   '5w1h',
   'cageerf',
   'focus',
-  'liquescent',
-  'radiant',
   'react',
   'scamper',
   'verify',
