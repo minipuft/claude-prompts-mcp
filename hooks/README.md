@@ -50,6 +50,10 @@ Triggers on every user message. Detects `>>prompt` syntax and suggests the corre
 Annotations preserve whole slash-qualified references and typed case; display resolves through
 the authored catalog ID. Quoted markers and delimiters do not create invocations or chain previews.
 
+A server built-in (`>>status`, `>>help`, `>>listprompts`, `>>gates`, …) has no catalog row and is
+routed to `prompt_engine` like a known prompt, never reported as unknown; the list lives in
+`lib/builtin_commands.py` and `tests/test_builtin_commands_parity.py` pins it to the server parser.
+
 **Output:**
 
 ```text
