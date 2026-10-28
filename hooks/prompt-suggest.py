@@ -24,6 +24,7 @@ from typing import cast
 # Add hooks lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
+from builtin_commands import is_builtin_command
 from cache_manager import (
     ArgumentInfo,
     PromptInfo,
@@ -661,8 +662,10 @@ def main():
         prompt_info = get_prompt_by_id(invoked_prompt) if invoked_prompt else None
 
         # Early return for unknown prompts: provide fuzzy suggestions without tool call
-        # This saves tokens by avoiding a failing server round-trip
-        if invoked_prompt and prompt_info is None:
+        # This saves tokens by avoiding a failing server round-trip. A built-in
+        # (`>>status`, `>>help`, ...) has no catalog row and is NOT unknown: the
+        # server answers it, so it routes like a known prompt.
+        if invoked_prompt and prompt_info is None and not is_builtin_command(invoked_prompt):
             suggestions = fuzzy_match_prompt_id(invoked_prompt)
             message = format_unknown_prompt_message(invoked_prompt, suggestions)
 

@@ -9,6 +9,7 @@ import {
 import { declaresFrameworkSections } from '../../frameworks/declared-sections.js';
 import { JUDGE_OUTPUT_PLACEHOLDER } from '../../gates/core/review-utils.js';
 import { liveNodeIds } from '../../gates/services/run-step-view.js';
+import { formatGateShellVerifySection } from '../../gates/shell/shell-verify-message-formatter.js';
 import { SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from '../../gates/shell/types.js';
 import { handoffNodeToken } from '../delegation/handoff-contract.js';
 import { DelegationRenderer } from '../delegation/renderer.js';
@@ -135,7 +136,7 @@ export class ResponseAssembler {
     const sections: string[] = [];
     const gateActive = !this.isGateContentSuppressed(context);
 
-    sections.push(this.extractBaseContent(context));
+    sections.push(this.extractBaseContent(context), ...this.buildShellVerifiedSections(context));
 
     const confirmationRequired = context.state.scripts?.confirmationRequired;
     if (confirmationRequired) {
@@ -1334,6 +1335,23 @@ export class ResponseAssembler {
   /** Checks injection control setting for gate guidance (not suppression — caller handles that). */
   private isGateGuidanceInjectionEnabled(context: PromptRequestContext): boolean {
     return context.state.injection?.gateGuidance?.inject !== false;
+  }
+
+  /**
+   * The `:: verify:` check that passed on this call, under the heading a gate's check uses. A
+   * failing check replies with its own feedback and never reaches the assembler, so a passing run
+   * left nothing for the caller to read: the reply was the next step, and whether the command ran
+   * was visible only in the server log.
+   */
+  private buildShellVerifiedSections(context: PromptRequestContext): string[] {
+    const passed = (context.state.gates.shellVerifyResults ?? []).filter((result) => result.passed);
+    return passed.length === 0
+      ? []
+      : [
+          formatGateShellVerifySection(
+            passed.map((result) => ({ ...result, gateId: 'verify', gateName: ':: verify' }))
+          ),
+        ];
   }
 
   private extractBaseContent(context: PromptRequestContext): string {

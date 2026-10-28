@@ -260,10 +260,10 @@ the guidance in a skill matches what `>>id` would enforce:
 | Declares no activation rules at all                                       | Never — opt-in only, same as at runtime           |
 | Requires a framework (`gate_type: framework`, or any `framework_context`) | **Never**                                         |
 
-The last row is the one that differs from runtime. The engine reads an absent framework as
-_unconstrained_, which is right for a live execution where a framework may yet be selected, but
-wrong for a static artifact: an exported skill has no framework, so a gate that only makes sense
-under one would ship guidance the reader cannot act on.
+The engine reads an absent framework as a mismatch for any gate that declares `framework_context`,
+so a runtime selection already withholds such a gate when no framework applies. Export never
+builds that context at all, and an exported skill has no framework, so it decides for itself: a
+gate that only makes sense under one would ship guidance the reader cannot act on.
 
 **How a carried gate renders.** Once a gate is included, export splits it the same way the runtime
 does: a **check** (a gate with a `shell_verify` or `script_tool` pass criterion) renders under

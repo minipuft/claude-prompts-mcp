@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A chain step's inline gates run whether or not its prompt binds a script tool.** A step that declared inline gates was planned `clean` when its prompt was a script tool, and the step ran without them; the clean default now applies only to a step that declares no gate, and a step plan carrying both is refused by name.
+- **A step answered with its verdict in one call advances in that call when its shell gate passes.** Sending `user_response` and `gate_verdict` together on a step with `:: verify:"..."` used to open a second review on the same step after the check passed and ask for the verdict again; the reply now advances to the next step and shows the check's result under `Shell Verification Results`. A failing check still refuses the verdict, and a check an operator control refused (an unset `MCP_SHELL_VERIFY_ALLOWLIST`, a disallowed directory) is recorded with that refusal, not as an exit code.
+- **A gate that names a framework in `activation.framework_context` does not activate without that framework, on every gate type.** A category gate restricted to one framework attached itself to steps running under another, or under none, because the rule was only enforced for `gate_type: framework` and a chain prompt's own gates were resolved without the active framework.
 - Aborting a run clears its owned stored verification; cleanup failures report an error and can be retried with another abort while cancellation remains durable.
 - Nested prompt commands and resume tokens preserve the full ID, quoted JSON arguments retain operator characters, and stale numbered tokens refuse instead of selecting another run. Appending updates progress immediately, while a blocking-unknown resume retains captured work and ordinary gate reviews.
 - First resource writes honor the configured resource directory even when its prompt/gate folders do not yet exist.

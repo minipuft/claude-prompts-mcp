@@ -1,4 +1,5 @@
 // @lifecycle canonical - Processes gate verdicts, actions, and hook events for chain sessions.
+import { gradeReviewChecks } from './gate-review-grading.js';
 import {
   describeRefusal,
   describeMissingReview,
@@ -31,10 +32,7 @@ import {
   resolvePinnedSemanticContext,
   resolveSemanticTargetResponseAdmission,
 } from '../../execution/pipeline/decisions/gates/semantic-review-context.js';
-import {
-  hasStructuralFinding,
-  selectToolReviewGateIds,
-} from '../../execution/pipeline/decisions/gates/structural-review-composition.js';
+import { hasStructuralFinding } from '../../execution/pipeline/decisions/gates/structural-review-composition.js';
 import {
   isUnknownInterruptPending,
   resolveEnforcementMode,
@@ -48,12 +46,7 @@ import {
 } from '../core/semantic-evaluation.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type {
-  GateCheckResult,
-  GateReview,
-  GateReviewSemanticContext,
-  GateVerdictSummary,
-} from '#shared/types/chain-execution.js';
+import type { GateReview, GateVerdictSummary } from '#shared/types/chain-execution.js';
 import type { McpToolRequest } from '#shared/types/execution.js';
 import type {
   ChainSession,
@@ -61,7 +54,7 @@ import type {
   HookRegistryPort,
   McpNotificationEmitterPort,
 } from '#shared/types/index.js';
-import type { StateStoreOptions } from '#shared/types/persistence.js';
+import type { ReviewCheckRunner } from './gate-review-grading.js';
 import type { SemanticGateSummaryFacts } from './gate-verdict-summary.js';
 import type { PromptRequestContext, SessionContext } from '../../execution/context/index.js';
 import type { HandoffEvidenceMode } from '../../execution/delegation/handoff-contract.js';
@@ -224,12 +217,7 @@ export class GateVerdictProcessor {
      * shell executor's gate master-switch read.
      * `issuedDefinitions` is the review's own frozen authority; omitted on legacy reviews.
      */
-    private readonly runReviewChecks?: (
-      gateIds: string[],
-      agentResponse: string,
-      scope: StateStoreOptions | undefined,
-      issuedDefinitions?: GateReviewSemanticContext['definitions']
-    ) => Promise<GateCheckResult[]>
+    private readonly runReviewChecks?: ReviewCheckRunner
   ) {}
 
   /** Target admission precedes resume routing, unknown observations and direct verdict grading. */
@@ -289,18 +277,10 @@ export class GateVerdictProcessor {
     const answer = await this.answerReview(context, session, {
       event: { type: 'verdict', verdict: payload, at: Date.now() },
       trailerNodeId: nodeId,
-      grade: async (review) => {
-        const checkResults =
-          this.runReviewChecks === undefined
-            ? []
-            : await this.runReviewChecks(
-                selectToolReviewGateIds(review),
-                review.reviewedOutput ?? '',
-                context.getScopeOptions(),
-                physicalReviewDefinitionIndex(review)
-              );
-        return checkResults.length > 0 ? { ...review, checkResults } : review;
-      },
+      grade: (review) =>
+        gradeReviewChecks(this.runReviewChecks, review, review.reviewedOutput ?? '', () =>
+          context.getScopeOptions()
+        ),
     });
     if (answer.kind === 'refused') {
       return answer;
@@ -655,7 +635,7 @@ export class GateVerdictProcessor {
       context,
       session,
       verdictPayload,
-      hasResponse,
+      hasResponse ? userResponse : undefined,
       trailerNodeId
     );
     if (answer.kind === 'refused') {
@@ -720,14 +700,23 @@ export class GateVerdictProcessor {
   /**
    * Answer a verdict through the one review path. A `bare` PASS (no answer sent with it) opens
    * no review, and is refused outright when its review grades a node with no captured output.
+   *
+   * A verdict that carries its answer (`userResponse`) is graded against that answer before it
+   * lands: the review's check-tier gates run here, whether the review was just opened by this
+   * call or opened when the step rendered. Measured 2026-10-16: the opened review carried no
+   * `checkResults`, so a PASS sent with the answer in one call — the form the `Next:` footer
+   * advertises — cleared every `shell_verify` gate without running one, and a gate graded at
+   * render time (before any answer existed) judged the verdict on a stale result. A bare
+   * verdict keeps the results stage 20 recorded when the answer was captured.
    */
   private async answerVerdict(
     context: PromptRequestContext,
     session: ChainSession,
     verdict: ParsedGateVerdict,
-    hasResponse: boolean,
+    userResponse: string | undefined,
     trailerNodeId: string | undefined
   ): Promise<ReviewAnswer> {
+    const hasResponse = userResponse !== undefined;
     const gateless =
       verdict.verdict === 'FAIL'
         ? this.gatelessStepOrdinal(context, session, trailerNodeId)
@@ -745,6 +734,21 @@ export class GateVerdictProcessor {
       event: { type: 'verdict', verdict, at: Date.now() },
       answerless: !hasResponse,
       ...(trailerNodeId !== undefined ? { trailerNodeId } : {}),
+      ...(userResponse !== undefined
+        ? {
+            // An inconsistent issued authority is refused by name in adjudication, not thrown here.
+            grade: (review: GateReview) =>
+              gradeReviewChecks(
+                this.runReviewChecks,
+                review,
+                userResponse,
+                () => context.getScopeOptions(),
+                {
+                  onInconsistentAuthority: 'skip',
+                }
+              ),
+          }
+        : {}),
       ...(authority !== undefined && !bare
         ? {
             open: async (nodeId: string) => {

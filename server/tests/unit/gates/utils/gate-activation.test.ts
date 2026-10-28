@@ -86,3 +86,53 @@ describe('isGateActiveForContext — ruling B13: artifacts decide when a gate na
     ).toBe(true);
   });
 });
+
+/**
+ * A gate that declares `framework_context` requires a matching framework in the context, whatever
+ * its gate_type. Reading an absent framework as "unconstrained" attached a RADIANT-only category
+ * gate to a development run under ReACT.
+ */
+describe('isGateActiveForContext — declared framework_context requires a matching framework', () => {
+  const categoryGate = { prompt_categories: ['development'], framework_context: ['RADIANT'] };
+
+  test('a category gate declaring a framework does not activate with no framework in context', () => {
+    expect(
+      isGateActiveForContext(categoryGate, { promptCategory: 'development' }, 'category')
+    ).toBe(false);
+    expect(isGateActiveForContext(categoryGate, { promptCategory: 'development' })).toBe(false);
+    expect(
+      isGateActiveForContext(categoryGate, { promptCategory: 'development', framework: '' })
+    ).toBe(false);
+  });
+
+  test('a category gate declaring a framework does not activate under a different framework', () => {
+    expect(
+      isGateActiveForContext(
+        categoryGate,
+        { promptCategory: 'development', framework: 'REACT' },
+        'category'
+      )
+    ).toBe(false);
+  });
+
+  test('control: a category gate declaring a framework activates under that framework, any case', () => {
+    expect(
+      isGateActiveForContext(
+        categoryGate,
+        { promptCategory: 'development', framework: 'RADIANT' },
+        'category'
+      )
+    ).toBe(true);
+    expect(
+      isGateActiveForContext(categoryGate, { promptCategory: 'development', framework: 'radiant' })
+    ).toBe(true);
+  });
+
+  test('a gate declaring no framework stays unconstrained by framework', () => {
+    const gate = { prompt_categories: ['development'] };
+    expect(isGateActiveForContext(gate, { promptCategory: 'development' })).toBe(true);
+    expect(
+      isGateActiveForContext(gate, { promptCategory: 'development', framework: 'REACT' })
+    ).toBe(true);
+  });
+});

@@ -199,6 +199,7 @@ export async function runGateShellVerifications(
           ? await executor.execute(gateConfig, scope)
           : {
               passed: false,
+              refused: true,
               exitCode: -1,
               stdout: '',
               stderr:
@@ -218,6 +219,7 @@ export async function runGateShellVerifications(
         stderr: result.stderr,
         durationMs: result.durationMs,
         timedOut: result.timedOut,
+        refused: result.refused,
       });
     }
   }

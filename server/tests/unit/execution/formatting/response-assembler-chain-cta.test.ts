@@ -3,6 +3,7 @@ import { describe, expect, test } from '@jest/globals';
 import { PromptRequestContext } from '../../../../src/engine/execution/context/prompt-request-context.js';
 import { ResponseAssembler } from '../../../../src/engine/execution/formatting/response-assembler.js';
 
+import type { ShellVerifyResult } from '../../../../src/engine/gates/shell/types.js';
 import type { PendingGateReview } from '../../../../src/shared/types/chain-execution.js';
 import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
 
@@ -704,4 +705,44 @@ describe('interrupt abort projections', () => {
       expect(text).not.toMatch(/cancel(: true)?/);
     }
   );
+});
+
+describe('a passing `:: verify:` check in the chain reply (chain-step-gates row 2.3)', () => {
+  const ran = (overrides: Partial<ShellVerifyResult> = {}): ShellVerifyResult => ({
+    passed: true,
+    exitCode: 0,
+    stdout: '144 passing',
+    stderr: '',
+    durationMs: 144,
+    command: 'npm test',
+    ...overrides,
+  });
+
+  const replyAfter = (results: ShellVerifyResult[] | undefined): string => {
+    const context = createChainContext({ currentStep: 2, totalSteps: 3 });
+    if (results !== undefined) context.state.gates.shellVerifyResults = results;
+    return assembler.formatChainResponse(context, { isChainFormatting: true } as any);
+  };
+
+  test('the passed command, its exit code and duration follow the step it released', () => {
+    const reply = replyAfter([ran()]);
+
+    expect(reply).toContain('## Shell Verification Results');
+    expect(reply).toContain(':: verify — PASSED');
+    expect(reply).toContain('**Command:** `npm test`');
+    expect(reply).toContain('**Exit Code:** 0');
+    expect(reply).toContain('**Duration:** 144ms');
+    expect(reply.indexOf('Chain step output content')).toBeLessThan(
+      reply.indexOf('## Shell Verification Results')
+    );
+  });
+
+  test('control: a call that ran no check shows no result section', () => {
+    expect(replyAfter(undefined)).not.toContain('Shell Verification Results');
+    expect(replyAfter([])).not.toContain('Shell Verification Results');
+  });
+
+  test('control: a result that did not pass is not presented as one', () => {
+    expect(replyAfter([ran({ passed: false, exitCode: 1 })])).not.toContain('PASSED');
+  });
 });

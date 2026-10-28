@@ -23,6 +23,7 @@ import {
   describeReviewForRender,
   semanticReviewResume,
 } from '../decisions/gates/describe-review-for-render.js';
+import { gradedNodeLeftStanding } from '../decisions/gates/graded-node-left-standing.js';
 import { partitionReviewHints } from '../decisions/gates/review-hints.js';
 import {
   decideInterrupt,
@@ -327,7 +328,15 @@ export class StepResponseCaptureStage extends BasePipelineStage {
 
     await this.settleVerdict(context, sessionId, session, verdictResult, heldNodeId);
 
-    await this.ensurePostAdvanceReview(context, heldNodeId);
+    // A node the run did not move off asks nothing more of this call's answer: the phase guard
+    // held it (R170), or the verdict graded it and a pending `:: verify:` check held the advance.
+    const unmovedNodeId =
+      heldNodeId ??
+      gradedNodeLeftStanding(
+        verdictResult,
+        this.chainSessionStore.getSession(sessionId, scopeOptions)?.state.currentNodeId
+      );
+    await this.ensurePostAdvanceReview(context, unmovedNodeId);
 
     this.logExit({ captured: true, ...(heldNodeId !== undefined ? { heldNodeId } : {}) });
   }
@@ -909,13 +918,18 @@ export class StepResponseCaptureStage extends BasePipelineStage {
    */
   private async ensurePostAdvanceReview(
     context: PromptRequestContext,
-    heldNodeId?: string
+    unmovedNodeId?: string
   ): Promise<void> {
     this.remeasureInterrupt(context);
     const service = this.collaborators.gateEnhancementService;
-    // A held answer moved nothing: its step's review is the structural one stage 19 opens, and a
-    // gate review opened here would ask again for the verdict this call already gave.
-    if (service !== undefined && context.sessionContext !== undefined && heldNodeId === undefined) {
+    // An answer that moved nothing has no step to review after the advance: a phase-guard hold
+    // leaves its structural review to stage 19, and a held PASS is the verdict this call already
+    // gave. A gate review opened here would ask for it again.
+    if (
+      service !== undefined &&
+      context.sessionContext !== undefined &&
+      unmovedNodeId === undefined
+    ) {
       await service.ensurePostAdvanceReview(context, context.sessionContext);
     }
     this.redecideInjection(context);

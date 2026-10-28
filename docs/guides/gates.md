@@ -117,9 +117,27 @@ Criteria gates use inline text criteria that Claude evaluates against its own ou
 4. A blocking FAIL holds the step for correction within its retry budget
 5. After retry exhaustion, resolve the review with an accepted `gate_action`
 
+A step's own inline gates (`inlineGateIds`, `inlineGateCriteria`) run whether or not its prompt
+binds a script tool. The `%clean` default that script-tool prompts get is applied only to a step
+that declares no gate, and a step plan that carries both a declared gate and `clean` fails by name
+instead of running the step ungated.
+
 ## Shell Verification Gates (Ground Truth)
 
 Shell verification uses actual command execution for validation—exit code 0 = PASS, non-zero = FAIL.
+
+The command runs on the call that answers the step, against the answer it carries. Send
+`user_response` alone and the reply shows the result under `Shell Verification Results` and asks
+for the verdict; send `user_response` and `gate_verdict` in one call and the command runs before
+the verdict lands, so a `PASS` over a failing command is refused and the run stays on the step.
+A verdict sent alone is judged on the result recorded when the answer was captured. Before
+2026-10-21 the one-call form opened the review without running anything, and a `PASS` cleared a
+`shell_verify` gate that had never run.
+
+An inline `:: verify:"command"` check works the same way on a chain step: the command runs on the
+call that answers the step, a `PASS` sent with the answer grades the step once, and a passing
+command releases the step in that same call. The reply carries the passing result under `Shell
+Verification Results`, and no second review of the step opens to ask for the verdict again.
 
 ### Syntax
 

@@ -10,6 +10,8 @@
  * - Framework gates (gate_type: 'framework') use AND logic: require BOTH
  *   category AND framework to match when both are defined
  * - Regular gates use blocking logic: each rule blocks independently if not satisfied
+ * - Declared `framework_context` requires a matching framework in the context for EVERY
+ *   gate_type; an absent framework does not activate the gate
  * - A gate naming `activation.artifacts` is decided by artifacts alone (ruling B13)
  */
 
@@ -153,9 +155,7 @@ function checkRegularGateActivation(
   context: GateActivationContext
 ): boolean {
   const categoryRules = activation.prompt_categories;
-  const frameworkRules = activation.framework_context;
   const promptCategory = context.promptCategory;
-  const framework = context.framework;
 
   // Check prompt categories (empty array means no restriction)
   if (
@@ -171,19 +171,11 @@ function checkRegularGateActivation(
     }
   }
 
-  // Check framework context (empty array means no restriction)
-  // Case-insensitive comparison to handle CAGEERF vs cageerf mismatches
-  if (
-    frameworkRules !== undefined &&
-    frameworkRules.length > 0 &&
-    framework !== undefined &&
-    framework.length > 0
-  ) {
-    const normalizedFramework = framework.toUpperCase();
-    const normalizedContexts = frameworkRules.map((f) => f.toUpperCase());
-    if (!normalizedContexts.includes(normalizedFramework)) {
-      return false;
-    }
+  // Declared framework rules require a matching framework in the context, whatever the
+  // gate_type: an absent framework is a mismatch, exactly as in the framework-gate branch.
+  // Reading it as "unconstrained" attached a RADIANT-only category gate to a run under ReACT.
+  if (!checkFrameworkContext(activation, context)) {
+    return false;
   }
 
   return true;
