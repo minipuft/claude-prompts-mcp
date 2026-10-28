@@ -1,7 +1,7 @@
 ---
 title: A chain step that binds a script tool silently drops its inline gates
 date: 2026-10-15
-status: active
+status: done
 type: plan
 publish: push · owner ruling 2026-10-28 ("the cut and PR split"): open the PR, no merge until review
 tags: [gates, chains]
@@ -102,9 +102,10 @@ framework id, so a development chain's category gates were resolved with no fram
 (`chain-prompt-gates-framework.test.ts`: not attached under react or with none, attached under
 radiant). Reverting either half fails its own test. Whether a CloudySky gate (and the RADIANT /
 liquescent frameworks) belong in the bundle is an open owner question: cloudySky has no resource
-workspace to move them into — `☐` (as of 2026-10-27 · flips when the owner rules on bundle
-membership or cloudySky gets an `MCP_WORKSPACE`).
+workspace to move them into — ✓ 2026-10-28: ruled. cloudySky has had `.claude-prompts/` since 2026-10-27 (the gate lives there); the two frameworks follow in `plans/framework-bundle-membership-2026-10-28.md`, the slice after the PR split.
 
 ## Third shape (2026-10-18): a system_message update on a prompt with none writes the file but not the pointer
 
 Measured on the showcase server (dist built 2026-10-06, main checkout) across 18 of 21 prompt updates: `resource_manager update` carrying only `system_message` for a prompt that has no system message writes `system-message.md` but leaves `prompt.yaml` without `systemMessageFile:`. The server answers `post-write verification FAILED (mismatched: systemMessage)` and still saves a version bump. Repeating the call with any yaml-resident key (`category` set to its current value) rewrites the yaml and succeeds. Cause: `writesYaml` in `file-operations.ts` (~line 1010) does not force a yaml rewrite when `systemMessage` is supplied and no pointer exists yet. Receipts: `media/showcase/evidence/call-*` listed in `media/showcase/v3/studies/vocabulary-2026-10-18.md` (showcase worktree). Not checked against current main. Row to add: the update path treats a new file-backed field as a yaml write; a test plants a prompt without a system message, updates with only `system_message`, and asserts the yaml carries the pointer and the verification passes.
+
+Tracked since 2026-10-28 as row 3 of `plans/backlog/project-workspace-followups-2026-10-28.md`; not a row here.

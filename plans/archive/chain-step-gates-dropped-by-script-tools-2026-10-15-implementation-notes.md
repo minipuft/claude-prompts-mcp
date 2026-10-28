@@ -1,7 +1,7 @@
 ---
 title: Chain-step gate plan notes
 date: 2026-10-27
-status: active
+status: done
 plan: chain-step-gates-dropped-by-script-tools-2026-10-15.md
 tags: [gates, chains]
 ---
