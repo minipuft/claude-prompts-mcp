@@ -199,10 +199,16 @@ function toCheckResults(
   scriptResults: readonly GateScriptToolResult[]
 ): GateCheckResult[] {
   return [
+    // A refused command never ran, so its line carries the refusal (which names the operator
+    // control) instead of an exit code nothing produced.
     ...shellResults.map((result) => ({
       gateId: result.gateId,
       passed: result.passed,
-      summary: toSummaryLine(`${result.command} exit ${result.exitCode}`),
+      summary: toSummaryLine(
+        result.refused === true
+          ? `${result.command}: ${result.stderr}`
+          : `${result.command} exit ${result.exitCode}`
+      ),
     })),
     ...scriptResults.map((result) => ({
       gateId: result.gateId,

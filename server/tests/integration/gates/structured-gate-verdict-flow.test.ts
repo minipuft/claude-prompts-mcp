@@ -1248,10 +1248,14 @@ describe.each(['stdio', 'http'] as const)(
       expect(reply.isError).toBe(false);
       const entries = captured(runtimeRoot, chainId);
       expect(entries).toHaveLength(1);
+      // The review's own check ran against the answer and leads the recorded rationale; the
+      // client's words follow it and stay whole under reportedRationale.
       expect(entries[0]).toMatchObject({
         gateId: GATE,
         verdict: 'FAIL',
-        rationale: 'Carrier criterion unmet',
+        rationale: expect.stringMatching(/ exit 1; Carrier criterion unmet$/),
+        reportedRationale: 'Carrier criterion unmet',
+        toolChecks: [expect.objectContaining({ gateId: GATE, passed: false })],
       });
       expect(entries[0]?.evaluation).toEqual(evaluation);
       const history = await call('system_control', {
@@ -1293,7 +1297,8 @@ describe.each(['stdio', 'http'] as const)(
       expect(entries[0]).toMatchObject({
         gateId: GATE,
         verdict: 'FAIL',
-        rationale: 'Object criterion',
+        rationale: expect.stringMatching(/ exit 1; Object criterion$/),
+        reportedRationale: 'Object criterion',
       });
       expect(entries[0]).not.toHaveProperty('evaluation');
     }, 90000);
