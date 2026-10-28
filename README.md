@@ -223,7 +223,7 @@ Validation runs between steps, not only at the end. For the full operator gramma
 
 <div align="center">
 
-<video src="https://github.com/user-attachments/assets/2840349d-d214-43a9-b8ee-83791dc6b6e2" width="720" autoplay loop muted playsinline controls title="One Claude Code session, with a side panel showing what the hooks and the server do: npm test fails, >>status is routed by the hook, resource_manager creates a prompt, a two-step chain runs it under @ReACT, the server runs npm test as the gate, and the review step approves the result"></video>
+<video src="https://github.com/user-attachments/assets/474b1058-be02-445e-95d9-96316692d0f7" width="720" autoplay loop muted playsinline controls title="One Claude Code session, with a side panel showing what the hooks and the server do: npm test fails, >>status is routed by the hook, resource_manager creates a prompt, a two-step chain runs it under @ReACT, the server runs npm test as the gate, and the review step approves the result"></video>
 
 <details>
 <summary>No video player here? Open the GIF.</summary>

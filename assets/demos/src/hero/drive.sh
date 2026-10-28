@@ -46,11 +46,11 @@ settle 3
 [ "$MODE" = "--smoke" ] && { mark end; settle 1; type_line "/exit"; sleep 2; tmux kill-session -t "$SESSION"; exit 0; }
 
 mark author
-send_and_wait "Create a prompt called implement_feature in category development through resource_manager: arguments target (required) and feature (required); the template asks you to implement the described feature in the target file based on the description alone, then stop. Confirm with the created id and version only." 300 || true
+send_and_wait "Create a prompt called implement_feature in category development through resource_manager: arguments target (required) and feature (required); the template asks you to implement the described feature in the target file from the description alone, without running the tests yourself (the chain's gate runs them), then stop. Confirm with the created id and version only." 300 || true
 settle 3
 
 mark run
-type_line ">>implement_feature target:'src/greeter.js' feature:'a sign-in banner greeting that reads well for any name' @ReACT :: verify:\"npm test\" --> >>review target:'src/greeter.js'"
+type_line "^ReACT >>implement_feature target:'src/greeter.js' feature:'a sign-in banner greeting that reads well for any name' :: verify:\"npm test\" --> >>review target:'src/greeter.js'"
 verdict_marked=0; i=0; seen=0; idle=0
 while :; do   # the gate's shell run is the beat worth 1x: mark it when the server logs it (trace.jsonl, via record.sh's tailer)
   if [ $verdict_marked -eq 0 ] && grep -Eq '"kind": ?"shell"' "$DEMO/trace.jsonl" 2>/dev/null; then mark verdict; verdict_marked=1; fi

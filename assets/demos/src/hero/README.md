@@ -17,14 +17,14 @@ rendered as often as needed. Nothing here is a screen capture, and no render re-
 
 ## Storyboard — one take, every primitive
 
-| #   | Beat (marker) | On screen                                                                                                           | Speed                        | Shows                                             |
-| --- | ------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------- |
-| 1   | `open`        | `!npm test` in Claude Code: three red tests                                                                         | 1x                           | the stakes, no model turn                         |
-| 2   | `status`      | `>>status` typed in chat; the hook routes it to `system_control`; the server answers with prompts, framework, gates | 2x                           | `>>` routing, `system_control`, hooks             |
-| 3   | `author`      | one sentence asks for a new prompt; `resource_manager` creates `implement_feature` v1                               | 3x, hold on the confirmation | authoring through MCP, no file edits              |
-| 4   | `run`         | `>>implement_feature … @ReACT :: verify:"npm test" --> >>review`; the model implements from the description         | 3x                           | prompt args, `@framework`, `::` gate, `-->` chain |
-| 5   | `verdict`     | the shell gate runs `npm test`; FAIL bounces back, the model fixes, PASS                                            | 1x                           | ground-truth verification, self-correction        |
-| 6   | `complete`    | step 2 reviews the diff with the code-quality gate, chain complete                                                  | 1.5x                         | chain lifecycle end                               |
+| #   | Beat (marker) | On screen                                                                                                                                                              | Speed                        | Shows                                             |
+| --- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------- |
+| 1   | `open`        | `!npm test` in Claude Code: three red tests                                                                                                                            | 1x                           | the stakes, no model turn                         |
+| 2   | `status`      | `>>status` typed in chat; the hook routes it to `system_control`; the server answers with prompts, framework, gates                                                    | 2x                           | `>>` routing, `system_control`, hooks             |
+| 3   | `author`      | one sentence asks for a new prompt; `resource_manager` creates `implement_feature` v1                                                                                  | 3x, hold on the confirmation | authoring through MCP, no file edits              |
+| 4   | `run`         | `^ReACT >>implement_feature … :: verify:"npm test" --> >>review`; the model implements from the description and does not run the tests (the prompt says the gate does) | 3x                           | prompt args, `@framework`, `::` gate, `-->` chain |
+| 5   | `verdict`     | the shell gate runs `npm test` on the answer; a FAIL comes back with the output, a PASS opens step 2 in the same call                                                  | 1x                           | ground-truth verification, self-correction        |
+| 6   | `complete`    | step 2 reviews the diff with the code-quality gate, chain complete                                                                                                     | 1.5x                         | chain lifecycle end                               |
 
 Target length after warp: 40–60 s. If the model passes the gate on the first attempt, that is
 the take; nothing is staged (the hasscheck rule: no fabricated output). The caption names the

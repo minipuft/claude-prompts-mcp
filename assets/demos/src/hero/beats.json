@@ -40,7 +40,7 @@
     "open": "1 \u00b7 three tests fail",
     "author": "2 \u00b7 a prompt authored through the server",
     "run": "3 \u00b7 one line: prompt, framework, gate, chain",
-    "verdict": "4 \u00b7 the server runs npm test itself",
+    "verdict": "4 \u00b7 gate refuses \u00b7 model fixes \u00b7 passes",
     "complete": "5 \u00b7 review verdict PASS, chain complete"
   },
   "scenes": [
@@ -59,7 +59,7 @@
         },
         {
           "track": "session",
-          "match": "@ReACT",
+          "match": "\\^ReACT",
           "text": true,
           "kind": "framework"
         },
@@ -103,16 +103,11 @@
     },
     {
       "at": "verdict",
-      "hold": 6.5,
+      "hold": 7.0,
       "freeze": true,
-      "spread": 15.0,
-      "caption": "server ran npm test itself \u00b7 exit 0",
+      "spread": 5.0,
+      "caption": "gate: npm test failed \u00b7 fixed \u00b7 passed",
       "highlights": [
-        {
-          "track": "session",
-          "match": "Bash\\(npm test",
-          "color": "#e6e6e6"
-        },
         {
           "track": "session",
           "match": "Calling claude-prompts",
@@ -123,6 +118,13 @@
           "match": "server ran npm test",
           "rows": 3,
           "kind": "gate"
+        },
+        {
+          "track": "trace",
+          "match": "passed \u00b7 exit 0",
+          "before": 1,
+          "rows": 3,
+          "kind": "gate"
         }
       ]
     },
@@ -131,12 +133,17 @@
       "hold": 4.0,
       "freeze": true,
       "spread": 0,
-      "caption": "review PASS \u00b7 chain complete 2/2",
+      "caption": "review approved \u00b7 chain complete 2/2",
       "highlights": [
         {
           "track": "session",
-          "match": "Review verdict:",
-          "rows": 4,
+          "match": "failed the gate",
+          "rows": 2,
+          "kind": "gate"
+        },
+        {
+          "track": "session",
+          "match": "verdict was approve|Review (verdict|notes)|[Aa]pprove",
           "kind": "prompt"
         },
         {
