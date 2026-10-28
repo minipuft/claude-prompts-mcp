@@ -117,10 +117,13 @@ Initialize a new workspace with starter prompts.
 
 ```bash
 cpm init ./my-workspace
+cpm init --project
 cpm init --json
 ```
 
 Creates a `resources/prompts/` directory with example prompts (`quick_review`, `explain`, `improve`) and a `config.jsonc` with every setting commented out (see [Configuration](#config) below). Prints setup instructions for Claude Desktop configuration.
+
+`cpm init --project` scaffolds `./.claude-prompts/` in the current directory with the same starter prompts and `config.jsonc`. Resources placed there load above the user workspace and the bundled ones when the server runs in this project over STDIO. It takes no path; `cpm init <path>` is the custom-location form.
 
 If a `config.jsonc` or `config.json` already exists, it is preserved. By default, `init` validates generated prompt YAML before returning success. Use `--no-validate` only if you intentionally need to bypass this guard.
 
