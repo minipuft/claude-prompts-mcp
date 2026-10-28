@@ -208,7 +208,7 @@ describe('Shared Workspace Continuity', () => {
       path.join(tmpDir, 'runtime-state', 'state.db'),
       {
         stateStore: frameworkStore,
-        defaultFramework: () => 'radiant',
+        defaultFramework: () => 'scamper',
       }
     );
 
@@ -218,7 +218,7 @@ describe('Shared Workspace Continuity', () => {
     // The distinction that matters: a workspace nobody has configured falls back to the
     // project's declared default, not to whatever another workspace happens to be on.
     const untouched = { workspaceId: 'workspace-never-seen' };
-    expect(stateStore.getCurrentState(untouched).activeFramework.toLowerCase()).toBe('radiant');
+    expect(stateStore.getCurrentState(untouched).activeFramework.toLowerCase()).toBe('scamper');
     expect(stateStore.getCurrentState(busy).activeFramework.toLowerCase()).toBe('react');
 
     await stateStore.shutdown();
