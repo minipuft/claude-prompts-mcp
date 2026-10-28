@@ -350,7 +350,8 @@ describe('Export Command Integration', () => {
     });
 
     it('withholds a category gate that names a framework_context', async () => {
-      // `creed-fidelity`'s real shape: gate_type `category`, framework_context `[RADIANT]`.
+      // A project-workspace gate's real shape (`creed-fidelity`, now outside the bundle):
+      // gate_type `category`, framework_context `[RADIANT]`.
       // Delegation alone ACTIVATES it, because the regular-gate branch reads an absent
       // framework as unconstrained rather than as a mismatch. Reading gate_type alone would
       // miss it, which is why `dependsOnFramework` checks both declarations.

@@ -127,27 +127,27 @@ describe('the change tracker spans operator roots, one file per id', () => {
     });
 
   it('watches the primary and the overlay, whether or not the overlay exists, and never the bundled tree', () => {
-    expect(roots().prompt).toEqual([OVERLAY, PRIMARY]);
+    expect(roots().prompt).toEqual([PRIMARY, OVERLAY]);
     expect(registration.directories).toEqual(expect.arrayContaining([OVERLAY, PRIMARY, GATES]));
     expect(registration.directories).not.toContain(BUNDLED);
   });
 
   it('tracks the serving copy of a duplicated id, so repeated baselines stay quiet', async () => {
-    await writePrompt(PRIMARY, 'general/dup', 'PRIMARY-COPY');
-    const overlayFile = await writePrompt(OVERLAY, 'general/dup', 'OVERLAY-COPY');
+    const primaryFile = await writePrompt(PRIMARY, 'general/dup', 'PRIMARY-COPY');
+    await writePrompt(OVERLAY, 'general/dup', 'OVERLAY-COPY');
     await writePrompt(OVERLAY, 'general/solo', 'OVERLAY-ONLY');
 
     const first = await compareResourceBaseline(tracker, roots(), logger);
     const second = await compareResourceBaseline(tracker, roots(), logger);
 
     expect(first.added).toBe(2);
-    expect(rowsFor('dup')).toEqual([{ operation: 'added', file_path: overlayFile }]);
+    expect(rowsFor('dup')).toEqual([{ operation: 'added', file_path: primaryFile }]);
     expect(rowsFor('solo').map((row) => row.operation)).toEqual(['added']);
     // Two copies, two runs, and no alternation between them.
     expect(second).toEqual({ added: 0, modified: 0, removed: 0, refused: 0 });
 
     // Positive control for that silence: an edit to the serving copy IS a change.
-    await writePrompt(OVERLAY, 'general/dup', 'OVERLAY-COPY-EDITED');
+    await writePrompt(PRIMARY, 'general/dup', 'PRIMARY-COPY-EDITED');
     const third = await compareResourceBaseline(tracker, roots(), logger);
     expect(third.modified).toBe(1);
   });
@@ -157,15 +157,15 @@ describe('the change tracker spans operator roots, one file per id', () => {
     const overlayFile = await writePrompt(OVERLAY, 'general/dup', 'OVERLAY-COPY');
     await compareResourceBaseline(tracker, roots(), logger);
 
-    // Shadowed: the overlay serves, so the primary copy's edit changes nothing served.
-    await writePrompt(PRIMARY, 'general/dup', 'PRIMARY-COPY-EDITED');
-    await fileEvent(primaryFile, 'modified');
+    // Shadowed: the primary serves, so the overlay copy's edit changes nothing served.
+    await writePrompt(OVERLAY, 'general/dup', 'OVERLAY-COPY-EDITED');
+    await fileEvent(overlayFile, 'modified');
     expect(rowsFor('dup').map((row) => row.operation)).toEqual(['added']);
 
-    // Removing the serving copy hands the id to the primary: a content change, not a removal.
-    await rm(path.dirname(overlayFile), { recursive: true });
-    await fileEvent(overlayFile, 'removed');
-    expect(rowsFor('dup').slice(1)).toEqual([{ operation: 'modified', file_path: primaryFile }]);
+    // Removing the serving copy hands the id to the overlay: a content change, not a removal.
+    await rm(path.dirname(primaryFile), { recursive: true });
+    await fileEvent(primaryFile, 'removed');
+    expect(rowsFor('dup').slice(1)).toEqual([{ operation: 'modified', file_path: overlayFile }]);
 
     // A nested step is keyed as the walk keys it, not by its folder name alone.
     const stepFile = await writePrompt(PRIMARY, 'examples/chain/step_one', 'STEP');

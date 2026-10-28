@@ -276,7 +276,7 @@ describe('an overlay that does not exist yet is still a root', () => {
       expect(existsSync(overlay)).toBe(false);
       const roots = resolveResourceRoots(resolver, type, path.join(workspace, 'resources', type));
       expect(roots.overlays).toEqual([overlay]);
-      expect(roots.lookupDirs[0]).toBe(overlay);
+      expect(roots.lookupDirs.slice(0, 2)).toEqual([roots.primary, overlay]);
       // The present-tense reading still reports only what exists.
       expect(resolver.getOverlayResourceDirs(type, roots.primary)).toEqual([]);
     }
@@ -319,8 +319,85 @@ describe('an overlay that does not exist yet is still a root', () => {
       getGatesDirectory: () => path.join(workspace, 'resources', 'gates'),
     } as unknown as ConfigLoader;
     expect(trackedResourceRoots(configManager, resolver)).toEqual({
-      prompt: [path.join(workspace, 'prompts'), path.join(workspace, 'resources', 'prompts')],
-      gate: [path.join(workspace, 'gates'), path.join(workspace, 'resources', 'gates')],
+      prompt: [path.join(workspace, 'resources', 'prompts'), path.join(workspace, 'prompts')],
+      gate: [path.join(workspace, 'resources', 'gates'), path.join(workspace, 'gates')],
     });
   });
+});
+
+describe('a project .claude-prompts/ created while the server runs', () => {
+  it('is watched before it exists and its gate is served once it appears, with no restart', async () => {
+    const packageRoot = await scratch('late-project-package');
+    const workspace = await scratch('late-project-workspace');
+    const project = await scratch('late-project-dir');
+    const elsewhere = await scratch('late-project-elsewhere');
+    await mkdir(path.join(packageRoot, 'resources', 'gates'), { recursive: true });
+    await mkdir(path.join(workspace, 'resources', 'gates'), { recursive: true });
+
+    const previous = process.env['MCP_WORKSPACE'];
+    const previousResources = process.env['MCP_RESOURCES_PATH'];
+    process.env['MCP_WORKSPACE'] = workspace;
+    delete process.env['MCP_RESOURCES_PATH'];
+    cleanups.push(async () => {
+      if (previous === undefined) delete process.env['MCP_WORKSPACE'];
+      else process.env['MCP_WORKSPACE'] = previous;
+      if (previousResources !== undefined) process.env['MCP_RESOURCES_PATH'] = previousResources;
+    });
+
+    const projectWorkspace = path.join(project, '.claude-prompts');
+    const projectGates = path.join(projectWorkspace, 'resources', 'gates');
+    const resolver = new PathResolver({
+      cli: {},
+      packageRoot,
+      projectDiscovery: true,
+      projectLaunch: { env: { CLAUDE_PROJECT_DIR: project }, cwd: elsewhere },
+    });
+
+    // At startup: no project directory, so the workspace is the primary and the project's gates
+    // folder is a root that does not exist yet.
+    expect(existsSync(projectWorkspace)).toBe(false);
+    expect(resolver.getProjectWorkspace()).toBeUndefined();
+    const roots = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
+    expect(roots.primary).toBe(path.join(workspace, 'resources', 'gates'));
+    expect(roots.overlays.at(-1)).toBe(projectGates);
+    expect(roots.lookupDirs.slice(0, 2)).toEqual([roots.primary, projectGates]);
+
+    const loader = new GateDefinitionLoader({
+      gatesDir: roots.primary!,
+      additionalGatesDirs: roots.lookupDirs,
+    });
+    expect(loader.getWatchDirectories()).toContain(projectGates);
+    // Positive control for the assertion below: the loader finds nothing before the folder exists.
+    expect(loader.loadGate('late-project-gate')).toBeUndefined();
+
+    const reloads: HotReloadEvent[] = [];
+    const observer = await startedObserver((event) => reloads.push(event));
+    await observer.start();
+    await observer.watchDirectories(loader.getWatchDirectories().map((dir) => ({ path: dir })));
+
+    // The whole chain of directories is created at once, as `mkdir -p` does: the watched path
+    // had no existing parent below the project directory. The observer polls the path itself.
+    await writeGate(projectGates, 'late-project-gate');
+
+    expect(await waitFor(() => reloads.some((e) => e.affectedFiles.includes(projectGates)))).toBe(
+      true
+    );
+    const gate = loader.loadGate('late-project-gate');
+    expect(gate?.id).toBe('late-project-gate');
+    expect(gate?.sourceRoot).toBe(projectGates);
+
+    // The directory now exists: the live probe sees it, and a resolver built from here (the next
+    // launch) makes it the primary, so it is never also listed as an overlay.
+    expect(resolver.getProjectWorkspace()).toBe(projectWorkspace);
+    const restarted = new PathResolver({
+      cli: {},
+      packageRoot,
+      projectDiscovery: true,
+      projectLaunch: { env: { CLAUDE_PROJECT_DIR: project }, cwd: elsewhere },
+    });
+    const after = resolveResourceRoots(restarted, 'gates', restarted.getGatesPath());
+    expect(after.primary).toBe(projectGates);
+    expect(after.overlays).not.toContain(projectGates);
+    expect(after.lookupDirs[0]).toBe(projectGates);
+  }, 30000);
 });

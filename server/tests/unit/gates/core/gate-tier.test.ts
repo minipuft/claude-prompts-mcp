@@ -169,9 +169,10 @@ describe('deriveGateTier — registry cross-check against generated _index.md', 
 
     // Guards the enumeration itself, the way `gate-definition-loader.test.ts` does for the
     // schema sweep: a per-gate comparison that silently found zero gates would still pass.
-    // 26 = the 25 registry gates plus `handoff-artifacts` (row 1.3).
-    expect(gateDirs.length).toBe(26);
-    expect(tierByIdFromIndex.size).toBe(26);
+    // 25 = the 24 registry gates plus `handoff-artifacts` (row 1.3); `creed-fidelity` left the
+    // bundle for cloudySky's project workspace on 2026-10-27.
+    expect(gateDirs.length).toBe(25);
+    expect(tierByIdFromIndex.size).toBe(25);
 
     for (const dirName of gateDirs) {
       const yamlPath = path.join(GATES_DIR, dirName, 'gate.yaml');

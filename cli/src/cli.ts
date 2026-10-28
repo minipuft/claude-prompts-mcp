@@ -82,6 +82,7 @@ function parseCliArgs(args: string[] = process.argv.slice(2)): ParsedArgs {
       // link-gate flags
       remove: { type: 'boolean' },
       'no-validate': { type: 'boolean' },
+      project: { type: 'boolean' },
       // config flags
       value: { type: 'string' },
     },
@@ -118,6 +119,7 @@ function parseCliArgs(args: string[] = process.argv.slice(2)): ParsedArgs {
       preview: values.preview as boolean | undefined,
       remove: values.remove as boolean | undefined,
       noValidate: values['no-validate'] as boolean | undefined,
+      project: values.project as boolean | undefined,
       value: values.value as string | undefined,
     },
   };
@@ -184,10 +186,12 @@ If path is omitted, initializes in the current directory.
 Options:
       --json              JSON output
       --no-validate       Skip post-init schema validation
+      --project           Scaffold ./.claude-prompts in the current directory (takes no path)
 
 Examples:
   cpm init ./my-workspace
-  cpm init`,
+  cpm init
+  cpm init --project`,
 
   create: `cpm create - Create a new resource
 
@@ -549,6 +553,7 @@ export async function run(args?: string[]): Promise<void> {
         path: parsed.positionals[0],
         json: parsed.global.json,
         noValidate: parsed.flags['noValidate'] as boolean | undefined,
+        project: parsed.flags['project'] as boolean | undefined,
       });
       break;
     case 'create':

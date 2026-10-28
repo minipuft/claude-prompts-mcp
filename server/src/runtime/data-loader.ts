@@ -116,7 +116,7 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   // `PathResolver.getBundledResourceDir` for the same defect's fatal form on frameworks.
   //
   // Order is the precedence: `mergePromptResults` lets a later result win on a duplicate id, so
-  // bundle → primary → overlays gives the documented "same ID = custom wins".
+  // bundle → overlays → primary gives the documented "same ID = custom wins".
   const overlayPromptsDirs = pathResolver?.getOverlayResourceDirs('prompts', promptsPath) ?? [];
 
   const loaded = await loadPromptsAcrossRoots(

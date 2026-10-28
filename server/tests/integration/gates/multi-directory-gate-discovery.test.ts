@@ -2,8 +2,8 @@
  * Integration test for multi-directory gate discovery.
  *
  * Tests that GateDefinitionLoader correctly discovers and loads gates
- * from both primary (flat) and additional (flat + grouped) directories, and that an overlay
- * outranks the primary on a same-id conflict (P4.27).
+ * from both primary (flat) and additional (flat + grouped) directories, and that the primary
+ * outranks an overlay on a same-id conflict.
  */
 
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals';
@@ -131,13 +131,12 @@ describe('Multi-Directory Gate Discovery', () => {
   });
 
   /**
-   * REWRITTEN AT P4.27. This case asserted "primary gate wins on ID conflict" — the defect in test
-   * form. Prompts have loaded bundle -> primary -> overlays with a later result winning since P1.0a
-   * ("same ID = custom wins"), and the resource indexer agrees; the three flat-layout kinds were
-   * the only ones resolving `primary ?? additional`, and the docstring that justified it held only
-   * while the workspace WAS the primary. An overlay now outranks the primary for gates too.
+   * The primary gate wins on ID conflict, as it does for prompts: one order for every kind,
+   * stated in `resourceRootPrecedence` — primary, overlays, bundled. (This case asserted the
+   * opposite from P4.27, when an overlay outranked the primary; a loader configured by hand with
+   * only `gatesDir` and `additionalGatesDirs` reads the same order as the composition root.)
    */
-  test('an overlay gate wins on ID conflict', () => {
+  test('the primary gate wins on ID conflict', () => {
     // A conflicting gate in an overlay dir with the same ID as one in the primary
     const conflictDir = mkdtempSync(join(tmpdir(), 'gates-conflict-'));
     const cqDir = join(conflictDir, 'code-quality');
@@ -152,14 +151,18 @@ describe('Multi-Directory Gate Discovery', () => {
 
       const gate = loader.loadGate('code-quality');
       expect(gate).toBeDefined();
-      // The overlay wins — the name comes from the overlay, not the primary.
-      expect(gate!.name).toBe('OVERRIDDEN Code Quality');
-      // …and it is the overlay the definition reports itself as served from.
-      expect(gate!.sourceRoot).toBe(conflictDir);
+      // The primary wins — the name comes from the primary, not the overlay.
+      expect(gate!.name).toBe('Code Quality');
+      // …and it is the primary the definition reports itself as served from.
+      expect(gate!.sourceRoot).toBe(primaryDir);
 
-      // POSITIVE CONTROL, same loader: an id the overlay does NOT define still comes from the
-      // primary, so the line above is not passing because the primary stopped being consulted.
-      expect(loader.loadGate('test-coverage')?.name).toBe('Test Coverage');
+      // POSITIVE CONTROL, same loader: an id only the overlay defines still comes from it, so the
+      // lines above are not passing because the overlay stopped being consulted.
+      const overlayOnlyDir = join(conflictDir, 'overlay-only');
+      mkdirSync(overlayOnlyDir);
+      writeFileSync(join(overlayOnlyDir, 'gate.yaml'), gateYaml('overlay-only', 'Overlay Only'));
+      expect(loader.loadGate('overlay-only')?.name).toBe('Overlay Only');
+      expect(loader.loadGate('overlay-only')?.sourceRoot).toBe(conflictDir);
     } finally {
       rmSync(conflictDir, { recursive: true, force: true });
     }

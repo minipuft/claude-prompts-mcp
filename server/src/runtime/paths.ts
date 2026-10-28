@@ -3,8 +3,9 @@
  * PathResolver - Unified Path Resolution System
  *
  * CLI flags take precedence over their workspace/config environment settings.
- * Resource types resolve through an explicit MCP_RESOURCES_PATH base, workspace layouts,
- * then package defaults. An absent type directory is created by its first write.
+ * Resource types resolve through an explicit MCP_RESOURCES_PATH base, else the project's
+ * `.claude-prompts/` when discovery is on and it exists, else workspace layouts, then package
+ * defaults. An absent type directory is created by its first write.
  *
  * Environment Variables:
  * - MCP_WORKSPACE: Full plugin/workspace directory (server/, hooks/, etc.)
@@ -35,10 +36,14 @@ import {
   type PathFallback,
   type PathSetting,
 } from '#shared/utils/path-setting.js';
+import { deriveProjectDir } from '#shared/utils/project-scope.js';
 import {
   RUNTIME_STATE_DIR_NAME,
   STATE_DB_FILE_NAME,
 } from '#shared/utils/runtime-state-location.js';
+
+/** The directory a project keeps its own resources in, directly under the project directory. */
+const PROJECT_WORKSPACE_DIR_NAME = '.claude-prompts';
 
 /**
  * CLI flag values parsed from command line arguments
@@ -58,6 +63,18 @@ export interface PathResolverConfig {
   packageRoot: string;
   /** Enable debug logging */
   debug?: boolean;
+  /**
+   * Whether the launch's project directory may contribute a resource root (R1-R3). Off unless the
+   * caller turns it on: a process serving several projects has no single project directory to look
+   * in.
+   */
+  projectDiscovery?: boolean;
+  /**
+   * Where the project directory is read from when {@link projectDiscovery} is on. Defaults to the
+   * process environment and working directory; injectable so a test names its project directory
+   * without changing either.
+   */
+  projectLaunch?: { env?: NodeJS.ProcessEnv; cwd?: string };
 }
 
 /**
@@ -182,6 +199,42 @@ export class PathResolver {
     return resolved;
   }
 
+  /**
+   * The project's own resource workspace, `<project>/.claude-prompts/`, or `undefined` when none
+   * applies: discovery is off, or the directory does not exist.
+   *
+   * "Exists" is the directory itself, not a per-type folder under it. Those are created by the
+   * first write, as a workspace's are. Probed on every call, like the type getters' own
+   * `existsSync` probes, so a directory created while the server runs is seen by the next
+   * resolution.
+   */
+  getProjectWorkspace(): string | undefined {
+    if (this.config.projectDiscovery !== true) return undefined;
+
+    const projectWorkspace = this.projectWorkspacePath();
+    if (projectWorkspace === undefined) return undefined;
+
+    try {
+      return statSync(projectWorkspace).isDirectory() ? projectWorkspace : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Where the project's `.claude-prompts/` is or would be, existing or not; `undefined` when
+   * discovery is off or the launch names no project directory.
+   */
+  private projectWorkspacePath(): string | undefined {
+    if (this.config.projectDiscovery !== true) return undefined;
+
+    const launch = this.config.projectLaunch;
+    const projectDir = deriveProjectDir(launch?.env, launch?.cwd);
+    if (projectDir === undefined) return undefined;
+
+    return join(this.resolvePath(projectDir.value), PROJECT_WORKSPACE_DIR_NAME);
+  }
+
   /** Resolve the writable root independently from package-owned resources. */
   getRuntimeRoot(): string {
     if (this.cache.runtimeRoot !== undefined) return this.cache.runtimeRoot;
@@ -296,9 +349,13 @@ export class PathResolver {
     }
 
     this.getConfigPath();
-    if (workspace !== undefined && this.readExplicitConfigSource() === undefined) {
-      this.assertSingleWorkspaceConfig(workspace);
-      this.assertUsableWorkspaceConfig(workspace);
+    if (this.readExplicitConfigSource() === undefined) {
+      // The project directory outranks the workspace, so its config is judged first.
+      this.assertUsableProjectConfig();
+      if (workspace !== undefined) {
+        this.assertSingleWorkspaceConfig(workspace);
+        this.assertUsableWorkspaceConfig(workspace);
+      }
     }
   }
 
@@ -341,6 +398,38 @@ export class PathResolver {
     );
   }
 
+  /**
+   * The project's `.claude-prompts/` naming both `config.jsonc` and `config.json` is ambiguous
+   * for the same reason a workspace is, and is refused the same way. No operator setting names the
+   * project directory (it is discovered), so the message names the directory and both files rather
+   * than a flag. A project config it holds must also be readable: resolving to a file and then
+   * booting on built-in defaults because it was not is the failure `getConfigPath` exists to prevent.
+   */
+  private assertUsableProjectConfig(): void {
+    const projectWorkspace = this.getProjectWorkspace();
+    if (projectWorkspace === undefined) return;
+    const found = findWorkspaceConfigFiles(projectWorkspace);
+    if (found.length >= 2) {
+      const [jsoncPath, jsonPath] = found as [string, string];
+      throw new PathSettingError(
+        [
+          `Refusing to start: the project workspace ${projectWorkspace} holds both config.jsonc (${jsoncPath}) and config.json (${jsonPath}).`,
+          `Expected a single config file there, or keep config.jsonc, the current name, and remove config.json (also still read).`,
+        ].join('\n')
+      );
+    }
+    const [config] = found;
+    if (config === undefined) return;
+    const problem = describeUnusableConfigFile(config);
+    if (problem === undefined) return;
+    throw new PathSettingError(
+      [
+        `Refusing to start: the project workspace ${projectWorkspace} holds a config file ${config} that ${problem}.`,
+        `Expected a readable JSON config file there, or move it out of the project workspace to use the next config in the order.`,
+      ].join('\n')
+    );
+  }
+
   /** A config file the workspace holds must be usable; one it does not hold falls back to the packaged config. */
   private assertUsableWorkspaceConfig(workspace: WorkspaceSource): void {
     const { resolved, origin } = this.resolveDefaultConfigPath();
@@ -365,10 +454,11 @@ export class PathResolver {
    * Priority:
    *   1. --config CLI flag
    *   2. MCP_CONFIG_PATH environment variable
-   *   3. ${workspace}/config.jsonc, else ${workspace}/config.json (if workspace differs from
-   *      package and either file exists — `.jsonc` wins when both are present, though
-   *      `assertUsablePathSettings` refuses startup on that ambiguity before this ever runs)
-   *   4. ${packageRoot}/config.json (default — the packaged file keeps its `.json` name)
+   *   3. ${project}/.claude-prompts/config.jsonc, else config.json (project discovery on and
+   *      the directory holds either)
+   *   4. ${workspace}/config.jsonc, else ${workspace}/config.json (if workspace differs from
+   *      package and either file exists)
+   *   5. ${packageRoot}/config.json (default — the packaged file keeps its `.json` name)
    *
    * An explicit path (1 or 2) that is not a readable config file throws `PathSettingError`, parsed
    * by extension (`.jsonc` tolerant of comments and a trailing comma, everything else strict
@@ -420,23 +510,32 @@ export class PathResolver {
   /** The config an explicit path's removal falls back to, with a caveat when that file is unusable too. */
   private describeDefaultConfigFallback(): PathFallback {
     const { resolved, origin } = this.resolveDefaultConfigPath();
-    if (origin !== 'workspace') return { label: 'the packaged default', resolved };
+    if (origin === 'package') return { label: 'the packaged default', resolved };
     const caveat = describeUnusableConfigFile(resolved);
-    return { label: 'the workspace config', resolved, ...(caveat !== undefined && { caveat }) };
+    const label = origin === 'project' ? 'the project config' : 'the workspace config';
+    return { label, resolved, ...(caveat !== undefined && { caveat }) };
   }
 
   /**
-   * Where config resolves when nothing names a path: the workspace file if present, else the
-   * package's. `origin` is what every caller branches on — `'workspace'` vs `'package'` — kept
+   * Where config resolves when nothing names a path: the project's `.claude-prompts/` file if
+   * present, else the workspace's, else the package's. `origin` is what every caller branches on
+   * — `'project'`, `'workspace'` or `'package'` — kept
    * separate from `source`, the human-readable label passed to {@link logResolution}, so that
    * label can name whichever filename was actually found without becoming the thing callers
    * compare against.
    */
   private resolveDefaultConfigPath(): {
     resolved: string;
-    origin: 'workspace' | 'package';
+    origin: 'project' | 'workspace' | 'package';
     source: string;
   } {
+    const projectWorkspace = this.getProjectWorkspace();
+    if (projectWorkspace !== undefined) {
+      const [first] = findWorkspaceConfigFiles(projectWorkspace);
+      if (first !== undefined) {
+        return { resolved: first, origin: 'project', source: `project ${basename(first)}` };
+      }
+    }
     const workspace = this.getWorkspace();
     if (workspace !== this.config.packageRoot) {
       const [first] = findWorkspaceConfigFiles(workspace);
@@ -564,10 +663,24 @@ export class PathResolver {
    * file observer watches it once it appears and reconciles it then.
    */
   getOverlayResourceCandidates(resourceType: string, primaryDir?: string): string[] {
-    if (!this.isUsingCustomWorkspace()) return [];
+    const candidates: string[] = [];
 
-    const workspace = this.getWorkspace();
-    const candidates = [join(workspace, resourceType), join(workspace, 'resources', resourceType)];
+    if (this.isUsingCustomWorkspace()) {
+      const workspace = this.getWorkspace();
+      candidates.push(join(workspace, resourceType), join(workspace, 'resources', resourceType));
+    }
+
+    // The project's own folder, listed last (highest overlay) whether or not `.claude-prompts/`
+    // exists yet. Once it exists it is the primary and the dedup below drops it; until then it is
+    // a root the loaders read as empty and the file observer watches, so a `.claude-prompts/`
+    // created while the server runs is served without a restart. An explicit MCP_RESOURCES_PATH
+    // keeps every type on its own boundary (see resolveResourceSubdir), so no project root joins.
+    const projectWorkspace = this.hasExplicitResourcesPath()
+      ? undefined
+      : this.projectWorkspacePath();
+    if (projectWorkspace !== undefined) {
+      candidates.push(join(projectWorkspace, 'resources', resourceType));
+    }
 
     return candidates.filter((dir) => dir !== primaryDir);
   }
@@ -622,10 +735,20 @@ export class PathResolver {
     return resolveSettingPath(inputPath);
   }
 
+  private hasExplicitResourcesPath(): boolean {
+    const explicitResources = process.env['MCP_RESOURCES_PATH'];
+    return explicitResources !== undefined && explicitResources !== '';
+  }
+
   /**
-   * Resolve a resource subdirectory: the directory a type is read from first and written to.
+   * Resolve a resource subdirectory: the directory a type is written to, and the root the shared
+   * precedence in `resourceRootPrecedence` calls the primary.
    *
-   * A custom workspace with no `MCP_RESOURCES_PATH` resolves inside the workspace:
+   * A project workspace (`getProjectWorkspace`) with no `MCP_RESOURCES_PATH` is the primary for
+   * every type: `<project>/.claude-prompts/resources/${subdir}/`, existing or not yet created.
+   * There is no legacy `<project>/.claude-prompts/${subdir}/` convention to keep from splitting.
+   *
+   * Otherwise, a custom workspace with no `MCP_RESOURCES_PATH` resolves inside the workspace:
    *   1. ${workspace}/resources/${subdir}/ (if exists)
    *   2. ${workspace}/${subdir}/ (legacy, if exists, so an existing collection does not split)
    *   3. ${workspace}/resources/${subdir}/ (not created yet; the first write creates it)
@@ -646,12 +769,20 @@ export class PathResolver {
   private resolveResourceSubdir(subdir: string): { resolved: string; source: string } {
     const workspace = this.getWorkspace();
     const legacyDir = join(workspace, subdir);
-    const explicitResources = process.env['MCP_RESOURCES_PATH'];
+    const hasExplicitResources = this.hasExplicitResourcesPath();
 
-    if (
-      (explicitResources === undefined || explicitResources === '') &&
-      this.isUsingCustomWorkspace()
-    ) {
+    const projectWorkspace = hasExplicitResources ? undefined : this.getProjectWorkspace();
+    if (projectWorkspace !== undefined) {
+      const projectDir = join(projectWorkspace, 'resources', subdir);
+      return {
+        resolved: projectDir,
+        source: existsSync(projectDir)
+          ? `project resources/${subdir}/`
+          : `project resources/${subdir}/ (created on first write)`,
+      };
+    }
+
+    if (!hasExplicitResources && this.isUsingCustomWorkspace()) {
       const workspaceDir = join(workspace, 'resources', subdir);
       if (existsSync(workspaceDir)) {
         return { resolved: workspaceDir, source: `workspace resources/${subdir}/` };
@@ -674,7 +805,7 @@ export class PathResolver {
       return { resolved: legacyDir, source: `workspace ${subdir}/ (legacy)` };
     }
 
-    if (explicitResources !== undefined && explicitResources !== '') {
+    if (hasExplicitResources) {
       return {
         resolved: resourcesDir,
         source: `resources/${subdir}/ (created on first write)`,
@@ -716,6 +847,23 @@ export function parsePathCliOptions(cliArgs: ServerCliArgs): PathResolverCliOpti
 }
 
 // ============================================================================
+// Transport and Project Discovery
+// ============================================================================
+
+/**
+ * Whether a server on `transport` may look for the launch's project `.claude-prompts/` (R4).
+ *
+ * Only a STDIO process serves one project: the client launches it from that project. An HTTP
+ * process (`streamable-http`, or `both`, which opens the HTTP listener too) serves many projects
+ * from one working directory, so the directory it started in names none of them. An absent value
+ * is STDIO, the default `resolveRuntimeLaunchOptions` applies. Callers pass the mode
+ * `TransportRouter.determineTransport` returns, which has already mapped an invalid value to STDIO.
+ */
+export function discoversProjectOver(transport: string | undefined): boolean {
+  return transport === undefined || transport === 'stdio';
+}
+
+// ============================================================================
 // Factory Function
 // ============================================================================
 
@@ -738,5 +886,6 @@ export function createPathResolver(
     cli,
     packageRoot,
     debug,
+    projectDiscovery: discoversProjectOver(cliArgs.transport),
   });
 }

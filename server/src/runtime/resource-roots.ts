@@ -36,7 +36,7 @@ export interface ResourceRoots {
   /** The writable root: where a `resource_manager` write lands, and what the inventory reports. */
   primary: string | undefined;
   /**
-   * Workspace directories layered over the primary. Highest precedence, later entry wins.
+   * Workspace directories layered over the bundled tree and under the primary. Later entry wins.
    *
    * Includes a candidate that does not exist yet: every consumer of this set fixes it once, at
    * startup, and an overlay created later must still be read and watched. An absent root reads
@@ -49,8 +49,8 @@ export interface ResourceRoots {
    * The loader's lookup list: EVERY contributing root, highest precedence first — primary included.
    *
    * It was called `additional` for the loader config key it feeds (`additionalGatesDirs` and its
-   * two siblings), and that name stopped describing the contents at P4.27: the primary is neither
-   * the top nor the bottom of the order, so a list that omitted it could not say where it sits.
+   * two siblings), and that name stopped describing the contents at P4.27: the primary sits at its
+   * own rank, so a list that omitted it could not say where it sits.
    * Renamed here, at the producing end. The three config keys keep their names — renaming them
    * reaches `mcp/tools/prompt-engine/core/prompt-executor.ts` and ~30 test call sites for no
    * behaviour change, and each loader's config docstring now states that the primary is inside the
@@ -70,9 +70,8 @@ export interface ResourceRoots {
  *
  * Until P4.27 the three flat-layout loaders resolved `primary ??
  * additional` and the docstring here justified it as "workspace wins"; that held only while the
- * workspace WAS the primary, so an operator's `<workspace>/gates/foo` lost to
- * `<workspace>/resources/gates/foo` while their `<workspace>/prompts/foo` won. Two answers to one
- * question.
+ * workspace WAS the primary, and prompts answered the same question differently. Two answers to one
+ * question; `resourceRootPrecedence` is the one statement all four kinds now read.
  *
  * Pure apart from the resolver's own `existsSync` probes.
  */

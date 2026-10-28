@@ -363,6 +363,8 @@ PATH OPTIONS:
                           by extension); the server refuses to start if it is not a
                           readable config file
 
+  Over STDIO only, a .claude-prompts/ directory in the project is read first and written to.
+
 RUNTIME OPTIONS:
   --init=/path            Create a new workspace with starter prompts and a config file at the
                           specified path

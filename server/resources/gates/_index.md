@@ -2,7 +2,7 @@
 
 # Gate Index
 
-26 gates across 5 groups.
+25 gates across 5 groups.
 
 For the full enforcement-mode taxonomy (`inline_guidance` / `framework_compliance` / `shell_verify` / `script_tool` / `semantic_evaluation`) and how each `pass_criteria.type` actually behaves at runtime, see [docs/guides/gates.md](../../../docs/guides/gates.md#enforcement-modes).
 
@@ -60,9 +60,8 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 
 | Gate | Tier | Components | Severity | Activation | Subject | ~tokens | Description |
 |------|------|------------|----------|------------|---------|---------|-------------|
-| `creed-fidelity` | reminder | reminder | high | development · frameworks: RADIANT | creed | 462 | CloudySky visual work must hold itself against the Materials Creed at the top of docs/DESIGN_BIBLE.md. The output states three things: the numbered creed line the work SERVES, the numbered line it most RISKS violating, and the observable check (tools/cdp probe, screenshot, or measured delta) that would catch the violation. If no CloudySky visual/aesthetic surface is in play, state "creed: n/a — no visual surface" and pass. |
 | `framework-compliance` | reminder | reminder | — | development, analysis, research, architecture, debugging, documentation, planning · frameworks: CAGEERF, ReACT, 5W1H, SCAMPER | framework | 137 | Ensures responses follow the active framework (CAGEERF, ReACT, 5W1H, SCAMPER). Requires BOTH a matching framework context AND a relevant prompt category to activate. This prevents framework gates from applying to simple prompts like greetings. |
 
 ---
 
-*Generated: 2026-10-08*
+*Generated: 2026-10-28*

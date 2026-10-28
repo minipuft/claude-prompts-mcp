@@ -34,6 +34,8 @@ The published copy is emitted to `server/dist/cpm.js` by `npm --prefix server ru
 | `inspect`  | Show a specific resource            | `cpm inspect prompt action_plan`    |
 | `init`     | Create a new workspace              | `cpm init ./my-workspace`           |
 
+`cpm init --project` scaffolds `./.claude-prompts/` in the current directory with the same starter prompts and `config.jsonc`; resources placed there load above the user workspace and the bundled ones when the server runs in this project over STDIO. It takes no path (`cpm init <path>` is the custom-location form).
+
 All commands support `--json` for machine-readable output and `-w`/`--workspace` for workspace selection.
 
 ## Architecture

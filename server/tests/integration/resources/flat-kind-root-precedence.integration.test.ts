@@ -1,22 +1,23 @@
-// @lifecycle test - P4.27 falsifier: an overlay outranks the primary for gates, frameworks, styles.
+// @lifecycle test - Root precedence falsifier: the primary outranks an overlay for gates, frameworks, styles.
 /**
  * A gate, a framework and a style each defined in BOTH the primary root and a workspace overlay are
- * served from the overlay — and the resource index names the overlay's file.
+ * served from the primary — and the resource index names the primary's file.
  *
- * WHAT WAS WRONG. Prompts have loaded bundle -> primary -> overlays with a later result winning
- * since P1.0a (`modules/prompts/prompt-root-loader.ts`, "same ID = custom wins"), and the resource
- * indexer accumulates in the same direction. The three flat-layout kinds resolved an id as
- * `primary ?? additional`, so the PRIMARY won, and the docstring on `resolveResourceRoots` called
- * that "workspace wins" — true only while the workspace WAS the primary. Two answers to one
- * question, in five kinds' worth of code.
+ * WHAT THIS PINS. One order for every kind, stated once in `resourceRootPrecedence`: the primary
+ * (the root a write lands in), then the overlays with a later one winning, then the bundled tree.
+ * Prompts read it as bundle -> overlays -> primary with a later result winning
+ * (`modules/prompts/prompt-root-loader.ts`, "same ID = custom wins"), and the resource indexer
+ * accumulates in the same direction. The three flat-layout kinds once resolved an id as
+ * `primary ?? additional` while prompts did not, and for a time the overlay outranked the primary;
+ * a file here that disagreed with prompts would be a kind answering the question its own way.
  *
  * WHY REAL LOADERS AND A REAL TREE. Precedence is produced by `resolveResourceRoots`, consumed by
  * three separate loaders, and re-read by the indexer through `indexerResourceRoots`. A hand-built
  * root list would assert the order this file also wrote. Here `PathResolver` derives the roots from
  * a real `MCP_WORKSPACE`, the loaders walk real directories, and the index is a real SQLite table.
  *
- * WHY THE LEGACY `<workspace>/<type>/` CONVENTION IS THE OVERLAY. It is the only overlay a real
- * install can have that is distinct from the primary: `getOverlayResourceDirs` offers
+ * WHY THE LEGACY `<workspace>/<type>/` CONVENTION IS THE OVERLAY. It is the only overlay a plain
+ * workspace can have that is distinct from the primary: `getOverlayResourceDirs` offers
  * `<ws>/<type>` and `<ws>/resources/<type>`, and the second IS what `getGatesPath()` resolves to,
  * so it is filtered out as the primary. Answering the row's first question read-only on
  * 2026-09-15: no real install on this machine carries a same-id pair across roots for these three
@@ -117,7 +118,7 @@ function writeResource(root: string, id: string, entryFile: string, body: string
   return file;
 }
 
-describe('an overlay outranks the primary root for gates, frameworks and styles (P4.27)', () => {
+describe('the primary root outranks an overlay for gates, frameworks and styles', () => {
   let tmpRoot: string;
   let packageRoot: string;
   let workspace: string;
@@ -167,19 +168,27 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
           entry,
           body('bundledonly', 'BUNDLED ONLY')
         ),
-        // P4.35 — the same id valid in the OVERLAY and malformed in the PRIMARY, which is the
-        // writable root an operator edits. Before the fix the overlay served and the primary was
-        // never opened, so this file produced no warning, no quarantine record and no repair
-        // target. `belowwinner` names the position, not the directory: what made it silent was
-        // being below whatever served, and since P4.27 that is where the writable root sits.
-        belowWinnerOverlay: writeResource(
+        // POSITIVE CONTROL: an id only the OVERLAY defines. Without it, an implementation that
+        // stopped reading the overlay below the primary would pass every line about the primary.
+        overlayOnly: writeResource(
           overlay,
-          'belowwinner',
+          'overlayonly',
           entry,
-          body('belowwinner', 'FROM OVERLAY')
+          body('overlayonly', 'OVERLAY ONLY')
         ),
+        // P4.35 — the same id valid in the PRIMARY and malformed in the OVERLAY, which sits below
+        // it. Before the fix the first root to serve ended the walk, so the lower file was never
+        // opened and produced no warning, no quarantine record and no repair target.
+        // `belowwinner` names the position, not the directory: what made it silent was being below
+        // whatever served.
         belowWinnerPrimary: writeResource(
           primary,
+          'belowwinner',
+          entry,
+          body('belowwinner', 'FROM PRIMARY')
+        ),
+        belowWinnerOverlay: writeResource(
+          overlay,
           'belowwinner',
           entry,
           unparseableYaml('belowwinner')
@@ -229,56 +238,63 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
       expect(roots.primary).toBe(path.join(workspace, 'resources', type));
       expect(roots.overlays).toEqual([path.join(workspace, type)]);
       expect(roots.lookupDirs).toEqual([
-        path.join(workspace, type),
         path.join(workspace, 'resources', type),
+        path.join(workspace, type),
         path.join(packageRoot, 'resources', type),
       ]);
     }
   });
 
-  it('serves a gate from the overlay, not the primary', () => {
+  it('serves a gate from the primary, not the overlay', () => {
     const roots = rootsFor('gates');
     const loader = new GateDefinitionLoader({
       gatesDir: roots.primary as string,
       additionalGatesDirs: roots.lookupDirs,
     });
 
-    expect(loader.loadGate('shadowed')?.name).toBe('FROM OVERLAY');
-    expect(loader.loadGate('shadowed')?.sourceRoot).toBe(path.join(workspace, 'gates'));
+    expect(loader.loadGate('shadowed')?.name).toBe('FROM PRIMARY');
+    expect(loader.loadGate('shadowed')?.sourceRoot).toBe(
+      path.join(workspace, 'resources', 'gates')
+    );
 
     // POSITIVE CONTROLS: the two lower roots are still read for the ids only they define.
     expect(loader.loadGate('primaryonly')?.name).toBe('PRIMARY ONLY');
+    expect(loader.loadGate('overlayonly')?.name).toBe('OVERLAY ONLY');
     expect(loader.loadGate('bundledonly')?.name).toBe('BUNDLED ONLY');
   });
 
-  it('serves a framework from the overlay, not the primary', () => {
+  it('serves a framework from the primary, not the overlay', () => {
     const roots = rootsFor('frameworks');
     const loader = new RuntimeFrameworkLoader({
       frameworksDir: roots.primary as string,
       additionalFrameworksDirs: roots.lookupDirs,
     });
 
-    expect(loader.loadFramework('shadowed')?.name).toBe('FROM OVERLAY');
-    expect(loader.loadFramework('shadowed')?.sourceRoot).toBe(path.join(workspace, 'frameworks'));
+    expect(loader.loadFramework('shadowed')?.name).toBe('FROM PRIMARY');
+    expect(loader.loadFramework('shadowed')?.sourceRoot).toBe(
+      path.join(workspace, 'resources', 'frameworks')
+    );
 
     expect(loader.loadFramework('primaryonly')?.name).toBe('PRIMARY ONLY');
+    expect(loader.loadFramework('overlayonly')?.name).toBe('OVERLAY ONLY');
     expect(loader.loadFramework('bundledonly')?.name).toBe('BUNDLED ONLY');
   });
 
-  it('serves a style from the overlay, not the primary', () => {
+  it('serves a style from the primary, not the overlay', () => {
     const roots = rootsFor('styles');
     const loader = new StyleDefinitionLoader({
       stylesDir: roots.primary as string,
       additionalStylesDirs: roots.lookupDirs,
     });
 
-    expect(loader.loadStyle('shadowed')?.name).toBe('FROM OVERLAY');
+    expect(loader.loadStyle('shadowed')?.name).toBe('FROM PRIMARY');
 
     expect(loader.loadStyle('primaryonly')?.name).toBe('PRIMARY ONLY');
+    expect(loader.loadStyle('overlayonly')?.name).toBe('OVERLAY ONLY');
     expect(loader.loadStyle('bundledonly')?.name).toBe('BUNDLED ONLY');
   });
 
-  it('indexes all three kinds from the overlay, so the index agrees with what is served', async () => {
+  it('indexes all three kinds from the primary, so the index agrees with what is served', async () => {
     const indexer = new ResourceIndexer(dbManager, mockLogger as never, {
       resourcesDir: path.join(workspace, 'resources'),
       resourceRoots: indexerResourceRoots(pathResolver),
@@ -298,9 +314,11 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
       ['framework', 'frameworks'],
       ['style', 'styles'],
     ] as const) {
-      expect(indexedPath(type, 'shadowed')).toBe(written[kind]?.['overlay']);
-      // POSITIVE CONTROL from the same table: an id only the primary holds is indexed from it, so
-      // the line above is not passing because the walk skipped the primary entirely.
+      expect(indexedPath(type, 'shadowed')).toBe(written[kind]?.['primary']);
+      // POSITIVE CONTROLS from the same table: an id only the overlay holds, and one only the
+      // primary holds, are each indexed from their own root, so the line above is not passing
+      // because the walk skipped one of the two.
+      expect(indexedPath(type, 'overlayonly')).toBe(written[kind]?.['overlayOnly']);
       expect(indexedPath(type, 'primaryonly')).toBe(written[kind]?.['primaryOnly']);
     }
   });
@@ -309,12 +327,9 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
    * P4.35 — a malformed file BELOW the root that serves is still recorded and still repairable.
    *
    * First-hit-wins opened a root only when the roots above it had not served, so a broken file in
-   * a lower root was never read and never quarantined. That was symmetric with the pre-P4.27
-   * behaviour, which silenced a broken OVERLAY — but P4.27 moved the writable root down the order,
-   * so the silent root became the one an operator edits. An operator whose own
-   * `<ws>/resources/gates/foo` is malformed while `<ws>/gates/foo` serves the id saw nothing at
-   * all: no warning, no `list` entry, no repair target. Ruling R17: serving stops at the first
-   * hit, recording does not.
+   * a lower root was never read and never quarantined: an operator whose `<ws>/gates/foo` is
+   * malformed while `<ws>/resources/gates/foo` serves the id saw nothing at all — no warning, no
+   * `list` entry, no repair target. Ruling R17: serving stops at the first hit, recording does not.
    *
    * EACH CASE CARRIES BOTH CONTROLS. A loader that quarantined everything would satisfy "the
    * broken file is recorded" for free, so every case first loads a healthy three-root id and
@@ -324,7 +339,7 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
    * root that legitimately won.
    */
   describe('a refusal below the serving root is recorded, not silenced (P4.35)', () => {
-    it('records the gate refused in the writable root while the overlay serves', () => {
+    it('records the gate refused in the overlay while the primary serves', () => {
       const roots = rootsFor('gates');
       const loader = new GateDefinitionLoader({
         gatesDir: roots.primary as string,
@@ -333,61 +348,63 @@ describe('an overlay outranks the primary root for gates, frameworks and styles 
 
       // CONTROL — a healthy id in all three roots leaves the collection empty, so the record
       // below is this file's refusal and not a walk that quarantines whatever it touches.
-      expect(loader.loadGate('shadowed')?.name).toBe('FROM OVERLAY');
+      expect(loader.loadGate('shadowed')?.name).toBe('FROM PRIMARY');
       expect(loader.getQuarantine().list()).toEqual([]);
 
-      // CONTROL — the served definition is unaffected: the id resolves, from the overlay.
-      expect(loader.loadGate('belowwinner')?.name).toBe('FROM OVERLAY');
-      expect(loader.loadGate('belowwinner')?.sourceRoot).toBe(path.join(workspace, 'gates'));
+      // CONTROL — the served definition is unaffected: the id resolves, from the primary.
+      expect(loader.loadGate('belowwinner')?.name).toBe('FROM PRIMARY');
+      expect(loader.loadGate('belowwinner')?.sourceRoot).toBe(
+        path.join(workspace, 'resources', 'gates')
+      );
 
-      // …and THIS file — the one in the writable root — is the one recorded.
+      // …and THIS file — the one in the overlay below it — is the one recorded.
       const records = loader.getQuarantine().byId('belowwinner');
       expect(records).toHaveLength(1);
-      expect(records[0]?.path).toBe(written['gates']?.['belowWinnerPrimary']);
-      expect(records[0]?.root).toBe(path.join(workspace, 'resources', 'gates'));
+      expect(records[0]?.path).toBe(written['gates']?.['belowWinnerOverlay']);
+      expect(records[0]?.root).toBe(path.join(workspace, 'gates'));
       expect(records[0]?.type).toBe('gate');
       expect(records[0]?.error).not.toBe('');
     });
 
-    it('records the framework refused in the writable root while the overlay serves', () => {
+    it('records the framework refused in the overlay while the primary serves', () => {
       const roots = rootsFor('frameworks');
       const loader = new RuntimeFrameworkLoader({
         frameworksDir: roots.primary as string,
         additionalFrameworksDirs: roots.lookupDirs,
       });
 
-      expect(loader.loadFramework('shadowed')?.name).toBe('FROM OVERLAY');
+      expect(loader.loadFramework('shadowed')?.name).toBe('FROM PRIMARY');
       expect(loader.getQuarantine().list()).toEqual([]);
 
-      expect(loader.loadFramework('belowwinner')?.name).toBe('FROM OVERLAY');
+      expect(loader.loadFramework('belowwinner')?.name).toBe('FROM PRIMARY');
       expect(loader.loadFramework('belowwinner')?.sourceRoot).toBe(
-        path.join(workspace, 'frameworks')
+        path.join(workspace, 'resources', 'frameworks')
       );
 
       const records = loader.getQuarantine().byId('belowwinner');
       expect(records).toHaveLength(1);
-      expect(records[0]?.path).toBe(written['frameworks']?.['belowWinnerPrimary']);
-      expect(records[0]?.root).toBe(path.join(workspace, 'resources', 'frameworks'));
+      expect(records[0]?.path).toBe(written['frameworks']?.['belowWinnerOverlay']);
+      expect(records[0]?.root).toBe(path.join(workspace, 'frameworks'));
       expect(records[0]?.type).toBe('framework');
       expect(records[0]?.error).not.toBe('');
     });
 
-    it('records the style refused in the writable root while the overlay serves', () => {
+    it('records the style refused in the overlay while the primary serves', () => {
       const roots = rootsFor('styles');
       const loader = new StyleDefinitionLoader({
         stylesDir: roots.primary as string,
         additionalStylesDirs: roots.lookupDirs,
       });
 
-      expect(loader.loadStyle('shadowed')?.name).toBe('FROM OVERLAY');
+      expect(loader.loadStyle('shadowed')?.name).toBe('FROM PRIMARY');
       expect(loader.getQuarantine().list()).toEqual([]);
 
-      expect(loader.loadStyle('belowwinner')?.name).toBe('FROM OVERLAY');
+      expect(loader.loadStyle('belowwinner')?.name).toBe('FROM PRIMARY');
 
       const records = loader.getQuarantine().byId('belowwinner');
       expect(records).toHaveLength(1);
-      expect(records[0]?.path).toBe(written['styles']?.['belowWinnerPrimary']);
-      expect(records[0]?.root).toBe(path.join(workspace, 'resources', 'styles'));
+      expect(records[0]?.path).toBe(written['styles']?.['belowWinnerOverlay']);
+      expect(records[0]?.root).toBe(path.join(workspace, 'styles'));
       expect(records[0]?.type).toBe('style');
       expect(records[0]?.error).not.toBe('');
     });
