@@ -40,3 +40,7 @@ tags: [resources, workspace, cli, docs]
 - F1a: R6's text overstated the skills-sync coupling (one comment and one hand-built fixture, no behaviour). Superseded here, R6 left as written in the plan with this pointer.
 - F2 (row 2.4): stale prose found on the way: `docs/architecture/overview.md:345` lists six guides and omits RADIANT and VERIFY; `yaml-framework-loading.test.ts:23` says "The 7 frameworks" over a 7-entry list that excludes `verify`; `framework-lifecycle-processor.ts:818` has a doc comment whose `@returns` text is wrong.
 - F3 (row 2.2): `docs/guides/cli.md` and `cli/README.md` document `cpm init ./my-workspace` but not `--project`; row 2.5 added.
+
+## 2026-10-28 — publish ruling
+
+- Owner ruling 2026-10-28: approve the cut, split the branch into one PR per outcome and open them; the framework removal (RADIANT, liquescent) follows immediately after the split as its own slice. `publish: push`; merging is the owner's call on review.

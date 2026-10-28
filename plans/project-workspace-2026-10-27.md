@@ -3,7 +3,7 @@ title: A project gets its own resource workspace in `.claude-prompts/`
 date: 2026-10-27
 status: active
 type: plan
-publish: none
+publish: push · owner ruling 2026-10-28 ("the cut and PR split"): open the PR, no merge until review
 tags: [resources, workspace, cli, docs]
 ---
 
