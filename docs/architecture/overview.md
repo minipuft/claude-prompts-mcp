@@ -342,7 +342,7 @@ Authentication and rate limiting run before body parsing or prompt lookup, respo
 
 - **Manager**: Stateless orchestration, loads definitions from framework registry
 - **State Store**: Persists active framework to the SQLite `kv_state` table (key `framework`)
-- **Guides**: CAGEERF, ReACT, 5W1H, SCAMPER, FOCUS, Liquescent implementations
+- **Guides**: CAGEERF, ReACT, 5W1H, SCAMPER, FOCUS, VERIFY implementations
 
 #### Gates (`src/engine/gates/`)
 

@@ -17,16 +17,14 @@ Frameworks are reasoning frameworks that the server injects into your prompts. T
 
 ## Built-in Frameworks
 
-| ID           | Name          | Best For                                 | Phases                                                                   |
-| ------------ | ------------- | ---------------------------------------- | ------------------------------------------------------------------------ |
-| `cageerf`    | C.A.G.E.E.R.F | General-purpose structured reasoning     | Context, Analysis, Goals, Execution, Evaluation, Refinement              |
-| `react`      | ReACT         | Iterative reasoning + action loops       | Reason, Act, Observe (repeat)                                            |
-| `5w1h`       | 5W1H          | Investigative analysis                   | Who, What, When, Where, Why, How                                         |
-| `scamper`    | SCAMPER       | Creative ideation and brainstorming      | Substitute, Combine, Adapt, Modify, Put to other use, Eliminate, Reverse |
-| `focus`      | FOCUS         | Problem-solving with root cause analysis | Find, Organize, Clarify, Understand, Solution                            |
-| `liquescent` | LIQUESCENT    | Creative flow and artistic exploration   | Layered creative phases                                                  |
-| `radiant`    | RADIANT       | CloudySky visual design work             | Vision, Goals, Palette, Atmosphere, Surfaces, Constraints, Live test     |
-| `verify`     | V.E.R.I.F.Y   | Resume audit against a documented bio    | Voice, Evidence, Resonance, Inspect, Field isolation, Yield              |
+| ID        | Name          | Best For                                 | Phases                                                                   |
+| --------- | ------------- | ---------------------------------------- | ------------------------------------------------------------------------ |
+| `cageerf` | C.A.G.E.E.R.F | General-purpose structured reasoning     | Context, Analysis, Goals, Execution, Evaluation, Refinement              |
+| `react`   | ReACT         | Iterative reasoning + action loops       | Reason, Act, Observe (repeat)                                            |
+| `5w1h`    | 5W1H          | Investigative analysis                   | Who, What, When, Where, Why, How                                         |
+| `scamper` | SCAMPER       | Creative ideation and brainstorming      | Substitute, Combine, Adapt, Modify, Put to other use, Eliminate, Reverse |
+| `focus`   | FOCUS         | Problem-solving with root cause analysis | Find, Organize, Clarify, Understand, Solution                            |
+| `verify`  | V.E.R.I.F.Y   | Resume audit against a documented bio    | Voice, Evidence, Resonance, Inspect, Field isolation, Yield              |
 
 ---
 
@@ -43,14 +41,16 @@ system_control(action: "framework", operation: "switch", framework: "cageerf")
 ### Pin a Framework Per Project
 
 A switch persists to the calling project's scope, so different repositories can sit on different
-frameworks at the same time — CAGEERF for a server codebase, RADIANT for a Spicetify theme.
+frameworks at the same time — CAGEERF for a server codebase, SCAMPER for a design-exploration repository.
+A framework that only one project needs belongs in that project's `.claude-prompts/` folder, where it
+loads for that project alone (see [Custom Resources](custom-resources.md#option-c--project-workspace)).
 
 Declare the starting point in that project's `config.jsonc` (`config.json` is also still read):
 
 ```json
 {
   "frameworks": {
-    "defaultFramework": "RADIANT"
+    "defaultFramework": "SCAMPER"
   }
 }
 ```
