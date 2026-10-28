@@ -1,7 +1,7 @@
 ---
 title: Project workspace notes
 date: 2026-10-27
-status: active
+status: done
 plan: project-workspace-2026-10-27.md
 tags: [resources, workspace, cli, docs]
 ---
