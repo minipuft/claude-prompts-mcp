@@ -3,9 +3,10 @@
  * Durable Migrations — what happens to the rows of a durable table when the schema moves on.
  *
  * `SqliteEngine` upgrades a database by snapshotting the durable tables, recreating the schema and
- * restoring the rows whose column NAMES still exist. A renamed column therefore loses its values
- * silently. A migration step is the declared alternative: a pure transform over the snapshot rows
- * (never SQL), run between the snapshot and the restore, so a rename is carried instead of dropped.
+ * restoring the rows by column NAME, and it refuses the upgrade when a snapshot column has no
+ * place in the new schema. A migration step is how a schema change says what happens instead: a
+ * pure transform over the snapshot rows (never SQL), run between the snapshot and the restore, so
+ * a rename is carried, and a removal declared in `droppedColumns`, rather than refused.
  *
  * This module decides three things and does no I/O: which steps apply to an upgrade
  * (`planDurableMigrations`), what the snapshot looks like after they ran
@@ -34,7 +35,7 @@ export interface DurableMigration {
   migrate(snapshot: DurableSnapshot): DurableSnapshot;
 }
 
-/** Oldest schema version a migration path exists from; older databases are recreated, not migrated. */
+/** Oldest schema version a migration path exists from; an older database is refused, not upgraded. */
 export const MIGRATION_FLOOR = 35;
 
 export const DURABLE_MIGRATIONS: readonly DurableMigration[] = [];
@@ -85,10 +86,18 @@ export function undeclaredColumnLoss(
   newColumns: ReadonlySet<string>,
   steps: readonly DurableMigration[]
 ): string[] {
-  const declared = new Set(steps.flatMap((step) => step.droppedColumns?.[table] ?? []));
+  const declared = declaredDroppedColumns(table, steps);
   return snapshotColumns
     .filter((column) => !newColumns.has(column) && !declared.has(column))
     .sort();
+}
+
+/** Every column of `table` that some step declares in `droppedColumns`. */
+export function declaredDroppedColumns(
+  table: string,
+  steps: readonly DurableMigration[]
+): ReadonlySet<string> {
+  return new Set(steps.flatMap((step) => step.droppedColumns?.[table] ?? []));
 }
 
 function assertRegistryWellFormed(registry: readonly DurableMigration[]): void {
@@ -97,7 +106,8 @@ function assertRegistryWellFormed(registry: readonly DurableMigration[]): void {
     if (step.toVersion <= MIGRATION_FLOOR) {
       throw new Error(
         `Durable migration to v${step.toVersion} is at or below the floor v${MIGRATION_FLOOR}: ` +
-          'databases that old are recreated, so the step could never run.'
+          'a database that old is refused at startup rather than upgraded, so the step could ' +
+          'never run.'
       );
     }
     if (seen.has(step.toVersion)) {

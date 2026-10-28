@@ -33,6 +33,17 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
+import {
+  DURABLE_MIGRATIONS,
+  MIGRATION_FLOOR,
+  applyDurableMigrations,
+  declaredDroppedColumns,
+  planDurableMigrations,
+  undeclaredColumnLoss,
+  type DurableMigration,
+  type DurableRow,
+  type DurableSnapshot,
+} from './durable-migrations.js';
 import { enforceRetention } from './retention.js';
 import {
   CONTRACTED_TABLE_NAMES,
@@ -58,7 +69,9 @@ import {
 } from '#shared/utils/runtime-state-location.js';
 
 /**
- * Bump this when changing the embedded schema. Triggers drop-and-recreate.
+ * Bump this when changing the embedded schema. An older database is upgraded by snapshot, drop,
+ * recreate and restore; a durable column the new DDL renames or removes needs a step in
+ * `durable-migrations.ts` (`DURABLE_MIGRATIONS`), or the restore refuses the upgrade.
  *
  * v35: the hook projection key in the `chain_sessions` state document becomes `currentStepReview`,
  * and its `v_execution_status` column `current_step_review` (P6.20, R193; the old names are in
@@ -69,7 +82,7 @@ import {
  * on every boot; the bump is what drops the rows a process wrote under the old key, since
  * `chain_sessions` is `derived` and `chain_runs`/`chain_run_nodes` are `ephemeral`. It also
  * retires the pre-3.1 residual reader in `run-registry.ts`: no `chain_runs` row older than this
- * bump survives it. `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move.
+ * bump survives it.
  *
  * v34: adds `accepted_at_step` to `chain_run_nodes` (P6.253, R136 — a remainder's acceptance
  * stamp).
@@ -82,8 +95,7 @@ import {
  * node the run stood on when the remainder was accepted; `run-registry.reconstructNode` reads it
  * back onto `ChainNode.acceptedAtStep`, which the comparator reads. Nullable INTEGER with NO DDL
  * DEFAULT, for the reason `origin` has none; NULL on every planned and inserted node — partial
- * population BY ROW TYPE. `chain_run_nodes` is `ephemeral`, so the bump drops and recreates it:
- * `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move.
+ * population BY ROW TYPE. `chain_run_nodes` is `ephemeral`, so the bump drops and recreates it.
  *
  * v33: `chain_sessions` is keyed by `(run_owner_pid, chain_id, continuity_scope_id)` and drops
  * `run_number` (P6.147, R70 — one process serving two continuity scopes).
@@ -96,8 +108,7 @@ import {
  * no DDL DEFAULT, so a writer that omits it fails); `workspace_id` stays the process's launch
  * workspace and answers a different question. `run_number` had no reader but the view projecting
  * it, and none in the hooks or downstream repos (measured 2026-09-27). `chain_sessions` is
- * `derived`, so the bump drops and recreates it: `DROPPED_ON_THIS_BUMP` stays empty and
- * `DROPPED_AT_VERSION` does not move.
+ * `derived`, so the bump drops and recreates it.
  *
  * v32: adds `inline_gate_ids` to `chain_run_nodes` (P6.101, R68 — a contributed node carries its
  * step's gates).
@@ -110,7 +121,7 @@ import {
  * node. JSON array of gate ids; nullable with NO DDL DEFAULT, for the reason `origin` has none. NULL
  * is every planned and inserted node, and every contributed node whose step declared no gates —
  * partial population BY ROW TYPE. `chain_run_nodes` is `ephemeral`, so the bump drops and recreates
- * it: `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move.
+ * it.
  *
  * v31: adds `spawned_at` to `chain_run_nodes` (delegation handoff contract, Tier 4 — detached
  * delegation).
@@ -137,7 +148,7 @@ import {
  * detached node not yet rendered — so this is partial population BY ROW TYPE, the v21/v23
  * pattern. `chain_run_nodes` is `ephemeral`: the bump drops its rows, no migration is written or
  * wanted, and a run in flight across the upgrade is lost exactly as every ephemeral bump before
- * this one loses it. `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move.
+ * this one loses it.
  *
  * v30: replaces the v24 delegation-acknowledgment boolean on `execution_records` with
  * `handoff_evidence TEXT` (delegation handoff contract, Tier 2 / R1).
@@ -159,8 +170,7 @@ import {
  * this repo read the retired boolean (grep across `minipuft-plugins`, `gemini-prompts` and
  * `opencode-prompts` at the v20 rename found no reader of any `execution_records` column, and no
  * hook opens it), and `execution_records` is `ephemeral`, so this bump drops its rows and no old
- * row can reach v30 to be interpreted under the new name. `DROPPED_ON_THIS_BUMP` stays empty and
- * `DROPPED_AT_VERSION` does not move.
+ * row can reach v30 to be interpreted under the new name.
  *
  * v29: adds `objects` and `version_entries` — the content-addressed store that backs byte-exact
  * resource rollback — and two nullable columns on `version_history`, `tree_hash` and
@@ -223,7 +233,7 @@ import {
  * incompatible legacy writers must still be retired or isolated. The startup check repairs
  * surviving history rows whose trees a legacy downgrade already removed.
  *
- * `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move: nothing is discarded.
+ * Nothing is discarded.
  *
  * v28: adds `idx_version_history_key`, a UNIQUE index on
  * `(tenant_id, resource_type, resource_id, version)` — the key `version_history` always meant and
@@ -238,13 +248,11 @@ import {
  * fixed with the index: the rename now renumbers the incoming rows to continue after the target's
  * newest version, in one transaction.
  *
- * `version_history` is `durable`, so this bump takes the snapshot/restore round-trip — and a
- * database that ALREADY holds duplicates would fail that restore on the new index. It does not:
- * `renumberDuplicateVersionHistory` runs between the snapshot and the restore and renumbers
- * colliding rows deterministically by `created_at` then `id`, keeping every row and every
- * chronology. That is this bump's migration, and it is the whole of it — no dual write, no flag,
- * no engine-resident code that re-runs forever, since a v28 database cannot produce a duplicate.
- * `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move: nothing is discarded.
+ * `version_history` is `durable`, so this bump took the snapshot/restore round-trip, and a
+ * database that already held duplicates had its colliding rows renumbered by `created_at` then
+ * `id` between the snapshot and the restore, keeping every row. This engine upgrades only from
+ * `MIGRATION_FLOOR` upward and refuses anything older, so it carries no v28 renumbering: a v28
+ * database cannot produce a duplicate.
  *
  * v27: adds `delegated` and `args_json` to `chain_run_nodes` (row A.5, remainder node fields).
  *
@@ -260,7 +268,7 @@ import {
  * catch a writer dropping it. NULL is a real value on both — it means the node declared nothing,
  * which is every planned and every inserted node. Partial population BY ROW TYPE, the v21/v23
  * pattern, not a value-dead column. `chain_run_nodes` is `ephemeral`, so this bump touches no
- * durable table: `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move.
+ * durable table.
  *
  * v26: adds `interrupts_raised` and `remainders_accepted` to `execution_records` (D-8, mid-chain
  * unknown surfacing). Nullable INTEGER, no DDL DEFAULT, bound only on terminal rows — the same
@@ -279,17 +287,15 @@ import {
  * DISTINCT unknown ids, the same unit `replaceRemainder`'s per-unknown-id cap counts. Both are
  * derived at read time in `getRunTelemetry`, never from a parallel counter — see `RunTelemetry`.
  *
- * `execution_records` is `ephemeral`, so this bump drops its rows and nothing durable is touched:
- * `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move. `v_execution_history`
- * is deliberately NOT widened for the reason v21 recorded — it has zero code readers, and adding
+ * `execution_records` is `ephemeral`, so this bump drops its rows and nothing durable is touched.
+ * `v_execution_history` is deliberately NOT widened for the reason v21 recorded — it has zero code readers, and adding
  * columns to a reader-less view is how this table produced value-dead columns twice.
  *
  * v24: adds `declared_sections_json` to `chain_run_nodes` (phase-guard declaration contract)
  * and a delegation-acknowledgment boolean to `execution_records` (S8, R-4; replaced by
  * `handoff_evidence` at v30 above). Both are
  * nullable with no DDL DEFAULT — rationale at each column's DDL comment. Both tables are
- * `ephemeral`, so the bump is free of the durable snapshot/restore path: `DROPPED_ON_THIS_BUMP`
- * stays empty and `DROPPED_AT_VERSION` does not move.
+ * `ephemeral`, so the bump is free of the durable snapshot/restore path.
  *
  * v23: adds `origin` and `origin_unknown_id` to `chain_run_nodes`, and `nodes_inserted` /
  * `nodes_skipped` to `execution_records` (P4 adaptive mutation).
@@ -320,7 +326,7 @@ import {
  * run carries NULLs because only one writer was taught the new fields.
  *
  * All three tables touched are `ephemeral`, so this bump is free of the durable snapshot/restore
- * path: `DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move.
+ * path.
  *
  * v22: retires `chain_run_registry` into per-row `chain_runs` + `chain_run_nodes`, and adds a
  * nullable `node_id` to `execution_records`.
@@ -338,8 +344,8 @@ import {
  * does not carry it. Two copies of one fact with no gate between them is the drift shape this
  * schema has produced twice; the column wins because it is the one a query can reach.
  *
- * No exclusion is declared for the dropped table and none is needed: `DROPPED_ON_THIS_BUMP` names
- * DURABLE tables withheld from the snapshot/restore round-trip, and `chain_run_registry` is
+ * The dropped table needs no migration step: steps carry DURABLE tables across the
+ * snapshot/restore round-trip, and `chain_run_registry` is
  * `ephemeral` — its rows are PID-scoped live-run state that a restart already invalidated. The
  * drop needs no ceremony because there is nothing to carry.
  *
@@ -395,12 +401,12 @@ import {
  * table from `applySchema()` requires a bump: existing databases still carry it, and
  * `assertSchemaMatchesContracts()` rejects a live table with no contract.
  *
- * This bump also **retires `DROPPED_ON_THIS_BUMP`**, which is why the set below is empty and
- * `DROPPED_AT_VERSION` moved to 19. `version_history` is therefore preserved across this bump, as
- * a durable table should be — the v18 drop was the one-time act and has already run.
+ * `version_history` is preserved across this bump, as a durable table should be — the v18 drop
+ * was a one-time act.
  *
- * v18: drops pre-scoping `version_history` rows via `DROPPED_ON_THIS_BUMP`. Every row written
- * before Tier 4 carried the literal `tenant_id = 'default'`, and many projects sharing one
+ * v18: dropped pre-scoping `version_history` rows by withholding the table from the restore.
+ * Every row written before Tier 4 carried the literal `tenant_id = 'default'`, and many projects
+ * sharing one
  * state.db wrote into it, so nothing distinguishes which workspace produced which row. Once reads
  * are workspace-scoped those rows are unreachable regardless; carrying them across would preserve
  * data no query can return. **This destroys rollback history predating the upgrade** — intended and
@@ -442,46 +448,11 @@ const SCHEMA_VERSION = 35;
  * Declared in `table-contracts.ts` as `posture: 'durable'` rather than listed here, so the
  * classification lives with the rest of the table's contract and the validation gates read
  * the same source. Marking a table durable is a commitment: its rows are carried across the
- * drop-and-recreate by column intersection, so a column removed from the DDL drops silently
- * and a new NOT NULL column without a default fails the restore loudly rather than discarding
- * rows.
+ * drop-and-recreate, so a snapshot column the new DDL lacks refuses the upgrade unless a
+ * migration step declares it dropped, and a new NOT NULL column without a default fails the
+ * restore loudly rather than discarding rows.
  */
 const DURABLE_TABLES = DURABLE_TABLE_NAMES;
-
-/**
- * Durable tables deliberately NOT carried across the current bump.
- *
- * **Currently empty, and that is the resting state.** It held `version_history` for v18 and was
- * retired at v19 — the retirement this file's gate was built to force.
- *
- * This is the escape hatch for a one-time data migration that a recreate can express: rather than
- * shipping migration code that lives in the engine forever — the F5 anti-pattern this schema was
- * cleaned of — the drop IS the migration, and this set plus the SCHEMA_VERSION docblock are its
- * record. If you add an entry, **empty it again at the next bump**; an entry left behind silently
- * discards a durable table on an unrelated schema change. `DROPPED_AT_VERSION` below is what makes
- * that forgetting impossible rather than merely discouraged.
- */
-const DROPPED_ON_THIS_BUMP: ReadonlySet<string> = new Set([]);
-
-/**
- * The SCHEMA_VERSION that `DROPPED_ON_THIS_BUMP` was declared for.
- *
- * Without this the exclusion has no retirement condition: it reads as a permanent property of the
- * engine rather than a one-time act, and the next bump would silently discard a durable table on
- * an unrelated schema change. `validate:table-contracts` compares the two — once SCHEMA_VERSION
- * moves past this, a non-empty set is a hard failure naming each stale entry.
- *
- * Retiring the exclusion is therefore two edits that the gate forces to happen together: empty the
- * set, and move this to the new version.
- */
-// Annotated `number` rather than left as a literal: once SCHEMA_VERSION moves past it, TypeScript
-// narrows both to non-overlapping literal types and rejects the runtime guard below as impossible.
-// The guard is not impossible — it is the check that fires when someone adds an entry to
-// DROPPED_ON_THIS_BUMP and forgets to move this constant with it.
-const DROPPED_AT_VERSION: number = 19;
-
-/** Rows carried across a schema recreate, keyed by table name. */
-type DurableSnapshot = Map<string, Array<Record<string, unknown>>>;
 
 /** One durable table the recreate carried across, and how many rows came with it. */
 interface PreservedTable {
@@ -539,68 +510,26 @@ function nameTheFile(dbPath: string, error: unknown): Error {
 }
 
 /**
- * The history key a row belongs to, as one string.
- *
- * `JSON.stringify` rather than a joined separator: a resource id may contain any character,
- * so any literal separator can be forged into another history's key — and a NUL one makes this
- * source file binary to `rg`, which silently blinds every text gate that scans it.
+ * Every column any snapshot row carries, in first-seen order. The union rather than the first
+ * row's keys: a migration step may give some rows a key others lack, and a column only the later
+ * rows carry would otherwise be dropped without being counted as a loss.
  */
-function versionHistoryGroupKey(row: Record<string, unknown>): string {
-  return JSON.stringify(
-    [row['tenant_id'], row['resource_type'], row['resource_id']].map((part) => String(part ?? ''))
-  );
+function snapshotColumns(rows: readonly DurableRow[]): string[] {
+  const columns = new Set<string>();
+  for (const row of rows) {
+    for (const column of Object.keys(row)) {
+      columns.add(column);
+    }
+  }
+  return [...columns];
 }
 
-/**
- * Renumber `version_history` rows so no two in one history share a version. PURE.
- *
- * The v28 migration (see the SCHEMA_VERSION docblock). Rows written before v28 could collide,
- * because the CLI's rename merged two histories under one id, so the restore into the newly
- * unique-indexed table would otherwise throw — and the restore's own failure mode is to abort
- * startup, which for a durable table nothing regenerates is worse than the duplicate.
- *
- * Deterministic and order-preserving: within a history, rows are walked oldest-first by
- * `created_at` then `id` (the write order, which is the only chronology these rows carry), and
- * each keeps its own version unless that would repeat or go backwards, in which case it takes the
- * next free number. A history that was already unique and ascending is left byte-identical, so the
- * migration is a no-op for every database that never renamed onto occupied history.
- *
- * Mutates `version` on the given rows and returns how many it changed.
- */
-function renumberDuplicateVersionHistory(rows: Array<Record<string, unknown>>): number {
-  const groups = new Map<string, Array<Record<string, unknown>>>();
-  for (const row of rows) {
-    const key = versionHistoryGroupKey(row);
-    const group = groups.get(key);
-    if (group === undefined) {
-      groups.set(key, [row]);
-    } else {
-      group.push(row);
-    }
-  }
-
-  let renumbered = 0;
-  for (const group of groups.values()) {
-    group.sort((left, right) => {
-      const byDate = String(left['created_at'] ?? '').localeCompare(
-        String(right['created_at'] ?? '')
-      );
-      return byDate !== 0 ? byDate : Number(left['id'] ?? 0) - Number(right['id'] ?? 0);
-    });
-
-    let previous = 0;
-    for (const row of group) {
-      const declared = Number(row['version'] ?? 0);
-      const assigned = declared > previous ? declared : previous + 1;
-      if (assigned !== declared) {
-        row['version'] = assigned;
-        renumbered += 1;
-      }
-      previous = assigned;
-    }
-  }
-
-  return renumbered;
+/** Whether `name` is a `<base>.v<digits>.bak` upgrade backup of the database file `base`. */
+function isUpgradeBackupOf(base: string, name: string): boolean {
+  const prefix = `${base}.v`;
+  const suffix = '.bak';
+  if (!name.startsWith(prefix) || !name.endsWith(suffix)) return false;
+  return /^\d+$/.test(name.slice(prefix.length, name.length - suffix.length));
 }
 
 /**
@@ -616,6 +545,18 @@ export interface DatabaseConfig {
   dbPath: string;
   /** Enable verbose SQL logging */
   verbose?: boolean;
+  /**
+   * The schema version an upgrade aims at: written into `schema_version` by a create or upgrade,
+   * compared against on every start, and the ceiling above which a database is refused as newer.
+   * Defaults to `SCHEMA_VERSION`. A test seam, so a test can upgrade a v35 file to a v36 target
+   * with a registered step against today's DDL; production callers pass nothing.
+   */
+  schemaVersion?: number;
+  /**
+   * The migration steps an upgrade toward `schemaVersion` may run. Defaults to
+   * `DURABLE_MIGRATIONS`; a test seam like `schemaVersion`, and production callers pass nothing.
+   */
+  durableMigrations?: readonly DurableMigration[];
 }
 
 /**
@@ -631,6 +572,8 @@ export class SqliteEngine implements DatabasePort {
   private readonly dbPath: string;
   private readonly logger: Logger;
   private readonly verbose: boolean;
+  private readonly targetVersion: number;
+  private readonly migrations: readonly DurableMigration[];
   private initialized: boolean = false;
 
   private constructor(logger: Logger, config: DatabaseConfig) {
@@ -639,9 +582,18 @@ export class SqliteEngine implements DatabasePort {
       // persist nothing while every write reported success.
       throw new Error('SqliteEngine requires a non-empty dbPath.');
     }
+    const targetVersion = config.schemaVersion ?? SCHEMA_VERSION;
+    if (!Number.isSafeInteger(targetVersion) || targetVersion <= 0) {
+      // Interpolated into the schema DDL, so anything but a positive integer is refused here.
+      throw new Error(
+        `SqliteEngine schemaVersion must be a positive integer, got ${targetVersion}.`
+      );
+    }
     this.logger = logger;
     this.verbose = config.verbose ?? false;
     this.dbPath = config.dbPath;
+    this.targetVersion = targetVersion;
+    this.migrations = config.durableMigrations ?? DURABLE_MIGRATIONS;
   }
 
   /**
@@ -705,14 +657,18 @@ export class SqliteEngine implements DatabasePort {
         this.db.exec(pragma);
       }
 
-      // Refuse incompatible or malformed authority before even changing the journal mode.
-      this.getSupportedSchemaVersion();
+      // Refuse incompatible or malformed authority before even changing the journal mode. The
+      // version read here is a peek, taken outside the schema transaction: it decides only
+      // whether to back the file up, and `ensureSchema` reads it again under the write lock.
+      const peekedVersion = this.getSupportedSchemaVersion();
 
       // Enable WAL mode for concurrent reader access (Python hooks, skills-sync CLI)
       this.db.exec('PRAGMA journal_mode=WAL');
 
-      // Ensure schema is current (creates fresh or recreates an older version)
-      const schemaOutcome = this.ensureSchema();
+      const backupPath = this.backupBeforeUpgrade(peekedVersion);
+
+      // Ensure schema is current (creates fresh or upgrades an older version)
+      const schemaOutcome = this.ensureSchema(backupPath);
       this.assertSchemaMatchesContracts();
 
       // Referential check A over the v29 object store. Skipped on a database this call just
@@ -767,6 +723,52 @@ export class SqliteEngine implements DatabasePort {
           'a directory; or set MCP_RUNTIME_ROOT to a writable directory.',
         { cause: error }
       );
+    }
+  }
+
+  /**
+   * Copy the file to `<dbPath>.v<version>.bak` before an upgrade from `version`, keeping only the
+   * latest such backup beside it. Returns the backup path, or null when no upgrade is due (fresh,
+   * current, or below the floor, which `bringSchemaCurrent` refuses) or the database is in memory.
+   *
+   * Runs before the schema transaction because SQLite refuses `VACUUM` inside one. `VACUUM INTO`
+   * refuses an existing target, so it writes a `.tmp` (any stale one removed first) and renames it
+   * over the backup. Another process may upgrade the file between this peek and the write lock;
+   * that costs one extra backup of a file that was then still at `version`, which is acceptable.
+   * A failure throws: an upgrade that could not be backed up does not start.
+   */
+  private backupBeforeUpgrade(version: number): string | null {
+    const upgradeDue = version >= MIGRATION_FLOOR && version < this.targetVersion;
+    if (!upgradeDue || this.dbPath === ':memory:') {
+      return null;
+    }
+    const backupPath = `${this.dbPath}.v${version}.bak`;
+    const staging = `${backupPath}.tmp`;
+    try {
+      fs.rmSync(staging, { force: true });
+      this.getDb().prepare('VACUUM INTO ?').run(staging);
+      fs.renameSync(staging, backupPath);
+      this.removeOtherUpgradeBackups(backupPath);
+    } catch (error) {
+      throw new Error(
+        `Cannot back up state.db at ${this.dbPath} to ${backupPath} before upgrading it from ` +
+          `schema v${version} to v${this.targetVersion}: ${messageOf(error)}. The upgrade did not ` +
+          'start and the database is unchanged; free space or fix permissions in that directory.',
+        { cause: error }
+      );
+    }
+    return backupPath;
+  }
+
+  /** Delete every `<basename>.v*.bak` beside the database except `kept`: the latest one only. */
+  private removeOtherUpgradeBackups(kept: string): void {
+    const directory = path.dirname(this.dbPath);
+    const base = path.basename(this.dbPath);
+    for (const name of fs.readdirSync(directory)) {
+      const candidate = path.join(directory, name);
+      if (candidate !== kept && isUpgradeBackupOf(base, name)) {
+        fs.rmSync(candidate, { force: true });
+      }
     }
   }
 
@@ -866,27 +868,32 @@ export class SqliteEngine implements DatabasePort {
   /**
    * Ensure database schema is current.
    *
-   * Strategy: embedded schema is the SSOT. On an older version, snapshot DURABLE_TABLES,
-   * drop everything, recreate from the embedded schema, then restore the snapshot. The
-   * snapshot/restore round-trip is what lets durable rows survive while still letting
-   * their DDL evolve — preserving the table in place instead would freeze its shape,
-   * because applySchema uses CREATE TABLE IF NOT EXISTS.
+   * Strategy: embedded schema is the SSOT. On an older version at or above `MIGRATION_FLOOR`,
+   * snapshot DURABLE_TABLES, run the declared migration steps over the snapshot, drop everything,
+   * recreate from the embedded schema, then restore the migrated snapshot. The snapshot/restore
+   * round-trip is what lets durable rows survive while still letting their DDL evolve —
+   * preserving the table in place instead would freeze its shape, because applySchema uses
+   * CREATE TABLE IF NOT EXISTS. A version below the floor is refused, unchanged.
    *
    * The three outcomes are named rather than returned as a boolean because a caller needs to tell
    * "this database already existed" from "this call created it" — a startup check over rows has
    * nothing to do in the second case, and `false` said both.
    *
    * **The whole decision is ONE `BEGIN IMMEDIATE` transaction**, version read included. The
-   * recreate is drop → apply → restore, and `applySchema` writes the new `schema_version` row, so
-   * without a transaction a restore that threw left the file at the NEW version with the durable
-   * table empty — the next start read it as current, and the rows were gone (measured 2026-10-12).
-   * SQLite DDL is transactional, and nothing in the sequence commits implicitly (no `VACUUM`, no
-   * `journal_mode` change — that one runs in `initialize` before this), so a ROLLBACK restores the
-   * old tables, rows and version together. Reading the version under the write lock also means two
-   * processes starting on one file cannot both decide to recreate it: the second waits
-   * (`busy_timeout`) and then reads the version the first committed.
+   * upgrade is drop → apply → restore, and `applySchema` writes the new `schema_version` row, so
+   * without a transaction a restore that threw would leave the file at the NEW version with the
+   * durable table empty — the next start would read it as current, and the rows would be gone
+   * (measured 2026-10-12). SQLite DDL is transactional, and nothing in the sequence commits
+   * implicitly (no `VACUUM` — the upgrade backup runs in `initialize` before this — and no
+   * `journal_mode` change), so a ROLLBACK restores the old tables, rows and version together.
+   * Reading the version under the write lock also means two processes starting on one file cannot
+   * both decide to upgrade it: the second waits (`busy_timeout`) and then reads the version the
+   * first committed.
+   *
+   * `backupPath` is the copy `backupBeforeUpgrade` wrote, reported here with the other lines that
+   * are only true once the transaction commits.
    */
-  private ensureSchema(): 'current' | 'created' | 'recreated' {
+  private ensureSchema(backupPath: string | null): 'current' | 'created' | 'recreated' {
     this.beginTransaction('immediate');
     let outcome: SchemaOutcome;
     try {
@@ -898,13 +905,16 @@ export class SqliteEngine implements DatabasePort {
     }
 
     // Logged only once the transaction has committed: before that, nothing here was true yet.
+    if (backupPath !== null) {
+      this.logger.info(`Backed up state.db to ${backupPath} before the schema upgrade`);
+    }
     if (outcome.kind === 'current') {
-      this.logger.info(`Database schema is up to date (version ${SCHEMA_VERSION})`);
+      this.logger.info(`Database schema is up to date (version ${this.targetVersion})`);
     } else {
       for (const { table, rows } of outcome.preserved) {
         this.logger.info(`Preserved ${rows} row(s) in durable table ${table}`);
       }
-      this.logger.info(`Schema version ${SCHEMA_VERSION} applied`);
+      this.logger.info(`Schema version ${this.targetVersion} applied`);
     }
     return outcome.kind;
   }
@@ -913,7 +923,7 @@ export class SqliteEngine implements DatabasePort {
   private bringSchemaCurrent(): SchemaOutcome {
     const currentVersion = this.getSupportedSchemaVersion();
 
-    if (currentVersion === SCHEMA_VERSION) {
+    if (currentVersion === this.targetVersion) {
       // Tables are current, but views must still refresh: a stale view survives every
       // version-match boot otherwise (see applyViews docblock).
       this.applyViews();
@@ -921,20 +931,46 @@ export class SqliteEngine implements DatabasePort {
     }
 
     if (currentVersion === 0) {
+      // Not an upgrade: a fresh database has no durable rows to protect.
       this.applySchema();
-      // Not a recreate: a fresh database has no durable rows to protect, so the purge below runs
-      // as a no-op and records its marker.
       return { kind: 'created', preserved: [] };
     }
 
+    return { kind: 'recreated', preserved: this.upgradeSchema(currentVersion) };
+  }
+
+  /**
+   * Carry the durable rows of a database at `fromVersion` across a recreate at the target version:
+   * snapshot, migrate, drop, apply, strict restore. Runs inside the schema transaction.
+   */
+  private upgradeSchema(fromVersion: number): PreservedTable[] {
+    const steps = this.planUpgrade(fromVersion);
     this.logger.info(
-      `Schema version mismatch (have ${currentVersion}, need ${SCHEMA_VERSION}), recreating...`
+      `Schema version mismatch (have ${fromVersion}, need ${this.targetVersion}), upgrading ` +
+        `through ${steps.length} durable migration step(s)...`
     );
-    const preserved = this.snapshotDurableTables();
-    this.normalizeVersionHistorySnapshot(preserved);
+    const migrated = applyDurableMigrations(this.snapshotDurableTables(), steps);
     this.dropAllTables();
     this.applySchema();
-    return { kind: 'recreated', preserved: this.restoreDurableTables(preserved) };
+    return this.restoreDurableTables(migrated, steps);
+  }
+
+  /**
+   * The migration steps from `fromVersion` to the target, or a refusal for a database older than
+   * `MIGRATION_FLOOR`. The refusal throws inside the schema transaction, so the rollback leaves the
+   * file exactly as it was.
+   */
+  private planUpgrade(fromVersion: number): readonly DurableMigration[] {
+    const plan = planDurableMigrations(fromVersion, this.targetVersion, this.migrations);
+    if (plan.kind === 'below-floor') {
+      throw new Error(
+        `state.db at ${this.dbPath} has schema v${plan.from}; this engine needs ` +
+          `v${this.targetVersion} and upgrades only from v${plan.floor} onward, so nothing was ` +
+          'changed. Move the file aside (a fresh one is created on the next start), or open it ' +
+          `once with an earlier release that still upgrades v${plan.from}.`
+      );
+    }
+    return plan.steps;
   }
 
   /**
@@ -1018,109 +1054,93 @@ export class SqliteEngine implements DatabasePort {
    * predates a durable table both produce an empty snapshot.
    */
   private snapshotDurableTables(): DurableSnapshot {
-    const snapshot: DurableSnapshot = new Map();
-
-    // A stale exclusion is imminent data loss, not a lint problem: the set names durable tables
-    // that will NOT be carried across the recreate about to happen. `validate:table-contracts`
-    // catches this before it ships; this throws if it somehow reaches a running server, because
-    // the alternative is silently discarding a table whose rows exist nowhere else.
-    if (DROPPED_ON_THIS_BUMP.size > 0 && SCHEMA_VERSION !== DROPPED_AT_VERSION) {
-      throw new Error(
-        `DROPPED_ON_THIS_BUMP still contains [${[...DROPPED_ON_THIS_BUMP].join(', ')}] but was ` +
-          `declared for schema v${DROPPED_AT_VERSION} and SCHEMA_VERSION is now ` +
-          `v${SCHEMA_VERSION}. Empty the set and move DROPPED_AT_VERSION, or these durable ` +
-          'tables are dropped by an unrelated schema change.'
-      );
-    }
-
+    const snapshot = new Map<string, readonly DurableRow[]>();
     for (const table of DURABLE_TABLES) {
-      if (DROPPED_ON_THIS_BUMP.has(table)) {
-        this.logger.info(
-          `Durable table ${table}: intentionally NOT carried across the v${SCHEMA_VERSION} recreate ` +
-            '(see the SCHEMA_VERSION docblock for why).'
-        );
-        continue;
-      }
       if (this.getTableColumns(table).size === 0) {
         continue;
       }
-      const rows = this.query<Record<string, unknown>>(`SELECT * FROM "${table}"`);
+      const rows = this.query<DurableRow>(`SELECT * FROM "${table}"`);
       if (rows.length > 0) {
         snapshot.set(table, rows);
       }
     }
-
     return snapshot;
   }
 
   /**
-   * Make the snapshotted `version_history` rows satisfy v28's unique key before they are restored.
+   * Re-insert the migrated snapshot rows into the freshly created schema. STRICT.
    *
-   * The boundary for the pure renumbering above: it decides, this logs. One line, with the count,
-   * because an operator whose rollback history was silently re-numbered deserves to see it in the
-   * startup log — and silence is the honest output when nothing collided.
-   */
-  private normalizeVersionHistorySnapshot(snapshot: DurableSnapshot): void {
-    const rows = snapshot.get('version_history');
-    if (rows === undefined) {
-      return;
-    }
-    const renumbered = renumberDuplicateVersionHistory(rows);
-    if (renumbered > 0) {
-      this.logger.info(
-        `version_history: renumbered ${renumbered} row(s) that shared a version with another row ` +
-          'in the same history (schema v28 unique key); no rows were discarded.'
-      );
-    }
-  }
-
-  /**
-   * Re-insert snapshotted rows into the freshly created schema.
-   *
-   * Only columns present in BOTH the snapshot and the new table are carried: a column
-   * dropped from the DDL is discarded, and a column added to it takes its default. A
-   * restore failure rethrows with the table named rather than losing the rows quietly —
-   * the schema change needs a real migration at that point.
+   * A table's columns are the union of keys across its rows. A column the new table lacks must be
+   * declared in some step's `droppedColumns`, or the restore throws naming the table and columns
+   * and the whole upgrade rolls back: losing a durable column is a decision a step records, never
+   * a side effect of the DDL. Declared columns are not inserted; a column the new table adds takes
+   * its default. An INSERT failure (a new NOT NULL column without a default, a violated key)
+   * rethrows with the table named rather than losing the rows quietly.
    *
    * Returns what it carried rather than logging it: this runs inside the schema transaction, and a
    * "preserved" line written before that transaction commits would be false if it then rolled back.
    */
-  private restoreDurableTables(snapshot: DurableSnapshot): PreservedTable[] {
+  private restoreDurableTables(
+    snapshot: DurableSnapshot,
+    steps: readonly DurableMigration[]
+  ): PreservedTable[] {
     const preserved: PreservedTable[] = [];
     for (const [table, rows] of snapshot) {
-      const newColumns = this.getTableColumns(table);
-      const carried = Object.keys(rows[0] ?? {}).filter((column) => newColumns.has(column));
-
-      if (carried.length === 0) {
-        this.logger.warn(
-          `Durable table ${table}: no columns survived the schema change, ${rows.length} row(s) discarded`
-        );
+      const carried = this.restorableColumns(table, rows, steps);
+      // Empty when a step emptied the table, or declared every one of its columns dropped.
+      if (rows.length === 0 || carried.length === 0) {
         continue;
       }
-
-      const columnList = carried.map((column) => `"${column}"`).join(', ');
-      const placeholders = carried.map(() => '?').join(', ');
-      const sql = `INSERT INTO "${table}" (${columnList}) VALUES (${placeholders})`;
-
-      try {
-        for (const row of rows) {
-          this.run(
-            sql,
-            carried.map((column) => row[column] ?? null)
-          );
-        }
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        throw new Error(
-          `Failed to restore ${rows.length} durable row(s) into ${table} after schema recreate: ${msg}. ` +
-            `This schema change needs an explicit migration for ${table}.`,
-          { cause: error }
-        );
-      }
-
+      this.insertDurableRows(table, carried, rows);
       preserved.push({ table, rows: rows.length });
     }
     return preserved;
+  }
+
+  /** The snapshot columns of `table` to insert, after refusing any undeclared loss. */
+  private restorableColumns(
+    table: string,
+    rows: readonly DurableRow[],
+    steps: readonly DurableMigration[]
+  ): string[] {
+    const columns = snapshotColumns(rows);
+    const newColumns = this.getTableColumns(table);
+    const lost = undeclaredColumnLoss(table, columns, newColumns, steps);
+    if (lost.length > 0) {
+      throw new Error(
+        `Durable table ${table}: column(s) ${lost.join(', ')} hold rows in the outgoing schema and ` +
+          `do not exist in schema v${this.targetVersion}. A migration step in ` +
+          'durable-migrations.ts must declare them in droppedColumns or carry their values into ' +
+          'a column that exists; the upgrade was rolled back and nothing changed.'
+      );
+    }
+    const declared = declaredDroppedColumns(table, steps);
+    return columns.filter((column) => newColumns.has(column) && !declared.has(column));
+  }
+
+  private insertDurableRows(
+    table: string,
+    columns: readonly string[],
+    rows: readonly DurableRow[]
+  ): void {
+    const columnList = columns.map((column) => `"${column}"`).join(', ');
+    const placeholders = columns.map(() => '?').join(', ');
+    const sql = `INSERT INTO "${table}" (${columnList}) VALUES (${placeholders})`;
+    try {
+      for (const row of rows) {
+        this.run(
+          sql,
+          columns.map((column) => row[column] ?? null)
+        );
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to restore ${rows.length} durable row(s) into ${table} after schema recreate: ${msg}. ` +
+          `This schema change needs an explicit migration for ${table}.`,
+        { cause: error }
+      );
+    }
   }
 
   /**
@@ -1504,7 +1524,7 @@ export class SqliteEngine implements DatabasePort {
       CREATE INDEX IF NOT EXISTS idx_execution_records_tenant ON execution_records(tenant_id);
       CREATE INDEX IF NOT EXISTS idx_chain_sessions_run_status ON chain_sessions(run_status);
 
-      INSERT OR IGNORE INTO schema_version (version) VALUES (${SCHEMA_VERSION});
+      INSERT OR IGNORE INTO schema_version (version) VALUES (${this.targetVersion});
     `);
     this.applyViews();
   }
@@ -1753,7 +1773,7 @@ export class SqliteEngine implements DatabasePort {
       }
       return version;
     } catch (error) {
-      const prefix = `Cannot read schema authority at ${this.dbPath} (supported schema ${SCHEMA_VERSION}): ${messageOf(error)}.`;
+      const prefix = `Cannot read schema authority at ${this.dbPath} (supported schema ${this.targetVersion}): ${messageOf(error)}.`;
       if (isSqliteLockError(error)) {
         throw new Error(`${prefix} ${LOCK_REMEDY}`, { cause: error });
       }
@@ -1766,9 +1786,9 @@ export class SqliteEngine implements DatabasePort {
 
   private getSupportedSchemaVersion(): number {
     const version = this.getSchemaVersion();
-    if (version > SCHEMA_VERSION) {
+    if (version > this.targetVersion) {
       throw new Error(
-        `Database at ${this.dbPath} has schema ${version}, newer than supported schema ${SCHEMA_VERSION}. ` +
+        `Database at ${this.dbPath} has schema ${version}, newer than supported schema ${this.targetVersion}. ` +
           'Use a compatible server runtime, or set MCP_RUNTIME_ROOT to an isolated directory. ' +
           'Retire or isolate incompatible writers before recovering the shared database.'
       );
