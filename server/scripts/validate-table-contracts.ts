@@ -189,13 +189,22 @@ export function undeclaredTableChanges(
 
 /** The lock gate as a pure function, so the self-test needs no database. */
 export function checkDurableSchemaLock(input: {
-  readonly lock: DurableSchemaLock;
+  readonly lock: DurableSchemaLock | undefined;
   readonly computed: DurableFingerprint;
   readonly schemaVersion: number;
   readonly migrations: readonly DurableMigration[];
 }): Problem[] {
   const { lock, computed, schemaVersion, migrations } = input;
   const problems: Problem[] = [];
+
+  if (lock === undefined) {
+    return [
+      {
+        subject: 'durable-schema.lock.json',
+        message: `lock file is missing at ${LOCK_RELATIVE_PATH}; create it with \`${UPDATE_COMMAND}\``,
+      },
+    ];
+  }
 
   if (lock.schemaVersion !== schemaVersion) {
     problems.push({
@@ -221,12 +230,14 @@ export function checkDurableSchemaLock(input: {
 
 /** What `--update` writes, or the reasons it refuses. Pure. */
 export function planLockUpdate(input: {
-  readonly lock: DurableSchemaLock;
+  readonly lock: DurableSchemaLock | undefined;
   readonly computed: DurableFingerprint;
   readonly schemaVersion: number;
   readonly migrations: readonly DurableMigration[];
 }): { next: DurableSchemaLock } | { refusals: Problem[] } {
   const { lock, computed, schemaVersion, migrations } = input;
+
+  if (lock === undefined) return { next: { schemaVersion, tables: computed } };
 
   if (schemaVersion < lock.schemaVersion) {
     return {
@@ -280,8 +291,11 @@ function serializeLock(lock: DurableSchemaLock): string {
   return `${JSON.stringify(out, null, 2)}\n`;
 }
 
-function readLock(): DurableSchemaLock {
-  return JSON.parse(fs.readFileSync(lockFilePath(), 'utf8')) as DurableSchemaLock;
+/** The committed lock, or `undefined` when no lock file exists yet. */
+function readLock(): DurableSchemaLock | undefined {
+  const file = lockFilePath();
+  if (!fs.existsSync(file)) return undefined;
+  return JSON.parse(fs.readFileSync(file, 'utf8')) as DurableSchemaLock;
 }
 
 /**
@@ -623,6 +637,32 @@ function checkLockSelfTest(failures: string[]): void {
     failures.push('lock gate: --update did not record the old lock as previous');
   }
 
+  expect(
+    'missing lock fails in check mode',
+    checkDurableSchemaLock({
+      lock: undefined,
+      computed: lock35.tables,
+      schemaVersion: 35,
+      migrations: [],
+    }),
+    1,
+    UPDATE_COMMAND
+  );
+  const created = planLockUpdate({
+    lock: undefined,
+    computed: lock35.tables,
+    schemaVersion: 35,
+    migrations: [],
+  });
+  if (
+    !('next' in created) ||
+    created.next.schemaVersion !== 35 ||
+    created.next.previous !== undefined ||
+    JSON.stringify(created.next.tables) !== JSON.stringify(lock35.tables)
+  ) {
+    failures.push('lock gate: --update with no lock did not yield the computed fingerprint');
+  }
+
   const normalized = normalizeSql('CREATE  TABLE t (\n  a INTEGER\n)');
   if (normalized !== 'CREATE TABLE t ( a INTEGER )') {
     failures.push(`lock gate: normalizeSql wrong: ${normalized}`);
@@ -744,8 +784,9 @@ async function updateLock(): Promise<void> {
     process.exitCode = 1;
     return;
   }
+  const lock = readLock();
   const plan = planLockUpdate({
-    lock: readLock(),
+    lock,
     computed: await computeDurableFingerprint(),
     schemaVersion,
     migrations: DURABLE_MIGRATIONS,
@@ -757,7 +798,11 @@ async function updateLock(): Promise<void> {
     return;
   }
   fs.writeFileSync(lockFilePath(), serializeLock(plan.next));
-  console.log(`${LABEL} lock at v${plan.next.schemaVersion} written to ${LOCK_RELATIVE_PATH}.`);
+  const tableCount = Object.keys(plan.next.tables).length;
+  console.log(
+    `${LABEL} lock at v${plan.next.schemaVersion} (${tableCount} durable tables) written to ` +
+      `${LOCK_RELATIVE_PATH}${lock === undefined ? ' (created: no lock existed)' : ''}.`
+  );
 }
 
 async function main(): Promise<void> {
