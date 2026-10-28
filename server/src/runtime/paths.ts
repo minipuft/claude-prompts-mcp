@@ -211,16 +211,28 @@ export class PathResolver {
   getProjectWorkspace(): string | undefined {
     if (this.config.projectDiscovery !== true) return undefined;
 
-    const launch = this.config.projectLaunch;
-    const projectDir = deriveProjectDir(launch?.env, launch?.cwd);
-    if (projectDir === undefined) return undefined;
+    const projectWorkspace = this.projectWorkspacePath();
+    if (projectWorkspace === undefined) return undefined;
 
-    const projectWorkspace = join(this.resolvePath(projectDir.value), PROJECT_WORKSPACE_DIR_NAME);
     try {
       return statSync(projectWorkspace).isDirectory() ? projectWorkspace : undefined;
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Where the project's `.claude-prompts/` is or would be, existing or not; `undefined` when
+   * discovery is off or the launch names no project directory.
+   */
+  private projectWorkspacePath(): string | undefined {
+    if (this.config.projectDiscovery !== true) return undefined;
+
+    const launch = this.config.projectLaunch;
+    const projectDir = deriveProjectDir(launch?.env, launch?.cwd);
+    if (projectDir === undefined) return undefined;
+
+    return join(this.resolvePath(projectDir.value), PROJECT_WORKSPACE_DIR_NAME);
   }
 
   /** Resolve the writable root independently from package-owned resources. */
@@ -651,10 +663,24 @@ export class PathResolver {
    * file observer watches it once it appears and reconciles it then.
    */
   getOverlayResourceCandidates(resourceType: string, primaryDir?: string): string[] {
-    if (!this.isUsingCustomWorkspace()) return [];
+    const candidates: string[] = [];
 
-    const workspace = this.getWorkspace();
-    const candidates = [join(workspace, resourceType), join(workspace, 'resources', resourceType)];
+    if (this.isUsingCustomWorkspace()) {
+      const workspace = this.getWorkspace();
+      candidates.push(join(workspace, resourceType), join(workspace, 'resources', resourceType));
+    }
+
+    // The project's own folder, listed last (highest overlay) whether or not `.claude-prompts/`
+    // exists yet. Once it exists it is the primary and the dedup below drops it; until then it is
+    // a root the loaders read as empty and the file observer watches, so a `.claude-prompts/`
+    // created while the server runs is served without a restart. An explicit MCP_RESOURCES_PATH
+    // keeps every type on its own boundary (see resolveResourceSubdir), so no project root joins.
+    const projectWorkspace = this.hasExplicitResourcesPath()
+      ? undefined
+      : this.projectWorkspacePath();
+    if (projectWorkspace !== undefined) {
+      candidates.push(join(projectWorkspace, 'resources', resourceType));
+    }
 
     return candidates.filter((dir) => dir !== primaryDir);
   }
@@ -709,6 +735,11 @@ export class PathResolver {
     return resolveSettingPath(inputPath);
   }
 
+  private hasExplicitResourcesPath(): boolean {
+    const explicitResources = process.env['MCP_RESOURCES_PATH'];
+    return explicitResources !== undefined && explicitResources !== '';
+  }
+
   /**
    * Resolve a resource subdirectory: the directory a type is written to, and the root the shared
    * precedence in `resourceRootPrecedence` calls the primary.
@@ -738,8 +769,7 @@ export class PathResolver {
   private resolveResourceSubdir(subdir: string): { resolved: string; source: string } {
     const workspace = this.getWorkspace();
     const legacyDir = join(workspace, subdir);
-    const explicitResources = process.env['MCP_RESOURCES_PATH'];
-    const hasExplicitResources = explicitResources !== undefined && explicitResources !== '';
+    const hasExplicitResources = this.hasExplicitResourcesPath();
 
     const projectWorkspace = hasExplicitResources ? undefined : this.getProjectWorkspace();
     if (projectWorkspace !== undefined) {

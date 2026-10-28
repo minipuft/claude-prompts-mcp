@@ -13,7 +13,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { GateDefinitionLoader } from '../../../src/engine/gates/core/gate-definition-loader.js';
-import { PathResolver } from '../../../src/runtime/paths.js';
+import { parseServerCliArgs } from '../../../src/runtime/cli.js';
+import { createPathResolver, PathResolver } from '../../../src/runtime/paths.js';
 import { indexerResourceRoots, resolveResourceRoots } from '../../../src/runtime/resource-roots.js';
 import {
   assertUsableDirectorySetting,
@@ -770,12 +771,23 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     expect(directoriesOf(withDiscovery)).toEqual(expectedUnder(path.join(workspace, 'resources')));
     expect(directoriesOf(withDiscovery)).toEqual(directoriesOf(withoutDiscovery));
 
-    const roots = resolveResourceRoots(withDiscovery, 'gates', withDiscovery.getGatesPath());
-    expect(roots).toEqual(
-      resolveResourceRoots(withoutDiscovery, 'gates', withoutDiscovery.getGatesPath())
+    // The one addition is the project folder as a not-yet-existing overlay (it is what lets a
+    // `.claude-prompts/` created later be served), listed above the workspace's legacy folder and
+    // below the primary. The primary, the bundle and what is served do not move.
+    const pending = path.join(project, '.claude-prompts', 'resources', 'gates');
+    const baseline = resolveResourceRoots(
+      withoutDiscovery,
+      'gates',
+      withoutDiscovery.getGatesPath()
     );
+    const roots = resolveResourceRoots(withDiscovery, 'gates', withDiscovery.getGatesPath());
+    expect(existsSync(pending)).toBe(false);
+    expect(roots.primary).toBe(baseline.primary);
+    expect(roots.bundled).toBe(baseline.bundled);
+    expect(roots.overlays).toEqual([...baseline.overlays, pending]);
     expect(roots.lookupDirs).toEqual([
       path.join(workspace, 'resources', 'gates'),
+      pending,
       path.join(workspace, 'gates'),
       path.join(packageRoot, 'resources', 'gates'),
     ]);
