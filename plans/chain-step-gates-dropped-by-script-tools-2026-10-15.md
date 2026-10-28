@@ -1,7 +1,7 @@
 ---
 title: A chain step that binds a script tool silently drops its inline gates
 date: 2026-10-15
-status: draft
+status: active
 type: plan
 publish: none
 tags: [gates, chains]
@@ -9,11 +9,11 @@ tags: [gates, chains]
 
 # A chain step that binds a script tool silently drops its inline gates
 
-## Now (2026-10-15)
+## Now (2026-10-27)
 
-Goal: a chain step's `inlineGateIds` run on every step, or the call is refused by name; a step with a gate and a clean plan fails loudly.
-Slice: one PR on the server: compute `gatesRequested` per step from `step.inlineGateIds` / `inlineGateCriteria` in `createChainPlan`, so `applyScriptToolDefaults` does not set `modifiers.clean` on a step that declares gates; a loud failure where `applyGatesToStep` would skip a gated step for `clean`; a unit test with the three-step reproduction and a positive control (the same chain under `%lean` ran every gate before the fix).
-Constraint: awaits the owner's publish ruling (this file carries `publish: none`).
+Goal: every shape this plan recorded is closed on one branch, and the README hero clip is re-recorded against the fixed server.
+Slice: rows 1.1–1.3, 2.1–2.4 and the hook built-in routing are commits on local branch `fix/chain-step-gates` (not pushed); the third shape (system_message update without a yaml pointer) is still open below. Next: re-record the hero take with a retry scenario (a gate fails once) and a shorter feature string, then the owner rules on PRs.
+Constraint: owner ruling 2026-10-27 — hold at the local branch until the demo is final; this file carries `publish: none`.
 
 ## Reproduction (measured 2026-10-15 on dist built Oct 6; mechanism re-read on main `5e703819`)
 
@@ -26,11 +26,11 @@ Constraint: awaits the owner's publish ruling (this file carries `publish: none`
 
 ## Rows
 
-| Row | Task                                                                                                                                            | Artifact check                                                                                                                          | Status                                                       |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| 1.1 | Per-step `gatesRequested` in `createChainPlan` (inline ids and criteria count), script-tool clean default skipped for a gated step              | unit test: the three-step reproduction renders and runs A's gate; control: the same chain without the gate still gets the clean default | ☐ (as of 2026-10-15 · flips when the test exists and passes) |
-| 1.2 | Loud failure: a step plan with gates and `clean` throws by name in `applyGatesToStep` instead of skipping                                       | planted: a step plan built with both fails with the message                                                                             | ☐ (as of 2026-10-15 · flips when the planted test passes)    |
-| 1.3 | Docs: `docs/guides/gates.md` states that a step's inline gates run regardless of the prompt's tool binding, and CHANGELOG entry in reader voice | the sentence exists; changelog line present                                                                                             | ☐ (as of 2026-10-15 · flips with the PR)                     |
+| Row | Task                                                                                                                                            | Artifact check                                                                                                                          | Status                                                                                                                                                                                                                                                             |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1.1 | Per-step `gatesRequested` in `createChainPlan` (inline ids and criteria count), script-tool clean default skipped for a gated step              | unit test: the three-step reproduction renders and runs A's gate; control: the same chain without the gate still gets the clean default | ✓ 2026-10-27 (local branch `fix/chain-step-gates`, `edc3fd6e`): `createChainPlan` sets `gatesRequested` per step from `declaredStepGateCount`; `chain-step-gate-script-tool.test.ts` fails 3/5 before, passes 5/5 after (control: the ungated chain keeps `clean`) |
+| 1.2 | Loud failure: a step plan with gates and `clean` throws by name in `applyGatesToStep` instead of skipping                                       | planted: a step plan built with both fails with the message                                                                             | ✓ 2026-10-27 (`edc3fd6e`): `assertSkippedStepDeclaresNoGates` throws by step and modifier; planted test rejects with the message, control still skips quietly                                                                                                      |
+| 1.3 | Docs: `docs/guides/gates.md` states that a step's inline gates run regardless of the prompt's tool binding, and CHANGELOG entry in reader voice | the sentence exists; changelog line present                                                                                             | ✓ 2026-10-27: sentence in `docs/guides/gates.md` §How It Works in a Chain; CHANGELOG `Fixed` entry under Unreleased                                                                                                                                                |
 
 ## Second shape (2026-10-16)
 
@@ -80,16 +80,30 @@ same verdict again. The model narrated it on camera: "the engine returned the sa
 I'm resending the verdict on its own." Not the row 2.1 defect (that one never ran the check); this
 one runs it and still asks twice. Row 2.3 (open): a verdict that arrives with the answer should
 answer the post-advance review the capture opens, or the capture should not open one when the
-call's verdict already graded that node — `☐` (as of 2026-10-21 · flips when the one-call form on
-an inline-verify chain advances in one call, with the shell result shown, and a failing check still
-refuses).
+call's verdict already graded that node — ☑ 2026-10-27 (`7c6fb53e`): stage 16 passes
+`gradedNodeLeftStanding` (pure, `pipeline/decisions/gates/`) to its post-advance-review guard, so no
+second review opens on the node the call's verdict graded and the shell hold left standing; a passing
+inline check now renders under `Shell Verification Results` in the chain reply (nothing read stage
+17's result before). `shell-verify-step-hold.e2e.test.ts` row 2.3 (a) advances 1→2 in one call with
+the result shown and the check run once, (b) a failing check still refuses the PASS; unit
+`step-response-capture-stage` (no review after a held one-call PASS; control without a check
+unchanged). Not changed: a next step's review after a shell release still opens on the next call's
+stage 13; a single-prompt `:: verify:` pass still renders no result.
 
 Seen in the same take: `creed-fidelity` (a bundled CloudySky design gate, `server/resources/gates/`,
 `activation.framework_context: [RADIANT]`) attached to a `development` step running under ReACT and
 put "Glow relapse … Painted bubble … readability.mjs" into a code review's gate text. Either the
 framework half of the activation AND is not applied on this path or the gate should not ship in the
-bundle. Row 2.4 (open): decide and close — `☐` (as of 2026-10-21 · flips when a development prompt
-under ReACT renders no creed-fidelity text, with a test naming the activation rule).
+bundle. Row 2.4 — ☑ 2026-10-27 (`ca7a1e59`): two causes. Activation read an absent framework as
+"unconstrained" for every gate type but `framework`; a declared `framework_context` now requires a
+matching framework whatever the gate type (`gate-activation.test.ts`, RADIANT positive control). And
+the chain prompt's own gate resolution input (`chainPromptResolutionInput`) never carried the active
+framework id, so a development chain's category gates were resolved with no framework at all
+(`chain-prompt-gates-framework.test.ts`: not attached under react or with none, attached under
+radiant). Reverting either half fails its own test. Whether a CloudySky gate (and the RADIANT /
+liquescent frameworks) belong in the bundle is an open owner question: cloudySky has no resource
+workspace to move them into — `☐` (as of 2026-10-27 · flips when the owner rules on bundle
+membership or cloudySky gets an `MCP_WORKSPACE`).
 
 ## Third shape (2026-10-18): a system_message update on a prompt with none writes the file but not the pointer
 
