@@ -1,7 +1,7 @@
 ---
 title: Framework operator caret notes
 date: 2026-10-28
-status: active
+status: done
 plan: framework-operator-caret-2026-10-28.md
 tags: [parsers, hooks, docs, contracts]
 ---
