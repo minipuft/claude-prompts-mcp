@@ -223,9 +223,14 @@ Validation runs between steps, not only at the end. For the full operator gramma
 
 <div align="center">
 
-<img src="assets/demos/hero-demo.gif" alt="Chain workflow with gate validation. A prompt executes through hooks, a gate catches a missing field on the first attempt, and the model self-corrects" width="720" />
+<video src="https://github.com/user-attachments/assets/2840349d-d214-43a9-b8ee-83791dc6b6e2" width="720" autoplay loop muted playsinline controls title="One Claude Code session, with a side panel showing what the hooks and the server do: npm test fails, >>status is routed by the hook, resource_manager creates a prompt, a two-step chain runs it under @ReACT, the server runs npm test as the gate, and the review step approves the result"></video>
 
-<sub>A gate catches a missing field, the model corrects itself, and the chain passes. Recorded on haiku, the cheapest model.</sub>
+<details>
+<summary>No video player here? Open the GIF.</summary>
+<img src="assets/demos/hero-demo.gif" alt="One Claude Code session, with a side panel showing what the hooks and the server do: npm test fails, >>status is routed by the hook, resource_manager creates a prompt, a two-step chain runs it under @ReACT, the server runs npm test as the gate, and the review step approves the result" width="720" />
+</details>
+
+<sub>Recorded live in Claude Code on Sonnet, sped up, nothing re-ordered or retyped. The side panel is a second recording of the same moments, shown while the session pauses: what each hook did and the server's own <code>npm test</code> run for the gate. The tests are red, the AI authors a prompt through <code>resource_manager</code>, a two-step chain implements under <code>@ReACT</code>, the <code>verify:"npm test"</code> gate passes, and <code>review</code> approves. Replay the source yourself: <code>asciinema play assets/demos/src/hero/hero.cast</code> (recorder and storyboard beside it).</sub>
 
 </div>
 

@@ -1,0 +1,169 @@
+{
+  "default": {
+    "speed": 2,
+    "cap": 2.0
+  },
+  "open": {
+    "speed": 1,
+    "cap": 2.5
+  },
+  "status": {
+    "speed": 12,
+    "cap": 0.08
+  },
+  "author": {
+    "speed": 3,
+    "cap": 1.0
+  },
+  "run": {
+    "speed": 3,
+    "cap": 1.0
+  },
+  "verdict": {
+    "speed": 1,
+    "cap": 3.0
+  },
+  "complete": {
+    "speed": 1.5,
+    "cap": 3.0
+  },
+  "end": {
+    "drop": true
+  },
+  "title": [
+    "Recorded live in Claude Code",
+    "one session \u00b7 sped up \u00b7 nothing re-ordered"
+  ],
+  "titleSeconds": 2.6,
+  "captionSeconds": 3.5,
+  "captions": {
+    "open": "1 \u00b7 three tests fail",
+    "author": "2 \u00b7 a prompt authored through the server",
+    "run": "3 \u00b7 one line: prompt, framework, gate, chain",
+    "verdict": "4 \u00b7 the server runs npm test itself",
+    "complete": "5 \u00b7 review verdict PASS, chain complete"
+  },
+  "scenes": [
+    {
+      "at": "run",
+      "hold": 5.0,
+      "freeze": true,
+      "spread": 3.2,
+      "caption": "hook: 2 steps \u00b7 @ReACT \u00b7 shell gate",
+      "highlights": [
+        {
+          "track": "session",
+          "match": ">>implement_feature target:'src/greeter.js' feature:'[^']*'",
+          "text": true,
+          "kind": "prompt"
+        },
+        {
+          "track": "session",
+          "match": "@ReACT",
+          "text": true,
+          "kind": "framework"
+        },
+        {
+          "track": "session",
+          "match": ":: verify:\\\"npm test\\\"",
+          "text": true,
+          "kind": "gate"
+        },
+        {
+          "track": "session",
+          "match": "--> >>review target:'src/greeter.js'",
+          "text": true,
+          "kind": "chain"
+        },
+        {
+          "track": "trace",
+          "match": "implement_feature: prompt-suggest",
+          "text": true,
+          "kind": "prompt"
+        },
+        {
+          "track": "trace",
+          "match": "chain: 2 steps",
+          "text": true,
+          "kind": "chain"
+        },
+        {
+          "track": "trace",
+          "match": "@ReACT",
+          "text": true,
+          "kind": "framework"
+        },
+        {
+          "track": "trace",
+          "match": "gates: ver",
+          "text": true,
+          "kind": "gate"
+        }
+      ]
+    },
+    {
+      "at": "verdict",
+      "hold": 6.5,
+      "freeze": true,
+      "spread": 15.0,
+      "caption": "server ran npm test itself \u00b7 exit 0",
+      "highlights": [
+        {
+          "track": "session",
+          "match": "Bash\\(npm test",
+          "color": "#e6e6e6"
+        },
+        {
+          "track": "session",
+          "match": "Calling claude-prompts",
+          "kind": "gate"
+        },
+        {
+          "track": "trace",
+          "match": "server ran npm test",
+          "rows": 3,
+          "kind": "gate"
+        }
+      ]
+    },
+    {
+      "at": "complete",
+      "hold": 4.0,
+      "freeze": true,
+      "spread": 0,
+      "caption": "review PASS \u00b7 chain complete 2/2",
+      "highlights": [
+        {
+          "track": "session",
+          "match": "Review verdict:",
+          "rows": 4,
+          "kind": "prompt"
+        },
+        {
+          "track": "trace",
+          "match": "verdict offered: PASS",
+          "last": true,
+          "before": 3,
+          "rows": 4,
+          "kind": "gate"
+        },
+        {
+          "track": "trace",
+          "match": "chain complete 2/2",
+          "before": 1,
+          "rows": 2,
+          "kind": "chain"
+        }
+      ]
+    }
+  ],
+  "sceneDim": 0.55,
+  "highlightColors": {
+    "prompt": "#78dce8",
+    "framework": "#ab9df2",
+    "gate": "#a9dc76",
+    "chain": "#ffd866"
+  },
+  "legend": true,
+  "highlightStyle": "marker"
+}
