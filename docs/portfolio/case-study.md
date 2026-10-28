@@ -22,7 +22,7 @@ npx -y claude-prompts@latest
 
 ```
 resource_manager(resource_type:"prompt", action:"list")                        # See your prompts
-prompt_engine(command:">>analyze_code @CAGEERF")     # Run with framework
+prompt_engine(command:">>analyze_code ^CAGEERF")     # Run with framework
 ```
 
 | Before                           | After                          |
@@ -41,7 +41,7 @@ prompt_engine(command:">>analyze_code @CAGEERF")     # Run with framework
 resource_manager(resource_type:"prompt", action:"list")
 
 # Run with framework
-prompt_engine(command:">>diagnose @CAGEERF scope:'performance'")
+prompt_engine(command:">>diagnose ^CAGEERF scope:'performance'")
 
 # Chain steps
 prompt_engine(command:"Analyze code --> Identify issues --> Propose fixes")
@@ -67,7 +67,7 @@ Parse → Validate → Plan → Enhance → Execute → Format → Return
 **Symbolic Command Language**:
 
 ```
->>analyze_code @CAGEERF :: 'security review' --> >>summarize
+>>analyze_code ^CAGEERF :: 'security review' --> >>summarize
 
 Operators:
 >>   Execute prompt by ID

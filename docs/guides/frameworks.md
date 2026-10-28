@@ -89,19 +89,22 @@ If two projects report the same id they share one row, and switching in either c
 
 ### Per-Request Override
 
-Use the `@` operator to apply a specific framework to a single prompt without changing the session default:
+Use the `^` operator to apply a specific framework to a single prompt without changing the session default:
 
 ```
-prompt_engine(command: "@REACT >>my_prompt")
+prompt_engine(command: "^REACT >>my_prompt")
 ```
 
-`@` recognizes the frameworks that exist when the command runs. A framework created with
-`resource_manager` applies through `@<id>` straight away, without a restart, and once it is deleted
-`@<id>` is left as literal text. A word that names no framework is also left as literal text, which
-is what keeps `@docs/` or `@mention` in a command from being read as an operator.
+`^` recognizes the frameworks that exist when the command runs. A framework created with
+`resource_manager` applies through `^<id>` straight away, without a restart, and once it is deleted
+`^<id>` is left as literal text. A word that names no framework is also left as literal text, which
+is what keeps a caret in ordinary command text, such as `^2`, from being read as an operator.
+
+`@<id>` is the deprecated spelling of the same operator. It still works and the reply says to use
+`^`. Claude Code, Codex and Cursor read `@` as a file or mention sigil, which is why `^` replaced it.
 
 The override needs no system toggle: with the framework system disabled
-(`system_control(action:"framework", operation:"disable")`), `@REACT` still applies to every step
+(`system_control(action:"framework", operation:"disable")`), `^REACT` still applies to every step
 the run renders, including a step a `remainder` or a blocking unknown adds mid-run.
 
 Without an override the toggle is read once, when a run starts: a run started with the system

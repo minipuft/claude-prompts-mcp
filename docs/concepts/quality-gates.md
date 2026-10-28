@@ -34,7 +34,7 @@ When multiple sources define gates, who wins?
 1.  **Inline (`::`)** — _Highest Priority_. Overrides everything else.
 2.  **Template** — Defined in `prompt.yaml` (`inline_gate_definitions`).
 3.  **Category** — Auto-applied by folder (e.g., `prompts/code/` → `code-quality`).
-4.  **Framework** — Applied by framework (e.g., `@CAGEERF`).
+4.  **Framework** — Applied by framework (e.g., `^CAGEERF`).
 5.  **Fallback** — Default gates if nothing else matches.
 
 ---
