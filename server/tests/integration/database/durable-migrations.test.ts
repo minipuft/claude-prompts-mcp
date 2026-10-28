@@ -92,13 +92,15 @@ function readShape(file: string): SchemaShape {
     const tables: SchemaShape['tables'] = {};
     for (const table of names('table')) {
       const indexes = (
-        db.prepare(`PRAGMA index_list("${table}")`).all() as Array<Record<string, unknown>>
+        db.prepare(`PRAGMA index_list("${table}")`).all() as Array<
+          { name: string } & Record<string, unknown>
+        >
       )
+        .sort((left, right) => left.name.localeCompare(right.name))
         .map((index) => ({
           ...index,
-          columns: db.prepare(`PRAGMA index_info("${String(index['name'])}")`).all(),
-        }))
-        .sort((left, right) => String(left['name']).localeCompare(String(right['name'])));
+          columns: db.prepare(`PRAGMA index_info("${index.name}")`).all(),
+        }));
       tables[table] = { columns: db.prepare(`PRAGMA table_info("${table}")`).all(), indexes };
     }
     return { tables, views: names('view') };
