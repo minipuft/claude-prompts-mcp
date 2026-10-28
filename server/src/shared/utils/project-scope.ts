@@ -1,6 +1,7 @@
 // @lifecycle canonical - Sole definition of the per-project scope id derivation
 /**
- * Derivation of the per-project scope id used for state isolation in `state.db`.
+ * Derivation of the per-project scope id used for state isolation in `state.db`, and of the
+ * project directory it names.
  *
  * Lives in `shared/` (L0) rather than beside its original caller in `runtime/` because
  * two layers need the same answer and cannot reach each other: `runtime/context.ts`
@@ -71,6 +72,37 @@ export function deriveProjectScopeId(
     if (value != null) {
       return { value, source: 'cwd' };
     }
+  }
+
+  return undefined;
+}
+
+/** The project directory a launch resolves to; the shape {@link deriveProjectScopeId} reports. */
+export type ProjectDirDerivation = ProjectScopeDerivation;
+
+/**
+ * Derive the project directory from the launch environment: the FULL path where
+ * {@link deriveProjectScopeId} keeps only its basename, from the same two rungs in the same order.
+ *
+ * `CLAUDE_PROJECT_DIR` (trimmed, non-empty) else the working directory. Kept beside the scope id
+ * so the two cannot disagree about which directory "the project" is.
+ *
+ * @param env - Process environment; injectable for testing.
+ * @param cwd - Working directory; injectable for testing.
+ * @returns The path and which source produced it, or undefined if neither yields one.
+ */
+export function deriveProjectDir(
+  env: NodeJS.ProcessEnv = process.env,
+  cwd: string = process.cwd()
+): ProjectDirDerivation | undefined {
+  const projectDir = normalizeString(env['CLAUDE_PROJECT_DIR']);
+  if (projectDir != null) {
+    return { value: projectDir, source: 'CLAUDE_PROJECT_DIR' };
+  }
+
+  const workingDir = normalizeString(cwd);
+  if (workingDir != null) {
+    return { value: workingDir, source: 'cwd' };
   }
 
   return undefined;

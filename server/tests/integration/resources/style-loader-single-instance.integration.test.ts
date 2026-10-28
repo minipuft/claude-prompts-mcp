@@ -145,11 +145,13 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
     writeStyle(primaryRoot, 'alwaysbroken', refusedStyle('alwaysbroken'));
     // Healthy at startup; broken and then repaired mid-run. The subject.
     hotStyleFile = writeStyle(primaryRoot, 'hotstyle', validStyle('hotstyle', 'HOT'));
-    // Same id in the overlay and the primary, for the `sourceRoot` stamp: the overlay outranks the
-    // primary (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence), so the stamp must
-    // name the overlay and not the root the loader was configured with.
+    // Same id in the overlay and the primary, for the `sourceRoot` stamp: the primary outranks the
+    // overlay (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence), so the stamp must
+    // name the primary. An id only the overlay defines is the control that the stamp follows the
+    // root that served, rather than naming the primary every time.
     writeStyle(overlayRoot, 'shadowed', validStyle('shadowed', 'FROM OVERLAY'));
     writeStyle(primaryRoot, 'shadowed', validStyle('shadowed', 'FROM PRIMARY'));
+    writeStyle(overlayRoot, 'overlayonly', validStyle('overlayonly', 'OVERLAY ONLY'));
 
     process.env['MCP_WORKSPACE'] = workspace;
     pathResolver = new PathResolver({ cli: {}, packageRoot });
@@ -220,7 +222,7 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
     const roots = resolveResourceRoots(pathResolver, 'styles', pathResolver.getStylesPath());
     expect(roots.primary).toBe(primaryRoot);
     expect(roots.overlays).toEqual([overlayRoot]);
-    expect(roots.lookupDirs).toEqual([overlayRoot, primaryRoot, bundledRoot]);
+    expect(roots.lookupDirs).toEqual([primaryRoot, overlayRoot, bundledRoot]);
 
     // RULING R22, asserted as identity rather than as behaviour. This is the line that fails the
     // instant anything reintroduces a manager-owned loader, whatever its config happens to be.
@@ -236,13 +238,13 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
   it('stamps sourceRoot with the root that served, not the root it was configured with', () => {
     loadEveryStyle();
 
-    // The id defined in both roots is served from the overlay, and says so.
-    expect(styleLoader.loadStyle('shadowed')?.name).toBe('FROM OVERLAY');
-    expect(styleLoader.loadStyle('shadowed')?.sourceRoot).toBe(overlayRoot);
+    // The id defined in both roots is served from the primary, and says so.
+    expect(styleLoader.loadStyle('shadowed')?.name).toBe('FROM PRIMARY');
+    expect(styleLoader.loadStyle('shadowed')?.sourceRoot).toBe(primaryRoot);
 
-    // POSITIVE CONTROL for the line above: an id only the primary defines stamps the primary, so
+    // POSITIVE CONTROL for the line above: an id only the overlay defines stamps the overlay, so
     // the assertion is measuring provenance rather than a constant.
-    expect(styleLoader.loadStyle('steady')?.sourceRoot).toBe(primaryRoot);
+    expect(styleLoader.loadStyle('overlayonly')?.sourceRoot).toBe(overlayRoot);
   });
 
   it('drops a style broken after startup and re-indexes it on repair, with no restart', async () => {
@@ -254,7 +256,7 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
     expect(refusedIds()).toEqual(['alwaysbroken']);
 
     await syncIndex();
-    expect(indexedStyleIds()).toEqual(['hotstyle', 'shadowed', 'steady']);
+    expect(indexedStyleIds()).toEqual(['hotstyle', 'overlayonly', 'shadowed', 'steady']);
 
     // ---- broken after startup ----
     writeStyle(primaryRoot, 'hotstyle', refusedStyle('hotstyle'));
@@ -269,7 +271,7 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
     expect(refusedIds()).toEqual(['alwaysbroken', 'hotstyle']);
 
     await syncIndex();
-    expect(indexedStyleIds()).toEqual(['shadowed', 'steady']);
+    expect(indexedStyleIds()).toEqual(['overlayonly', 'shadowed', 'steady']);
 
     // ---- repaired after startup ----
     writeStyle(primaryRoot, 'hotstyle', validStyle('hotstyle', 'HOT AGAIN'));
@@ -279,6 +281,6 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
     expect(styleManager.getStyle('hotstyle')?.name).toBe('HOT AGAIN');
 
     await syncIndex();
-    expect(indexedStyleIds()).toEqual(['hotstyle', 'shadowed', 'steady']);
+    expect(indexedStyleIds()).toEqual(['hotstyle', 'overlayonly', 'shadowed', 'steady']);
   });
 });

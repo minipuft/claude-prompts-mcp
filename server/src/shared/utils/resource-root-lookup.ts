@@ -4,11 +4,13 @@
  *
  * WHAT THIS EXISTS TO PREVENT. Each of those three loaders holds a primary directory plus a list
  * of further directories, and each resolved an id as `primary ?? additional`, so the PRIMARY won a
- * same-id conflict. Prompts answer the same question the other way: `prompt-root-loader.ts` loads
- * bundle -> primary -> overlays with a later result winning, which is the documented
- * "same ID = custom wins", and the resource indexer agrees with prompts. Three kinds disagreed with
- * the other two, and the docstring that justified it ("workspace wins") held only while the
- * workspace WAS the primary.
+ * same-id conflict. Prompts answered the same question the other way: `prompt-root-loader.ts` loaded
+ * bundle -> primary -> overlays with a later result winning, and the resource indexer agreed with
+ * prompts. Three kinds disagreed with the other two, and the docstring that justified it
+ * ("workspace wins") held only while the workspace WAS the primary. P4.27 settled the disagreement
+ * by putting overlays above the primary. A project workspace reversed that: it is the root a write
+ * lands in AND the nearest root, so the primary now outranks the overlays and the overlays outrank
+ * the bundled tree. The documented "same ID = custom wins" over the bundle never moved.
  *
  * TWO HALVES. {@link resourceRootPrecedence} states the order, once, for every caller that has the
  * three root kinds in hand. Everything below it merely WALKS an order it is handed and reports
@@ -23,10 +25,15 @@ import { join } from 'path';
 /**
  * THE statement of precedence among the roots that contribute one resource type.
  *
- * Overlays outrank the primary, the primary outranks the bundled tree, and a later overlay
- * outranks an earlier one — which is exactly what `modules/prompts/prompt-root-loader.ts` produces
- * by loading bundle -> primary -> overlays and letting a later result win, and what the resource
- * indexer produces by accumulating in that direction.
+ * The primary (the root a write lands in) outranks the overlays, the overlays outrank the bundled
+ * tree, and a later overlay outranks an earlier one. One rule, not a case for any root kind: under
+ * a project workspace it reads project > user workspace > bundle, and under a plain workspace the
+ * only pair it orders differently from before R9 is `<ws>/resources/<type>` (the primary) over the
+ * legacy `<ws>/<type>` (an overlay).
+ *
+ * `modules/prompts/prompt-root-loader.ts` produces the same order read backwards, by loading
+ * bundle -> overlays -> primary and letting a later result win; the resource indexer produces it by
+ * accumulating in that direction, and `classifyOrigin` in `resource-file-set.ts` reads it forwards.
  *
  * It lived in `shared/` because its two callers sat in layers that may not import each other:
  * `runtime/resource-roots.ts` (the composition root's three loaders, and the resource indexer via
@@ -38,9 +45,9 @@ import { join } from 'path';
  * caller today. It stays in `shared/` because that is where a statement about resource layout
  * belongs and because `mcp/` still may not import `runtime/`, not because two callers need it.
  *
- * The primary is IN the list, not beside it: it is neither the top nor the bottom of the order, so
- * a list that left it out could not say where it goes, and every consumer would have to re-derive
- * the boundary between "overlay" and "bundled" from a flat array that cannot express it.
+ * The primary is IN the list, not beside it: a list that left it out could not say where it goes,
+ * and every consumer would have to re-derive the boundary between "overlay" and "bundled" from a
+ * flat array that cannot express it.
  */
 export function resourceRootPrecedence(roots: {
   primary: string | undefined;
@@ -49,10 +56,10 @@ export function resourceRootPrecedence(roots: {
 }): string[] {
   return [
     ...new Set([
+      ...(roots.primary !== undefined ? [roots.primary] : []),
       // Reversed: `overlays` is stated lowest-first (a later entry wins) and this is a
       // first-hit-wins lookup order.
       ...[...roots.overlays].reverse(),
-      ...(roots.primary !== undefined ? [roots.primary] : []),
       ...(roots.bundled !== undefined && roots.bundled !== roots.primary ? [roots.bundled] : []),
     ]),
   ];
@@ -62,17 +69,19 @@ export function resourceRootPrecedence(roots: {
  * The directories a loader consults for an id, highest precedence first.
  *
  * `additionalDirs` is taken AS GIVEN — the composition root already ordered it and already placed
- * the primary inside it. The primary is appended only when it is absent, which is what a loader
- * configured by hand (tests, standalone use) passes; appending rather than prepending is the
- * ordering this module is allowed to choose, and it is the overlay-wins direction every other kind
- * already uses. Deduplicated keeping the FIRST occurrence, so a primary already in the list keeps
- * its position rather than being pushed to the end.
+ * the primary inside it. The primary is added only when it is absent, which is what a loader
+ * configured by hand (tests, standalone use) passes, and it goes FIRST: that is where
+ * {@link resourceRootPrecedence} puts the primary, and the fallback is allowed to choose nothing
+ * the statement above has already chosen. A primary already in the list keeps its own position.
  */
 export function resourceLookupOrder(
   primaryDir: string,
   additionalDirs: readonly string[] = []
 ): string[] {
-  return [...new Set([...additionalDirs, primaryDir])];
+  const ordered = additionalDirs.includes(primaryDir)
+    ? additionalDirs
+    : [primaryDir, ...additionalDirs];
+  return [...new Set(ordered)];
 }
 
 /**

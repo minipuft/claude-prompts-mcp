@@ -16,12 +16,13 @@
  * `string` and differ only in which string.
  */
 
-import { describe, expect, it } from '@jest/globals';
-import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 
 import { ConfigLoader, type ResourcePathSource } from '../../../../src/infra/config/index.js';
+import { PathResolver } from '../../../../src/runtime/paths.js';
 
 /** A resolver whose every member returns a path far from any config directory. */
 function resolverAt(root: string): ResourcePathSource {
@@ -231,5 +232,78 @@ describe('prompt write destination', () => {
     } finally {
       await cleanup();
     }
+  });
+});
+
+/**
+ * R3 of the project-workspace plan: `resource_manager` writes into the project directory when
+ * `.claude-prompts/` exists, and as before when it does not. The resolver here is the real
+ * `PathResolver`, not the stub above, because the claim is about what the real one hands the
+ * loader: a stub returning a project path would assert the path this file wrote.
+ */
+describe('project workspace write destination', () => {
+  const PATH_ENV_KEYS = ['MCP_WORKSPACE', 'MCP_RESOURCES_PATH', 'MCP_RUNTIME_ROOT'] as const;
+  const originalPathEnv = new Map<string, string | undefined>(
+    PATH_ENV_KEYS.map((key) => [key, process.env[key]])
+  );
+  let root: string;
+  let workspace: string;
+  let project: string;
+
+  beforeEach(async () => {
+    for (const key of PATH_ENV_KEYS) delete process.env[key];
+    root = await mkdtemp(path.join(tmpdir(), 'project-write-dest-'));
+    workspace = path.join(root, 'workspace');
+    project = path.join(root, 'project');
+    await mkdir(workspace);
+    await mkdir(project);
+    process.env['MCP_WORKSPACE'] = workspace;
+  });
+
+  afterEach(async () => {
+    for (const [key, value] of originalPathEnv) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(root, { recursive: true, force: true });
+  });
+
+  async function loaderOver(projectDiscovery: boolean) {
+    const resolver = new PathResolver({
+      cli: {},
+      packageRoot: path.join(root, 'package'),
+      projectDiscovery,
+      projectLaunch: { env: { CLAUDE_PROJECT_DIR: project }, cwd: root },
+    });
+    const configPath = path.join(root, 'config.json');
+    await writeFile(
+      configPath,
+      JSON.stringify({ prompts: { directory: 'resources/prompts' } }),
+      'utf8'
+    );
+    const manager = new ConfigLoader(configPath, resolver);
+    await manager.loadConfig();
+    return manager;
+  }
+
+  it('writes every resource type into <project>/.claude-prompts/resources when that directory exists', async () => {
+    await mkdir(path.join(project, '.claude-prompts'));
+    const manager = await loaderOver(true);
+    const projectResources = path.join(project, '.claude-prompts', 'resources');
+
+    expect(manager.getResolvedPromptsDirectory()).toBe(path.join(projectResources, 'prompts'));
+    expect(manager.getGatesDirectory()).toBe(path.join(projectResources, 'gates'));
+    expect(manager.getFrameworksDirectory()).toBe(path.join(projectResources, 'frameworks'));
+    expect(manager.getStylesDirectory()).toBe(path.join(projectResources, 'styles'));
+    expect(manager.getScriptsDirectory()).toBe(path.join(projectResources, 'scripts'));
+  });
+
+  it('CONTROL: writes into the workspace as before when there is no .claude-prompts/, or discovery is off', async () => {
+    const workspaceGates = path.join(workspace, 'resources', 'gates');
+
+    expect((await loaderOver(true)).getGatesDirectory()).toBe(workspaceGates);
+
+    await mkdir(path.join(project, '.claude-prompts'));
+    expect((await loaderOver(false)).getGatesDirectory()).toBe(workspaceGates);
   });
 });

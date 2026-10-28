@@ -12,7 +12,9 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
+import { GateDefinitionLoader } from '../../../src/engine/gates/core/gate-definition-loader.js';
 import { PathResolver } from '../../../src/runtime/paths.js';
+import { indexerResourceRoots, resolveResourceRoots } from '../../../src/runtime/resource-roots.js';
 import {
   assertUsableDirectorySetting,
   PathSettingError,
@@ -490,7 +492,7 @@ describe('PathResolver resolves resource directories inside a custom workspace',
 
     expect(resolver.getPromptsPath()).toBe(path.join(workspace, 'prompts'));
     expect(resolver.getGatesPath()).toBe(path.join(workspace, 'resources', 'gates'));
-    // With both layouts present, `resources/<type>` is the root and the legacy one overlays it.
+    // With both layouts present, `resources/<type>` is the root and the legacy one is an overlay beneath it.
     expect(resolver.getFrameworksPath()).toBe(path.join(workspace, 'resources', 'frameworks'));
     expect(resolver.getOverlayResourceDirs('frameworks', resolver.getFrameworksPath())).toEqual([
       path.join(workspace, 'frameworks'),
@@ -560,5 +562,264 @@ describe('PathResolver resolves resource directories inside a custom workspace',
     expect(directoriesOf(new PathResolver({ cli: {}, packageRoot }))).toEqual(
       expectedUnder(path.join(packageRoot, 'resources'))
     );
+  });
+});
+
+/**
+ * The project directory as a resource root (R1-R3 of the project-workspace plan).
+ *
+ * The project is named through the resolver's injected launch environment, never by changing this
+ * process's environment or working directory: the discovery flag is off by default, so every other
+ * describe block in this file runs the resolver exactly as it did before the project existed.
+ */
+describe('PathResolver resolves the project directory as a resource root', () => {
+  const TYPES = ['prompts', 'gates', 'frameworks', 'styles', 'scripts'] as const;
+  type ResourceType = (typeof TYPES)[number];
+  let dir: string;
+  let packageRoot: string;
+  let workspace: string;
+  let project: string;
+  let elsewhere: string;
+
+  const gateYaml = (name: string): string =>
+    [
+      'id: shadowed',
+      `name: ${name}`,
+      'type: validation',
+      'severity: medium',
+      'description: Test gate shadowed',
+      'pass_criteria:',
+      '  - type: inline_guidance',
+      '',
+    ].join('\n');
+
+  function writeGate(root: string, name: string): void {
+    mkdirSync(path.join(root, 'shadowed'), { recursive: true });
+    writeFileSync(path.join(root, 'shadowed', 'gate.yaml'), gateYaml(name), 'utf-8');
+  }
+
+  /** A resolver whose project directory is `project`, found through CLAUDE_PROJECT_DIR. */
+  function resolverWithDiscovery(
+    overrides: Partial<ConstructorParameters<typeof PathResolver>[0]> = {}
+  ) {
+    return new PathResolver({
+      cli: {},
+      packageRoot,
+      projectDiscovery: true,
+      projectLaunch: { env: { CLAUDE_PROJECT_DIR: project }, cwd: elsewhere },
+      ...overrides,
+    });
+  }
+
+  function directoriesOf(resolver: PathResolver): Record<ResourceType, string> {
+    return {
+      prompts: resolver.getPromptsPath(),
+      gates: resolver.getGatesPath(),
+      frameworks: resolver.getFrameworksPath(),
+      styles: resolver.getStylesPath(),
+      scripts: resolver.getScriptsPath(),
+    };
+  }
+
+  function expectedUnder(root: string): Record<ResourceType, string> {
+    return Object.fromEntries(TYPES.map((type) => [type, path.join(root, type)])) as Record<
+      ResourceType,
+      string
+    >;
+  }
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'project-workspace-root-'));
+    packageRoot = path.join(dir, 'package');
+    workspace = path.join(dir, 'workspace');
+    project = path.join(dir, 'project');
+    elsewhere = path.join(dir, 'elsewhere');
+    for (const type of TYPES)
+      mkdirSync(path.join(packageRoot, 'resources', type), { recursive: true });
+    mkdirSync(workspace);
+    mkdirSync(project);
+    mkdirSync(elsewhere);
+    process.env['MCP_WORKSPACE'] = workspace;
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('makes <project>/.claude-prompts/resources/<type> the primary of every type when .claude-prompts/ exists, creating nothing', () => {
+    const projectWorkspace = path.join(project, '.claude-prompts');
+    mkdirSync(projectWorkspace);
+    const resolver = resolverWithDiscovery();
+
+    expect(resolver.getProjectWorkspace()).toBe(projectWorkspace);
+    expect(directoriesOf(resolver)).toEqual(
+      expectedUnder(path.join(projectWorkspace, 'resources'))
+    );
+    // Resolution names the directory; only a write creates it.
+    expect(readdirSync(projectWorkspace)).toEqual([]);
+    expect(readdirSync(workspace)).toEqual([]);
+    // The custom workspace is still the workspace: only the primary moved.
+    expect(resolver.isUsingCustomWorkspace()).toBe(true);
+    expect(resolver.getWorkspace()).toBe(workspace);
+  });
+
+  it('keeps writing into a per-type directory that already exists under the project, and ignores a legacy <project>/.claude-prompts/<type>/', () => {
+    mkdirSync(path.join(project, '.claude-prompts', 'resources', 'gates'), { recursive: true });
+    mkdirSync(path.join(project, '.claude-prompts', 'prompts'));
+    const resolver = resolverWithDiscovery();
+
+    expect(resolver.getGatesPath()).toBe(
+      path.join(project, '.claude-prompts', 'resources', 'gates')
+    );
+    expect(resolver.getPromptsPath()).toBe(
+      path.join(project, '.claude-prompts', 'resources', 'prompts')
+    );
+  });
+
+  it('finds the project directory in CLAUDE_PROJECT_DIR, else in the working directory', () => {
+    mkdirSync(path.join(elsewhere, '.claude-prompts'));
+    const byCwd = resolverWithDiscovery({ projectLaunch: { env: {}, cwd: elsewhere } });
+    expect(byCwd.getProjectWorkspace()).toBe(path.join(elsewhere, '.claude-prompts'));
+
+    // CLAUDE_PROJECT_DIR outranks the working directory, so `project` (with no .claude-prompts/)
+    // is the project and the working directory's .claude-prompts/ is not looked at.
+    const byEnv = resolverWithDiscovery({
+      projectLaunch: { env: { CLAUDE_PROJECT_DIR: project }, cwd: elsewhere },
+    });
+    expect(byEnv.getProjectWorkspace()).toBeUndefined();
+  });
+
+  it('keeps the workspace candidates as overlays and the bundle as the lowest root beneath the project primary', () => {
+    mkdirSync(path.join(project, '.claude-prompts'));
+    const resolver = resolverWithDiscovery();
+    const primary = resolver.getGatesPath();
+
+    expect(resolver.getOverlayResourceCandidates('gates', primary)).toEqual([
+      path.join(workspace, 'gates'),
+      path.join(workspace, 'resources', 'gates'),
+    ]);
+    expect(resolver.getBundledResourceDir('gates')).toBe(
+      path.join(packageRoot, 'resources', 'gates')
+    );
+  });
+
+  it('reads the project, the workspace candidates, then the bundle, in that order', () => {
+    mkdirSync(path.join(project, '.claude-prompts'));
+    const resolver = resolverWithDiscovery();
+
+    const roots = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
+
+    expect(roots.primary).toBe(path.join(project, '.claude-prompts', 'resources', 'gates'));
+    expect(roots.lookupDirs).toEqual([
+      path.join(project, '.claude-prompts', 'resources', 'gates'),
+      path.join(workspace, 'resources', 'gates'),
+      path.join(workspace, 'gates'),
+      path.join(packageRoot, 'resources', 'gates'),
+    ]);
+  });
+
+  it('hands the indexer the project root, highest last, for every indexed type', () => {
+    mkdirSync(path.join(project, '.claude-prompts'));
+    const resolver = resolverWithDiscovery();
+    const projectResources = path.join(project, '.claude-prompts', 'resources');
+
+    const roots = indexerResourceRoots(resolver);
+
+    expect(Object.keys(roots).sort()).toEqual(['framework', 'gate', 'prompt', 'style']);
+    for (const [kind, type] of [
+      ['prompt', 'prompts'],
+      ['gate', 'gates'],
+      ['framework', 'frameworks'],
+      ['style', 'styles'],
+    ] as const) {
+      // Lowest precedence first: the walk accumulates, so the last root overwrites.
+      expect(roots[kind]).toEqual([
+        path.join(packageRoot, 'resources', type),
+        path.join(workspace, type),
+        path.join(workspace, 'resources', type),
+        path.join(projectResources, type),
+      ]);
+    }
+  });
+
+  it('serves a gate defined in the project and in the workspace from the project copy', () => {
+    const projectGates = path.join(project, '.claude-prompts', 'resources', 'gates');
+    writeGate(projectGates, 'FROM PROJECT');
+    writeGate(path.join(workspace, 'resources', 'gates'), 'FROM WORKSPACE');
+    writeGate(path.join(workspace, 'gates'), 'FROM WORKSPACE LEGACY');
+    writeGate(path.join(packageRoot, 'resources', 'gates'), 'FROM BUNDLE');
+    const resolver = resolverWithDiscovery();
+    const roots = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
+
+    const loader = new GateDefinitionLoader({
+      gatesDir: roots.primary as string,
+      additionalGatesDirs: roots.lookupDirs,
+    });
+
+    expect(loader.loadGate('shadowed')?.name).toBe('FROM PROJECT');
+    expect(loader.loadGate('shadowed')?.sourceRoot).toBe(projectGates);
+  });
+
+  it("CONTROL: without .claude-prompts/ the primaries, the order and the served gate are the workspace's", () => {
+    writeGate(path.join(workspace, 'resources', 'gates'), 'FROM WORKSPACE');
+    writeGate(path.join(packageRoot, 'resources', 'gates'), 'FROM BUNDLE');
+    const withDiscovery = resolverWithDiscovery();
+    const withoutDiscovery = new PathResolver({ cli: {}, packageRoot });
+
+    expect(withDiscovery.getProjectWorkspace()).toBeUndefined();
+    expect(directoriesOf(withDiscovery)).toEqual(expectedUnder(path.join(workspace, 'resources')));
+    expect(directoriesOf(withDiscovery)).toEqual(directoriesOf(withoutDiscovery));
+
+    const roots = resolveResourceRoots(withDiscovery, 'gates', withDiscovery.getGatesPath());
+    expect(roots).toEqual(
+      resolveResourceRoots(withoutDiscovery, 'gates', withoutDiscovery.getGatesPath())
+    );
+    expect(roots.lookupDirs).toEqual([
+      path.join(workspace, 'resources', 'gates'),
+      path.join(workspace, 'gates'),
+      path.join(packageRoot, 'resources', 'gates'),
+    ]);
+
+    const loader = new GateDefinitionLoader({
+      gatesDir: roots.primary as string,
+      additionalGatesDirs: roots.lookupDirs,
+    });
+    expect(loader.loadGate('shadowed')?.name).toBe('FROM WORKSPACE');
+  });
+
+  it('CONTROL: a .claude-prompts/ that exists is ignored unless projectDiscovery is on', () => {
+    mkdirSync(path.join(project, '.claude-prompts', 'resources', 'gates'), { recursive: true });
+    const resolver = new PathResolver({
+      cli: {},
+      packageRoot,
+      projectLaunch: { env: { CLAUDE_PROJECT_DIR: project }, cwd: elsewhere },
+    });
+
+    expect(resolver.getProjectWorkspace()).toBeUndefined();
+    expect(directoriesOf(resolver)).toEqual(expectedUnder(path.join(workspace, 'resources')));
+  });
+
+  it('lets an explicit MCP_RESOURCES_PATH keep every type, so a project directory does not widen an explicit boundary', () => {
+    mkdirSync(path.join(project, '.claude-prompts'));
+    const resources = path.join(dir, 'explicit-resources');
+    mkdirSync(resources);
+    process.env['MCP_RESOURCES_PATH'] = resources;
+    const resolver = resolverWithDiscovery();
+
+    expect(directoriesOf(resolver)).toEqual(expectedUnder(resources));
+  });
+
+  it('puts the project over the bundle when the workspace is the package root, with no overlays', () => {
+    delete process.env['MCP_WORKSPACE'];
+    mkdirSync(path.join(project, '.claude-prompts'));
+    const resolver = resolverWithDiscovery();
+    const primary = resolver.getGatesPath();
+
+    expect(resolver.isUsingCustomWorkspace()).toBe(false);
+    expect(primary).toBe(path.join(project, '.claude-prompts', 'resources', 'gates'));
+    expect(resolveResourceRoots(resolver, 'gates', primary).lookupDirs).toEqual([
+      primary,
+      path.join(packageRoot, 'resources', 'gates'),
+    ]);
   });
 });

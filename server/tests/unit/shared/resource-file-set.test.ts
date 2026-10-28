@@ -578,6 +578,31 @@ describe('resourceFileSet — origin', () => {
     expect(overlay.files[0]?.absolutePath.startsWith(String(roots.primary))).toBe(false);
   });
 
+  it('classifies an entry inside two roots in resourceRootPrecedence order: primary, then overlay, then bundled', async () => {
+    const entry = await write('workspace/gates/a/gate.yaml', 'id: a\n');
+    const workspaceGates = path.join(root, 'workspace', 'gates');
+    const workspace = path.join(root, 'workspace');
+
+    const primaryAndOverlay = await resourceFileSet({
+      resourceType: 'gate',
+      entryPath: entry,
+      roots: { primary: workspaceGates, overlays: [workspace], bundled: undefined },
+    });
+    const overlayAndBundled = await resourceFileSet({
+      resourceType: 'gate',
+      entryPath: entry,
+      roots: {
+        primary: path.join(root, 'elsewhere', 'gates'),
+        overlays: [workspace],
+        bundled: workspaceGates,
+      },
+    });
+
+    // The root that outranks the other is the one a loader would have served the entry from.
+    expect(primaryAndOverlay.origin).toBe('primary');
+    expect(overlayAndBundled.origin).toBe('overlay');
+  });
+
   it('reports unknown rather than guessing when no root contains the entry', async () => {
     const entry = await write('elsewhere/gates/c/gate.yaml', 'id: c\n');
 

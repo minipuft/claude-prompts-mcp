@@ -3,8 +3,9 @@
  * PathResolver - Unified Path Resolution System
  *
  * CLI flags take precedence over their workspace/config environment settings.
- * Resource types resolve through an explicit MCP_RESOURCES_PATH base, workspace layouts,
- * then package defaults. An absent type directory is created by its first write.
+ * Resource types resolve through an explicit MCP_RESOURCES_PATH base, else the project's
+ * `.claude-prompts/` when discovery is on and it exists, else workspace layouts, then package
+ * defaults. An absent type directory is created by its first write.
  *
  * Environment Variables:
  * - MCP_WORKSPACE: Full plugin/workspace directory (server/, hooks/, etc.)
@@ -35,10 +36,14 @@ import {
   type PathFallback,
   type PathSetting,
 } from '#shared/utils/path-setting.js';
+import { deriveProjectDir } from '#shared/utils/project-scope.js';
 import {
   RUNTIME_STATE_DIR_NAME,
   STATE_DB_FILE_NAME,
 } from '#shared/utils/runtime-state-location.js';
+
+/** The directory a project keeps its own resources in, directly under the project directory. */
+const PROJECT_WORKSPACE_DIR_NAME = '.claude-prompts';
 
 /**
  * CLI flag values parsed from command line arguments
@@ -58,6 +63,18 @@ export interface PathResolverConfig {
   packageRoot: string;
   /** Enable debug logging */
   debug?: boolean;
+  /**
+   * Whether the launch's project directory may contribute a resource root (R1-R3). Off unless the
+   * caller turns it on: a process serving several projects has no single project directory to look
+   * in.
+   */
+  projectDiscovery?: boolean;
+  /**
+   * Where the project directory is read from when {@link projectDiscovery} is on. Defaults to the
+   * process environment and working directory; injectable so a test names its project directory
+   * without changing either.
+   */
+  projectLaunch?: { env?: NodeJS.ProcessEnv; cwd?: string };
 }
 
 /**
@@ -180,6 +197,30 @@ export class PathResolver {
     this.cache.workspace = resolved;
     this.logResolution('workspace', resolved, source);
     return resolved;
+  }
+
+  /**
+   * The project's own resource workspace, `<project>/.claude-prompts/`, or `undefined` when none
+   * applies: discovery is off, or the directory does not exist.
+   *
+   * "Exists" is the directory itself, not a per-type folder under it. Those are created by the
+   * first write, as a workspace's are. Probed on every call, like the type getters' own
+   * `existsSync` probes, so a directory created while the server runs is seen by the next
+   * resolution.
+   */
+  getProjectWorkspace(): string | undefined {
+    if (this.config.projectDiscovery !== true) return undefined;
+
+    const launch = this.config.projectLaunch;
+    const projectDir = deriveProjectDir(launch?.env, launch?.cwd);
+    if (projectDir === undefined) return undefined;
+
+    const projectWorkspace = join(this.resolvePath(projectDir.value), PROJECT_WORKSPACE_DIR_NAME);
+    try {
+      return statSync(projectWorkspace).isDirectory() ? projectWorkspace : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   /** Resolve the writable root independently from package-owned resources. */
@@ -623,9 +664,14 @@ export class PathResolver {
   }
 
   /**
-   * Resolve a resource subdirectory: the directory a type is read from first and written to.
+   * Resolve a resource subdirectory: the directory a type is written to, and the root the shared
+   * precedence in `resourceRootPrecedence` calls the primary.
    *
-   * A custom workspace with no `MCP_RESOURCES_PATH` resolves inside the workspace:
+   * A project workspace (`getProjectWorkspace`) with no `MCP_RESOURCES_PATH` is the primary for
+   * every type: `<project>/.claude-prompts/resources/${subdir}/`, existing or not yet created.
+   * There is no legacy `<project>/.claude-prompts/${subdir}/` convention to keep from splitting.
+   *
+   * Otherwise, a custom workspace with no `MCP_RESOURCES_PATH` resolves inside the workspace:
    *   1. ${workspace}/resources/${subdir}/ (if exists)
    *   2. ${workspace}/${subdir}/ (legacy, if exists, so an existing collection does not split)
    *   3. ${workspace}/resources/${subdir}/ (not created yet; the first write creates it)
@@ -647,11 +693,20 @@ export class PathResolver {
     const workspace = this.getWorkspace();
     const legacyDir = join(workspace, subdir);
     const explicitResources = process.env['MCP_RESOURCES_PATH'];
+    const hasExplicitResources = explicitResources !== undefined && explicitResources !== '';
 
-    if (
-      (explicitResources === undefined || explicitResources === '') &&
-      this.isUsingCustomWorkspace()
-    ) {
+    const projectWorkspace = hasExplicitResources ? undefined : this.getProjectWorkspace();
+    if (projectWorkspace !== undefined) {
+      const projectDir = join(projectWorkspace, 'resources', subdir);
+      return {
+        resolved: projectDir,
+        source: existsSync(projectDir)
+          ? `project resources/${subdir}/`
+          : `project resources/${subdir}/ (created on first write)`,
+      };
+    }
+
+    if (!hasExplicitResources && this.isUsingCustomWorkspace()) {
       const workspaceDir = join(workspace, 'resources', subdir);
       if (existsSync(workspaceDir)) {
         return { resolved: workspaceDir, source: `workspace resources/${subdir}/` };
@@ -674,7 +729,7 @@ export class PathResolver {
       return { resolved: legacyDir, source: `workspace ${subdir}/ (legacy)` };
     }
 
-    if (explicitResources !== undefined && explicitResources !== '') {
+    if (hasExplicitResources) {
       return {
         resolved: resourcesDir,
         source: `resources/${subdir}/ (created on first write)`,

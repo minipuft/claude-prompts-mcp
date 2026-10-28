@@ -276,7 +276,7 @@ describe('an overlay that does not exist yet is still a root', () => {
       expect(existsSync(overlay)).toBe(false);
       const roots = resolveResourceRoots(resolver, type, path.join(workspace, 'resources', type));
       expect(roots.overlays).toEqual([overlay]);
-      expect(roots.lookupDirs[0]).toBe(overlay);
+      expect(roots.lookupDirs.slice(0, 2)).toEqual([roots.primary, overlay]);
       // The present-tense reading still reports only what exists.
       expect(resolver.getOverlayResourceDirs(type, roots.primary)).toEqual([]);
     }
@@ -319,8 +319,8 @@ describe('an overlay that does not exist yet is still a root', () => {
       getGatesDirectory: () => path.join(workspace, 'resources', 'gates'),
     } as unknown as ConfigLoader;
     expect(trackedResourceRoots(configManager, resolver)).toEqual({
-      prompt: [path.join(workspace, 'prompts'), path.join(workspace, 'resources', 'prompts')],
-      gate: [path.join(workspace, 'gates'), path.join(workspace, 'resources', 'gates')],
+      prompt: [path.join(workspace, 'resources', 'prompts'), path.join(workspace, 'prompts')],
+      gate: [path.join(workspace, 'resources', 'gates'), path.join(workspace, 'gates')],
     });
   });
 });

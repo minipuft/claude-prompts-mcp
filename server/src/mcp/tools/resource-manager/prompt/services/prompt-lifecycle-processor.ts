@@ -965,9 +965,9 @@ export class PromptLifecycleProcessor {
    *
    * WRITABLE root first: `preferredRepairTarget` prefers the primary because that is the root a
    * `resource_manager` write lands in, so an operator repairing `foo` edits the copy they can
-   * actually edit rather than the bundled one they cannot. NOT precedence — since P4.27 the primary
-   * is outranked by every overlay (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence),
-   * and this docstring cited that precedence back when the two happened to agree.
+   * actually edit rather than the bundled one they cannot. That root is also the highest in
+   * `shared/utils/resource-root-lookup.ts` §resourceRootPrecedence, but the preference is stated by
+   * where a write lands, so it would survive a change to that order.
    */
   private resolveRepairTarget(id: string): QuarantinedResource | undefined {
     const records = this.context.dependencies.quarantine?.byId(id) ?? [];

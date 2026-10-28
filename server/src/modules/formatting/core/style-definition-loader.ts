@@ -43,14 +43,13 @@ export interface StyleDefinitionLoaderConfig {
    * The WHOLE lookup order for styles, HIGHEST precedence first — `stylesDir` included.
    *
    * The name says "additional" and the contents are not: since P4.27 the composition root places
-   * `stylesDir` itself inside this list, at its own rank, because the primary is neither the top of
-   * the order nor the bottom (overlays outrank it, the bundled tree trails it) and a list that
-   * omitted it could not say where it sits. The accurate name lives at the producing end,
+   * `stylesDir` itself inside this list, at its own rank (it outranks the overlays, which outrank
+   * the bundled tree), because a list that omitted it could not say where it sits. The accurate name lives at the producing end,
    * `ResourceRoots.lookupDirs`; this key kept its own so the rename would not reach ~30 test call
    * sites for no behaviour change.
    *
    * A caller configuring the loader by hand may omit `stylesDir`, in which case it is consulted
-   * last — see `resourceLookupOrder`.
+   * first — see `resourceLookupOrder`.
    */
   additionalStylesDirs?: string[];
   /** Enable caching of loaded definitions (default: true) */
