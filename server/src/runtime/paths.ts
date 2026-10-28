@@ -27,6 +27,7 @@ import {
   findWorkspaceConfigFiles,
   parseConfigText,
 } from '#shared/utils/config-file-format.js';
+import { selectConfigFile, type ConfigFileOrigin } from '#shared/utils/config-file-selection.js';
 import {
   assertUsableDirectorySetting,
   describeRemoval,
@@ -44,6 +45,9 @@ import {
 
 /** The directory a project keeps its own resources in, directly under the project directory. */
 const PROJECT_WORKSPACE_DIR_NAME = '.claude-prompts';
+
+/** The per-type resource directories `resolveResourceSubdir` answers for. */
+type ResourceSubdir = 'prompts' | 'frameworks' | 'gates' | 'scripts' | 'styles';
 
 /**
  * CLI flag values parsed from command line arguments
@@ -151,6 +155,14 @@ function describeUnusableConfigFile(resolved: string): string | undefined {
 export class PathResolver {
   private config: PathResolverConfig;
   private cache: Partial<ResolvedPaths> = {};
+  /**
+   * The per-type directories, kept apart from {@link cache} because they alone depend on a
+   * directory that can appear or vanish while the server runs. Valid only for
+   * {@link typePathsProject}.
+   */
+  private typePaths: Partial<Record<ResourceSubdir, string>> = {};
+  /** The project workspace {@link typePaths} was resolved under; `undefined` when there was none. */
+  private typePathsProject: string | undefined;
   private debug: boolean;
 
   constructor(config: PathResolverConfig) {
@@ -518,30 +530,31 @@ export class PathResolver {
 
   /**
    * Where config resolves when nothing names a path: the project's `.claude-prompts/` file if
-   * present, else the workspace's, else the package's. `origin` is what every caller branches on
-   * — `'project'`, `'workspace'` or `'package'` — kept
+   * present, else the workspace's, else the package's — steps 2-5 from `selectConfigFile`, the one
+   * place every config reader takes that order from, and the shipped file as step 6. `origin` is
+   * what every caller branches on — `'project'`, `'workspace'` or `'package'` (`'explicit'` is
+   * never passed in, so never comes back) — kept
    * separate from `source`, the human-readable label passed to {@link logResolution}, so that
    * label can name whichever filename was actually found without becoming the thing callers
    * compare against.
    */
   private resolveDefaultConfigPath(): {
     resolved: string;
-    origin: 'project' | 'workspace' | 'package';
+    origin: ConfigFileOrigin | 'package';
     source: string;
   } {
-    const projectWorkspace = this.getProjectWorkspace();
-    if (projectWorkspace !== undefined) {
-      const [first] = findWorkspaceConfigFiles(projectWorkspace);
-      if (first !== undefined) {
-        return { resolved: first, origin: 'project', source: `project ${basename(first)}` };
-      }
-    }
     const workspace = this.getWorkspace();
-    if (workspace !== this.config.packageRoot) {
-      const [first] = findWorkspaceConfigFiles(workspace);
-      if (first !== undefined) {
-        return { resolved: first, origin: 'workspace', source: `workspace ${basename(first)}` };
-      }
+    const selected = selectConfigFile({
+      projectWorkspace: this.getProjectWorkspace(),
+      // A workspace that IS the package root is the package step below, not a second source.
+      workspace: workspace === this.config.packageRoot ? undefined : workspace,
+    });
+    if (selected !== undefined) {
+      return {
+        resolved: selected.path,
+        origin: selected.origin,
+        source: `${selected.origin} ${basename(selected.path)}`,
+      };
     }
     return {
       resolved: join(this.config.packageRoot, 'config.json'),
@@ -555,11 +568,7 @@ export class PathResolver {
    * Resolution order: `resolveResourceSubdir`.
    */
   getPromptsPath(): string {
-    if (this.cache.prompts) return this.cache.prompts;
-    const { resolved, source } = this.resolveResourceSubdir('prompts');
-    this.cache.prompts = resolved;
-    this.logResolution('prompts', resolved, source);
-    return resolved;
+    return this.resourceSubdirPath('prompts');
   }
 
   /**
@@ -567,11 +576,7 @@ export class PathResolver {
    * Resolution order: `resolveResourceSubdir`.
    */
   getFrameworksPath(): string {
-    if (this.cache.frameworks) return this.cache.frameworks;
-    const { resolved, source } = this.resolveResourceSubdir('frameworks');
-    this.cache.frameworks = resolved;
-    this.logResolution('frameworks', resolved, source);
-    return resolved;
+    return this.resourceSubdirPath('frameworks');
   }
 
   /**
@@ -579,11 +584,7 @@ export class PathResolver {
    * Resolution order: `resolveResourceSubdir`.
    */
   getGatesPath(): string {
-    if (this.cache.gates) return this.cache.gates;
-    const { resolved, source } = this.resolveResourceSubdir('gates');
-    this.cache.gates = resolved;
-    this.logResolution('gates', resolved, source);
-    return resolved;
+    return this.resourceSubdirPath('gates');
   }
 
   /**
@@ -591,11 +592,7 @@ export class PathResolver {
    * Resolution order: `resolveResourceSubdir`.
    */
   getScriptsPath(): string {
-    if (this.cache.scripts) return this.cache.scripts;
-    const { resolved, source } = this.resolveResourceSubdir('scripts');
-    this.cache.scripts = resolved;
-    this.logResolution('scripts', resolved, source);
-    return resolved;
+    return this.resourceSubdirPath('scripts');
   }
 
   /**
@@ -603,11 +600,7 @@ export class PathResolver {
    * Resolution order: `resolveResourceSubdir`.
    */
   getStylesPath(): string {
-    if (this.cache.styles) return this.cache.styles;
-    const { resolved, source } = this.resolveResourceSubdir('styles');
-    this.cache.styles = resolved;
-    this.logResolution('styles', resolved, source);
-    return resolved;
+    return this.resourceSubdirPath('styles');
   }
 
   /**
@@ -741,8 +734,38 @@ export class PathResolver {
   }
 
   /**
+   * The directory a type is written to, answered from a cache that is only as old as the project
+   * directory's existence.
+   *
+   * `resolveResourceSubdir` consults the project workspace before anything else, so a `.claude-prompts/`
+   * created (or removed) while the server runs changes every type's answer at once. The cache used
+   * to be keyed on nothing: after the directory appeared, writes kept landing in the workspace and
+   * a same-id copy there kept outranking the project's, until a restart. The key is the project
+   * workspace itself (`undefined` while there is none), probed once per call, so the first call
+   * after the directory's existence changes resolves every type again.
+   */
+  private resourceSubdirPath(subdir: ResourceSubdir): string {
+    const projectWorkspace = this.hasExplicitResourcesPath()
+      ? undefined
+      : this.getProjectWorkspace();
+    if (projectWorkspace !== this.typePathsProject) {
+      this.typePaths = {};
+      this.typePathsProject = projectWorkspace;
+    }
+
+    const cached = this.typePaths[subdir];
+    if (cached !== undefined) return cached;
+
+    const { resolved, source } = this.resolveResourceSubdir(subdir, projectWorkspace);
+    this.typePaths[subdir] = resolved;
+    this.logResolution(subdir, resolved, source);
+    return resolved;
+  }
+
+  /**
    * Resolve a resource subdirectory: the directory a type is written to, and the root the shared
-   * precedence in `resourceRootPrecedence` calls the primary.
+   * precedence in `resourceRootPrecedence` calls the primary. `projectWorkspace` is the answer of
+   * `getProjectWorkspace()`, already withheld when `MCP_RESOURCES_PATH` is set.
    *
    * A project workspace (`getProjectWorkspace`) with no `MCP_RESOURCES_PATH` is the primary for
    * every type: `<project>/.claude-prompts/resources/${subdir}/`, existing or not yet created.
@@ -766,12 +789,14 @@ export class PathResolver {
    * Readers treat the absent directory as empty; bundled resources still load underneath
    * (`getBundledResourceDir`).
    */
-  private resolveResourceSubdir(subdir: string): { resolved: string; source: string } {
+  private resolveResourceSubdir(
+    subdir: ResourceSubdir,
+    projectWorkspace: string | undefined
+  ): { resolved: string; source: string } {
     const workspace = this.getWorkspace();
     const legacyDir = join(workspace, subdir);
     const hasExplicitResources = this.hasExplicitResourcesPath();
 
-    const projectWorkspace = hasExplicitResources ? undefined : this.getProjectWorkspace();
     if (projectWorkspace !== undefined) {
       const projectDir = join(projectWorkspace, 'resources', subdir);
       return {

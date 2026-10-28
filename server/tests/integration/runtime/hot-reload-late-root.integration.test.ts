@@ -14,7 +14,10 @@
  *   - a directory that existed at registration is NOT reconciled;
  *   - the framework and gate registrations actually drop what the disk no longer holds;
  *   - overlay roots that do not exist yet are still read and watched (the other half of the row:
- *     one created after startup used to be filtered out for good).
+ *     one created after startup used to be filtered out for good);
+ *   - a project `.claude-prompts/` created while the server runs becomes the write root AND the
+ *     precedence winner: a same-id gate or framework is served from the project copy, and a write
+ *     through the config loader lands there, with no restart.
  *
  * The window is reproduced deterministically rather than raced: the entry is registered, then its
  * whole folder is removed BEFORE the watch is set up, and the folder is recreated empty. That is
@@ -35,13 +38,17 @@ import { StyleDefinitionLoader } from '../../../src/modules/formatting/core/styl
 import { HotReloadObserver } from '../../../src/modules/hot-reload/hot-reload-observer.js';
 import { buildFrameworkAuxiliaryReloadConfig } from '../../../src/runtime/framework-hot-reload.js';
 import { buildGateAuxiliaryReloadConfig } from '../../../src/runtime/gate-hot-reload.js';
+import { ConfigLoader } from '../../../src/infra/config/index.js';
+import { GateFileWriter } from '../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
 import { PathResolver } from '../../../src/runtime/paths.js';
 import { trackedResourceRoots } from '../../../src/runtime/resource-change-tracking.js';
-import { resolveResourceRoots } from '../../../src/runtime/resource-roots.js';
+import {
+  createLoaderRootsSource,
+  resolveResourceRoots,
+} from '../../../src/runtime/resource-roots.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 
 import type { FrameworkManager } from '../../../src/engine/frameworks/framework-manager.js';
-import type { ConfigLoader } from '../../../src/infra/config/index.js';
 import type { McpToolRouter } from '../../../src/mcp/tools/index.js';
 import type { AuxiliaryReloadConfig } from '../../../src/modules/hot-reload/hot-reload-observer.js';
 import type { HotReloadEvent, Logger } from '../../../src/shared/types/index.js';
@@ -93,7 +100,11 @@ async function startedObserver(
   return observer;
 }
 
-async function writeFramework(root: string, id: string): Promise<void> {
+async function writeFramework(
+  root: string,
+  id: string,
+  guidance = 'late root probe'
+): Promise<void> {
   await mkdir(path.join(root, id), { recursive: true });
   await writeFile(
     path.join(root, id, 'framework.yaml'),
@@ -102,7 +113,7 @@ async function writeFramework(root: string, id: string): Promise<void> {
       `name: ${id}`,
       `type: ${id.toUpperCase()}`,
       'enabled: true',
-      'systemPromptGuidance: late root probe',
+      `systemPromptGuidance: ${guidance}`,
       'version: 1.0.0',
       '',
     ].join('\n'),
@@ -110,7 +121,7 @@ async function writeFramework(root: string, id: string): Promise<void> {
   );
 }
 
-async function writeGate(root: string, id: string): Promise<void> {
+async function writeGate(root: string, id: string, description = 'late root probe'): Promise<void> {
   await mkdir(path.join(root, id), { recursive: true });
   await writeFile(
     path.join(root, id, 'gate.yaml'),
@@ -118,7 +129,7 @@ async function writeGate(root: string, id: string): Promise<void> {
       `id: ${id}`,
       `name: ${id}`,
       'type: validation',
-      'description: late root probe',
+      `description: ${description}`,
       'severity: medium',
       'guidance: late root probe',
       '',
@@ -400,4 +411,234 @@ describe('a project .claude-prompts/ created while the server runs', () => {
     expect(after.overlays).not.toContain(projectGates);
     expect(after.lookupDirs[0]).toBe(projectGates);
   }, 30000);
+});
+
+describe('a project .claude-prompts/ created while the server runs becomes the write root and the winner', () => {
+  const TYPES = ['prompts', 'gates', 'frameworks', 'styles', 'scripts'] as const;
+
+  interface Launch {
+    resolver: PathResolver;
+    workspace: string;
+    projectWorkspace: string;
+  }
+
+  /** A server that started with no `.claude-prompts/`, in a project that will get one. */
+  async function launchWithoutProjectDirectory(): Promise<Launch> {
+    const packageRoot = await scratch('late-winner-package');
+    const workspace = await scratch('late-winner-workspace');
+    const project = await scratch('late-winner-project');
+    const elsewhere = await scratch('late-winner-elsewhere');
+    for (const type of TYPES) {
+      await mkdir(path.join(packageRoot, 'resources', type), { recursive: true });
+      await mkdir(path.join(workspace, 'resources', type), { recursive: true });
+    }
+
+    const previous = process.env['MCP_WORKSPACE'];
+    const previousResources = process.env['MCP_RESOURCES_PATH'];
+    process.env['MCP_WORKSPACE'] = workspace;
+    delete process.env['MCP_RESOURCES_PATH'];
+    cleanups.push(async () => {
+      if (previous === undefined) delete process.env['MCP_WORKSPACE'];
+      else process.env['MCP_WORKSPACE'] = previous;
+      if (previousResources !== undefined) process.env['MCP_RESOURCES_PATH'] = previousResources;
+    });
+
+    const resolver = new PathResolver({
+      cli: {},
+      packageRoot,
+      projectDiscovery: true,
+      projectLaunch: { env: { CLAUDE_PROJECT_DIR: project }, cwd: elsewhere },
+    });
+    const projectWorkspace = path.join(project, '.claude-prompts');
+    expect(existsSync(projectWorkspace)).toBe(false);
+    return { resolver, workspace, projectWorkspace };
+  }
+
+  /** A gate manager whose loader is configured exactly as the composition root configures it. */
+  async function gateManagerFor(resolver: PathResolver) {
+    const roots = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
+    return createGateManager(logger, {
+      registryConfig: {
+        autoLoadBuiltIn: false,
+        validateOnRegistration: false,
+        loaderConfig: {
+          gatesDir: roots.primary!,
+          additionalGatesDirs: roots.lookupDirs,
+          rootsSource: createLoaderRootsSource(resolver, 'gates'),
+        },
+      },
+    });
+  }
+
+  /** A framework registry whose loader is configured as the composition root configures it. */
+  async function frameworkRegistryFor(resolver: PathResolver): Promise<FrameworkRegistry> {
+    const roots = resolveResourceRoots(resolver, 'frameworks', resolver.getFrameworksPath());
+    const registry = new FrameworkRegistry(logger, {
+      autoLoadBuiltIn: false,
+      validateOnRegistration: false,
+      runtimeLoaderConfig: {
+        frameworksDir: roots.primary!,
+        additionalFrameworksDirs: roots.lookupDirs,
+        rootsSource: createLoaderRootsSource(resolver, 'frameworks'),
+        validateOnLoad: false,
+      },
+    });
+    await registry.initialize();
+    return registry;
+  }
+
+  const frameworkAuxFor = (registry: FrameworkRegistry): AuxiliaryReloadConfig =>
+    buildFrameworkAuxiliaryReloadConfig(logger, {
+      getFrameworkManager: () =>
+        ({
+          getFrameworkRegistry: () => registry,
+          reload: async () => {},
+          removeFramework: async () => {},
+        }) as unknown as FrameworkManager,
+    } as unknown as McpToolRouter)!;
+
+  const frameworkSourceRoot = (registry: FrameworkRegistry, id: string): string | undefined =>
+    (registry.getGuide(id) as { sourceRoot?: string } | undefined)?.sourceRoot;
+
+  it('serves the project copy of a gate the workspace also holds, with no restart', async () => {
+    const { resolver, workspace, projectWorkspace } = await launchWithoutProjectDirectory();
+    const workspaceGates = path.join(workspace, 'resources', 'gates');
+    const projectGates = path.join(projectWorkspace, 'resources', 'gates');
+    await writeGate(workspaceGates, 'shared-gate', 'FROM WORKSPACE');
+
+    const gateManager = await gateManagerFor(resolver);
+    const registry = gateManager.getGateRegistry();
+    const loader = registry.getLoader();
+    expect(await registry.reloadGuide('shared-gate')).toBe(true);
+    // Positive control for the wait below: before the directory exists, the workspace copy serves.
+    expect(registry.getGuide('shared-gate')?.description).toBe('FROM WORKSPACE');
+    expect(resolver.getGatesPath()).toBe(workspaceGates);
+
+    const gateAux = buildGateAuxiliaryReloadConfig(logger, gateManager);
+    expect(gateAux).toBeDefined();
+    const observer = await startedObserver(() => {});
+    observer.setAuxiliaryReloads([gateAux!]);
+    await observer.start();
+    await observer.watchDirectories(loader.getWatchDirectories().map((dir) => ({ path: dir })));
+
+    await writeGate(projectGates, 'shared-gate', 'FROM PROJECT');
+
+    expect(
+      await waitFor(() => registry.getGuide('shared-gate')?.description === 'FROM PROJECT')
+    ).toBe(true);
+    expect(loader.loadGate('shared-gate')?.sourceRoot).toBe(projectGates);
+    expect(resolver.getGatesPath()).toBe(projectGates);
+    expect(loader.getGatesDir()).toBe(projectGates);
+    // The workspace did not go away: it is the next root down.
+    expect(loader.getWatchDirectories()).toContain(workspaceGates);
+  }, 30000);
+
+  it('serves the project copy of a framework the workspace also holds, with no restart', async () => {
+    const { resolver, workspace, projectWorkspace } = await launchWithoutProjectDirectory();
+    const workspaceFrameworks = path.join(workspace, 'resources', 'frameworks');
+    const projectFrameworks = path.join(projectWorkspace, 'resources', 'frameworks');
+    await writeFramework(workspaceFrameworks, 'shared_fw', 'FROM WORKSPACE');
+
+    const registry = await frameworkRegistryFor(resolver);
+    expect(await registry.loadAndRegisterById('shared_fw')).toBe(true);
+    // Positive control for the wait below.
+    expect(frameworkSourceRoot(registry, 'shared_fw')).toBe(workspaceFrameworks);
+
+    const observer = await startedObserver(() => {});
+    observer.setAuxiliaryReloads([frameworkAuxFor(registry)]);
+    await observer.start();
+    await observer.watchDirectories(
+      registry
+        .getRuntimeLoader()
+        .getWatchDirectories()
+        .map((dir) => ({ path: dir }))
+    );
+
+    await writeFramework(projectFrameworks, 'shared_fw', 'FROM PROJECT');
+
+    expect(
+      await waitFor(() => frameworkSourceRoot(registry, 'shared_fw') === projectFrameworks)
+    ).toBe(true);
+    expect(resolver.getFrameworksPath()).toBe(projectFrameworks);
+  }, 30000);
+
+  // The per-file event for a project copy can reach its handler BEFORE the roots are re-resolved
+  // (the watcher reports what it finds, then announces the directory), and that load still sees
+  // the workspace copy first. The reconciliation is what puts it right, so it is driven here
+  // alone, with no watcher and no file event to help it.
+  it('re-registers a gate and a framework whose winning root moved when the reconciliation runs', async () => {
+    const { resolver, workspace, projectWorkspace } = await launchWithoutProjectDirectory();
+    const projectGates = path.join(projectWorkspace, 'resources', 'gates');
+    const projectFrameworks = path.join(projectWorkspace, 'resources', 'frameworks');
+    await writeGate(path.join(workspace, 'resources', 'gates'), 'shared-gate', 'FROM WORKSPACE');
+    await writeFramework(
+      path.join(workspace, 'resources', 'frameworks'),
+      'shared_fw',
+      'FROM WORKSPACE'
+    );
+
+    const gateManager = await gateManagerFor(resolver);
+    const gateRegistry = gateManager.getGateRegistry();
+    expect(await gateRegistry.reloadGuide('shared-gate')).toBe(true);
+    const frameworkRegistry = await frameworkRegistryFor(resolver);
+    expect(await frameworkRegistry.loadAndRegisterById('shared_fw')).toBe(true);
+    const gateAux = buildGateAuxiliaryReloadConfig(logger, gateManager)!;
+    const frameworkAux = frameworkAuxFor(frameworkRegistry);
+
+    await writeGate(projectGates, 'shared-gate', 'FROM PROJECT');
+    await writeFramework(projectFrameworks, 'shared_fw', 'FROM PROJECT');
+
+    // Positive control: the directory exists, and nothing has told either registration, so both
+    // still serve the workspace copy they registered at startup.
+    expect(gateRegistry.getGuide('shared-gate')?.description).toBe('FROM WORKSPACE');
+    expect(frameworkSourceRoot(frameworkRegistry, 'shared_fw')).toBe(
+      path.join(workspace, 'resources', 'frameworks')
+    );
+
+    await gateAux.reconcile(projectGates);
+    await frameworkAux.reconcile(projectFrameworks);
+
+    expect(gateRegistry.getGuide('shared-gate')?.description).toBe('FROM PROJECT');
+    expect(frameworkSourceRoot(frameworkRegistry, 'shared_fw')).toBe(projectFrameworks);
+  });
+
+  it('lands a write made through the config loader in the project once the directory exists', async () => {
+    const { resolver, workspace, projectWorkspace } = await launchWithoutProjectDirectory();
+    const configDir = await scratch('late-winner-config');
+    const configPath = path.join(configDir, 'config.json');
+    await writeFile(configPath, '{}', 'utf8');
+    // Built once, as the server builds them, and held across the directory appearing.
+    const configManager = new ConfigLoader(configPath, resolver);
+    const writer = new GateFileWriter({ logger, configManager });
+    const writeGateThrough = (id: string) =>
+      writer.writeGateFiles({
+        id,
+        name: id,
+        type: 'validation',
+        description: 'late root write probe',
+        guidance: 'late root write probe',
+        pass_criteria: [{ type: 'inline_guidance' }],
+      });
+    const workspaceGate = (id: string) => path.join(workspace, 'resources', 'gates', id);
+    const projectGate = (id: string) => path.join(projectWorkspace, 'resources', 'gates', id);
+
+    // Positive control: before the directory exists the same writer lands in the workspace.
+    expect((await writeGateThrough('written-before')).success).toBe(true);
+    expect(existsSync(path.join(workspaceGate('written-before'), 'gate.yaml'))).toBe(true);
+    expect(existsSync(projectWorkspace)).toBe(false);
+
+    await mkdir(projectWorkspace);
+
+    expect((await writeGateThrough('written-after')).success).toBe(true);
+    expect(existsSync(path.join(projectGate('written-after'), 'gate.yaml'))).toBe(true);
+    expect(existsSync(workspaceGate('written-after'))).toBe(false);
+
+    // Every type's write root moved together, not only gates.
+    const under = (type: string): string => path.join(projectWorkspace, 'resources', type);
+    expect(configManager.getResolvedPromptsDirectory()).toBe(under('prompts'));
+    expect(configManager.getGatesDirectory()).toBe(under('gates'));
+    expect(configManager.getFrameworksDirectory()).toBe(under('frameworks'));
+    expect(configManager.getStylesDirectory()).toBe(under('styles'));
+    expect(configManager.getScriptsDirectory()).toBe(under('scripts'));
+  });
 });

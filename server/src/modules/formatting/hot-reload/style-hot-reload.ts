@@ -147,8 +147,12 @@ export class StyleHotReloadCoordinator {
    * removed before its folder was watched stays servable only through that cache. Clearing all of
    * it is exact — `StyleManager` reads through the loader on every request — and costs one
    * re-parse per style next used.
+   *
+   * The loader's roots are taken again first, so a late project directory that became the primary
+   * is where the next read looks first.
    */
   async reconcile(): Promise<void> {
+    this.loader.refreshRoots();
     this.loader.clearCache();
     this.logger.debug('Style cache cleared for reconciliation');
   }

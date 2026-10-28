@@ -147,17 +147,30 @@ export class FrameworkHotReloadCoordinator {
    * reports every file in it. Only `yaml-runtime` entries are considered, so a guide registered
    * in code is never mistaken for a missing file.
    *
+   * The loader's roots are taken again first, and when the lookup order changed every framework
+   * still on disk is loaded again from the root that wins now: a late project directory that
+   * became the primary outranks the root a registered framework was served from, and its per-file
+   * events arrived before the roots moved. See `GateHotReloadCoordinator.reconcile`.
+   *
    * @returns the ids that were unregistered
    */
   async reconcile(): Promise<string[]> {
+    const rootsMoved = this.loader.refreshRoots();
     const removed: string[] = [];
     for (const entry of this.registry.getGuideEntries(false)) {
       const frameworkId = entry.guide.frameworkId.toLowerCase();
-      if (entry.source !== 'yaml-runtime' || this.loader.frameworkExists(frameworkId)) {
+      if (entry.source !== 'yaml-runtime') {
         continue;
       }
-      await this.handleFrameworkDeletion(frameworkId);
-      removed.push(frameworkId);
+      if (!this.loader.frameworkExists(frameworkId)) {
+        await this.handleFrameworkDeletion(frameworkId);
+        removed.push(frameworkId);
+        continue;
+      }
+      if (rootsMoved) {
+        // The failure is already logged and counted by `handleFrameworkReload`.
+        await this.handleFrameworkReload(frameworkId).catch(() => undefined);
+      }
     }
     return removed;
   }

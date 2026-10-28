@@ -27,7 +27,12 @@ import {
 import type { FrameworkResourceDefinition } from './framework-definition-types.js';
 
 import { ResourceQuarantine, type QuarantineView } from '#shared/utils/resource-quarantine.js';
-import { resourceEntryRoots, resourceLookupOrder } from '#shared/utils/resource-root-lookup.js';
+import {
+  deriveLoaderRoots,
+  resourceEntryRoots,
+  sameLookupOrder,
+  type LoaderRootsSource,
+} from '#shared/utils/resource-root-lookup.js';
 import { loadYamlFileSync, discoverNestedYamlDirectories } from '#shared/utils/yaml/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -53,6 +58,10 @@ export interface RuntimeFrameworkLoaderConfig {
    * first — see `resourceLookupOrder`.
    */
   additionalFrameworksDirs?: string[];
+  /**
+   * Resolves the roots again — see `GateDefinitionLoaderConfig.rootsSource`, which this mirrors.
+   */
+  rootsSource?: LoaderRootsSource;
   /** Enable caching of loaded definitions (default: true) */
   enableCache?: boolean;
   /** Validate definitions on load (default: true) */
@@ -88,7 +97,8 @@ export class RuntimeFrameworkLoader {
   private frameworksDir: string;
   private additionalFrameworksDirs: string[];
   /** Every root this loader consults for an id, highest precedence first. */
-  private readonly lookupDirs: string[];
+  private lookupDirs: string[];
+  private readonly rootsSource: LoaderRootsSource | undefined;
   private enableCache: boolean;
   private validateOnLoad: boolean;
   private debug: boolean;
@@ -100,16 +110,11 @@ export class RuntimeFrameworkLoader {
 
   constructor(config: RuntimeFrameworkLoaderConfig = {}) {
     this.frameworksDir = config.frameworksDir ?? this.resolveFrameworksDir();
-    // From the RAW list — see the gate loader's twin: the primary's rank IS its position here, and
-    // filtering it out first would drop it behind the bundled tree.
-    this.lookupDirs = resourceLookupOrder(
-      this.frameworksDir,
-      config.additionalFrameworksDirs ?? []
-    );
     // Reported and watched, not looked up — absent ones included, as in the gate loader's twin.
-    this.additionalFrameworksDirs = (config.additionalFrameworksDirs ?? []).filter(
-      (dir) => dir !== this.frameworksDir
-    );
+    const roots = deriveLoaderRoots(this.frameworksDir, config.additionalFrameworksDirs ?? []);
+    this.lookupDirs = roots.lookupDirs;
+    this.additionalFrameworksDirs = roots.besideDirs;
+    this.rootsSource = config.rootsSource;
     this.enableCache = config.enableCache ?? true;
     this.validateOnLoad = config.validateOnLoad ?? true;
     this.debug = config.debug ?? false;
@@ -212,6 +217,26 @@ export class RuntimeFrameworkLoader {
    */
   getWatchDirectories(): string[] {
     return [this.frameworksDir, ...this.additionalFrameworksDirs];
+  }
+
+  /**
+   * Take the roots from `rootsSource` again, and drop every cached definition when they differ
+   * from the ones held. See `GateDefinitionLoader.refreshRoots`.
+   *
+   * @returns whether the lookup order changed; `false` for a loader with no source
+   */
+  refreshRoots(): boolean {
+    if (this.rootsSource === undefined) return false;
+    const next = this.rootsSource();
+    const roots = deriveLoaderRoots(next.primary, next.lookupDirs);
+    if (next.primary === this.frameworksDir && sameLookupOrder(roots.lookupDirs, this.lookupDirs)) {
+      return false;
+    }
+    this.frameworksDir = next.primary;
+    this.lookupDirs = roots.lookupDirs;
+    this.additionalFrameworksDirs = roots.besideDirs;
+    this.cache.clear();
+    return true;
   }
 
   // ============================================================================

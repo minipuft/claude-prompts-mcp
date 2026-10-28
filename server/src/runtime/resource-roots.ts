@@ -29,7 +29,10 @@ import type {
 import type { PathResolver } from './paths.js';
 
 import { locateResourceEntry, resourceEntryFileName } from '#shared/utils/resource-file-set.js';
-import { resourceRootPrecedence } from '#shared/utils/resource-root-lookup.js';
+import {
+  resourceRootPrecedence,
+  type LoaderRootsSource,
+} from '#shared/utils/resource-root-lookup.js';
 
 /** Every directory that contributes definitions of one resource type, in precedence order. */
 export interface ResourceRoots {
@@ -85,6 +88,44 @@ export function resolveResourceRoots(
   const bundled = candidate !== undefined && candidate !== primary ? candidate : undefined;
   const lookupDirs = resourceRootPrecedence({ primary, overlays, bundled });
   return { primary, overlays, bundled, lookupDirs };
+}
+
+/** The resource-type directories that have a primary root a loader or locator is built on. */
+type RootedTypeDir = 'prompts' | 'gates' | 'frameworks' | 'styles';
+
+/** The primary the resolver names for `typeDir` right now. */
+function primaryOf(pathResolver: PathResolver, typeDir: RootedTypeDir): string {
+  switch (typeDir) {
+    case 'prompts':
+      return pathResolver.getPromptsPath();
+    case 'gates':
+      return pathResolver.getGatesPath();
+    case 'frameworks':
+      return pathResolver.getFrameworksPath();
+    case 'styles':
+      return pathResolver.getStylesPath();
+  }
+}
+
+/**
+ * How a flat-layout loader asks for its roots again.
+ *
+ * Handed to the loader at construction, next to the roots it starts with, and called by the
+ * reconciliation after a late directory arms (`refreshRoots`). It resolves through
+ * {@link resolveResourceRoots} exactly as the construction did, so the order a loader takes now
+ * is the one `resourceRootPrecedence` states for the resolver's present primary — a project
+ * `.claude-prompts/` created while the server ran is the primary by then, and nothing here
+ * re-orders anything.
+ */
+export function createLoaderRootsSource(
+  pathResolver: PathResolver,
+  typeDir: Exclude<RootedTypeDir, 'prompts'>
+): LoaderRootsSource {
+  return () => {
+    const primary = primaryOf(pathResolver, typeDir);
+    const roots = resolveResourceRoots(pathResolver, typeDir, primary);
+    return { primary, lookupDirs: roots.lookupDirs };
+  };
 }
 
 /** The overlays that exist right now — what an inventory line may honestly report. */
@@ -187,14 +228,7 @@ export function createResourceFileLocator(
         return { located: false, reason: 'no path resolver was wired at the composition root' };
       }
       const typeDir = VERSIONED_TYPE_DIRS[resourceType];
-      const primary =
-        typeDir === 'prompts'
-          ? pathResolver.getPromptsPath()
-          : typeDir === 'gates'
-            ? pathResolver.getGatesPath()
-            : pathResolver.getFrameworksPath();
-
-      const roots = resolveResourceRoots(pathResolver, typeDir, primary);
+      const roots = resolveResourceRoots(pathResolver, typeDir, primaryOf(pathResolver, typeDir));
       const entryPath = await locateResourceEntry({
         resourceType,
         resourceId,

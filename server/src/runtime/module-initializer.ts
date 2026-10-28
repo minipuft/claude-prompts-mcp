@@ -17,6 +17,7 @@ import {
   type ResourceInventory,
 } from './resource-inventory.js';
 import {
+  createLoaderRootsSource,
   createResourceFileLocator,
   existingOverlays,
   resolveResourceRoots,
@@ -39,6 +40,7 @@ import type {
 } from '#shared/types/index.js';
 import type { DatabasePort } from '#shared/types/persistence.js';
 import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
+import type { LoaderRootsSource } from '#shared/utils/resource-root-lookup.js';
 import type { RuntimeLaunchOptions } from './options.js';
 import type { PathResolver } from './paths.js';
 import type { McpServer } from '@modelcontextprotocol/server';
@@ -267,15 +269,21 @@ function resourceInventoryOf(
  * precedence order including `roots.primary` — not the roots beside it. The key's name predates
  * P4.27; `ResourceRoots.lookupDirs` is the accurate end of the mapping, and each loader's config
  * docstring restates it at the receiving end.
+ *
+ * `rootsSource` is the same resolution again, on demand: the reconciliation after a late directory
+ * arms asks for it, because the roots above are the ones at startup and a project
+ * `.claude-prompts/` created since is the primary now.
  */
 function loaderDirsConfig<PrimaryKey extends string, LookupKey extends string>(
   roots: ResourceRoots,
   primaryKey: PrimaryKey,
-  lookupKey: LookupKey
-): Record<string, string | string[]> {
+  lookupKey: LookupKey,
+  rootsSource: LoaderRootsSource
+): Record<string, string | string[] | LoaderRootsSource> {
   return {
     ...(roots.primary !== undefined ? { [primaryKey]: roots.primary } : {}),
     ...(roots.lookupDirs.length > 0 ? { [lookupKey]: roots.lookupDirs } : {}),
+    rootsSource,
   };
 }
 
@@ -364,7 +372,12 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     pathResolver.getFrameworksPath()
   );
   const frameworkLoader = getDefaultRuntimeLoader(
-    loaderDirsConfig(frameworkRoots, 'frameworksDir', 'additionalFrameworksDirs')
+    loaderDirsConfig(
+      frameworkRoots,
+      'frameworksDir',
+      'additionalFrameworksDirs',
+      createLoaderRootsSource(pathResolver, 'frameworks')
+    )
   );
 
   if (isVerbose) logger.info('🔄 Initializing Framework State Manager...');
@@ -404,7 +417,12 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   const gateRoots = resolveResourceRoots(pathResolver, 'gates', pathResolver.getGatesPath());
   const gateManager = await createGateManager(logger, {
     registryConfig: {
-      loaderConfig: loaderDirsConfig(gateRoots, 'gatesDir', 'additionalGatesDirs'),
+      loaderConfig: loaderDirsConfig(
+        gateRoots,
+        'gatesDir',
+        'additionalGatesDirs',
+        createLoaderRootsSource(pathResolver, 'gates')
+      ),
     },
   });
   if (isVerbose) {
@@ -439,7 +457,12 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   // framework loader above: PathResolver is the SSOT for directory resolution and enables overlays.
   const styleRoots = resolveResourceRoots(pathResolver, 'styles', pathResolver.getStylesPath());
   const styleLoader = getDefaultStyleDefinitionLoader(
-    loaderDirsConfig(styleRoots, 'stylesDir', 'additionalStylesDirs')
+    loaderDirsConfig(
+      styleRoots,
+      'stylesDir',
+      'additionalStylesDirs',
+      createLoaderRootsSource(pathResolver, 'styles')
+    )
   );
 
   // Root + count for the three resource types initialized here (T1.8). Not gated on quiet — see
