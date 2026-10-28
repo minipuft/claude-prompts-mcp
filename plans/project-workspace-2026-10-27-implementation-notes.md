@@ -17,12 +17,16 @@ tags: [resources, workspace, cli, docs]
 
 ## Deviations
 
+- DEV-T2-3 (2026-10-27, row 2.3): R7 said cloudySky receives the gate on a local branch of its own; cloudySky is on `feat/open-work-2026-09` with unrelated modified files owned by another session, so the planner did not move that HEAD. `.claude-prompts/` sits untracked there for the owner to commit.
+
 - DEV-T1-1 (2026-10-27, row 1.1): the row's 5-file bound was widened to the precedence statement, the prompt loader and the tests pinning the old order, under R9; the worker added a public `getProjectWorkspace()` and a `projectLaunch` injection the brief did not name (needed by 1.2 and 1.3 and by the tests).
 
 - DEV-T2-1 (2026-10-27, row 2.2): public docs were dispatched as a worker brief rather than through `>>documentation_change`; the rulings were the spec and the row was prose-exact. Recorded so the next docs row routes through the chain.
 - DEV-T2-2 (2026-10-27, row 2.1): `cli/` resolves no prettier config of its own and a bare `prettier --write` rewrote `cli.ts` to double quotes; the worker restored the file and formatted the test with `--config server/.prettierrc.json`. `validate:format` does not cover `cli/**/*.ts`. A brief for a cli row names the config.
 
 ## Findings
+
+- F5 (row 2.3): after the move, `rg creed-fidelity server/` still hits `resources/prompts/development/strategic_worker/prompt.yaml:55` (a `gateConfiguration.exclude` entry) and `resources/gates/math-fidelity/guidance.md:25` (prose). Ruled: both stay — in a project that ships the gate the exclude still keeps it off worker briefs, and bundled resources are edited through the MCP tools, not by hand. The row's artifact check is corrected to "no bundled gate FOLDER named creed-fidelity"; name-based readers were the pre-dispatch probe the row lacked.
 
 - F4 (row 1.1, 2026-10-27): R2 as written could not hold. `resourceRootPrecedence` (`shared/utils/resource-root-lookup.ts`) ranks overlays above the primary and the prompt loader merges bundle → primary → overlays, so making the project the primary put the workspace above it; two precedence tests went red for exactly that. The plan assumed "primary reads first" from the `resolveResourceSubdir` docstring without probing the ordering function. Ruled R9; the planner's miss, not the worker's.
 
