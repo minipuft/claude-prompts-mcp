@@ -25,6 +25,8 @@ tags: []
 - F6 (2026-10-28): four integration tests seed v1/v27/v28 databases, so the floor turns their upgrades into refusals (measured by `rg "VALUES \((\d+)\)" tests`); row 1.4 now owns them. The upgrade path cannot be exercised while 35 is the only version, so row 1.2 adds an injectable `schemaVersion`/`durableMigrations` engine config.
 - F7 (2026-10-28): the lock gate could not bootstrap — `--update` refuses a same-version mismatch, so a missing lock had no creator; row 1.5 added. The fingerprint covers tables and indexes only; the engine defines no triggers (`rg "CREATE TRIGGER" sqlite-engine.ts` → 0).
 - F8 (2026-10-28): the plan-sync Stop hook recorded a planner heredoc (`python3 -I - <<'EOF'`) as a source edit at the path `<<'EOF`; every source edit so far is a worker's, on its row branch. Planner writebacks go through Edit from here.
+- F9 (2026-10-28): a step that lists every column of a table in `droppedColumns` empties that table with no throw — declared intent, so accepted, but worth one line in the step-authoring docs when a real step first does it. Any durable DDL change, even a nullable column add, needs a step naming the table, because the lock compares DDL text; an identity `migrate` satisfies it.
+- F10 (2026-10-28): a T3 server restart killed the row 1.4 worker mid-row (three test files edited, the new suite not yet created); resumed with the same brief plus the partial state.
 
 ## Deviations
 
@@ -33,5 +35,6 @@ tags: []
 - DEV-T1-3 (2026-10-28): check (a) (stale lock version) suppresses (b); `--update` also refuses a SCHEMA_VERSION below the lock. Accepted.
 - DEV-T1-5 (2026-10-28): a lock re-created by `--update` after deletion is seeded at the current version with no step check, so a deleted lock can be re-seeded over a drifted schema; accepted, because the deletion and re-seed show as a lock-file diff in review. Malformed lock JSON still throws from `JSON.parse` (a loud failure, accepted).
 - DEV-T1-2 (2026-10-28): the worker exported `declaredDroppedColumns` from durable-migrations.ts so the engine and `undeclaredColumnLoss` share one rule, and corrected that module's header. The constructor refuses a non-integer `schemaVersion`. `getInstance` ignores a different `schemaVersion`/`durableMigrations` on a second call (tests must `shutdownInstance()` between targets). Accepted; deleting older backups blocking the upgrade became row 1.6.
+- DEV-T2-2 (2026-10-28): the docs worker added "never edit the lock by hand" to the rules file (not stated in code; consistent with `--update` being the lock's only writer) and listed all four durable tables in CLAUDE.md where it named two. Accepted.
 
 ## Receipts
