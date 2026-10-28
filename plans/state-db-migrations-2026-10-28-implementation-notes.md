@@ -28,7 +28,6 @@ tags: []
 ## Deviations
 
 - DEV-T2-1 (2026-10-28): the briefed commit subject `docs(adr): …` was refused by commitlint (`adr` is not an allowed scope; capitalised ADR fails subject-case); landed as `docs: the record of why runtime state lives in one SQLite file is accepted`. Later briefs carry the scope list from `commitlint.config.mjs`.
+- DEV-T1-1 (2026-10-28): `DurableRow` is `Readonly<Record<string, unknown>>`, not `SQLInputValue`, matching the engine snapshot rows; `planDurableMigrations` also throws on from > to and validates the registry before the floor check. Accepted.
 
 ## Receipts
-
-- DEV-T1-1 (2026-10-28): `DurableRow` is `Readonly<Record<string, unknown>>`, not `SQLInputValue`, matching the engine snapshot rows; `planDurableMigrations` also throws on from > to and validates the registry before the floor check. Accepted.
