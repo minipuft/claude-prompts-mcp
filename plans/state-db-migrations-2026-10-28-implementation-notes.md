@@ -21,6 +21,11 @@ tags: []
 - F2 (2026-10-28): the live `execution_records.organization_id` holds the workspace name (114/30/14 rows per workspace); every other table's `organization_id` is NULL. Row 4.3 locates the writer.
 - F3 (2026-10-28): the shared checkout's HEAD moved twice during planning (feat/framework-operator-caret → feat/framework-bundle-membership → feat/project-workspace-followups).
 
+- F4 (2026-10-28): the ADR index in `docs/adr/README.md` is generated (`node scripts/adr.mjs index`, checked by `adr.mjs check`); never hand-edit it.
+- F5 (2026-10-28): ADR 0002, which 0005 cites as the downgrade rule, is still `proposed` in the index although the engine enforces it. Owner question, not a row.
+
 ## Deviations
+
+- DEV-T2-1 (2026-10-28): the briefed commit subject `docs(adr): …` was refused by commitlint (`adr` is not an allowed scope; capitalised ADR fails subject-case); landed as `docs: the record of why runtime state lives in one SQLite file is accepted`. Later briefs carry the scope list from `commitlint.config.mjs`.
 
 ## Receipts
