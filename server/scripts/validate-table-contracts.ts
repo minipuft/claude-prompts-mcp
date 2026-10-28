@@ -33,9 +33,19 @@
  * `acceptedForeignWriters` entries retire as their named tiers land.
  */
 
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 import {
+  DURABLE_MIGRATIONS,
+  type DurableMigration,
+} from '../src/infra/database/durable-migrations.js';
+import {
+  DURABLE_TABLE_NAMES,
   SQLITE_INTERNAL_TABLES,
   TABLE_CONTRACTS,
   VIEW_CONTRACTS,
@@ -59,84 +69,219 @@ interface Problem {
   readonly message: string;
 }
 
-/** An exception must name its exit, or it is a permanent bypass. */
 /**
- * Parse `SCHEMA_VERSION`, `DROPPED_ON_THIS_BUMP`, and `DROPPED_AT_VERSION` out of the engine source.
+ * Parse `SCHEMA_VERSION` out of the engine source.
  *
  * Read as text rather than imported, for the same reason `parseSchemaDdl` is: `table-contracts.ts`
  * imports nothing so gates can run without pulling `node:sqlite` and the engine singleton into a
- * validation process. Importing the engine here to reach three consts would undo that.
+ * validation process. Importing the engine here to reach one const would undo that.
  */
-export function parseBumpExclusion(engineSource: string): {
-  schemaVersion: number | null;
-  declaredAt: number | null;
-  excluded: string[];
-} {
-  const schemaVersion = /^const SCHEMA_VERSION = (\d+);/m.exec(engineSource);
-  const declaredAt = /^const DROPPED_AT_VERSION = (\d+);/m.exec(engineSource);
-  const setLiteral =
-    /^const DROPPED_ON_THIS_BUMP: ReadonlySet<string> = new Set\(\[([^\]]*)\]\);/m.exec(
-      engineSource
-    );
+export function parseSchemaVersion(engineSource: string): number | null {
+  const match = /^const SCHEMA_VERSION = (\d+);/m.exec(engineSource);
+  return match ? Number(match[1]) : null;
+}
 
-  const excluded =
-    setLiteral === undefined || setLiteral === null
-      ? []
-      : (setLiteral[1] ?? '')
-          .split(',')
-          .map((entry) => entry.trim().replace(/^['"`]|['"`]$/g, ''))
-          .filter((entry) => entry.length > 0);
+/** sha256 per durable table over its normalized `CREATE TABLE` / `CREATE INDEX` statements. */
+type DurableFingerprint = Readonly<Record<string, string>>;
 
-  return {
-    schemaVersion: schemaVersion ? Number(schemaVersion[1]) : null,
-    declaredAt: declaredAt ? Number(declaredAt[1]) : null,
-    excluded,
-  };
+interface DurableSchemaSnapshot {
+  readonly schemaVersion: number;
+  readonly tables: DurableFingerprint;
+}
+
+/** The committed record of the durable schema at the last `--update`, plus the one before it. */
+interface DurableSchemaLock extends DurableSchemaSnapshot {
+  readonly previous?: DurableSchemaSnapshot;
+}
+
+const LOCK_RELATIVE_PATH = 'src/infra/database/durable-schema.lock.json';
+const UPDATE_COMMAND = 'npm run validate:table-contracts -- --update';
+
+function lockFilePath(): string {
+  return fileURLToPath(new URL(`../${LOCK_RELATIVE_PATH}`, import.meta.url));
+}
+
+/** Whitespace-insensitive, so reformatting a statement is not a schema change. */
+export function normalizeSql(sql: string): string {
+  return sql.replace(/\s+/g, ' ').trim();
+}
+
+interface SchemaObjectRow {
+  readonly type: string;
+  readonly name: string;
+  readonly tbl_name: string;
+  readonly sql: string;
+}
+
+/** Pure: group `sqlite_master` rows by table and hash each table's statements. */
+export function fingerprintDurableTables(
+  rows: readonly SchemaObjectRow[],
+  durableTables: readonly string[]
+): DurableFingerprint {
+  const fingerprint: Record<string, string> = {};
+  for (const table of [...durableTables].sort()) {
+    const statements = rows
+      .filter((row) => row.tbl_name === table)
+      .sort(
+        (left, right) => left.type.localeCompare(right.type) || left.name.localeCompare(right.name)
+      )
+      .map((row) => normalizeSql(row.sql));
+    fingerprint[table] = createHash('sha256').update(statements.join('\n')).digest('hex');
+  }
+  return fingerprint;
 }
 
 /**
- * A one-time durable-table exclusion must retire with the bump that declared it.
- *
- * `DROPPED_ON_THIS_BUMP` names durable tables deliberately NOT carried across a schema recreate.
- * That is correct exactly once. Left behind, it silently discards a table whose rows exist nowhere
- * else on the next, unrelated bump. This is the `closedBy` rule above applied to a construct that
- * is not an AcceptedException: a bypass must name what retires it, and something must notice when
- * it has not.
+ * The durable schema as the engine really creates it: initialize a scratch database and read
+ * `sqlite_master`. Hashing the engine's own output, not the DDL text, means a column added by any
+ * path that reaches a fresh database is seen.
  */
-function checkBumpExclusionRetired(engineSource: string, problems: Problem[]): void {
-  const { schemaVersion, declaredAt, excluded } = parseBumpExclusion(engineSource);
-
-  if (schemaVersion === null) {
-    problems.push({
-      subject: 'sqlite-engine.ts',
-      message: 'could not parse SCHEMA_VERSION — this check cannot verify the bump exclusion',
-    });
-    return;
+async function computeDurableFingerprint(): Promise<DurableFingerprint> {
+  const { SqliteEngine } = await import('../src/infra/database/sqlite-engine.js');
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'durable-schema-'));
+  const silent = { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
+  const engine = await SqliteEngine.getInstance(silent, {
+    dbPath: path.join(scratch, 'state.db'),
+  });
+  try {
+    await engine.initialize();
+    const placeholders = DURABLE_TABLE_NAMES.map(() => '?').join(', ');
+    const rows = engine
+      .getDb()
+      .prepare(
+        `SELECT type, name, tbl_name, sql FROM sqlite_master
+         WHERE type IN ('table', 'index') AND sql IS NOT NULL AND tbl_name IN (${placeholders})`
+      )
+      .all(...DURABLE_TABLE_NAMES) as unknown as SchemaObjectRow[];
+    return fingerprintDurableTables(rows, DURABLE_TABLE_NAMES);
+  } finally {
+    await engine.shutdown();
+    fs.rmSync(scratch, { recursive: true, force: true });
   }
+}
 
-  if (excluded.length === 0) {
-    return;
-  }
+/** Tables whose hash differs between two snapshots, including ones added or removed. */
+function changedTables(before: DurableFingerprint, after: DurableFingerprint): string[] {
+  const names = new Set([...Object.keys(before), ...Object.keys(after)]);
+  return [...names].filter((name) => before[name] !== after[name]).sort();
+}
 
-  if (declaredAt === null) {
-    problems.push({
-      subject: 'DROPPED_ON_THIS_BUMP',
+/** Check (c): every table that moved between `previous` and `lock` is named by a step at `lock`. */
+export function undeclaredTableChanges(
+  lock: DurableSchemaLock,
+  migrations: readonly DurableMigration[]
+): Problem[] {
+  if (lock.previous === undefined) return [];
+  const declared = new Set(
+    migrations
+      .filter((step) => step.toVersion === lock.schemaVersion)
+      .flatMap((step) => step.tables)
+  );
+  return changedTables(lock.previous.tables, lock.tables)
+    .filter((table) => !declared.has(table))
+    .map((table) => ({
+      subject: table,
       message:
-        `excludes [${excluded.join(', ')}] but DROPPED_AT_VERSION is absent — an exclusion with ` +
-        'no recorded version has no retirement condition',
+        `durable table ${table} changed at v${lock.schemaVersion} with no migration step naming ` +
+        'it. Add a step to DURABLE_MIGRATIONS with this toVersion and the table in `tables`.',
+    }));
+}
+
+/** The lock gate as a pure function, so the self-test needs no database. */
+export function checkDurableSchemaLock(input: {
+  readonly lock: DurableSchemaLock;
+  readonly computed: DurableFingerprint;
+  readonly schemaVersion: number;
+  readonly migrations: readonly DurableMigration[];
+}): Problem[] {
+  const { lock, computed, schemaVersion, migrations } = input;
+  const problems: Problem[] = [];
+
+  if (lock.schemaVersion !== schemaVersion) {
+    problems.push({
+      subject: 'durable-schema.lock.json',
+      message:
+        `lock is at v${lock.schemaVersion} but SCHEMA_VERSION is v${schemaVersion}; schema ` +
+        `version moved, run \`${UPDATE_COMMAND}\``,
     });
-    return;
+  } else {
+    for (const table of changedTables(lock.tables, computed)) {
+      problems.push({
+        subject: table,
+        message:
+          'durable schema changed without updating the lock; bump SCHEMA_VERSION, add a ' +
+          `migration step, then \`${UPDATE_COMMAND}\``,
+      });
+    }
   }
 
-  if (schemaVersion !== declaredAt) {
-    problems.push({
-      subject: 'DROPPED_ON_THIS_BUMP',
-      message:
-        `still excludes [${excluded.join(', ')}] from the durable snapshot, but it was declared ` +
-        `for v${declaredAt} and SCHEMA_VERSION is now v${schemaVersion}. Empty the set and move ` +
-        'DROPPED_AT_VERSION, or these durable tables are dropped by an unrelated schema change.',
-    });
+  problems.push(...undeclaredTableChanges(lock, migrations));
+  return problems;
+}
+
+/** What `--update` writes, or the reasons it refuses. Pure. */
+export function planLockUpdate(input: {
+  readonly lock: DurableSchemaLock;
+  readonly computed: DurableFingerprint;
+  readonly schemaVersion: number;
+  readonly migrations: readonly DurableMigration[];
+}): { next: DurableSchemaLock } | { refusals: Problem[] } {
+  const { lock, computed, schemaVersion, migrations } = input;
+
+  if (schemaVersion < lock.schemaVersion) {
+    return {
+      refusals: [
+        {
+          subject: 'durable-schema.lock.json',
+          message: `SCHEMA_VERSION v${schemaVersion} is below the lock's v${lock.schemaVersion}`,
+        },
+      ],
+    };
   }
+
+  if (schemaVersion === lock.schemaVersion) {
+    const drifted = changedTables(lock.tables, computed);
+    if (drifted.length > 0) {
+      return {
+        refusals: drifted.map((table) => ({
+          subject: table,
+          message:
+            `durable schema changed but SCHEMA_VERSION is still v${schemaVersion}; bump ` +
+            'SCHEMA_VERSION and add a migration step before updating the lock',
+        })),
+      };
+    }
+    return { next: lock };
+  }
+
+  const next: DurableSchemaLock = {
+    schemaVersion,
+    tables: computed,
+    previous: { schemaVersion: lock.schemaVersion, tables: lock.tables },
+  };
+  const missing = undeclaredTableChanges(next, migrations);
+  return missing.length > 0 ? { refusals: missing } : { next };
+}
+
+/** Stable bytes: table names sorted, 2-space indent, trailing newline. */
+function serializeLock(lock: DurableSchemaLock): string {
+  const sorted = (tables: DurableFingerprint): DurableFingerprint =>
+    Object.fromEntries(Object.entries(tables).sort(([a], [b]) => a.localeCompare(b)));
+  const out: Record<string, unknown> = {
+    schemaVersion: lock.schemaVersion,
+    tables: sorted(lock.tables),
+  };
+  if (lock.previous !== undefined) {
+    out.previous = {
+      schemaVersion: lock.previous.schemaVersion,
+      tables: sorted(lock.previous.tables),
+    };
+  }
+  return `${JSON.stringify(out, null, 2)}\n`;
+}
+
+function readLock(): DurableSchemaLock {
+  return JSON.parse(fs.readFileSync(lockFilePath(), 'utf8')) as DurableSchemaLock;
 }
 
 /**
@@ -339,6 +484,151 @@ function checkSingleWriter(problems: Problem[], used: Set<string>): string[] {
   return acknowledged;
 }
 
+/** Self-test for the lock gate: each arm must fail for its own reason, and the pass arms must pass. */
+function checkLockSelfTest(failures: string[]): void {
+  const step = (toVersion: number, tables: string[]): DurableMigration => ({
+    toVersion,
+    tables,
+    summary: 'fixture',
+    migrate: (snapshot) => snapshot,
+  });
+  const lock35: DurableSchemaLock = { schemaVersion: 35, tables: { a: 'h1', b: 'h2' } };
+  const expect = (name: string, problems: Problem[], count: number, fragment?: string): void => {
+    const text = problems.map((problem) => problem.message).join(' | ');
+    if (problems.length !== count || (fragment !== undefined && !text.includes(fragment))) {
+      failures.push(
+        `lock gate: ${name}: expected ${count} problem(s) ${fragment ?? ''}, got ${text || 'none'}`
+      );
+    }
+  };
+
+  expect(
+    'unchanged passes',
+    checkDurableSchemaLock({
+      lock: lock35,
+      computed: lock35.tables,
+      schemaVersion: 35,
+      migrations: [],
+    }),
+    0
+  );
+  expect(
+    'DDL changed at the same version fails (b)',
+    checkDurableSchemaLock({
+      lock: lock35,
+      computed: { a: 'h1', b: 'changed' },
+      schemaVersion: 35,
+      migrations: [],
+    }),
+    1,
+    'without updating the lock'
+  );
+  expect(
+    'version bumped, lock not updated, fails (a)',
+    checkDurableSchemaLock({
+      lock: lock35,
+      computed: lock35.tables,
+      schemaVersion: 36,
+      migrations: [],
+    }),
+    1,
+    'schema version moved'
+  );
+
+  const lock36: DurableSchemaLock = {
+    schemaVersion: 36,
+    tables: { a: 'h1', b: 'h3' },
+    previous: lock35,
+  };
+  expect(
+    'changed table with a naming step passes',
+    checkDurableSchemaLock({
+      lock: lock36,
+      computed: lock36.tables,
+      schemaVersion: 36,
+      migrations: [step(36, ['b'])],
+    }),
+    0
+  );
+  expect(
+    'changed table with no step fails (c)',
+    checkDurableSchemaLock({
+      lock: lock36,
+      computed: lock36.tables,
+      schemaVersion: 36,
+      migrations: [],
+    }),
+    1,
+    'durable table b changed at v36 with no migration step naming it'
+  );
+  expect(
+    'a step at another version does not count',
+    checkDurableSchemaLock({
+      lock: lock36,
+      computed: lock36.tables,
+      schemaVersion: 36,
+      migrations: [step(35, ['b'])],
+    }),
+    1,
+    'durable table b'
+  );
+  const added: DurableSchemaLock = { ...lock36, tables: { a: 'h1', b: 'h2', c: 'h4' } };
+  expect(
+    'a table added without a step fails (c)',
+    checkDurableSchemaLock({
+      lock: added,
+      computed: added.tables,
+      schemaVersion: 36,
+      migrations: [],
+    }),
+    1,
+    'durable table c'
+  );
+  const removed: DurableSchemaLock = { ...lock36, tables: { a: 'h1' } };
+  expect(
+    'a table removed without a step fails (c)',
+    checkDurableSchemaLock({
+      lock: removed,
+      computed: removed.tables,
+      schemaVersion: 36,
+      migrations: [],
+    }),
+    1,
+    'durable table b'
+  );
+
+  const refusal = planLockUpdate({
+    lock: lock35,
+    computed: { a: 'h1', b: 'changed' },
+    schemaVersion: 35,
+    migrations: [],
+  });
+  if (!('refusals' in refusal))
+    failures.push('lock gate: --update at an unchanged version did not refuse drift');
+  const unstepped = planLockUpdate({
+    lock: lock35,
+    computed: { a: 'h1', b: 'h3' },
+    schemaVersion: 36,
+    migrations: [],
+  });
+  if (!('refusals' in unstepped))
+    failures.push('lock gate: --update wrote a changed table with no step');
+  const stepped = planLockUpdate({
+    lock: lock35,
+    computed: { a: 'h1', b: 'h3' },
+    schemaVersion: 36,
+    migrations: [step(36, ['b'])],
+  });
+  if (!('next' in stepped) || stepped.next.previous?.schemaVersion !== 35) {
+    failures.push('lock gate: --update did not record the old lock as previous');
+  }
+
+  const normalized = normalizeSql('CREATE  TABLE t (\n  a INTEGER\n)');
+  if (normalized !== 'CREATE TABLE t ( a INTEGER )') {
+    failures.push(`lock gate: normalizeSql wrong: ${normalized}`);
+  }
+}
+
 function runSelfTest(): void {
   const failures: string[] = [];
 
@@ -412,43 +702,7 @@ function runSelfTest(): void {
     failures.push('an accepted exception with an empty closedBy was not rejected');
   }
 
-  // The bump exclusion must retire with the version that declared it. Both arms matter: a stale
-  // set has to fail, and a matching version has to pass, or the check is either always-red
-  // (blocking every bump) or always-green (the state this replaced).
-  const staleSource = [
-    'const SCHEMA_VERSION = 21;',
-    "const DROPPED_ON_THIS_BUMP: ReadonlySet<string> = new Set(['version_history']);",
-    'const DROPPED_AT_VERSION = 20;',
-  ].join('\n');
-  const staleProblems: Problem[] = [];
-  checkBumpExclusionRetired(staleSource, staleProblems);
-  if (staleProblems.length !== 1) {
-    failures.push(
-      `a bump exclusion left behind past its declared version was not rejected (got ${staleProblems.length})`
-    );
-  }
-
-  const currentSource = [
-    'const SCHEMA_VERSION = 20;',
-    "const DROPPED_ON_THIS_BUMP: ReadonlySet<string> = new Set(['version_history']);",
-    'const DROPPED_AT_VERSION = 20;',
-  ].join('\n');
-  const currentProblems: Problem[] = [];
-  checkBumpExclusionRetired(currentSource, currentProblems);
-  if (currentProblems.length !== 0) {
-    failures.push('an exclusion declared for the current version was wrongly rejected');
-  }
-
-  const emptySource = [
-    'const SCHEMA_VERSION = 21;',
-    'const DROPPED_ON_THIS_BUMP: ReadonlySet<string> = new Set([]);',
-    'const DROPPED_AT_VERSION = 20;',
-  ].join('\n');
-  const emptyProblems: Problem[] = [];
-  checkBumpExclusionRetired(emptySource, emptyProblems);
-  if (emptyProblems.length !== 0) {
-    failures.push('an emptied exclusion was wrongly rejected after a later bump');
-  }
+  checkLockSelfTest(failures);
 
   if (failures.length > 0) {
     console.error(`${LABEL} SELF-TEST FAILED:`);
@@ -464,16 +718,63 @@ function runSelfTest(): void {
   );
 }
 
-function main(): void {
-  if (process.argv.slice(2).includes('--self-test')) {
+async function checkLockAgainstEngine(problems: Problem[]): Promise<void> {
+  const schemaVersion = parseSchemaVersion(readEngineSource());
+  if (schemaVersion === null) {
+    problems.push({
+      subject: 'sqlite-engine.ts',
+      message: 'could not parse SCHEMA_VERSION — the durable schema lock cannot be checked',
+    });
+    return;
+  }
+  problems.push(
+    ...checkDurableSchemaLock({
+      lock: readLock(),
+      computed: await computeDurableFingerprint(),
+      schemaVersion,
+      migrations: DURABLE_MIGRATIONS,
+    })
+  );
+}
+
+async function updateLock(): Promise<void> {
+  const schemaVersion = parseSchemaVersion(readEngineSource());
+  if (schemaVersion === null) {
+    console.error(`${LABEL} REFUSED: could not parse SCHEMA_VERSION from the engine source.`);
+    process.exitCode = 1;
+    return;
+  }
+  const plan = planLockUpdate({
+    lock: readLock(),
+    computed: await computeDurableFingerprint(),
+    schemaVersion,
+    migrations: DURABLE_MIGRATIONS,
+  });
+  if ('refusals' in plan) {
+    console.error(`${LABEL} REFUSED: lock not written.`);
+    plan.refusals.forEach((p) => console.error(`  - ${p.subject}: ${p.message}`));
+    process.exitCode = 1;
+    return;
+  }
+  fs.writeFileSync(lockFilePath(), serializeLock(plan.next));
+  console.log(`${LABEL} lock at v${plan.next.schemaVersion} written to ${LOCK_RELATIVE_PATH}.`);
+}
+
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  if (args.includes('--self-test')) {
     runSelfTest();
+    return;
+  }
+  if (args.includes('--update')) {
+    await updateLock();
     return;
   }
 
   const problems: Problem[] = [];
 
   checkSetEquality(problems);
-  checkBumpExclusionRetired(readEngineSource(), problems);
+  await checkLockAgainstEngine(problems);
   for (const contract of TABLE_CONTRACTS) {
     checkPostureCoherence(contract, problems);
     checkReaders(contract, problems);
@@ -508,4 +809,7 @@ function main(): void {
   );
 }
 
-main();
+main().catch((error: unknown) => {
+  console.error(`${LABEL} crashed:`, error);
+  process.exitCode = 1;
+});
