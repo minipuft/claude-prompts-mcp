@@ -21,7 +21,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 import { MIGRATION_FLOOR } from '../../../src/infra/database/durable-migrations.js';
 import { SqliteEngine } from '../../../src/infra/database/sqlite-engine.js';
@@ -222,6 +222,34 @@ describe('durable rows cross an upgrade only through declared steps', () => {
       { tenant_id: 'ws', workspace_id: 'ws', resource_id: 'seed-0', snapshot: '{"seed":0}' },
     ]);
     expect(readVersion(dbPath)).toBe(targetVersion);
+  });
+
+  it('upgrades past an older backup it cannot delete, warning about that file', async () => {
+    await seedFile(dbPath);
+    const undeletable = `${dbPath}.v30.bak`;
+    await fs.mkdir(undeletable);
+    await fs.writeFile(
+      path.join(undeletable, 'keep'),
+      'a directory is not removable without recursive'
+    );
+    const warnings = createMockLogger();
+
+    const engine = await SqliteEngine.getInstance(warnings, {
+      dbPath,
+      schemaVersion: targetVersion,
+      durableMigrations: [],
+    });
+    await engine.initialize();
+    expect(engine.getSchemaVersion()).toBe(targetVersion);
+    await engine.shutdown();
+
+    expect(readVersion(dbPath)).toBe(targetVersion);
+    expect(readVersion(`${dbPath}.v${seededVersion}.bak`)).toBe(seededVersion);
+    expect((await fs.stat(undeletable)).isDirectory()).toBe(true);
+    const warned = (warnings.warn as jest.Mock).mock.calls
+      .map(([message]) => String(message))
+      .filter((message) => message.includes(undeletable));
+    expect(warned).toHaveLength(1);
   });
 
   it('rolls back a step that leaves an undeclared column in the snapshot', async () => {
