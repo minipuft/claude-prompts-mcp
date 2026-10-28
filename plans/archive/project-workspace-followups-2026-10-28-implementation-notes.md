@@ -24,4 +24,3 @@ tags: [resources, config, cli, hooks]
 ## 2026-10-28 — closure
 
 - All four rows terminal; plan retired to `plans/archive/`; `publish: push` under the owner's ruling. gemini-prompts#53 opened for row 4.
-
