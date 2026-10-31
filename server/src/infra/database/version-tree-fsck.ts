@@ -27,9 +27,8 @@
  * WHY THIS FILE IS PURE, AND WHERE THE SQL RUNS. `validate:arch` forbids `infra/` from importing
  * `engine/`, `modules/` or `mcp/` in any form, so the engine cannot reach a `modules/versioning/`
  * module at startup. The decision therefore lives here, next to the engine, and the engine runs
- * the two queries and the two writes — the same split `renumberDuplicateVersionHistory` already
- * uses for the v28 migration, and the reason the write sites stay inside the one file the
- * single-writer gate permits to touch every table.
+ * the two queries and the two writes. That split is also what keeps the write sites inside the one
+ * file the single-writer gate permits to touch every table.
  *
  * THE LOG LINE NAMES COUNTS AND NOTHING ELSE. Never a hash, never a path, never bytes: this runs
  * on every boot of a database shared across every project on the machine, and a repair report is
