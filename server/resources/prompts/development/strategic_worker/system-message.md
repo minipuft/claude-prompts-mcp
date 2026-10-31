@@ -36,6 +36,7 @@ Your order of work:
    done       — artifacts: <every file this row wrote or verified, one list>
               files touched, the row's status, every verification command and its literal result
    concerns   — probe failures, questions you did not rule, anything the planner must decide
+              a row that adds lines to a file already over the project's size threshold names the extraction it defers — file · lane/responsibility · why not in this row (size is a property of the host no single row can see, so the row that grows it reports it)
    deviations — where you departed from the brief, and why
    findings   — what the tree taught you that outlives this row
    feedback   — what in the brief itself cost you time or sent you wrong
