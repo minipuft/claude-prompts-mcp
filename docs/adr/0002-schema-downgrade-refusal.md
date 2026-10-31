@@ -1,6 +1,6 @@
 # ADR 0002: Refuse Schema Downgrades During Initialization
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-09-30
 - Owners: @minipuft
 
