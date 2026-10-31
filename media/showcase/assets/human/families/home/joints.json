@@ -1,0 +1,112 @@
+{
+ "family": "home",
+ "actor": "human",
+ "silhouette": "open",
+ "registration": "skeleton",
+ "method": "The D73 skeleton of assets/human/skeleton.json, placed on the approved model-sheet plate (assets/human/model.json, D75); joint_provenance there records which joints are derived and which were placed by hand. The skeleton toolchain of v3/studies/tech-rig-01.md is not installed, so none of these joints is toolchain-registered.",
+ "space": "mesh",
+ "restHeightPx": 922,
+ "figure": {
+  "region": [
+   31,
+   30,
+   621,
+   952
+  ]
+ },
+ "plateSha256": "232c0bccdb7433be2e7262995e6f50b1c8615a95751bc6f881a0f98205951929",
+ "meshSha256": "16f33c5518f45bdd3def3b17eee564e7dbb54e2af422a7423cb6dedc5e12e16a",
+ "source": {
+  "plate": "assets/human/cutout.png",
+  "mesh": "assets/human/mesh.json",
+  "joints": "assets/human/skeleton.json"
+ },
+ "joints": {
+  "root": [
+   349,
+   475
+  ],
+  "torso": [
+   348,
+   213
+  ],
+  "neck": [
+   352,
+   195
+  ],
+  "head": [
+   347,
+   176
+  ],
+  "shoulderL": [
+   306,
+   252
+  ],
+  "elbowL": [
+   263,
+   363
+  ],
+  "wristL": [
+   183,
+   452
+  ],
+  "shoulderR": [
+   396,
+   252
+  ],
+  "elbowR": [
+   443,
+   365
+  ],
+  "wristR": [
+   506,
+   455
+  ],
+  "hipL": [
+   319,
+   475
+  ],
+  "kneeL": [
+   281,
+   655
+  ],
+  "ankleL": [
+   241,
+   835
+  ],
+  "hipR": [
+   376,
+   475
+  ],
+  "kneeR": [
+   399,
+   645
+  ],
+  "ankleR": [
+   426,
+   838
+  ],
+  "ponchoPoint": [
+   355,
+   470
+  ]
+ },
+ "parents": {
+  "torso": "root",
+  "neck": "torso",
+  "head": "neck",
+  "shoulderL": "torso",
+  "elbowL": "shoulderL",
+  "wristL": "elbowL",
+  "shoulderR": "torso",
+  "elbowR": "shoulderR",
+  "wristR": "elbowR",
+  "hipL": "root",
+  "kneeL": "hipL",
+  "ankleL": "kneeL",
+  "hipR": "root",
+  "kneeR": "hipR",
+  "ankleR": "kneeR",
+  "ponchoPoint": "torso"
+ }
+}

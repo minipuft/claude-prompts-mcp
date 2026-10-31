@@ -1,0 +1,70 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "create",
+    "id": "showcase_asset_muse",
+    "name": "Showcase Asset Muse",
+    "category": "development",
+    "description": "Between-iteration muse for one showcase asset: design_muse on the filed references and the existing cast, then 3+ variants rendered side by side in the substrate, then a rubric grade. No asset enters a scene without it (D55).",
+    "arguments": [
+      {
+        "name": "asset",
+        "type": "string",
+        "required": true,
+        "description": "The asset's job in the script's resource vocabulary."
+      },
+      {
+        "name": "constraints",
+        "type": "string",
+        "required": false,
+        "defaultValue": "Five-role flat SVG on a black field; Seuss contour language; Midnight Gospel stipple shadows; identity pigments fixed; drawn on twos. Variants must sit between the filed references (v3/references/style-references.json) and the existing cast (Clawd, Codex, gadget, frame).",
+        "description": "The style envelope the variants must stay inside."
+      }
+    ],
+    "chain_steps": [
+      {
+        "id": "muse",
+        "promptId": "design_muse",
+        "stepName": "Reference Directions",
+        "args": {
+          "mode": "brainstorm",
+          "moodboard": "media/showcase/v3/references/style-references.json",
+          "seed_refs": "The existing cast under media/showcase/src/library/cast and props: their silhouettes are the other end of the space a new asset must sit between."
+        },
+        "inputMapping": {
+          "challenge": "asset",
+          "constraints": "constraints"
+        }
+      },
+      {
+        "id": "sheet",
+        "promptId": "showcase_asset_sheet",
+        "stepName": "Rendered Sheet",
+        "inputMapping": {
+          "asset": "asset",
+          "context": "previous_step_result"
+        },
+        "delegated": true
+      },
+      {
+        "id": "grade",
+        "promptId": "showcase_review",
+        "stepName": "Sheet Grade",
+        "inputMapping": {
+          "brief": "asset",
+          "context": "previous_step_result"
+        },
+        "inlineGateIds": [
+          "showcase-review"
+        ]
+      }
+    ],
+    "artifacts": {
+      "produces": [
+        "source",
+        "docs"
+      ]
+    }
+  }
+}

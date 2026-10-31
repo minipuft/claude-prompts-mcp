@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "⚠️ Deletion requires confirmation.\n\nTo delete prompt 'showcase_treatment', set confirm: true.\nThis cannot be undone — rollback cannot restore a deleted prompt.\n\n⚠️ 1 prompt(s) reference it and would break:\n- Showcase Pipeline (showcase_pipeline)"
+    }
+  ],
+  "isError": true
+}

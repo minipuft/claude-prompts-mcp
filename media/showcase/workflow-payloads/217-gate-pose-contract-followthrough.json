@@ -1,0 +1,27 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "update",
+    "id": "animation-pose-contract",
+    "description": "Check-tier gate on the pose step: every chart key has a pose with a moment; the key sheet's spine fits the declared curve with a bow of at least 6 % of height; limbs do not twin without a why; a weight foot is declared; every key pair has a breakdown that is a pose; long holds move; and every secondary made of a material (D97) trails its primary by the material's lag, settles after it and answers a step as the material declares. A secondary with a hand-written lag and no material is not measured by the follow-through probe, and a sheet that mixes the two is refused on the hand-written part. On the pose step the spine fit and weight are measured on the sheet's solved joints (the key sheet is drawn afterwards and measures its own keys against the same declarations with --joints keys).",
+    "guidance": "Ground truth by exit code (D81, D97). The probe runs `python3 scripts/animation/probe-all.py --contract v3/poses v3/keys v3/charts` in the renderer root and prints one line per probe: `probe-poses.py --joints solved` (every chart key has a pose with a moment; timing shape per move; lead arm never a secondary; long holds move; spine fit, bow and weight on the pose sheet's `solved` joints), then, for every pose sheet that has a secondary made of a material, the joints the chart plays (`scripts/animation/played-joints.mjs`, written to a scratch file) through `probe-followthrough.py --materials v3/materials.json`: per move the secondary's velocity trails its primary's by at least the material's `lagFrames` and it is still displaced when the primary lands and moves on after it; per secondary the step response identified from the played frames has the declared lag, settle (within 2 frames) and overshoot (within 0.08); a contact of a material is followed by its settle `contact` frames later. A sheet with no material is SKIPPED and says so. Each probe prints its control first and refuses to report if the control does not trip. On FAIL quote the line naming the secondary, move or key and fix the pose sheet or the material, never the probe. Control: a secondary that settles before its primary, a lag below the material's, and a secondary with no material are each refused.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-all.py",
+          "--contract",
+          "v3/poses",
+          "v3/keys",
+          "v3/charts"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 600000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ]
+  }
+}

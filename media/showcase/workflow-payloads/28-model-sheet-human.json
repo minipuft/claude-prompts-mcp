@@ -1,0 +1,6 @@
+{
+ "name": "prompt_engine",
+ "arguments": {
+  "command": ">>showcase_model_sheet character:\"human\" pick:\"/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/v3/studies/human-gen-16-swoop.png\" cards:\"seuss-archbishop-katz, midnight-gospel-junkyard, style-board (D44), eagle-msra13489b3xt (Boondocks model sheet, line discipline), eagle-ms6v3zad9jlic (cloak figure)\" output_root:\"media/showcase\""
+ }
+}

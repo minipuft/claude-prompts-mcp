@@ -1,0 +1,19 @@
+{
+ "valid": true,
+ "path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/bubble/muse-03.png",
+ "source": "/home/minipuft/.codex/generated_images/01a14226-ed30-7211-acb5-6abe1289ae10/exec-43eb1782-846a-4715-b171-253db8356c4b.png",
+ "sha256": "35709bb12cec817a3490ef2286b35ab52938cf6643ea0ecc587ea6de85f2dc65",
+ "bytes": 1098679,
+ "referenced_image_paths": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFIYY3RT6SJS2.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-no-one-youer.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/clawd-official.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFJFTELGH6FD8.png"
+ ],
+ "tool_arguments": {
+  "raw": "{\n  \"prompt\": \"Create ONE 16:9 design variant sheet for a prop of a silent hand-drawn animated film. Variant muse-03, Pop-star bubble (do not print this name). Pure black field #000000. Show the SAME bubble in exactly three states from left to right on one shared invisible baseline: small and whole; swollen with a small world inside; burst ring with flying fragments. No baseline drawn. Generous black separation between the three states and between detachable pieces. The bubble represents capability seen through glass: it swells out of a box, contains a tiny world with rays, then pops. Focus the sheet on the bubble prop, not a scene or box illustration.\\nDesign: an unevenly bulging organic lobed skin with swooping lobes. On popping, it becomes a broken ring and pointed star shards radiating outward. Shards combine stubby blocky flat plates and sharp tapered star points. A coherent recognizable bubble design across all three states. Within the swollen state, a miniature world made of a tiny flat blocky silhouette, curling stalks with flag leaves, and discrete radial ray shapes around one radiant core behind the silhouette. Keep the core cream and the silhouette readable; no whiteout."
+ },
+ "summary": {
+  "references": 4
+ }
+}

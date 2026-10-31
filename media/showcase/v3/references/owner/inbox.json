@@ -1,0 +1,158 @@
+{
+  "inbox": [
+    {
+      "folder": "Movies › Shorts › CalArts 2025 › Continue?",
+      "why": "Lantz Prize 2025; pose-to-pose with 11–27 frame holds, measured in craft-ref-01",
+      "source": "v3/studies/craft-ref-01.md",
+      "name": "",
+      "tags": [
+        "calarts",
+        "cadence"
+      ],
+      "url": "https://www.youtube.com/watch?v=SvSnPa-Rr7c"
+    },
+    {
+      "url": "https://www.toonboom.com/mercury-filmworks-on-the-magic-behind-hilda",
+      "folder": "TV Shows › Animation › Hilda",
+      "why": "rigs plus traditional methods to retain a drawn aesthetic; drawings tweaked not redrawn",
+      "source": "v3/studies/tech-rig-02.md",
+      "tags": [
+        "pipeline",
+        "rig"
+      ]
+    },
+    {
+      "folder": "Artwork › Animation › Tron Uprising",
+      "why": "shaded 3D with emissive edges that still reads drawn; art-directed by Alberto Mielgo, whose Windshield Wiper is already in the library; feeds the programming world (D78)",
+      "source": "v3/beats-v2.json beat 7, 2026-10-13",
+      "name": "",
+      "tags": [
+        "tron",
+        "shaded",
+        "world"
+      ],
+      "url": "https://vimeo.com/65043932"
+    },
+    {
+      "folder": "Movies › Boy and the World",
+      "why": "crayon and sketch world, wordless, a child's eye; feeds the art world (D78)",
+      "source": "v3/beats-v2.json beat 5, 2026-10-13",
+      "name": "",
+      "tags": [
+        "crayon",
+        "world"
+      ],
+      "url": "https://www.imdb.com/title/tt3183630/"
+    },
+    {
+      "folder": "Animation Craft › Line of action",
+      "why": "Preston Blair's line-of-action page: the same figure on a straight line, a C and an S, showing how the curve alone changes the pose's force",
+      "source": "pose-pass 2026-10-14 (gap: drawn line-of-action and spacing craft)",
+      "name": "",
+      "tags": [
+        "line-of-action",
+        "preston-blair",
+        "pose"
+      ],
+      "url": "http://gurneyjourney.blogspot.com/2012/09/line-of-action.html"
+    },
+    {
+      "folder": "Animation Craft › Line of action",
+      "why": "a sheet of line-of-action examples with the curve drawn over each pose: the drawn-over curve is what our solver must reproduce",
+      "source": "pose-pass 2026-10-14 (gap: drawn line-of-action and spacing craft)",
+      "name": "",
+      "tags": [
+        "line-of-action",
+        "pose",
+        "sheet"
+      ],
+      "url": "https://poselibrary.com/line-of-action-drawing"
+    },
+    {
+      "folder": "Animation Craft › Spacing and overlap",
+      "why": "Richard Williams' chart pages: breakdown as a passing position that goes somewhere else en route, eased spacing clusters at the arc's ends, wrist leads and hand drags",
+      "source": "pose-pass 2026-10-14 (gap: drawn line-of-action and spacing craft)",
+      "name": "",
+      "tags": [
+        "spacing",
+        "breakdown",
+        "arc",
+        "overlap",
+        "richard-williams"
+      ],
+      "url": "http://livlily.blogspot.com/2010/10/richard-williams-animators-survival-kit.html"
+    },
+    {
+      "folder": "Animation Craft › Spacing and overlap",
+      "why": "overlap drawn frame by frame: the secondary reaches its pose drawings after the primary, the lag our overlap probe measures",
+      "source": "pose-pass 2026-10-14 (gap: drawn line-of-action and spacing craft)",
+      "name": "",
+      "tags": [
+        "overlap",
+        "drag",
+        "follow-through"
+      ],
+      "url": "https://rbossert27.wixsite.com/mysite-2/post/creating-overlap"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Elmo%27s_World",
+      "folder": "Movies › Timing and acting › Elmo's World",
+      "why": "a world that wants to play with the child: furniture, door and window answer when addressed; the crayon-drawn room as a warm field, lines that wobble because a child drew them; failures are met with delight, never shame",
+      "source": "interview D88/D92 2026-10-17",
+      "tags": [
+        "showcase",
+        "acting",
+        "warm",
+        "staggered"
+      ]
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/My_Neighbor_Totoro",
+      "folder": "Movies › Timing and acting › My Neighbor Totoro",
+      "why": "the details only a child would notice: a shoe left askew, a pillar that crumbles when pushed, acorns on the floor; weight on contact: a body lands, settles, then the cloth settles after; a world that is lived in before the story touches it",
+      "source": "interview D88/D92 2026-10-17",
+      "tags": [
+        "showcase",
+        "acting",
+        "warm",
+        "hold-heavy"
+      ]
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Spirited_Away",
+      "folder": "Movies › Timing and acting › Spirited Away",
+      "why": "one unneeded gesture that proves the body is real; the pause before a step through a threshold (beat 4, the frame)",
+      "source": "interview D88/D92 2026-10-17",
+      "tags": [
+        "showcase",
+        "acting",
+        "reverent",
+        "hold-heavy"
+      ]
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Samurai_Jack",
+      "folder": "Movies › Timing and acting › Samurai Jack",
+      "why": "long held poses that are compositions, then one snap; silence carried by staging and light alone; wide flat planes of colour as the field",
+      "source": "interview D88/D92 2026-10-17",
+      "tags": [
+        "showcase",
+        "acting",
+        "neutral",
+        "snap"
+      ]
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Kyle_Baker",
+      "folder": "Movies › Timing and acting › Kyle Baker",
+      "why": "rubbery anticipation into a hard stop; a face that commits to one expression per drawing; comic timing by the length of the hold, not the speed of the move",
+      "source": "interview D88/D92 2026-10-17",
+      "tags": [
+        "showcase",
+        "acting",
+        "comic",
+        "snap"
+      ]
+    }
+  ]
+}

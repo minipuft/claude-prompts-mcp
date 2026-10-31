@@ -1,0 +1,149 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🔍 **Prompt Inspect**: Animation Animatic (per episode) (`animation_animatic`)\n\n⚡ **Type**: chain\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Per episode, between pre-production and the per-shot chain (D80): timeline → blocking → light script → animatic render → rubric grade → evidence. Each step carries a check-tier gate that runs a probe with a positive control (D81); the grade step is the one advisory gate and says so. Inputs: episode_root, renderer, output_root.\n\n**Arguments**:\n- `episode_root` `string` *(required)*: Episode directory holding the beat ledger (beats-v2.json or beats.json), contracts (timeline.json, blocking/, keys/, light.json, worlds/), rubric.md and studies/ (e.g. media/showcase/v3).\n- `renderer` `string`: The rendering project root (Remotion here): where `npm run animatic`, `npm run xsheet` and scripts/animation/ live.\n- `context` `string`: Owner notes, rulings or the previous step's result.\n- `output_root` `string`: Caller-owned production artifact directory for studies and receipts.\n- `brief` `string`: One paragraph: what this animatic must answer for the owner (pacing, a world, a crossing).\n\n**Chain Steps** (6):\n1. `animation_timeline` - Timeline\n2. `animation_blocking` - Blocking\n3. `animation_light_script` - Light and Colour Script\n4. `animation_animatic_render` - Animatic Render\n5. `showcase_review` - Rubric Grade\n6. `showcase_evidence` - File and Feed Back\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "inspect",
+    "resource_type": "prompt",
+    "id": "animation_animatic",
+    "current_version": 0,
+    "prompt": {
+      "id": "animation_animatic",
+      "name": "Animation Animatic (per episode)",
+      "category": "animation",
+      "description": "Per episode, between pre-production and the per-shot chain (D80): timeline → blocking → light script → animatic render → rubric grade → evidence. Each step carries a check-tier gate that runs a probe with a positive control (D81); the grade step is the one advisory gate and says so. Inputs: episode_root, renderer, output_root.",
+      "systemMessage": "",
+      "userMessageTemplate": "",
+      "arguments": [
+        {
+          "name": "episode_root",
+          "required": true,
+          "description": "Episode directory holding the beat ledger (beats-v2.json or beats.json), contracts (timeline.json, blocking/, keys/, light.json, worlds/), rubric.md and studies/ (e.g. media/showcase/v3).",
+          "type": "string"
+        },
+        {
+          "name": "renderer",
+          "required": false,
+          "description": "The rendering project root (Remotion here): where `npm run animatic`, `npm run xsheet` and scripts/animation/ live.",
+          "type": "string",
+          "defaultValue": "media/showcase"
+        },
+        {
+          "name": "context",
+          "required": false,
+          "description": "Owner notes, rulings or the previous step's result.",
+          "type": "string"
+        },
+        {
+          "name": "output_root",
+          "required": false,
+          "description": "Caller-owned production artifact directory for studies and receipts.",
+          "type": "string",
+          "defaultValue": "media/showcase"
+        },
+        {
+          "name": "brief",
+          "required": false,
+          "description": "One paragraph: what this animatic must answer for the owner (pacing, a world, a crossing).",
+          "type": "string"
+        }
+      ],
+      "chainSteps": [
+        {
+          "promptId": "animation_timeline",
+          "stepName": "Timeline",
+          "id": "timeline",
+          "inputMapping": {
+            "episode_root": "episode_root",
+            "renderer": "renderer",
+            "context": "brief",
+            "output_root": "output_root"
+          },
+          "inlineGateIds": [
+            "animation-timeline-contract"
+          ]
+        },
+        {
+          "promptId": "animation_blocking",
+          "stepName": "Blocking",
+          "id": "blocking",
+          "inputMapping": {
+            "episode_root": "episode_root",
+            "renderer": "renderer",
+            "context": "previous_step_result",
+            "output_root": "output_root"
+          },
+          "inlineGateIds": [
+            "animation-blocking-contract"
+          ]
+        },
+        {
+          "promptId": "animation_light_script",
+          "stepName": "Light and Colour Script",
+          "id": "light",
+          "inputMapping": {
+            "episode_root": "episode_root",
+            "renderer": "renderer",
+            "context": "previous_step_result",
+            "output_root": "output_root"
+          },
+          "inlineGateIds": [
+            "animation-colour-script"
+          ]
+        },
+        {
+          "promptId": "animation_animatic_render",
+          "stepName": "Animatic Render",
+          "id": "render",
+          "inputMapping": {
+            "episode_root": "episode_root",
+            "renderer": "renderer",
+            "context": "previous_step_result",
+            "output_root": "output_root"
+          },
+          "inlineGateIds": [
+            "animation-animatic-probes"
+          ]
+        },
+        {
+          "promptId": "showcase_review",
+          "stepName": "Rubric Grade",
+          "id": "grade",
+          "inputMapping": {
+            "brief": "brief",
+            "constraints": "episode_root",
+            "context": "previous_step_result",
+            "output_root": "output_root"
+          },
+          "inlineGateIds": [
+            "animation-review"
+          ]
+        },
+        {
+          "promptId": "showcase_evidence",
+          "stepName": "File and Feed Back",
+          "id": "evidence",
+          "inputMapping": {
+            "brief": "brief",
+            "shot": "episode_root",
+            "context": "previous_step_result",
+            "output_root": "output_root"
+          },
+          "inlineGateIds": [
+            "handoff-artifacts"
+          ]
+        }
+      ]
+    },
+    "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+    "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+    "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "source_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "edit_copies_on_write": false,
+    "message": "🔍 **Prompt Inspect**: Animation Animatic (per episode) (`animation_animatic`)\n\n⚡ **Type**: chain\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Per episode, between pre-production and the per-shot chain (D80): timeline → blocking → light script → animatic render → rubric grade → evidence. Each step carries a check-tier gate that runs a probe with a positive control (D81); the grade step is the one advisory gate and says so. Inputs: episode_root, renderer, output_root.\n\n**Arguments**:\n- `episode_root` `string` *(required)*: Episode directory holding the beat ledger (beats-v2.json or beats.json), contracts (timeline.json, blocking/, keys/, light.json, worlds/), rubric.md and studies/ (e.g. media/showcase/v3).\n- `renderer` `string`: The rendering project root (Remotion here): where `npm run animatic`, `npm run xsheet` and scripts/animation/ live.\n- `context` `string`: Owner notes, rulings or the previous step's result.\n- `output_root` `string`: Caller-owned production artifact directory for studies and receipts.\n- `brief` `string`: One paragraph: what this animatic must answer for the owner (pacing, a world, a crossing).\n\n**Chain Steps** (6):\n1. `animation_timeline` - Timeline\n2. `animation_blocking` - Blocking\n3. `animation_light_script` - Light and Colour Script\n4. `animation_animatic_render` - Animatic Render\n5. `showcase_review` - Rubric Grade\n6. `showcase_evidence` - File and Feed Back\n"
+  },
+  "isError": false
+}

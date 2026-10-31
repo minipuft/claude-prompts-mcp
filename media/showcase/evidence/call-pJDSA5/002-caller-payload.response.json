@@ -1,0 +1,29 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Updated**: Showcase Render Study (showcase_render_study)\n\nUpdated prompt: showcase_render_study\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/prompt.yaml\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "update",
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "update",
+      "id": "showcase_render_study",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/prompt.yaml"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 2
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Updated**: Showcase Render Study (showcase_render_study)\n\nUpdated prompt: showcase_render_study\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/prompt.yaml\n"
+  },
+  "isError": false
+}

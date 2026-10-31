@@ -1,0 +1,10 @@
+{
+  "id": "home",
+  "field": "#07060c",
+  "line": {"ratio": 166, "colour": "pale"},
+  "fills": "flat",
+  "boil": {"variants": 3, "rate": 4},
+  "radiance": {"on": true, "colour": "#ffe9b0"},
+  "provisional": true,
+  "cards": ["board-06 §1 world", "seuss-midnight-paintings"]
+}

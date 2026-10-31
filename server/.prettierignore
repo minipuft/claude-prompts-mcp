@@ -52,3 +52,15 @@ resources/schemas/phases.schema.json
 # lint-staged on a file no human edits. Ignoring it costs no verification: `--check` compares
 # PARSED content, so the published-surface gate is unaffected by byte formatting.
 tests/snapshots/mcp-input-schemas.json
+
+# Written by the server itself through resource_manager (the showcase film's prompts, chains and
+# gates are authored only through workflow-client.mjs payloads, never by hand); the YAML/Markdown
+# emitter is the generator, and Prettier re-wraps its long lines, so the two would disagree on
+# every write. Formatting these by hand would be a manual edit under server/resources, which the
+# handbook forbids.
+resources/prompts/animation/
+resources/prompts/development/showcase_*/
+resources/prompts/development/design_muse/
+resources/gates/animation-*/
+resources/gates/showcase-*/
+resources/gates/handoff-artifacts/

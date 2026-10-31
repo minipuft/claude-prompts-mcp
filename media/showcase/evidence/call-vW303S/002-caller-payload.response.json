@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ Gate 'animation-story-planted-control' created successfully\n\n📁 Files created:\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/animation-story-planted-control\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/animation-story-planted-control/gate.yaml\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/animation-story-planted-control/guidance.md\n\n🔄 Registered in the gate registry — ready to use now"
+    }
+  ],
+  "isError": false
+}

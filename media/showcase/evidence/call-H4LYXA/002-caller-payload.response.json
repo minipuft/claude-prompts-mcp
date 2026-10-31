@@ -1,0 +1,29 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Updated**: Showcase Shot (showcase_shot)\n\nUpdated prompt: showcase_shot\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +14 additions, -5 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_shot/prompt.yaml\n+++ b/development/showcase_shot/prompt.yaml\n@@ -1,10 +1,11 @@\n id: showcase_shot\n name: Showcase Shot\n-description: \"Once per shot: timing table in the animation language, a\n-  multi-frame render study (Remotion, or Blender when tool:blender_render is\n-  named), the rubric grade behind the showcase-review gate, and the evidence\n-  step that files the receipt and feeds the measured range back into shots.json\n-  and the script.\"\n+description: \"Once per shot (D72 pose-to-pose): timing chart with the key list,\n+  the key sheet generated from the model sheet and cut into key plates, a\n+  multi-frame render study where the puppet holds and inbetweens between keys\n+  (Remotion, or Blender when tool:blender_render is named), the rubric grade\n+  behind the showcase-review gate, and the evidence step that files the receipt\n+  and feeds the measured range back into shots.json and the script.\"\n category: development\n userMessageTemplateFile: user-message.md\n arguments:\n@@ -52,6 +53,14 @@\n       output_root: output_root\n     id: motion\n     stepName: Timing Table\n+  - promptId: showcase_key_sheet\n+    inputMapping:\n+      shot: shot\n+      context: previous_step_result\n+      output_root: output_root\n+    delegated: true\n+    id: keys\n+    stepName: Key Sheet\n   - promptId: showcase_render_study\n     inputMapping:\n       brief: brief\n\n```\n\n🧠 chain\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_shot\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_shot/prompt.yaml\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "update",
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "update",
+      "id": "showcase_shot",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_shot",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_shot/prompt.yaml"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 2
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Updated**: Showcase Shot (showcase_shot)\n\nUpdated prompt: showcase_shot\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +14 additions, -5 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_shot/prompt.yaml\n+++ b/development/showcase_shot/prompt.yaml\n@@ -1,10 +1,11 @@\n id: showcase_shot\n name: Showcase Shot\n-description: \"Once per shot: timing table in the animation language, a\n-  multi-frame render study (Remotion, or Blender when tool:blender_render is\n-  named), the rubric grade behind the showcase-review gate, and the evidence\n-  step that files the receipt and feeds the measured range back into shots.json\n-  and the script.\"\n+description: \"Once per shot (D72 pose-to-pose): timing chart with the key list,\n+  the key sheet generated from the model sheet and cut into key plates, a\n+  multi-frame render study where the puppet holds and inbetweens between keys\n+  (Remotion, or Blender when tool:blender_render is named), the rubric grade\n+  behind the showcase-review gate, and the evidence step that files the receipt\n+  and feeds the measured range back into shots.json and the script.\"\n category: development\n userMessageTemplateFile: user-message.md\n arguments:\n@@ -52,6 +53,14 @@\n       output_root: output_root\n     id: motion\n     stepName: Timing Table\n+  - promptId: showcase_key_sheet\n+    inputMapping:\n+      shot: shot\n+      context: previous_step_result\n+      output_root: output_root\n+    delegated: true\n+    id: keys\n+    stepName: Key Sheet\n   - promptId: showcase_render_study\n     inputMapping:\n       brief: brief\n\n```\n\n🧠 chain\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_shot\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_shot/prompt.yaml\n"
+  },
+  "isError": false
+}

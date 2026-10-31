@@ -1,0 +1,101 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "update",
+    "id": "showcase_shot",
+    "chain_steps": [
+      {
+        "id": "layout",
+        "stepName": "Cinematography Sheet",
+        "promptId": "showcase_layout_sheet",
+        "inputMapping": {
+          "shot": "shot",
+          "output_root": "output_root"
+        }
+      },
+      {
+        "id": "motion",
+        "stepName": "Timing Table",
+        "promptId": "showcase_motion",
+        "inputMapping": {
+          "brief": "brief",
+          "constraints": "constraints",
+          "context": "previous_step_result",
+          "output_root": "output_root"
+        }
+      },
+      {
+        "id": "poses",
+        "stepName": "Pose Sheet",
+        "promptId": "animation_poses",
+        "inputMapping": {
+          "shot": "shot",
+          "context": "previous_step_result",
+          "output_root": "output_root"
+        },
+        "inlineGateIds": [
+          "animation-pose-contract"
+        ]
+      },
+      {
+        "id": "keys",
+        "stepName": "Key Sheet",
+        "promptId": "showcase_key_sheet",
+        "inputMapping": {
+          "shot": "shot",
+          "context": "previous_step_result",
+          "output_root": "output_root"
+        },
+        "delegated": true,
+        "inlineGateIds": [
+          "animation-key-fit"
+        ]
+      },
+      {
+        "id": "render",
+        "stepName": "Render Study",
+        "promptId": "showcase_render_study",
+        "inputMapping": {
+          "brief": "brief",
+          "shot": "shot",
+          "renderer": "renderer",
+          "frames": "frames",
+          "context": "previous_step_result",
+          "output_root": "output_root"
+        },
+        "inlineGateIds": [
+          "animation-inbetween-probes",
+          "showcase-asset-muse",
+          "animation-render-manifest"
+        ]
+      },
+      {
+        "id": "grade",
+        "stepName": "Rubric Grade",
+        "promptId": "showcase_review",
+        "inputMapping": {
+          "brief": "brief",
+          "constraints": "constraints",
+          "context": "previous_step_result",
+          "motion_contract": "step2_result",
+          "output_root": "output_root"
+        },
+        "inlineGateIds": [
+          "showcase-review"
+        ]
+      },
+      {
+        "id": "evidence",
+        "stepName": "File and Feed Back",
+        "promptId": "showcase_evidence",
+        "inputMapping": {
+          "brief": "brief",
+          "shot": "shot",
+          "context": "previous_step_result",
+          "output_root": "output_root"
+        }
+      }
+    ]
+  }
+}

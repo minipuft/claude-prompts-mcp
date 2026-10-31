@@ -1,0 +1,33 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_animatic#1",
+    "gate_verdict": {
+      "overall": "FAIL",
+      "rationale": "The blocking gate passed in the engine (probe-blocking.py exit 0, 221 ms, including the new props-apart check) but the animation-vocabulary gate FAILED in the engine (exit 1, 85 ms): owner-ask p007 has no intent, options, default. p007 belongs to the light row and was not touched; filed as finding p008. The step is held until p007 carries the three fields.",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "Animation Blocking Contract: engine shell verification PASSED exit 0 in 221 ms; control trips on 10 planted defects including prop overlap, stale contact, stalk in the air, prop off stage and prop inside the human's body; 8 beats staged, props apart"
+        },
+        {
+          "index": 2,
+          "passed": false,
+          "rationale": "Animation Vocabulary: engine shell verification FAILED exit 1 in 85 ms: `FAIL proposals: owner-ask p007 has no intent, options, default`; every other check ok (112 terms, overrides, facets, 53 rulings, 2 pose sheets, 73 material intents); cause is a proposal outside this run's scope, filed as p008"
+        },
+        {
+          "index": 4,
+          "passed": true,
+          "rationale": "Structural phase guard: Context, Analysis, Goals, Execution present"
+        }
+      ],
+      "reminders": {
+        "satisfied": [
+          "framework-compliance"
+        ],
+        "not_applicable": []
+      }
+    }
+  }
+}

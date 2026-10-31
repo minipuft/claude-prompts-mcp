@@ -1,0 +1,12 @@
+{
+ "name": "resource_manager",
+ "arguments": {
+  "resource_type": "prompt",
+  "action": "update",
+  "id": "showcase_review",
+  "name": "Showcase Review",
+  "category": "development",
+  "description": "Grade a rendered artifact against rubric.md by criterion id, with evidence tiers, controls and the five-part receipt.",
+  "user_message_template": "Brief: {{brief}}\nConstraints: {{constraints}}\nProduction root: {{output_root}}\nPrevious handoff:\n{{context | default(\"Read available chain history; report missing evidence.\")}}\n\nRead, before writing, the project files under the production root's `v3/`: `creative-spec.md` (rulings D41\u2013D53, medium, palette law, animation language), `script.md` (resource vocabulary and beats), `rubric.md` (criteria C1\u2013C18 and the receipt shape). They are the contract; this prompt does not restate them.\n\nGrade the actual rendered artifact against `rubric.md` by criterion id; do not grade anything you have not viewed. Use only the four marks: HOLDS, FAILS, UNPROVEN, TASTE. Each mark cites its evidence at or above the criterion's minimum tier (still, 3x crop, consecutive frames, moving render, owner viewing) and names the failing control it beats. Measure where the rubric allows it: per-frame pixel change for twos versus ones (C16), two renders hashed for determinism (C12), a sampled pixel for identity pigments (C1).\n\nMotion contract:\n{{motion_contract | default(\"Use the recorded Motion Contract step; flag missing handoff.\")}}\n\nWrite the receipt in the rubric's five parts, in order: Changed (by file); Grades (one line per criterion touched); Controls (which earlier study each flipped FAILS beats); Owner (at most two TASTE questions, each with the default the planner takes if unanswered); Next (one fix per FAILS). Save it as `v3/studies/<name>.md` beside the artifact copies, copied unchanged from `out/` with sha256 prefixes. A render that is absent is BLOCKED, not PASS. Propose a rubric change only through its Evolution rules: a new ruling adds a row; three consecutive HOLDS bakes one; a standing TASTE is ruled or deleted.\n\nReturn: Inspected Evidence; Grades; Controls; Owner; Next; Rubric Evolution; Concerns."
+ }
+}

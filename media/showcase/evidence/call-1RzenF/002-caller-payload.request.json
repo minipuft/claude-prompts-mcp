@@ -1,0 +1,53 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "animation-story-contract",
+    "name": "Animation Story Contract",
+    "type": "validation",
+    "gate_type": "custom",
+    "severity": "high",
+    "subject": "animation-story-contract",
+    "enforcement_mode": "blocking",
+    "description": "Check-tier gate on the chain's first step (row 9.8): the screenplay holds its contract and the film's themes hold on the staging before a beat is timed, so a beat whose story points lack a want or a turn, a recipe for every measure clause, or a theme cannot enter posing. Two probes run in order, both without frames: probe-screenplay.py (shape, themes and their tags, recipes, want and turn, current renders) and probe-theme.py (the frame is carried in at sp-4.2 and on no frame before, the gadget is seen only through glass, one lit join at a time, every light line resolves to a target the eye trace measures). The frames-reading probe-story.py stays on `animation-story`, which runs where there are frames to read.",
+    "guidance": "Ground truth by exit code (D81, row 9.8). Two commands run in `media/showcase`: `python3 scripts/animation/probe-screenplay.py v3/screenplay.json`, then `python3 scripts/animation/probe-theme.py v3/screenplay.json`. Each prints its control first and refuses to report if a control does not trip. On FAIL quote each failing line with its story point id (sp-<beat>.<n>) or theme id (th-*), open the file and field it names, and change what it names: a story point with no recipe, theme, want or turn goes to the owner as a proposal on the bible (never edit v3/screenplay.json to pass); a blocking that stages the frame before sp-4.2 or a gadget outside its glass is fixed in v3/blocking; an `eye` or `emitter` line the eye trace cannot resolve is the director's to reword. Never edit a probe or this check to make it pass.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-screenplay.py",
+          "v3/screenplay.json"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      },
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-theme.py",
+          "v3/screenplay.json"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ],
+    "activation": {
+      "prompt_categories": [
+        "animation",
+        "development"
+      ],
+      "explicit_request": true
+    },
+    "retry_config": {
+      "max_attempts": 2,
+      "improvement_hints": true
+    }
+  }
+}

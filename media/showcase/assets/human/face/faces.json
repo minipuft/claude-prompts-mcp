@@ -1,0 +1,47 @@
+{
+ "source": "v3/studies/human-gen-17-faces.png",
+ "row": 2,
+ "rule": "D70 (row 2, owner 2026-10-13): marks dilated ~3% of head width; soft alpha sigma 1.1; pale contour halo 5 px one step behind",
+ "states": {
+  "neutral": {
+   "png": "face/neutral.png",
+   "contour": "face/neutral-contour.png",
+   "size": [
+    96,
+    99
+   ],
+   "sha256": "43e3eabc89978258",
+   "marks_dilation_px": 3
+  },
+  "blink": {
+   "png": "face/blink.png",
+   "contour": "face/blink-contour.png",
+   "size": [
+    96,
+    103
+   ],
+   "sha256": "0ccab6aeceb883f1",
+   "marks_dilation_px": 3
+  },
+  "mouth": {
+   "png": "face/mouth.png",
+   "contour": "face/mouth-contour.png",
+   "size": [
+    96,
+    104
+   ],
+   "sha256": "a169249524660d27",
+   "marks_dilation_px": 3
+  },
+  "look": {
+   "png": "face/look.png",
+   "contour": "face/look-contour.png",
+   "size": [
+    96,
+    107
+   ],
+   "sha256": "38515545dce5c21c",
+   "marks_dilation_px": 3
+  }
+ }
+}

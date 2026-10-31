@@ -1,0 +1,29 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "update",
+    "id": "animation-inbetween-probes",
+    "description": "Check-tier gate on a shot's render step: one probe line per shot runs twos, hold band (3–6 drawings per move, holds 11–27) and the inbetween checks (one-sided arcs with declared reversals only, eased spacing, secondaries landing after the body, moving holds) on the figure-only frames and the joints dump, so no probe can be made green by breaking another; a linear tween, a zigzag or a 10-drawing move is refused.",
+    "guidance": "Ground truth by exit code (D81). The probe runs `python3 scripts/animation/probe-all.py --shots v3/poses --frames-root out --joints-root out` in the renderer root: for every pose sheet it reads `out/<shot>-figure-seq/`, `out/<shot>-joints.json` (`npm run joints -- <shot>`) and `out/<shot>-xsheet.json`, prints one line per probe per shot (twos, holds, inbetweens), skips a shot with no frames and fails when none ran. Controls print first. On FAIL quote the line naming the joint, move or frames (a straight path, an undeclared reversal, even spacing, a snapped secondary, a frozen hold, a move outside 3–6 drawings) and fix the pose sheet's declared shape or the mechanics, never the probe. Control: a linear lerp and a zigzag are each refused.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-all.py",
+          "--shots",
+          "v3/poses",
+          "--frames-root",
+          "out",
+          "--joints-root",
+          "out"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 600000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ]
+  }
+}

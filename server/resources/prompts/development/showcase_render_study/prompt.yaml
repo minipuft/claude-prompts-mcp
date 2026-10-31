@@ -1,0 +1,69 @@
+id: showcase_render_study
+name: Showcase Render Study
+description: "Render one shot's frame set through Remotion (default) or, when
+  explicitly requested with tool:blender_render, through Blender, from the
+  shot's key plates and pose chart (D72, D83): the puppet holds and plays
+  authored breakdowns between keys and never redraws; writes the stills, the
+  consecutive-frame strip, the figure-only sequence and joints dump the
+  inbetween probe reads, the identity probes, and the receipt skeleton."
+category: development
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: brief
+    type: string
+    description: Audience, product goal and desired silent showcase outcome.
+    required: true
+  - name: context
+    type: string
+    description: Prior step output; read shared chain history for earlier evidence
+      and decisions.
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory.
+    required: false
+    defaultValue: media/showcase
+  - name: shot
+    type: string
+    description: Shot id from v3/shots.json.
+    required: true
+  - name: renderer
+    type: string
+    description: remotion (default) or blender. Blender runs only when the request
+      also names tool:blender_render; it refuses when no Blender binary is
+      reachable.
+    required: false
+    defaultValue: remotion
+    validation:
+      allowedValues:
+        - remotion
+        - blender
+  - name: frames
+    type: string
+    description: "Frame set: first, key (the shot's action frame), last, and a
+      6-frame consecutive strip around the key, plus any explicit frame
+      numbers."
+    required: false
+    defaultValue: first,key,last,strip
+  - name: blend_file
+    type: string
+    description: "Blender: path to the .blend for this shot."
+    required: false
+  - name: python_script
+    type: string
+    description: "Blender: optional driver script run with --python; receives
+      --frame and --out after --."
+    required: false
+artifacts:
+  produces:
+    - docs
+gateConfiguration:
+  exclude:
+    - api-documentation
+    - creed-fidelity
+    - information-placement
+    - plan-quality
+    - product-positioning-fidelity
+    - prose-hygiene
+    - semantic-discoverability
+systemMessageFile: system-message.md

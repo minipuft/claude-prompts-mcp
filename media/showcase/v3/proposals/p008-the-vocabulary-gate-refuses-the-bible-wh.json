@@ -1,0 +1,19 @@
+{
+  "id": "p008",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "everything-at-once",
+    "frame": 200
+  },
+  "title": "The vocabulary gate refuses the bible while p007 is open",
+  "text": "Animatic 04 ran the blocking step of animation_animatic with the animation-vocabulary gate in the chain, and the engine's shell check FAILED (exit 1): `FAIL proposals: owner-ask p007 has no intent, options, default`. The vocabulary check requires every owner-ask to carry an intent word, its options as vocabulary words and a default (the form D96 fixed); p007, filed with the light layer, has the question in prose and none of the three. The light row is open on p005-p007 and this run did not touch them, so the chain is held at its second step (attempt 1 of 2 used) and the later steps, among them the evidence step where the animation-bible gate runs, have not run in the chain. What unblocks it: p007 gets its intent, options and default (the planner's or the owner's wording), then the same answer is sent again to the held chain.",
+  "references": [
+    "samurai-jack-holds"
+  ],
+  "before": "owner-ask p007: question in prose only; vocabulary gate exit 1 in the chain (receipt evidence/drive-uzeuoq, mailbox/animatic-04/04-step.md)",
+  "after": "owner-ask p007 carries intent, options and default; the vocabulary gate passes in the chain",
+  "status": "open",
+  "ruling": null
+}

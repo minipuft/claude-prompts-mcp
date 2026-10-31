@@ -1,0 +1,40 @@
+{
+  "evidenceClass": "explicitly labeled smoke fixture",
+  "chain": "showcase_preproduction",
+  "chainId": "chain-showcase_preproduction#1",
+  "handoffSentinel": "SMOKE_BOARD_HANDOFF_7D3A",
+  "sentinelPresent": true,
+  "storyTemplatePresent": true,
+  "briefMapped": true,
+  "boardOutputInStoryContext": true,
+  "briefPresent": true,
+  "gateVerdictSubmitted": false,
+  "creativeProductionExecuted": false,
+  "modifier": "%clean: protocol/mapping probe only; production gate reviews not exercised",
+  "handoffChecks": [
+    {
+      "from": "story",
+      "expectedNext": "Write `v3/shots.json`",
+      "outputSentinelPresent": true,
+      "nextPromptPresent": true,
+      "previousHandoffInContext": true
+    },
+    {
+      "from": "shots",
+      "expectedNext": "Return: Inspected Evidence; Grades",
+      "outputSentinelPresent": true,
+      "nextPromptPresent": true,
+      "previousHandoffInContext": true
+    }
+  ],
+  "stepsRendered": [
+    "board",
+    "story",
+    "shots",
+    "grade"
+  ],
+  "beforeSessionResponseRecorded": true,
+  "chainCancelledNotice": true,
+  "sessionProgressBefore": "1/4",
+  "sessionProgressAfter": "4/4"
+}

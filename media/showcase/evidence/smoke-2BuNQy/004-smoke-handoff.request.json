@@ -1,0 +1,7 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_pipeline#1",
+    "user_response": "SMOKE: recorded validation fixture. SMOKE_REFERENCE_HANDOFF_7D3A\n\n## Context\nThis is a labeled mapping probe, not a completed inspiration or creative task. The only goal is to prove an upstream result reaches the story step.\n\n## Analysis\nReference URLs, observations and the preferred direction remain unverified. This fixture exercises state capture and propagation, not design quality.\n\n## Goals\nThe next rendered specialist must include this sentinel and the invocation brief. No actor may interpret the fixture as production evidence.\n\n## Execution\nRecord this text as the upstream handoff and inspect the rendered story brief. Do not write creative artifacts or submit an invented gate verdict.\n\n## Evaluation\nSuccess is observed literal propagation and a pending/cancelled run. Product results, rendering and gate quality remain unverified.\n\n## Refinement\nAfter the mapping probe, cancel the incomplete chain. A real production run needs researched direction, reviewed specialist output and explicit file ownership."
+  }
+}

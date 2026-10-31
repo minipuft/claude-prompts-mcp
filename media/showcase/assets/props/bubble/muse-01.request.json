@@ -1,0 +1,12 @@
+{
+ "prompt": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the bubble: capability seen through glass; it swells out of the box, holds a small world with rays, and pops; hand-coded today in Bubble.tsx.\nLAYOUT: Show the SAME bubble in three states on one baseline: small and whole, swollen with the small world inside, and the burst ring with flying fragments. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: owner card MFI6QTUP15009: a figure inside a bubble with rays, a tilted view.\nImage 2: Dr. Seuss Midnight Painting: receding hand-drawn frames, each slightly turned.\nImage 3: the Codex companion: take only its rounded soft cloud-and-prompt silhouette and its screen-glyph window as the cast property.\nImage 4: owner card MFIYY3RT6SJS2: a radial burst with a tiny figure at its centre.\nVARIANT muse-01 'Window bubble': A thick-skinned bubble whose skin is a window: a pale contour ring with a turned inner frame, the small world visible through it with a few rays. The design sits between codex (rounded soft silhouette and glyph window) and the Seuss paintings.",
+ "references": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFI6QTUP15009.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-nested-frames.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/codex-official.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFIYY3RT6SJS2.png"
+ ],
+ "out": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/bubble/muse-01.png",
+ "workdir": "/home/minipuft/.cache/muse-work/cwd",
+ "timeout": 280
+}

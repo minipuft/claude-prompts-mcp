@@ -1,0 +1,23 @@
+twos-ones · FAIL · control: change on frame 7 -> FAIL (odd-frame figure changes at [7]); changes on even frames only with the camera moving every frame -> pass (0 odd-frame changes, 7 even-frame changes, camera moved on 24 odd frames)
+    FAIL odd-frame changes: 15 odd frame(s) where the figure changed (tolerance 0): [39, 41, 43, 45, 49, 55, 133, 153, 155, 157, 175, 177, 181, 183, 185]
+    FAIL: twos-ones - 1 of 2 checks failed: odd-frame changes
+hold-band · FAIL · control: 40-frame hold -> FAIL (hold of 40 frames at 0-39 is over 27 and no key declares it); 16-frame hold, 4-drawing move -> pass (2 holds, move of 4); 40-frame hold declared by key 'K1' -> pass and listed; 1-drawing move -> FAIL
+    FAIL move drawings: move from the hold ending 25 to the hold starting 43 uses 7 drawing(s), not 3-6; move from the hold ending 129 to the hold starting 155 uses 9 drawing(s), not 3-6; move from the hold ending 176 to the hold starting 190 uses 10 drawing(s), not 3-6
+    FAIL: hold-band - 1 of 3 checks failed: move drawings
+screen-time · FAIL · control: beat 'b' shifted 3 frames against the same xsheet -> FAIL (beat 'a' ends at frame 30 in the xsheet, 33 in the timeline); unshifted -> pass (0 problems)
+    FAIL beat extents: the xsheet has 420 rows for a 1950-frame timeline; beat 'cant-build': no xsheet row names it; beat 'the-frame': no xsheet row names it; beat 'art-world': no xsheet row names it; beat 'crossing': no xsheet row names it; beat 'programming-world': no xsheet row names it; beat 'home-settle': no xsheet row names it
+    FAIL rendered frames: 420 frames rendered for a 1950-frame timeline
+    FAIL: screen-time - 2 of 2 checks failed: beat extents, rendered frames
+eye-trace · FAIL · control: bright blob 10 % of the width off the emitter -> FAIL (offset 10.0 % > 3 %); blob on the emitter -> pass (0.0 %); identity patch brighter than the blob is ignored (read as bright it would put the offset at 54 %)
+    FAIL emitter within tolerance: 178 frame(s) over 3 % of the width: [(0, 26.7), (1, 26.7), (2, 26.7), (3, 26.7), (4, 26.7), (5, 26.7), (6, 26.7), (7, 26.7), (8, 26.7), (9, 26.7), (10, 26.7), (11, 26.7)]
+    FAIL: eye-trace - 1 of 2 checks failed: emitter within tolerance
+loop-closure · FAIL · control: synthetic closed outline closed=True (height 1.000, share 1.000); 4 px band erased across the shins (row 127) closed=False (height 0.744, share 0.588) flips
+    FAIL line phases present: 0 line-phase frames - none, so closure was never measured
+    FAIL: loop-closure - 1 of 1 checks failed: line phases present
+colour-continuity · FAIL · control: magenta patch off both pairs -> FAIL (frame 5: 576 of 15376 saturated pixels outside); hue detour through green across a crossing -> FAIL (crossing 14-34 detours: sample 1 (205 deg) sits 16 deg behind the start); clean sequence with an identity-pigment patch -> pass
+    FAIL hue pair per frame: 190 frame(s) with saturated pixels outside the pair +-15 deg: [(0, 10850, 68122), (1, 10850, 68122), (2, 10850, 68122), (3, 10850, 68122), (4, 10850, 68122), (5, 10850, 68122), (6, 10850, 68122), (7, 10850, 68122)] (frame, outside, saturated)
+    FAIL: colour-continuity - 1 of 2 checks failed: hue pair per frame
+determinism · FAIL · control: one altered pixel -> FAIL (frame [0] differs); two writes of the same frame -> pass (1 frame, 0 differ)
+    FAIL byte-identical: 26 of 42 common frames identical; differ at [170, 180, 200, 210, 220, 230, 240, 250, 260, 280, 290, 300, 330, 370, 380, 410]
+    FAIL: determinism - 1 of 2 checks failed: byte-identical
+FAIL: probe-all - 0 of 7 probes passed

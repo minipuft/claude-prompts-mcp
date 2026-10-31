@@ -1,0 +1,29 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Updated**: Showcase Render Study (showcase_render_study)\n\nUpdated prompt: showcase_render_study\n\n📜 No change to record — still at version 1 (use `action:\"history\"` to view)\n\n**Changes**: +6 additions, -3 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_render_study/prompt.yaml\n+++ b/development/showcase_render_study/prompt.yaml\n@@ -1,6 +1,11 @@\n id: showcase_render_study\n name: Showcase Render Study\n-description: \"Render one shot's frame set through Remotion (default) or, when explicitly requested with tool:blender_render, through Blender, from the shot's key plates and pose chart (D72, D83): the puppet holds and plays authored breakdowns between keys and never redraws; writes the stills, the consecutive-frame strip, the figure-only sequence and joints dump the inbetween probe reads, the identity probes, and the receipt skeleton.\"\n+description: \"Render one shot's frame set through Remotion (default) or, when\n+  explicitly requested with tool:blender_render, through Blender, from the\n+  shot's key plates and pose chart (D72, D83): the puppet holds and plays\n+  authored breakdowns between keys and never redraws; writes the stills, the\n+  consecutive-frame strip, the figure-only sequence and joints dump the\n+  inbetween probe reads, the identity probes, and the receipt skeleton.\"\n category: development\n userMessageTemplateFile: user-message.md\n arguments:\n@@ -49,8 +54,6 @@\n     description: \"Blender: optional driver script run with --python; receives\n       --frame and --out after --.\"\n     required: false\n-tools:\n-  - blender_render\n artifacts:\n   produces:\n     - docs\n\n```\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/prompt.yaml\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "update",
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "update",
+      "id": "showcase_render_study",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/prompt.yaml"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 1
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Updated**: Showcase Render Study (showcase_render_study)\n\nUpdated prompt: showcase_render_study\n\n📜 No change to record — still at version 1 (use `action:\"history\"` to view)\n\n**Changes**: +6 additions, -3 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_render_study/prompt.yaml\n+++ b/development/showcase_render_study/prompt.yaml\n@@ -1,6 +1,11 @@\n id: showcase_render_study\n name: Showcase Render Study\n-description: \"Render one shot's frame set through Remotion (default) or, when explicitly requested with tool:blender_render, through Blender, from the shot's key plates and pose chart (D72, D83): the puppet holds and plays authored breakdowns between keys and never redraws; writes the stills, the consecutive-frame strip, the figure-only sequence and joints dump the inbetween probe reads, the identity probes, and the receipt skeleton.\"\n+description: \"Render one shot's frame set through Remotion (default) or, when\n+  explicitly requested with tool:blender_render, through Blender, from the\n+  shot's key plates and pose chart (D72, D83): the puppet holds and plays\n+  authored breakdowns between keys and never redraws; writes the stills, the\n+  consecutive-frame strip, the figure-only sequence and joints dump the\n+  inbetween probe reads, the identity probes, and the receipt skeleton.\"\n category: development\n userMessageTemplateFile: user-message.md\n arguments:\n@@ -49,8 +54,6 @@\n     description: \"Blender: optional driver script run with --python; receives\n       --frame and --out after --.\"\n     required: false\n-tools:\n-  - blender_render\n artifacts:\n   produces:\n     - docs\n\n```\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/prompt.yaml\n"
+  },
+  "isError": false
+}

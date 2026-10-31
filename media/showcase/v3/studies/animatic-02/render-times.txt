@@ -1,0 +1,7 @@
+animatic-seq-new rc=0 secs=570
+animatic-seq-b-new rc=0 secs=79
+animatic-fig-seq-new rc=0 secs=45
+animatic-figline-seq-new rc=0 secs=13
+animatic-mp4-a rc=0 secs=602
+animatic-mp4-b rc=1 secs=532
+animatic-mp4-b(attempt2, --timeout=180000) rc=0 secs=615

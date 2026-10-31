@@ -1,0 +1,19 @@
+{
+ "valid": true,
+ "path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/box/muse-02.png",
+ "source": "/home/minipuft/.codex/generated_images/01a14225-c78d-72f2-bc0e-23dc109e125f/exec-f4f15189-d37c-4f06-a93e-0ee3b340433a.png",
+ "sha256": "045788064f9f6b26cd3467069fab98f78cab7296feb0e9c8c5dc5c51b0081dbe",
+ "bytes": 903885,
+ "referenced_image_paths": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/human-model.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-no-one-youer.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFI6SELJHX04J.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFJFTELGH6FD8.png"
+ ],
+ "tool_arguments": {
+  "raw": "{\n  \"prompt\": \"Create ONE 16:9 design variant sheet for a prop in a silent hand-drawn animated film. Variant muse-02, Swoop crate (do not print this name). Pure black #000000 field. Show the SAME box exactly twice side by side, at equal scale on one implied baseline (do not draw a baseline): LEFT lid closed with one hairline cream light seam; RIGHT lid lifted about 100 degrees on its BACK hinge, with designed light shapes spilling from the opening. Preserve identical body, proportions, handle and lid between states. Asset: a plain ordinary package interpreted as a tall crate with sides swooping inward like an organic tower, a curling stalk handle, and a long pointed cap lid. Balance the long swooping human line with organic storybook lobes. Keep it recognizably a simple package, not a building, creature or ornate treasure chest. The lid is a separate rigid part hinged to the rear edge, ready to let a bubble swell out; focus on the box and light, no extra scene.\\nUse all four supplied images solely for these respective properties; do not copy their subjects or compositions. Image 1 human model sheet: only the long swooping neck-and-hair line, tapered tips and thin pale contour. Imag"
+ },
+ "summary": {
+  "references": 4
+ }
+}

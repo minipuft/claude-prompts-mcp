@@ -1,0 +1,35 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Created**: Showcase Render Study (showcase_render_study)\n\n📝 Render one shot's frame set through Remotion (default) or, when explicitly requested with tool:blender_render, through Blender; writes the stills, the consecutive-frame strip and the measured probes the review needs, and the receipt skeleton.\n🧠 single\n\n🔧 **Script Tools Created**: 1 tool(s)\n- `blender_render`: Blender Render (trigger: explicit)\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/user-message.md\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/tools/blender_render\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/tools/blender_render/tool.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/tools/blender_render/schema.json\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/tools/blender_render/script.py\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "create",
+    "valid": true,
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "create",
+      "id": "showcase_render_study",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/prompt.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/user-message.md",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/tools/blender_render",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/tools/blender_render/tool.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/tools/blender_render/schema.json",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/tools/blender_render/script.py"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 1
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Created**: Showcase Render Study (showcase_render_study)\n\n📝 Render one shot's frame set through Remotion (default) or, when explicitly requested with tool:blender_render, through Blender; writes the stills, the consecutive-frame strip and the measured probes the review needs, and the receipt skeleton.\n🧠 single\n\n🔧 **Script Tools Created**: 1 tool(s)\n- `blender_render`: Blender Render (trigger: explicit)\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/user-message.md\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/tools/blender_render\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/tools/blender_render/tool.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/tools/blender_render/schema.json\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_render_study/tools/blender_render/script.py\n"
+  },
+  "isError": false
+}

@@ -1,0 +1,12 @@
+{
+ "prompt": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the bubble: capability seen through glass; it swells out of the box, holds a small world with rays, and pops; hand-coded today in Bubble.tsx.\nLAYOUT: Show the SAME bubble in three states on one baseline: small and whole, swollen with the small world inside, and the burst ring with flying fragments. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: owner card MRAM46LYMIGKO: light as a volume, nested glowing ovals, forms read as silhouettes.\nImage 2: Dr. Seuss Midnight Painting: light as strings of beads strung between forms.\nImage 3: the human's model sheet: take only its long swooping neck-and-hair line, tapered tips and thin pale contour as the cast property.\nImage 4: owner card MFJFTELGH6FD8: a single radiant core behind a flat silhouette, the shape never whites out.\nVARIANT muse-02 'Volume bubble': A bubble drawn as nested glowing ovals, each a flat band, the small world a silhouette in the innermost oval, light as a volume. The design sits between human (tapered tips and thin pale contour) and the Seuss paintings.",
+ "references": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MRAM46LYMIGKO.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-green-cat-lights.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/human-model.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFJFTELGH6FD8.png"
+ ],
+ "out": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/bubble/muse-02.png",
+ "workdir": "/home/minipuft/.cache/muse-work/cwd",
+ "timeout": 280
+}

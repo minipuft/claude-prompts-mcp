@@ -1,0 +1,98 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "update",
+    "id": "animation_animatic",
+    "chain_steps": [
+      {
+        "id": "timeline",
+        "stepName": "Timeline",
+        "promptId": "animation_timeline",
+        "inputMapping": {
+          "episode_root": "episode_root",
+          "renderer": "renderer",
+          "context": "brief",
+          "output_root": "output_root"
+        },
+        "inlineGateIds": [
+          "animation-timeline-contract"
+        ]
+      },
+      {
+        "id": "blocking",
+        "stepName": "Blocking",
+        "promptId": "animation_blocking",
+        "inputMapping": {
+          "episode_root": "episode_root",
+          "renderer": "renderer",
+          "context": "previous_step_result",
+          "output_root": "output_root"
+        },
+        "inlineGateIds": [
+          "animation-blocking-contract",
+          "animation-vocabulary"
+        ]
+      },
+      {
+        "id": "light",
+        "stepName": "Light and Colour Script",
+        "promptId": "animation_light_script",
+        "inputMapping": {
+          "episode_root": "episode_root",
+          "renderer": "renderer",
+          "context": "previous_step_result",
+          "output_root": "output_root"
+        },
+        "inlineGateIds": [
+          "animation-colour-script"
+        ]
+      },
+      {
+        "id": "render",
+        "stepName": "Animatic Render",
+        "promptId": "animation_animatic_render",
+        "inputMapping": {
+          "episode_root": "episode_root",
+          "renderer": "renderer",
+          "context": "previous_step_result",
+          "output_root": "output_root"
+        },
+        "inlineGateIds": [
+          "animation-animatic-probes"
+        ]
+      },
+      {
+        "id": "grade",
+        "stepName": "Rubric Grade",
+        "promptId": "showcase_review",
+        "inputMapping": {
+          "brief": "brief",
+          "constraints": "episode_root",
+          "context": "previous_step_result",
+          "output_root": "output_root"
+        },
+        "inlineGateIds": [
+          "animation-review",
+          "animation-vocabulary"
+        ]
+      },
+      {
+        "id": "evidence",
+        "stepName": "File and Feed Back",
+        "promptId": "showcase_evidence",
+        "inputMapping": {
+          "brief": "brief",
+          "shot": "episode_root",
+          "context": "previous_step_result",
+          "output_root": "output_root"
+        },
+        "inlineGateIds": [
+          "handoff-artifacts",
+          "animation-bible",
+          "animation-vocabulary"
+        ]
+      }
+    ]
+  }
+}

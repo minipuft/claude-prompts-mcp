@@ -1,0 +1,307 @@
+{
+  "id": "programming-world",
+  "provisional": true,
+  "derivedFrom": "restaged 2026-10-20 (row 9.6, beat 7): the shaded world; the grid stands at the right with the two kit blocks in its top cell (the empty join) and three gates along its foot; Codex points at the join (sp-7.1), she sets the stalk against the blocks and the join lights after the contact (sp-7.2), a bead runs along the gates and the world lights each gate as the light stands at it, in order, the third made by the human (sp-7.3), the frame is a window and the light is in it (sp-7.4)",
+  "figure": {
+    "scale": 0.58,
+    "x": 452,
+    "y": 85
+  },
+  "codex": {
+    "x": 1100,
+    "y": 540,
+    "scale": 0.9
+  },
+  "clawd": {
+    "x": 1075,
+    "y": 330,
+    "scale": 0.8
+  },
+  "frame": {
+    "x": 1040,
+    "y": 50,
+    "width": 230,
+    "height": 190,
+    "litFrom": 1620
+  },
+  "blocks": [
+    {
+      "x": 720,
+      "y": 244,
+      "width": 80,
+      "height": 60,
+      "role": "main1"
+    },
+    {
+      "x": 800,
+      "y": 244,
+      "width": 80,
+      "height": 60,
+      "role": "main2"
+    }
+  ],
+  "join": {
+    "x": 800,
+    "y": 274
+  },
+  "arch": {
+    "x": 30,
+    "y": 40,
+    "width": 340,
+    "height": 430,
+    "opening": 0.6,
+    "top": 70
+  },
+  "gates": [
+    {
+      "x": 1030,
+      "y": 440,
+      "r": 22
+    },
+    {
+      "x": 950,
+      "y": 440,
+      "r": 28
+    },
+    {
+      "x": 870,
+      "y": 440,
+      "r": 34,
+      "madeBy": "human"
+    }
+  ],
+  "floor": {
+    "y": 480
+  },
+  "figureCrop": {
+    "x": 380,
+    "y": 0,
+    "width": 500,
+    "height": 720
+  },
+  "beat": "programming-world",
+  "shot": "s03-scaffold",
+  "emitter": {
+    "start": [
+      800,
+      274
+    ],
+    "end": [
+      800,
+      274
+    ],
+    "anchor": "the join (empty, then lit), then the running bead, then the frame's interior",
+    "storyPoint": "sp-7.2",
+    "at": [
+      {
+        "frame": 1350,
+        "strength": 0.3
+      },
+      {
+        "frame": 1452,
+        "strength": 0.3
+      },
+      {
+        "frame": 1464,
+        "strength": 1
+      },
+      {
+        "frame": 1514,
+        "radius": 260
+      },
+      {
+        "frame": 1518,
+        "strength": 1
+      },
+      {
+        "frame": 1519,
+        "radius": 260
+      },
+      {
+        "frame": 1520,
+        "radius": 60
+      },
+      {
+        "frame": 1524,
+        "strength": 1.6
+      },
+      {
+        "frame": 1552,
+        "radius": 60
+      },
+      {
+        "frame": 1566,
+        "radius": 100
+      },
+      {
+        "frame": 1572,
+        "strength": 1.6
+      },
+      {
+        "frame": 1600,
+        "strength": 1
+      },
+      {
+        "frame": 1612,
+        "radius": 260
+      }
+    ]
+  },
+  "card": "seuss-archbishop-katz",
+  "cardNote": "provisional: board \u00a71 world, stacked arches for the gates; not yet chosen against the layout sheet",
+  "cutIn": true,
+  "cutOut": true,
+  "actors": {
+    "heap": {
+      "x": 418,
+      "y": 602,
+      "scale": 1.0
+    },
+    "grid": {
+      "x": 920,
+      "y": 470,
+      "scale": 1.0
+    },
+    "stalk": {
+      "x": 800,
+      "y": 262,
+      "scale": 0.55,
+      "facing": "right",
+      "carriedBy": "human",
+      "standsOn": "blocks",
+      "openAt": [
+        {
+          "frame": 1350,
+          "value": 1
+        }
+      ],
+      "at": [
+        {
+          "frame": 1360,
+          "x": 832,
+          "y": 271
+        },
+        {
+          "frame": 1420,
+          "x": 832,
+          "y": 271
+        },
+        {
+          "frame": 1448,
+          "x": 842,
+          "y": 264
+        }
+      ]
+    },
+    "pointer": {
+      "x": 1100,
+      "y": 546,
+      "scale": 1.0,
+      "on": 1360,
+      "off": 1436
+    },
+    "bead": {
+      "x": 993,
+      "y": 432,
+      "scale": 0.5,
+      "on": 1520,
+      "off": 1620,
+      "lit": {
+        "from": 1520,
+        "offset": [
+          75,
+          15
+        ]
+      },
+      "at": [
+        {
+          "frame": 1520,
+          "x": 993,
+          "y": 432
+        },
+        {
+          "frame": 1528,
+          "x": 993,
+          "y": 432
+        },
+        {
+          "frame": 1544,
+          "x": 913,
+          "y": 432
+        },
+        {
+          "frame": 1560,
+          "x": 833,
+          "y": 432
+        }
+      ]
+    }
+  },
+  "contacts": [
+    {
+      "a": "blocks",
+      "b": "grid",
+      "why": "the two kit blocks stand in the grid's top cell: the join the stalk goes into"
+    },
+    {
+      "a": "grid",
+      "b": "stalk",
+      "why": "the stalk's lines are connected to the grid (sp-6.2) and set into it (sp-7.2)"
+    },
+    {
+      "a": "human",
+      "b": "grid",
+      "why": "she reaches into the grid with the stalk"
+    },
+    {
+      "a": "human",
+      "b": "stalk",
+      "why": "she carries the stalk to the join and sets it down (sp-7.2)"
+    },
+    {
+      "a": "human",
+      "b": "blocks",
+      "why": "she reaches for the blocks with the stalk in her hand"
+    },
+    {
+      "a": "blocks",
+      "b": "stalk",
+      "why": "the stalk is set against the blocks at the join (sp-7.2)"
+    },
+    {
+      "a": "blocks",
+      "b": "pointer",
+      "why": "the arm ends on the join between the two blocks (sp-7.1)"
+    },
+    {
+      "a": "pointer",
+      "b": "stalk",
+      "why": "the arm's bounding box covers the stalk she holds; the arm ends on the join the stalk is about to be set against"
+    },
+    {
+      "a": "human",
+      "b": "pointer",
+      "why": "the arm's bounding box covers her reaching hand; the arm itself passes below it"
+    },
+    {
+      "a": "codex",
+      "b": "pointer",
+      "why": "the arm is Codex's: it comes out of Codex's side"
+    },
+    {
+      "a": "clawd",
+      "b": "pointer",
+      "why": "the arm's bounding box covers Clawd's corner; the arm itself passes beside him"
+    },
+    {
+      "a": "grid",
+      "b": "pointer",
+      "why": "the arm reaches into the grid to point at the join"
+    },
+    {
+      "a": "bead",
+      "b": "grid",
+      "why": "the bead runs along the grid's foot"
+    }
+  ]
+}

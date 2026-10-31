@@ -1,0 +1,19 @@
+{
+  "id": "p012",
+  "kind": "change",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "home-settle",
+    "frame": 1800
+  },
+  "title": "Home-settle: the structure stands small under the frame, which keeps the frame clear and weakens the last picture",
+  "text": "The structure used to stand over the frame (a 264 x 222 px overlap), hiding the window the ledger says the human takes one last look through. Restaged, it stands at half size under the frame at (1050, 452) holding the gadget and the lit joins: the frame is clear and the ending stays wide and small (D93), but the structure now reads as a small glowing arch and the last picture has less in it than animatic 03's. Alternatives: a larger structure at frame left behind Codex (the upper left is empty), or the frame itself set inside the structure as its window. Staged as the smallest change that clears the collision; the choice is the owner's.",
+  "references": [
+    "seuss-nested-frames"
+  ],
+  "before": "structure x1.2 over the frame; frame hidden",
+  "after": "structure x0.5 under the frame; frame clear; the ending small",
+  "status": "ruled",
+  "ruling": "D102"
+}

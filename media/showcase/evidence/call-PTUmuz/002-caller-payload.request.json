@@ -1,0 +1,40 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "animation-timeline-contract",
+    "name": "Animation Timeline Contract",
+    "description": "Check-tier gate on the timeline step: the compiled timeline's beats cover the duration without gaps, every transition names a window inside both beats, every hold sits in the measured band.",
+    "type": "validation",
+    "gate_type": "custom",
+    "severity": "high",
+    "subject": "animation-timeline-contract",
+    "enforcement_mode": "blocking",
+    "guidance": "Ground truth by exit code (D81). The probe runs `python3 scripts/animation/probe-timeline.py v3/timeline.json` in the renderer root and passes only when every check it prints passes; its first printed line is its positive control and it refuses to report if the control does not trip. Checks: beats contiguous and summing to the duration; crossing windows inside both beats; worlds named in the world registry; holds 11–27 frames unless marked intentional. On FAIL quote the probe's own line naming the frame or beat and fix the contract or the render, never the probe. Control: a planted 0-frame beat is refused.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-timeline.py",
+          "v3/timeline.json"
+        ],
+        "shell_working_dir": "media/showcase",
+        "shell_timeout": 600000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ],
+    "activation": {
+      "prompt_categories": [
+        "animation"
+      ],
+      "explicit_request": true
+    },
+    "retry_config": {
+      "max_attempts": 2,
+      "improvement_hints": true
+    }
+  }
+}

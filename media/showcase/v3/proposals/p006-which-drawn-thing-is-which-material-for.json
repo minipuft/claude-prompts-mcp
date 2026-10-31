@@ -1,0 +1,22 @@
+{
+  "id": "p006",
+  "kind": "change",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "arrival"
+  },
+  "title": "Which drawn thing is which material for the light",
+  "text": "Materials.json has no entry for a character, so the light layer reads the human, the Codex and Clawd as `body` (albedo 0.3, stipple-2) and the box, the gadget and the kit's pieces as `box` (albedo 0.15, stipple-2); the human's cloak and hair are not told apart from her body yet (the parts rig draws one canvas), so the hair's soft stipple-1 and the cloth's albedo 0.25 do not show. The bubble is `glass` (transmissive) and is not in the occluder mask. A per-part split of the human, or a `cast` material for Clawd and Codex, would change what casts and what bounces. (The other half of this proposal, the shot palette the eye-trace fills lacked, was ruled a measurement fix and is done: v3/roles.json now carries s01Turrell, the box's tape and the title lockup.)",
+  "references": [
+    "seuss-no-one-youer"
+  ],
+  "before": {
+    "note": "roles.json lists the settled palette only; characters have no material"
+  },
+  "after": {
+    "note": "decide: a cast material for Clawd and the Codex, and whether the human is split per part (hair, cloth, body)"
+  },
+  "status": "open",
+  "ruling": null
+}

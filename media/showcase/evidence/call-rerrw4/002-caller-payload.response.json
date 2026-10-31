@@ -1,0 +1,58 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🔍 **Prompt Inspect**: Animation Timeline (`animation_timeline`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Step 1 of the animatic chain (D80): compile the episode's beat ledger into timeline.json (beats as frame ranges, world per beat, crossing windows, state flips) and report pacing against the measured hold band; the one file every composition reads.\n\n**Arguments**:\n- `episode_root` `string` *(required)*: Episode directory holding the beat ledger (beats-v2.json or beats.json), contracts (timeline.json, blocking/, keys/, light.json, worlds/), rubric.md and studies/ (e.g. media/showcase/v3).\n- `renderer` `string`: The rendering project root (Remotion here): where `npm run animatic`, `npm run xsheet` and scripts/animation/ live.\n- `context` `string`: Owner notes, rulings or the previous step's result.\n- `output_root` `string`: Caller-owned production artifact directory for studies and receipts.\n\n**System Message**:\n```\nUse the animation-direction vocabulary (<episode_root>/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n```\n\n**User Message Template**:\n```\nEpisode root: {{episode_root}}\nRenderer: {{renderer}}\nProduction root: {{output_root}}\nNotes:\n{{context | default(\"none\")}}\n\nRead the ledger in the episode root (`beats-v2.json`, else `beats.json`) and its revision note, the hold band in `studies/craft-ref-01.md` (11–27 frames, 3–6 drawings per move) and `creative-spec.md` for the episode's duration ruling. Run `node scripts/animation/compile-timeline.mjs` in the renderer to write `<episode_root>/timeline.json`; never hand-type frame numbers. Report, as a table per beat: id · world · start–end · seconds · transition in/out · crossing window · state flips with scope. Name every ask the ledger leaves open with its default, and every beat whose actions cannot fit its seconds at the hold band (a beat with N drawn actions needs at least N × 11 frames of holds plus 3–6 drawings per move). Pacing is the timeline's own data: propose seconds changes as a diff to the ledger, not as prose, and apply only what the notes authorize. The gate runs `probe-timeline.py`; quote its lines. Reply: Timeline (the table), Pacing (fits / does not, per beat), Asks (each with default), Changed (files), Receipt.\n```\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "inspect",
+    "resource_type": "prompt",
+    "id": "animation_timeline",
+    "current_version": 0,
+    "prompt": {
+      "id": "animation_timeline",
+      "name": "Animation Timeline",
+      "category": "animation",
+      "description": "Step 1 of the animatic chain (D80): compile the episode's beat ledger into timeline.json (beats as frame ranges, world per beat, crossing windows, state flips) and report pacing against the measured hold band; the one file every composition reads.",
+      "systemMessage": "Use the animation-direction vocabulary (<episode_root>/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.",
+      "userMessageTemplate": "Episode root: {{episode_root}}\nRenderer: {{renderer}}\nProduction root: {{output_root}}\nNotes:\n{{context | default(\"none\")}}\n\nRead the ledger in the episode root (`beats-v2.json`, else `beats.json`) and its revision note, the hold band in `studies/craft-ref-01.md` (11–27 frames, 3–6 drawings per move) and `creative-spec.md` for the episode's duration ruling. Run `node scripts/animation/compile-timeline.mjs` in the renderer to write `<episode_root>/timeline.json`; never hand-type frame numbers. Report, as a table per beat: id · world · start–end · seconds · transition in/out · crossing window · state flips with scope. Name every ask the ledger leaves open with its default, and every beat whose actions cannot fit its seconds at the hold band (a beat with N drawn actions needs at least N × 11 frames of holds plus 3–6 drawings per move). Pacing is the timeline's own data: propose seconds changes as a diff to the ledger, not as prose, and apply only what the notes authorize. The gate runs `probe-timeline.py`; quote its lines. Reply: Timeline (the table), Pacing (fits / does not, per beat), Asks (each with default), Changed (files), Receipt.",
+      "arguments": [
+        {
+          "name": "episode_root",
+          "required": true,
+          "description": "Episode directory holding the beat ledger (beats-v2.json or beats.json), contracts (timeline.json, blocking/, keys/, light.json, worlds/), rubric.md and studies/ (e.g. media/showcase/v3).",
+          "type": "string"
+        },
+        {
+          "name": "renderer",
+          "required": false,
+          "description": "The rendering project root (Remotion here): where `npm run animatic`, `npm run xsheet` and scripts/animation/ live.",
+          "type": "string",
+          "defaultValue": "media/showcase"
+        },
+        {
+          "name": "context",
+          "required": false,
+          "description": "Owner notes, rulings or the previous step's result.",
+          "type": "string"
+        },
+        {
+          "name": "output_root",
+          "required": false,
+          "description": "Caller-owned production artifact directory for studies and receipts.",
+          "type": "string",
+          "defaultValue": "media/showcase"
+        }
+      ],
+      "chainSteps": []
+    },
+    "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+    "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+    "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "source_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "edit_copies_on_write": false,
+    "message": "🔍 **Prompt Inspect**: Animation Timeline (`animation_timeline`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Step 1 of the animatic chain (D80): compile the episode's beat ledger into timeline.json (beats as frame ranges, world per beat, crossing windows, state flips) and report pacing against the measured hold band; the one file every composition reads.\n\n**Arguments**:\n- `episode_root` `string` *(required)*: Episode directory holding the beat ledger (beats-v2.json or beats.json), contracts (timeline.json, blocking/, keys/, light.json, worlds/), rubric.md and studies/ (e.g. media/showcase/v3).\n- `renderer` `string`: The rendering project root (Remotion here): where `npm run animatic`, `npm run xsheet` and scripts/animation/ live.\n- `context` `string`: Owner notes, rulings or the previous step's result.\n- `output_root` `string`: Caller-owned production artifact directory for studies and receipts.\n\n**System Message**:\n```\nUse the animation-direction vocabulary (<episode_root>/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n```\n\n**User Message Template**:\n```\nEpisode root: {{episode_root}}\nRenderer: {{renderer}}\nProduction root: {{output_root}}\nNotes:\n{{context | default(\"none\")}}\n\nRead the ledger in the episode root (`beats-v2.json`, else `beats.json`) and its revision note, the hold band in `studies/craft-ref-01.md` (11–27 frames, 3–6 drawings per move) and `creative-spec.md` for the episode's duration ruling. Run `node scripts/animation/compile-timeline.mjs` in the renderer to write `<episode_root>/timeline.json`; never hand-type frame numbers. Report, as a table per beat: id · world · start–end · seconds · transition in/out · crossing window · state flips with scope. Name every ask the ledger leaves open with its default, and every beat whose actions cannot fit its seconds at the hold band (a beat with N drawn actions needs at least N × 11 frames of holds plus 3–6 drawings per move). Pacing is the timeline's own data: propose seconds changes as a diff to the ledger, not as prose, and apply only what the notes authorize. The gate runs `probe-timeline.py`; quote its lines. Reply: Timeline (the table), Pacing (fits / does not, per beat), Asks (each with default), Changed (files), Receipt.\n```\n"
+  },
+  "isError": false
+}

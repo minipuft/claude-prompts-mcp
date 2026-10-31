@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ Gate 'animation-review' created successfully\n\n📁 Files created:\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/animation-review\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/animation-review/gate.yaml\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/animation-review/guidance.md\n\n🔄 Registered in the gate registry — ready to use now"
+    }
+  ],
+  "isError": false
+}

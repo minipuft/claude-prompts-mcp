@@ -1,0 +1,108 @@
+{
+ "sheet": "out/s01-layout-02.png",
+ "panels": [
+  {
+   "n": 1,
+   "box": [
+    29,
+    30,
+    730,
+    501
+   ],
+   "inner_h": 472,
+   "inner_w": 702,
+   "face_h_px": 47,
+   "figure_h_est_px": 368.5,
+   "figure_h_est_pct": 78.1,
+   "face_xy_frac": [
+    0.552,
+    0.494
+   ],
+   "seam_frac": {
+    "x": 0.52,
+    "y": 0.777,
+    "pixels": 714
+   },
+   "box_frac": {
+    "x": [
+     0.37,
+     0.665
+    ],
+    "top": 0.407,
+    "floor": 0.958
+   }
+  },
+  {
+   "n": 2,
+   "box": [
+    735,
+    30,
+    1644,
+    501
+   ],
+   "inner_h": 472,
+   "inner_w": 910,
+   "face_h_px": 20,
+   "figure_h_est_px": 156.8,
+   "figure_h_est_pct": 33.2,
+   "face_xy_frac": [
+    0.502,
+    0.783
+   ],
+   "dial_frac": {
+    "x": 0.532,
+    "y": 0.512,
+    "pixels": 639,
+    "radius_frac_of_width": 0.0157
+   }
+  },
+  {
+   "n": 3,
+   "box": [
+    29,
+    505,
+    730,
+    861
+   ],
+   "inner_h": 357,
+   "inner_w": 702
+  },
+  {
+   "n": 4,
+   "box": [
+    735,
+    505,
+    1644,
+    861
+   ],
+   "inner_h": 357,
+   "inner_w": 910,
+   "strip_runs": [
+    [
+     125,
+     890
+    ]
+   ],
+   "strip_people": [
+    {
+     "cols": [
+      125,
+      890
+     ],
+     "rows": [
+      6,
+      356
+     ],
+     "height_pct": 98.3,
+     "face_h_px": 44,
+     "est_from_face_pct": 96.6
+    }
+   ]
+  }
+ ],
+ "model": {
+  "face_h_px": 63,
+  "figure_h_px": 494,
+  "figure_over_face": 7.841
+ }
+}

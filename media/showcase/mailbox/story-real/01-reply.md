@@ -1,0 +1,1 @@
+Question put to the owner (smoke reply for the story gate proof): Situation (sp-1.2 LIFT: the lid lifts at frame 66), Options (soft, hard), Default (soft), Changes (light), Reference (seuss-no-one-youer).

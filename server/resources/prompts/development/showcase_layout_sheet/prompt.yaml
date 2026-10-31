@@ -1,0 +1,29 @@
+id: showcase_layout_sheet
+name: Showcase Cinematography Sheet
+description: "Once per shot before its keys (D77): generate the cinematography
+  sheet through the imagegen tool (frame at the start and end of the move,
+  top-down staging plan with the camera path and leading line, emitter, D74 hue
+  pair, figure on-screen height in heads) from the actors' model sheets and the
+  owner's Composition cards, measure it, and write v3/layouts/<shot>.json as the
+  camera contract the key sheet is drawn at and the render study is measured
+  against (C25)."
+category: development
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: shot
+    type: string
+    description: Shot id from v3/shots.json.
+    required: true
+  - name: context
+    type: string
+    description: Notes, card ids or the owner's camera wishes for this shot; default
+      reads the shot row and board §8.
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory.
+    required: false
+    defaultValue: media/showcase
+tools:
+  - imagegen
+systemMessageFile: system-message.md
