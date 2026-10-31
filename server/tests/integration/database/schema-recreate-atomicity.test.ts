@@ -1,6 +1,6 @@
 // @lifecycle test - A schema recreate that fails part-way leaves the old schema, rows and version intact
 /**
- * The version-mismatch branch of `ensureSchema` is snapshot → drop every table → apply the new
+ * The upgrade branch of `ensureSchema` is snapshot → drop every table → apply the new
  * schema → restore the durable rows, and the new schema's `INSERT` into `schema_version` is part of
  * the apply step. Until 2026-10-12 none of it ran in a transaction: a restore that threw (a durable
  * row the new DDL refuses) still left the file at the NEW version with the durable table EMPTY, so
@@ -10,7 +10,8 @@
  *
  * The forced failure is the one the restore's own error message names: a durable row that violates
  * a `NOT NULL` the new DDL declares. The outgoing table is rebuilt without the constraint so it can
- * hold such a row, exactly as an older schema without that column constraint would.
+ * hold such a row, exactly as an older schema without that column constraint would. The upgrade is
+ * driven by reopening the file with an engine whose `schemaVersion` target is one ahead of it.
  *
  * Positive control: the same seam with a VALID row carries it across and moves the version, so the
  * "nothing changed" assertions below are not what a recreate that never ran would also produce.
@@ -59,7 +60,7 @@ describe('a schema recreate is one transaction', () => {
     await fs.rm(testDir, { recursive: true, force: true });
   });
 
-  /** Rewind the file to the previous version, with one `version_history` row of `snapshot`. */
+  /** Loosen `version_history` to an older, constraint-free shape and seed one row of `snapshot`. */
   function seedOlderFile(snapshot: string | null): void {
     const raw = new DatabaseSync(dbPath);
     try {
@@ -74,10 +75,18 @@ describe('a schema recreate is one transaction', () => {
            VALUES ('ws', 'prompt', 'seed', 1, ?, '2026-01-01T00:00:00.000Z')`
         )
         .run(snapshot);
-      raw.prepare('UPDATE schema_version SET version = ?').run(currentVersion - 1);
     } finally {
       raw.close();
     }
+  }
+
+  /** An engine one version ahead of the seeded file, so `initialize` takes the upgrade branch. */
+  function openUpgrading(): Promise<SqliteEngine> {
+    return SqliteEngine.getInstance(logger as never, {
+      dbPath,
+      schemaVersion: currentVersion + 1,
+      durableMigrations: [],
+    });
   }
 
   function readFileState(): FileState {
@@ -99,10 +108,10 @@ describe('a schema recreate is one transaction', () => {
   it('leaves the old tables, durable rows and version in place when the restore fails', async () => {
     seedOlderFile(null);
     const before = readFileState();
-    expect(before.version).toBe(currentVersion - 1);
+    expect(before.version).toBe(currentVersion);
     expect(before.history).toEqual([{ resource_id: 'seed', version: 1, snapshot: null }]);
 
-    const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
+    const engine = await openUpgrading();
     await expect(engine.initialize()).rejects.toThrow(
       /Failed to restore 1 durable row\(s\) into version_history/
     );
@@ -114,7 +123,7 @@ describe('a schema recreate is one transaction', () => {
     expect(readFileState()).toEqual(before);
 
     // And the next start fails the same way, rather than reading the file as current.
-    const again = await SqliteEngine.getInstance(logger as never, { dbPath });
+    const again = await openUpgrading();
     await expect(again.initialize()).rejects.toThrow(/Failed to restore/);
     expect(readFileState()).toEqual(before);
   });
@@ -122,12 +131,12 @@ describe('a schema recreate is one transaction', () => {
   it('carries a valid durable row across and moves the version (positive control)', async () => {
     seedOlderFile('{"step":"one"}');
 
-    const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
+    const engine = await openUpgrading();
     await engine.initialize();
     await engine.shutdown();
 
     const after = readFileState();
-    expect(after.version).toBe(currentVersion);
+    expect(after.version).toBe(currentVersion + 1);
     expect(after.history).toEqual([
       { resource_id: 'seed', version: 1, snapshot: '{"step":"one"}' },
     ]);

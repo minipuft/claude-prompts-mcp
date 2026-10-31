@@ -118,7 +118,7 @@ per-gate entries: the numbered gate list a `[n] PASS` refers to is rendered from
 
 No migration was owed and none was written: `execution_records` is `ephemeral`, so the bump drops
 and recreates it, and no row written under the old name can reach v30 to be read under the new one.
-`DROPPED_ON_THIS_BUMP` stays empty and `DROPPED_AT_VERSION` does not move. Seven test harnesses
+no durable row was discarded. Seven test harnesses
 hand-write this table's DDL rather than booting the engine;
 `tests/unit/infra/database/ddl-copy-parity.test.ts` enumerates them by shape and fails
 when one drifts from the engine's column set — which is how a copy left declaring the retired
@@ -133,7 +133,7 @@ and the `await` declaration stays on the step in the run's blueprint, where ever
 declaration lives. `unreportedDetachedNodeIds` (`shared/types/chain-execution.ts`) is the single
 reader of the pair. Nullable with no DDL DEFAULT, NULL on every blocking node and on a detached node
 the run has not reached. `chain_run_nodes` is `ephemeral`, so the bump drops and recreates it and
-no migration is written; `DROPPED_ON_THIS_BUMP` stays empty. No test hand-writes this table's DDL
+no migration is written, and no durable row was discarded. No test hand-writes this table's DDL
 today; the parity test holds any copy added later to the engine's column set.
 
 `chain_run_nodes.inline_gate_ids TEXT` arrived at v32 (P6.101). A node a remainder or an
@@ -143,7 +143,7 @@ holds them as a JSON array beside `args_json` and `delegated`; `run-registry` re
 the node, `synthesizeStep` carries it onto the step, and gate enhancement walks that step as it
 walks a parse-time one. Nullable with no DDL DEFAULT, NULL on every planned and inserted node and on
 every contributed node whose step declared no gates. `chain_run_nodes` is `ephemeral`, so the bump
-drops and recreates it and no migration is written; `DROPPED_ON_THIS_BUMP` stays empty.
+drops and recreates it and no migration is written; no durable row was discarded.
 
 `chain_sessions.continuity_scope_id TEXT NOT NULL` arrived at v33 (P6.147), and `run_number` left.
 Run numbers are counted per continuity scope, so one HTTP server serving two workspaces holds
@@ -155,8 +155,7 @@ is not `workspace_id`, which stays the process's launch workspace. `run_number` 
 `v_execution_status` projecting it (none in `hooks/` or the three downstream repos), so the view
 lost that column too. The hooks loader still selects by chain id and PID liveness, so it tells two
 scopes' runs of one chain id apart by recency alone; `hooks/tests/test_db_reader.py` pins that.
-`chain_sessions` is `derived`, so the bump drops and recreates it; `DROPPED_ON_THIS_BUMP` stays
-empty.
+`chain_sessions` is `derived`, so the bump drops and recreates it; no durable row was discarded.
 
 `chain_run_nodes.accepted_at_step INTEGER` arrived at v34 (P6.253). It holds the ordinal of the
 node a run stood on when a remainder node was accepted. The per-unknown-id remainder cap counts a
@@ -167,7 +166,7 @@ a new remainder. `run-registry` reads the column back onto the node and the comp
 remainder nodes; an inserted node still counts by its position, which is exact because it lands
 right after the node that declared its unknown. Nullable with no DDL DEFAULT, NULL on every planned
 and inserted node. `chain_run_nodes` is `ephemeral`, so the bump drops and recreates it and no
-migration is written; `DROPPED_ON_THIS_BUMP` stays empty.
+migration is written; no durable row was discarded.
 
 At v35 (P6.20) the hook projection key in the `chain_sessions` state document became
 `currentStepReview` (it was `pendingGateReview`), and `v_execution_status.pending_gate_review`
@@ -178,7 +177,7 @@ node `resolveShownReview` names; the old name was the per-run review slot that r
 changed, and the view is recreated on every boot, but the bump drops the rows a process wrote
 under the old key. `chain_sessions` is `derived`, and `chain_runs` is `ephemeral`, so no
 `chain_runs` row older than v35 survives. That is what retired the pre-3.1 residual reader in
-`run-registry.ts`. `DROPPED_ON_THIS_BUMP` stays empty.
+`run-registry.ts`. No durable row was discarded.
 
 ## Live Run Ownership and Fresh-Process Handoff
 
@@ -256,7 +255,7 @@ its declared retention; the optional archive supplies the durable evidence bound
 See [How to Calibrate a Semantic Gate](../guides/semantic-gate-calibration.md) for the
 operator workflow and the distinction between a reviewed receipt and a resource write.
 
-## Four Tables Are Durable — A Schema Bump Must Not Destroy Them
+## Durable Tables Migrate, Caches Rebuild — Four Tables Are Durable
 
 `objects` and `version_entries` joined this list at v29; the reasoning below is why the
 classification, not the DDL, is the risky part of that bump.
@@ -286,18 +285,45 @@ the next resource created under that id. Both delete surfaces purge now, over on
 `chain/step` rows with it. The residual leak is cross-surface, not per-surface: rows written under a
 tenant id the other surface does not resolve are not reached by its delete.
 
-`ensureSchema()` snapshots durable rows → drops → `applySchema()` → restores by intersecting old
-columns with new. **Do not "optimize" this into skipping durable tables during the drop.**
-`applySchema()` uses `CREATE TABLE IF NOT EXISTS`, so a table that is never dropped is never
-recreated and its DDL freezes permanently.
+A schema bump treats the two kinds of table differently. `ephemeral` and `derived` tables are
+simply dropped and recreated from `applySchema()`. `durable` tables go through a snapshot: the
+engine reads their rows into memory, applies the migration steps for the version range, drops every
+table, runs `applySchema()`, and restores the migrated rows. **Do not "optimize" this into skipping
+durable tables during the drop.** `applySchema()` uses `CREATE TABLE IF NOT EXISTS`, so a table that
+is never dropped is never recreated and its DDL freezes permanently. The decision record is
+[ADR 0005](../adr/0005-runtime-state-lives-in-one-sqlite-file.md).
 
-Adding a `NOT NULL` column with no default to a durable table makes the restore throw, naming the
-table. That is intended: the change needs a real migration.
+**A migration step is a pure transform over the snapshot, never SQL.** `DURABLE_MIGRATIONS`
+(`infra/database/durable-migrations.ts`) is the registry; each `DurableMigration` carries
+`toVersion`, the durable `tables` it rewrites, an optional `droppedColumns` map, a `summary`, and
+`migrate(snapshot) → snapshot`, which must not mutate its input. An upgrade from version `v` runs
+the steps with `v < toVersion <= SCHEMA_VERSION` in ascending order. Because a step sees rows and
+not a live database, it can be tested without one, and a rename is carried by a step that moves the
+value rather than discovered as a missing column.
+
+**The restore is strict.** For each durable table the columns restored are the union of keys over
+its snapshot rows. A column that no longer exists in the new table, and that no step lists in
+`droppedColumns`, throws naming the table and the columns, and the transaction rolls back: the file
+stays at its old version with its rows. A column that was removed on purpose is therefore a
+declaration, not an accident. Adding a `NOT NULL` column with no default makes the restore throw
+too, unless a step supplies the value, so that change needs a step.
+
+**Migrations start at `MIGRATION_FLOOR` (v35).** A database older than the floor is refused at
+startup, file unchanged, with a message that names the path, both versions and the two remedies:
+move the file aside (a fresh one is created on the next start) or open it once with an earlier
+release that still upgrades it. Below the floor no step exists to run, so the engine refuses rather
+than guess.
+
+**An upgrade is backed up first.** Before the transaction opens, the engine writes
+`<db>.v<version>.bak` (a `VACUUM INTO` a `.tmp` file, renamed over the backup; only the latest
+backup is kept beside the database). It happens outside the transaction because SQLite refuses
+`VACUUM` inside one, and a backup that cannot be written stops the upgrade before anything changes.
+There are no down migrations; the backup is the way back.
 
 **The whole sequence is one `BEGIN IMMEDIATE` transaction**, from the version read through the
 restore, and `applySchema()` writes the new `schema_version` row inside it. A restore that throws
 rolls back the drop and the apply with it: the file keeps its old tables, its durable rows and its
-old version, and every later start fails the same way until the change ships a migration. Before
+old version, and every later start fails the same way until the change ships a migration step. Before
 2026-10-12 the steps ran unwrapped, so a failed restore left the file at the new version with the
 durable table empty, and the next start read it as current. Reading the version under the write
 lock also serializes two processes starting on one file: the second waits out `busy_timeout`, then
@@ -575,9 +601,11 @@ isolated-`MCP_RUNTIME_ROOT` remedy. This changes startup policy without a schema
 
 `schema_version` must be a table containing exactly one positive safe-integer version. Empty or
 multiple records, invalid values, wrong shape and unreadable authority refuse initialization. Missing
-authority means a fresh database only when no application tables or views exist. Fresh creation,
-current-version reopening and older-version upgrades remain supported; upgrades carry the declared
-durable tables through snapshot/drop/recreate/restore. Failure clears initialization state and closes
+authority means a fresh database only when no application tables or views exist. Fresh creation and
+current-version reopening are supported. An older database at or above `MIGRATION_FLOOR` is backed
+up and upgraded, carrying the declared durable tables through migration steps and a strict
+snapshot/drop/recreate/restore (see [Durable Tables Migrate, Caches Rebuild](#durable-tables-migrate-caches-rebuild--four-tables-are-durable));
+one below the floor is refused at startup with the file unchanged. Failure clears initialization state and closes
 the handle; if closing also fails, the original initialization error remains the reported failure.
 
 The connection's `busy_timeout` and `foreign_keys` pragmas (`STATE_DB_WRITER_PRAGMAS`) are set
@@ -692,12 +720,13 @@ zero-patience connection against the same held lock as the positive control. `op
 private and closes its connection before any caller could read a pragma off it, so an observable
 probe is the only honest one.
 
-v28 is the worked example of a **real migration** on a durable table. `ensureSchema()` renumbers
-colliding rows between the snapshot and the restore (`renumberDuplicateVersionHistory`,
-deterministic by `created_at` then `id`), keeping every row and every chronology, and logs one line
-with the count. Without it the restore would hit the new index and abort startup. There is no dual
-write and no flag: a v28 database cannot produce a duplicate, so the migration is a no-op forever
-after, and it needs no `DROPPED_ON_THIS_BUMP` entry because nothing is discarded.
+At v28 the startup upgrade renumbered colliding `version_history` rows between the snapshot and
+the restore, deterministic by `created_at` then `id`, keeping every row and every chronology, and
+logged one line with the count. Without it the restore would have hit the new index and aborted
+startup. It ran as code in the engine, with no dual write and no flag; a v28 database cannot
+produce a duplicate, and nothing was discarded. The engine now upgrades only from `MIGRATION_FLOOR`
+upward, so a v28 database is refused rather than renumbered; the same repair on today's engine is a
+migration step.
 
 ## `tenant_id` Means Three Things — Two of Them Are Not a Workspace
 
@@ -739,23 +768,36 @@ stopped emitting NULLs. `applyIdentityScopeMigration` was deleted once each writ
 **`version_history` had to move reads and writes together.** Scoping the writes alone would have
 broken version numbering, because `MAX(version)` would read a different set than the INSERT wrote
 into. Rows predating the scoping cannot be attributed to a workspace and were dropped by the v18
-bump via `DROPPED_ON_THIS_BUMP` — see that constant's retirement rule below.
+bump, which discarded them; that decision was made once, for that version, and no mechanism
+remains that discards durable rows.
 
-## One-Time Durable Exclusions Must Retire
+### Changing a Durable Table's Schema
 
-`DROPPED_ON_THIS_BUMP` names durable tables deliberately NOT carried across a schema recreate. It
-is correct exactly once. Left behind, it silently discards a table whose rows exist nowhere else on
-the next, unrelated bump.
+`src/infra/database/durable-schema.lock.json` records `schemaVersion` and a sha256 per durable
+table over its normalized `CREATE` statements (the table and its indexes), plus `previous` once a
+change has been recorded. `validate:table-contracts` (a member of `validate:all`) computes the same
+hashes from `applySchema()` and fails when:
 
-`DROPPED_AT_VERSION` records the `SCHEMA_VERSION` it was declared for.
-`validate:table-contracts` fails when the two diverge while the set is non-empty, and
-`snapshotDurableTables()` throws on the same condition — so a stale exclusion cannot reach a
-running server. Retiring it is two edits the gate forces to happen together: empty the set, move
-the version.
+- the lock's version differs from `SCHEMA_VERSION`;
+- the durable schema differs from the lock at the same version, which is an edit with no bump;
+- a table differs between `previous` and the lock and no step with `toVersion` equal to the lock's
+  version lists it in `tables`.
 
-Prefer this over engine-resident migration code. F5 in the remediation plan was exactly that, and a
-one-time step guarded by a marker in `kv_state` is the same shape — `kv_state` is `ephemeral`, so
-anything clearing it re-arms the deletion.
+To change a durable table:
+
+1. Edit its DDL in `applySchema()` and bump `SCHEMA_VERSION`.
+2. Add a `DurableMigration` to `DURABLE_MIGRATIONS` with `toVersion` equal to the new version, the
+   table in `tables`, any deliberately removed column in `droppedColumns`, and a `migrate` that
+   carries the rows. A change that only adds a nullable column still needs a step naming the table;
+   it can return the snapshot unchanged.
+3. Run `npm run validate:table-contracts -- --update` from `server/`. It rewrites the lock with the
+   old hashes under `previous`, and refuses when the durable schema moved without a version bump or
+   when a changed table has no step.
+4. Cover the step with a test that seeds rows at the old version and upgrades through the engine's
+   `schemaVersion` and `durableMigrations` options, which exist so a test can aim an upgrade at a
+   later version.
+
+A bump that touches no durable table still moves the lock's version (step 3) and needs no step.
 
 ## `state.db` Is Shared Across Projects
 
