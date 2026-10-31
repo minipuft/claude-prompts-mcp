@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0](https://github.com/minipuft/claude-prompts-mcp/compare/v5.1.1...v6.0.0) (2026-10-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* exported type names are unique; resource_manager checks the shapes it publishes ([#501](https://github.com/minipuft/claude-prompts-mcp/issues/501))
+* **hooks:** hooks honor a workflow pause and track claude code runs ([#495](https://github.com/minipuft/claude-prompts-mcp/issues/495))
+* **mcp-tools:** each workflow control accepts exactly one form ([#492](https://github.com/minipuft/claude-prompts-mcp/issues/492))
+
+### Added
+
+* **gates:** accept bound semantic evaluation reports ([#476](https://github.com/minipuft/claude-prompts-mcp/issues/476)) ([6889b01](https://github.com/minipuft/claude-prompts-mcp/commit/6889b0154e44eebd38cb1f622089c9650769aa1b))
+* **gates:** archive revision-bound semantic review evidence ([#475](https://github.com/minipuft/claude-prompts-mcp/issues/475)) ([9644ba2](https://github.com/minipuft/claude-prompts-mcp/commit/9644ba2712f02fb8c1b1c176403ef28a1682eba1))
+* **gates:** validate standalone semantic evaluation reports ([#474](https://github.com/minipuft/claude-prompts-mcp/issues/474)) ([2b8805a](https://github.com/minipuft/claude-prompts-mcp/commit/2b8805aa3b2466b5e264ac900b6b67169d72a4a9))
+* **hooks:** hooks honor a workflow pause and track claude code runs ([#495](https://github.com/minipuft/claude-prompts-mcp/issues/495)) ([95ef25b](https://github.com/minipuft/claude-prompts-mcp/commit/95ef25b0b74809872970f542693d2a23aa8d39b4))
+* **mcp-tools:** a workflow run can be paused for discussion and resumed ([#493](https://github.com/minipuft/claude-prompts-mcp/issues/493)) ([dd55553](https://github.com/minipuft/claude-prompts-mcp/commit/dd5555353afb1530a937edeed721db39e0b42ed3))
+* **mcp-tools:** each workflow control accepts exactly one form ([#492](https://github.com/minipuft/claude-prompts-mcp/issues/492)) ([5e70381](https://github.com/minipuft/claude-prompts-mcp/commit/5e7038199dee44f8a024dae51740486bb163db92))
+* **parsers:** the framework operator is ^NAME, with @NAME as a deprecated alias ([#518](https://github.com/minipuft/claude-prompts-mcp/issues/518)) ([d05fa54](https://github.com/minipuft/claude-prompts-mcp/commit/d05fa5424f54dd967e8aa0b877911dcc711c6a24))
+* **resources:** a project carries its own resources in .claude-prompts/ ([#516](https://github.com/minipuft/claude-prompts-mcp/issues/516)) ([57e3e08](https://github.com/minipuft/claude-prompts-mcp/commit/57e3e0805323ae38fafa6854e7d8b5c225cde23a))
+* **resources:** a project's .claude-prompts/ is honoured by every config reader and at every moment ([#520](https://github.com/minipuft/claude-prompts-mcp/issues/520)) ([d8302d7](https://github.com/minipuft/claude-prompts-mcp/commit/d8302d7c21d337448b2e7eb8f1dfa9ee6b30fd76))
+* **runtime:** durable rows cross a schema upgrade only through declared migration steps ([#521](https://github.com/minipuft/claude-prompts-mcp/issues/521)) ([acc5b03](https://github.com/minipuft/claude-prompts-mcp/commit/acc5b03f54dbe491df3adfda9571320c83c07d5b))
+
+
+### Fixed
+
+* **chains:** chain manager behavior is pinned to 92% branch coverage ([#491](https://github.com/minipuft/claude-prompts-mcp/issues/491)) ([abfe8af](https://github.com/minipuft/claude-prompts-mcp/commit/abfe8afc7a7245013188c7d4100fabb3f8fd51a1))
+* **chains:** pausing or resuming a finished or unheld run is refused ([#496](https://github.com/minipuft/claude-prompts-mcp/issues/496)) ([a6a6e63](https://github.com/minipuft/claude-prompts-mcp/commit/a6a6e6369f0fdef28e13bf82fdc38e53f87defa7))
+* **gates:** a chain step's declared gates run and are graded on every path to its answer ([#515](https://github.com/minipuft/claude-prompts-mcp/issues/515)) ([93a8a96](https://github.com/minipuft/claude-prompts-mcp/commit/93a8a9648e89c21af70ea632d728438cac7fb029))
+* **gates:** a semantic review reply carries its instructions once, routed to the answering call ([#484](https://github.com/minipuft/claude-prompts-mcp/issues/484)) ([8c15413](https://github.com/minipuft/claude-prompts-mcp/commit/8c154134a9460522e7ec43f6e4aa168aa306799a))
+* **gates:** every requested gate is enforced as written or refused with a reason ([#480](https://github.com/minipuft/claude-prompts-mcp/issues/480)) ([f459bf7](https://github.com/minipuft/claude-prompts-mcp/commit/f459bf7460d87d9322de35d835201927a9522738))
+* **gates:** gate requests are refused before script tools run, and a full registry makes room ([#486](https://github.com/minipuft/claude-prompts-mcp/issues/486)) ([3dec741](https://github.com/minipuft/claude-prompts-mcp/commit/3dec74103f4857f72f47f73790f3226a06da4619))
+* **gates:** gate stages and review output state what actually runs ([#477](https://github.com/minipuft/claude-prompts-mcp/issues/477)) ([d1cbd10](https://github.com/minipuft/claude-prompts-mcp/commit/d1cbd107e09264e3696e29980df7d469ec38b1db))
+* **gates:** requested inline gates are refused rather than dropped ([#478](https://github.com/minipuft/claude-prompts-mcp/issues/478)) ([ca0df3b](https://github.com/minipuft/claude-prompts-mcp/commit/ca0df3bf20545bcf597240cd2bd4e04af3476e84))
+* **gates:** semantic verdicts, suppressed gates and per-step frameworks never fail silently ([#481](https://github.com/minipuft/claude-prompts-mcp/issues/481)) ([d90dda9](https://github.com/minipuft/claude-prompts-mcp/commit/d90dda9401d507853dbe3b6e3f3e0ebebb9b1476))
+* **hooks:** a workflow's shell verification is enforced at stop ([#497](https://github.com/minipuft/claude-prompts-mcp/issues/497)) ([49bfb67](https://github.com/minipuft/claude-prompts-mcp/commit/49bfb674d1f5a0b5b1423b68b9866d5b3f99985f))
+* **mcp-tools:** a prompt update changes only what the caller sent ([#503](https://github.com/minipuft/claude-prompts-mcp/issues/503)) ([bc8ca3f](https://github.com/minipuft/claude-prompts-mcp/commit/bc8ca3fc66161d107cf579a543b9d3d14421f0de))
+* **runtime:** a failed schema upgrade leaves state.db and its durable rows intact ([#479](https://github.com/minipuft/claude-prompts-mcp/issues/479)) ([06db054](https://github.com/minipuft/claude-prompts-mcp/commit/06db054a83628be7c476c0ef5b0544786d176a66))
+* **runtime:** every shutdown trigger persists state before the process exits ([#483](https://github.com/minipuft/claude-prompts-mcp/issues/483)) ([adc6054](https://github.com/minipuft/claude-prompts-mcp/commit/adc6054b425c14d5eececd8df596e63a3fa6a456))
+* **scripts:** the release workflow keeps the Unreleased changelog header above the newest release ([#472](https://github.com/minipuft/claude-prompts-mcp/issues/472)) ([54ab4f1](https://github.com/minipuft/claude-prompts-mcp/commit/54ab4f1ce04d195368eee15be14c03683c0c9af9))
+* **server:** a skills-sync failure in one resource no longer hides the rest ([#490](https://github.com/minipuft/claude-prompts-mcp/issues/490)) ([0c7627d](https://github.com/minipuft/claude-prompts-mcp/commit/0c7627d07285d7962d4cbae4c206b12d487a5262))
+* **server:** the JSON files the server writes match the repository's formatter ([#502](https://github.com/minipuft/claude-prompts-mcp/issues/502)) ([ffaae3e](https://github.com/minipuft/claude-prompts-mcp/commit/ffaae3e3d7f9297d07bc209609d855bb02730cfa))
+
+
+### Changed
+
+* **docs:** the Skills Sync surfaces describe translation only ([#485](https://github.com/minipuft/claude-prompts-mcp/issues/485)) ([6e4a617](https://github.com/minipuft/claude-prompts-mcp/commit/6e4a61724e00619e7f4cdc314b80b83581e14b51))
+* **execution:** the pipeline's per-request state is named PromptRequestContext ([#500](https://github.com/minipuft/claude-prompts-mcp/issues/500)) ([ee3986e](https://github.com/minipuft/claude-prompts-mcp/commit/ee3986e2d516726f4a1b77186671035a9357277e))
+* exported type names are unique; resource_manager checks the shapes it publishes ([#501](https://github.com/minipuft/claude-prompts-mcp/issues/501)) ([f771517](https://github.com/minipuft/claude-prompts-mcp/commit/f771517f7b2b4e4a40295823294486a810ae2bb9))
+
+
+### Documentation
+
+* **prompts:** a worker row that grows an over-threshold file names the extraction it defers ([#525](https://github.com/minipuft/claude-prompts-mcp/issues/525)) ([ad5f188](https://github.com/minipuft/claude-prompts-mcp/commit/ad5f1885811ace310e1b6d526172855971f2a435))
+* the 6.0 changelog names its breaking changes and how to migrate ([#498](https://github.com/minipuft/claude-prompts-mcp/issues/498)) ([166d310](https://github.com/minipuft/claude-prompts-mcp/commit/166d3108b8f3ee381db63366323ac3fd6bf878d8))
+* the README hero demo shows the server refusing a step and the model fixing it ([#517](https://github.com/minipuft/claude-prompts-mcp/issues/517)) ([afddf26](https://github.com/minipuft/claude-prompts-mcp/commit/afddf260031692ea60238a9c417fd053e8ed3749))
+* the README names what Skills Sync writes for Cursor and OpenCode ([#487](https://github.com/minipuft/claude-prompts-mcp/issues/487)) ([abc09d9](https://github.com/minipuft/claude-prompts-mcp/commit/abc09d974ba2e782426e8458a022d2a39a1896f0))
+* the semantic-gate review remediation has its own plan ([#482](https://github.com/minipuft/claude-prompts-mcp/issues/482)) ([cf619a6](https://github.com/minipuft/claude-prompts-mcp/commit/cf619a61ded48ffea12f43224a9f49e93a8646ab))
+
 ## [Unreleased]
 
 ### Added
