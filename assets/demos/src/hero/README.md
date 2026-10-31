@@ -65,8 +65,10 @@ storyboard is the input.
 6. **Ship** when the interview says so: `render.sh`, swap the README caption, commit cast and
    GIF together. For a playing video in the README, `publish.sh` uploads the mp4 the way the
    web editor does (GitHub plays only `user-attachments` URLs; a repo-relative mp4 or a release
-   asset is a download link) and prints the URL to paste into the `<video src>`; the asset is
-   private to the uploader until the README references it, and each run mints a new URL.
+   asset is a download link), posts the URL as a comment on the issue you name, and prints it
+   once a logged-out fetch serves it; paste that into the `<video src>`. Until a posted comment
+   references it the asset is private to the uploader (a README reference does not count), and
+   each run mints a new URL.
 
 Rehearse on haiku (five rounds for this take), record the shipped take on the model the caption
 names.
@@ -77,7 +79,7 @@ names.
 MODEL=sonnet bash assets/demos/src/hero/record.sh          # full take → hero.cast
 MODEL=haiku  bash assets/demos/src/hero/record.sh --smoke  # boots, routes >>status, quits
 bash assets/demos/src/hero/render.sh                        # GIF + MP4, no API calls
-bash assets/demos/src/hero/publish.sh                       # upload hero-demo.mp4 to GitHub user-attachments, print the URL
+bash assets/demos/src/hero/publish.sh --issue <N>           # upload hero-demo.mp4, comment it on issue N, print the URL once it is public
 ```
 
 Needs on PATH: `claude`, `tmux`, `asciinema3` (asciinema ≥ 3.0 musl build), `agg` (musl build;
