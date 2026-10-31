@@ -50,6 +50,11 @@ import {
   findWorkspaceConfigFiles,
   parseConfigText,
 } from '#shared/utils/config-file-format.js';
+import {
+  findProjectWorkspace,
+  selectLaunchConfigFile,
+  type ConfigLaunch,
+} from '#shared/utils/config-file-selection.js';
 
 // ── Result types ─────────────────────────────────────────────────────────────
 
@@ -101,15 +106,27 @@ export interface ConfigKeyInfo {
 // ── Path resolution ──────────────────────────────────────────────────────────
 
 /**
- * The config file a workspace operation acts on.
+ * The config file a workspace operation acts on: the file the server would read from the same
+ * environment (`selectLaunchConfigFile`, owner ruling R1) — `MCP_CONFIG_PATH`, then the project's
+ * `.claude-prompts/config.jsonc` or `config.json`, then the workspace's. The project directory is
+ * `CLAUDE_PROJECT_DIR`, else the working directory, so an operation run from inside a project
+ * edits the project's config exactly where the server running there reads it.
  *
- * Precedence is `config.jsonc` then `config.json`, first existing wins. With NEITHER present the
- * `config.jsonc` path comes back — the name a create would write — so a caller that reports
- * "not found" names the file it would have made rather than the older spelling.
+ * With NO file present the `config.jsonc` path comes back — the name a create would write — in the
+ * project's `.claude-prompts/` when that directory exists, else in the workspace, so a caller that
+ * reports "not found" names the file it would have made rather than the older spelling.
+ *
+ * @param workspace - The workspace directory the operation was pointed at
+ * @param launch - Where the explicit path and the project directory are read from; defaults to the
+ *   process environment and working directory
  */
-export function resolveConfigPath(workspace: string): string {
+export function resolveConfigPath(workspace: string, launch: ConfigLaunch = {}): string {
   const workspaceDir = resolve(workspace);
-  return findWorkspaceConfigFiles(workspaceDir)[0] ?? join(workspaceDir, USER_CONFIG_FILENAMES[0]);
+  const selected = selectLaunchConfigFile(workspaceDir, launch);
+  if (selected !== undefined) {
+    return selected.path;
+  }
+  return join(findProjectWorkspace(launch) ?? workspaceDir, USER_CONFIG_FILENAMES[0]);
 }
 
 /**
@@ -469,14 +486,14 @@ export function initConfig(targetPath: string): ConfigInitResult {
  * `config.json` gets the minimal default document. Exactly one config file exists afterwards,
  * under the same name as before.
  *
- * @param workspace - Workspace directory
+ * @param workspace - Workspace directory; the file reset is the one {@link resolveConfigPath} chooses
+ *   for it, which is the project's when the launch's project directory holds one
  * @returns Which file was written and what to tell the user
  */
 export function resetConfig(workspace: string): ConfigResetResult {
-  const workspaceDir = resolve(workspace);
-  const configPath = resolveConfigPath(workspaceDir);
+  const configPath = resolveConfigPath(workspace);
 
-  const ambiguity = ambiguousConfigError(workspaceDir);
+  const ambiguity = ambiguousConfigErrorForFile(configPath);
   if (ambiguity !== undefined) {
     return { success: false, configPath, message: ambiguity, error: ambiguity };
   }

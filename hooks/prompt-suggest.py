@@ -11,7 +11,8 @@ Architecture:
 - Layer 2: This hook - efficiency layer translating >>syntax to prompt_engine calls
 
 Operators detected (from SSOT registry):
-- `-->` chain, `==>` delegation, `::` gate, `@` framework, `#` style, `* N` repetition
+- `-->` chain, `==>` delegation, `::` gate, `^` framework (`@` is a deprecated alias), `#` style,
+  `* N` repetition
 """
 
 import json
@@ -24,6 +25,7 @@ from typing import cast
 # Add hooks lib to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
 
+from builtin_commands import is_builtin_command
 from cache_manager import (
     ArgumentInfo,
     PromptInfo,
@@ -91,7 +93,7 @@ def detect_prompt_invocation(message: str) -> str | None:
         >>deep_analysis -> "deep_analysis"
         >> code_review -> "code_review"
         >>research-comprehensive -> "research-comprehensive"
-        @CAGEERF >>analyze -> "analyze"
+        ^CAGEERF >>analyze -> "analyze"
         #analytical >>report -> "report"
     """
     annotations = annotate_prompt_references(message)
@@ -158,12 +160,12 @@ def detect_inline_gates(message: str) -> list[str]:
 
 def detect_framework(message: str) -> str | None:
     """
-    Detect @FRAMEWORK syntax in message.
+    Detect ^FRAMEWORK syntax (or the deprecated @FRAMEWORK alias) in message.
     Returns the framework ID if found (normalized to lowercase).
 
     Examples:
-        @CAGEERF >>analyze -> "cageerf"
-        @ReACT >>debug -> "react"
+        ^CAGEERF >>analyze -> "cageerf"
+        @ReACT >>debug -> "react"  (deprecated alias)
 
     Note: Framework IDs are normalized to lowercase to align with MCP server storage.
     """
@@ -420,7 +422,7 @@ def format_user_message(
     Format user-visible confirmation message.
 
     Args:
-        command: The full command string (e.g., ">>deep_analysis" or "@CAGEERF >>analyze")
+        command: The full command string (e.g., ">>deep_analysis" or "^CAGEERF >>analyze")
         parsed_args: Parsed arguments from message
         operators: Detected operators dict
         arguments: Prompt arguments with types (from format_arguments)
@@ -453,7 +455,7 @@ def format_user_message(
     if operators.get("repetition"):
         op_indicators.append(f"*{operators['repetition'][0]}")
     if operators.get("framework"):
-        op_indicators.append(f"@{operators['framework'][0]}")
+        op_indicators.append(f"^{operators['framework'][0]}")
     if operators.get("style"):
         op_indicators.append(f"#{operators['style'][0]}")
     if operators.get("gate"):
@@ -499,7 +501,7 @@ def _format_expanded_message(
         if operators.get("chain"):
             op_parts.append(f"chain ({len(operators['chain'])} steps)")
         if operators.get("framework"):
-            op_parts.append(f"@{operators['framework'][0]}")
+            op_parts.append(f"^{operators['framework'][0]}")
         if operators.get("style"):
             op_parts.append(f"#{operators['style'][0]}")
         if operators.get("repetition"):
@@ -661,8 +663,10 @@ def main():
         prompt_info = get_prompt_by_id(invoked_prompt) if invoked_prompt else None
 
         # Early return for unknown prompts: provide fuzzy suggestions without tool call
-        # This saves tokens by avoiding a failing server round-trip
-        if invoked_prompt and prompt_info is None:
+        # This saves tokens by avoiding a failing server round-trip. A built-in
+        # (`>>status`, `>>help`, ...) has no catalog row and is NOT unknown: the
+        # server answers it, so it routes like a known prompt.
+        if invoked_prompt and prompt_info is None and not is_builtin_command(invoked_prompt):
             suggestions = fuzzy_match_prompt_id(invoked_prompt)
             message = format_unknown_prompt_message(invoked_prompt, suggestions)
 
@@ -677,7 +681,7 @@ def main():
         arguments = format_arguments(invoked_prompt) if invoked_prompt else None
 
         # Use full message as command (server parses it)
-        # Preserve @framework, #style prefixes and all operators
+        # Preserve ^framework (or @framework), #style prefixes and all operators
         command = user_message.strip()
 
         # Format outputs (check config for expanded mode)

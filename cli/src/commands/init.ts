@@ -11,10 +11,22 @@ interface InitOptions {
   path?: string;
   json: boolean;
   noValidate?: boolean;
+  project?: boolean;
 }
 
+/** Directory name the server looks for in the project (STDIO); fixed by convention. */
+const PROJECT_WORKSPACE_DIR = '.claude-prompts';
+
 export async function init(options: InitOptions): Promise<number> {
-  const targetPath = options.path ?? '.';
+  if (options.project && options.path !== undefined) {
+    console.error(
+      `--project scaffolds ./${PROJECT_WORKSPACE_DIR} and takes no path; use 'cpm init ${options.path}' for a custom location`,
+    );
+    return 1;
+  }
+  const targetPath = options.project
+    ? join(process.cwd(), PROJECT_WORKSPACE_DIR)
+    : (options.path ?? '.');
   const result = initWorkspace(targetPath);
 
   if (result.success && !options.noValidate) {
@@ -57,6 +69,11 @@ export async function init(options: InitOptions): Promise<number> {
     console.log(result.message);
     if (configCreated && configPath) {
       console.log(`Created ${basename(configPath)} with default settings`);
+    }
+    if (options.project && result.success) {
+      console.log(
+        `Resources placed in ${PROJECT_WORKSPACE_DIR}/ load above the user workspace and the bundled ones whenever the server runs in this project (STDIO).`,
+      );
     }
   }
 

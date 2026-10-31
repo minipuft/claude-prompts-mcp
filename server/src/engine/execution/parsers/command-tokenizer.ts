@@ -205,9 +205,9 @@ function detectGates(
   }
 }
 
-/** Detect framework (@word), style (#id), and repetition (*N) operators. */
+/** Detect framework (^word, or the deprecated @word), style (#id), and repetition (*N) operators. */
 function detectModifiers(trimmed: string, operators: TokenizedOperator[]): void {
-  // Framework operators (@word) — quote-aware with path/reference exclusion
+  // Framework operators (^word, or the deprecated @word) — quote-aware with path/reference exclusion
   const fwMatch = findFrameworkOperatorOutsideQuotes(trimmed);
   if (fwMatch !== null) {
     operators.push({

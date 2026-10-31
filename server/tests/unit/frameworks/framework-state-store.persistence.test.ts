@@ -63,12 +63,12 @@ describe('FrameworkStateStore (persistence)', () => {
   test('a scope with no persisted row resolves to the configured default framework', async () => {
     const logger = createLogger();
     const mgr = await createFrameworkStateStore(logger, stateDbPath, {
-      defaultFramework: () => 'radiant',
+      defaultFramework: () => 'scamper',
     });
 
     // Without the config wiring this reported the built-in CAGEERF fallback.
     const unseen = { workspaceId: 'workspace-with-no-persisted-framework' };
-    expect(mgr.getCurrentState(unseen).activeFramework.toLowerCase()).toBe('radiant');
+    expect(mgr.getCurrentState(unseen).activeFramework.toLowerCase()).toBe('scamper');
 
     await mgr.shutdown();
   });
@@ -134,11 +134,11 @@ describe('FrameworkStateStore (persistence)', () => {
     // The suite's first test wrote 'react' under the unscoped 'default' row, standing in
     // for state written before scope ids existed.
     const migrated = await createFrameworkStateStore(logger, stateDbPath, {
-      defaultFramework: () => 'radiant',
+      defaultFramework: () => 'scamper',
       defaultScope: { workspaceId: 'project-upgrading' },
     });
 
-    // Adopted from the legacy row, not reset to the configured 'radiant' default.
+    // Adopted from the legacy row, not reset to the configured 'scamper' default.
     expect(migrated.getCurrentState().activeFramework.toLowerCase()).toBe('react');
 
     await migrated.shutdown();
@@ -148,7 +148,7 @@ describe('FrameworkStateStore (persistence)', () => {
     const logger = createLogger();
     // tmpRoot still holds the 'react' row written by the restoration test above.
     const mgr = await createFrameworkStateStore(logger, stateDbPath, {
-      defaultFramework: () => 'radiant',
+      defaultFramework: () => 'scamper',
     });
 
     expect(mgr.getCurrentState().activeFramework.toLowerCase()).toBe('react');
@@ -165,12 +165,12 @@ describe('FrameworkStateStore (persistence)', () => {
     await before.shutdown();
 
     const after = await createFrameworkStateStore(logger, stateDbPath, {
-      defaultFramework: () => 'radiant',
+      defaultFramework: () => 'scamper',
       defaultScope: scope,
     });
     // Not the first framework available, which is what the recovery used to pick.
-    expect(after.getCurrentState().activeFramework.toLowerCase()).toBe('radiant');
-    expect(after.getActiveFramework().id.toLowerCase()).toBe('radiant');
+    expect(after.getCurrentState().activeFramework.toLowerCase()).toBe('scamper');
+    expect(after.getActiveFramework().id.toLowerCase()).toBe('scamper');
     await after.shutdown();
   });
 
@@ -194,25 +194,25 @@ describe('FrameworkStateStore (persistence)', () => {
   test('removing the selected framework selects the configured default and persists it', async () => {
     const logger = createLogger();
     const scope = { workspaceId: 'project-removing-its-framework' };
-    const options = { defaultFramework: () => 'radiant', defaultScope: scope };
+    const options = { defaultFramework: () => 'scamper', defaultScope: scope };
     const store = await createFrameworkStateStore(logger, stateDbPath, options);
     await store.switchFramework({ targetFramework: 'react' });
 
     const removed = await store.getFrameworkManager()!.removeFramework('react');
 
     expect(removed).toBe(true);
-    expect(store.getCurrentState().activeFramework.toLowerCase()).toBe('radiant');
-    expect(store.getActiveFramework().id.toLowerCase()).toBe('radiant');
+    expect(store.getCurrentState().activeFramework.toLowerCase()).toBe('scamper');
+    expect(store.getActiveFramework().id.toLowerCase()).toBe('scamper');
     await store.shutdown();
 
     const restarted = await createFrameworkStateStore(logger, stateDbPath, options);
-    expect(restarted.getCurrentState().activeFramework.toLowerCase()).toBe('radiant');
+    expect(restarted.getCurrentState().activeFramework.toLowerCase()).toBe('scamper');
     await restarted.shutdown();
   });
 
   test('the fallback selects the configured default as it is when the framework is removed', async () => {
     const logger = createLogger();
-    let configuredDefault = 'radiant';
+    let configuredDefault = 'scamper';
     const store = await createFrameworkStateStore(logger, stateDbPath, {
       defaultFramework: () => configuredDefault,
       defaultScope: { workspaceId: 'project-whose-default-changes' },
@@ -239,7 +239,7 @@ describe('FrameworkStateStore (persistence)', () => {
       },
     } as unknown as SqliteStateStore<PersistedFrameworkState>;
     const store = await createFrameworkStateStore(logger, stateDbPath, {
-      defaultFramework: () => 'radiant',
+      defaultFramework: () => 'scamper',
       defaultScope: { workspaceId: 'project-with-a-read-only-database' },
       stateStore,
     });
@@ -262,7 +262,7 @@ describe('FrameworkStateStore (persistence)', () => {
       },
     } as unknown as SqliteStateStore<PersistedFrameworkState>;
     const store = await createFrameworkStateStore(logger, stateDbPath, {
-      defaultFramework: () => 'radiant',
+      defaultFramework: () => 'scamper',
       defaultScope: { workspaceId: 'project-toggling-against-a-read-only-database' },
       stateStore,
     });

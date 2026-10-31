@@ -28,6 +28,8 @@ export interface GateShellVerifyResult {
   stderr: string;
   durationMs: number;
   timedOut?: boolean;
+  /** The command never ran: an operator control refused it, or no executor was wired. */
+  refused?: boolean;
 }
 
 /**

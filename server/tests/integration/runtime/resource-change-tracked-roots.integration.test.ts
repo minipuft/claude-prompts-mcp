@@ -127,27 +127,27 @@ describe('the change tracker spans operator roots, one file per id', () => {
     });
 
   it('watches the primary and the overlay, whether or not the overlay exists, and never the bundled tree', () => {
-    expect(roots().prompt).toEqual([OVERLAY, PRIMARY]);
+    expect(roots().prompt).toEqual([PRIMARY, OVERLAY]);
     expect(registration.directories).toEqual(expect.arrayContaining([OVERLAY, PRIMARY, GATES]));
     expect(registration.directories).not.toContain(BUNDLED);
   });
 
   it('tracks the serving copy of a duplicated id, so repeated baselines stay quiet', async () => {
-    await writePrompt(PRIMARY, 'general/dup', 'PRIMARY-COPY');
-    const overlayFile = await writePrompt(OVERLAY, 'general/dup', 'OVERLAY-COPY');
+    const primaryFile = await writePrompt(PRIMARY, 'general/dup', 'PRIMARY-COPY');
+    await writePrompt(OVERLAY, 'general/dup', 'OVERLAY-COPY');
     await writePrompt(OVERLAY, 'general/solo', 'OVERLAY-ONLY');
 
     const first = await compareResourceBaseline(tracker, roots(), logger);
     const second = await compareResourceBaseline(tracker, roots(), logger);
 
     expect(first.added).toBe(2);
-    expect(rowsFor('dup')).toEqual([{ operation: 'added', file_path: overlayFile }]);
+    expect(rowsFor('dup')).toEqual([{ operation: 'added', file_path: primaryFile }]);
     expect(rowsFor('solo').map((row) => row.operation)).toEqual(['added']);
     // Two copies, two runs, and no alternation between them.
     expect(second).toEqual({ added: 0, modified: 0, removed: 0, refused: 0 });
 
     // Positive control for that silence: an edit to the serving copy IS a change.
-    await writePrompt(OVERLAY, 'general/dup', 'OVERLAY-COPY-EDITED');
+    await writePrompt(PRIMARY, 'general/dup', 'PRIMARY-COPY-EDITED');
     const third = await compareResourceBaseline(tracker, roots(), logger);
     expect(third.modified).toBe(1);
   });
@@ -157,15 +157,15 @@ describe('the change tracker spans operator roots, one file per id', () => {
     const overlayFile = await writePrompt(OVERLAY, 'general/dup', 'OVERLAY-COPY');
     await compareResourceBaseline(tracker, roots(), logger);
 
-    // Shadowed: the overlay serves, so the primary copy's edit changes nothing served.
-    await writePrompt(PRIMARY, 'general/dup', 'PRIMARY-COPY-EDITED');
-    await fileEvent(primaryFile, 'modified');
+    // Shadowed: the primary serves, so the overlay copy's edit changes nothing served.
+    await writePrompt(OVERLAY, 'general/dup', 'OVERLAY-COPY-EDITED');
+    await fileEvent(overlayFile, 'modified');
     expect(rowsFor('dup').map((row) => row.operation)).toEqual(['added']);
 
-    // Removing the serving copy hands the id to the primary: a content change, not a removal.
-    await rm(path.dirname(overlayFile), { recursive: true });
-    await fileEvent(overlayFile, 'removed');
-    expect(rowsFor('dup').slice(1)).toEqual([{ operation: 'modified', file_path: primaryFile }]);
+    // Removing the serving copy hands the id to the overlay: a content change, not a removal.
+    await rm(path.dirname(primaryFile), { recursive: true });
+    await fileEvent(primaryFile, 'removed');
+    expect(rowsFor('dup').slice(1)).toEqual([{ operation: 'modified', file_path: overlayFile }]);
 
     // A nested step is keyed as the walk keys it, not by its folder name alone.
     const stepFile = await writePrompt(PRIMARY, 'examples/chain/step_one', 'STEP');
@@ -186,6 +186,58 @@ describe('the change tracker spans operator roots, one file per id', () => {
     for (const [relativeDir, id, logged] of cases) {
       await fileEvent(await writePrompt(PRIMARY, relativeDir, id), 'added');
       expect([id, rowsFor(id).map((row) => row.operation)]).toEqual([id, logged ? ['added'] : []]);
+    }
+  });
+
+  it('judges which copy serves by the roots as they are now, after a project .claude-prompts/ appears', async () => {
+    const projectDir = path.join(TEST_DIR, 'project');
+    const projectPrompts = path.join(projectDir, '.claude-prompts', 'resources', 'prompts');
+    const resolver = new PathResolver({
+      cli: {},
+      packageRoot: PACKAGE_ROOT,
+      projectDiscovery: true,
+      projectLaunch: { env: { CLAUDE_PROJECT_DIR: projectDir }, cwd: TEST_DIR },
+    });
+    // Read through the resolver on every call, as the server's config loader does.
+    const moving = {
+      getResolvedPromptsDirectory: () => resolver.getPromptsPath(),
+      getGatesDirectory: () => resolver.getGatesPath(),
+    } as unknown as ConfigLoader;
+    const built = buildResourceChangeTrackerAuxiliaryReloadConfig(logger, moving, resolver);
+    if (built === undefined) throw new Error('tracker registration was not built');
+
+    try {
+      await writePrompt(PRIMARY, 'general/dup', 'WORKSPACE-COPY');
+      // Registered before the project directory exists: the workspace is the primary, and the
+      // project's folder is a root that does not exist yet, ranked below it.
+      expect(trackedResourceRoots(moving, resolver).prompt).toEqual([
+        PRIMARY,
+        projectPrompts,
+        OVERLAY,
+      ]);
+      await compareResourceBaseline(tracker, trackedResourceRoots(moving, resolver), logger);
+
+      // The directory appears holding its own copy of the id, and now outranks the workspace.
+      const projectFile = await writePrompt(projectPrompts, 'general/dup', 'PROJECT-COPY');
+      expect(trackedResourceRoots(moving, resolver).prompt).toEqual([
+        projectPrompts,
+        PRIMARY,
+        OVERLAY,
+      ]);
+      await built.handler({
+        type: 'prompt_changed',
+        reason: 'test',
+        affectedFiles: [projectFile],
+        changeType: 'added',
+        timestamp: Date.now(),
+        requiresFullReload: false,
+      });
+
+      // Served now, so the id's content changed. Under the order held at registration the project
+      // copy ranked below the workspace's and the event was dropped as shadowed.
+      expect(rowsFor('dup').slice(1)).toEqual([{ operation: 'modified', file_path: projectFile }]);
+    } finally {
+      await rm(projectDir, { recursive: true, force: true, maxRetries: 5 });
     }
   });
 

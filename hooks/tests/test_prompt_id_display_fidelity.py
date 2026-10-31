@@ -169,4 +169,6 @@ def test_advisory_modifiers_ignore_quotes_and_unicode_arrow():
     assert detect_operator('text:"@CAGEERF #analytical ==>"', "style") == []
     assert detect_operator('text:"@CAGEERF #analytical ==>"', "delegation") == []
     assert detect_operator("@CAGEERF >>Parent/Child", "framework") == ["CAGEERF"]
+    assert detect_operator("^CAGEERF >>Parent/Child", "framework") == ["CAGEERF"]
+    assert detect_operator('text:"^CAGEERF #analytical ==>"', "framework") == []
     assert prompt_suggest.detect_chain_syntax(">>notes → >>reviewCard") == []

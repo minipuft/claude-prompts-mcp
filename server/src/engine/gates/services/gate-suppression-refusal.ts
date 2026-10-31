@@ -32,6 +32,21 @@ export function suppressingModifier(
   return undefined;
 }
 
+/** The gate declarations a chain step carries (`ChainStepPrompt`). */
+interface StepGateDeclarations {
+  readonly inlineGateIds?: readonly string[] | undefined;
+  readonly inlineGateCriteria?: readonly string[] | undefined;
+}
+
+/**
+ * How many gates the step itself declares: inline gate ids plus inline criteria. This is what a
+ * step asks for, whichever call carried it, so a default that would withhold gates is judged
+ * against the step as well as the call. PURE.
+ */
+export function declaredStepGateCount(step: StepGateDeclarations): number {
+  return (step.inlineGateIds?.length ?? 0) + (step.inlineGateCriteria?.length ?? 0);
+}
+
 /**
  * The three switches, in the order every caller reads them. Each later one is read only when the
  * one before it is on: the runtime switch is a scoped store read, and a caller's modifiers may be

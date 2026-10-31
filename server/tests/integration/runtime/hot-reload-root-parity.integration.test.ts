@@ -165,14 +165,14 @@ describe('hot reload composes the same roots startup does', () => {
   });
 
   it('lets a higher-precedence root win a duplicate id, as startup does', async () => {
-    // Precedence is bundle → primary → overlays. Asserted here because the shared loader owns it
+    // Precedence is bundle → overlays → primary. Asserted here because the shared loader owns it
     // for both paths now, so a reordering would silently change what a reload serves.
     await writePrompt(bundled, 'general', 'shared_id', 'FROM BUNDLED');
     await writePrompt(primary, 'general', 'shared_id', 'FROM PRIMARY');
     await writePrompt(overlay, 'general', 'shared_id', 'FROM OVERLAY');
 
     const { body } = await reload();
-    expect(body('shared_id')).toContain('FROM OVERLAY');
+    expect(body('shared_id')).toContain('FROM PRIMARY');
   });
 
   it('does not depend on catalog size — the assertion a count-based test would make', async () => {

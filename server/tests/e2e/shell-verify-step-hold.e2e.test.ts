@@ -56,6 +56,15 @@
  * projection a bare `>>sv_chain` uses: step 2 renders its own template and its FAIL opens a review
  * of the step's `sv-block` gate. Every `quick_decision` case above now runs quick_decision's three
  * step prompts rather than its own template three times.
+ *
+ * MEASURED 2026-10-21 (README hero take, `>>implement_feature … :: verify:"npm test" --> >>review`):
+ * a step whose request gate targets it, answered with `user_response` and `gate_verdict` in one
+ * call, ran the check, passed it, and replied with the review of the SAME step. The verdict
+ * cleared the review the step rendered with, the pending check held the advance, and the capture
+ * then opened a second review on the node it had not left; the next call spent a second verdict.
+ *
+ * Now (chain-step-gates row 2.3) a verdict that graded a step the check holds leaves that step
+ * with no review of its own: the one call advances once, and a failing check still refuses.
  */
 import { afterEach, describe, expect, test } from '@jest/globals';
 
@@ -103,7 +112,13 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
   async function startVerifiedChain(
     markerPresent: boolean,
     verifyOptions = '',
-    opening: { prompt?: string; user_response?: string; authored?: boolean } = {}
+    opening: {
+      prompt?: string;
+      user_response?: string;
+      authored?: boolean;
+      /** Request gates sent with the opening call, e.g. one targeting step 1. */
+      gates?: Array<Record<string, unknown>>;
+    } = {}
   ): Promise<{
     call: Call;
     raw: Call;
@@ -154,11 +169,11 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
       opening.prompt ??
       (opening.authored === true ? 'sv_chain' : 'quick_decision topic:"pick a database"');
     const command = `>>${prompt} :: verify:"sh ${script}"${verifyOptions}`;
-    const start = await raw(
-      opening.user_response === undefined
-        ? { command }
-        : { command, user_response: opening.user_response }
-    );
+    const start = await raw({
+      command,
+      ...(opening.user_response === undefined ? {} : { user_response: opening.user_response }),
+      ...(opening.gates === undefined ? {} : { gates: opening.gates }),
+    });
     const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(start.text)?.[1];
     if (chainId === undefined) throw new Error(`no chain id in: ${start.text.slice(0, 400)}`);
     return {
@@ -610,5 +625,45 @@ describe('Streamable HTTP: a step under a pending shell check is held', () => {
     const start = await raw({ command: '>>sv_chain :: "extra criterion"' });
     const chainId = /chain_id[=:] ?"(chain-[A-Za-z0-9_#-]+)"/.exec(start.text)?.[1];
     expectStepTwoReview(await failStepTwo((args) => raw({ chain_id: chainId, ...args })));
+  }, 180000);
+
+  /** A request gate that names step 1, so the capture has a review to open for it. */
+  const STEP_ONE_GATE = [
+    { id: 'row-2-3-step-one', name: 'step one', criteria: ['CRIT-2-3'], target_step_number: 1 },
+  ];
+
+  test('row 2.3 (a): answer + PASS in one call on a gate-targeted step advances once, asking no second verdict', async () => {
+    const { call, runs } = await startVerifiedChain(true, '', { gates: STEP_ONE_GATE });
+
+    const answered = await answer(call, 'Step 1');
+    expect(answered.text).not.toContain('Gate Review Required');
+    expect(answered.text).not.toContain('Shell Verification FAILED');
+    expect(answered.text).toContain('Progress 2/3');
+    expect(answered.stepStatuses).toEqual(['passed']);
+    expect(runs()).toBe(1);
+
+    // The passing result is in the reply, not only in the server log
+    expect(answered.text).toContain('## Shell Verification Results');
+    expect(answered.text).toContain(':: verify — PASSED');
+    expect(answered.text).toContain('check.sh');
+    expect(answered.text).toContain('**Exit Code:** 0');
+  }, 180000);
+
+  test('row 2.3 (b): the same one-call form over a failing check is refused and holds the step', async () => {
+    const { call, marker, runs } = await startVerifiedChain(false, '', { gates: STEP_ONE_GATE });
+
+    const bounced = await answer(call, 'Step 1');
+    expect(bounced.text).toContain('Shell Verification FAILED (Attempt 1/5)');
+    expect(bounced.text).not.toContain('Progress 2/3');
+    expect(bounced.text).not.toContain('Shell Verification Results');
+    expect(count(bounced, STEP_COMPLETE)).toBe(0);
+    expect(runs()).toBe(1);
+
+    // Control: fixed, the next one-call answer passes the check and moves the step once
+    writeFileSync(marker, 'ok');
+    const fixed = await fixedAnswer(call, 'fixed');
+    expect(fixed.text).toContain('Progress 2/3');
+    expect(count(fixed, STEP_COMPLETE)).toBe(1);
+    expect(runs()).toBe(2);
   }, 180000);
 });

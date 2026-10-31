@@ -339,6 +339,23 @@ export class PipelineBuilder {
     const shellVerifyExecutor = createShellVerifyExecutor({
       debug: false,
       gateSystemEnabled: (scope) => deps.lightweightGateSystem.isGateSystemEnabled(scope),
+      // One log line per run, so the operator who allowlisted the command can see each time a
+      // gate ran it: the command, where, and what came back. Refusals are logged as refusals.
+      onExecuted: (_gate, result, cwd) =>
+        deps.logger.info('shell_verify', {
+          command: result.command,
+          cwd: cwd ?? null,
+          outcome:
+            result.refused === true
+              ? 'refused'
+              : result.timedOut === true
+                ? 'timed out'
+                : result.passed
+                  ? 'passed'
+                  : 'failed',
+          exitCode: result.exitCode,
+          durationMs: result.durationMs,
+        }),
     });
     const gateVerdictProcessor = new GateVerdictProcessor(
       deps.chainSessionStore,

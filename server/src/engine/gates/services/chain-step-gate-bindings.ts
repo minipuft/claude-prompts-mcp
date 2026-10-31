@@ -74,17 +74,20 @@ type TemporaryGateTargetCheck = (
  * resolution, as before. Resolved, not recorded: the walk records them on the final step, after
  * that step's own resolution, and the inherited re-derivation adds them at the same point. The
  * resolver is the caller's: `GateEnhancementService` builds it from its gate manager, loader and
- * temporary gate registry.
+ * temporary gate registry. `frameworkId` is the run's active framework (undefined when none
+ * applies): registry selection reads it, so a gate declaring `framework_context` is decided
+ * against the framework the chain actually runs under.
  */
 export async function chainPromptGates(
   resolver: Pick<GateSetResolver, 'resolve'>,
   context: PromptRequestContext,
   steps: readonly ChainStepPrompt[],
   runStepView: RunStepView | undefined,
-  frameworkGateIds: ReadonlySet<string>
+  frameworkGateIds: ReadonlySet<string>,
+  frameworkId: string | undefined
 ): Promise<ChainPromptGates | undefined> {
   const finalStep = finalWalkedStep(steps, runStepView);
-  const input = chainPromptResolutionInput(context, frameworkGateIds);
+  const input = chainPromptResolutionInput(context, frameworkGateIds, frameworkId);
   if (finalStep === undefined || input === undefined) {
     return undefined;
   }
@@ -213,7 +216,8 @@ function finalWalkedStep(
  */
 function chainPromptResolutionInput(
   context: PromptRequestContext,
-  frameworkGateIds: ReadonlySet<string>
+  frameworkGateIds: ReadonlySet<string>,
+  frameworkId: string | undefined
 ): GateResolutionInput | undefined {
   const prompt = context.parsedCommand?.convertedPrompt;
   if (prompt?.chainSteps === undefined || prompt.chainSteps.length === 0) {
@@ -223,6 +227,7 @@ function chainPromptResolutionInput(
     prompt,
     category: prompt.category,
     modifiers: context.executionPlan?.modifiers,
+    frameworkId,
     frameworkInjected: false,
     frameworkGatesEnabled: false,
     knownFrameworkGateIds: [...frameworkGateIds],

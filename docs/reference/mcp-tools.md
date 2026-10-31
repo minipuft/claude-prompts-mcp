@@ -13,7 +13,7 @@ Execute prompts, build workflows, and manage your resource library — all throu
 ReadMcpResourceTool uri="resource://prompt/"
 
 # Execute a prompt with arguments
-prompt_engine(command:"@CAGEERF analysis_report content:'Q4 metrics'")
+prompt_engine(command:"^CAGEERF analysis_report content:'Q4 metrics'")
 
 # Chain two prompts together
 prompt_engine(command:"research topic:'AI safety' --> summary")
@@ -99,7 +99,7 @@ Resources are **4-30x more token efficient** than equivalent tool calls:
 | ----------------- | ------------------- | ----------- | ------- |
 | List 52 prompts   | ~4500 chars         | ~2800 chars | **38%** |
 | List 26 gates     | ~600 chars          | ~400 chars  | **33%** |
-| List 8 frameworks | ~350 chars          | ~200 chars  | **43%** |
+| List 6 frameworks | ~350 chars          | ~200 chars  | **43%** |
 | Pipeline metrics  | ~15KB (raw samples) | ~500 bytes  | **97%** |
 
 </details>
@@ -201,13 +201,13 @@ prompt_engine(command:"[modifiers] [framework] prompt_id [args] [gates]")
 prompt_engine(command:"code_review file:'api.ts'")
 
 # With framework
-prompt_engine(command:"@CAGEERF security_audit target:'auth module'")
+prompt_engine(command:"^CAGEERF security_audit target:'auth module'")
 
 # With inline quality gates
 prompt_engine(command:"research topic:'LLMs' :: 'cite sources, note confidence'")
 
 # Full chain with everything
-prompt_engine(command:"@ReACT analysis --> synthesis --> report :: 'include data'")
+prompt_engine(command:"^ReACT analysis --> synthesis --> report :: 'include data'")
 ```
 
 #### JSON command form
@@ -247,15 +247,16 @@ the legacy/execution-hint channel. Resolution precedence is: explicit inline arg
 
 <!-- illustrative-prompts: step2 prompt brainstorm analyze summarize research compare validate synthesize p -->
 
-| Operator     | Syntax         | Example                    | Purpose                                 |
-| ------------ | -------------- | -------------------------- | --------------------------------------- |
-| Framework    | `@NAME`        | `@CAGEERF prompt`          | Apply framework                         |
-| Chain        | `-->`          | `step1 --> step2`          | Sequential execution                    |
-| Delegation   | `==>`          | `step1 ==> step2`          | Hand off step to sub-agent              |
-| Repetition   | `* N`          | `>>prompt * 3`             | Repeat with same args (chain shorthand) |
-| Gate (anon)  | `:: "text"`    | `:: 'cite sources'`        | Anonymous quality criteria              |
-| Gate (named) | `:: id:"text"` | `:: security:"no secrets"` | Named gate with trackable ID            |
-| Style        | `#id`          | `#analytical`              | Response formatting                     |
+| Operator                     | Syntax         | Example                    | Purpose                                 |
+| ---------------------------- | -------------- | -------------------------- | --------------------------------------- |
+| Framework                    | `^NAME`        | `^CAGEERF prompt`          | Apply framework                         |
+| Framework (deprecated alias) | `@NAME`        | `@CAGEERF prompt`          | Still works; the reply says to use `^`  |
+| Chain                        | `-->`          | `step1 --> step2`          | Sequential execution                    |
+| Delegation                   | `==>`          | `step1 ==> step2`          | Hand off step to sub-agent              |
+| Repetition                   | `* N`          | `>>prompt * 3`             | Repeat with same args (chain shorthand) |
+| Gate (anon)                  | `:: "text"`    | `:: 'cite sources'`        | Anonymous quality criteria              |
+| Gate (named)                 | `:: id:"text"` | `:: security:"no secrets"` | Named gate with trackable ID            |
+| Style                        | `#id`          | `#analytical`              | Response formatting                     |
 
 **A delegated step can be detached.** `==>` always blocks: the run waits at the step until the
 worker's result comes back as `user_response`. A chain step (YAML `chainSteps[]` or a `workflow`
@@ -309,7 +310,7 @@ prompt_engine(command:">>validate input:'step1' --> >>validate input:'step2' -->
 prompt_engine(command:"#analytical report topic:'Q4 metrics'")
 
 # Combine style with framework
-prompt_engine(command:"#procedural @CAGEERF tutorial subject:'React hooks'")
+prompt_engine(command:"#procedural ^CAGEERF tutorial subject:'React hooks'")
 
 # Available styles: analytical, procedural, creative, reasoning
 ```
@@ -716,6 +717,7 @@ prompt_engine(command:">>bugfix :: verify:'npm test' :full loop:true")
 
 1. The command runs after each answer — never on the call that renders the prompt, even when that call carries a `user_response`, because nothing has been answered yet. On a chain, every step's answer is checked and each step gets its own attempt budget (`max:N` bounds each step); the chain completes only when the last step's check passes.
 2. A chain step is held while its check is pending: the run stays on that step until the check passes or a `gate_action` moves it.
+   A `gate_verdict` sent in the same call as the answer grades the step once: when the check passes, the step advances in that call and the reply shows the result under `Shell Verification Results`; when it fails, the reply is the bounce-back and the step stays held.
 3. If FAIL + attempts remain → bounce-back (Claude retries automatically)
 4. If FAIL + max reached → escalation (user chooses `retry`/`skip` via `gate_action`; `abort` stops the whole run at any time). Answering again after the attempts are spent re-shows the escalation without running the command.
 5. When a step has both an exhausted gate review and a pending check, a `retry` or `skip` action answers the review only. After a `skip`, the check still holds the step and the reply says so; answer again to re-run it, or send `skip` again to skip the check.
@@ -1776,7 +1778,7 @@ The server injects guidance into prompts. Control this per-execution or globally
 
 ```bash
 # Force framework injection
-prompt_engine(command:"%framework @CAGEERF audit_plan topic:'security'")
+prompt_engine(command:"%framework ^CAGEERF audit_plan topic:'security'")
 
 # No injection (follow-up in same context)
 prompt_engine(command:"%clean next_step input:'data'")
@@ -2185,7 +2187,7 @@ resource_manager(resource_type:"prompt", action:"update", id:"my_prompt", ...)
 
 ```bash
 # 1. Start chain with framework
-prompt_engine(command:"@CAGEERF research topic:'X' --> analysis --> report")
+prompt_engine(command:"^CAGEERF research topic:'X' --> analysis --> report")
 
 # 2. Complete step 1, resume
 prompt_engine(chain_id:"chain-research#1", user_response:"Research complete: ...")

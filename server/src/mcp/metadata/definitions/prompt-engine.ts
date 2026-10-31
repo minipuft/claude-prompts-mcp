@@ -23,7 +23,7 @@ const promptEngineContract = {
   tool: 'prompt_engine',
   version: 1,
   summary:
-    'Execute prompts/chains with inline operators. Steps must start with `>>prompt_id` (or `/prompt_id`); place modifiers first: `%judge @Framework #style :: gates`.',
+    'Execute prompts/chains with inline operators. Steps must start with `>>prompt_id` (or `/prompt_id`); place modifiers first: `%judge ^Framework #style :: gates`.',
   parameters: prompt_engineParameters,
   commands: prompt_engineCommands,
 };
@@ -68,12 +68,12 @@ const usagePatterns: UsagePatternDescriptor<RequestField>[] = [
       'Show correct operator order: modifiers first, prompt ids on every step, quoted free text after the prompt id.',
     sampleCommand: [
       'prompt_engine({',
-      '  "command": "%judge @CAGEERF #analytical >>analytical \\"overview\\" --> >>procedural \\"edge cases\\" --> >>creative \\"JSON summary\\" :: framework-compliance :: technical-accuracy"',
+      '  "command": "%judge ^CAGEERF #analytical >>analytical \\"overview\\" --> >>procedural \\"edge cases\\" --> >>creative \\"JSON summary\\" :: framework-compliance :: technical-accuracy"',
       '})',
     ].join('\n'),
     parameters: ['command'],
     notes: [
-      'Modifiers (%judge/@/#style/::) apply to the whole chain—keep them at the front.',
+      'Modifiers (%judge/^/#style/::) apply to the whole chain—keep them at the front.',
       'Each step must start with `>>prompt_id` (or `/prompt_id`); avoid plain-text step labels.',
       'Execution shape: command (+optional gates/options); resume shape: chain_id plus user_response and/or gate_verdict/gate_action.',
     ],

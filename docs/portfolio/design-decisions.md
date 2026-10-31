@@ -113,12 +113,12 @@ server/tooling/contracts/*.json  →  npm run generate:contracts  →  mcp-contr
 3. **LLM Consumption**: Contracts inform tool descriptions that LLMs read.
 4. **Versioning**: Contracts enable tracking breaking changes.
 
-### Symbolic DSL (`>>`, `-->`, `::`, `@`, `#`)
+### Symbolic DSL (`>>`, `-->`, `::`, `^`, `#`)
 
 We implemented a custom parser for symbolic commands:
 
 ```
->>analysis --> >>summary :: "strict" @CAGEERF #analytical
+>>analysis --> >>summary :: "strict" ^CAGEERF #analytical
 ```
 
 | Operator | Purpose            | Example                            |
@@ -126,13 +126,13 @@ We implemented a custom parser for symbolic commands:
 | `>>`     | Prompt reference   | `>>my_prompt`                      |
 | `-->`    | Chain steps        | `>>a --> >>b --> >>c`              |
 | `::`     | Inline gate        | `>>prompt :: "validate citations"` |
-| `@`      | Framework override | `>>prompt @CAGEERF`                |
+| `^`      | Framework override | `>>prompt ^CAGEERF`                |
 | `#`      | Style override     | `#analytical >>report`             |
 
 **Why a DSL?**
 
 1. **Developer Experience**: JSON payloads break flow. Symbolic syntax reads naturally.
-2. **Composability**: Operators combine: `#analytical >>a --> >>b :: "quality" @ReACT`
+2. **Composability**: Operators combine: `#analytical >>a --> >>b :: "quality" ^ReACT`
 3. **Discoverability**: Syntax is self-documenting in tool descriptions.
 
 ### Meta-Prompts (Self-Authoring UX)

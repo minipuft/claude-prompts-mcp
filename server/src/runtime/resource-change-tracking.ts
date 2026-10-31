@@ -428,8 +428,12 @@ export function buildResourceChangeTrackerAuxiliaryReloadConfig(
     return undefined;
   }
 
-  const roots = trackedResourceRoots(configManager, pathResolver);
-  const directories = [...new Set([...roots.gate, ...roots.prompt])];
+  // The WATCH set is fixed here: a project `.claude-prompts/` created later is already one of these
+  // roots, as a candidate. Which root outranks which is not fixed — it moves when that directory
+  // appears — so the handler and the reconciliation resolve the roots again rather than reading
+  // the order at startup.
+  const startupRoots = trackedResourceRoots(configManager, pathResolver);
+  const directories = [...new Set([...startupRoots.gate, ...startupRoots.prompt])];
   if (directories.length === 0) {
     logger.debug('No resource directories to watch for change tracking');
     return undefined;
@@ -444,7 +448,10 @@ export function buildResourceChangeTrackerAuxiliaryReloadConfig(
         return;
       }
 
-      const located = locateTrackedFile(filePath, roots);
+      const located = locateTrackedFile(
+        filePath,
+        trackedResourceRoots(configManager, pathResolver)
+      );
       if (located === undefined) {
         logger.debug(`Not a tracked resource file: ${filePath}`);
         return;
@@ -475,7 +482,10 @@ export function buildResourceChangeTrackerAuxiliaryReloadConfig(
     // removal needs no content, so no quarantine is consulted — a refused file is still on disk
     // and keeps its key.
     reconcile: async () => {
-      const present = await collectTrackedResources(roots, logger);
+      const present = await collectTrackedResources(
+        trackedResourceRoots(configManager, pathResolver),
+        logger
+      );
       const removed = await tracker.sweepRemovals(present);
       if (removed > 0) {
         logger.info(`ResourceChangeTracker: reconciliation logged ${removed} removal(s)`);

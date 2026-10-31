@@ -10,19 +10,25 @@ This page does not restate it, because a second copy drifts from the first.
 
 ## Which File Is Read
 
-The server checks four locations, in order, and stops at the first match:
+The server checks six locations, in order, and stops at the first match:
 
-1. **`--config` / `MCP_CONFIG_PATH`**: an explicit path always wins over anything workspace- or
-   package-relative. It is parsed as JSONC if the path ends `.jsonc`, otherwise strict JSON.
-2. **`<workspace>/config.jsonc`**, where the workspace comes from `--workspace` or
+1. **`--config` / `MCP_CONFIG_PATH`**: an explicit path always wins over anything project-,
+   workspace- or package-relative. It is parsed as JSONC if the path ends `.jsonc`, otherwise
+   strict JSON.
+2. **`<project>/.claude-prompts/config.jsonc`**, when the project directory has a
+   `.claude-prompts/` folder (STDIO only; see [Custom Resources](../guides/custom-resources.md)).
+   A project's own settings outrank the workspace shared across projects.
+3. **`<project>/.claude-prompts/config.json`**, read only if the project's `config.jsonc` is not
+   present.
+4. **`<workspace>/config.jsonc`**, where the workspace comes from `--workspace` or
    `MCP_WORKSPACE`.
-3. **`<workspace>/config.json`**, read only if `config.jsonc` is not present.
-4. **`<package>/config.json`**: the file that ships with the server, used when no workspace is
+5. **`<workspace>/config.json`**, read only if `config.jsonc` is not present.
+6. **`<package>/config.json`**: the file that ships with the server, used when no workspace is
    configured or the workspace holds neither file.
 
-A workspace holding **both** `config.jsonc` and `config.json` is ambiguous, so the server refuses
-to start rather than silently preferring `.jsonc`; `cpm config` refuses the same way. The message
-names both paths. Delete whichever file you are not using.
+A project directory or workspace holding **both** `config.jsonc` and `config.json` is ambiguous,
+so the server refuses to start rather than silently preferring `.jsonc`; `cpm config` refuses the
+same way for a workspace. The message names both paths. Delete whichever file you are not using.
 
 **What refuses startup, and what falls back:**
 
@@ -30,8 +36,9 @@ names both paths. Delete whichever file you are not using.
 | --------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `--workspace` / `MCP_WORKSPACE`                           | Not an existing directory                                      | Refuses to start                                                     |
 | `--config` / `MCP_CONFIG_PATH`                            | Missing, a directory, unreadable, or invalid for its extension | Refuses to start                                                     |
-| A workspace `config.jsonc`/`config.json`                  | Unreadable, a directory, or valid JSON that is not an object   | Refuses to start                                                     |
+| A project or workspace `config.jsonc`/`config.json`       | Unreadable, a directory, or valid JSON that is not an object   | Refuses to start                                                     |
 | A workspace holding both `config.jsonc` and `config.json` | Ambiguous                                                      | Refuses to start                                                     |
+| A project `.claude-prompts/` holding both files           | Ambiguous                                                      | Refuses to start                                                     |
 | A workspace with no config file at all                    | n/a                                                            | Falls back to the packaged default                                   |
 | The packaged `config.json`                                | Invalid JSON                                                   | Falls back to built-in defaults, logs a warning, does **not** refuse |
 

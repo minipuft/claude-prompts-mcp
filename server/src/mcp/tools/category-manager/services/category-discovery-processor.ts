@@ -162,12 +162,10 @@ export class CategoryDiscoveryProcessor {
   /**
    * What an `update` would actually do to this category, for a declaration in another root.
    *
-   * THIS SENTENCE WAS FALSE. It read "an update writes your own copy under <primary>, which then
-   * takes precedence" — and a write lands in the PRIMARY, which every workspace overlay outranks
-   * (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence). `collectViews` lets a later
-   * root's declaration win, and overlays are walked last, so the declaring root is an overlay at
-   * least as often as it is the bundled tree. For those categories the operator was told their
-   * copy would take over while the overlay went on answering.
+   * A write lands in the PRIMARY, which outranks every overlay and the bundled tree
+   * (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence), so an update displaces a
+   * declaration in either. `collectViews` lets a later root's declaration win and walks the primary
+   * last, which is why the declaring root can only be foreign when the primary declares nothing.
    *
    * Nothing has been written yet, so there is no served value to read back the way a repair
    * response does — the honest substitute is the rank the walk already recorded, which is exactly
@@ -178,9 +176,8 @@ export class CategoryDiscoveryProcessor {
   private updateOutcome(view: CategoryView): string {
     if (view.declaringRootLabel === 'overlay') {
       return (
-        `  - An update writes your own copy under ${this.writableRoot()} — but ` +
-        `${view.declaringRoot} outranks that root, so '${view.id}' would still be declared from ` +
-        `there. Edit the declaration where it lives.`
+        `  - An update writes your own copy under ${this.writableRoot()}, which takes precedence ` +
+        `over ${view.declaringRoot}, so '${view.id}' would then be declared from your copy.`
       );
     }
     if (view.declaringRootLabel === 'bundled') {
@@ -216,13 +213,13 @@ export class CategoryDiscoveryProcessor {
     if (bundled !== undefined && path.resolve(bundled) !== path.resolve(primary)) {
       roots.push({ path: bundled, label: 'bundled' });
     }
-    roots.push({ path: primary, label: 'primary' });
     for (const overlay of this.ctx.configManager.getOverlayResourceDirectories(
       'prompts',
       primary
     )) {
       roots.push({ path: overlay, label: 'overlay' });
     }
+    roots.push({ path: primary, label: 'primary' });
 
     const byId = new Map<string, { view: CategoryView; promptCount: number }>();
 

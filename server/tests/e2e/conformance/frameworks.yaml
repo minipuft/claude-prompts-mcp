@@ -1,6 +1,6 @@
 # Claims-conformance corpus — framework selection (@framework)
 #
-# `resources/frameworks/` declares 8 ids, and CLAUDE.md § Key Constraints names
+# `resources/frameworks/` declares six ids, and CLAUDE.md § Key Constraints names
 # `frameworkManager.getFramework(id)` as the authority that must never be hardcoded. That makes
 # the declared set itself the claim: every id present on disk must be selectable, and an id that
 # is not present must be rejected.
@@ -21,16 +21,6 @@ scenarios:
   - id: framework-focus
     claim_source: 'resources/frameworks/focus — declared, therefore selectable'
     requests: [{ tool: prompt_engine, args: { command: '@FOCUS >>minimal_prompt' } }]
-    expect: { ok: true }
-
-  - id: framework-liquescent
-    claim_source: 'resources/frameworks/liquescent — declared, therefore selectable'
-    requests: [{ tool: prompt_engine, args: { command: '@LIQUESCENT >>minimal_prompt' } }]
-    expect: { ok: true }
-
-  - id: framework-radiant
-    claim_source: 'resources/frameworks/radiant — declared, therefore selectable'
-    requests: [{ tool: prompt_engine, args: { command: '@RADIANT >>minimal_prompt' } }]
     expect: { ok: true }
 
   - id: framework-scamper

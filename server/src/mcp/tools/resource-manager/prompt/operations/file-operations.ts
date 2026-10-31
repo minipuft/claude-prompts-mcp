@@ -14,6 +14,7 @@ import { validateCategoryName } from '../utils/validation.js';
 
 import type {
   ResourceMutationTarget,
+  ResourceVerificationResult,
   ResourceWriteCommitOptions,
 } from '#modules/resources/services/index.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
@@ -34,6 +35,7 @@ import { safeWriteFile } from '#shared/utils/file-transactions.js';
 import { formatJsonDocument } from '#shared/utils/json-document-format.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
 import { slugifyCategoryDirectory } from '#shared/utils/resource-ids.js';
+import { loadYamlFileSync } from '#shared/utils/yaml/index.js';
 import {
   readYamlSource,
   serializeYamlPreservingSource,
@@ -309,6 +311,12 @@ export const NO_WRITE_INTENT: PromptWriteIntent = {
   removedToolIds: [],
 };
 
+/** Each message file the writer produces, and the `prompt.yaml` key the loader reads it through. */
+const MESSAGE_FILE_POINTERS: ReadonlyArray<{ file: string; pointerKey: string }> = [
+  { file: 'system-message.md', pointerKey: 'systemMessageFile' },
+  { file: 'user-message.md', pointerKey: 'userMessageTemplateFile' },
+];
+
 /** A file a prompt write produces, addressed relative to the prompt's own directory. */
 interface PlannedPromptFile {
   relativePath: string;
@@ -520,7 +528,7 @@ export class FileOperations {
 
         return { messages, affectedFiles };
       },
-      validate: () => this.verificationService.validateFile('prompts', yamlId, yamlPath),
+      validate: () => this.validateProducedPrompt(yamlId, yamlPath, plan.promptFiles),
       ...(options.commit !== undefined ? { commit: options.commit } : {}),
     });
 
@@ -535,6 +543,43 @@ export class FileOperations {
     return {
       message: result.messages.join('\n'),
       affectedFiles: result.affectedFiles,
+    };
+  }
+
+  /**
+   * The transaction's `validate` step: the produced `prompt.yaml` against its schema, then against
+   * the files this write put beside it.
+   *
+   * The second half is what keeps a failed read-back from costing a version. The registry
+   * comparison in `PromptMutationReceiptService` runs after the transaction has committed, so a
+   * message file the yaml does not point at passed this step, recorded a version, and only then
+   * answered `post-write verification FAILED`. Refusing it here restores the files and never
+   * reaches `commit`.
+   */
+  private validateProducedPrompt(
+    yamlId: string,
+    yamlPath: string,
+    writtenFiles: readonly PlannedPromptFile[]
+  ): ResourceVerificationResult {
+    const schemaResult = this.verificationService.validateFile('prompts', yamlId, yamlPath);
+    if (!schemaResult.valid) return schemaResult;
+
+    const produced = loadYamlFileSync(yamlPath) as Record<string, unknown>;
+    const unreferenced = MESSAGE_FILE_POINTERS.filter(
+      ({ file, pointerKey }) =>
+        writtenFiles.some((written) => written.relativePath === file) &&
+        typeof produced[pointerKey] !== 'string'
+    );
+    if (unreferenced.length === 0) return schemaResult;
+
+    return {
+      ...schemaResult,
+      valid: false,
+      errors: unreferenced.map(({ file, pointerKey }) => ({
+        code: 'message_file_unreferenced',
+        path: pointerKey,
+        message: `${file} was written but prompt.yaml has no ${pointerKey}, so the loader would not serve it`,
+      })),
     };
   }
 
@@ -1112,11 +1157,23 @@ export class FileOperations {
     // key IN the yaml, `systemMessageFile`. Without this clause, clearing it narrowed the write
     // scope to a file the writer then never opened, so the orphaned `systemMessageFile:` survived
     // pointing at a `.md` this same call had just deleted. Caught by the enumeration test.
+    //
+    // A supplied `systemMessage` the yaml has no `systemMessageFile:` pointer for is a yaml write
+    // too: `system-message.md` alone is a file nothing reads, and the loader keeps serving "no
+    // system message" until the same write adds the pointer. A prompt created without one is the
+    // ordinary case (measured 2026-10-18: 18 of 21 `system_message`-only updates wrote the file,
+    // left the yaml, and answered `post-write verification FAILED (mismatched: systemMessage)`).
+    // This subsumes the inline-form `systemMessage` conversion above: an inline key has no pointer.
+    const addsSystemMessagePointer =
+      suppliedKeys.has('systemMessage') &&
+      Boolean(promptData.systemMessage) &&
+      existingYaml?.['systemMessageFile'] === undefined;
     const writesYaml =
       isFreshDirectory ||
       unsetKeys.size > 0 ||
       PROMPT_YAML_RESIDENT_KEYS.some((key) => suppliedKeys.has(key)) ||
-      convertsInlineMessage;
+      convertsInlineMessage ||
+      addsSystemMessagePointer;
     const writesUserMessage = isFreshDirectory || suppliedKeys.has('userMessageTemplate');
     // P2.1. `systemMessage` is the one unsettable field with a FILE behind it, so clearing it is
     // two operations, not one: `buildPromptYamlData` drops `systemMessageFile` (its guard is

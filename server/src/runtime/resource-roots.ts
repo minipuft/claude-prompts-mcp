@@ -29,14 +29,17 @@ import type {
 import type { PathResolver } from './paths.js';
 
 import { locateResourceEntry, resourceEntryFileName } from '#shared/utils/resource-file-set.js';
-import { resourceRootPrecedence } from '#shared/utils/resource-root-lookup.js';
+import {
+  resourceRootPrecedence,
+  type LoaderRootsSource,
+} from '#shared/utils/resource-root-lookup.js';
 
 /** Every directory that contributes definitions of one resource type, in precedence order. */
 export interface ResourceRoots {
   /** The writable root: where a `resource_manager` write lands, and what the inventory reports. */
   primary: string | undefined;
   /**
-   * Workspace directories layered over the primary. Highest precedence, later entry wins.
+   * Workspace directories layered over the bundled tree and under the primary. Later entry wins.
    *
    * Includes a candidate that does not exist yet: every consumer of this set fixes it once, at
    * startup, and an overlay created later must still be read and watched. An absent root reads
@@ -49,8 +52,8 @@ export interface ResourceRoots {
    * The loader's lookup list: EVERY contributing root, highest precedence first — primary included.
    *
    * It was called `additional` for the loader config key it feeds (`additionalGatesDirs` and its
-   * two siblings), and that name stopped describing the contents at P4.27: the primary is neither
-   * the top nor the bottom of the order, so a list that omitted it could not say where it sits.
+   * two siblings), and that name stopped describing the contents at P4.27: the primary sits at its
+   * own rank, so a list that omitted it could not say where it sits.
    * Renamed here, at the producing end. The three config keys keep their names — renaming them
    * reaches `mcp/tools/prompt-engine/core/prompt-executor.ts` and ~30 test call sites for no
    * behaviour change, and each loader's config docstring now states that the primary is inside the
@@ -70,9 +73,8 @@ export interface ResourceRoots {
  *
  * Until P4.27 the three flat-layout loaders resolved `primary ??
  * additional` and the docstring here justified it as "workspace wins"; that held only while the
- * workspace WAS the primary, so an operator's `<workspace>/gates/foo` lost to
- * `<workspace>/resources/gates/foo` while their `<workspace>/prompts/foo` won. Two answers to one
- * question.
+ * workspace WAS the primary, and prompts answered the same question differently. Two answers to one
+ * question; `resourceRootPrecedence` is the one statement all four kinds now read.
  *
  * Pure apart from the resolver's own `existsSync` probes.
  */
@@ -86,6 +88,44 @@ export function resolveResourceRoots(
   const bundled = candidate !== undefined && candidate !== primary ? candidate : undefined;
   const lookupDirs = resourceRootPrecedence({ primary, overlays, bundled });
   return { primary, overlays, bundled, lookupDirs };
+}
+
+/** The resource-type directories that have a primary root a loader or locator is built on. */
+type RootedTypeDir = 'prompts' | 'gates' | 'frameworks' | 'styles';
+
+/** The primary the resolver names for `typeDir` right now. */
+function primaryOf(pathResolver: PathResolver, typeDir: RootedTypeDir): string {
+  switch (typeDir) {
+    case 'prompts':
+      return pathResolver.getPromptsPath();
+    case 'gates':
+      return pathResolver.getGatesPath();
+    case 'frameworks':
+      return pathResolver.getFrameworksPath();
+    case 'styles':
+      return pathResolver.getStylesPath();
+  }
+}
+
+/**
+ * How a flat-layout loader asks for its roots again.
+ *
+ * Handed to the loader at construction, next to the roots it starts with, and called by the
+ * reconciliation after a late directory arms (`refreshRoots`). It resolves through
+ * {@link resolveResourceRoots} exactly as the construction did, so the order a loader takes now
+ * is the one `resourceRootPrecedence` states for the resolver's present primary — a project
+ * `.claude-prompts/` created while the server ran is the primary by then, and nothing here
+ * re-orders anything.
+ */
+export function createLoaderRootsSource(
+  pathResolver: PathResolver,
+  typeDir: Exclude<RootedTypeDir, 'prompts'>
+): LoaderRootsSource {
+  return () => {
+    const primary = primaryOf(pathResolver, typeDir);
+    const roots = resolveResourceRoots(pathResolver, typeDir, primary);
+    return { primary, lookupDirs: roots.lookupDirs };
+  };
 }
 
 /** The overlays that exist right now — what an inventory line may honestly report. */
@@ -188,14 +228,7 @@ export function createResourceFileLocator(
         return { located: false, reason: 'no path resolver was wired at the composition root' };
       }
       const typeDir = VERSIONED_TYPE_DIRS[resourceType];
-      const primary =
-        typeDir === 'prompts'
-          ? pathResolver.getPromptsPath()
-          : typeDir === 'gates'
-            ? pathResolver.getGatesPath()
-            : pathResolver.getFrameworksPath();
-
-      const roots = resolveResourceRoots(pathResolver, typeDir, primary);
+      const roots = resolveResourceRoots(pathResolver, typeDir, primaryOf(pathResolver, typeDir));
       const entryPath = await locateResourceEntry({
         resourceType,
         resourceId,

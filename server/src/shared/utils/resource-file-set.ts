@@ -255,7 +255,7 @@ async function readYamlMapping(filePath: string): Promise<Record<string, unknown
 /**
  * The root class an entry belongs to.
  *
- * Checked in `resourceRootPrecedence` order — overlays, then primary, then bundled — because a
+ * Checked in `resourceRootPrecedence` order — primary, then overlays, then bundled — because a
  * root may legitimately contain another (a workspace whose overlay sits under its primary), and
  * the first match must be the one a loader would have served from. Compared on REAL paths so a
  * symlinked temp root classifies the same as the directory it points at.
@@ -267,12 +267,12 @@ async function classifyOrigin(
   if (roots === undefined) return 'unknown';
   const real = await realpath(entryPath);
   const candidates: Array<[string, ResourceRootOrigin]> = [
-    ...[...(roots.overlays ?? [])]
-      .reverse()
-      .map((dir): [string, ResourceRootOrigin] => [dir, 'overlay']),
     ...(roots.primary !== undefined
       ? [[roots.primary, 'primary'] as [string, ResourceRootOrigin]]
       : []),
+    ...[...(roots.overlays ?? [])]
+      .reverse()
+      .map((dir): [string, ResourceRootOrigin] => [dir, 'overlay']),
     ...(roots.bundled !== undefined
       ? [[roots.bundled, 'bundled'] as [string, ResourceRootOrigin]]
       : []),

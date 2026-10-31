@@ -342,7 +342,7 @@ Authentication and rate limiting run before body parsing or prompt lookup, respo
 
 - **Manager**: Stateless orchestration, loads definitions from framework registry
 - **State Store**: Persists active framework to the SQLite `kv_state` table (key `framework`)
-- **Guides**: CAGEERF, ReACT, 5W1H, SCAMPER, FOCUS, Liquescent implementations
+- **Guides**: CAGEERF, ReACT, 5W1H, SCAMPER, FOCUS, VERIFY implementations
 
 #### Gates (`src/engine/gates/`)
 
@@ -429,7 +429,7 @@ The pipeline runs stages in this order (from the `stages` array in `pipeline-bui
 │ 3. IdentityResolution        Resolve the workspace continuity scope │
 │ 4. CommandParsing            Parse command, extract arguments       │
 │ 5. InlineGateExtraction      Register `::` criteria as temp gates   │
-│ 6. OperatorValidation        Validate `@framework` overrides        │
+│ 6. OperatorValidation        Validate `^framework` overrides        │
 ├─────────────────────────────────────────────────────────────────────┤
 │                        PLAN & ENHANCE                               │
 ├─────────────────────────────────────────────────────────────────────┤
@@ -527,8 +527,8 @@ const finalGates = context.gates.getAll(); // Deduplicated
 Resolves framework from multiple sources:
 
 ```typescript
-// Priority: modifiers (%clean/%lean) > @ operator > global
-// A judge-phase framework choice re-enters through `@framework`, so it arrives
+// Priority: modifiers (%clean/%lean) > ^ operator > global
+// A judge-phase framework choice re-enters through `^framework`, so it arrives
 // as operatorOverride rather than through a separate client channel.
 const decision = context.frameworkAuthority.decide({
   modifiers: context.executionPlan?.modifiers,

@@ -45,15 +45,19 @@ contract.
 
 ### `prompt-suggest.py` (UserPromptSubmit)
 
-Triggers on every user message. Detects `>>prompt` syntax and suggests the correct `prompt_engine` call.
+Triggers on every user message. Detects `>>prompt` syntax and suggests the correct `prompt_engine` call. The framework operator is `^` (`^CAGEERF >>analyze`); the hook still detects `@` as a deprecated alias and renders either as `^`.
 
 Annotations preserve whole slash-qualified references and typed case; display resolves through
 the authored catalog ID. Quoted markers and delimiters do not create invocations or chain previews.
 
+A server built-in (`>>status`, `>>help`, `>>listprompts`, `>>gates`, …) has no catalog row and is
+routed to `prompt_engine` like a known prompt, never reported as unknown; the list lives in
+`lib/builtin_commands.py` and `tests/test_builtin_commands_parity.py` pins it to the server parser.
+
 **Output:**
 
 ```text
-[>>] diagnose | scope:"auth" [chain:3steps, @CAGEERF]
+[>>] diagnose | scope:"auth" [chain:3steps, ^CAGEERF]
 [Chain Workflow] 3 steps:
   1. initial_scan: Initial Scan (1/3)
   2. deep_dive: Deep Dive (2/3)
@@ -175,10 +179,13 @@ Re-injects active chain state after compaction. Recovery is scoped to the chain 
 
 ### Output Format
 
-Set in your config file (`config.jsonc`, or `config.json`) — hooks resolve `MCP_WORKSPACE`, then
-`${CLAUDE_PLUGIN_DATA}`, then the packaged `server/` directory, trying `config.jsonc` before
-`config.json` in each and using the first file found; an unreadable or malformed file falls back to
-the default below rather than making a hook refuse to run:
+Set in your config file (`config.jsonc`, or `config.json`) — hooks read the file the server reads,
+in its order: `MCP_CONFIG_PATH`, then the project's `.claude-prompts/` (under `CLAUDE_PROJECT_DIR`,
+else the working directory), then `MCP_WORKSPACE`, then `${CLAUDE_PLUGIN_DATA}`, then the packaged
+`server/` directory, trying `config.jsonc` before `config.json` in each directory and using the
+first file found (see [Which File Is Read](../docs/reference/configuration.md#which-file-is-read));
+an unreadable or malformed file falls back to the default below rather than making a hook refuse
+to run:
 
 ```json
 {

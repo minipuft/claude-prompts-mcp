@@ -27,7 +27,12 @@ import {
 } from './style-schema.js';
 
 import { ResourceQuarantine, type QuarantineView } from '#shared/utils/resource-quarantine.js';
-import { resourceEntryRoots, resourceLookupOrder } from '#shared/utils/resource-root-lookup.js';
+import {
+  deriveLoaderRoots,
+  resourceEntryRoots,
+  sameLookupOrder,
+  type LoaderRootsSource,
+} from '#shared/utils/resource-root-lookup.js';
 import { loadYamlFileSync, discoverNestedYamlDirectories } from '#shared/utils/yaml/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -43,16 +48,19 @@ export interface StyleDefinitionLoaderConfig {
    * The WHOLE lookup order for styles, HIGHEST precedence first — `stylesDir` included.
    *
    * The name says "additional" and the contents are not: since P4.27 the composition root places
-   * `stylesDir` itself inside this list, at its own rank, because the primary is neither the top of
-   * the order nor the bottom (overlays outrank it, the bundled tree trails it) and a list that
-   * omitted it could not say where it sits. The accurate name lives at the producing end,
+   * `stylesDir` itself inside this list, at its own rank (it outranks the overlays, which outrank
+   * the bundled tree), because a list that omitted it could not say where it sits. The accurate name lives at the producing end,
    * `ResourceRoots.lookupDirs`; this key kept its own so the rename would not reach ~30 test call
    * sites for no behaviour change.
    *
    * A caller configuring the loader by hand may omit `stylesDir`, in which case it is consulted
-   * last — see `resourceLookupOrder`.
+   * first — see `resourceLookupOrder`.
    */
   additionalStylesDirs?: string[];
+  /**
+   * Resolves the roots again — see `GateDefinitionLoaderConfig.rootsSource`, which this mirrors.
+   */
+  rootsSource?: LoaderRootsSource;
   /** Enable caching of loaded definitions (default: true) */
   enableCache?: boolean;
   /** Validate definitions on load (default: true) */
@@ -100,20 +108,19 @@ export class StyleDefinitionLoader {
   private stylesDir: string;
   private additionalStylesDirs: string[];
   /** Every root this loader consults for an id, highest precedence first. */
-  private readonly lookupDirs: string[];
+  private lookupDirs: string[];
+  private readonly rootsSource: LoaderRootsSource | undefined;
   private enableCache: boolean;
   private validateOnLoad: boolean;
   private debug: boolean;
 
   constructor(config: StyleDefinitionLoaderConfig = {}) {
     this.stylesDir = config.stylesDir ?? this.resolveStylesDir();
-    // From the RAW list — see the gate loader's twin: the primary's rank IS its position here, and
-    // filtering it out first would drop it behind the bundled tree.
-    this.lookupDirs = resourceLookupOrder(this.stylesDir, config.additionalStylesDirs ?? []);
     // Reported and watched, not looked up — absent ones included, as in the gate loader's twin.
-    this.additionalStylesDirs = (config.additionalStylesDirs ?? []).filter(
-      (dir) => dir !== this.stylesDir
-    );
+    const roots = deriveLoaderRoots(this.stylesDir, config.additionalStylesDirs ?? []);
+    this.lookupDirs = roots.lookupDirs;
+    this.additionalStylesDirs = roots.besideDirs;
+    this.rootsSource = config.rootsSource;
     this.enableCache = config.enableCache ?? true;
     this.validateOnLoad = config.validateOnLoad ?? true;
     this.debug = config.debug ?? false;
@@ -227,6 +234,26 @@ export class StyleDefinitionLoader {
    */
   getWatchDirectories(): string[] {
     return [this.stylesDir, ...this.additionalStylesDirs];
+  }
+
+  /**
+   * Take the roots from `rootsSource` again, and drop every cached definition when they differ
+   * from the ones held. See `GateDefinitionLoader.refreshRoots`.
+   *
+   * @returns whether the lookup order changed; `false` for a loader with no source
+   */
+  refreshRoots(): boolean {
+    if (this.rootsSource === undefined) return false;
+    const next = this.rootsSource();
+    const roots = deriveLoaderRoots(next.primary, next.lookupDirs);
+    if (next.primary === this.stylesDir && sameLookupOrder(roots.lookupDirs, this.lookupDirs)) {
+      return false;
+    }
+    this.stylesDir = next.primary;
+    this.lookupDirs = roots.lookupDirs;
+    this.additionalStylesDirs = roots.besideDirs;
+    this.cache.clear();
+    return true;
   }
 
   // ============================================================================

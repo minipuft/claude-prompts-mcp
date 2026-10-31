@@ -127,18 +127,17 @@ describe('CategoryDiscoveryProcessor.handleInspect — declared-only read-back',
 /**
  * P4.39 — what `inspect` says an update would DO, for a declaration in another root.
  *
- * THE SENTENCE WAS FALSE, not merely vague. It read "an update writes your own copy under
- * <primary>, which then takes precedence" — and a write lands in the primary, which every
- * workspace overlay outranks (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence).
- * `collectViews` walks bundled -> primary -> overlays letting a later declaration win, so the
- * declaring root is an OVERLAY at least as often as it is the bundled tree, and those two sit on
- * opposite sides of the root being written. For the overlay half the operator was told their copy
- * would take over while the overlay went on declaring the category.
+ * A write lands in the primary, which outranks every overlay and the bundled tree
+ * (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence). `collectViews` walks
+ * bundled -> overlays -> primary letting a later declaration win, so a foreign declaring root is
+ * an overlay or the bundled tree and an update displaces either — the sentence names which one.
+ * When an overlay outranked the primary this sentence told the operator their copy would take over
+ * while the overlay went on declaring the category; the case below pins the opposite verdict.
  *
- * BOTH POLARITIES, because one of them is the pre-existing behaviour. A renderer that said
- * "outranked" for every foreign root would be just as wrong in the other direction and would
- * satisfy the overlay case on its own — so the bundled case asserts the opposite sentence, and a
- * declaration in the writable root asserts that no such line is rendered at all.
+ * A renderer that said "outranked" for every foreign root, or "takes precedence" without naming
+ * the root it takes precedence over, would satisfy one polarity on its own — so the overlay and
+ * bundled cases each assert their own root, and a declaration in the writable root asserts that
+ * no such line is rendered at all.
  */
 describe('CategoryDiscoveryProcessor.handleInspect — which root wins after an update (P4.39)', () => {
   let workspaceDir: string;
@@ -194,17 +193,17 @@ describe('CategoryDiscoveryProcessor.handleInspect — which root wins after an 
     await rm(workspaceDir, { recursive: true, force: true });
   });
 
-  it('FALSIFIER — a declaration in an overlay is NOT displaced by writing the primary', async () => {
+  it('FALSIFIER — a declaration in an overlay IS displaced by writing the primary, and the overlay is named', async () => {
     declareIn(overlayDir, 'analysis');
     const text = await inspectWith(processorOverRoots([overlayDir], bundledDir), 'analysis');
 
-    // The root that actually wins is named, and the write is described as inert for this purpose.
+    // The root being displaced is named, and the write is described as taking over from it.
     expect(text).toContain(`Source Root: ${overlayDir}`);
-    expect(text).toContain(`${overlayDir} outranks that root`);
-    expect(text).toContain("'analysis' would still be declared from there");
-    // The claim this row removed, in the branch that made it falsely.
-    expect(text).not.toContain('which then takes precedence');
-    expect(text).not.toContain('would then be declared from your copy');
+    expect(text).toContain(`which takes precedence over ${overlayDir}`);
+    expect(text).toContain("'analysis' would then be declared from your copy");
+    // The claim the old order made true, in the branch that made it.
+    expect(text).not.toContain('outranks that root');
+    expect(text).not.toContain('would still be declared');
   });
 
   it('POSITIVE CONTROL — a declaration in the bundled tree IS displaced, and says so', async () => {
@@ -216,6 +215,7 @@ describe('CategoryDiscoveryProcessor.handleInspect — which root wins after an 
     expect(text).toContain(`Source Root: ${bundledDir}`);
     expect(text).toContain('takes precedence over the bundled tree');
     expect(text).toContain("'examples' would then be declared from your copy");
+    expect(text).not.toContain(`takes precedence over ${overlayDir}`);
     expect(text).not.toContain('outranks that root');
   });
 
@@ -232,14 +232,16 @@ describe('CategoryDiscoveryProcessor.handleInspect — which root wins after an 
     expect(text).not.toContain('takes precedence');
   });
 
-  it('the LAST declaring root wins, so an overlay beats a primary declaration of the same id', async () => {
+  it('the LAST declaring root wins, so a primary declaration beats an overlay declaration of the same id', async () => {
     // The walk's own contract, asserted because the rank label is only meaningful if it names the
-    // root that actually won. Both roots declare; the overlay is walked last.
+    // root that actually won. Both roots declare; the primary is walked last.
     declareIn(primaryDir, 'shared');
     declareIn(overlayDir, 'shared');
     const text = await inspectWith(processorOverRoots([overlayDir], bundledDir), 'shared');
 
-    expect(text).toContain(`Source Root: ${overlayDir}`);
-    expect(text).toContain(`${overlayDir} outranks that root`);
+    expect(text).toContain(`Declaration: ${join(primaryDir, 'shared', 'category.yaml')}`);
+    // The winner is the writable root, so no foreign-root rank line is rendered.
+    expect(text).not.toContain('Source Root:');
+    expect(text).not.toContain(overlayDir + '/shared/category.yaml');
   });
 });

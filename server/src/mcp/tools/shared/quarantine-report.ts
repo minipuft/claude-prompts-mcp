@@ -166,8 +166,8 @@ export function formatShadowedNote(
   }
   lines.push(
     `\n\n_Repairing that file changes what \`${records[0]?.id ?? ''}\` serves only if its root ` +
-      `outranks ${servedFrom ?? 'the serving root'}: overlays outrank the writable root, which ` +
-      `outranks the bundled tree._\n`
+      `outranks ${servedFrom ?? 'the serving root'}: the writable root outranks overlays, which ` +
+      `outrank the bundled tree._\n`
   );
   return lines.join('');
 }
@@ -181,9 +181,9 @@ export function formatShadowedNote(
  *
  * WHAT IT REPLACES. Both repair responses told the operator, verbatim, that the repair "wrote
  * `<path>`, which takes precedence, so `<id>` now serves your copy". A write lands in the WRITABLE
- * root, and since P4.27 every overlay outranks that root — so for a refused file living in an
- * overlay the claim was false in both halves: the overlay still answered, and the operator was
- * told their copy was serving while it was inert.
+ * root, and that claim was made without reading what served: a refused file in the bundled tree
+ * is left as broken as it was, and a copy the loader then refuses is inert, so the operator could
+ * be told their copy was serving while it was not.
  *
  * One helper for both kinds rather than a copy in each processor: the claim is the thing that was
  * wrong, and a second copy is a second place for it to go wrong again.

@@ -440,9 +440,9 @@ export class FrameworkLifecycleProcessor {
    *
    * WRITABLE root first: `preferredRepairTarget` prefers the primary because that is the root a
    * `resource_manager` write lands in, so an operator repairing `foo` means the copy they can
-   * actually edit rather than the bundled one they cannot. NOT precedence — since P4.27 the primary
-   * is outranked by every overlay (`shared/utils/resource-root-lookup.ts` §resourceRootPrecedence),
-   * and this docstring cited that precedence back when the two happened to agree.
+   * actually edit rather than the bundled one they cannot. That root is also the highest in
+   * `shared/utils/resource-root-lookup.ts` §resourceRootPrecedence, but the preference is stated by
+   * where a write lands, so it would survive a change to that order.
    */
   private resolveRepairTarget(id: string): QuarantinedResource | undefined {
     const records = this.ctx.frameworkManager.getQuarantine().byId(id.toLowerCase());
@@ -461,10 +461,9 @@ export class FrameworkLifecycleProcessor {
    * written.
    *
    * WHICH ROOT SERVES is the second fact, and it does not follow from the first. This branch used
-   * to assert that the written file "takes precedence, so `<id>` now serves your copy", which
-   * P4.27 made false whenever the refused file sits in an overlay: overlays outrank the primary,
-   * so the repair lands in a root that does not answer. `formatRepairServingLine` reads the
-   * loader's own `sourceRoot` stamp back instead of re-deriving the order here.
+   * to assert that the written file "takes precedence, so `<id>` now serves your copy", a claim
+   * about the lookup order made without reading it. `formatRepairServingLine` reads the loader's
+   * own `sourceRoot` stamp back instead of re-deriving the order here.
    */
   private formatRepairOutcome(
     target: QuarantinedResource,
@@ -815,7 +814,7 @@ export class FrameworkLifecycleProcessor {
    * may proceed. Checked before anything is removed.
    *
    * A framework that ships with the package. This asked a hardcoded four-id literal until
-   * 2026-09-07 while eight ship, so `focus`, `liquescent`, `radiant` and `verify` fell through to
+   * 2026-09-07 while eight shipped (six ship since 2026-10-28), so `focus`, `liquescent`, `radiant` and `verify` fell through to
    * `fs.rm` and were deleted FROM THE BUNDLED TREE in a default install. The bundled-tree check in
    * `handleDelete` could not cover them, because it sits inside `if (!existsSync(frameworkDir))`
    * and those directories exist at the configured root. The owner of framework validity answers

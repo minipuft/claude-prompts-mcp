@@ -15,13 +15,13 @@ import type { Category, PromptData } from './types.js';
  * the `ResourcePathSource` port. Passing a resolved set keeps one loader usable from both layers.
  */
 export interface PromptRootSet {
-  /** The writable/primary root. */
+  /** The writable/primary root. Highest precedence. */
   primary: string;
   /** Base path for id derivation — the primary directory, or its parent for a file path. */
   basePath: string;
   /** The package-shipped tree. Lowest precedence, always read, never written. */
   bundled?: string | undefined;
-  /** Workspace overlays. Highest precedence, applied in order. */
+  /** Workspace overlays, applied in order over the bundle and under the primary. */
   overlays: readonly string[];
 }
 
@@ -38,7 +38,7 @@ export interface PromptRootLoadResult {
 }
 
 /**
- * Load a prompt catalog across every root, bundle → primary → overlays.
+ * Load a prompt catalog across every root, bundle → overlays → primary.
  *
  * WHY THIS IS SHARED RATHER THAN DUPLICATED
  * Startup and hot reload were two derivations of one question, and they disagreed. Startup merged
@@ -54,7 +54,8 @@ export interface PromptRootLoadResult {
  * for this asserts on served CONTENT, never on catalog size.
  *
  * Precedence is the call order: `mergePromptResults` lets a later result win on a duplicate id, so
- * bundle → primary → overlays yields the documented "same ID = custom wins".
+ * bundle → overlays → primary yields the documented "same ID = custom wins" over the bundle, with
+ * the root a write lands in outranking every overlay — `resourceRootPrecedence` read backwards.
  */
 export async function loadPromptsAcrossRoots(
   promptManager: PromptAssetManager,
@@ -91,17 +92,16 @@ export async function loadPromptsAcrossRoots(
       : await promptManager.loadAndConvertPrompts(roots.primary, roots.basePath);
 
   let overridden = 0;
-  let invalid = primary.invalid;
+  let invalid = 0;
   let base: string | undefined;
   let accumulated: {
     promptsData: PromptData[];
     categories: Category[];
     convertedPrompts: ConvertedPrompt[];
-  } = primary;
+  } = { promptsData: [], categories: [], convertedPrompts: [] };
 
   if (bundledContributes && roots.bundled !== undefined) {
     const bundled = await promptManager.loadAndConvertPrompts(roots.bundled, roots.bundled);
-    overridden += mergeResults(bundled, primary);
     invalid += bundled.invalid;
     base = roots.bundled;
     accumulated = bundled;
@@ -122,6 +122,10 @@ export async function loadPromptsAcrossRoots(
       );
     }
   }
+
+  // Last, so the root a write lands in has the final say over every overlay and the bundle.
+  overridden += mergeResults(accumulated, primary);
+  invalid += primary.invalid;
 
   return {
     promptsData: accumulated.promptsData,

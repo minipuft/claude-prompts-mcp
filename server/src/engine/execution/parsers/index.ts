@@ -77,9 +77,10 @@ export interface ParsingSystem {
  * - Argument processor with validation and type coercion
  *
  * @param logger Logger instance for system-wide logging
- * @param isRegisteredFramework Optional lookup for quote-aware @framework detection, asked on
- *   every parse. When provided, only @framework operators it accepts are detected, and other
- *   @word patterns (like @docs/, @mention) stay literal text.
+ * @param isRegisteredFramework Optional lookup for quote-aware ^framework detection (and the
+ *   deprecated @framework spelling), asked on every parse. When provided, only framework operators
+ *   it accepts are detected, and other ^word or @word patterns (like @docs/, @mention) stay
+ *   literal text.
  * @returns Complete parsing system ready for use
  */
 export function createParsingSystem(

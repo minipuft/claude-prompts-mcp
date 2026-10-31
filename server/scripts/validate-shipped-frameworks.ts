@@ -11,7 +11,7 @@
  *
  * A declared list buys that precision and costs the ability to rot, which is exactly what
  * happened. Measured 2026-09-07: two hand-written copies of the set each named four ids while
- * eight shipped, and `focus`, `liquescent`, `radiant` and `verify` were deletable from the bundled
+ * eight shipped (six ship since 2026-10-28), and `focus`, `liquescent`, `radiant` and `verify` were deletable from the bundled
  * tree because no guard named them. This gate is the closure condition for that class — not the
  * four ids that were missing, but the disagreement itself, in either direction.
  *

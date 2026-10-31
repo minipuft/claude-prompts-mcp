@@ -2,7 +2,7 @@
 
 # Custom Resources
 
-Use your own prompts, gates, frameworks, and styles. Two approaches depending on whether you want the bundled resources or not.
+Use your own prompts, gates, frameworks, and styles. Three approaches, depending on whether the resources belong to you, to a plugin install, or to one project.
 
 ## Option A — Own workspace (full control)
 
@@ -18,10 +18,29 @@ This creates `~/my-prompts/resources/` with starter prompts you own. Set `MCP_WO
 
 Plugin installs (Claude Code, OpenCode, Gemini) set `MCP_WORKSPACE` automatically and ship the bundled prompts, gates, and frameworks. Where created resources are saved follows the rules below; for the Claude Code plugin the workspace is its plugin data folder, which Claude Code keeps across plugin updates.
 
+## Option C — Project workspace
+
+A repository can carry its own prompts, gates, frameworks, and styles in `<project>/.claude-prompts/`, so they travel with the code and apply only there. The directory holds an optional `config.jsonc` and a `resources/` folder with one subfolder per type (`prompts`, `gates`, `frameworks`, `styles`). It mirrors the harnesses' own project folders: Claude Code's `.claude/`, Gemini CLI's `.gemini/`, and OpenCode's `.opencode/`.
+
+From the project root, scaffold it with the same starter content as `--init`:
+
+```bash
+npx -p claude-prompts cpm init --project
+```
+
+When the server runs inside that project over STDIO, resources in `.claude-prompts/` load above your user workspace and the bundled ones. On a shared id the nearest wins: project, then workspace, then bundle. Claude Code, Codex, OpenCode, and Gemini CLI start an MCP server in the project directory, so no setup beyond the folder is needed.
+
+The server finds the project directory the same way it derives the project scope: `CLAUDE_PROJECT_DIR` if set, otherwise the working directory. The HTTP transport does not look at the project directory, because one HTTP process serves many projects; use Option A or B there.
+
+A `.claude-prompts/` directory created while the server is running is picked up without a
+restart for new resources. Which copy wins when the same id also exists in your workspace, and
+where new resources are written, follow on the next start.
+
 ## Where created resources are saved
 
 Prompts, gates, and frameworks you create through `resource_manager` are written to one folder per type:
 
+- **`.claude-prompts/` exists at the project root** (STDIO only): `<project>/.claude-prompts/resources/<type>/`, for example `.claude-prompts/resources/prompts/`. The folder does not need to exist; the first write creates it. The workspace setting below applies only when the project has no `.claude-prompts/`.
 - **A workspace is set** (`MCP_WORKSPACE` or `--workspace`) and `MCP_RESOURCES_PATH` is not: `<workspace>/resources/<type>/`, for example `<workspace>/resources/prompts/`. The folder does not need to exist; the first write creates it. If the workspace already keeps that type in the older `<workspace>/<type>/` layout, writes go there instead, so one collection is not split across two folders.
 - **`MCP_RESOURCES_PATH` is set**: its `<type>/` folder when that folder exists, otherwise the package's own resources folder.
 - **Neither is set**: the package's own resources folder, which a reinstall replaces.

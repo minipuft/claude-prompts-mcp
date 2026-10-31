@@ -16,7 +16,7 @@ import type { PromptRequestContext } from '../../context/index.js';
  * - Pipeline terminates early with the judge response
  *
  * Execution Phase (follow-up call with operators):
- * - Client reruns prompt_engine with inline operators (@framework, ::gates, #style)
+ * - Client reruns prompt_engine with inline operators (^framework, ::gates, #style)
  * - Pipeline continues with normal execution using operator-derived selections
  *
  * Domain logic delegated to:

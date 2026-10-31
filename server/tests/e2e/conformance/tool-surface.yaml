@@ -8,7 +8,7 @@
 # Coverage source of truth:
 #   system_control    — 11 actions, from the router dispatch
 #   resource_manager  — 4 resource_types x 14 actions, from resource-manager.schema.ts
-#   frameworks        — 8 ids under resources/frameworks/
+#   frameworks        — six ids under resources/frameworks/
 
 version: 1
 

@@ -825,3 +825,105 @@ describe('handoff evidence mode from the collaborators bag', () => {
     expect(context.response?.isError).toBeUndefined();
   });
 });
+
+/**
+ * Chain-step-gates row 2.3: a verdict sent with its answer, over a step a `:: verify:` check holds.
+ *
+ * MEASURED 2026-10-21 (README hero take): the PASS cleared the review the step rendered with, the
+ * pending check held the advance, and `ensurePostAdvanceReview` then opened a SECOND review on the
+ * node the run had not left, so the next call spent a second verdict. The stage asks the review
+ * service only after an advance that moved the run onto another step.
+ */
+describe('post-advance review after a one-call verdict (row 2.3)', () => {
+  /** A run on `n1` whose review is open; the store double moves the run only when `advanceStep` runs. */
+  const oneCallHarness = (options: { checkHoldsStep: boolean }) => {
+    const created = createSessionManager();
+    let standingOn = 'n1';
+    const reviews: Record<string, unknown> = {
+      n1: {
+        nodeId: 'n1',
+        kind: 'gate',
+        phase: 'awaiting-verdict',
+        combinedPrompt: '',
+        gateIds: ['accuracy'],
+        attemptCount: 0,
+        prompts: [],
+        createdAt: Date.now(),
+        maxAttempts: 3,
+      },
+    };
+    created.getSession.mockImplementation(() => ({
+      sessionId: 'sess-1',
+      chainId: 'chain-1',
+      state: {
+        currentNodeId: standingOn,
+        nodes: [{ id: 'n1' }, { id: 'n2' }, { id: 'n3' }],
+      },
+      reviews,
+    }));
+    created.advanceStep.mockImplementation(async () => {
+      standingOn = 'n2';
+      return { nodeId: 'n2', ordinal: 2 };
+    });
+    (created.manager.clearReview as unknown as jest.Mock).mockImplementation(
+      async (...args: unknown[]) => {
+        delete reviews[args[1] as string];
+      }
+    );
+    (created.manager.getPendingShellVerification as unknown as jest.Mock).mockImplementation(() =>
+      options.checkHoldsStep && standingOn === 'n1' ? { nodeId: 'n1' } : undefined
+    );
+    (created.manager as unknown as Record<string, unknown>)['setPendingShellVerification'] =
+      jest.fn<() => Promise<void>>(async () => undefined);
+
+    const ensurePostAdvanceReview = jest.fn<() => Promise<void>>(async () => undefined);
+    const logger = createLogger();
+    const stage = new StepResponseCaptureStage(
+      new GateVerdictProcessor(created.manager, logger),
+      new StepCaptureService(created.manager, logger),
+      created.manager,
+      new UnknownObservationProcessor(created.manager, logger),
+      logger,
+      { gateEnhancementService: { ensurePostAdvanceReview } as never }
+    );
+    const context = new PromptRequestContext({
+      command: '>>chain',
+      chain_id: 'chain-1',
+      user_response: 'step one output',
+      gate_verdict: { overall: 'PASS', rationale: 'meets the gate' },
+    });
+    context.sessionContext = {
+      sessionId: 'sess-1',
+      chainId: 'chain-1',
+      isChainExecution: true,
+      currentStep: 1,
+      currentNodeId: 'n1',
+      totalSteps: 3,
+      pendingReview: reviews['n1'] as never,
+    };
+    return { stage, context, ensurePostAdvanceReview, advanceStep: created.advanceStep };
+  };
+
+  test('a PASS whose advance a pending check held asks the review service for nothing', async () => {
+    const { stage, context, ensurePostAdvanceReview, advanceStep } = oneCallHarness({
+      checkHoldsStep: true,
+    });
+
+    await stage.execute(context);
+
+    // The advance was held, so the run still stands on the node the verdict graded
+    expect(advanceStep).not.toHaveBeenCalled();
+    expect(ensurePostAdvanceReview).not.toHaveBeenCalled();
+  });
+
+  test('control: the same PASS with no check advances, and the review service is asked once', async () => {
+    const { stage, context, ensurePostAdvanceReview, advanceStep } = oneCallHarness({
+      checkHoldsStep: false,
+    });
+
+    await stage.execute(context);
+
+    expect(advanceStep).toHaveBeenCalledWith('sess-1', 'n1');
+    expect(ensurePostAdvanceReview).toHaveBeenCalledTimes(1);
+  });
+});

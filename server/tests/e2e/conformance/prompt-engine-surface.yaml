@@ -11,7 +11,7 @@
 version: 1
 
 scenarios:
-  # ── @framework selection (8 ids under resources/frameworks/) ────────────────
+  # ── @framework selection (six ids under resources/frameworks/) ────────────────
   - id: framework-cageerf
     claim_source: 'prompt_engine tool description — "@CAGEERF >>prompt" applies a framework'
     requests: [{ tool: prompt_engine, args: { command: '@CAGEERF >>minimal_prompt' } }]

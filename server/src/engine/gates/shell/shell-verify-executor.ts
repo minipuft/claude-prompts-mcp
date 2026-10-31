@@ -58,8 +58,10 @@ export class ShellVerifyExecutor {
   private readonly allowlist: readonly string[] | undefined;
   private readonly allowedDirs: readonly string[] | undefined;
   private readonly gateSystemEnabled: ShellVerifyExecutorConfig['gateSystemEnabled'];
+  private readonly onExecuted: ShellVerifyExecutorConfig['onExecuted'];
 
   constructor(config: ShellVerifyExecutorConfig) {
+    this.onExecuted = config.onExecuted;
     this.defaultTimeout = config.defaultTimeout ?? SHELL_VERIFY_DEFAULT_TIMEOUT;
     this.maxTimeout = config.maxTimeout ?? SHELL_VERIFY_MAX_TIMEOUT;
     this.defaultWorkingDir = config.defaultWorkingDir ?? process.cwd();
@@ -96,6 +98,16 @@ export class ShellVerifyExecutor {
    * @returns Verification result with pass/fail status and output
    */
   async execute(gate: ShellVerifyGate, scope?: StateStoreOptions): Promise<ShellVerifyResult> {
+    const { result, cwd } = await this.executeUnobserved(gate, scope);
+    this.onExecuted?.(gate, result, cwd);
+    return result;
+  }
+
+  /** The result, and the directory the command ran in (undefined when it never ran). */
+  private async executeUnobserved(
+    gate: ShellVerifyGate,
+    scope?: StateStoreOptions
+  ): Promise<{ result: ShellVerifyResult; cwd?: string }> {
     const { command, workingDir, timeout, env, stdin } = gate;
 
     // One rendered form for every message and every result, so a refusal names the
@@ -104,12 +116,14 @@ export class ShellVerifyExecutor {
 
     if (!command || display.trim() === '') {
       return {
-        passed: false,
-        exitCode: -1,
-        stdout: '',
-        stderr: 'Empty command provided',
-        durationMs: 0,
-        command: display,
+        result: {
+          passed: false,
+          exitCode: -1,
+          stdout: '',
+          stderr: 'Empty command provided',
+          durationMs: 0,
+          command: display,
+        },
       };
     }
 
@@ -119,15 +133,17 @@ export class ShellVerifyExecutor {
     // disabled the system is entitled to have that mean it.
     if (!this.gateSystemEnabled(scope)) {
       return {
-        passed: false,
-        refused: true,
-        exitCode: -1,
-        stdout: '',
-        stderr:
-          'Shell verification refused: the gate system is disabled. ' +
-          'Re-enable it with system_control action="gates", operation="enable".',
-        durationMs: 0,
-        command: display,
+        result: {
+          passed: false,
+          refused: true,
+          exitCode: -1,
+          stdout: '',
+          stderr:
+            'Shell verification refused: the gate system is disabled. ' +
+            'Re-enable it with system_control action="gates", operation="enable".',
+          durationMs: 0,
+          command: display,
+        },
       };
     }
 
@@ -142,29 +158,33 @@ export class ShellVerifyExecutor {
     const unsafeEnvKeys = findUnsafeEnvironmentKeys(env);
     if (unsafeEnvKeys.length > 0) {
       return {
-        passed: false,
-        refused: true,
-        exitCode: -1,
-        stdout: '',
-        stderr:
-          `Shell verification refused: this gate's shell_env sets ` +
-          `${unsafeEnvKeys.join(', ')}, which decide what an allowed command resolves ` +
-          `to or loads. Remove them from the gate definition; no setting permits them.`,
-        durationMs: 0,
-        command: display,
+        result: {
+          passed: false,
+          refused: true,
+          exitCode: -1,
+          stdout: '',
+          stderr:
+            `Shell verification refused: this gate's shell_env sets ` +
+            `${unsafeEnvKeys.join(', ')}, which decide what an allowed command resolves ` +
+            `to or loads. Remove them from the gate definition; no setting permits them.`,
+          durationMs: 0,
+          command: display,
+        },
       };
     }
 
     const decision = isCommandAllowed(command, this.resolveAllowlist());
     if (!decision.allowed) {
       return {
-        passed: false,
-        refused: true,
-        exitCode: -1,
-        stdout: '',
-        stderr: `Shell verification refused: ${decision.reason ?? 'command not permitted'}`,
-        durationMs: 0,
-        command: display,
+        result: {
+          passed: false,
+          refused: true,
+          exitCode: -1,
+          stdout: '',
+          stderr: `Shell verification refused: ${decision.reason ?? 'command not permitted'}`,
+          durationMs: 0,
+          command: display,
+        },
       };
     }
 
@@ -179,13 +199,15 @@ export class ShellVerifyExecutor {
     );
     if (!dirDecision.allowed) {
       return {
-        passed: false,
-        refused: true,
-        exitCode: -1,
-        stdout: '',
-        stderr: `Shell verification refused: ${dirDecision.reason ?? 'working directory not permitted'}`,
-        durationMs: 0,
-        command: display,
+        result: {
+          passed: false,
+          refused: true,
+          exitCode: -1,
+          stdout: '',
+          stderr: `Shell verification refused: ${dirDecision.reason ?? 'working directory not permitted'}`,
+          durationMs: 0,
+          command: display,
+        },
       };
     }
 
@@ -195,10 +217,11 @@ export class ShellVerifyExecutor {
     const spawnCommand: string | [string, ...string[]] =
       typeof command === 'string' ? command : (command as [string, ...string[]]);
 
+    // The value the check approved, not the raw string it approved it from.
+    const resolvedCwd = dirDecision.resolvedDir ?? this.defaultWorkingDir;
     const result = await executeProcess({
       command: spawnCommand,
-      // The value the check approved, not the raw string it approved it from.
-      cwd: dirDecision.resolvedDir ?? this.defaultWorkingDir,
+      cwd: resolvedCwd,
       env,
       stdin,
       timeout: timeout ?? this.defaultTimeout,
@@ -223,7 +246,7 @@ export class ShellVerifyExecutor {
       shellResult.timedOut = true;
     }
 
-    return shellResult;
+    return { result: shellResult, cwd: resolvedCwd };
   }
 }
 

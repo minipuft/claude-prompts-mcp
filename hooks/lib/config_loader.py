@@ -1,11 +1,13 @@
 """
 Config loader for Claude Code hooks.
 
-Loads hook-specific configuration from the user's config file, resolved in this
-order: `MCP_WORKSPACE`, then `${CLAUDE_PLUGIN_DATA}`, then the packaged `server/`
-directory this loader has always read. Within each directory, `config.jsonc` (which
-may carry `//` and `/* */` comments and a trailing comma before `}`/`]`) is tried
-before the strict `config.json`. See `get_config_path()` for the full contract.
+Loads hook-specific configuration from the file the server reads, resolved in this
+order: `MCP_CONFIG_PATH`, then the project's `.claude-prompts/` directory (under
+`CLAUDE_PROJECT_DIR`, else the working directory), then `MCP_WORKSPACE`, then
+`${CLAUDE_PLUGIN_DATA}`, then the packaged `server/` directory this loader has always
+read. Within each directory, `config.jsonc` (which may carry `//` and `/* */` comments
+and a trailing comma before `}`/`]`) is tried before the strict `config.json`. See
+`get_config_path()` for the full contract.
 """
 
 import json
@@ -13,7 +15,11 @@ import os
 from pathlib import Path
 from typing import TypedDict
 
-from workspace import get_server_dir
+from workspace import get_project_dir, get_server_dir
+
+# The directory a project keeps its own resources and config in, directly under the project
+# directory (`PROJECT_WORKSPACE_DIR_NAME` in `server/src/shared/utils/config-file-selection.ts`).
+PROJECT_WORKSPACE_DIR_NAME = ".claude-prompts"
 
 
 class HooksConfig(TypedDict, total=False):
@@ -140,11 +146,21 @@ def strip_jsonc_comments(text: str) -> str:
 
 
 def get_config_path() -> Path | None:
-    """Resolve the user's config file.
+    """Resolve the config file the server reads.
 
-    Lookup order: `MCP_WORKSPACE`, then `${CLAUDE_PLUGIN_DATA}`, then the packaged
-    `server/` directory this loader has always read (via `get_server_dir`). The first
-    two are read directly from the environment rather than through
+    Lookup order, the server's own (`docs/reference/configuration.md` §Which File Is
+    Read, owner ruling R1) with the hook-only candidates after the workspace:
+
+    1. `MCP_CONFIG_PATH`, an explicit file. A path that does not exist is skipped, not
+       an error: a hook never refuses to run over the operator's config.
+    2. `<project>/.claude-prompts/`, where the project directory is `CLAUDE_PROJECT_DIR`
+       else the working directory (`workspace.get_project_dir`).
+    3. `MCP_WORKSPACE`.
+    4. `${CLAUDE_PLUGIN_DATA}`.
+    5. The packaged `server/` directory this loader has always read (via
+       `get_server_dir`).
+
+    The workspace variables are read directly from the environment rather than through
     `workspace.get_workspace_root()`: that helper's fallback chain (CLAUDE_PLUGIN_ROOT,
     PLUGIN_ROOT, self-resolution) answers where the PACKAGED plugin installation lives,
     not where an operator's config or the Claude Code plugin's persistent data
@@ -160,7 +176,16 @@ def get_config_path() -> Path | None:
 
     Returns None when no candidate exists anywhere in the search order.
     """
+    explicit = os.environ.get("MCP_CONFIG_PATH")
+    if explicit and explicit.strip():
+        explicit_path = Path(explicit)
+        if explicit_path.exists():
+            return explicit_path
+
     directories: list[Path] = []
+    project_dir = get_project_dir()
+    if project_dir is not None:
+        directories.append(project_dir / PROJECT_WORKSPACE_DIR_NAME)
     for root_variable in ("MCP_WORKSPACE", "CLAUDE_PLUGIN_DATA"):
         root = os.environ.get(root_variable)
         if root and root.strip():

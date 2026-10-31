@@ -318,14 +318,14 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
     180000
   );
 
-  test('deferred single review classifies loaded reminders and checks without inventing criterion results', async () => {
+  test('deferred single review classifies loaded reminders and records the loaded check, refused here by the unset allowlist', async () => {
     const session = await authoredSession();
     const created = await session.callTool('resource_manager', {
       resource_type: 'gate',
       action: 'create',
       id: 'em-check',
       name: 'Configured Check',
-      description: 'A single prompt must not execute this check',
+      description: 'A verdict sent with the answer runs this check against it',
       guidance: 'Inspect the result',
       enforcement_mode: 'blocking',
       pass_criteria: [{ type: 'shell_verify', shell_command: ['node', '--version'] }],
@@ -348,9 +348,18 @@ describe('Streamable HTTP: a FAIL follows the gate declared enforcement_mode', (
     expect(persisted.status).not.toBe('completed');
     expect(persisted.node).toBe(review.nodeId);
     expect(review.gateTiers).toEqual({ [BLOCK_GATE]: 'reminder', 'em-check': 'check' });
-    expect(review.checkResults).toBeUndefined();
+    // No MCP_SHELL_VERIFY_ALLOWLIST is set for this session, so the check is recorded as refused
+    // by that control, never as an exit code.
+    expect(review.checkResults).toEqual([
+      {
+        gateId: 'em-check',
+        passed: false,
+        summary: expect.stringContaining('MCP_SHELL_VERIFY_ALLOWLIST'),
+      },
+    ]);
+    expect(review.checkResults?.[0]?.summary).not.toContain('exit -1');
     expect(failed.text).toContain('Review Required');
-    expect(failed.text).toContain('No criterion results are recorded');
+    expect(failed.text).toContain('Recorded check results appear in the template');
     expect(failed.text).toContain(`"satisfied": ["${BLOCK_GATE}"]`);
     expect(failed.text).toContain('"index": 2');
     expect(failed.text).not.toContain('"index": 1');

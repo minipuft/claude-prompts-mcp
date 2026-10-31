@@ -1,5 +1,5 @@
 // @lifecycle canonical - Parses symbolic command expressions into operators.
-import { OPERATOR_PATTERNS } from './operator-patterns.js';
+import { FRAMEWORK_SIGIL_CLASS, OPERATOR_PATTERNS } from './operator-patterns.js';
 import {
   stripStyleOperators,
   findFrameworkOperatorOutsideQuotes,
@@ -38,7 +38,7 @@ import { mintSequentialIds } from '#shared/utils/node-order.js';
  *
  * A function rather than a set of ids, because the framework set changes while the server runs:
  * `resource_manager` creates, updates and deletes frameworks, and hot reload follows their
- * folders. A set copied when the parser was built kept every one of those changes out of `@id`
+ * folders. A set copied when the parser was built kept every one of those changes out of `^id`
  * detection until restart, while the rest of the server already saw them.
  */
 export type FrameworkIdLookup = (normalizedId: string) => boolean;
@@ -117,6 +117,14 @@ export function rejectQuoteInGateText(command: string): void {
 const EMPTY_QUOTED_GATE_TEXT = /\s::\s*(?:([a-z][a-z0-9_-]*):)?(["'])\2(?=\s|$)/gi;
 
 /**
+ * A framework operator opening a chain step (`^ReACT >>b`, or the deprecated `@ReACT`). Operators
+ * apply to the whole execution, so a step's own copy is dropped before its prompt id is read. The
+ * sigils come from the registry: this strip once named only `@`, which threw `Invalid chain step
+ * format` on a `^` step while the same command spelled with `@` parsed.
+ */
+const LEADING_FRAMEWORK_OPERATOR = new RegExp(`^${FRAMEWORK_SIGIL_CLASS}[A-Za-z0-9_-]+\\s+`);
+
+/**
  * Refuse a `::` gate whose quoted text is empty, with stage 05's `gate-criteria-invalid` reason
  * text and accepted forms. Thrown before any strategy runs, beside {@link rejectQuoteInGateText}.
  * A blank text (`:: "   "`) IS a gate token, so it parses and stage 05 refuses it; a
@@ -157,14 +165,15 @@ function advanceQuoteState(
 export class SymbolicCommandParser {
   private readonly logger: Logger;
   /**
-   * Validates `@framework` operators: an id the lookup rejects is left as literal text.
-   * Absent means no framework knowledge, and every `@word` is treated as a framework operator.
+   * Validates `^framework` operators (and the deprecated `@framework` spelling): an id the lookup
+   * rejects is left as literal text. Absent means no framework knowledge, and every `^word` or
+   * `@word` is treated as a framework operator.
    */
   private readonly isRegisteredFramework: FrameworkIdLookup | undefined;
 
   /**
    * Operator patterns derived from SSOT registry.
-   * Pattern documentation and examples: see mcp-contracts/schemas/operators.json
+   * Pattern documentation and examples: see tooling/contracts/registries/operators.json
    *
    * Gate pattern groups: 1=operator, 2=namedColonId, 3=namedColonText, 4=anonQuoted, 5=canonicalOrUnquoted
    */
@@ -181,7 +190,8 @@ export class SymbolicCommandParser {
   /**
    * @param logger - Logger instance
    * @param isRegisteredFramework - Optional lookup, asked on every parse. When provided, only
-   *   @framework operators it accepts are detected; any other @word stays literal text.
+   *   ^framework operators (and the deprecated @framework spelling) it accepts are detected; any
+   *   other ^word or @word stays literal text.
    */
   constructor(logger: Logger, isRegisteredFramework?: FrameworkIdLookup) {
     this.logger = logger;
@@ -379,7 +389,7 @@ export class SymbolicCommandParser {
       command = expandedCommand;
     }
 
-    // Use quote-aware framework detection to avoid matching @word inside quoted strings
+    // Use quote-aware framework detection to avoid matching ^word / @word inside quoted strings
     const frameworkResult = findFrameworkOperatorOutsideQuotes(command);
     if (frameworkResult) {
       const normalizedId = frameworkResult.frameworkId.toUpperCase();
@@ -391,13 +401,14 @@ export class SymbolicCommandParser {
         operators.push({
           type: 'framework',
           frameworkId: frameworkResult.frameworkId,
+          sigil: frameworkResult.sigil,
           normalizedId,
           temporary: true,
           scopeType: 'execution',
         });
       } else {
         this.logger.debug(
-          `[detectOperators] Skipping unregistered framework operator: @${frameworkResult.frameworkId}`
+          `[detectOperators] Skipping unregistered framework operator: ${frameworkResult.sigil}${frameworkResult.frameworkId}`
         );
       }
     }
@@ -587,7 +598,7 @@ export class SymbolicCommandParser {
     const namedOccurrences = new Map<string, number>();
     const steps: SymbolicChainStep[] = splitResults.map((result, index) => {
       // Clean operators from individual steps before validation
-      // This allows syntax like: @CAGEERF >>step1 --> %lean @ReACT >>step2
+      // This allows syntax like: ^CAGEERF >>step1 --> %lean ^ReACT >>step2
       // Note: Operators still apply at execution-level, not per-step
       const cleanedStep = this.cleanStepOperators(result.text);
 
@@ -636,8 +647,9 @@ export class SymbolicCommandParser {
 
   /**
    * Clean operators from a chain step string before validation.
-   * Strips %modifiers and @framework operators that may appear on individual steps.
-   * This allows syntax like: %judge @CAGEERF >>step1 --> %lean @ReACT >>step2
+   * Strips %modifiers and framework operators (`^framework`, or the deprecated `@framework`)
+   * that may appear on individual steps.
+   * This allows syntax like: %judge ^CAGEERF >>step1 --> %lean ^ReACT >>step2
    * Note: Operators apply at execution-level, not per-step. This method only
    * removes them for parsing validation purposes.
    */
@@ -647,8 +659,8 @@ export class SymbolicCommandParser {
     // Strip modifier prefix (e.g., %clean, %judge, %lean, %framework)
     cleaned = cleaned.replace(/^%\s*[a-zA-Z_-]+\s*/, '');
 
-    // Strip framework operator prefix (e.g., @CAGEERF, @ReACT)
-    cleaned = cleaned.replace(/^@[A-Za-z0-9_-]+\s+/, '');
+    // Strip framework operator prefix (e.g., ^CAGEERF, ^ReACT; sigils from the registry)
+    cleaned = cleaned.replace(LEADING_FRAMEWORK_OPERATOR, '');
 
     // Strip inline style selector (e.g., #style(analytical))
     cleaned = stripStyleOperators(cleaned);

@@ -173,10 +173,18 @@ class TestHitPathReachesTheThread:
         code, out = run_hook(monkeypatch, capsys, "@CAGEERF #analytical >>demo_prompt * 3")
         ctx = context_of(out)
         # Framework/style keep the casing the user typed; only the DB lookup
-        # that validates them is case-folded.
-        assert "@CAGEERF" in ctx
+        # that validates them is case-folded. The deprecated `@` spelling is
+        # detected and rendered as `^`.
+        assert "^CAGEERF" in ctx
+        # The verbatim command echo keeps the spelling typed, so `^CAGEERF` can only come from rendering.
         assert "#analytical" in ctx
         assert "*3" in ctx
+
+    def test_caret_framework_is_rendered_as_typed(self, stub_cache, monkeypatch, capsys):
+        code, out = run_hook(monkeypatch, capsys, "^CAGEERF #analytical >>demo_prompt * 3")
+        ctx = context_of(out)
+        assert "^CAGEERF" in ctx
+        assert "@CAGEERF" not in ctx
 
     def test_chain_preview_is_visible(self, stub_cache, monkeypatch, capsys):
         code, out = run_hook(monkeypatch, capsys, ">>demo_chain")

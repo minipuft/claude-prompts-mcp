@@ -197,6 +197,10 @@ class TestFrameworkDetection:
         matches = detect_operator("@CAGEERF >>analyze", "framework")
         assert "CAGEERF" in matches
 
+    def test_detects_framework_caret(self):
+        matches = detect_operator("^CAGEERF >>analyze", "framework")
+        assert "CAGEERF" in matches
+
     def test_no_framework_in_plain_prompt(self):
         matches = detect_operator(">>analyze", "framework")
         assert len(matches) == 0
@@ -218,6 +222,12 @@ class TestStyleDetection:
         matches = detect_operator(">>analyze", "style")
         assert len(matches) == 0
 
+    def test_caret_framework_prefix_with_chain(self):
+        assert detect_chain_syntax('^CAGEERF >>step1 scope:"x" --> >>step2') == [
+            "step1",
+            "step2",
+        ]
+
 
 # ── detect_all_operators Integration ──
 
@@ -229,6 +239,11 @@ class TestDetectAllOperators:
         assert "delegation" in result
         assert "framework" in result
         assert "gate" in result
+
+    def test_complex_command_caret_framework(self):
+        result = detect_all_operators('^CAGEERF >>step1 --> >>step2 ==> >>step3 :: "validate"')
+        assert result.get("framework") == ["CAGEERF"]
+        assert "chain" in result and "delegation" in result and "gate" in result
 
     def test_simple_prompt(self):
         result = detect_all_operators(">>analyze")
