@@ -22,15 +22,15 @@
 ## Analysis
 
 1. Treat the signal as evidence-first analysis, not an automatic interview. Reuse explicit authorization and settled rulings under "{{decision}}".
-2. Probe retrievable facts (repo, filesystem, docs, measurements) first. List remaining probes separately; a settled fact needs no human question.
-3. Identify consequential choices still unresolved. One choice gets one focused question; multiple choices get a small frontier whose prerequisites are settled. Hold only dependent actions; continue independent authorized work.
+2. Probe retrievable facts (repo, filesystem, docs, measurements) first: an open PR, commits ahead, a plan's `publish:` field are probes, never questions. List remaining probes separately; a settled fact needs no human question.
+3. Identify consequential choices still unresolved. One choice gets one focused question; multiple choices get a small frontier whose prerequisites are settled. Hold only dependent actions; continue independent authorized work. A question whose answer depends on something the owner has not seen (a live flip, a strip, a blind pair) waits for the round that shows it: one live demo, judged in the owner's own words.
 4. Classify questions as architecture, contract, scope, or taste for context; any class can be consequential. A full grill is reserved for manual /grill-me or deep discovery.
 
 ## Goals
 
 - The operator can rule on everything in one message, without opening a file.
 - Consequential guesses are settled before dependent work; facts and answered decisions do not become redundant questions.
-- The output is pasteable: a `rulings` block the planner copies into the plan's implementation notes{% if route != 'interview' %}, or the next prompt's arguments{% endif %}.
+- The output is pasteable: a `rulings` block the planner files in full in the plan's `## Now` block (a round line in its implementation notes) and as an /evidence-report bundle, so a later session finds each decision without the transcript{% if route != 'interview' %}, or the next prompt's arguments{% endif %}.
 
 ## Execution
 
@@ -47,6 +47,8 @@ If probes and existing rulings settle the signal, produce no questions and proce
 2. ...
 ```
 
+Medium by question type: choice, scope and contract questions go through the host's blocking question tool where it has one (Claude Code `AskUserQuestion`: up to 4 per call, recommended option first and labelled "(Recommended)", each option with one everyday sentence on what it means for the owner); taste, blind and glance questions, and anything needing an image, go to an /evidence-report interview page. Titles and options name what the owner will see or do, never row ids, arm codes or tunable names (/evidence-report §Reader voice).
+
 {% if stance == 'exploring' %}Offer candidate rulings where useful for reaction.{% elif stance == 'committed' %}Preserve stated rulings; ask only consequential gaps still unresolved.{% endif %} Scope and taste may require an explicit answer. Silence or elapsed time never supplies a required answer or approval. State reversible, low-impact assumptions only where existing authorization covers proceeding.
 
 Close with:
@@ -58,7 +60,11 @@ open:
   - <consequential question awaiting an explicit answer, or authorized low-impact assumption with flip condition>
 probes:
   - <fact the planner measures before the next round>
+live:
+  - <question deferred to the live round, and what the owner will see there>
 ```
+
+File the block: rulings in full in the plan's `## Now` block, and an /evidence-report bundle with one `decision` item per ruling (`ruling {option, by: owner, date}`) and one `interview` item (owner-grade) per `live:` round. A round asked in chat is recorded the same way.
 
 {% else %}
 
@@ -85,9 +91,9 @@ Ask no questions. This stop routes to `>>{{route}}`. Emit, in order:
 ## Evaluation
 
 - Does every numbered question carry ➡ a recommended answer and a class?
-- Does any question in the round depend on another question in the same round? If so, move it to a later round.
+- Does any question in the round depend on another question in the same round, or on something the owner has not seen yet? If so, move it to a later round or to `live:`.
 - Was a fact put to the operator? If so, move it to **Probes**.
-- Is every decision that needs a human stated in full here rather than referenced by id?
+- Is every decision that needs a human stated in full here, in the owner's words, rather than referenced by id or code?
 
 ## Refinement
 

@@ -298,7 +298,7 @@ export class CommandParsingStage extends BasePipelineStage {
     const argResult = await this.argumentParser.parseArguments(
       parseResult.rawArgs,
       convertedPrompt,
-      this.createArgumentContext()
+      this.createArgumentContext(context)
     );
 
     const parsedCommand: ParsedCommand = {
@@ -369,10 +369,13 @@ export class CommandParsingStage extends BasePipelineStage {
     return undefined;
   }
 
-  private createArgumentContext(): ArgumentContext {
+  /** Request inputs/options merge later; `mergeRequestArguments` validates the merged map, not the inline one. */
+  private createArgumentContext(context: PromptRequestContext): ArgumentContext {
+    const { requestOptions, requestInputs } = context.state.normalization;
     return {
       environmentVars: process.env as Record<string, string>,
       promptDefaults: {},
+      deferSchemaValidation: requestOptions !== undefined || requestInputs !== undefined,
     };
   }
 }

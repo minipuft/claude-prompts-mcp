@@ -170,6 +170,61 @@ describe('CommandParsingStage', () => {
     );
   });
 
+  test('validates a pattern-constrained argument supplied only through inputs after the merge', async () => {
+    // `>>interview` with `inputs: {trigger: 'open-fork'}` was refused by the pattern because the
+    // inline-only map (trigger resolved to '') was validated before request inputs merged.
+    const pattern = '^(open-fork|other)$';
+    const convertedPrompt: ConvertedPrompt = {
+      id: 'pattern_prompt',
+      name: 'Pattern Prompt',
+      description: '',
+      category: 'analysis',
+      userMessageTemplate: '{{ decision }} {{ trigger }}',
+      arguments: [
+        { name: 'decision', type: 'string', required: true },
+        { name: 'trigger', type: 'string', required: true, validation: { pattern } },
+      ],
+    };
+    const parseResult = {
+      promptId: 'pattern_prompt',
+      rawArgs: '',
+      format: 'simple' as const,
+      commandType: 'single' as const,
+      confidence: 0.95,
+      metadata: {
+        originalCommand: '>>pattern_prompt',
+        parseStrategy: 'simple',
+        detectedFormat: 'simple',
+        warnings: [],
+      },
+    };
+    const mockCommandParser: Partial<UnifiedCommandParser> = {
+      parseCommand: jest.fn<UnifiedCommandParser['parseCommand']>().mockResolvedValue(parseResult),
+    };
+    const stageFor = () =>
+      new CommandParsingStage(
+        mockCommandParser as UnifiedCommandParser,
+        new ArgumentParser(createLogger()),
+        () => [convertedPrompt],
+        createLogger(),
+        createMockSymbolicCommandBuilder()
+      );
+    const contextWith = (inputs: Record<string, string>) => {
+      const context = new PromptRequestContext({ command: '>>pattern_prompt', inputs } as never);
+      context.state.normalization.requestInputs = inputs;
+      return context;
+    };
+
+    const accepted = contextWith({ decision: 'x', trigger: 'open-fork' });
+    await stageFor().execute(accepted);
+    expect(accepted.getPromptArgs()).toEqual({ decision: 'x', trigger: 'open-fork' });
+
+    // Positive control: the merged map is still validated, so a non-matching input is refused.
+    await expect(
+      stageFor().execute(contextWith({ decision: 'x', trigger: 'nope' }))
+    ).rejects.toThrow(`Value must match pattern ${pattern}`);
+  });
+
   test('merges inline gate criteria for symbolic single prompts', async () => {
     const symbolicParseResult: SymbolicCommandParseResult = {
       promptId: 'demo_prompt',
