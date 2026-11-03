@@ -48,40 +48,31 @@ Claude Prompts adds reusable prompt resources, composable chains, validation gat
 
 ## Quick Start
 
-<table>
-<tr><th><a id="claude-code-recommended"></a>Claude Code (Recommended)</th><th><a id="codex-install"></a>Codex (Experimental)</th></tr>
-<tr valign="top"><td>
+### Claude Code (Recommended)
 
 ```bash
-# Add marketplace (first time only)
-/plugin marketplace add minipuft/minipuft-plugins
-
-# Install
+/plugin marketplace add minipuft/minipuft-plugins  # first time only
 /plugin install claude-prompts@minipuft
-
-# Try it
 >>tech_evaluation_chain library:'zod' context:'API validation'
 ```
 
-</td><td>
+<a id="codex-install"></a>
 
-Hooks need Codex CLI 0.117 or later and are unavailable on Windows ([codex-prompts requirements](https://github.com/minipuft/codex-prompts#requirements)). Enable them in `~/.codex/config.toml`:
+### Codex (Experimental)
+
+Turn on hooks in `~/.codex/config.toml`, then install the plugin:
 
 ```toml
 [features]
 hooks = true
 ```
 
-Then install the plugin:
-
 ```bash
 codex plugin marketplace add https://github.com/minipuft/minipuft-plugins.git
 codex plugin add codex-prompts@minipuft
 ```
 
-Restart Codex, run `/hooks` to review the plugin hooks, then try `>>tech_evaluation_chain library:'zod' context:'API validation'`.
-
-</td></tr></table>
+Restart Codex, run `/hooks` to review and trust the plugin hooks, then try the same `>>tech_evaluation_chain` command. Needs Codex CLI 0.117 or later; not available on Windows ([requirements](https://github.com/minipuft/codex-prompts#requirements)).
 
 <details>
 <summary>Claude Code development setup: load the plugin from local source</summary>
