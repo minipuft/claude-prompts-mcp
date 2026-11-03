@@ -1,0 +1,50 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_shot#1",
+    "gate_verdict": {
+      "overall": "FAIL",
+      "rationale": "The engine ran probe-all.py and it exited 1: the joints dump was planted with linear lerp for this proof, so arcs, spacing and overlap are refused. The dump is restored and resubmitted.",
+      "per_gate": [
+        {
+          "index": 8,
+          "passed": false,
+          "rationale": "probe-all.py --shots v3/poses --frames-root out --joints-root out exited 1: 25 of 27 inbetween checks failed on arcs, spacing and overlap."
+        }
+      ],
+      "reminders": {
+        "satisfied": [],
+        "not_applicable": [
+          {
+            "id": "api-documentation",
+            "reason": "no surface for this reminder in a joints dump"
+          },
+          {
+            "id": "creed-fidelity",
+            "reason": "no surface for this reminder in a joints dump"
+          },
+          {
+            "id": "information-placement",
+            "reason": "no surface for this reminder in a joints dump"
+          },
+          {
+            "id": "product-positioning-fidelity",
+            "reason": "no surface for this reminder in a joints dump"
+          },
+          {
+            "id": "prose-hygiene",
+            "reason": "no surface for this reminder in a joints dump"
+          },
+          {
+            "id": "semantic-discoverability",
+            "reason": "no surface for this reminder in a joints dump"
+          },
+          {
+            "id": "framework-compliance",
+            "reason": "no surface for this reminder in a joints dump"
+          }
+        ]
+      }
+    }
+  }
+}

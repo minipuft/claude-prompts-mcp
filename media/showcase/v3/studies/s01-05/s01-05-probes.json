@@ -1,0 +1,44 @@
+{
+ "shot": "s01-arrival-overwhelm",
+ "run": 5,
+ "frames": {
+  "000": "b59133fc1e12733e",
+  "042": "1f03689a4064ec48",
+  "066": "395460bbe4ff87cd",
+  "104": "10659b54162bf511",
+  "154": "451bd3aa6453b818",
+  "190": "e7f6ca01abe311a7",
+  "228": "7150e5e54eb7f9a2",
+  "272": "94175731fe30886f",
+  "330": "5412275c028c1451",
+  "419": "3912d4fba97e790d"
+ },
+ "determinism": {
+  "frame0": [
+   "b59133fc1e12733e",
+   "b59133fc1e12733e"
+  ],
+  "frame154": [
+   "451bd3aa6453b818",
+   "451bd3aa6453b818"
+  ]
+ },
+ "mp4": {
+  "path": "out/s01-05.mp4",
+  "sha256": "5a3aedb21ed80c1d",
+  "frames": 420
+ },
+ "strip": "out/s01-05-strip.png",
+ "keysTable": "out/s01-05-keys-table.txt",
+ "probeAllShots": "out/s01-05-probe-all-shots.txt",
+ "inbetweens": "out/s01-05-inbetweens.txt",
+ "frameChange": "out/s01-05-frame-change.json",
+ "measure": "out/s01-05-measure.json",
+ "receiptSkeleton": {
+  "Changed": [],
+  "Grades": [],
+  "Controls": [],
+  "Owner": [],
+  "Next": []
+ }
+}

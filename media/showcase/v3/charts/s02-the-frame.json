@@ -1,0 +1,91 @@
+{
+  "shot": "s02-the-frame",
+  "fps": 30,
+  "frames": [
+    630,
+    930
+  ],
+  "provisional": true,
+  "source": {
+    "timeline": "v3/timeline.json (the-frame 630-930)",
+    "layout": "v3/layouts/s02-cant-build-frame.json",
+    "proposal": "v3/proposals/p001-beat4-action.json (D99)"
+  },
+  "pieces": [],
+  "actors": {
+    "human": {
+      "kind": "rig",
+      "keySheet": "v3/keys/s02-the-frame.json",
+      "keys": [
+        {
+          "name": "slump",
+          "frame": 630,
+          "pose": "still bent from the failed joins, the cloak heavy on the shoulders, the light lost on the floor",
+          "lineOfAction": "one deep C bowed forward from the hips: head, shoulders and arms on one heavy arc",
+          "changes": "the held low point",
+          "hold": 26
+        },
+        {
+          "name": "turn",
+          "frame": 690,
+          "pose": "the head and shoulders turn toward the frame's light after a small sink away from it",
+          "lineOfAction": "an S: shoulders turned one way, hips the other",
+          "changes": "anticipation away, then the turn",
+          "hold": 16
+        },
+        {
+          "name": "rise",
+          "frame": 740,
+          "pose": "stands up out of the cloak, which drops as a heap; the body lands and settles, the cloth settles after",
+          "lineOfAction": "a straight rising line, deliberately plumb for the instant she is upright",
+          "changes": "overshoot past upright, then settle; the cloak lets go",
+          "hold": 20
+        },
+        {
+          "name": "step",
+          "frame": 800,
+          "pose": "one step toward the frame, weight travelling onto the lead foot",
+          "lineOfAction": "a gentle S through the stepping hip",
+          "changes": "the passing position of the step, then the foot lands",
+          "hold": 14
+        },
+        {
+          "name": "threshold",
+          "frame": 840,
+          "pose": "the pause at the frame's edge on one foot, the other heel lifted",
+          "lineOfAction": "a plumb line over the planted foot",
+          "changes": "the heel tap into the shoe: contact, then the body settles",
+          "hold": 24
+        },
+        {
+          "name": "through",
+          "frame": 900,
+          "pose": "goes through alone, framed small inside the frame's light",
+          "lineOfAction": "a small S, the figure drawn to a fraction of its height in the light",
+          "changes": "the last move, no anticipation",
+          "hold": 30
+        }
+      ],
+      "breakdowns": [],
+      "note": "Beat 4 of the film (D99): six keys over 300 frames. The chart lists what each key is; the drawings between them are the pose sheet's breakdowns (v3/poses/s02-the-frame.json)."
+    }
+  },
+  "pulses": [],
+  "lag": {
+    "frames": 3,
+    "recovery": 12,
+    "note": "the light follows the drawn layer by 2-4 frames; this chart carries the figure only, the light layer is its own sheet"
+  },
+  "boil": {
+    "variants": 3,
+    "rate": 4,
+    "seed": 11
+  },
+  "camera": {
+    "span": [
+      630,
+      930
+    ],
+    "note": "the layout's camera for this beat (v3/layouts/s02-cant-build-frame.json): the pan right ends on the raised frame; not authored in this chart"
+  }
+}

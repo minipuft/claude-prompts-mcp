@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claude Prompts showcase · design bible board</title>
+<style>
+:root{--field:#07060c;--ink:#e7e4da;--muted:#9a9ab0;--line:#1f1f2e;--gold:#d28a21;--blue:#56b0d4;--coral:#e8694a;--green:#67b479;--mauve:#c885c2}
+*{box-sizing:border-box}
+body{margin:0;background:var(--field);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:var(--blue);text-underline-offset:3px}
+code{font:12px ui-monospace,monospace;color:var(--muted)}
+.wrap{max-width:1560px;margin:auto;padding:28px 32px 60px}
+.masthead{display:grid;grid-template-columns:1.2fr 1fr;gap:32px;align-items:end;border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:8px}
+.masthead h1{font-size:30px;line-height:1.1;margin:0 0 8px;font-weight:650}
+.masthead .rev{color:var(--muted);font-size:13px;margin:0}
+.masthead .thesis{font-size:16px;margin:0 0 6px}
+.masthead .prov{color:var(--muted);font-size:12.5px;margin:0}
+.laws{display:grid;grid-template-columns:1.1fr 1fr;gap:36px;padding:18px 0 22px;border-bottom:1px solid var(--line)}
+.laws h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;font-weight:600}
+.laws h2:first-child{margin-top:0}
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 14px}
+.swatch{display:grid;grid-template-columns:34px 1fr;gap:0 8px;align-items:center;font-size:12.5px}
+.swatch i{display:block;width:34px;height:34px;border-radius:6px;grid-row:1/3}
+.swatch b{font-weight:600}
+.swatch span{color:var(--muted);font-size:11.5px;line-height:1.25}
+.timing table{border-collapse:collapse;font-size:13px;width:100%}
+.timing td{padding:3px 10px 3px 0;vertical-align:top;border-bottom:1px solid var(--line)}
+.timing td:nth-child(2){white-space:nowrap;color:var(--gold)}
+.timing ol{margin:0;padding-left:20px;font-size:13px;color:var(--ink)}
+.timing li{margin:2px 0}
+.timing ul.anti{margin:0;padding-left:18px;font-size:13px;color:var(--muted)}
+.timing ul.anti li::marker{color:var(--coral)}
+section{padding:26px 0 8px}
+section>header h2{font-size:22px;margin:0 0 6px;font-weight:650}
+.law{font-size:15px;margin:0 0 8px;max-width:1100px}
+.meta{margin:0 0 14px;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.lives{margin-left:8px}
+.tag{display:inline-block;font:11px/1 ui-monospace,monospace;padding:4px 6px;border-radius:4px;margin:0 4px 4px 0;border:1px solid var(--line)}
+.tag.ruling{color:var(--gold);border-color:#4a3614}
+.tag.criterion{color:var(--blue);border-color:#163a4a}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));gap:18px}
+.card{display:grid;grid-template-columns:220px 1fr;gap:14px;background:#0d0c16;border:1px solid var(--line);border-radius:10px;padding:12px;min-height:200px}
+.media{position:relative;background:#000;border-radius:6px;overflow:hidden;aspect-ratio:4/3;display:flex;align-items:center;justify-content:center}
+.media img,.media video{width:100%;height:100%;object-fit:contain;display:block}
+.media.text{color:var(--muted);font-size:12px;border:1px dashed var(--line);background:transparent}
+.media .at{position:absolute;right:6px;bottom:6px;font:11px ui-monospace,monospace;background:#000c;color:var(--ink);padding:3px 6px;border-radius:4px}
+.card h3{font-size:16px;margin:0 0 2px;font-weight:650}
+.by{color:var(--muted);font-size:12px;margin:0 0 8px}
+.borrow,.refuse,.note{font-size:13px;margin:4px 0}
+.borrow b{color:var(--green);font-weight:600}
+.refuse b{color:var(--coral);font-weight:600}
+.tags{margin:8px 0 0}
+@media print{.card{break-inside:avoid}}
+</style></head>
+<body><div class="wrap">
+<div class="masthead">
+  <div><h1>Claude Prompts showcase · design bible board</h1><p class="rev">board-07 · 2026-10-13 · references, laws, lineage, process (D56–D77); 24 owner-library cards with Eagle provenance; reads with creative-spec v4-brief-21</p></div>
+  <div><p class="thesis">Raw capability is radiant and overwhelming; scaffolding is one lit join at a time. Saturated figures on a black field, Seuss architecture, Midnight Gospel shadows, drawn on twos with light on ones.</p><p class="prov">Every filed image's source, bytes and sha256 live in style-references.json and identity-references.json. Video cards keep a low-resolution private study copy next to this file; the href is the public original. Reference properties transfer, never figures or compositions. Nothing we have drawn is on this board: studies and their grades live under studies/ and are compared against this, never shown beside it.</p></div>
+</div>
+
+<section id="laws" class="laws">
+  <div class="roles">
+    <h2>Five roles per asset</h2>
+    <div class="swatches"><div class="swatch"><i style="background:#0c6ca0"></i><b>main1</b><span>dominant local color</span></div><div class="swatch"><i style="background:#56b0d4"></i><b>main2</b><span>second local color</span></div><div class="swatch"><i style="background:#142b3e"></i><b>shadow</b><span>one darker step, a designed shape, graded by stipple (D47, D48)</span></div><div class="swatch"><i style="background:#d9e5e3"></i><b>light</b><span>one lighter step, flat</span></div><div class="swatch"><i style="background:#c8323a"></i><b>accent</b><span>one scarce saturated mark</span></div></div>
+    <h2>Identity pigments, never graded</h2>
+    <div class="swatches"><div class="swatch"><i style="background:linear-gradient(90deg,#4f7df2 60%,#9fe8ff 60%)"></i><b>Codex</b><span>#4f7df2 · #9fe8ff</span></div><div class="swatch"><i style="background:linear-gradient(90deg,#e8694a 60%,#2a1410 60%)"></i><b>Clawd</b><span>#e8694a · #2a1410</span></div><div class="swatch"><i style="background:linear-gradient(90deg,#67b479 60%,#c885c2 60%)"></i><b>Human skin</b><span>#67b479 · #c885c2</span></div>
+      <div class="swatch"><i style="background:#07060c;border:1px solid #333"></i><b>field</b><span>#07060c</span></div>
+      <div class="swatch"><i style="background:#ffe9b0"></i><b>emitter</b><span>#ffe9b0, one per shot</span></div>
+    </div>
+  </div>
+  <div class="timing">
+    <h2>Timing at 30 fps</h2>
+    <table><tr><td><b>hold</b></td><td>8–20</td><td>nothing moves but boil and light</td></tr><tr><td><b>anticipation</b></td><td>3–5</td><td>small move opposite the action</td></tr><tr><td><b>action</b></td><td>4–8 on twos</td><td>the move, one smear frame if far</td></tr><tr><td><b>overshoot</b></td><td>2–3</td><td>past the target</td></tr><tr><td><b>settle</b></td><td>10–16</td><td>damped return, wobble decaying</td></tr></table>
+    <h2>Laws</h2>
+    <ol><li>One actor moves at a time; related elements stagger 3–5 frames.</li><li>No linear curve anywhere: poses step, light springs with memory.</li><li>Boil is not shimmer: seeded variants at ~4/s, never a per-frame reseed.</li><li>Light lags drawing by 2–4 frames; glass lags light by 2–4 more.</li><li>Every move exposes cause and recovery; speed is never a move's identity.</li><li>No text moves. Identity pigments never grade.</li><li>The fewest cuts: beats progress by morphs and camera moves along leading lines the world provides (D64).</li></ol>
+    <h2>Medium</h2><ul class="anti"><li>Remotion is the single substrate; the frame interior is a Three.js glass pass mounted through @remotion/three (D41).</li><li>This board holds references, laws and lineage only; nothing the project drew (D56).</li><li>No captions beyond the held title, planner assumption under D53 (D57).</li><li>Frame bars gold from the nested-frames painting, planner assumption (D58).</li></ul>
+    <h2>Process</h2><ol class="process"><li>No asset enters a scene as its first iteration: a muse sheet of 3+ variants, each citing a card here, comes first (D55).</li><li>Two chains: showcase_preproduction once per episode, showcase_shot once per shot; the shot list is the handoff (D59).</li><li>A shot run feeds the script: measured ranges go back into shots.json and the beat (D60).</li><li>A render study is a frame set with probes, never one still (D61).</li><li>Blender is an explicit, confirmed, optional path on the render study (D62).</li><li>Companions keep their pigments and morph their construction to the world (D63).</li><li>Owner-library cards carry eagle://item/&lt;ID&gt; provenance and are filed through /inspiration; a reference cited anywhere in v3 without an id or URL is rejected by check-provenance (D74 fold, 2026-10-13).</li></ol>
+    <h2>What the film is not</h2><ul class="anti"><li>The early-web explainer video: everything tweening at once on a linear curve, hinge-jointed cutouts, pop-in text, no holds, no anticipation, motion with no cause.</li><li>Calm daylight scenery with fill everywhere and no negative space.</li><li>A frame interior that is a flat gradient, a picture instead of a place.</li><li>A toon shader standing in for drawn shadow shapes.</li></ul>
+  </div>
+</section>
+
+<section id="world">
+  <header>
+    <h2>1 · World architecture</h2>
+    <p class="law">The world inside the frame follows Dr. Seuss's Midnight Paintings: swooping organic towers, stacked pointed arches, curling stalks with flag leaves, pale thin contour outlines on a black field, light as beaded strings. The frame interior is receding hand-drawn frames, each slightly turned.</p>
+    <p class="meta"><span class="tag ruling">D42</span><span class="tag ruling">D46</span><span class="tag ruling">D50</span><span class="tag criterion">C7</span><span class="tag criterion">C8</span><span class="tag criterion">C10</span><span class="lives">lives in <code>src/library/glass/seuss.tsx</code>, <code>src/library/glass/FrameInterior.tsx</code>, <code>src/library/props/Frame.tsx</code></span></p>
+  </header>
+  <div class="grid">
+<article class="card" id="seuss-no-one-youer">
+  <div class="media"><img src="seuss-no-one-youer.jpg" alt="There Is No One Alive That Is You-er Than You" loading="lazy"></div>
+  <div class="text-block">
+    <h3>There Is No One Alive That Is You-er Than You</h3>
+    <p class="by">Dr. Seuss, Midnight Paintings (Secret Art) · <a href="https://www.drseussart.com/secretandarchive" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> black field with one blue cloud as the only large light mass · clock-stalks and curling stalks with flag leaves = the prompt object · sparse colored stars, pale thin outlines</p>
+    <p class="refuse"><b>Refuse</b> the figures · the composition as a whole</p>
+    
+    <p class="tags"><span class="tag ruling">D50</span><span class="tag criterion">C5</span><span class="tag criterion">C8</span></p>
+  </div>
+</article>
+<article class="card" id="seuss-nested-frames">
+  <div class="media"><img src="seuss-nested-frames.png" alt="Nested frames on black" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Nested frames on black</h3>
+    <p class="by">Dr. Seuss, Midnight Paintings (Secret Art) · <a href="https://www.drseussart.com/secretandarchive" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> receding frames, each slightly turned = the frame interior's depth · faint curling filigree between rings · gold on black for the frame bars</p>
+    <p class="refuse"><b>Refuse</b> literal picture frames hung on a wall</p>
+    
+    <p class="tags"><span class="tag ruling">D42</span><span class="tag ruling">D45</span><span class="tag criterion">C7</span></p>
+  </div>
+</article>
+<article class="card" id="seuss-archbishop-katz">
+  <div class="media"><img src="seuss-archbishop-katz.jpg" alt="Archbishop Katz" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Archbishop Katz</h3>
+    <p class="by">Dr. Seuss, Midnight Paintings (Secret Art) · <a href="https://www.drseussart.com/secretandarchive" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> interlocking pointed arches = the gate object, keystone pulse on PASS · black as a positive shape · mauve, blue, cream as the human's garment family · a small figure for scale at the base</p>
+    <p class="refuse"><b>Refuse</b> the cat · cathedral literalism</p>
+    
+    <p class="tags"><span class="tag ruling">D50</span><span class="tag ruling">D54</span><span class="tag criterion">C8</span></p>
+  </div>
+</article>
+<article class="card" id="seuss-cat-stairway">
+  <div class="media"><img src="seuss-cat-stairway.jpg" alt="Cat on a striped stairway" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Cat on a striped stairway</h3>
+    <p class="by">Dr. Seuss, Midnight Paintings; photo Brandt Eisner</p>
+    <p class="borrow"><b>Borrow</b> stepped striped planes = category patches that join at seams · outlines as colored contour strokes, not black · long-neck figure silhouette for new assets</p>
+    <p class="refuse"><b>Refuse</b> the cat</p>
+    
+    <p class="tags"><span class="tag ruling">D50</span><span class="tag ruling">D55</span><span class="tag criterion">C8</span></p>
+  </div>
+</article>
+<article class="card" id="seuss-green-cat-lights">
+  <div class="media"><img src="seuss-green-cat-lights.webp" alt="Green Cat with Lights" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Green Cat with Lights</h3>
+    <p class="by">Dr. Seuss, Midnight Paintings (Secret Art)</p>
+    <p class="borrow"><b>Borrow</b> strings of dotted lights draped over dark masses = the chain object, one bead per handoff · motes as beaded lines, never scattered points</p>
+    <p class="refuse"><b>Refuse</b> the cat · daylight</p>
+    
+    <p class="tags"><span class="tag ruling">D50</span><span class="tag criterion">C6</span></p>
+  </div>
+</article>
+<article class="card" id="seuss-freebird">
+  <div class="media"><img src="seuss-freebird.webp" alt="Freebird" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Freebird</h3>
+    <p class="by">Dr. Seuss, Midnight Paintings (Secret Art)</p>
+    <p class="borrow"><b>Borrow</b> swirled wave masses with cream highlight sweeps = gesture lines for fast moves · one small warm figure with long trailing lines = the smear frame</p>
+    <p class="refuse"><b>Refuse</b> literal water</p>
+    
+    <p class="tags"><span class="tag ruling">D50</span><span class="tag ruling">D51</span><span class="tag criterion">C16</span></p>
+  </div>
+</article></div>
+</section>
+<section id="shadow">
+  <header>
+    <h2>2 · Shadow, grain and the gadget</h2>
+    <p class="law">Shadows are designed shapes: a form shadow following the silhouette and a cast shadow on the field, each with a weighted edge. Where a shadow grades it grades by two-scale stipple with a hue shift toward cool at contact, never a smooth ramp. The gadget is familiar parts in an impossible whole, like The Midnight Gospel's universe simulator.</p>
+    <p class="meta"><span class="tag ruling">D43</span><span class="tag ruling">D47</span><span class="tag ruling">D48</span><span class="tag criterion">C3</span><span class="tag criterion">C4</span><span class="tag criterion">C9</span><span class="tag criterion">C11</span><span class="lives">lives in <code>src/library/Dither.tsx</code>, <code>src/library/props/Gadget.tsx</code></span></p>
+  </header>
+  <div class="grid">
+<article class="card" id="gospel-junkyard">
+  <div class="media"><img src="midnight-gospel-junkyard.jpg" alt="Junkyard still" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Junkyard still</h3>
+    <p class="by">The Midnight Gospel · Pendleton Ward, Duncan Trussell · Titmouse (AIGA Eye on Design)</p>
+    <p class="borrow"><b>Borrow</b> piles of familiar objects compose an alien place = the gadget's construction · coarse airbrushed/stippled gradients inside flat fills · hue shifts within one form (magenta→violet, cyan→lime) · thin colored outlines</p>
+    <p class="refuse"><b>Refuse</b> any character · smooth ramps</p>
+    
+    <p class="tags"><span class="tag ruling">D43</span><span class="tag ruling">D48</span><span class="tag criterion">C4</span><span class="tag criterion">C11</span></p>
+  </div>
+</article>
+<article class="card" id="gospel-cosmos">
+  <div class="media"><img src="midnight-gospel-cosmos.jpg" alt="Cosmos still" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Cosmos still</h3>
+    <p class="by">The Midnight Gospel · Titmouse (IMDb media)</p>
+    <p class="borrow"><b>Borrow</b> grain at two scales: fine speckle plus sparse larger splatter · soft rim/halo on characters · the overwhelm texture inside the frame</p>
+    <p class="refuse"><b>Refuse</b> rainbow fill everywhere in the settled state</p>
+    
+    <p class="tags"><span class="tag ruling">D48</span><span class="tag criterion">C4</span><span class="tag criterion">C9</span></p>
+  </div>
+</article>
+<article class="card" id="gospel-hallway">
+  <div class="media"><img src="midnight-gospel-hallway.jpg" alt="Hallway still" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Hallway still</h3>
+    <p class="by">The Midnight Gospel · Titmouse (listing thumbnail, low res)</p>
+    <p class="borrow"><b>Borrow</b> soft blobby architecture with pastel multi-hue gradients · warm/cool shift inside one object</p>
+    <p class="refuse"><b>Refuse</b> its daylight pastel field; ours is black</p>
+    
+    <p class="tags"><span class="tag ruling">D48</span><span class="tag criterion">C3</span></p>
+  </div>
+</article>
+<article class="card" id="gospel-bg-pecini">
+  <div class="media"><img src="midnight-gospel-bg-pecini-01.jpg" alt="Background paint, selected" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Background paint, selected</h3>
+    <p class="by">Olivia Pecini (color) · line art Titmouse layout · AD Jesse Moynihan · lead BG design Eleanor Michalka · <a href="https://oliviapecini.myportfolio.com/the-midnight-gospel-background-paint" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> how a painted shadow actually grades: density of marks, not opacity · line art and color as separate passes = our drawn layer over role fills</p>
+    <p class="refuse"><b>Refuse</b> the scene</p>
+    
+    <p class="tags"><span class="tag ruling">D48</span><span class="tag criterion">C4</span><span class="tag criterion">C9</span></p>
+  </div>
+</article>
+<article class="card" id="gospel-trailer-16">
+  <div class="media"><video controls preload="none" poster="yt-0kQWAqjFJS0-16s.jpg" src="yt-0kQWAqjFJS0.mp4#t=16"></video><span class="at">at 0:16</span></div>
+  <div class="text-block">
+    <h3>Trailer · the simulator opens</h3>
+    <p class="by">The Midnight Gospel official trailer · Netflix · <a href="https://www.youtube.com/watch?v=0kQWAqjFJS0&amp;t=16s" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> one hot emitter inside a dark speckled field = the box seam, the bubble · planets as flat discs with rim light, no 3D shading</p>
+    <p class="refuse"><b>Refuse</b> the vulva-portal literalism</p>
+    
+    <p class="tags"><span class="tag ruling">D43</span><span class="tag ruling">D45</span><span class="tag criterion">C6</span></p>
+  </div>
+</article>
+<article class="card" id="gospel-trailer-72">
+  <div class="media"><video controls preload="none" poster="yt-0kQWAqjFJS0-72s.jpg" src="yt-0kQWAqjFJS0.mp4#t=72"></video><span class="at">at 1:12</span></div>
+  <div class="text-block">
+    <h3>Trailer · inside a simulated world</h3>
+    <p class="by">The Midnight Gospel official trailer · Netflix · <a href="https://www.youtube.com/watch?v=0kQWAqjFJS0&amp;t=72s" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> organic architecture crowded with pieces = the overwhelm beat · flat characters with thin outlines moving on twos against held backgrounds</p>
+    <p class="refuse"><b>Refuse</b> the cast</p>
+    
+    <p class="tags"><span class="tag ruling">D44</span><span class="tag ruling">D51</span><span class="tag criterion">C17</span></p>
+  </div>
+</article>
+<article class="card" id="gospel-trailer-104">
+  <div class="media"><video controls preload="none" poster="yt-0kQWAqjFJS0-104s.jpg" src="yt-0kQWAqjFJS0.mp4#t=104"></video><span class="at">at 1:44</span></div>
+  <div class="text-block">
+    <h3>Trailer · ribbons</h3>
+    <p class="by">The Midnight Gospel official trailer · Netflix · <a href="https://www.youtube.com/watch?v=0kQWAqjFJS0&amp;t=104s" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> saturated bands in a dark field = emitter hue bands · grain subordinate to outline</p>
+    <p class="refuse"><b>Refuse</b> full-frame rainbow in any settled shot</p>
+    
+    <p class="tags"><span class="tag ruling">D44</span><span class="tag criterion">C9</span><span class="tag criterion">C15</span></p>
+  </div>
+</article></div>
+</section>
+<section id="field">
+  <header>
+    <h2>3 · Field, palette and light</h2>
+    <p class="law">Saturated figures on a black field, readable as negative space. Five roles per asset: a grayscale value pass first, then 2 mains, 1 shadow, 1 light, 1 accent. Identity pigments are separate from field pigments and never grade. One emitter per shot; radiance is additive and sits under the flat assets.</p>
+    <p class="meta"><span class="tag criterion">C1</span><span class="tag criterion">C12</span><span class="tag criterion">C15</span><span class="tag criterion">C2</span><span class="tag criterion">C5</span><span class="tag criterion">C6</span><span class="tag ruling">D44</span><span class="tag ruling">D47</span><span class="tag ruling">D53</span><span class="tag ruling">D54</span><span class="tag ruling">D74</span><span class="lives">lives in <code>src/library/tokens.ts</code>, <code>src/library/Radiance.tsx</code>, <code>src/library/Sprite.tsx</code></span></p>
+  </header>
+  <div class="grid">
+<article class="card" id="owner-board">
+  <div class="media"><img src="style-board-2026-10-06.png" alt="Owner's style board" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Owner's style board</h3>
+    <p class="by">owner-supplied, 2026-10-06</p>
+    <p class="borrow"><b>Borrow</b> top-left painting: the overwhelm mood, maximalist and dense · sticker sheets: the five-role recipe and designed shadow shapes · cloaked figures: additive light on black, iridescent fill inside a flat silhouette, speckle, one hot emitter, sparse motes</p>
+    <p class="refuse"><b>Refuse</b> copying any figure · a toon shader</p>
+    
+    <p class="tags"><span class="tag ruling">D44</span><span class="tag ruling">D47</span><span class="tag criterion">C1</span><span class="tag criterion">C2</span><span class="tag criterion">C6</span></p>
+  </div>
+</article>
+<article class="card" id="cloudysky-guide">
+  <div class="media"><img src="cloudysky-visual-guide.png" alt="CloudySky visual guide" loading="lazy"></div>
+  <div class="text-block">
+    <h3>CloudySky visual guide</h3>
+    <p class="by">owner's cloudySky project, docs/DESIGN_BIBLE.md moodboard · <a href="file:///home/minipuft/Applications/cloudySky/docs/DESIGN_BIBLE.md" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> identity vs field pigments, role/material tokens · grade as a token morph over unchanged drawings · scarce emitter, grain at separate scales · light as force with memory: cause → light → glass → settle</p>
+    <p class="refuse"><b>Refuse</b> its UI numeric floors · its glass as the whole world; ours is bounded by the frame</p>
+    
+    <p class="tags"><span class="tag ruling">D51</span><span class="tag criterion">C1</span><span class="tag criterion">C15</span><span class="tag criterion">C18</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mtr8rsmq452e8">
+  <div class="media"><img src="owner/picks/MTR8RSMQ452E8.png" alt="Hades, lit by his own flame" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Hades, lit by his own flame</h3>
+    <p class="by">Hercules (Disney 1997), frame saved 2026-09-07 · <a href="eagle://item/MTR8RSMQ452E8" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> Hades lit by his own blue flame on a black field: one emitter, one hue, the rest unlit</p>
+    <p class="refuse"><b>Refuse</b> the photograph or the 3D render as a surface · any figure · the architecture</p>
+    <p class="note">Eagle MTR8RSMQ452E8 · saved 2026-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D44</span><span class="tag ruling">D74</span><span class="tag criterion">C5</span><span class="tag criterion">C6</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mtr8sl3r48no7">
+  <div class="media"><img src="owner/picks/MTR8SL3R48NO7.png" alt="The Styx boat" loading="lazy"></div>
+  <div class="text-block">
+    <h3>The Styx boat</h3>
+    <p class="by">Hercules (Disney 1997), frame saved 2026-09-07 · <a href="eagle://item/MTR8SL3R48NO7" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> Styx boat: figure as a silhouette inside the light, water drawn as a few flat shapes</p>
+    <p class="refuse"><b>Refuse</b> the photograph or the 3D render as a surface · any figure · the architecture</p>
+    <p class="note">Eagle MTR8SL3R48NO7 · saved 2026-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D44</span><span class="tag ruling">D74</span><span class="tag criterion">C5</span><span class="tag criterion">C6</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mqyt675imxyk8">
+  <div class="media"><img src="owner/picks/MQYT675IMXYK8.webp" alt="The Weather Project" loading="lazy"></div>
+  <div class="text-block">
+    <h3>The Weather Project</h3>
+    <p class="by">Olafur Eliasson, Tate Modern 2003 · <a href="https://www.bing.com/images/search?view=detailV2&amp;ccid=jZl6hPkj&amp;id=08E57BE7809BD77C258B36BB8C371918AD85283B&amp;thid=OIP.jZl6hPkjx-6p2oppJKrJgwHaHt&amp;mediaurl=https%3A%2F%2Farquitecturaviva.com%2Fassets%2Fuploads%2Farticulos%2F61039%2Fav_medium__av_69801.webp%3Fh%3D88f28c31&amp;cdnurl=https%3A%2F%2Fth.bing.com%2Fth%2Fid%2FR.8d997a84f923c7eea9da8a6924aac983%3Frik%3DOyiFrRgZN4y7Ng%26pid%3DImgRaw%26r%3D0&amp;exph=1573&amp;expw=1512&amp;q=olafur+eliasson+the+weather+project&amp;form=IRPRST&amp;ck=70B5DAFEE540AB2004270CA384CCE694&amp;selectedindex=2&amp;itb=0&amp;cw=1613&amp;ch=1370&amp;ajaxhist=0&amp;ajaxserp=0&amp;vt=2&amp;sim=11" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> light as a volume: one hue fills the frame and people read as silhouettes (Turrell / Eliasson)</p>
+    <p class="refuse"><b>Refuse</b> the photograph or the 3D render as a surface · any figure · the architecture</p>
+    <p class="note">Eagle MQYT675IMXYK8 · saved 2026-06 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D44</span><span class="tag ruling">D74</span><span class="tag criterion">C5</span><span class="tag criterion">C6</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mram46lymigko">
+  <div class="media"><img src="owner/picks/MRAM46LYMIGKO.png" alt="Aten Reign, blue state" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Aten Reign, blue state</h3>
+    <p class="by">James Turrell, Guggenheim 2013 · <a href="https://www.pinterest.com/pin/379217231136438993/" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> light as a volume: one hue fills the frame and people read as silhouettes (Turrell / Eliasson)</p>
+    <p class="refuse"><b>Refuse</b> the photograph or the 3D render as a surface · any figure · the architecture</p>
+    <p class="note">Eagle MRAM46LYMIGKO · saved 2026-07 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D44</span><span class="tag ruling">D74</span><span class="tag criterion">C5</span><span class="tag criterion">C6</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mram4dk8k755w">
+  <div class="media"><img src="owner/picks/MRAM4DK8K755W.jpg" alt="Aten Reign, violet state" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Aten Reign, violet state</h3>
+    <p class="by">James Turrell, Guggenheim 2013 · <a href="https://www.pinterest.com/pin/12596073952580276/" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> light as a volume: one hue fills the frame and people read as silhouettes (Turrell / Eliasson)</p>
+    <p class="refuse"><b>Refuse</b> the photograph or the 3D render as a surface · any figure · the architecture</p>
+    <p class="note">Eagle MRAM4DK8K755W · saved 2026-07 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D44</span><span class="tag ruling">D74</span><span class="tag criterion">C5</span><span class="tag criterion">C6</span></p>
+  </div>
+</article></div>
+</section>
+<section id="motion">
+  <header>
+    <h2>4 · Animation language: drawn on twos, light on ones</h2>
+    <p class="law">The drawn layer (flat assets, contours, stipple) moves on twos with hold, anticipation, action, overshoot, settle, and boils visibly between seeded variants. The light layer (radiance, motes, glass, emitter) runs continuous on ones, lagging the drawing by 2–4 frames and recovering without snapping. Beats progress by cut and reframe, not pans.</p>
+    <p class="meta"><span class="tag ruling">D51</span><span class="tag ruling">D52</span><span class="tag criterion">C13</span><span class="tag criterion">C14</span><span class="tag criterion">C16</span><span class="tag criterion">C17</span><span class="tag criterion">C18</span><span class="lives">lives in <code>src/library/motion.ts</code>, <code>src/scenes/Beats45.tsx</code></span></p>
+  </header>
+  <div class="grid">
+<article class="card" id="klaus-lighting">
+  <div class="media"><video controls preload="none" poster="yt-nTcblxN8TGQ-1200s.jpg" src="yt-nTcblxN8TGQ.mp4#t=20"></video><span class="at">at 0:20</span></div>
+  <div class="text-block">
+    <h3>Klaus · lighting time-lapse</h3>
+    <p class="by">SPA Studios · Sergio Pablos; tools by Les Films du Poisson Rouge · <a href="https://www.youtube.com/watch?v=nTcblxN8TGQ" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> light is a separate pass painted over finished 2D drawings = our light layer · the drawing holds while the light changes; light has its own timing</p>
+    <p class="refuse"><b>Refuse</b> its volumetric realism; our light stays flat and additive on a black field</p>
+    
+    <p class="tags"><span class="tag ruling">D51</span><span class="tag criterion">C18</span></p>
+  </div>
+</article>
+<article class="card" id="spiderverse-twos">
+  <div class="media"><a href="https://www.youtube.com/watch?v=9jH0wDp5GnQ" target="_blank" rel="noopener"><img src="yt-9jH0wDp5GnQ.jpg" alt="Spider-Verse · why it moves on twos"></a><span class="at">external</span></div>
+  <div class="text-block">
+    <h3>Spider-Verse · why it moves on twos</h3>
+    <p class="by">Noodle (YouTube), analyzing Sony Pictures Animation · <a href="https://www.youtube.com/watch?v=9jH0wDp5GnQ" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> a pose updates every second frame while the world keeps running = drawn layer on twos, light on ones · ones reserved for a moment that earns it</p>
+    <p class="refuse"><b>Refuse</b> halftone and chromatic-aberration as decoration</p>
+    
+    <p class="tags"><span class="tag ruling">D51</span><span class="tag criterion">C16</span></p>
+  </div>
+</article>
+<article class="card" id="line-boil">
+  <div class="media"><video controls preload="none" poster="yt-it3PGEcaobk-90s.jpg" src="yt-it3PGEcaobk.mp4#t=90"></video><span class="at">at 1:30</span></div>
+  <div class="text-block">
+    <h3>Line boil, three drawings looping</h3>
+    <p class="by">2D animation tutorial (YouTube) · <a href="https://www.youtube.com/watch?v=it3PGEcaobk" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> three traced variants cycling at a low rate = `boil` in motion.ts · visible, not subtle (D52)</p>
+    <p class="refuse"><b>Refuse</b> a per-frame reseed; that is shimmer and C13 fails it</p>
+    
+    <p class="tags"><span class="tag ruling">D52</span><span class="tag criterion">C13</span></p>
+  </div>
+</article>
+<article class="card" id="kevin-ngo">
+  <div class="media"><video controls preload="none" poster="x-kevinngo-20s.jpg" src="x-kevinngo-2105428751.mp4#t=20"></video><span class="at">at 0:20</span></div>
+  <div class="text-block">
+    <h3>Paper-doodle chess</h3>
+    <p class="by">Kevin Ngo (@kevin_t_ngo), 2026-09-30, owner-supplied · <a href="https://x.com/kevin_t_ngo/status/2105428751115071642" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> one medium governs characters, environment and feedback · interaction marks belong to the drawing, never floating UI trim</p>
+    <p class="refuse"><b>Refuse</b> the chess task, the cast, any claim about how it was built</p>
+    
+    <p class="tags"><span class="tag ruling">D51</span><span class="tag criterion">C2</span></p>
+  </div>
+</article>
+<article class="card" id="shfred">
+  <div class="media"><video controls preload="none" poster="x-shfred-8s.jpg" src="x-shfred-2102495989.mp4#t=8"></video><span class="at">at 0:08</span></div>
+  <div class="text-block">
+    <h3>Ink narrative, day 0 to now</h3>
+    <p class="by">shfred (@shfred0), 2026-09-22, owner-supplied · <a href="https://x.com/shfred0/status/2102495989194236158" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> beats progress by cut and reframe; the camera is locked within a beat · positive/negative mass carries the story; one held label per scene at most</p>
+    <p class="refuse"><b>Refuse</b> its black/cream palette · captions as narration</p>
+    
+    <p class="tags"><span class="tag ruling">D51</span><span class="tag criterion">C14</span></p>
+  </div>
+</article>
+<article class="card" id="lcslates">
+  <div class="media"><video controls preload="none" poster="x-lcslates-38s.jpg" src="x-lcslates-2102503030.mp4#t=38"></video><span class="at">at 0:38</span></div>
+  <div class="text-block">
+    <h3>Mosaic film: tiles lift, flip, click back</h3>
+    <p class="by">LCSlates / Chris Riley, 2026-09-22, owner-supplied · <a href="https://x.com/LCSlates/status/2102503027340988559" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> a piece transforms the way its material allows; a join is a click, never a fade · the creator's frame-by-frame correction loop = our receipt loop</p>
+    <p class="refuse"><b>Refuse</b> the tessera material itself</p>
+    
+    <p class="tags"><span class="tag ruling">D51</span><span class="tag criterion">C18</span></p>
+  </div>
+</article>
+<article class="card" id="chetas">
+  <div class="media"><video controls preload="none" poster="x-chetas-20s.jpg" src="x-chetas-2101599959.mp4#t=20"></video><span class="at">at 0:20</span></div>
+  <div class="text-block">
+    <h3>Little Company: eighteen faces</h3>
+    <p class="by">chetaslua, 2026-09-20, owner-supplied · <a href="https://x.com/chetaslua/status/2101599959367999968" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> line and fill economy for expression: eye, mouth, ear and face direction carry personality · distinct personalities across one construction</p>
+    <p class="refuse"><b>Refuse</b> full-body acting lessons; it shows none</p>
+    
+    <p class="tags"><span class="tag criterion">C14</span></p>
+  </div>
+</article></div>
+</section>
+<section id="cast">
+  <header>
+    <h2>5 · Cast and identity</h2>
+    <p class="law">Original blue terminal-faced Codex and coral Clawd accompany the human from the opening. Their pigments are identity and never grade. The human's skin is green with a mauve shadow step, between coral and blue so the trio reads as a tricolor. No asset enters a scene as its first iteration: a muse sheet of 3+ variants, each citing a card on this board and one cast property, comes first.</p>
+    <p class="meta"><span class="tag criterion">C1</span><span class="tag criterion">C19</span><span class="tag criterion">C20</span><span class="tag criterion">C21</span><span class="tag criterion">C22</span><span class="tag ruling">D35</span><span class="tag ruling">D36</span><span class="tag ruling">D54</span><span class="tag ruling">D55</span><span class="tag ruling">D72</span><span class="lives">lives in <code>src/library/cast/</code>, <code>src/library/tokens.ts</code></span></p>
+  </header>
+  <div class="grid">
+<article class="card" id="codex-official">
+  <div class="media"><img src="codex-official-v4.webp" alt="Codex sprite sheet v4" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Codex sprite sheet v4</h3>
+    <p class="by">OpenAI, official pet sprite sheet · <a href="https://persistent.oaistatic.com/codex/pets/v1/codex-spritesheet-v4.webp" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> cloud-lobed head, terminal face, blue and screen cyan</p>
+    <p class="refuse"><b>Refuse</b> pixel art; ours is redrawn in the contour language</p>
+    
+    <p class="tags"><span class="tag ruling">D35</span><span class="tag criterion">C1</span></p>
+  </div>
+</article>
+<article class="card" id="clawd-official">
+  <div class="media"><img src="clawd-official-demo.gif" alt="Clawd, Claude Code demo" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Clawd, Claude Code demo</h3>
+    <p class="by">Anthropic, claude-code repository demo.gif · <a href="https://github.com/anthropics/claude-code" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> block mass, coral, dark eyes</p>
+    <p class="refuse"><b>Refuse</b> the terminal UI around it</p>
+    
+    <p class="tags"><span class="tag ruling">D36</span><span class="tag criterion">C1</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mpwbnf91uc57g">
+  <div class="media"><img src="owner/picks/MPWBNF91UC57G.png" alt="Huey Freeman, still" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Huey Freeman, still</h3>
+    <p class="by">The Boondocks (Adult Swim) · <a href="https://www.google.com/search?sca_esv=cb596a67502e2f5f&amp;sxsrf=ANbL-n6DVyJIkc6xOL43P4xfKhZtkQyCIg:1780382787295&amp;udm=2&amp;fbs=ADc_l-aN0CWEZBOHjofHoaMMDiKpaEWjvZ2Py1XXV8d8KvlI3jljrY5CkLlk8Dq3IvwBz-Qg9gdZYJriKd9fBMKKfwqZsp5a2Z8RykAyI8QON1GKtPTIrrJiYWTZwm-VKtqgos72mZXBK3sAri9thD-jNul_QbW18s4fIQeR15QVd7KInS8-gAUm77oQwL_ZxigG6um4m-iJiib6ENBKWygBaDi7SLxz0Q&amp;q=huey+boondocks&amp;sa=X&amp;ved=2ahUKEwitj-fc-ueUAxWjnGoFHT9kCLIQtKgLegQIExAB&amp;biw=1598&amp;bih=1370&amp;dpr=1#sv=CAMSVhoyKhBlLVJtSDBsd0dMMml0b1ZNMg5SbUgwbHdHTDJpdG9WTToORzctSmF6ZUxEMG1yRk0gBCocCgZtb3NhaWMSEGUtUm1IMGx3R0wyaXRvVk0YADABGAcg346uowhKCBABGAEgASgB" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> model-sheet discipline: one line weight, construction heads, expression row</p>
+    <p class="refuse"><b>Refuse</b> the characters · the anime-derived face proportions</p>
+    <p class="note">Eagle MPWBNF91UC57G · saved 2026-06 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D72</span><span class="tag criterion">C20</span><span class="tag criterion">C21</span><span class="tag criterion">C22</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-msra13489b3xt">
+  <div class="media"><img src="owner/picks/MSRA13489B3XT.jpg" alt="Huey and Riley model sheet" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Huey and Riley model sheet</h3>
+    <p class="by">The Boondocks, character design sheet · <a href="https://www.google.com/search?q=boondocks+character+desig&amp;sca_esv=29bc699f92e89c34&amp;udm=2&amp;biw=1487&amp;bih=1712&amp;sxsrf=APpeQnsCMFYOjwxArxYJR85H6xsH3dPxdQ%3A1786610853253&amp;ei=pYR9ar7_DoWqmtkP37SZgQw&amp;ved=0ahUKEwj-5YmKnJ2WAxUFlSYFHV9aJsAQ4dUDCBE&amp;uact=5&amp;oq=boondocks+character+desig&amp;gs_lp=Egtnd3Mtd2l6LWltZyIZYm9vbmRvY2tzIGNoYXJhY3RlciBkZXNpZzIHECMYyQIYJ0iCF1DxBVjNFXABeACQAQCYAU6gAfEIqgECMTe4AQPIAQD4AQGYAhKgAqIJwgIGEAAYBxgewgIFEAAYgATCAgoQABiABBiKBRhDwgIIEAAYgAQYsQPCAgsQABiABBixAxiDAcICBBAAGB7CAgYQABgFGB7CAgYQABgIGB6YAwCIBgGSBwIxOKAH9VqyBwIxN7gHnwnCBwQzLjE1yAcjgAgB&amp;sclient=gws-wiz-img#ip=1&amp;sv=CAMSOBoyKhBlLXphLU5iQ2hvTWVsWVFNMg56YS1OYkNob01lbFlRTToOMDRxZ2pqZ05UV2NIYk0gBDgAGAcg5_eVogZKCBABGAEgASgB" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> two-tone poster as a silhouette test</p>
+    <p class="refuse"><b>Refuse</b> the characters · the anime-derived face proportions</p>
+    <p class="note">Eagle MSRA13489B3XT · saved 2026-08 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D72</span><span class="tag criterion">C20</span><span class="tag criterion">C21</span><span class="tag criterion">C22</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-ms6v3zad9jlic">
+  <div class="media"><img src="owner/picks/MS6V3ZAD9JLIC.webp" alt="The cloak figure, first generation" loading="lazy"></div>
+  <div class="text-block">
+    <h3>The cloak figure, first generation</h3>
+    <p class="by">owner, Stable Diffusion, 2026-07-29 (prompt in the Eagle annotation) · <a href="eagle://item/MS6V3ZAD9JLIC" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> the cloak figure before it had a name: S-curve turn, cloak thrown wide (prompt in annotation)</p>
+    <p class="refuse"><b>Refuse</b> the photographic rendering</p>
+    <p class="note">Eagle MS6V3ZAD9JLIC · saved 2026-07 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D69</span><span class="tag ruling">D71</span></p>
+  </div>
+</article></div>
+</section>
+<section id="lineage">
+  <header>
+    <h2>6 · Lineage: v2 references that became a law</h2>
+    <p class="law">The v2 study (September) chose a soft daylight medium that D44 superseded. These seven references survived the medium change as properties, not as a look; each card names the law it became. Everything else in v2 stays filed there and is not inspiration.</p>
+    <p class="meta"><span class="tag ruling">D12</span><span class="tag ruling">D18</span><span class="tag ruling">D25</span><span class="tag ruling">D27</span><span class="tag ruling">D44</span><span class="lives">lives in <code>v2/references.json</code>, <code>v2/moodboard.html</code></span></p>
+  </header>
+  <div class="grid">
+<article class="card" id="lin-chicory">
+  <div class="media"><img src="../../v2/references/chicory.gif" alt="Chicory: A Colorful Tale" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Chicory: A Colorful Tale</h3>
+    <p class="by">Greg Lobanov / Finji · v2 role: visible authored marks</p>
+    <p class="borrow"><b>Borrow</b> one precise mark attributable to the human, kept visible afterwards</p>
+    <p class="refuse"><b>Refuse</b> the brush mechanic, the cast</p>
+    <p class="note">Became: resource_manager is the human's hands placing or lifting a piece (script, resource vocabulary).</p>
+    <p class="tags"><span class="tag ruling">D12</span></p>
+  </div>
+</article>
+<article class="card" id="lin-unravel">
+  <div class="media"><img src="../../v2/references/unravel-two.png" alt="Unravel Two" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Unravel Two</h3>
+    <p class="by">Coldwood / EA · v2 role: tactile material, physical cooperation</p>
+    <p class="borrow"><b>Borrow</b> two figures sharing weight at one authored object</p>
+    <p class="refuse"><b>Refuse</b> yarn literalism, photoreal surfaces</p>
+    <p class="note">Became: a piece transforms the way its material allows; a join is a seam pulse, never a fade (world layer rule); Clawd braces the frame.</p>
+    <p class="tags"><span class="tag ruling">D12</span><span class="tag ruling">D51</span></p>
+  </div>
+</article>
+<article class="card" id="lin-tiny-glade">
+  <div class="media"><img src="../../v2/references/tiny-glade.jpg" alt="Tiny Glade" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Tiny Glade</h3>
+    <p class="by">Pounce Light · v2 role: coherent construction, world light</p>
+    <p class="borrow"><b>Borrow</b> one structure built from related parts with a clear joint and shared light</p>
+    <p class="refuse"><b>Refuse</b> its daylight, its camera</p>
+    <p class="note">Became: beat 5, scaffold one join at a time; the lit join is the only emitter.</p>
+    <p class="tags"><span class="tag ruling">D12</span><span class="tag ruling">D46</span></p>
+  </div>
+</article>
+<article class="card" id="lin-adventure-time">
+  <div class="media"><img src="../../v2/references/adventure-time.jpg" alt="Adventure Time" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Adventure Time</h3>
+    <p class="by">Pendleton Ward / Cartoon Network · v2 role: world logic, companion ease</p>
+    <p class="borrow"><b>Borrow</b> companions at ease while the world stays locally peculiar but legible</p>
+    <p class="refuse"><b>Refuse</b> the cast, the candy palette</p>
+    <p class="note">Became: Codex and Clawd idle on one boil; the same creator's Midnight Gospel now carries the drawn layer (D43, D48).</p>
+    <p class="tags"><span class="tag ruling">D18</span><span class="tag ruling">D43</span><span class="tag ruling">D49</span></p>
+  </div>
+</article>
+<article class="card" id="lin-ed-edd-eddy">
+  <div class="media"><img src="../../v2/references/ed-edd-eddy.jpg" alt="Ed, Edd n Eddy" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Ed, Edd n Eddy</h3>
+    <p class="by">Danny Antonucci / a.k.a. Cartoon · v2 role: expressive organic line</p>
+    <p class="borrow"><b>Borrow</b> the line is alive: animated holds, visible wobble</p>
+    <p class="refuse"><b>Refuse</b> the exaggeration of proportion</p>
+    <p class="note">Became: D52 visible boil, `boil` in motion.ts, rubric C13.</p>
+    <p class="tags"><span class="tag ruling">D25</span><span class="tag ruling">D52</span><span class="tag criterion">C13</span></p>
+  </div>
+</article>
+<article class="card" id="lin-fosters">
+  <div class="media"><img src="../../v2/references/fosters-wilt.png" alt="Foster's Home · Wilt" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Foster's Home · Wilt</h3>
+    <p class="by">Craig McCracken / Cartoon Network · v2 role: organic drawn silhouette</p>
+    <p class="borrow"><b>Borrow</b> proportion and pose carry personality before surface detail; long purposeful limbs</p>
+    <p class="refuse"><b>Refuse</b> any Wilt anatomy or color</p>
+    <p class="note">Became: the silhouette test every muse variant must pass before fills; the stalk construction direction.</p>
+    <p class="tags"><span class="tag ruling">D25</span><span class="tag ruling">D55</span></p>
+  </div>
+</article>
+<article class="card" id="lin-katamari">
+  <div class="media"><img src="../../v2/references/katamari.jpg" alt="Katamari Damacy REROLL" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Katamari Damacy REROLL</h3>
+    <p class="by">Bandai Namco · v2 role: absurd scale contrast</p>
+    <p class="borrow"><b>Borrow</b> one tiny precise action readable beside a huge thing casually held by the companion</p>
+    <p class="refuse"><b>Refuse</b> the rolling, the music-video density as a settled state</p>
+    <p class="note">Became: the frame Clawd holds up contains the whole environment; the human places one piece inside it.</p>
+    <p class="tags"><span class="tag ruling">D42</span><span class="tag ruling">D46</span></p>
+  </div>
+</article></div>
+</section>
+<section id="colour-script">
+  <header>
+    <h2>7 · Colour script per shot (owner's CalArts picks)</h2>
+    <p class="law">Each shot owns one hue pair and one emitter (D74): the radiance hue and one local accent, on the black field, with identity pigments untouched. The pair is chosen per shot from the owner's own CalArts saves, where a scene is one or two saturated colours as whole fields and the figure reads as a flat silhouette inside the light. Palette travel between shots is a cut or a morph on the chart, never a grey detour (C15).</p>
+    <p class="meta"><span class="tag ruling">D74</span><span class="tag criterion">C2</span><span class="tag criterion">C6</span><span class="tag criterion">C15</span><span class="tag criterion">C24</span><span class="lives">lives in <code>v3/shots.json</code>, <code>src/library/tokens.ts</code></span></p>
+  </header>
+  <div class="grid">
+<article class="card" id="eagle-mfjgajy0bcxvr">
+  <div class="media"><img src="owner/picks/MFJGAJY0BCXVR.png" alt="Sweet on You, frame" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Sweet on You, frame</h3>
+    <p class="by">CalArts 2025, Sweet on You; owner's Eagle folder Movies › Shorts › CalArts 2025 · <a href="eagle://item/MFJGAJY0BCXVR" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> Sweet on You: sky blue and butter yellow as two fields, candy accents scarce; feeds s03</p>
+    <p class="refuse"><b>Refuse</b> the characters and compositions · backgrounds painted as scenery</p>
+    <p class="note">Eagle MFJGAJY0BCXVR · saved 2025-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D74</span><span class="tag criterion">C2</span><span class="tag criterion">C15</span><span class="tag criterion">C24</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mfjgajy0cfjt5">
+  <div class="media"><img src="owner/picks/MFJGAJY0CFJT5.png" alt="Sweet on You, frame" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Sweet on You, frame</h3>
+    <p class="by">CalArts 2025, Sweet on You; owner's Eagle folder Movies › Shorts › CalArts 2025 · <a href="eagle://item/MFJGAJY0CFJT5" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> Sweet on You: one blue field, one yellow shape, the rest unlit; feeds s03</p>
+    <p class="refuse"><b>Refuse</b> the characters and compositions · backgrounds painted as scenery</p>
+    <p class="note">Eagle MFJGAJY0CFJT5 · saved 2025-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D74</span><span class="tag criterion">C2</span><span class="tag criterion">C15</span><span class="tag criterion">C24</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mfiyufl6jlve9">
+  <div class="media"><img src="owner/picks/MFIYUFL6JLVE9.png" alt="Lulu Mckown, frame" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Lulu Mckown, frame</h3>
+    <p class="by">CalArts 2025, Lulu Mckown; owner's Eagle folder Movies › Shorts › CalArts 2025 · <a href="eagle://item/MFIYUFL6JLVE9" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> Lulu Mckown: chartreuse field, text as the only dark mark; feeds nothing yet (refused hue, kept as the limit)</p>
+    <p class="refuse"><b>Refuse</b> the characters and compositions · backgrounds painted as scenery</p>
+    <p class="note">Eagle MFIYUFL6JLVE9 · saved 2025-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D74</span><span class="tag criterion">C2</span><span class="tag criterion">C15</span><span class="tag criterion">C24</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mfiyufl6rwfww">
+  <div class="media"><img src="owner/picks/MFIYUFL6RWFWW.png" alt="Lulu Mckown, frame" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Lulu Mckown, frame</h3>
+    <p class="by">CalArts 2025, Lulu Mckown; owner's Eagle folder Movies › Shorts › CalArts 2025 · <a href="eagle://item/MFIYUFL6RWFWW" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> Lulu Mckown: magenta room lit from one source, pink accent; feeds s04</p>
+    <p class="refuse"><b>Refuse</b> the characters and compositions · backgrounds painted as scenery</p>
+    <p class="note">Eagle MFIYUFL6RWFWW · saved 2025-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D74</span><span class="tag criterion">C2</span><span class="tag criterion">C15</span><span class="tag criterion">C24</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mfjftelf9bjm6">
+  <div class="media"><img src="owner/picks/MFJFTELF9BJM6.png" alt="GIANT CRUSH, frame" loading="lazy"></div>
+  <div class="text-block">
+    <h3>GIANT CRUSH, frame</h3>
+    <p class="by">CalArts 2025, GIANT CRUSH; owner's Eagle folder Movies › Shorts › CalArts 2025 · <a href="eagle://item/MFJFTELF9BJM6" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> GIANT CRUSH: teal control room, one warm accent; feeds s02</p>
+    <p class="refuse"><b>Refuse</b> the characters and compositions · backgrounds painted as scenery</p>
+    <p class="note">Eagle MFJFTELF9BJM6 · saved 2025-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D74</span><span class="tag criterion">C2</span><span class="tag criterion">C15</span><span class="tag criterion">C24</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mfjftelgh6fd8">
+  <div class="media"><img src="owner/picks/MFJFTELGH6FD8.png" alt="GIANT CRUSH, frame" loading="lazy"></div>
+  <div class="text-block">
+    <h3>GIANT CRUSH, frame</h3>
+    <p class="by">CalArts 2025, GIANT CRUSH; owner's Eagle folder Movies › Shorts › CalArts 2025 · <a href="eagle://item/MFJFTELGH6FD8" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> GIANT CRUSH: gold field with the figure as a silhouette in the light; feeds s01 (the thesis frame)</p>
+    <p class="refuse"><b>Refuse</b> the characters and compositions · backgrounds painted as scenery</p>
+    <p class="note">Eagle MFJFTELGH6FD8 · saved 2025-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D74</span><span class="tag criterion">C2</span><span class="tag criterion">C15</span><span class="tag criterion">C24</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mfi6qtunbbx5f">
+  <div class="media"><img src="owner/picks/MFI6QTUNBBX5F.png" alt="Soup!, frame" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Soup!, frame</h3>
+    <p class="by">CalArts 2025, Soup!; owner's Eagle folder Movies › Shorts › CalArts 2025 · <a href="eagle://item/MFI6QTUNBBX5F" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> Soup!: coral on black, peach rim as the accent; feeds s04</p>
+    <p class="refuse"><b>Refuse</b> the characters and compositions · backgrounds painted as scenery</p>
+    <p class="note">Eagle MFI6QTUNBBX5F · saved 2025-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D74</span><span class="tag criterion">C2</span><span class="tag criterion">C15</span><span class="tag criterion">C24</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mfi6qtunoe60y">
+  <div class="media"><img src="owner/picks/MFI6QTUNOE60Y.png" alt="Soup!, frame" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Soup!, frame</h3>
+    <p class="by">CalArts 2025, Soup!; owner's Eagle folder Movies › Shorts › CalArts 2025 · <a href="eagle://item/MFI6QTUNOE60Y" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> Soup!: coral figure on black, teal as the single cold accent; feeds s04</p>
+    <p class="refuse"><b>Refuse</b> the characters and compositions · backgrounds painted as scenery</p>
+    <p class="note">Eagle MFI6QTUNOE60Y · saved 2025-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D74</span><span class="tag criterion">C2</span><span class="tag criterion">C15</span><span class="tag criterion">C24</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mfi6syywulzqi">
+  <div class="media"><img src="owner/picks/MFI6SYYWULZQI.png" alt="FIGHTER, frame" loading="lazy"></div>
+  <div class="text-block">
+    <h3>FIGHTER, frame</h3>
+    <p class="by">CalArts 2025, FIGHTER; owner's Eagle folder Movies › Shorts › CalArts 2025 · <a href="eagle://item/MFI6SYYWULZQI" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> FIGHTER: sunset orange against violet: one warm field, the fighter a flat silhouette; feeds s01</p>
+    <p class="refuse"><b>Refuse</b> the characters and compositions · backgrounds painted as scenery</p>
+    <p class="note">Eagle MFI6SYYWULZQI · saved 2025-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D74</span><span class="tag criterion">C2</span><span class="tag criterion">C15</span><span class="tag criterion">C24</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mfjg4uahap05l">
+  <div class="media"><img src="owner/picks/MFJG4UAHAP05L.png" alt="MOTOR GIRL, frame" loading="lazy"></div>
+  <div class="text-block">
+    <h3>MOTOR GIRL, frame</h3>
+    <p class="by">CalArts 2025, MOTOR GIRL; owner's Eagle folder Movies › Shorts › CalArts 2025 · <a href="eagle://item/MFJG4UAHAP05L" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> MOTOR GIRL: magenta stage with one violet accent, the girl as a cut-out inside the light; feeds s04</p>
+    <p class="refuse"><b>Refuse</b> the characters and compositions · backgrounds painted as scenery</p>
+    <p class="note">Eagle MFJG4UAHAP05L · saved 2025-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D74</span><span class="tag criterion">C2</span><span class="tag criterion">C15</span><span class="tag criterion">C24</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mfi6seljdbv13">
+  <div class="media"><img src="owner/picks/MFI6SELJDBV13.png" alt="Bukunawa, frame" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Bukunawa, frame</h3>
+    <p class="by">CalArts 2025, Bukunawa; owner's Eagle folder Movies › Shorts › CalArts 2025 · <a href="eagle://item/MFI6SELJDBV13" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> Bukunawa: amber night field, one lamp as the emitter, water as two flat shapes; feeds s03</p>
+    <p class="refuse"><b>Refuse</b> the characters and compositions · backgrounds painted as scenery</p>
+    <p class="note">Eagle MFI6SELJDBV13 · saved 2025-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D74</span><span class="tag criterion">C2</span><span class="tag criterion">C15</span><span class="tag criterion">C24</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mfjfs03xiiv0n">
+  <div class="media"><img src="owner/picks/MFJFS03XIIV0N.png" alt="Mousling, frame" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Mousling, frame</h3>
+    <p class="by">CalArts 2025, Mousling; owner's Eagle folder Movies › Shorts › CalArts 2025 · <a href="eagle://item/MFJFS03XIIV0N" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> Mousling: teal and green as whole fields, the mouse a pale silhouette; feeds s02</p>
+    <p class="refuse"><b>Refuse</b> the characters and compositions · backgrounds painted as scenery</p>
+    <p class="note">Eagle MFJFS03XIIV0N · saved 2025-09 · owner's library (owner-library-01)</p>
+    <p class="tags"><span class="tag ruling">D74</span><span class="tag criterion">C2</span><span class="tag criterion">C15</span><span class="tag criterion">C24</span></p>
+  </div>
+</article></div>
+</section>
+<section id="camera">
+  <header>
+    <h2>8 · Camera and staging (owner's Composition picks)</h2>
+    <p class="law">Every shot carries a cinematography sheet before its keys (D77): the frame at the start and end of the move, a top-down staging plan with the camera path, the leading line the move follows (D64), the emitter, the hue pair (D74) and the figure's on-screen height in heads. These cards are borrowed for framing and scale only: where the figure sits in the field, how a line leads the eye, how one emitter owns a frame.</p>
+    <p class="meta"><span class="tag ruling">D64</span><span class="tag ruling">D77</span><span class="tag criterion">C25</span><span class="lives">lives in <code>v3/shots.json</code>, <code>v3/layouts/</code></span></p>
+  </header>
+  <div class="grid">
+<article class="card" id="eagle-lxu2uuohr9v2c">
+  <div class="media"><img src="owner/picks/LXU2UUOHR9V2C.jpg" alt="Corner of a cold room" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Corner of a cold room</h3>
+    <p class="by">owner's Eagle, Composition › Film · <a href="https://www.instagram.com/p/C3n50_0oYUZ/" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> figure small in the corner of a cold room, the room as the field: the lost beat of s02 at medium size; feeds s02 start</p>
+    <p class="refuse"><b>Refuse</b> the photograph as a surface · the people · any realism of light fall-off</p>
+    <p class="note">Eagle LXU2UUOHR9V2C · saved 2024-06 · owner's library</p>
+    <p class="tags"><span class="tag ruling">D64</span><span class="tag ruling">D77</span><span class="tag criterion">C25</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mfp3wx8x3lix2">
+  <div class="media"><img src="owner/picks/MFP3WX8X3LIX2.jpg" alt="Figure in a lit doorway" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Figure in a lit doorway</h3>
+    <p class="by">owner's Eagle, Composition · <a href="https://www.artstation.com/artwork/eRv6NG" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> lone figure inside a lit doorway in a dark field: the frame interior as the emitter; feeds s02 end</p>
+    <p class="refuse"><b>Refuse</b> the photograph as a surface · the people · any realism of light fall-off</p>
+    <p class="note">Eagle MFP3WX8X3LIX2 · saved 2025-09 · owner's library</p>
+    <p class="tags"><span class="tag ruling">D64</span><span class="tag ruling">D77</span><span class="tag criterion">C25</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-mf83t1h77o7bm">
+  <div class="media"><img src="owner/picks/MF83T1H77O7BM.jpg" alt="Red corridor, converging lines" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Red corridor, converging lines</h3>
+    <p class="by">owner's Eagle, Composition · <a href="https://www.artstation.com/artwork/oJYdQ4" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> corridor lines converging to one point, figure tiny at the vanishing point: the leading line a pan follows; feeds s02 move and s03</p>
+    <p class="refuse"><b>Refuse</b> the photograph as a surface · the people · any realism of light fall-off</p>
+    <p class="note">Eagle MF83T1H77O7BM · saved 2025-09 · owner's library</p>
+    <p class="tags"><span class="tag ruling">D64</span><span class="tag ruling">D77</span><span class="tag criterion">C25</span></p>
+  </div>
+</article>
+<article class="card" id="eagle-lyio3is7tokub">
+  <div class="media"><img src="owner/picks/LYIO3IS7TOKUB.jpg" alt="Silhouette before a lit interior" loading="lazy"></div>
+  <div class="text-block">
+    <h3>Silhouette before a lit interior</h3>
+    <p class="by">owner's Eagle, Composition · <a href="https://www.instagram.com/p/CsHJx8suRbg/" target="_blank" rel="noopener">source</a></p>
+    <p class="borrow"><b>Borrow</b> silhouette in a doorway against a lit interior, chandelier as the one emitter: the human looking through the frame; feeds s02 end</p>
+    <p class="refuse"><b>Refuse</b> the photograph as a surface · the people · any realism of light fall-off</p>
+    <p class="note">Eagle LYIO3IS7TOKUB · saved 2024-07 · owner's library</p>
+    <p class="tags"><span class="tag ruling">D64</span><span class="tag ruling">D77</span><span class="tag criterion">C25</span></p>
+  </div>
+</article></div>
+</section>
+</div></body></html>

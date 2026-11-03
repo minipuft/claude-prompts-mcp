@@ -1,0 +1,29 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "❌ **Prompt Updated, but post-write verification FAILED**: Showcase World Sheet (showcase_world_sheet)\nPrompt 'showcase_world_sheet' was written but the refreshed registry did not expose the expected state (mismatched: systemMessage).\n\nUpdated prompt: showcase_world_sheet\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +1 additions, -0 deletions\n\n```diff\n===================================================================\n--- /dev/null\n+++ b/development/showcase_world_sheet/system-message.md\n@@ -0,0 +1,1 @@\n+Use the animation-direction vocabulary (media/showcase/v3/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n\\ No newline at end of file\n\n```\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `verification_failed`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet/system-message.md\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "update",
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "update",
+      "id": "showcase_world_sheet",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet/system-message.md"
+      ],
+      "refresh_status": "verification_failed",
+      "loaded_after_refresh": false,
+      "current_version": 2
+    },
+    "mutated": true,
+    "message": "❌ **Prompt Updated, but post-write verification FAILED**: Showcase World Sheet (showcase_world_sheet)\nPrompt 'showcase_world_sheet' was written but the refreshed registry did not expose the expected state (mismatched: systemMessage).\n\nUpdated prompt: showcase_world_sheet\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +1 additions, -0 deletions\n\n```diff\n===================================================================\n--- /dev/null\n+++ b/development/showcase_world_sheet/system-message.md\n@@ -0,0 +1,1 @@\n+Use the animation-direction vocabulary (media/showcase/v3/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n\\ No newline at end of file\n\n```\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `verification_failed`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_world_sheet/system-message.md\n"
+  },
+  "isError": true
+}

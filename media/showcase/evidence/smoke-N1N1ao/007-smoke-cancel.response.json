@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🛑 **Chain Cancelled**: `chain-showcase_preproduction#1`\n\nFurther progression is blocked. Session state and artifacts are retained — remove them with `system_control(action:\"session\", operation:\"clear\")`."
+    }
+  ],
+  "isError": false
+}

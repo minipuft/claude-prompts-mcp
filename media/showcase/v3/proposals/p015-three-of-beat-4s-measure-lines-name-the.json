@@ -1,0 +1,19 @@
+{
+  "id": "p015",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "the-frame",
+    "frame": 800
+  },
+  "title": "Three of beat 4's measure lines name the human, and the human now travels so they hold as written",
+  "text": "The first restage of row 9.5 passed all six story points of beat 4 in `probe-story.py`, but three measure lines of v3/screenplay.json were not what the probe read or what the film showed: sp-4.4 STEP 'human x moves toward frame >= 60 px' (the probe read Codex's x; the human's placement was one number per beat), sp-4.5 THRESHOLD 'hand within 8 px of frame edge' (true at the threshold key by accident, nothing probed it) and sp-4.6 THROUGH 'human crosses frame x' (the body stayed left of the frame's left edge, only the hands reached the bar). Option (b) of the first version was taken: the human travels.\n\nWhat holds now (animatic 05 draft 2). The blocking gives the human root travel, `figure.at` position keys on the canvas's top-left, the same mechanism Codex and Clawd have, read on the frame each drawing came on so the figure layer changes only where the exposure sheet has a row. Beat 4's keys sit in the pose sheet's moves, not its holds: 814 to 836 (step to threshold) 62 px toward the frame, 864 to 896 (threshold to through) 90 px more; the base `figure.x` is 333, 62 px left of where it was, so the hand reaches the frame's edge on the threshold key and not before. `probe-story.py` now reads what each line names: sp-4.4 `human.near_frame` (the human's placement x, 333 -> 395, 62 px toward the frame against the 60 needed) beside Codex's contact; sp-4.5 `human.at_frame_edge` (figure measure `edge-gap`: the figure layer's rightmost ink at x 595 on frame 840, the frame's left edge at 590, 5 px against the 8 allowed); sp-4.6 `human.crosses_frame` (figure measure `centre`: the silhouette's centre at x 454 on frame 840, the previous story point, and x 610 on frame 929, the beat's last frame, against the frame's left edge at 590). The heap's 4-12 px stays measured by probe-blocking.py from the contact the blocking declares (8 px). The crossing is read from the previous story point's frame because the body crosses the edge in the pose sheet's move into the through key (864-896) and settles in its hold; the hold itself does not glide, which the hold-band probe would read as a move.",
+  "references": [
+    "totoro-lived-in"
+  ],
+  "before": "the human has no travel: sp-4.4, 4.5 and 4.6 pass on Codex, the key and the world change, and the human's body never leaves the left of the frame",
+  "after": "probe-story reads the human on all three lines and passes them: placement 62 px toward the frame, hand 5 px from its edge, body centre from x 454 to x 610 across its left edge at 590",
+  "status": "open",
+  "ruling": null
+}

@@ -1,0 +1,89 @@
+### Original Request Intent
+
+This step was given the following request. Your work must satisfy this intent:
+
+- **shot**: s01-arrival-overwhelm
+- **output_root**: media/showcase
+- **brief**: First demo of the film's intro, beats arrival (frames 0-180) and everything-at-once (180-420) of v3/beats-v2.json, home world, 420 frames at 30 fps (v3/timeline.json wins over shots.json's older 0-330...
+- **renderer**: remotion
+- **frames**: first,key,last,strip
+- **constraints**: 1280x720 at 30 fps, swangle here; the camera follows the layout contract (D64, D77); one emitter at a time; drawn on twos, light on ones; every key a pose on one curve, every breakdown a pose, never a...
+
+> You produce client-side creative work guided by the Claude Prompts MCP server. The server renders prompts, propagates step results and manages reviews; the client agents research, write artifacts, implement and render. Use existing services and authored resource contracts. Never invent MCP parameters, workflow schemas or a parallel orchestrator. Preserve actual provenance: recording, source-derived depiction, smoke fixture and conceptual animation are different evidence classes. Do not imply a simulated agent or UI is a recorded Claude/Codex run. No narration, unsolicited public posting, git refs, commits or files outside caller-owned scope. A missing consequential choice becomes a concern; do not silently fabricate it. Read prior context and chain history, and cite actual paths/URLs used. Revisions must have observable rationale. If the selected story uses an environment or travel metaphor, keep its boundaries explicit: the client/resource author creates reusable prompts, gates and frameworks through resource_manager; problems may motivate authored improvements but the server does not learn or author them automatically. Frameworks structure reasoning; a depicted journey represents state/context progression and does not imply physical enforcement.
+
+Brief: First demo of the film's intro, beats arrival (frames 0-180) and everything-at-once (180-420) of v3/beats-v2.json, home world, 420 frames at 30 fps (v3/timeline.json wins over shots.json's older 0-330). Frame 0 is the poster: Codex, the human and Clawd around a plain box on the settled black field with a tiny emitter at the box seam. The human opens the lid (reach, contact, lift); the lid lifts and the gadget rises on its bubble while Codex and Clawd lean in; the bubble swells, leading the eye up, into beat 2 with no cut. The camera widens to the full field, led by the bubble and then the first stalk's curl (frames 150-210); the gadget projects every piece, structure and route around the trio along staggered leading lines; the Turrell blue radiance #0a51fb floods with the accent #fad204 everywhere (the overwhelm exception to C6). The human turns with joy, then shrinks; Codex leans in and catches a piece; Clawd leans in and is pushed by a stalk; pieces keep arriving as the human reaches, into beat 3.
+Constraints: 1280x720 at 30 fps, swangle here; the camera follows the layout contract (D64, D77); one emitter at a time; drawn on twos, light on ones; every key a pose on one curve, every breakdown a pose, never a favour alone (D83).
+Production root: media/showcase
+Previous handoff:
+**Summary**: Shot s01-arrival-overwhelm rendered on the pinned `swangle` renderer: 420-frame png sequence, `out/s01-05.mp4`, a figure-only sequence, the exposure sheet and joints dump regenerated, and the three-probe gate `probe-all.py --shots v3/poses --frames-root out --joints-root out` passes 3 of 3 (exit 0). Frames 0 and 154 rendered twice are identical. The figure-only sequence is byte-identical to run 4's (420 of 420 frames).
+
+Frames Rendered (path · sha256 prefix): full sequence `out/s01-05-seq/element-NNN.png` (420); mp4 `out/s01-05.mp4` 5a3aedb21ed80c1d (420 frames, 3.4 MB); figure-only `out/s01-arrival-overwhelm-figure-seq/` (420); strip `out/s01-05-strip.png` (frames 0, 42, 66, 104, 154, 180, 190, 210, 228, 272, 330, 419); key stills of the figure-only pass tiled `out/s01-05-key-stills.png`. Frame hashes: f0 b59133fc1e12733e, f42 1f03689a4064ec48, f66 395460bbe4ff87cd, f104 10659b54162bf511, f154 451bd3aa6453b818, f190 e7f6ca01abe311a7, f228 7150e5e54eb7f9a2, f272 94175731fe30886f, f330 5412275c028c1451, f419 3912d4fba97e790d.
+
+Probes:
+- Determinism (C12): frame 0 twice b59133fc1e12733e, b59133fc1e12733e; frame 154 twice 451bd3aa6453b818, 451bd3aa6453b818; both equal the sequence's own frames 0 and 154 (still against sequence, the pairing that failed in run 1).
+- Twos and ones (C27): `probe-twos`: the drawing changed on 106 even frames and 0 odd frames, tolerance 0; the control (a change on frame 7) refused. On the figure-only pass 129 even frames changed and 30 odd frames changed, all 30 inside the camera widen (frames 150-210), none outside (`out/s01-05-measure.json`).
+- Hold band (C28): 8 holds in band or declared, 7 moves of 3-6 drawings, 0 pops, one declared long hold (shrink, 148 frames).
+- Inbetweens (C23, C32, C33; `out/s01-05-inbetweens.txt`): `s01-arrival-overwhelm · pass · 7 moves, 54 items measured, 0 failed`; arcs 21 items ok, spacing 7, overlap 11, moving holds 8, pixel ease 7; controls tripped (a zigzag with the same off-chord distance refused, a linear lerp refused).
+- Gate lines (`out/s01-05-probe-all-shots.txt`): `twos-ones pass`, `hold-band pass`, `inbetweens pass`, `pass: probe-all --shots - 3 of 3 probe runs passed, 0 shot(s) skipped`.
+- Model-sheet overlay (C20): from the keys table, 8.00 heads and limb scales 1.00 on every key, worst deviation 0.0 percent; plate against film MAD 7.3 to 9.6 (bar 10).
+- Light lag (C18): pop at 180; pop ring and flood blue first respond on 178, lamp core on 182 (`lightLag`, `out/s01-05-measure.json`).
+- Identity samples (C1): pixels within 6 RGB of each pigment on frames 0 / 120 / 200 / 300 / 419: Codex blue 1556 / 1564 / 657 / 248 / 160; Clawd coral 4318 / 4364 / 981 / 1193 / 335; human skin 162 / 123 / 0 / 20 / 13.
+- Identity pass (D70): face crop heights 32 px (frame 0), 41 px (104), 18 px (419), `out/s01-05-identity-pass.png`.
+- C25: lamp centroid on frame 300 at (696.5, 223.5) against the layout's (697.6, 223.9), 0.09 percent of width; zoom end 0.6, figure-height ratio of the layout 0.4251. On frame 0 the brightest-pixel centroid is 29 percent of width from the seam (the poster's white box top, not the emitter); the exposure sheet's emitter is 2.07 percent off.
+- Colour pair, identity-complete (C24): 20 sampled frames of 70 exceed 2 percent off-pair saturated pixels, worst frame 30 at 19.7 percent (known mask gap, run 1 gap 19; not a gate).
+
+Receipt Skeleton Path: `out/s01-05-probes.json`. Renderer Used: remotion on `swangle`, `ShotS01` and `ShotS01Figure`.
+
+Concerns: the full render shows the human's face only in the first 150 frames; from frame 190 the figure is 20 to 29 percent of frame height under the flood. Frames 0 and 154 are the only still-against-sequence pairs compared. The drive's key-step gate `animation-key-fit` was not visible in the mailbox for the delegated step (see study gaps).
+
+Read, before writing, the project files under the production root's `v3/`: `creative-spec.md` (rulings D41–D72, medium, palette law, animation language, Craft baseline), `script.md` (resource vocabulary and beats), `rubric.md` (criteria C1–C23 and the receipt shape). They are the contract; this prompt does not restate them.
+
+Grade the actual rendered artifact against `rubric.md` by criterion id; do not grade anything you have not viewed. Use only the four marks: HOLDS, FAILS, UNPROVEN, TASTE. Each mark cites its evidence at or above the criterion's minimum tier (still, 3x crop, consecutive frames, moving render, owner viewing) and names the failing control it beats. Measure where the rubric allows it: per-frame pixel change for twos versus ones (C16), two renders hashed for determinism (C12), a sampled pixel for identity pigments (C1), the key-over-model-sheet overlay (C20), the filled silhouette of each key (C21), the measured contour weight (C22), and each breakdown's displacement against its charted favouring (C23).
+
+Motion contract:
+**Summary**: Run 5 keeps the run 4 layout contract (`v3/layouts/s01-arrival-overwhelm.json`) unchanged; no sheet was regenerated because the checks found no defect in it. The widen ends at zoom 0.6.
+
+- **Camera**: start locked medium-wide (640, 360, x1); end the full field at (604, 103, x0.6) over frames 150-210 on ones; move: widen (pull back and up, no cut); led by the bubble swelling out of the box (f150-180), then the first stalk's curl (f180-210).
+- **Emitter**: start the box's lid seam (0.52, 0.777); end the gadget's dial (0.545, 0.311).
+- **Figure Heights**: panel 1 78.1 percent (face-derived, over-reads, see `figure.note`), panel 2 33.2 percent (sheet framing); heads 8.0. The render stands the human at 350 px (48.6 percent) at rest and 210 px at the end zoom.
+- **Hue**: D74 pair radiance #0a51fb, accent #fad204.
+- **Cards Used**: eagle-lyio3is7tokub, eagle-mf83t1h77o7bm, eagle-m92nkizilu1cb, eagle-mram46lymigko (unchanged).
+- **Sheet Path**: `assets/layouts/s01-layout-02.png`, sha256 66445f7f...f19f; the copy in `public/assets/layouts/` has the identical hash (checked this step). Panel 2 still draws the 0.425 framing; `cameraPose` supersedes it.
+- **layout.json Path**: `v3/layouts/s01-arrival-overwhelm.json` (provisional: true).
+- **Generation Receipt**: `evidence/s01/imagegen-layout-s01-02.json` (nothing generated in run 5).
+- **Rejected Generations**: `out/s01-layout-01.png` (run 1).
+- **Checks run**: `probe-timeline.py v3/timeline.json` passes; `v3/blocking/arrival.json` and `everything-at-once.json` exist; `assets/human/model.json` exists.
+- **Concerns**: panel 2 of the sheet and the contract disagree about the end framing until the sheet is redrawn; the render and C25 read the contract.
+
+Write the receipt in the rubric's five parts, in order: Changed (by file); Grades (one line per criterion touched); Controls (which earlier study each flipped FAILS beats); Owner (at most two TASTE questions, each with the default the planner takes if unanswered); Next (one fix per FAILS). Save it as `v3/studies/<name>.md` beside the artifact copies, copied unchanged from `out/` with sha256 prefixes. A render that is absent is BLOCKED, not PASS. Propose a rubric change only through its Evolution rules: a new ruling adds a row; three consecutive HOLDS bakes one; a standing TASTE is ruled or deleted.
+
+Return: Inspected Evidence; Grades; Controls; Owner; Next; Rubric Evolution; Concerns.
+
+---
+
+## Inline Gates
+
+### Reminders
+
+### Showcase Review Rubric
+Grade only what was viewed. One mark per touched criterion: HOLDS, FAILS, UNPROVEN or TASTE, each with evidence at or above the criterion's minimum tier and the failing control it beats. Identity pigments unchanged (C1); role fills, no hex in assets (C2); designed, stippled shadows (C3, C4); black negative space, one emitter under the assets (C5, C6); frame interior refracted and drawn in depth (C7, C8); grain subordinate (C9); interior is the subject (C10); gadget familiar-impossible (C11); byte-identical renders (C12); no shimmer, drawn on twos, staggered, light lagging (C13, C16, C17, C18); acting reads without text (C14); palette travel never greys (C15); every asset mused (C19); craft baseline D72: keys match the model sheet within 5 % (C20), each key has a line of action and a filled silhouette that reads (C21), clean-up standard measured on the plate (C22), breakdowns sit at their charted favouring (C23). Receipt in five parts: Changed, Grades, Controls, Owner, Next.
+
+Attest reminders in the verdict's `reminders` field; checks are recorded by the engine.
+
+---
+
+---
+
+### Required Response Format
+
+**Summary**: What was implemented (2-3 sentences)
+
+**Gate Coverage**:
+- [1] PASS|FAIL: rationale
+- [2] PASS|FAIL: rationale
+
+**GATE_REVIEW: PASS|FAIL - overall assessment**
+
+Chain: chain-showcase_shot#1
+→ Progress 6/7
+Next: chain_id="chain-showcase_shot#1", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"

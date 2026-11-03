@@ -1,0 +1,111 @@
+/* generated from screenplay.json by scripts/animation/compile-screenplay.mjs · source dd2a98f0d3c5 · body 5ae64624c7e5 */
+Title: Claude Prompts
+Credit: a silent film in eight beats
+Revision: 1 · 2026-10-19 · director's draft for the owner (p014)
+Notes:
+    A user opens a box that is too bright to use, and two companions walk them through the frame that makes it usable, one lit join at a time.
+    Thesis: Raw capability is radiant and overwhelming; scaffolding is one lit join at a time.
+
+===
+
+# themes
+
+= th-glass · capability is always seen through glass: the gadget is visible only inside the bubble or the frame interior; outside both it is lost in grain (beat 3) or resting inside the structure (beat 8); the one stretch it stands free is sp-2.1 to sp-3.1, the overwhelm after the pop [[carried by sp-1.3, sp-2.1, sp-3.3, sp-4.2, sp-8.1]]
+
+= th-one-join · scaffolding is one lit join at a time: after sp-4.6 no story point lights more than one new join, and the flood (sp-2.2 to sp-2.3) is the only place where arrivals are not staggered; the strokes of one drawing (sp-5.2) are one piece, not three joins [[carried by sp-2.2, sp-2.3, sp-3.1, sp-5.2, sp-5.3, sp-6.2, sp-7.2, sp-7.3]]
+
+= th-light-leads · light leads composition: every story point names what its light pushes and the eye finds it [[carried by sp-1.1, sp-1.2, sp-1.3, sp-2.1, sp-2.2, sp-2.3, sp-4.2, sp-4.6, sp-5.3, sp-6.1, sp-7.1, sp-7.2, sp-8.3]]
+
+= th-channels · the human is eyes, Clawd is heart, Codex is humour: in each act (beats 1-3, beat 4, beats 5-8) at least one story point carries the human's look, one Clawd's touch, one Codex's gag [[carried by sp-1.2, sp-1.3, sp-2.3, sp-3.1, sp-3.2, sp-3.3, sp-4.2, sp-4.3, sp-4.4, sp-4.5, sp-5.1, sp-5.2, sp-6.2, sp-7.1, sp-7.3, sp-8.2]]
+
+= th-child-detail · details only a child would notice: every beat carries at least one small persistent detail (the heap that stays, the heel tap, the lid, the hands appearing, the tape on the box) [[carried by sp-1.1, sp-1.2, sp-4.3, sp-4.4, sp-4.5, sp-5.4, sp-8.1]]
+
+= th-register · warm, playful, inviting; reverent only at beats 4 and 8: registers outside beats 4 and 8 are warm, playful, inviting, curious, delighted or overwhelmed; reverent appears only in beats 4 and 8 [[carried by sp-1.1, sp-2.2, sp-3.2, sp-4.1, sp-4.5, sp-5.1, sp-8.1, sp-8.2, sp-8.3]]
+
+= th-frame-portal · the frame is the portal: carried in at sp-4.2, never on stage before: the frame prop is absent from every frame before sp-4.2 and present from sp-4.2 to the end [[carried by sp-4.2, sp-4.6, sp-7.4, sp-8.3]]
+
+===
+
+# s01-arrival-overwhelm
+
+EXT. HOME FIELD - ARRIVAL #1#
+
+A closed box. The only light is the seam of its lid. The human stands behind it in the heavy cloak, hands hidden in the sleeves. Codex left, Clawd right, both still. [[sp-1.1 · f0 · blue · warm, inviting]]
+
+The human lifts the lid in one move. The sleeves slide back: the first time we see hands. The seam light lags behind the lid, then spills. [[sp-1.2 · f60 · blue · curiosity]]
+
+A glass bubble swells out of the box with the gadget dim inside it. Codex, then Clawd, lean in, staggered by four. [[sp-1.3 · f110 · blue · curiosity]]
+
+EXT. HOME FIELD - EVERYTHING AT ONCE #2#
+
+The bubble pops. One frame of smear. The light arrives first, the glass second: the gadget stands free with its dial wide. [[sp-2.1 · f186 · blue · delight]]
+
+The gadget projects: stalks shoot up, arches drop in, rings spin out, patches tile, beads scatter, each on twos, staggered. The human turns with joy, arms open: the one full arm-open in the film, and it is earned. [[sp-2.2 · f230 · blue · delight]]
+
+Nothing is staggered any more; everything arrives at once. Codex catches a piece out of the air. A stalk shoves Clawd sideways. The human pulls the cloak back around and shrinks. [[sp-2.3 · f330 · blue · overwhelm]]
+
+# s02-cant-build-frame
+
+EXT. HOME FIELD - CANT BUILD #3#
+
+The human reaches for a stalk to plant it on a patch. Anticipation, action, contact: no pulse. The stalk slides back the way it came. [[sp-3.1 · f430 · steel · frustration kept kind]]
+
+Both hands now. The human stacks three patches. They collapse, staggered by three, each a settle with no hold. Codex winces small at frame left. [[sp-3.2 · f500 · steel · gentle gag]]
+
+The dial's light is lost in the grain. The human sits down in the mess. Clawd looks at the human, then leaves frame right. [[sp-3.3 · f580 · steel · frustration kept kind]]
+
+EXT. HOME FIELD / PORTAL - THE FRAME #4#
+
+Hold. The human slumped among the fallen pieces, the cloak pooled. Codex small at left. Clawd gone. [[sp-4.1 · f630 · steel · reverent]]
+
+Clawd re-enters from the right holding the frame up with both arms. Its interior lights: the crayon world is inside it, refracted. The human's head turns to it first, then the body. [[sp-4.2 · f690 · steel · wonder]]
+
+The human rises. The cloak slides off and falls to a heap that stays. The Swoop is revealed hands first. [[sp-4.3 · f740 · steel · wonder]]
+
+The human steps toward the frame. Codex, passing, nudges the heap with a foot. It does not move much. That is the gag. [[sp-4.4 · f800 · steel · comic]]
+
+At the frame. One hand on its edge. The heel taps the floor at its base and settles. The human looks through. [[sp-4.5 · f840 · steel · reverent]]
+
+The human steps through. The field narrows to the frame; everything outside it dims through the lag. Codex and Clawd follow. [[sp-4.6 · f900 · steel → crayon · wonder]]
+
+# s03-scaffold
+
+EXT. CRAYON PAPER - ART WORLD #5#
+
+A paper field. Crayon architecture: stacked arches as scribbles, stalks as waxy lines. Clawd hands the human a crayon. [[sp-5.1 · f940 · crayon · playful]]
+
+The human draws a stalk in the air in three strokes. The strokes stay where they are drawn. [[sp-5.2 · f1010 · crayon · playful]]
+
+The drawing fills in and becomes a real stalk; its leaf opens. Codex keeps it from drifting off with one hand. [[sp-5.3 · f1110 · crayon · delight]]
+
+The human picks the stalk up and holds it like a lantern. Turns toward the edge of the paper, where the lines begin. [[sp-5.4 · f1200 · crayon · curiosity]]
+
+EXT. LINE WORLD - CROSSING #6#
+
+Everything reduces to pale contour lines, the figures included. [[sp-6.1 · f1240 · line · focused]]
+
+The lines re-route and connect: the stalk's lines reach the next world's grid. Codex steps past Clawd and takes the lead. [[sp-6.2 · f1300 · line · focused]]
+
+EXT. SHADED GRID - PROGRAMMING WORLD #7#
+
+Shaded architecture with emissive edges. Gates as rings. Codex points to one empty join. [[sp-7.1 · f1360 · shaded · focused]]
+
+The human places the stalk against another piece. Contact. The join lights: a seam pulse at the keystone, the first one that has worked. [[sp-7.2 · f1440 · shaded · satisfaction]]
+
+The chain runs down the grid: three gates light in sequence, the third is the one the human made. Clawd watches from the edge. [[sp-7.3 · f1520 · shaded · satisfaction]]
+
+The frame stands ahead, now a window with home inside it. The trio steps back through. [[sp-7.4 · f1620 · shaded → coral · contentment]]
+
+# s04-settle
+
+EXT. HOME FIELD - HOME SETTLE #8#
+
+Home. The structure stands small under the frame (D102) with the crayon piece and the lit joins inside it. The gadget rests inside, bright but bounded. [[sp-8.1 · f1660 · coral · contentment]]
+
+The human sits on the patch. Codex settles left, Clawd right, each with one idle boil. The frame is set down against the structure. [[sp-8.2 · f1760 · coral · settled]]
+
+One last look through the frame, now a window. Title. Hold to the end. [[sp-8.3 · f1860 · coral · settled]]
+
+= ask-5 (sp-5.2): which object the human draws first. Default: the first stalk.
+= ask-7 (sp-7.3): how many gates light. Default: three, the third is the one the human made.
+= ask-c (sp-5.1): the world kits carry their own hue pairs; does the colour script gain three rows (crayon, line, shaded) or do the worlds keep the kit palettes as they are. Default: three rows, taken from the kit studies.

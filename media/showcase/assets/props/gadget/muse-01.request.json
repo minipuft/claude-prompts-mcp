@@ -1,0 +1,12 @@
+{
+ "prompt": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the gadget: raw capability, a hybrid universe-simulator machine in the spirit of The Midnight Gospel, familiar parts in an impossible whole, organic and mechanical at once; not a device with buttons, not an orb; its dial is the one emitter; hand-coded today in Gadget.tsx.\nLAYOUT: Show the SAME machine twice on one baseline: left dormant, right with its dial open and light pouring out. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: Dr. Seuss Midnight Painting: swooping organic lobes, curling stalks with flag leaves and pale thin contour on black.\nImage 2: Dr. Seuss Midnight Painting: curling stalks with flag leaves.\nImage 3: owner card MFJFTELGH6FD8: a single radiant core behind a flat silhouette, the shape never whites out.\nImage 4: the Clawd companion: take only its stubby blocky body, flat plates and small dark slit marks as the cast property.\nVARIANT muse-01 'Clock-stalk machine': Stacked blobby lobes like a clock-stalk with a crooked funnel, a curled antenna with a flag leaf, a round dial as the emitter and stub legs. The design sits between clawd (stubby plated legs and body blocks) and the Seuss paintings.",
+ "references": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-no-one-youer.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-freebird.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFJFTELGH6FD8.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/clawd-official.png"
+ ],
+ "out": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/gadget/muse-01.png",
+ "workdir": "/home/minipuft/.cache/muse-work/cwd",
+ "timeout": 280
+}

@@ -1,0 +1,19 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_animatic#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "Rubric receipt written for the viewed strip only, with probe-decided criteria cited and motion criteria left UNPROVEN; this step carries a reminder and no shell check so no engine exit code exists for it",
+      "reminders": {
+        "satisfied": [],
+        "not_applicable": [
+          {
+            "id": "animation-review",
+            "reason": "graded at still tier on the twelve frame strip only and motion criteria stay UNPROVEN because nothing was watched in motion and no motion contract step was recorded"
+          }
+        ]
+      }
+    }
+  }
+}

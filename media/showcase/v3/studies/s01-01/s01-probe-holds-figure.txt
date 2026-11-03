@@ -1,0 +1,7 @@
+control: 40-frame hold -> FAIL (hold of 40 frames at 0-39 is over 27 and no key declares it); 16-frame hold, 4-drawing move -> pass (2 holds, move of 4); 40-frame hold declared by key 'K1' -> pass and listed; 1-drawing move -> FAIL
+  frames 420; holds found 8 (lengths [16, 20, 22, 24, 26, 148]); moves 7 (drawings per move [4, 4, 3, 6, 6, 4, 6]); pops 0; boil changes (no key row within 1 frame, not counted as drawings) 3
+  ok   hold band: all 8 holds inside 11-27 or declared
+  ok   move drawings: all 7 moves use 3-6 drawings
+  ok   pops: 0 key-to-key change(s) with no drawing between
+  intentional long hold: key 'shrink' frames 272.. (148 frames, declared 148)
+pass: hold-band - 8 holds in the band or declared, 7 moves of 3-6 drawings, 0 pops, 1 intentional long holds listed

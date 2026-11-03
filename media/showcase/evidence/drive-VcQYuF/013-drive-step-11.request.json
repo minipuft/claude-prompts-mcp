@@ -1,0 +1,42 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_shot#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "The study v3/studies/s01-02.md with its five-part receipt and gaps list, the artifact copies with sha256 prefixes and the strip exist and were listed with paths, the script feed touched only the measured fields and two dated notes, no ruling was invented, and nothing was committed.",
+      "reminders": {
+        "satisfied": [
+          "framework-compliance",
+          "prose-hygiene"
+        ],
+        "not_applicable": [
+          {
+            "id": "api-documentation",
+            "reason": "a study filing documents no API endpoint"
+          },
+          {
+            "id": "creed-fidelity",
+            "reason": "creed n/a, no visual surface of the CloudySky repo, the filing is of a showcase study"
+          },
+          {
+            "id": "information-placement",
+            "reason": "no documentation page is placed or changed"
+          },
+          {
+            "id": "plan-quality",
+            "reason": "the step files a study and writes no plan"
+          },
+          {
+            "id": "product-positioning-fidelity",
+            "reason": "no public documentation of the client and server boundary is written"
+          },
+          {
+            "id": "semantic-discoverability",
+            "reason": "no documentation is written and no search terminology is chosen"
+          }
+        ]
+      }
+    }
+  }
+}

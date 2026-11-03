@@ -1,0 +1,45 @@
+id: showcase_motion
+name: Showcase Motion
+description: "Write the timing charts: per shot and actor the key list the key
+  sheet will draw and, per key pair, the chart (holds, breakdowns with
+  favouring, smear, overshoot, settle, on twos) plus staggers, light lag, boil,
+  seam pulses and camera; executable by src/library/motion.ts and measurable by
+  the render study (D72)."
+category: development
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: brief
+    type: string
+    description: Audience, product goal and desired silent showcase outcome.
+    required: true
+  - name: context
+    type: string
+    description: Prior step output; read shared chain history for earlier evidence
+      and decisions.
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory.
+    required: false
+    defaultValue: media/showcase/output
+  - name: constraints
+    type: string
+    description: Duration, dimensions, accessibility, renderer and evidence limits.
+    required: false
+    defaultValue: Silent motion film; evidence-backed product claims; client-owned
+      rendering; no publishing.
+gateConfiguration:
+  framework_gates: false
+  exclude:
+    - api-documentation
+    - creed-fidelity
+    - information-placement
+    - plan-quality
+    - product-positioning-fidelity
+    - prose-hygiene
+    - semantic-discoverability
+artifacts:
+  produces:
+    - docs
+    - plan

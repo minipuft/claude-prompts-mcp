@@ -1,0 +1,93 @@
+{
+ "sheet": "assets/human/keys/s01-arrival-overwhelm/sheet-b-01.png",
+ "sheetSha256": "bed3be1801352590264d978286b86e43dd1a309fc2397e720372d29e990ca143",
+ "baselineRow": 539,
+ "numeralX": [
+  232.0,
+  632.0,
+  1039.5,
+  1436.5
+ ],
+ "keys": [
+  {
+   "key": "K5",
+   "cropBoxInSheet": [
+    57,
+    117,
+    364,
+    543
+   ],
+   "cropPx": [
+    307,
+    426
+   ],
+   "crop": "assets/human/keys/s01-arrival-overwhelm/K5-crop.png",
+   "cropSha256": "0b95d23eae99ebf85b176c8294a8a46b2745dbf76cdc543005914fcea26af41f",
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K5.png",
+   "plateSha256": "c4b64b87f79c626b7fe486cd77548c3a27b2065b0139ddc978bb0fe1b1a977ba",
+   "parts": 1,
+   "figureHeightPx": 426,
+   "baselineInCrop": 422
+  },
+  {
+   "key": "K6",
+   "cropBoxInSheet": [
+    449,
+    18,
+    841,
+    543
+   ],
+   "cropPx": [
+    392,
+    525
+   ],
+   "crop": "assets/human/keys/s01-arrival-overwhelm/K6-crop.png",
+   "cropSha256": "dd42f14561d030a59d72d4a2c276d7d2dac076169afe394e3de81cfac7c3cfd1",
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K6.png",
+   "plateSha256": "b913660625a5514bac5c50e5b403c95afdd560b5f464e92e8a08d549d5093d58",
+   "parts": 1,
+   "figureHeightPx": 525,
+   "baselineInCrop": 521
+  },
+  {
+   "key": "K7",
+   "cropBoxInSheet": [
+    829,
+    51,
+    1226,
+    543
+   ],
+   "cropPx": [
+    397,
+    492
+   ],
+   "crop": "assets/human/keys/s01-arrival-overwhelm/K7-crop.png",
+   "cropSha256": "3c66d015ccebc0e185cc6bf8cff3cc76a32e0437e91fb04310693af64c5b71a8",
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K7.png",
+   "plateSha256": "9b89e1d36d2481a9b3b03ee4f958bbc57a64056da5c499a822efaede9a3a399c",
+   "parts": 1,
+   "figureHeightPx": 492,
+   "baselineInCrop": 488
+  },
+  {
+   "key": "K8",
+   "cropBoxInSheet": [
+    1312,
+    264,
+    1538,
+    543
+   ],
+   "cropPx": [
+    226,
+    279
+   ],
+   "crop": "assets/human/keys/s01-arrival-overwhelm/K8-crop.png",
+   "cropSha256": "221610aecc22fc0527f6c0cc43d245314495a6b4b2539fdcaae492da39e9e2e3",
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K8.png",
+   "plateSha256": "3b34faf69077908aee52f1b11dbcb9e1bffb065e7fbba80a9e9f003e9c974864",
+   "parts": 1,
+   "figureHeightPx": 279,
+   "baselineInCrop": 275
+  }
+ ]
+}

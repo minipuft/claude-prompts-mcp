@@ -1,0 +1,7 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_shot#1",
+    "user_response": "Layout sheet: numbering probe, no work done.\n"
+  }
+}

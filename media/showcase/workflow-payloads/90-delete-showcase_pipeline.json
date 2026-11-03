@@ -1,0 +1,8 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "delete",
+    "id": "showcase_pipeline"
+  }
+}

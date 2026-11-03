@@ -1,0 +1,6 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "command": ">>animation_animatic episode_root:\"media/showcase/v3\" renderer:\"media/showcase\" output_root:\"media/showcase\" brief:\"Animatic 04 of the 65 s eight-beat episode: the blocking step resolves the prop collisions animatic 03 left open (the box over the kit blocks and the join glow, the stalk in the air at 300, the structure over the frame, and the blocks inside the human's body in beat 4); beat 4 plays the six D99 keys (slump, turn, rise, step, threshold, through) from v3/poses/s02-the-frame.json with its derived secondaries (cloak, hair); the animation-vocabulary and animation-bible gates run on their steps in this chain. Every gate line quoted.\""
+  }
+}

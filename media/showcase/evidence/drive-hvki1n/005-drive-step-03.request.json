@@ -1,0 +1,15 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_asset_muse#1",
+    "user_response": "**Summary**: Graded the pieces muse sheet against the rubric by criterion id: C19 (sheet clause), C5 and C6 HOLD; shadows and motion rows are UNPROVEN at the viewed tier; the pick is the owner's.\n\n**Gate Coverage**:\n- [1] PASS: showcase-review, each mark cites viewed evidence and the control it beats; UNPROVEN where the tier was not reached.\n\n## Inspected Evidence\n`assets/props/pieces/muse-01.png`, `muse-02.png`, `muse-03.png` (1672x941, viewed as a three-up at 700 px each; muse-01 of the box also at full size), `assets/props/pieces/muse.json`, measured corners and near-black share per plate. Not viewed: any render in motion.\n\n## Grades\n- C19 HOLDS (sheet clause): 3 variants of the family, all seven members (stalk, arch, ring, block, frame, soft patch, beaded string) at one scale on one baseline in each; each cites library cards by facet and a cast property (codex, clawd, human); pick not made.\n- C5 HOLDS: corner max channel 1; 86, 88 and 92 percent of pixels below 16.\n- C6 HOLDS: no variant carries a glow; the accent is small diamonds and beads.\n- C3, C4 UNPROVEN (the members are about 60 px tall in a 1672 px plate, below any crop tier); muse-03 is mostly line, so shadow shapes barely exist there.\n- One family sheet does not test the pieces' motion: a stalk draws on, a string swings; those stay with the shot.\n\n## Controls\nBeats the hand-coded Pieces.tsx and Frame.tsx, whose members share no cited reference.\n\n## Owner\n(1) Pick one grammar for the family: Seuss chunky (muse-01), window kit (muse-02) or line (muse-03)? Default: muse-01. (2) Is the patch part of the family or a ground treatment? Default: ground treatment, drawn with the world.\n\n## Next\nRegenerate members at a larger scale (one plate per member pair) before a cut; the family sheet decides grammar only.\n\n## Rubric Evolution\nNone proposed.\n\n## Concerns\nThe grade step asks for a receipt under `v3/studies/`; this row may not write there, so the receipt is `assets/props/pieces/grade.md` and the study index is untouched.\n\n**GATE_REVIEW: PASS - graded by criterion id from viewed stills; nothing unviewed marked HOLDS**\n",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "Graded by criterion id from the viewed stills with measured corner values; motion rows and the 3x crop tier marked UNPROVEN; owner picks.",
+      "reminders": {
+        "satisfied": [],
+        "not_applicable": []
+      }
+    }
+  }
+}

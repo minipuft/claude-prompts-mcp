@@ -1,0 +1,88 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🔍 **Prompt Inspect**: Showcase Asset Muse (`showcase_asset_muse`)\n\n⚡ **Type**: chain\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Between-iteration muse for one showcase asset: design_muse on the board and the existing cast, then 3+ generated sheets side by side in the substrate, then a rubric grade. No asset enters a scene without it (D55); the pick proceeds to a model sheet (D72).\n\n**Arguments**:\n- `asset` `string` *(required)*: The asset's job in the script's resource vocabulary.\n- `constraints` `string`: The style envelope the variants must stay inside.\n\n**Chain Steps** (3):\n1. `design_muse` - Reference Directions\n2. `showcase_asset_sheet` - Rendered Sheet\n3. `showcase_review` - Sheet Grade\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "inspect",
+    "resource_type": "prompt",
+    "id": "showcase_asset_muse",
+    "current_version": 0,
+    "prompt": {
+      "id": "showcase_asset_muse",
+      "name": "Showcase Asset Muse",
+      "category": "development",
+      "description": "Between-iteration muse for one showcase asset: design_muse on the board and the existing cast, then 3+ generated sheets side by side in the substrate, then a rubric grade. No asset enters a scene without it (D55); the pick proceeds to a model sheet (D72).",
+      "systemMessage": "",
+      "userMessageTemplate": "",
+      "arguments": [
+        {
+          "name": "asset",
+          "required": true,
+          "description": "The asset's job in the script's resource vocabulary.",
+          "type": "string"
+        },
+        {
+          "name": "constraints",
+          "required": false,
+          "description": "The style envelope the variants must stay inside.",
+          "type": "string",
+          "defaultValue": "Generated sheets only (D65/D66), pure black field, five flat roles with identity pigments pinned, pale contour, clean-up standard (D72); variants must sit between the board cards cited and the existing cast. The owner's pick then gets a model sheet (showcase_model_sheet) before any key sheet; nothing is animated by generation (D68)."
+        }
+      ],
+      "chainSteps": [
+        {
+          "promptId": "design_muse",
+          "stepName": "Reference Directions",
+          "id": "muse",
+          "args": {
+            "mode": "brainstorm",
+            "moodboard": "media/showcase/v3/references/style-references.json",
+            "seed_refs": "The existing cast under media/showcase/src/library/cast and props: their silhouettes are the other end of the space a new asset must sit between."
+          },
+          "inputMapping": {
+            "challenge": "asset",
+            "constraints": "constraints"
+          }
+        },
+        {
+          "promptId": "showcase_asset_sheet",
+          "stepName": "Rendered Sheet",
+          "id": "sheet",
+          "inputMapping": {
+            "asset": "asset",
+            "context": "previous_step_result"
+          },
+          "delegated": true
+        },
+        {
+          "promptId": "showcase_review",
+          "stepName": "Sheet Grade",
+          "id": "grade",
+          "inputMapping": {
+            "brief": "asset",
+            "context": "previous_step_result"
+          },
+          "inlineGateIds": [
+            "showcase-review"
+          ]
+        }
+      ],
+      "artifacts": {
+        "produces": [
+          "source",
+          "docs"
+        ]
+      }
+    },
+    "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+    "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+    "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "source_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "edit_copies_on_write": false,
+    "message": "🔍 **Prompt Inspect**: Showcase Asset Muse (`showcase_asset_muse`)\n\n⚡ **Type**: chain\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Between-iteration muse for one showcase asset: design_muse on the board and the existing cast, then 3+ generated sheets side by side in the substrate, then a rubric grade. No asset enters a scene without it (D55); the pick proceeds to a model sheet (D72).\n\n**Arguments**:\n- `asset` `string` *(required)*: The asset's job in the script's resource vocabulary.\n- `constraints` `string`: The style envelope the variants must stay inside.\n\n**Chain Steps** (3):\n1. `design_muse` - Reference Directions\n2. `showcase_asset_sheet` - Rendered Sheet\n3. `showcase_review` - Sheet Grade\n"
+  },
+  "isError": false
+}

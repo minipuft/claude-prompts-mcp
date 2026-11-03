@@ -1,0 +1,39 @@
+id: animation-bible
+name: Animation Bible
+type: validation
+description: "Check-tier gate on the evidence step (D94, D95, D81): the
+  production bible is current only when it covers the timeline, every proposal
+  file sits inside its beat and closes properly, and the page shows the bible it
+  was built from. The bible (v3/bible.json) must cover the whole timeline with
+  no gap and its pacing items must be the timeline's beats; every proposal file
+  has an item and every item a file, each anchored inside the frame range of its
+  beat; a proposal is one of five kinds, an open one carries no ruling and a
+  ruled one names a D-number; the page footer carries the bible's hash and the
+  bible's recorded inputs still hash to what is on disk. A proposal anchored
+  outside its beat, a bible that no longer matches its inputs or a page built
+  from an older bible fails the gate until `npm run bible` is run again."
+guidanceFile: guidance.md
+pass_criteria:
+  - type: shell_verify
+    shell_command:
+      - python3
+      - scripts/animation/probe-bible.py
+      - v3/bible.json
+      - --page
+      - out/bible.html
+    shell_timeout: 120000
+    shell_working_dir: ../media/showcase
+    shell_max_attempts: 1
+    shell_preset: full
+activation:
+  prompt_categories:
+    - animation
+    - development
+  explicit_request: true
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+subject: animation-bible
+severity: high
+enforcementMode: blocking
+gate_type: custom

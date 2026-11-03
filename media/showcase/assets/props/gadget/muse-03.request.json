@@ -1,0 +1,12 @@
+{
+ "prompt": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the gadget: raw capability, a hybrid universe-simulator machine in the spirit of The Midnight Gospel, familiar parts in an impossible whole, organic and mechanical at once; not a device with buttons, not an orb; its dial is the one emitter; hand-coded today in Gadget.tsx.\nLAYOUT: Show the SAME machine twice on one baseline: left dormant, right with its dial open and light pouring out. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: owner card MFIYY3RT6SJS2: a radial burst with a tiny figure at its centre.\nImage 2: owner card MTR8RSMQ452E8: one hard blue flame lights the form on black, the rest unlit.\nImage 3: Dr. Seuss Midnight Painting: light as strings of beads strung between forms.\nImage 4: the human's model sheet: take only its long swooping neck-and-hair line, tapered tips and thin pale contour as the cast property.\nVARIANT muse-03 'Radial hybrid': A pot-bellied creature-machine with a ring of fins radiating from its dial like a burst, part kettle, part plant, part loom, a funnel for a mouth. The design sits between human (long swoop line, large hands as grippers) and the Seuss paintings.",
+ "references": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFIYY3RT6SJS2.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MTR8RSMQ452E8.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-green-cat-lights.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/human-model.png"
+ ],
+ "out": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/gadget/muse-03.png",
+ "workdir": "/home/minipuft/.cache/muse-work/cwd",
+ "timeout": 280
+}

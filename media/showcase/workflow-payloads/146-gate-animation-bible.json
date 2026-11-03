@@ -1,0 +1,43 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "animation-bible",
+    "name": "Animation Bible",
+    "description": "Check-tier gate on the evidence step (D94, D95, D81): the production bible is current only when it covers the timeline, every proposal file sits inside its beat and closes properly, and the page shows the bible it was built from. The bible (v3/bible.json) must cover the whole timeline with no gap and its pacing items must be the timeline's beats; every proposal file has an item and every item a file, each anchored inside the frame range of its beat; a proposal is one of five kinds, an open one carries no ruling and a ruled one names a D-number; the page footer carries the bible's hash and the bible's recorded inputs still hash to what is on disk. A proposal anchored outside its beat, a bible that no longer matches its inputs or a page built from an older bible fails the gate until `npm run bible` is run again.",
+    "type": "validation",
+    "gate_type": "custom",
+    "severity": "high",
+    "subject": "animation-bible",
+    "enforcement_mode": "blocking",
+    "guidance": "Ground truth by exit code (D81). The probe runs `python3 scripts/animation/probe-bible.py v3/bible.json --page out/bible.html` in the renderer root: it reads v3/bible.json, v3/timeline.json, every file under v3/proposals/ and the page out/bible.html, and checks that the tracks cover the timeline, each proposal sits inside the frame range of its beat, kind and ruling are consistent, the page footer hash equals the bible's hash and the bible's declared inputs hash to its inputsHash. Its first line is its control (a clean bible passes; a bible with the last pacing item dropped, a proposal anchored at frame 5 of a later beat, a ruled proposal with no D-number, a page whose footer hash differs, a wrong inputsHash and a stale-input flag are each named) and it refuses to report if a control does not trip. On FAIL quote the probe's refused line, run `npm run bible` in the production root (it recompiles the contracts, the bible and the page, then runs this probe again) and quote the pass line; never edit v3/bible.json, the probe or a proposal file to make it pass - a proposal with a wrong anchor is fixed by re-anchoring it to the beat it belongs in, in its own file, before the rebuild. Control: a proposal anchored outside its beat is refused.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-bible.py",
+          "v3/bible.json",
+          "--page",
+          "out/bible.html"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ],
+    "activation": {
+      "prompt_categories": [
+        "animation",
+        "development"
+      ],
+      "explicit_request": true
+    },
+    "retry_config": {
+      "max_attempts": 2,
+      "improvement_hints": true
+    }
+  }
+}

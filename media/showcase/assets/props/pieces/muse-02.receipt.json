@@ -1,0 +1,19 @@
+{
+ "valid": true,
+ "path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/pieces/muse-02.png",
+ "source": "/home/minipuft/.codex/generated_images/01a14227-b856-7d00-9673-c2f892d27504/exec-21d9ee1d-930d-4ec1-9b32-590b5593fb43.png",
+ "sha256": "f774eb14644c4085f9b2a2b089a9d5bb4c0c3d97295785ab98a809d4c1e4f32e",
+ "bytes": 654421,
+ "referenced_image_paths": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFI6QTUOYA66U.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFP3WX8X3LIX2.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-green-cat-lights.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/clawd-official.png"
+ ],
+ "tool_arguments": {
+  "raw": "{\n  \"prompt\": \"Create ONE 16:9 design variant sheet for a prop family in a silent hand-drawn animated film. Variant muse-02, 'Window family' (this name is metadata only; render no text). Pure black field #000000. All seven members at ONE consistent scale, on one invisible baseline, in one horizontal row with generous black gaps and no overlaps. Left to right: (1) a curling stalk with a flag leaf, reading as a narrow whimsical window support; (2) a pointed doorway arch with a distinct keystone; (3) a ring, a receding turned window frame with an open center; (4) a stubby plated block with small dark slit marks; (5) a held-up frame, a window pair on squat supports, the prompt_engine prop; (6) a soft flat ground patch with an organic closed silhouette; (7) a beaded light string hanging in a clear catenary between two curling stalks, counted as one kit. Keep all seven kits separate, with no connecting baseline drawn. The string may meet its own two stalks, but does not overlap other kits. Every member reads as a window or doorway kit: arch as doorway, ring as window frame, held-up frame as window pair, string as lit lead lines. Stubby blocky bodies and flat plates, with whimsical curlin"
+ },
+ "summary": {
+  "references": 4
+ }
+}

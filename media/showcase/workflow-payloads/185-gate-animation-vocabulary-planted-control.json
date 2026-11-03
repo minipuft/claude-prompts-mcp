@@ -1,0 +1,45 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "animation-vocabulary-planted",
+    "name": "Animation Vocabulary (planted control)",
+    "description": "Temporary control for row 8.2 (D96): the animation-vocabulary probe pointed at a proposals directory that carries a planted word, to show the server refuses it through shell_verify. Deleted after the drive.",
+    "type": "validation",
+    "gate_type": "custom",
+    "severity": "high",
+    "subject": "animation-vocabulary-planted",
+    "enforcement_mode": "blocking",
+    "guidance": "Temporary control gate; see animation-vocabulary. On FAIL quote the refused line.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-vocabulary.py",
+          "v3/vocabulary.json",
+          "--overrides",
+          "v3/vocabulary-overrides.json",
+          "--proposals",
+          "/home/minipuft/.cache/vocab-planted/proposals"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ],
+    "activation": {
+      "prompt_categories": [
+        "animation",
+        "development"
+      ],
+      "explicit_request": true
+    },
+    "retry_config": {
+      "max_attempts": 2,
+      "improvement_hints": true
+    }
+  }
+}

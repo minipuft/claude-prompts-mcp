@@ -1,0 +1,58 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🔍 **Prompt Inspect**: Animation Light and Colour Script (`animation_light_script`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Step 3: write light.json, the light track per beat (hue pair, emitter path and intensity, radiance level, handoffs) and the colour path across every crossing, from the shots' D74 hue pairs and the ledger's effects; checked before any render.\n\n**Arguments**:\n- `episode_root` `string` *(required)*: Episode directory holding the beat ledger (beats-v2.json or beats.json), contracts (timeline.json, blocking/, keys/, light.json, worlds/), rubric.md and studies/ (e.g. media/showcase/v3).\n- `renderer` `string`: The rendering project root (Remotion here): where `npm run animatic`, `npm run xsheet` and scripts/animation/ live.\n- `context` `string`: Owner notes, rulings or the previous step's result.\n- `output_root` `string`: Caller-owned production artifact directory for studies and receipts.\n\n**System Message**:\n```\nUse the animation-direction vocabulary (<episode_root>/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n```\n\n**User Message Template**:\n```\nEpisode root: {{episode_root}}\nRenderer: {{renderer}}\nProduction root: {{output_root}}\nNotes:\n{{context | default(\"none\")}}\n\nRead `timeline.json`, `shots.json` (`hue.radiance`/`hue.accent` per shot, beats mapped by each shot's `beat` list), the ledger's `effects` per beat (emitter, radiance, grain, boil), `worlds/*.json` (each world's radiance colour) and `rubric.md` C6, C15, C18, C24. Write `<episode_root>/light.json`: per beat the hue pair, the emitter (anchor, start→end position from blocking, intensity on ones, colour), radiance level, grain; per crossing window the hue path from the from-beat's pair to the to-beat's (monotonic in hue, through the line world's no-radiance hold, never grey); and every handoff (one emitter at a time: the frame where one goes out and the next comes on, 2–4 frames apart per C18). Keep one hue pair per beat; a beat that needs a second saturated hue outside identity pigments is a FAIL to name, not a third colour to add. The gate runs `probe-colour.py --contract light.json`; quote its lines. Reply: Light script (table: beat · pair · emitter · intensity · handoff frame), Crossings (hue path each), Fails named, Changed, Receipt.\n```\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "inspect",
+    "resource_type": "prompt",
+    "id": "animation_light_script",
+    "current_version": 0,
+    "prompt": {
+      "id": "animation_light_script",
+      "name": "Animation Light and Colour Script",
+      "category": "animation",
+      "description": "Step 3: write light.json, the light track per beat (hue pair, emitter path and intensity, radiance level, handoffs) and the colour path across every crossing, from the shots' D74 hue pairs and the ledger's effects; checked before any render.",
+      "systemMessage": "Use the animation-direction vocabulary (<episode_root>/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.",
+      "userMessageTemplate": "Episode root: {{episode_root}}\nRenderer: {{renderer}}\nProduction root: {{output_root}}\nNotes:\n{{context | default(\"none\")}}\n\nRead `timeline.json`, `shots.json` (`hue.radiance`/`hue.accent` per shot, beats mapped by each shot's `beat` list), the ledger's `effects` per beat (emitter, radiance, grain, boil), `worlds/*.json` (each world's radiance colour) and `rubric.md` C6, C15, C18, C24. Write `<episode_root>/light.json`: per beat the hue pair, the emitter (anchor, start→end position from blocking, intensity on ones, colour), radiance level, grain; per crossing window the hue path from the from-beat's pair to the to-beat's (monotonic in hue, through the line world's no-radiance hold, never grey); and every handoff (one emitter at a time: the frame where one goes out and the next comes on, 2–4 frames apart per C18). Keep one hue pair per beat; a beat that needs a second saturated hue outside identity pigments is a FAIL to name, not a third colour to add. The gate runs `probe-colour.py --contract light.json`; quote its lines. Reply: Light script (table: beat · pair · emitter · intensity · handoff frame), Crossings (hue path each), Fails named, Changed, Receipt.",
+      "arguments": [
+        {
+          "name": "episode_root",
+          "required": true,
+          "description": "Episode directory holding the beat ledger (beats-v2.json or beats.json), contracts (timeline.json, blocking/, keys/, light.json, worlds/), rubric.md and studies/ (e.g. media/showcase/v3).",
+          "type": "string"
+        },
+        {
+          "name": "renderer",
+          "required": false,
+          "description": "The rendering project root (Remotion here): where `npm run animatic`, `npm run xsheet` and scripts/animation/ live.",
+          "type": "string",
+          "defaultValue": "media/showcase"
+        },
+        {
+          "name": "context",
+          "required": false,
+          "description": "Owner notes, rulings or the previous step's result.",
+          "type": "string"
+        },
+        {
+          "name": "output_root",
+          "required": false,
+          "description": "Caller-owned production artifact directory for studies and receipts.",
+          "type": "string",
+          "defaultValue": "media/showcase"
+        }
+      ],
+      "chainSteps": []
+    },
+    "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+    "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+    "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "source_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "edit_copies_on_write": false,
+    "message": "🔍 **Prompt Inspect**: Animation Light and Colour Script (`animation_light_script`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Step 3: write light.json, the light track per beat (hue pair, emitter path and intensity, radiance level, handoffs) and the colour path across every crossing, from the shots' D74 hue pairs and the ledger's effects; checked before any render.\n\n**Arguments**:\n- `episode_root` `string` *(required)*: Episode directory holding the beat ledger (beats-v2.json or beats.json), contracts (timeline.json, blocking/, keys/, light.json, worlds/), rubric.md and studies/ (e.g. media/showcase/v3).\n- `renderer` `string`: The rendering project root (Remotion here): where `npm run animatic`, `npm run xsheet` and scripts/animation/ live.\n- `context` `string`: Owner notes, rulings or the previous step's result.\n- `output_root` `string`: Caller-owned production artifact directory for studies and receipts.\n\n**System Message**:\n```\nUse the animation-direction vocabulary (<episode_root>/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n```\n\n**User Message Template**:\n```\nEpisode root: {{episode_root}}\nRenderer: {{renderer}}\nProduction root: {{output_root}}\nNotes:\n{{context | default(\"none\")}}\n\nRead `timeline.json`, `shots.json` (`hue.radiance`/`hue.accent` per shot, beats mapped by each shot's `beat` list), the ledger's `effects` per beat (emitter, radiance, grain, boil), `worlds/*.json` (each world's radiance colour) and `rubric.md` C6, C15, C18, C24. Write `<episode_root>/light.json`: per beat the hue pair, the emitter (anchor, start→end position from blocking, intensity on ones, colour), radiance level, grain; per crossing window the hue path from the from-beat's pair to the to-beat's (monotonic in hue, through the line world's no-radiance hold, never grey); and every handoff (one emitter at a time: the frame where one goes out and the next comes on, 2–4 frames apart per C18). Keep one hue pair per beat; a beat that needs a second saturated hue outside identity pigments is a FAIL to name, not a third colour to add. The gate runs `probe-colour.py --contract light.json`; quote its lines. Reply: Light script (table: beat · pair · emitter · intensity · handoff frame), Crossings (hue path each), Fails named, Changed, Receipt.\n```\n"
+  },
+  "isError": false
+}

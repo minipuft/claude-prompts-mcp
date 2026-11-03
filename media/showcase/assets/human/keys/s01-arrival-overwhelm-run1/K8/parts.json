@@ -1,0 +1,50 @@
+{
+  "plate": "assets/human/keys/s01-arrival-overwhelm/K8-crop.png",
+  "plate_sha256": "221610aecc22fc0527f6c0cc43d245314495a6b4b2539fdcaae492da39e9e2e3",
+  "size": [
+    226,
+    279
+  ],
+  "roles": {
+    "main1": "#2f45a8",
+    "main2": "#b983c0",
+    "shadow": "#1d1d36",
+    "light": "#e7e4da",
+    "accent": "#d28a21"
+  },
+  "pins": {
+    "skin": "#67b479",
+    "skinShadow": "#c885c2"
+  },
+  "parts": [
+    {
+      "id": "part00",
+      "bbox": [
+        0,
+        6,
+        226,
+        278
+      ],
+      "pivot": [
+        135.48291069459756,
+        131.00050401638055
+      ],
+      "area": 31745,
+      "control": "part00-control.png",
+      "control_sha256": "3dcbc4c0071f51f0490b75efa0cb1316198aede0ffa5806b88bf4b02451a55ce",
+      "png": "part00.png",
+      "sha256": "70eac8636e81194dda4c90fb830f633c1afe91c17b1fa58ba163e6ed5e64c1e2",
+      "role_pixels": {
+        "skin": 4888,
+        "skinShadow": 2481,
+        "main1": 6225,
+        "main2": 6959,
+        "shadow": 3250,
+        "light": 7928,
+        "accent": 14
+      },
+      "svg": "part00.svg",
+      "svg_sha256": "aca1cae8c7d9f76cc8529f25b088c52a7584437d17f342d3096e164dd5b557ad"
+    }
+  ]
+}

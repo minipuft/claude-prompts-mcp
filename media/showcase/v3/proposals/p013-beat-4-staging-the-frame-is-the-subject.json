@@ -1,0 +1,26 @@
+{
+  "id": "p013",
+  "kind": "owner-ask",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "the-frame",
+    "frame": 900
+  },
+  "title": "Beat 4 staging: the frame is the subject, but the figure fills the stage",
+  "text": "D91 says beat 4's light narrows the field to the frame, lit from inside. On the animatic the human and Codex use 674 of the stage's 720 px of height and the frame sits small at top right; the camera now keeps feet and Codex in picture (p010) but no camera move can make the frame the subject while the figure is this large, and a zoom below 1 shows black outside the stage. Options in the vocabulary: 'wide' restages beat 4 so the frame is large and near centre and the figure stands further off, small against it, the field narrowing to the frame as ruled; 'medium' keeps the present figure scale and lets the frame read as a small lit object the figure walks into. Default: wide.\n\nDone 2026-10-19 under D101 (row 9.5): 'wide'. The frame is 400 x 410 at (590, 190) with its base on the floor line the figure stands on; the figure is 0.34 of its old scale; Clawd carries the frame in from the right (frames 690 to 738, `frame.carriedBy`) and the light sits in its interior and travels with it (`emitter.follows`); the cloak heap lies on the floor from 760; Codex walks to the heap and nudges it on 812. The beat is cut into on 630 and out of on 930 (`cutIn`, `cutOut`: the placements of the beats around it do not ease). Beat 4 is the only beat whose frames changed: `compare-renders.py out/animatic-seq out/animatic-05-draft-seq` finds 1382 of 1950 frames identical and the others in 630-929 (beat 4) and 1682-1949 (home settle, where the heap now lies). Study: v3/studies/beat4-restage.md.",
+  "references": [
+    "totoro-lived-in",
+    "samurai-jack-holds"
+  ],
+  "before": "beat 4 staged with the figure at full stage height and the frame small at top right; eye trace 270 of 300 frames off the frame",
+  "after": "beat 4 restaged wide: the frame large (400 x 410 against 280 x 230), the figure small (0.34 against 0.58) and standing against it, the field narrowing to the lit frame (D91, D99, D101); probe-story passes sp-4.1 to sp-4.6",
+  "intent": "wonder",
+  "options": [
+    "wide",
+    "medium"
+  ],
+  "default": "wide",
+  "status": "ruled",
+  "ruling": "D101"
+}

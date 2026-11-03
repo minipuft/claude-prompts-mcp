@@ -1,0 +1,104 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🔍 **Prompt Inspect**: Showcase Pre-production (`showcase_preproduction`)\n\n⚡ **Type**: chain\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Once per episode: rebuild the board, write the story and beats, break them into shots with the object inventory, and grade the package; the muse then runs per object from the inventory (showcase_asset_muse) before any showcase_shot run.\n\n**Arguments**:\n- `brief` `string` *(required)*: Audience, product goal and desired silent showcase outcome.\n- `constraints` `string`: Duration, dimensions, renderer and evidence limits.\n- `output_root` `string`: Caller-owned production artifact directory.\n\n**System Message**:\n```\nUse the animation-direction vocabulary (media/showcase/v3/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n```\n\n**Chain Steps** (4):\n1. `showcase_board` - Board\n2. `showcase_story` - Story and Beats\n3. `showcase_shotlist` - Shot List and Inventory\n4. `showcase_review` - Package Grade\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "inspect",
+    "resource_type": "prompt",
+    "id": "showcase_preproduction",
+    "current_version": 0,
+    "prompt": {
+      "id": "showcase_preproduction",
+      "name": "Showcase Pre-production",
+      "category": "development",
+      "description": "Once per episode: rebuild the board, write the story and beats, break them into shots with the object inventory, and grade the package; the muse then runs per object from the inventory (showcase_asset_muse) before any showcase_shot run.",
+      "systemMessage": "Use the animation-direction vocabulary (media/showcase/v3/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.",
+      "userMessageTemplate": "",
+      "arguments": [
+        {
+          "name": "brief",
+          "required": true,
+          "description": "Audience, product goal and desired silent showcase outcome.",
+          "type": "string"
+        },
+        {
+          "name": "constraints",
+          "required": false,
+          "description": "Duration, dimensions, renderer and evidence limits.",
+          "type": "string",
+          "defaultValue": "~40 s at 30 fps, 1280x720, silent, poster at frame 0, swangle renderer here, final render on the Windows host."
+        },
+        {
+          "name": "output_root",
+          "required": false,
+          "description": "Caller-owned production artifact directory.",
+          "type": "string",
+          "defaultValue": "media/showcase"
+        }
+      ],
+      "chainSteps": [
+        {
+          "promptId": "showcase_board",
+          "stepName": "Board",
+          "id": "board",
+          "inputMapping": {
+            "brief": "brief",
+            "output_root": "output_root"
+          }
+        },
+        {
+          "promptId": "showcase_story",
+          "stepName": "Story and Beats",
+          "id": "story",
+          "inputMapping": {
+            "brief": "brief",
+            "constraints": "constraints",
+            "context": "previous_step_result",
+            "output_root": "output_root"
+          }
+        },
+        {
+          "promptId": "showcase_shotlist",
+          "stepName": "Shot List and Inventory",
+          "id": "shots",
+          "inputMapping": {
+            "brief": "brief",
+            "constraints": "constraints",
+            "context": "previous_step_result",
+            "output_root": "output_root"
+          }
+        },
+        {
+          "promptId": "showcase_review",
+          "stepName": "Package Grade",
+          "id": "grade",
+          "inputMapping": {
+            "brief": "brief",
+            "constraints": "constraints",
+            "context": "previous_step_result",
+            "output_root": "output_root"
+          },
+          "inlineGateIds": [
+            "showcase-review"
+          ]
+        }
+      ],
+      "artifacts": {
+        "produces": [
+          "docs",
+          "plan"
+        ]
+      }
+    },
+    "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+    "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+    "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "source_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "edit_copies_on_write": false,
+    "message": "🔍 **Prompt Inspect**: Showcase Pre-production (`showcase_preproduction`)\n\n⚡ **Type**: chain\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Once per episode: rebuild the board, write the story and beats, break them into shots with the object inventory, and grade the package; the muse then runs per object from the inventory (showcase_asset_muse) before any showcase_shot run.\n\n**Arguments**:\n- `brief` `string` *(required)*: Audience, product goal and desired silent showcase outcome.\n- `constraints` `string`: Duration, dimensions, renderer and evidence limits.\n- `output_root` `string`: Caller-owned production artifact directory.\n\n**System Message**:\n```\nUse the animation-direction vocabulary (media/showcase/v3/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n```\n\n**Chain Steps** (4):\n1. `showcase_board` - Board\n2. `showcase_story` - Story and Beats\n3. `showcase_shotlist` - Shot List and Inventory\n4. `showcase_review` - Package Grade\n"
+  },
+  "isError": false
+}

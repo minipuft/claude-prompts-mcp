@@ -1,0 +1,17 @@
+{
+  "id": "p030",
+  "kind": "finding",
+  "from": "worker",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "programming-world",
+    "frame": 1620
+  },
+  "title": "sp-7.4: three figures crossing the window's x is not staged; the story point's texture line says so and no layer records it",
+  "text": "sp-7.4's texture line reads \"three figures cross its x (the human's crossing is read at sp-4.6; Codex and Clawd's are not recorded for this beat)\" and its only recipe is `frame prop present`. Measured on the blocking of beat 7 (`v3/blocking/programming-world.json`): the window (`frame`) stands at x 1040-1270, y 50-240 from the beat's first frame; Codex stands at x 1100 and Clawd at x 1075, both already on the window's side of its left edge x 1040 for the whole beat, and the human's crop (380-880) is 160 px left of it. The story point's window is f1620-1659 and the beat's cut is f1650 (the crossing out is 1615-1685), so a crossing of x 1040 by all three is 30 frames. Putting the three left of x 1040 at f1620 and walking each across it needs: the human's root travel of about 410 px in 30 frames (her stride at the beat-4 walk is 152 px in 60), Codex and Clawd moved off the grid's right edge (the gates stand at x 870-1030 and the bead's run ends at 870 on f1572-1600), and the human's crop clear of both identity boxes (`probe-blocking.py` `identity boxes apart`) while it passes beside the window. It also moves the gadget's holder (`th-glass`: the gadget rests in the structure from beat 8) and the light's target (sp-7.4's eye line is `frame interior`, which the crossing figures would cover). That is a restage of beats 7 and 8's cast, not a staging fix inside this story point, so it is left as the texture line says: the frame stands, the light goes into it (litFrom 1620, the eye trace's target) and the trio's crossing is not read by any probe. Options: (a) keep the line as texture and say it is not staged, (b) restage the cast of beats 7-8 with the trio left of x 1040 at the start of sp-7.4 and a crossing recipe (`stage` expect `crosses`, which does not exist yet: `carried-by` and `inside` are the closest forms), (c) re-word the story point to what the film stages: the light goes into the window.",
+  "references": [],
+  "before": "the frame stands; Codex and Clawd already right of its left edge; the human 160 px left of it; no recipe reads a crossing",
+  "after": "a ruling on (a), (b) or (c)",
+  "status": "open",
+  "ruling": null
+}

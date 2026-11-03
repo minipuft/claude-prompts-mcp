@@ -1,0 +1,22 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "showcase-review",
+    "name": "Showcase Review Rubric",
+    "description": "Reminder that a showcase render is graded against media/showcase/v3/rubric.md by criterion id with cited evidence, never by impression.",
+    "type": "guidance",
+    "gate_type": "custom",
+    "severity": "medium",
+    "subject": "showcase-review",
+    "enforcement_mode": "advisory",
+    "guidance": "Grade only what was viewed. One mark per touched criterion: HOLDS, FAILS, UNPROVEN or TASTE, each with evidence at or above the criterion's minimum tier and the failing control it beats. Identity pigments unchanged (C1); role fills, no hex in assets (C2); designed, stippled shadows (C3, C4); black negative space, one emitter under the assets (C5, C6); frame interior refracted and drawn in depth (C7, C8); grain subordinate (C9); interior is the subject (C10); gadget familiar-impossible (C11); byte-identical renders (C12); no shimmer, drawn on twos, staggered, light lagging (C13, C16, C17, C18); acting reads without text (C14); palette travel never greys (C15). Receipt in five parts: Changed, Grades, Controls, Owner, Next.",
+    "activation": {
+      "prompt_categories": [
+        "development"
+      ],
+      "explicit_request": true
+    }
+  }
+}

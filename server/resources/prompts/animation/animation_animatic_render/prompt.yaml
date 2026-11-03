@@ -1,0 +1,31 @@
+id: animation_animatic_render
+name: Animation Animatic Render
+description: "Step 4: render the animatic (the whole timeline, holds only, each
+  beat in its world under its blocking, keys and light) twice, write the
+  exposure sheet, run every episode-tier probe on the frames, and file the study
+  the owner watches."
+category: animation
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: episode_root
+    type: string
+    description: Episode directory holding the beat ledger (beats-v2.json or
+      beats.json), contracts (timeline.json, blocking/, keys/, light.json,
+      worlds/), rubric.md and studies/ (e.g. media/showcase/v3).
+    required: true
+  - name: renderer
+    type: string
+    description: "The rendering project root (Remotion here): where `npm run
+      animatic`, `npm run xsheet` and scripts/animation/ live."
+    required: false
+    defaultValue: media/showcase
+  - name: context
+    type: string
+    description: Owner notes, rulings or the previous step's result.
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory for studies and receipts.
+    required: false
+    defaultValue: media/showcase
+systemMessageFile: system-message.md

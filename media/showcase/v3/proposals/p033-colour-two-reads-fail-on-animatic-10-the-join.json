@@ -1,0 +1,17 @@
+{
+  "id": "p033",
+  "kind": "finding",
+  "from": "worker",
+  "date": "2026-10-20",
+  "anchor": {
+    "beat": "programming-world",
+    "frame": 1428
+  },
+  "title": "Colour: the join's glow reads 1 degree outside its pair on 1428-1515, and the 1615-1685 crossing reads a hue path the light's path does not take",
+  "text": "`probe-all` colour-continuity on animatic 10 (`out/animatic-10-chain-probe-all.txt`): (1) `radiance hue per frame`: 96 of 1560 frames where the light is drawn and readable read a hue outside the beat's pair (205 and 214 deg, tolerance 15): 190 deg on 1428-1431 and 189 deg on 1432-1435 (the first eight of the list), i.e. under a degree past the edge. The read region is the brightest 0.5 % of the frame outside the fixed fills within 3 % of the emitter, and it takes in the kit blocks' lit pale edge (hue about 190), so the emitter's own hue does not move it: the shaded world's radiance colour was changed from #56b0d4 (197 deg) to #56a0d4 and to #5aa0e8 (about 210 deg) and the read stayed 189-190, then the colour was put back. The standalone `probe-colour.py` (every fixed colour masked everywhere, not by prop crop) reads 1560 of 1560 inside the pair. (2) `crossing hue path`: the 1615-1685 crossing (shaded to home) read on frames detours: sample 7 reads 39 deg, 153 deg behind its start (194 deg), while the light contract's path for it (`#c5e4f0 #c9caf1 #e7cef2 #f3d2e6 #f4d9d6`) is monotonic and the contract check passes. The frames read the world refilling from lines to the warm home (cyan to yellow-orange, hue falling through green), the light path goes up through violet and pink: two different directions between the same ends. The contract compiles the shorter arc (168 deg upward against 192 deg downward). Options for a ruling: (a) give the crossing's light path the direction the frames take (a `via` hue or a direction key in the light compile), (b) change the world's refill so its dominant hue walks the light's way, (c) read the crossing's hue path from the light's own path and not from the frames where the line world's middle has no colour. Neither read is one of the contract's own checks, which pass.",
+  "references": [],
+  "before": "96 frames off the pair by about 1 deg; the 1615-1685 path 153 deg behind",
+  "after": "both reads inside the pair and monotonic",
+  "status": "open",
+  "ruling": null
+}

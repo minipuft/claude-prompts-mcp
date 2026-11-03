@@ -1,0 +1,12 @@
+{
+ "prompt": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the box: a plain package, flat and ordinary, whose lid lifts on a back hinge to let a bubble swell out; hand-coded today in Box.tsx.\nLAYOUT: Show the SAME box twice side by side on one baseline: left lid closed with one hairline light seam, right lid lifted about 100 degrees on its back edge with the light spilling. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: the Clawd companion: take only its stubby blocky body, flat plates and small dark slit marks as the cast property.\nImage 2: Dr. Seuss Midnight Painting: swooping organic lobes, curling stalks with flag leaves and pale thin contour on black.\nImage 3: owner card MTR8RSMQ452E8: one hard blue flame lights the form on black, the rest unlit.\nImage 4: owner card MFJFTELGH6FD8: a single radiant core behind a flat silhouette, the shape never whites out.\nVARIANT muse-01 'Block box': A stout box built of two stacked soft blocks with a lobed cap for a lid and one small curled flag-leaf latch; its only light is one hard seam as emitter. The design sits between clawd (stubby blocky body and flat plates) and the Seuss paintings.",
+ "references": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/clawd-official.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-no-one-youer.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MTR8RSMQ452E8.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFJFTELGH6FD8.png"
+ ],
+ "out": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/box/muse-01.png",
+ "workdir": "/home/minipuft/.cache/muse-work/cwd",
+ "timeout": 280
+}

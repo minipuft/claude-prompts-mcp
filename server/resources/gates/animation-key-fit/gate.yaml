@@ -1,0 +1,34 @@
+id: animation-key-fit
+name: Animation Key Fit
+type: validation
+description: "Check-tier gate on the key sheet step: every drawn key's
+  registered joints fit the pose sheet's declaration (curve class, side and bow
+  within 0.02, no undeclared twinning, root over the weight foot); a plate that
+  draws a lean where a curve was declared is refused before render."
+guidanceFile: guidance.md
+pass_criteria:
+  - type: shell_verify
+    shell_command:
+      - python3
+      - scripts/animation/probe-poses.py
+      - v3/poses
+      - v3/keys
+      - v3/charts
+      - --joints
+      - keys
+    shell_timeout: 600000
+    shell_working_dir: ../media/showcase
+    shell_max_attempts: 1
+    shell_preset: full
+activation:
+  prompt_categories:
+    - animation
+    - development
+  explicit_request: true
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+subject: animation-key-fit
+severity: high
+enforcementMode: blocking
+gate_type: custom

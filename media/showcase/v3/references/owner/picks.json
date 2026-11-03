@@ -1,0 +1,1400 @@
+{
+  "picks": [
+    {
+      "id": "MFJFS03X49AQO",
+      "section": "pose",
+      "why": "backlit dancer in a doorway: the whole body on one diagonal S, read entirely from silhouette",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "pose": {
+          "lineOfAction": "S",
+          "weight": "one-foot",
+          "lead": "leg",
+          "silhouette": "line"
+        },
+        "composition": {
+          "framing": "doorway"
+        },
+        "camera": {
+          "angle": "eye"
+        },
+        "light": {
+          "contrast": "silhouette",
+          "source": "backlight"
+        },
+        "colour": {
+          "field": "dark"
+        }
+      },
+      "applied": [
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#awe",
+          "note": "curve S and one-foot weight (L, 0.6), lead leg R: one diagonal S read from the silhouette, the step back with the head tipped up",
+          "receipt": "evidence/drive-VcQYuF",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#awe",
+          "note": "curve S and one-foot weight (L, 0.6), lead leg R: one diagonal S read from the silhouette, the step back with the head tipped up (run 5: declaration kept, re-confirmed against the rules)",
+          "receipt": "evidence/drive-P7TOpp",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MFJFS03XZOP7E",
+      "section": "pose",
+      "why": "two dancers' arms form one continuous arc over a small figure: a shared line of action across actors, scale contrast",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "pose": {
+          "lineOfAction": "C",
+          "weight": "both",
+          "lead": "arm",
+          "silhouette": "open"
+        },
+        "composition": {
+          "framing": "pair",
+          "scale": "pair-contrast"
+        },
+        "camera": {
+          "angle": "low"
+        },
+        "light": {
+          "contrast": "silhouette"
+        },
+        "colour": {
+          "scheme": "mono"
+        }
+      },
+      "applied": [
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#rest-on-lid",
+          "note": "curve C and weight both: the shared arc over a small figure; the poster pose takes the C class and the even stance (lead none: the card's lead arm is not taken, the poster is twinned on purpose)",
+          "receipt": "evidence/drive-VcQYuF",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#rest-on-lid",
+          "note": "curve C and weight both: the shared arc over a small figure; the poster pose takes the C class and the even stance (lead none: the card's lead arm is not taken, the poster is twinned on purpose) (run 5: declaration kept, re-confirmed against the rules)",
+          "receipt": "evidence/drive-P7TOpp",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MFJFS03XD6A8L",
+      "section": "pose",
+      "why": "dancers mid-leap: every limb extends the spine's curve, no twinning, drapery trails the body",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "pose": {
+          "lineOfAction": "S",
+          "weight": "air",
+          "lead": "both",
+          "silhouette": "open"
+        },
+        "composition": {
+          "framing": "none",
+          "leadingLine": "diagonal"
+        },
+        "camera": {
+          "angle": "eye"
+        },
+        "light": {
+          "contrast": "silhouette"
+        },
+        "fx": [
+          "rays",
+          "glow"
+        ]
+      },
+      "applied": []
+    },
+    {
+      "id": "MFI6SYYWK85H4",
+      "section": "pose",
+      "why": "mid-kick: whip-shaped line of action, opposite arm and leg lead, hair and sleeve lag the torso",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "pose": {
+          "lineOfAction": "S",
+          "weight": "one-foot",
+          "lead": "leg",
+          "silhouette": "star"
+        },
+        "composition": {
+          "framing": "none"
+        },
+        "camera": {
+          "angle": "eye"
+        },
+        "light": {
+          "contrast": "flat"
+        },
+        "timing": "moving",
+        "fx": [
+          "smear"
+        ]
+      },
+      "applied": [
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#joy-b",
+          "note": "curve S, one-foot weight (L, 0.8), opposite arm and leg lead (arm R, leg L), hair and poncho lag the torso: the turn, arms swapped",
+          "receipt": "evidence/drive-VcQYuF",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#joy-b",
+          "note": "curve S, one-foot weight (L, 0.8), opposite arm and leg lead (arm R, leg L), hair and poncho lag the torso: the turn, arms swapped (run 5: declaration kept, re-confirmed against the rules)",
+          "receipt": "evidence/drive-P7TOpp",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MFJG10AXINU2X",
+      "section": "pose",
+      "why": "small figure hauling a pole: full-body C lean against the load, weight on the back foot",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "pose": {
+          "lineOfAction": "C",
+          "weight": "one-foot",
+          "lead": "arm",
+          "silhouette": "line"
+        },
+        "composition": {
+          "framing": "negative-space",
+          "scale": "figure-small"
+        },
+        "camera": {
+          "angle": "eye"
+        },
+        "light": {
+          "contrast": "flat"
+        },
+        "colour": {
+          "scheme": "mono"
+        }
+      },
+      "applied": [
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#grip",
+          "note": "curve C and weight on the back foot (R, 0.6), lead arm R: the full-body lean against the load, here the gather before the lid lifts",
+          "receipt": "evidence/drive-VcQYuF",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#lift",
+          "note": "weight on the back foot (R, 0.7) and lead arm R: the haul against the load, now with the C flipped to lean back (sign +1)",
+          "receipt": "evidence/drive-VcQYuF",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#grip",
+          "note": "curve C and weight on the back foot (R, 0.6), lead arm R: the full-body lean against the load, here the gather before the lid lifts (run 5: declaration kept, re-confirmed against the rules)",
+          "receipt": "evidence/drive-P7TOpp",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#lift",
+          "note": "weight on the back foot (R, 0.7) and lead arm R: the haul against the load, now with the C flipped to lean back (sign +1) (run 5: declaration kept, re-confirmed against the rules)",
+          "receipt": "evidence/drive-P7TOpp",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MFJG10AV4V3U5",
+      "section": "pose",
+      "why": "child folded on the floor: a stoop with the arms crossing the torso, the shape our single mesh cannot hold",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "pose": {
+          "lineOfAction": "C",
+          "weight": "seated",
+          "lead": "none",
+          "silhouette": "fold"
+        },
+        "composition": {
+          "framing": "none"
+        },
+        "camera": {
+          "angle": "high",
+          "distance": "medium"
+        },
+        "light": {
+          "contrast": "flat"
+        }
+      },
+      "applied": [
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#shrink",
+          "note": "curve C, fold silhouette, lead none: the stoop with the arms crossing over, the shape the single mesh cannot hold (plate family fold)",
+          "receipt": "evidence/drive-VcQYuF",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#shrink",
+          "note": "curve C, fold silhouette, lead none: the stoop with the arms crossing over, the shape the single mesh cannot hold (plate family fold) (run 5: declaration kept, re-confirmed against the rules)",
+          "receipt": "evidence/drive-P7TOpp",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MFJG10AX4YB91",
+      "section": "pose",
+      "why": "annoyed girl beside a giant belly: one raised arm, head tilt against it, expression carried by asymmetry",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "pose": {
+          "lineOfAction": "C",
+          "weight": "seated",
+          "lead": "arm",
+          "silhouette": "closed"
+        },
+        "composition": {
+          "framing": "pair",
+          "scale": "pair-contrast"
+        },
+        "camera": {
+          "angle": "eye"
+        },
+        "light": {
+          "contrast": "flat"
+        }
+      },
+      "applied": [
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#brace",
+          "note": "curve C, lead arm L and closed silhouette: one hand leading against a swelling mass, the asymmetry carried by the lead hand and a head tilt",
+          "receipt": "evidence/drive-VcQYuF",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#brace",
+          "note": "curve C, lead arm L and closed silhouette: one hand leading against a swelling mass, the asymmetry carried by the lead hand and a head tilt (run 5: declaration kept, re-confirmed against the rules)",
+          "receipt": "evidence/drive-P7TOpp",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MFJFTELHRG7MG",
+      "section": "pose",
+      "why": "two people pointing: arms on opposing diagonals, torsos lean away, the pair reads as one X",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "pose": {
+          "lineOfAction": "I",
+          "weight": "one-foot",
+          "lead": "arm",
+          "silhouette": "open"
+        },
+        "composition": {
+          "framing": "pair",
+          "leadingLine": "diagonal"
+        },
+        "camera": {
+          "angle": "low"
+        },
+        "light": {
+          "contrast": "soft"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFJFTELH7A9UQ",
+      "section": "pose",
+      "why": "a pair leaping inside a burst of light: joy as a star shape, silhouette held against whiteout",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "pose": {
+          "lineOfAction": "S",
+          "weight": "air",
+          "lead": "both",
+          "silhouette": "star"
+        },
+        "composition": {
+          "framing": "radial",
+          "scale": "figure-small"
+        },
+        "camera": {
+          "angle": "eye"
+        },
+        "light": {
+          "contrast": "silhouette",
+          "source": "backlight"
+        },
+        "fx": [
+          "whiteout",
+          "bloom"
+        ]
+      },
+      "applied": [
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#joy-a",
+          "note": "star silhouette and both-sides lead (arm L, leg L): joy as a star shape held against whiteout, the burst after the pop",
+          "receipt": "evidence/drive-VcQYuF",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#joy-a",
+          "note": "star silhouette and both-sides lead (arm L, leg L): joy as a star shape held against whiteout, the burst after the pop (run 5: declaration kept, re-confirmed against the rules)",
+          "receipt": "evidence/drive-P7TOpp",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MFJFRODX2CIQ5",
+      "section": "pose",
+      "why": "character diving into a hug: the spine curls into a full C and the limbs wrap it",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "pose": {
+          "lineOfAction": "C",
+          "weight": "air",
+          "lead": "arm",
+          "silhouette": "fold"
+        },
+        "composition": {
+          "framing": "none"
+        },
+        "camera": {
+          "angle": "dutch",
+          "distance": "close"
+        },
+        "light": {
+          "contrast": "flat"
+        },
+        "fx": [
+          "glow"
+        ]
+      },
+      "applied": [
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#joy-a",
+          "note": "curve C: the spine curls into one full C (here the back arch, sign -1) and the limbs extend it",
+          "receipt": "evidence/drive-VcQYuF",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "v3/poses/s01-arrival-overwhelm.json#joy-a",
+          "note": "curve C: the spine curls into one full C (here the back arch, sign -1) and the limbs extend it (run 5: declaration kept, re-confirmed against the rules)",
+          "receipt": "evidence/drive-P7TOpp",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MFIYY3RS0DEEN",
+      "section": "composition",
+      "why": "top-down of a cluttered workshop: an overhead angle makes a full field legible",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "composition": {
+          "framing": "overhead",
+          "scale": "figure-small",
+          "leadingLine": "none",
+          "placement": "centre"
+        },
+        "camera": {
+          "angle": "overhead",
+          "distance": "wide"
+        },
+        "light": {
+          "source": "window"
+        },
+        "colour": {
+          "field": "dark"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFIYV9W294NNA",
+      "section": "composition",
+      "why": "low angle up through water at a floating figure, arms open: the look-up our awe key needs",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "composition": {
+          "framing": "none",
+          "scale": "figure-large",
+          "leadingLine": "vertical",
+          "placement": "centre"
+        },
+        "camera": {
+          "angle": "low",
+          "distance": "medium"
+        },
+        "light": {
+          "source": "flood",
+          "direction": "above"
+        },
+        "colour": {
+          "field": "colour",
+          "scheme": "mono"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFIYY3RSE9W5G",
+      "section": "composition",
+      "why": "POV hands reaching into the dark: a first-person insert as a shot angle",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "composition": {
+          "framing": "none",
+          "scale": "figure-large",
+          "leadingLine": "diagonal",
+          "placement": "edge"
+        },
+        "camera": {
+          "angle": "pov",
+          "distance": "insert"
+        },
+        "light": {
+          "source": "none"
+        },
+        "colour": {
+          "field": "dark"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFIYY3RT6SJS2",
+      "section": "composition",
+      "why": "radial burst with a tiny figure at the centre: scale by negative space",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "composition": {
+          "framing": "radial",
+          "scale": "figure-small",
+          "leadingLine": "radial",
+          "placement": "centre"
+        },
+        "camera": {
+          "angle": "eye",
+          "distance": "wide"
+        },
+        "light": {
+          "source": "flood",
+          "direction": "behind"
+        },
+        "colour": {
+          "field": "light"
+        },
+        "fx": [
+          "burst",
+          "rays",
+          "whiteout"
+        ]
+      },
+      "applied": [
+        {
+          "to": "assets/props/gadget/muse.json#muse-03",
+          "note": "gadget muse-03 Radial hybrid: composition.framing=radial (a radial burst around a tiny centre)",
+          "receipt": "evidence/drive-Hwxy2c",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "assets/props/bubble/muse.json#muse-03",
+          "note": "bubble muse-03 Pop-star bubble: fx=burst (a radial burst of rays on the pop)",
+          "receipt": "evidence/drive-iCf6Tv",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MFI6QTUP15009",
+      "section": "composition",
+      "why": "figure inside a bubble, tilted horizon, rays: a dutch angle for the pop",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "composition": {
+          "framing": "window",
+          "scale": "figure-medium",
+          "leadingLine": "diagonal",
+          "placement": "third-left"
+        },
+        "camera": {
+          "angle": "dutch",
+          "distance": "medium"
+        },
+        "light": {
+          "source": "single-emitter"
+        },
+        "colour": {
+          "field": "colour"
+        },
+        "fx": [
+          "rays",
+          "glow"
+        ]
+      },
+      "applied": [
+        {
+          "to": "assets/props/bubble/muse.json#muse-01",
+          "note": "bubble muse-01 Window bubble: composition.framing=window (a figure inside a bubble framed as a window); fx=rays (rays from a single emitter inside the bubble)",
+          "receipt": "evidence/drive-iCf6Tv",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MFJFS03X5VMJO",
+      "section": "composition",
+      "why": "small figure from behind between two large silhouettes facing the light: the overwhelm staging",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "composition": {
+          "framing": "pair",
+          "scale": "pair-contrast",
+          "leadingLine": "vertical",
+          "placement": "centre"
+        },
+        "camera": {
+          "angle": "low",
+          "distance": "medium"
+        },
+        "light": {
+          "source": "backlight",
+          "direction": "behind",
+          "contrast": "silhouette"
+        },
+        "colour": {
+          "field": "colour",
+          "scheme": "mono"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFI6SELJHX04J",
+      "section": "composition",
+      "why": "small figure under a patterned tower: height by a single vertical and a flat pattern",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "composition": {
+          "framing": "tower",
+          "scale": "figure-small",
+          "leadingLine": "vertical",
+          "placement": "low"
+        },
+        "camera": {
+          "angle": "eye",
+          "distance": "wide"
+        },
+        "light": {
+          "source": "none"
+        },
+        "colour": {
+          "field": "colour",
+          "scheme": "two-tone"
+        }
+      },
+      "applied": [
+        {
+          "to": "assets/props/box/muse.json#muse-02",
+          "note": "box muse-02 Swoop crate: composition.framing=tower (height told by one vertical and a flat pattern)",
+          "receipt": "evidence/drive-JURm1O",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "assets/props/pieces/muse.json#muse-01",
+          "note": "pieces muse-01 Seuss grammar: composition.framing=tower (height told by one vertical and a flat pattern); colour.scheme=two-tone (two tones per member)",
+          "receipt": "evidence/drive-hvki1n",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MFI6QTUOYA66U",
+      "section": "composition",
+      "why": "two windows frame two characters: a framing device inside the architecture",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "composition": {
+          "framing": "window",
+          "scale": "pair-contrast",
+          "leadingLine": "vertical",
+          "placement": "third-left"
+        },
+        "camera": {
+          "angle": "eye",
+          "distance": "wide"
+        },
+        "light": {
+          "source": "window",
+          "direction": "behind"
+        },
+        "colour": {
+          "field": "colour",
+          "scheme": "complement"
+        }
+      },
+      "applied": [
+        {
+          "to": "assets/props/box/muse.json#muse-03",
+          "note": "box muse-03 Nested lid: composition.framing=window (a window framing what is inside the architecture)",
+          "receipt": "evidence/drive-JURm1O",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "assets/props/gadget/muse.json#muse-02",
+          "note": "gadget muse-02 Doorway engine: composition.framing=window (windows framing parts inside the architecture)",
+          "receipt": "evidence/drive-Hwxy2c",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "assets/props/pieces/muse.json#muse-02",
+          "note": "pieces muse-02 Window family: composition.framing=window (windows framing what is inside the architecture)",
+          "receipt": "evidence/drive-hvki1n",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MFJG4UAHG1Z6J",
+      "section": "composition",
+      "why": "a man seen through the gap under a girl's knee, low angle: a figure framed by another body's negative space, scale told by the frame itself",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "composition": {
+          "framing": "body-gap",
+          "scale": "figure-small",
+          "leadingLine": "diagonal",
+          "placement": "centre"
+        },
+        "camera": {
+          "angle": "low",
+          "distance": "medium"
+        },
+        "light": {
+          "source": "cone",
+          "direction": "above"
+        },
+        "colour": {
+          "field": "colour",
+          "scheme": "two-tone"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFJFTELGH6FD8",
+      "section": "light",
+      "why": "lone figure against a radiant core: the burst stays behind the silhouette, the figure never whites out",
+      "added": "2026-10-14",
+      "source": "pose-pass 2026-10-14",
+      "facets": {
+        "light": {
+          "source": "single-emitter",
+          "direction": "behind",
+          "contrast": "silhouette"
+        },
+        "colour": {
+          "scheme": "mono"
+        },
+        "fx": [
+          "burst",
+          "bloom",
+          "whiteout"
+        ],
+        "composition": {
+          "scale": "figure-small",
+          "framing": "radial"
+        },
+        "camera": {
+          "angle": "eye"
+        }
+      },
+      "applied": [
+        {
+          "to": "assets/props/box/muse.json#muse-01",
+          "note": "box muse-01 Block box: light.source=single-emitter (a single radiant seam behind a flat silhouette that never whites out)",
+          "receipt": "evidence/drive-JURm1O",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "assets/props/box/muse.json#muse-02",
+          "note": "box muse-02 Swoop crate: composition.scale=figure-small (the box stays a small silhouette against the radiant core)",
+          "receipt": "evidence/drive-JURm1O",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "assets/props/gadget/muse.json#muse-01",
+          "note": "gadget muse-01 Clock-stalk machine: light.source=single-emitter (the dial is the single radiant core behind the machine's silhouette); fx=burst (a burst from the dial stays behind the form)",
+          "receipt": "evidence/drive-Hwxy2c",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "assets/props/bubble/muse.json#muse-03",
+          "note": "bubble muse-03 Pop-star bubble: fx=bloom (bloom behind the silhouette that never whites out)",
+          "receipt": "evidence/drive-iCf6Tv",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MTR8RSMQ452E8",
+      "section": "light",
+      "why": "Hades lit by his own blue flame on a black field: one emitter, one hue, the rest unlit",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "light": {
+          "source": "single-emitter",
+          "direction": "above",
+          "contrast": "hard"
+        },
+        "colour": {
+          "scheme": "mono"
+        },
+        "fx": [
+          "glow",
+          "rim"
+        ],
+        "composition": {
+          "scale": "figure-medium"
+        }
+      },
+      "applied": [
+        {
+          "to": "assets/props/box/muse.json#muse-01",
+          "note": "box muse-01 Block box: light.contrast=hard (one hard emitter lights the form on black, the rest unlit)",
+          "receipt": "evidence/drive-JURm1O",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "assets/props/gadget/muse.json#muse-03",
+          "note": "gadget muse-03 Radial hybrid: light.source=single-emitter (one hard flame lights the form on black)",
+          "receipt": "evidence/drive-Hwxy2c",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MTR8SL3R48NO7",
+      "section": "light",
+      "why": "Styx boat: figure as a silhouette inside the light, water drawn as a few flat shapes",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "light": {
+          "source": "backlight",
+          "direction": "behind",
+          "contrast": "silhouette"
+        },
+        "colour": {
+          "scheme": "mono"
+        },
+        "fx": [
+          "glow"
+        ],
+        "composition": {
+          "scale": "figure-medium"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MRAM46LYMIGKO",
+      "section": "light",
+      "why": "light as a volume: one hue fills the frame and people read as silhouettes (Turrell / Eliasson)",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "light": {
+          "source": "flood",
+          "direction": "ambient",
+          "contrast": "silhouette"
+        },
+        "colour": {
+          "scheme": "mono"
+        },
+        "fx": [
+          "glow"
+        ],
+        "composition": {
+          "scale": "figure-small"
+        }
+      },
+      "applied": [
+        {
+          "to": "assets/props/bubble/muse.json#muse-02",
+          "note": "bubble muse-02 Volume bubble: light.contrast=silhouette (forms read as silhouettes inside nested volume); composition.scale=figure-small (the contents stay small inside the volume)",
+          "receipt": "evidence/drive-iCf6Tv",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MRAM4DK8K755W",
+      "section": "light",
+      "why": "light as a volume: one hue fills the frame and people read as silhouettes (Turrell / Eliasson)",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "light": {
+          "source": "flood",
+          "direction": "above",
+          "contrast": "silhouette"
+        },
+        "colour": {
+          "scheme": "mono"
+        },
+        "fx": [
+          "glow"
+        ],
+        "composition": {
+          "scale": "figure-small"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MSRA13489B3XT",
+      "section": "line",
+      "why": "two-tone poster as a silhouette test",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "composition": {
+          "framing": "none"
+        },
+        "camera": {
+          "angle": "eye"
+        },
+        "light": {
+          "source": "none"
+        },
+        "colour": {
+          "scheme": "two-tone"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MS6V3ZAD9JLIC",
+      "section": "cloak",
+      "why": "the cloak figure before it had a name: S-curve turn, cloak thrown wide (prompt in annotation)",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "composition": {
+          "framing": "none"
+        },
+        "camera": {
+          "angle": "eye"
+        },
+        "light": {
+          "source": "backlight"
+        },
+        "colour": {
+          "scheme": "mono"
+        },
+        "pose": {
+          "lineOfAction": "S"
+        },
+        "fx": [
+          "motes",
+          "rim"
+        ]
+      },
+      "applied": []
+    },
+    {
+      "id": "MFJGAJY0BCXVR",
+      "section": "colour",
+      "why": "Sweet on You: sky blue and butter yellow as two fields, candy accents scarce; feeds s03",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "colour": {
+          "scheme": "complement",
+          "field": "light"
+        },
+        "light": {
+          "source": "none"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFJGAJY0CFJT5",
+      "section": "colour",
+      "why": "Sweet on You: one blue field, one yellow shape, the rest unlit; feeds s03",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "colour": {
+          "scheme": "two-tone",
+          "field": "light"
+        },
+        "light": {
+          "source": "none"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFIYUFL6JLVE9",
+      "section": "colour",
+      "why": "Lulu Mckown: chartreuse field, text as the only dark mark; feeds nothing yet (refused hue, kept as the limit)",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "colour": {
+          "scheme": "mono",
+          "field": "colour"
+        },
+        "light": {
+          "source": "none"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFIYUFL6RWFWW",
+      "section": "colour",
+      "why": "Lulu Mckown: magenta room lit from one source, pink accent; feeds s04",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "colour": {
+          "scheme": "mono",
+          "field": "colour"
+        },
+        "light": {
+          "source": "single-emitter"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFJFTELF9BJM6",
+      "section": "colour",
+      "why": "GIANT CRUSH: teal control room, one warm accent; feeds s02",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "colour": {
+          "scheme": "two-tone",
+          "field": "colour"
+        },
+        "light": {
+          "source": "none"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFI6QTUNBBX5F",
+      "section": "colour",
+      "why": "Soup!: coral on black, peach rim as the accent; feeds s04",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "colour": {
+          "scheme": "two-tone",
+          "field": "black"
+        },
+        "light": {
+          "source": "none"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFI6QTUNOE60Y",
+      "section": "colour",
+      "why": "Soup!: coral figure on black, teal as the single cold accent; feeds s04",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "colour": {
+          "scheme": "complement",
+          "field": "black"
+        },
+        "light": {
+          "source": "none"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFI6SYYWULZQI",
+      "section": "colour",
+      "why": "FIGHTER: sunset orange against violet: one warm field, the fighter a flat silhouette; feeds s01",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "colour": {
+          "scheme": "complement",
+          "field": "colour"
+        },
+        "light": {
+          "source": "flood"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFJG4UAHAP05L",
+      "section": "colour",
+      "why": "MOTOR GIRL: magenta stage with one violet accent, the girl as a cut-out inside the light; feeds s04",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "colour": {
+          "scheme": "two-tone",
+          "field": "dark"
+        },
+        "light": {
+          "source": "cone"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFI6SELJDBV13",
+      "section": "colour",
+      "why": "Bukunawa: amber night field, one lamp as the emitter, water as two flat shapes; feeds s03",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "colour": {
+          "scheme": "two-tone",
+          "field": "dark"
+        },
+        "light": {
+          "source": "single-emitter"
+        }
+      },
+      "applied": [
+        {
+          "to": "assets/props/box/muse.json#muse-03",
+          "note": "box muse-03 Nested lid: light.source=single-emitter (one emitter inside an otherwise dark space)",
+          "receipt": "evidence/drive-JURm1O",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MFJFS03XIIV0N",
+      "section": "colour",
+      "why": "Mousling: teal and green as whole fields, the mouse a pale silhouette; feeds s02",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "colour": {
+          "scheme": "two-tone",
+          "field": "colour"
+        },
+        "light": {
+          "source": "flood"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "LXU2UUOHR9V2C",
+      "section": "camera",
+      "why": "figure small in the corner of a cold room, the room as the field: the lost beat of s02 at medium size; feeds s02 start",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "composition": {
+          "framing": "negative-space",
+          "scale": "figure-small"
+        },
+        "camera": {
+          "angle": "high",
+          "distance": "wide"
+        },
+        "light": {
+          "source": "window"
+        },
+        "colour": {
+          "scheme": "mono"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "LYIO3IS7TOKUB",
+      "section": "camera",
+      "why": "silhouette in a doorway against a lit interior, chandelier as the one emitter: the human looking through the frame; feeds s02 end",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "composition": {
+          "framing": "doorway",
+          "scale": "figure-medium"
+        },
+        "camera": {
+          "angle": "eye",
+          "distance": "medium"
+        },
+        "light": {
+          "source": "window"
+        },
+        "colour": {
+          "scheme": "mono"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "LYCYX5EKJMMJH",
+      "section": "crossing",
+      "why": "Arcane: the frame shattering into white line fragments; feeds the line crossing (beat 6)",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "composition": {
+          "framing": "none"
+        },
+        "camera": {
+          "angle": "eye"
+        },
+        "light": {
+          "source": "none"
+        },
+        "colour": {
+          "scheme": "mono"
+        },
+        "fx": [
+          "smear"
+        ]
+      },
+      "applied": []
+    },
+    {
+      "id": "LYCZ7B8LTHX9V",
+      "section": "crossing",
+      "why": "Spider-Verse: pure web lines on a blank field, the world as nothing but connecting lines; feeds the line crossing (beat 6)",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "composition": {
+          "framing": "none"
+        },
+        "camera": {
+          "angle": "eye"
+        },
+        "light": {
+          "source": "none"
+        },
+        "colour": {
+          "scheme": "mono"
+        },
+        "fx": [
+          "none"
+        ]
+      },
+      "applied": [
+        {
+          "to": "assets/props/pieces/muse.json#muse-03",
+          "note": "pieces muse-03 Line family: fx=none (pure thin lines on a blank field)",
+          "receipt": "evidence/drive-hvki1n",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "LYCZ7B95UJO2H",
+      "section": "crossing",
+      "why": "Spider-Verse: a hexagonal glitch panel over a figure, a world leaking through another; feeds the refill into the shaded world",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "composition": {
+          "framing": "window"
+        },
+        "camera": {
+          "angle": "eye"
+        },
+        "light": {
+          "source": "backlight"
+        },
+        "colour": {
+          "scheme": "two-tone"
+        },
+        "fx": [
+          "glow"
+        ]
+      },
+      "applied": []
+    },
+    {
+      "id": "MQYT675IMXYK8",
+      "section": "light",
+      "why": "light as a volume: one hue fills the frame and people read as silhouettes (Turrell / Eliasson)",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "light": {
+          "source": "single-emitter",
+          "direction": "above",
+          "contrast": "silhouette"
+        },
+        "colour": {
+          "scheme": "mono"
+        },
+        "fx": [
+          "bloom",
+          "glow"
+        ],
+        "composition": {
+          "scale": "figure-small"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MPWBNF91UC57G",
+      "section": "line",
+      "why": "model-sheet discipline: one line weight, construction heads, expression row",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "composition": {
+          "framing": "none"
+        },
+        "camera": {
+          "angle": "eye"
+        },
+        "light": {
+          "source": "none"
+        },
+        "colour": {
+          "scheme": "full"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "MFP3WX8X3LIX2",
+      "section": "camera",
+      "why": "lone figure inside a lit doorway in a dark field: the frame interior as the emitter; feeds s02 end",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "composition": {
+          "framing": "doorway",
+          "scale": "figure-small"
+        },
+        "camera": {
+          "angle": "eye",
+          "distance": "wide"
+        },
+        "light": {
+          "source": "single-emitter"
+        },
+        "colour": {
+          "scheme": "mono"
+        }
+      },
+      "applied": [
+        {
+          "to": "assets/props/gadget/muse.json#muse-02",
+          "note": "gadget muse-02 Doorway engine: composition.framing=doorway (a lit doorway in a dark field, the interior the only emitter)",
+          "receipt": "evidence/drive-Hwxy2c",
+          "date": "2026-10-15"
+        },
+        {
+          "to": "assets/props/pieces/muse.json#muse-02",
+          "note": "pieces muse-02 Window family: composition.framing=doorway (a lit doorway the interior shows through)",
+          "receipt": "evidence/drive-hvki1n",
+          "date": "2026-10-15"
+        }
+      ]
+    },
+    {
+      "id": "MF83T1H77O7BM",
+      "section": "camera",
+      "why": "corridor lines converging to one point, figure tiny at the vanishing point: the leading line a pan follows; feeds s02 move and s03",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "composition": {
+          "framing": "tower",
+          "scale": "figure-small",
+          "leadingLine": "diagonal"
+        },
+        "camera": {
+          "angle": "eye",
+          "distance": "wide",
+          "move": "pan"
+        },
+        "light": {
+          "source": "single-emitter"
+        },
+        "colour": {
+          "scheme": "mono"
+        }
+      },
+      "applied": []
+    },
+    {
+      "id": "LYCYY9LR7XD55",
+      "section": "shaded-world",
+      "why": "Arcane: lit stair edges as glowing lines in a dark shaded space, lines connecting the architecture; feeds the programming world (beat 7)",
+      "added": "2026-10-13",
+      "source": "",
+      "facets": {
+        "composition": {
+          "framing": "none"
+        },
+        "camera": {
+          "angle": "eye"
+        },
+        "light": {
+          "source": "single-emitter"
+        },
+        "colour": {
+          "scheme": "two-tone"
+        },
+        "fx": [
+          "rim",
+          "glow"
+        ]
+      },
+      "applied": [
+        {
+          "to": "assets/props/pieces/muse.json#muse-03",
+          "note": "pieces muse-03 Line family: fx=glow (lit edges as glowing lines)",
+          "receipt": "evidence/drive-hvki1n",
+          "date": "2026-10-15"
+        }
+      ]
+    }
+  ]
+}

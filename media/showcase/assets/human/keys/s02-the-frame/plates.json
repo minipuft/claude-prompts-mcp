@@ -1,0 +1,98 @@
+[
+ {
+  "key": "K1",
+  "name": "slump",
+  "plate": "assets/human/keys/s02-the-frame/K1.png",
+  "family": "home",
+  "cropPx": [
+   265,
+   419
+  ],
+  "baselineInCrop": 417,
+  "scale": 0.4745,
+  "originMask": [
+   108,
+   73
+  ]
+ },
+ {
+  "key": "K2",
+  "name": "turn",
+  "plate": "assets/human/keys/s02-the-frame/K2.png",
+  "family": "home",
+  "cropPx": [
+   373,
+   422
+  ],
+  "baselineInCrop": 419,
+  "scale": 0.4745,
+  "originMask": [
+   -31,
+   68
+  ]
+ },
+ {
+  "key": "K3",
+  "name": "rise",
+  "plate": "assets/human/keys/s02-the-frame/K3.png",
+  "family": "home",
+  "cropPx": [
+   383,
+   444
+  ],
+  "baselineInCrop": 440,
+  "scale": 0.4745,
+  "originMask": [
+   -66,
+   24
+  ]
+ },
+ {
+  "key": "K4",
+  "name": "step",
+  "plate": "assets/human/keys/s02-the-frame/K4.png",
+  "family": "home",
+  "cropPx": [
+   396,
+   513
+  ],
+  "baselineInCrop": 510,
+  "scale": 0.4745,
+  "originMask": [
+   -89,
+   -124
+  ]
+ },
+ {
+  "key": "K5",
+  "name": "threshold",
+  "plate": "assets/human/keys/s02-the-frame/K5.png",
+  "family": "home",
+  "cropPx": [
+   381,
+   446
+  ],
+  "baselineInCrop": 441,
+  "scale": 0.4745,
+  "originMask": [
+   -103,
+   21
+  ]
+ },
+ {
+  "key": "K6",
+  "name": "through",
+  "plate": "assets/human/keys/s02-the-frame/K6.png",
+  "family": "home",
+  "cropPx": [
+   328,
+   420
+  ],
+  "baselineInCrop": 418,
+  "scale": 0.4745,
+  "originMask": [
+   21,
+   71
+  ]
+ }
+]

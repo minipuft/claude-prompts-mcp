@@ -1,0 +1,31 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Created**: Animation Animatic (per episode) (animation_animatic)\n\n📝 Per episode, between pre-production and the per-shot chain (D80): timeline → blocking → light script → animatic render → rubric grade → evidence. Each step carries a check-tier gate that runs a probe with a positive control (D81); the grade step is the one advisory gate and says so. Inputs: episode_root, renderer, output_root.\n🧠 chain\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic/user-message.md\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "create",
+    "valid": true,
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "create",
+      "id": "animation_animatic",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic/prompt.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic/user-message.md"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 1
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Created**: Animation Animatic (per episode) (animation_animatic)\n\n📝 Per episode, between pre-production and the per-shot chain (D80): timeline → blocking → light script → animatic render → rubric grade → evidence. Each step carries a check-tier gate that runs a probe with a positive control (D81); the grade step is the one advisory gate and says so. Inputs: episode_root, renderer, output_root.\n🧠 chain\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_animatic/user-message.md\n"
+  },
+  "isError": false
+}

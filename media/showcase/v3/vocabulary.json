@@ -1,0 +1,742 @@
+{
+  "schema": "animation-direction.vocabulary.1",
+  "note": "The controlled direction vocabulary (D96, p004). A word that names an intent in a proposal, a ruling's because clause, a pose sheet or a material must be a term here (or an alias in the project's overrides). Terms are project-agnostic; a film's own words go in its vocabulary-overrides.json. A word that appears under two domains has one entry whose definition carries both senses.",
+  "domains": {
+    "shot": {
+      "size": [
+        "extreme wide",
+        "wide",
+        "medium wide",
+        "medium",
+        "medium close",
+        "close",
+        "insert"
+      ],
+      "angle": [
+        "eye",
+        "low",
+        "high",
+        "overhead",
+        "dutch",
+        "pov"
+      ],
+      "move": [
+        "locked",
+        "push",
+        "pull",
+        "pan",
+        "tilt",
+        "orbit",
+        "drift",
+        "whip"
+      ]
+    },
+    "staging": [
+      "centre",
+      "third-left",
+      "third-right",
+      "edge",
+      "low",
+      "high",
+      "doorway",
+      "window",
+      "negative-space",
+      "radial",
+      "pair",
+      "tower",
+      "body-gap"
+    ],
+    "timing": [
+      "hold",
+      "moving hold",
+      "anticipation",
+      "action",
+      "overshoot",
+      "settle",
+      "breakdown",
+      "passing position",
+      "favour",
+      "snap",
+      "float",
+      "even",
+      "staggered",
+      "on twos",
+      "on ones"
+    ],
+    "acting": {
+      "register": [
+        "warm",
+        "playful",
+        "inviting",
+        "reverent",
+        "comic",
+        "tense",
+        "focused",
+        "neutral"
+      ],
+      "business": [
+        "lean in",
+        "reach",
+        "grip",
+        "lift",
+        "turn",
+        "slump",
+        "rise",
+        "step",
+        "threshold",
+        "nudge",
+        "look through"
+      ]
+    },
+    "light": {
+      "role": [
+        "key",
+        "rim",
+        "fill",
+        "practical",
+        "motivated",
+        "volume",
+        "emitter",
+        "bounce"
+      ],
+      "quality": [
+        "hard",
+        "soft",
+        "flood",
+        "cone",
+        "narrow",
+        "settled",
+        "noisy",
+        "rising",
+        "falling"
+      ],
+      "behaviour": [
+        "lag",
+        "memory",
+        "pulse",
+        "seam"
+      ]
+    },
+    "material": {
+      "intent": [
+        "snap",
+        "float",
+        "weighted",
+        "drape",
+        "crisp",
+        "soft",
+        "still"
+      ]
+    },
+    "transition": [
+      "cut",
+      "morph",
+      "crossing",
+      "refill",
+      "reduce-to-lines",
+      "swell",
+      "push-through"
+    ],
+    "colour": [
+      "pair",
+      "radiance",
+      "accent",
+      "identity pigment",
+      "field",
+      "lit-paper"
+    ],
+    "feeling": [
+      "curiosity",
+      "delight",
+      "overwhelm",
+      "frustration",
+      "wonder",
+      "play",
+      "focus",
+      "satisfaction",
+      "contentment"
+    ]
+  },
+  "governs": {
+    "lanes": [
+      "pacing",
+      "blocking",
+      "camera",
+      "keys",
+      "light",
+      "colour-script",
+      "look"
+    ],
+    "materialProperties": [
+      "mass",
+      "lagFrames",
+      "settleFrames",
+      "overshoot",
+      "drag",
+      "stiffness",
+      "contact",
+      "boil",
+      "shadowClass",
+      "occluder",
+      "albedo",
+      "refraction",
+      "diffusion"
+    ],
+    "facetGroups": [
+      "pose",
+      "acting",
+      "camera",
+      "composition",
+      "light",
+      "colour"
+    ]
+  },
+  "aliases": {
+    "held": "hold",
+    "hold-heavy": "hold",
+    "moving": "moving hold",
+    "passing": "passing position",
+    "single-emitter": "emitter",
+    "backlight": "rim"
+  },
+  "facets": {
+    "camera.angle": {
+      "domain": "shot.angle",
+      "unmapped": []
+    },
+    "camera.distance": {
+      "domain": "shot.size",
+      "unmapped": []
+    },
+    "camera.move": {
+      "domain": "shot.move",
+      "unmapped": [
+        "unknown"
+      ]
+    },
+    "composition.placement": {
+      "domain": "staging",
+      "unmapped": []
+    },
+    "composition.framing": {
+      "domain": "staging",
+      "unmapped": [
+        "none"
+      ]
+    },
+    "acting.register": {
+      "domain": "acting.register",
+      "unmapped": []
+    },
+    "acting.timing": {
+      "domain": "timing",
+      "unmapped": []
+    },
+    "acting.contact": {
+      "domain": "material.intent",
+      "unmapped": [
+        "light",
+        "none"
+      ]
+    },
+    "timing": {
+      "domain": "timing",
+      "unmapped": [
+        "unknown"
+      ]
+    },
+    "light.source": {
+      "domain": "light.role",
+      "unmapped": [
+        "none"
+      ]
+    },
+    "light.contrast": {
+      "domain": "light.quality",
+      "unmapped": [
+        "silhouette",
+        "flat"
+      ]
+    },
+    "light.pushes": {
+      "domain": "feeling",
+      "unmapped": [
+        "none"
+      ]
+    }
+  },
+  "terms": {
+    "accent": {
+      "definition": "The one local hue beside the radiance.",
+      "governs": "colour-script"
+    },
+    "action": {
+      "definition": "The main move between two keys.",
+      "governs": "pacing, keys"
+    },
+    "anticipation": {
+      "definition": "A small opposite move before the action that announces it.",
+      "governs": "pose.breakdown, pacing"
+    },
+    "body-gap": {
+      "definition": "A gap between the body and an arm that frames something behind it.",
+      "governs": "blocking"
+    },
+    "bounce": {
+      "definition": "Light returned from a lit surface to what is near it.",
+      "governs": "light, albedo"
+    },
+    "breakdown": {
+      "definition": "A drawing between two keys that fixes the path the move takes.",
+      "governs": "pose.breakdown"
+    },
+    "centre": {
+      "definition": "Subject on the frame's middle line; stable and formal.",
+      "governs": "blocking"
+    },
+    "close": {
+      "definition": "A face or a single hand fills the frame.",
+      "governs": "camera"
+    },
+    "comic": {
+      "definition": "Timing built for a gag: set-up, beat, pay-off.",
+      "governs": "acting.register, pacing"
+    },
+    "cone": {
+      "definition": "Light bounded to a beam with a clear edge.",
+      "governs": "light"
+    },
+    "contentment": {
+      "definition": "Nothing is needed; the end state.",
+      "governs": "light.pushes"
+    },
+    "crisp": {
+      "definition": "Edges hold their shape; short settle, little boil.",
+      "governs": "boil, stiffness"
+    },
+    "crossing": {
+      "definition": "The film's passage between worlds: reduce to lines, re-route, refill.",
+      "governs": "pacing, colour-script"
+    },
+    "curiosity": {
+      "definition": "The light or move invites a closer look.",
+      "governs": "light.pushes"
+    },
+    "cut": {
+      "definition": "The picture changes on one frame.",
+      "governs": "pacing, camera"
+    },
+    "delight": {
+      "definition": "A small, glad surprise.",
+      "governs": "light.pushes"
+    },
+    "doorway": {
+      "definition": "Subject framed by an opening; a threshold is near.",
+      "governs": "blocking"
+    },
+    "drape": {
+      "definition": "Hangs and folds under its own weight; cloth and cloak.",
+      "governs": "stiffness, mass"
+    },
+    "drift": {
+      "definition": "A slow unmotivated float of a few pixels; the frame breathes.",
+      "governs": "camera"
+    },
+    "dutch": {
+      "definition": "A tilted horizon; the world is off balance.",
+      "governs": "camera"
+    },
+    "edge": {
+      "definition": "Subject pushed to the frame's rim; tension or smallness.",
+      "governs": "blocking"
+    },
+    "emitter": {
+      "definition": "The object that gives off the beat's light.",
+      "governs": "light"
+    },
+    "even": {
+      "definition": "Equal spacing between drawings; mechanical, the named failing control.",
+      "governs": "pacing"
+    },
+    "extreme wide": {
+      "definition": "The figure is a speck and the place is the subject.",
+      "governs": "camera"
+    },
+    "eye": {
+      "definition": "Camera at the subject's eye line; neutral, shared.",
+      "governs": "camera"
+    },
+    "falling": {
+      "definition": "Intensity or grain dropping across the beat.",
+      "governs": "light, colour-script"
+    },
+    "favour": {
+      "definition": "Which key a breakdown sits nearer, as a fraction of the way.",
+      "governs": "pose.breakdown"
+    },
+    "field": {
+      "definition": "The colour behind everything.",
+      "governs": "colour-script, look"
+    },
+    "fill": {
+      "definition": "A weaker light that lifts shadows and lowers contrast.",
+      "governs": "light"
+    },
+    "float": {
+      "definition": "Slow arrival with a long ease. As material.intent: high drag and a long lag.",
+      "governs": "pacing, drag, lagFrames",
+      "domains": [
+        "timing",
+        "material.intent"
+      ]
+    },
+    "flood": {
+      "definition": "Light that fills the frame or the whole field.",
+      "governs": "light, colour-script"
+    },
+    "focus": {
+      "definition": "Attention narrows and the rest recedes.",
+      "governs": "light.pushes"
+    },
+    "focused": {
+      "definition": "Narrow attention; little wasted motion.",
+      "governs": "acting.register, pacing"
+    },
+    "frustration": {
+      "definition": "Effort that does not land.",
+      "governs": "light.pushes"
+    },
+    "grip": {
+      "definition": "A hand closes on an object; commitment.",
+      "governs": "pose.lead"
+    },
+    "hard": {
+      "definition": "A sharp shadow edge.",
+      "governs": "light"
+    },
+    "high": {
+      "definition": "Camera above looking down; the subject shrinks. As staging: subject high in the frame; lift or exposure.",
+      "governs": "camera, blocking",
+      "domains": [
+        "shot.angle",
+        "staging"
+      ]
+    },
+    "hold": {
+      "definition": "A drawing stays unchanged for a count of frames.",
+      "governs": "pacing, pose.hold"
+    },
+    "identity pigment": {
+      "definition": "Codex blue and Clawd coral; never graded.",
+      "governs": "colour-script, look"
+    },
+    "insert": {
+      "definition": "An object or detail alone, cut in to show what the figure attends to.",
+      "governs": "camera"
+    },
+    "inviting": {
+      "definition": "Open poses and a beckoning rhythm; come in.",
+      "governs": "acting.register, pacing"
+    },
+    "key": {
+      "definition": "The main light; the brightest thing on the subject.",
+      "governs": "light"
+    },
+    "lag": {
+      "definition": "The light arrives after the thing that causes it. As a secondary: the frames a part trails its primary.",
+      "governs": "light, lagFrames"
+    },
+    "lean in": {
+      "definition": "The body tips toward something; interest.",
+      "governs": "pose.lineOfAction"
+    },
+    "lift": {
+      "definition": "Raising an object or oneself; effort, then release.",
+      "governs": "pose.weight"
+    },
+    "lit-paper": {
+      "definition": "A paper-coloured field lit by the beat's light, not black.",
+      "governs": "colour-script, look"
+    },
+    "locked": {
+      "definition": "No camera motion for the whole shot.",
+      "governs": "camera"
+    },
+    "look through": {
+      "definition": "The gaze goes through an opening to what lies beyond.",
+      "governs": "blocking, camera"
+    },
+    "low": {
+      "definition": "Camera below looking up; the subject grows. As staging: subject low in the frame; weight, sitting, being small.",
+      "governs": "camera, blocking",
+      "domains": [
+        "shot.angle",
+        "staging"
+      ]
+    },
+    "medium": {
+      "definition": "The figure from the waist up; gesture and face share the frame.",
+      "governs": "camera"
+    },
+    "medium close": {
+      "definition": "Chest up; the face carries and the hands still enter.",
+      "governs": "camera"
+    },
+    "medium wide": {
+      "definition": "The figure from head to knee with room around it.",
+      "governs": "camera"
+    },
+    "memory": {
+      "definition": "The light keeps a trace after its source has moved on.",
+      "governs": "light"
+    },
+    "morph": {
+      "definition": "One shape becomes another by deforming.",
+      "governs": "look"
+    },
+    "motivated": {
+      "definition": "Light whose direction has a source inside the world.",
+      "governs": "light"
+    },
+    "moving hold": {
+      "definition": "A hold that keeps a few pixels of drift or a face change so it stays alive.",
+      "governs": "pacing, pose.movingHold"
+    },
+    "narrow": {
+      "definition": "A tight cone around one thing.",
+      "governs": "light"
+    },
+    "negative-space": {
+      "definition": "A large empty field around the subject; quiet or isolation.",
+      "governs": "blocking"
+    },
+    "neutral": {
+      "definition": "No colour added; the default when nothing is asked.",
+      "governs": "acting.register"
+    },
+    "noisy": {
+      "definition": "Grain and flicker in the light; trouble or busyness.",
+      "governs": "light, colour-script"
+    },
+    "nudge": {
+      "definition": "A small push from a companion; help or a gag.",
+      "governs": "blocking, keys"
+    },
+    "on ones": {
+      "definition": "A new drawing every frame; the film's light layer.",
+      "governs": "light, pacing"
+    },
+    "on twos": {
+      "definition": "A new drawing every second frame; the film's drawn layer.",
+      "governs": "keys, pacing"
+    },
+    "orbit": {
+      "definition": "The camera circles the subject.",
+      "governs": "camera"
+    },
+    "overhead": {
+      "definition": "Camera straight down; the scene reads as a plan.",
+      "governs": "camera"
+    },
+    "overshoot": {
+      "definition": "The move passes its target and returns.",
+      "governs": "pose.breakdown, overshoot"
+    },
+    "overwhelm": {
+      "definition": "More arrives than the figure can take in.",
+      "governs": "light.pushes"
+    },
+    "pair": {
+      "definition": "Two subjects balanced or linked by a line between them. As colour: a beat's two hues: its radiance and its accent.",
+      "governs": "blocking, colour-script",
+      "domains": [
+        "staging",
+        "colour"
+      ]
+    },
+    "pan": {
+      "definition": "The camera swings sideways about a fixed point.",
+      "governs": "camera"
+    },
+    "passing position": {
+      "definition": "The off-line drawing a body passes through mid-move, giving the move an arc.",
+      "governs": "pose.breakdown"
+    },
+    "play": {
+      "definition": "Everything is a toy.",
+      "governs": "light.pushes"
+    },
+    "playful": {
+      "definition": "Light, quick and willing to be silly.",
+      "governs": "acting.register, pacing"
+    },
+    "pov": {
+      "definition": "The frame is what a character sees.",
+      "governs": "camera"
+    },
+    "practical": {
+      "definition": "A light source that is visible in the frame.",
+      "governs": "light"
+    },
+    "pull": {
+      "definition": "The camera travels away; reveal or release.",
+      "governs": "camera"
+    },
+    "pulse": {
+      "definition": "A rhythmic swell of the light on a beat.",
+      "governs": "light"
+    },
+    "push": {
+      "definition": "The camera travels toward the subject; emphasis and commitment.",
+      "governs": "camera"
+    },
+    "push-through": {
+      "definition": "The camera or figure passes through a surface into the next place.",
+      "governs": "camera, pacing"
+    },
+    "radial": {
+      "definition": "Lines converge on the subject.",
+      "governs": "blocking"
+    },
+    "radiance": {
+      "definition": "The hue the light gives the field.",
+      "governs": "colour-script, light"
+    },
+    "reach": {
+      "definition": "An arm extends toward something; wanting.",
+      "governs": "pose.lead"
+    },
+    "reduce-to-lines": {
+      "definition": "A picture gives up its fills until only contour remains.",
+      "governs": "look, colour-script"
+    },
+    "refill": {
+      "definition": "Colour returns into a line drawing.",
+      "governs": "colour-script, look"
+    },
+    "reverent": {
+      "definition": "Slow, still and held; the moment is large.",
+      "governs": "acting.register, pacing"
+    },
+    "rim": {
+      "definition": "An edge light that separates the subject from its field.",
+      "governs": "light"
+    },
+    "rise": {
+      "definition": "The body unfolds upward; resolve.",
+      "governs": "pose.lineOfAction"
+    },
+    "rising": {
+      "definition": "Intensity or grain climbing across the beat.",
+      "governs": "light, colour-script"
+    },
+    "satisfaction": {
+      "definition": "A thing works and the figure knows it.",
+      "governs": "light.pushes"
+    },
+    "seam": {
+      "definition": "Light escaping along a join between two things.",
+      "governs": "light, look"
+    },
+    "settle": {
+      "definition": "The decay to rest after the action stops.",
+      "governs": "pose.breakdown, settleFrames"
+    },
+    "settled": {
+      "definition": "Steady intensity and grain across the beat.",
+      "governs": "light, colour-script"
+    },
+    "slump": {
+      "definition": "The body gives way; defeat or fatigue.",
+      "governs": "pose.lineOfAction"
+    },
+    "snap": {
+      "definition": "Fast arrival with a short ease. As material.intent: low drag and a short settle.",
+      "governs": "pacing, drag, settleFrames",
+      "domains": [
+        "timing",
+        "material.intent"
+      ]
+    },
+    "soft": {
+      "definition": "A feathered shadow edge. As material.intent: feathered shadow stipple and high diffusion.",
+      "governs": "light, shadowClass, diffusion",
+      "domains": [
+        "light.quality",
+        "material.intent"
+      ]
+    },
+    "staggered": {
+      "definition": "Parts arrive on different frames instead of one.",
+      "governs": "pose.secondaries, lagFrames"
+    },
+    "step": {
+      "definition": "Weight passes from one foot to the other.",
+      "governs": "pose.weight"
+    },
+    "still": {
+      "definition": "Does not move unless something moves it; no idle motion.",
+      "governs": "settleFrames, overshoot"
+    },
+    "swell": {
+      "definition": "Size or light rises to a peak, then the change happens.",
+      "governs": "pacing, light"
+    },
+    "tense": {
+      "definition": "Tight holds and short, sharp moves; something may go wrong.",
+      "governs": "acting.register, pacing"
+    },
+    "third-left": {
+      "definition": "Subject on the left third line; room to look into.",
+      "governs": "blocking"
+    },
+    "third-right": {
+      "definition": "Subject on the right third line; room to look into.",
+      "governs": "blocking"
+    },
+    "threshold": {
+      "definition": "The moment of crossing an opening; the commitment point.",
+      "governs": "blocking, pacing"
+    },
+    "tilt": {
+      "definition": "The camera swings up or down about a fixed point.",
+      "governs": "camera"
+    },
+    "tower": {
+      "definition": "A tall vertical stack; scale and ascent.",
+      "governs": "blocking"
+    },
+    "turn": {
+      "definition": "The body rotates to face a new direction; a decision.",
+      "governs": "pose.silhouette"
+    },
+    "volume": {
+      "definition": "Light as a bounded body in the space, not a surface shading.",
+      "governs": "light"
+    },
+    "warm": {
+      "definition": "Friendly and close; the world is glad to see you.",
+      "governs": "acting.register, pacing"
+    },
+    "weighted": {
+      "definition": "Mass shows: it lands and settles, and what it carries swings after it.",
+      "governs": "mass, contact"
+    },
+    "whip": {
+      "definition": "A fast pan that smears into the next shot.",
+      "governs": "camera"
+    },
+    "wide": {
+      "definition": "The whole place with the figure's full body, small in it.",
+      "governs": "camera"
+    },
+    "window": {
+      "definition": "Subject framed by a lit opening; looking in or out.",
+      "governs": "blocking"
+    },
+    "wonder": {
+      "definition": "Something large and beautiful is allowed to be seen.",
+      "governs": "light.pushes"
+    }
+  }
+}

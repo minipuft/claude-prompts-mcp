@@ -1,0 +1,54 @@
+### Original Request Intent
+
+This step was given the following request. Your work must satisfy this intent:
+
+- **brief**: A silent ~40 s showcase film for Claude Prompts MCP: a box arrives with a radiant gadget (raw capability) that overwhelms; a companion holds up a frame whose interior is someplace else; through it the...
+- **constraints**: ~40 s at 30 fps, 1280x720, silent, poster at frame 0; swangle renderer here, final render on the Windows host; drawn on twos, light on ones; one locked camera and one emitter per shot; no asset accept...
+- **output_root**: media/showcase
+
+> You produce client-side creative work guided by the Claude Prompts MCP server. The server renders prompts, propagates step results and manages reviews; the client agents research, write artifacts, implement and render. Use existing services and authored resource contracts. Never invent MCP parameters, workflow schemas or a parallel orchestrator. Preserve actual provenance: recording, source-derived depiction, smoke fixture and conceptual animation are different evidence classes. Do not imply a simulated agent or UI is a recorded Claude/Codex run. No narration, unsolicited public posting, git refs, commits or files outside caller-owned scope. A missing consequential choice becomes a concern; do not silently fabricate it. Read prior context and chain history, and cite actual paths/URLs used. Revisions must have observable rationale. If the selected story uses an environment or travel metaphor, keep its boundaries explicit: the client/resource author creates reusable prompts, gates and frameworks through resource_manager; problems may motivate authored improvements but the server does not learn or author them automatically. Frameworks structure reasoning; a depicted journey represents state/context progression and does not imply physical enforcement.
+
+Brief: A silent ~40 s showcase film for Claude Prompts MCP: a box arrives with a radiant gadget (raw capability) that overwhelms; a companion holds up a frame whose interior is someplace else; through it the human scaffolds one lit join at a time (category, prompt, chain, gate, framework, workspace); the trio settles. Audience: developers landing on the GitHub README; frame 0 is the poster. The bots are standardizing their own design process (D49), and this run is the trail. Clean slate on assets (D56): every object is mused from the board before it enters a shot.
+Constraints: ~40 s at 30 fps, 1280x720, silent, poster at frame 0; swangle renderer here, final render on the Windows host; drawn on twos, light on ones; one locked camera and one emitter per shot; no asset accepted as a first iteration.
+Production root: media/showcase
+Previous handoff:
+## Context
+Board step of `showcase_preproduction` run 1, 2026-10-13. Read `v3/references/board.json` (board-04) and `v3/creative-spec.md` (v4-brief-11, rulings D35–D62). creed: n/a — no CloudySky visual surface (this is the Claude Prompts showcase board; CloudySky appears only as a filed reference card).
+
+## Analysis
+Checked in order with a script over the manifest: every card carries title, by, borrow, refuse, governs (31/31); every `src` and `poster` path exists (the build asserts this and refuses otherwise); no card path points under `studies/` and no muse sheet or failing control is on the board (D56); every video card has a local study copy under `references/` or an explicit external href (Spider-Verse is the one external-only card); ruling coverage for D41 and later computed as the union of card `governs`, section `governs` and the laws block.
+
+## Goals
+Board revision current, every D41+ ruling reachable from the board, HTML and PNG rebuilt from the same manifest.
+
+## Execution
+Coverage probe found four rulings without a card or law line: D41 (medium), D56 (board scope), D57 (captions assumption), D58 (frame bars assumption). None is a reference, so none gets a card; added a `laws.medium` block carrying the four lines and taught the generator to render it. Re-ran the probe: uncovered list is empty. Ran `npm run board`.
+
+## Evaluation
+Board Revision: board-04 · 2026-10-13 · references, laws, lineage, process (D56–D62); reads with creative-spec v4-brief-11.
+Sections and Card Count: 6 sections, 31 cards (world 6, shadow/grain/gadget 7, field/palette/light 2, animation language 7, cast 2, lineage 7).
+Rulings Without a Card: none after this step (D41, D56, D57, D58 now in the laws block as Medium).
+Paths Fixed: none needed; every src/poster existed.
+Build Output: `v3/references/board.html` 37,458 bytes; `v3/references/board.png` 1600x5931 (trimmed from a 9000-px window).
+Concerns: the showcase_board prompt text says "ruling governed by a card or named in the laws block"; process and medium rulings will always land in the laws block, which is the intended reading. The creed-fidelity gate injected here belongs to the CloudySky project and is a reminder-tier gate in this worktree's gate set; it should be excluded from the showcase prompts' gate configuration so a future run is not asked to map a creed it does not serve.
+
+## Refinement
+Board step complete. Next step (story) reads `v3/script.md` rev 1 and emits `beats.json`; the board's card ids are the citation vocabulary for the shot list.
+
+Read, before writing, the project files under the production root's `v3/`: `creative-spec.md` (rulings D41–D53, medium, palette law, animation language), `script.md` (resource vocabulary and beats), `rubric.md` (criteria C1–C18 and the receipt shape). They are the contract; this prompt does not restate them.
+
+Write or revise the silent script. Every object on screen is a server resource drawn by the fixed vocabulary in `script.md` (prompt = stalk, chain = beaded string, framework = receding frames, gate = arch, category = patch, style = light state, resource_manager = the human's hands, prompt_engine = the frame); never invent a second symbol for a resource that has one. Beats carry purpose, actors, action, light state and the house phases (hold, anticipation, action on twos, overshoot, settle). Frame 0 is the poster (D53): mark, trio, box, settled black field; the film never opens on overwhelm.
+
+Deliver `script.md` and `beats.json` under the production root `v3/`. `beats.json` is the artifact the Remotion compositions read: an array of beats, each `{id, start, duration, purpose, actors[], actions[{actor, phase_frames:{hold,anticipation,action,overshoot,settle}, start, stagger_after}], light_state, emitter, joins[{object, pulse_at}]}`. Sum durations against the requested length. No narration; no text beyond the held title unless a ruling permits one held line per beat. Label any depicted server activity as illustrative unless a captured receipt exists.
+
+Return: Thesis; Vocabulary Check (every object named with its resource); Beats; Artifact Handoff; Concerns. End with the actual paths written, or complete content marked unpersisted.
+
+---
+
+### Required Response Format
+
+**Summary**: What was implemented (2-3 sentences)
+
+Chain: chain-showcase_preproduction#1
+→ Progress 2/4
+Next: chain_id="chain-showcase_preproduction#1", user_response="<your step output>"

@@ -1,0 +1,12 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "command": ">>showcase_pipeline",
+    "inputs": {
+      "brief": "SMOKE: recorded validation fixture for silent showcase mapping; do not produce creative work.",
+      "constraints": "SMOKE fixture only. No creative evaluation, no filesystem changes, no executable check or publication.",
+      "output_root": "media/showcase/output",
+      "files": ""
+    }
+  }
+}

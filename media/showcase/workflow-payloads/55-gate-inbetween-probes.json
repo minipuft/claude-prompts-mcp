@@ -1,0 +1,46 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "animation-inbetween-probes",
+    "name": "Animation Inbetween Probes",
+    "description": "Check-tier gate on a shot's render step: on the figure-only frames and the joints dump, the lead wrist, head and root travel on arcs, the drawings ease in and out, secondaries land after the primary, and holds move; a linear tween is refused.",
+    "type": "validation",
+    "gate_type": "custom",
+    "severity": "high",
+    "subject": "animation-inbetween-probes",
+    "enforcement_mode": "blocking",
+    "guidance": "Ground truth by exit code (D81). The probe runs `python3 scripts/animation/probe-inbetweens.py --all v3/poses --frames-root out --joints-root out` in the renderer root: for every pose sheet it reads `out/<shot>-figure-seq/` (the figure-only composition rendered as a png sequence, `--props='{\"captions\":false}'`) and `out/<shot>-joints.json` (`npm run joints -- <shot>`), skips a shot with neither and fails when none ran. Its first lines are its controls. On FAIL quote the line naming the joint and frames (a straight path, even spacing, a snapped secondary, a frozen hold) and fix the pose sheet or the breakdown poses, never the probe. Control: a linear lerp between two keys is refused.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-inbetweens.py",
+          "--all",
+          "v3/poses",
+          "--frames-root",
+          "out",
+          "--joints-root",
+          "out"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 600000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ],
+    "activation": {
+      "prompt_categories": [
+        "animation",
+        "development"
+      ],
+      "explicit_request": true
+    },
+    "retry_config": {
+      "max_attempts": 2,
+      "improvement_hints": true
+    }
+  }
+}

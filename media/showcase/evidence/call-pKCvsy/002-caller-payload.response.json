@@ -1,0 +1,31 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Created**: Animation Timeline (animation_timeline)\n\n📝 Step 1 of the animatic chain (D80): compile the episode's beat ledger into timeline.json (beats as frame ranges, world per beat, crossing windows, state flips) and report pacing against the measured hold band; the one file every composition reads.\n🧠 single\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_timeline\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_timeline/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_timeline/user-message.md\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "create",
+    "valid": true,
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "create",
+      "id": "animation_timeline",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_timeline",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_timeline/prompt.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_timeline/user-message.md"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 1
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Created**: Animation Timeline (animation_timeline)\n\n📝 Step 1 of the animatic chain (D80): compile the episode's beat ledger into timeline.json (beats as frame ranges, world per beat, crossing windows, state flips) and report pacing against the measured hold band; the one file every composition reads.\n🧠 single\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_timeline\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_timeline/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_timeline/user-message.md\n"
+  },
+  "isError": false
+}

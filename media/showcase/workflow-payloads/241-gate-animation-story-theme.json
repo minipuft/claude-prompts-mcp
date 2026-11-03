@@ -1,0 +1,52 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "update",
+    "id": "animation-story",
+    "description": "Check-tier gate on the blocking (poses in the shot chain) and evidence steps (p014, D81, row 9.8): the film changes its world where the screenplay says it does, not only its figure, and keeps its themes. Three probes run in order: probe-screenplay.py holds the screenplay contract (ids, frames inside their beats, shots that tile the timeline, state keys, colour keys, registers, the theme ledger and its tags, a recipe for every measure clause, a want or a turn in every beat, current renders), probe-theme.py holds the theme invariants on the blocking (the frame is carried in at sp-4.2 and on no frame before, the gadget is seen only through glass, one lit join at a time, every light line resolves to a target the eye trace measures) and probe-story.py judges every story point on a bound key, on each `after` key and each recipe of its measure being observable, and on the world changing outside the figure. A story point no key binds, a figure that acts over a world that does not change, a measure clause no frame shows, a theme the staging breaks and a story point with no recipe each fail the gate.",
+    "guidance": "Ground truth by exit code (D81, p014, row 9.8). Three commands run in `media/showcase`: `python3 scripts/animation/probe-screenplay.py v3/screenplay.json` (the contract of v3/screenplay.json: shape, themes, recipes, want and turn), then `python3 scripts/animation/probe-theme.py v3/screenplay.json` (the theme invariants read on v3/blocking and the story points), then `python3 scripts/animation/probe-story.py v3/screenplay.json --frames out/animatic-seq --figure-frames out/animatic-fig-seq` (one line per story point: pass or FAIL and why, read from the keys of v3/keys and v3/poses, the blocking, the xsheet, the light contract and the composed frames of the last animatic render). Each prints its control first and refuses to report if a control does not trip. The frames are those of the last render: at the blocking step they are the previous animatic's, so a prop restaged now is judged on the next render's frames; render (npm run animatic and the figure layer) before the evidence step so that step reads current frames. On FAIL quote each failing line with its id (sp-<beat>.<n>) or theme (th-*), open the file and field it names, and make the film show it: bind the story point to a key (`storyPoint` on the key, within 4 frames of the story point's frame), stage the prop the `after` key or the recipe names in the blocking, take the frame out of a beat before sp-4.2, or change the story point through the owner-ask path (a proposal on the bible) instead of editing the screenplay. Never edit v3/screenplay.json, a probe or this check to make it pass. Control: a key sheet with the storyPoint binding of sp-1.1 removed is refused with sp-1.1 named; a blocking with the frame on stage on frame 0 is refused by th-frame-portal.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-screenplay.py",
+          "v3/screenplay.json"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      },
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-theme.py",
+          "v3/screenplay.json"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      },
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-story.py",
+          "v3/screenplay.json",
+          "--frames",
+          "out/animatic-seq",
+          "--figure-frames",
+          "out/animatic-fig-seq"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 300000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ]
+  }
+}

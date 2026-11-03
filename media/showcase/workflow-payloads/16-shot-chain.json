@@ -1,0 +1,121 @@
+{
+ "name": "resource_manager",
+ "arguments": {
+  "resource_type": "prompt",
+  "action": "create",
+  "id": "showcase_shot",
+  "name": "Showcase Shot",
+  "category": "development",
+  "description": "Once per shot: timing table in the animation language, a multi-frame render study (Remotion, or Blender when tool:blender_render is named), the rubric grade behind the showcase-review gate, and the evidence step that files the receipt and feeds the measured range back into shots.json and the script.",
+  "arguments": [
+   {
+    "name": "shot",
+    "type": "string",
+    "required": true,
+    "description": "Shot id from v3/shots.json."
+   },
+   {
+    "name": "brief",
+    "type": "string",
+    "required": false,
+    "defaultValue": "Silent showcase film for Claude Prompts MCP; see v3/script.md.",
+    "description": "Audience, product goal and desired silent showcase outcome."
+   },
+   {
+    "name": "renderer",
+    "type": "string",
+    "required": false,
+    "defaultValue": "remotion",
+    "description": "remotion or blender (blender also needs tool:blender_render on the request).",
+    "validation": {
+     "allowedValues": [
+      "remotion",
+      "blender"
+     ]
+    }
+   },
+   {
+    "name": "frames",
+    "type": "string",
+    "required": false,
+    "defaultValue": "first,key,last,strip",
+    "description": "Frame set the render study produces."
+   },
+   {
+    "name": "constraints",
+    "type": "string",
+    "required": false,
+    "defaultValue": "1280x720 at 30 fps, swangle here; one locked camera; one emitter; drawn on twos, light on ones.",
+    "description": "Renderer and evidence limits."
+   },
+   {
+    "name": "output_root",
+    "type": "string",
+    "required": false,
+    "defaultValue": "media/showcase",
+    "description": "Caller-owned production artifact directory."
+   }
+  ],
+  "chain_steps": [
+   {
+    "id": "motion",
+    "promptId": "showcase_motion",
+    "stepName": "Timing Table",
+    "inputMapping": {
+     "brief": "brief",
+     "constraints": "constraints",
+     "context": "shot",
+     "output_root": "output_root"
+    }
+   },
+   {
+    "id": "render",
+    "promptId": "showcase_render_study",
+    "stepName": "Render Study",
+    "inputMapping": {
+     "brief": "brief",
+     "shot": "shot",
+     "renderer": "renderer",
+     "frames": "frames",
+     "context": "previous_step_result",
+     "output_root": "output_root"
+    }
+   },
+   {
+    "id": "grade",
+    "promptId": "showcase_review",
+    "stepName": "Rubric Grade",
+    "inputMapping": {
+     "brief": "brief",
+     "constraints": "constraints",
+     "context": "previous_step_result",
+     "motion_contract": "step1_result",
+     "output_root": "output_root"
+    },
+    "inlineGateIds": [
+     "showcase-review"
+    ]
+   },
+   {
+    "id": "evidence",
+    "promptId": "showcase_evidence",
+    "stepName": "File and Feed Back",
+    "inputMapping": {
+     "brief": "brief",
+     "shot": "shot",
+     "context": "previous_step_result",
+     "output_root": "output_root"
+    }
+   }
+  ],
+  "budget": {
+   "pauseOnBlocking": true
+  },
+  "artifacts": {
+   "produces": [
+    "docs",
+    "plan"
+   ]
+  }
+ }
+}

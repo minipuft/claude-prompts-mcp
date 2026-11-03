@@ -1,0 +1,35 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Created**: Showcase Cinematography Sheet (showcase_layout_sheet)\n\n📝 Once per shot before its keys (D77): generate the cinematography sheet through the imagegen tool (frame at the start and end of the move, top-down staging plan with the camera path and leading line, emitter, D74 hue pair, figure on-screen height in heads) from the actors' model sheets and the owner's Composition cards, measure it, and write v3/layouts/<shot>.json as the camera contract the key sheet is drawn at and the render study is measured against (C25).\n🧠 single\n\n💡 **Suggested Gates**: Consider adding these gates:\n- research-quality\nUse `update` action with `gate_configuration` parameter to add gates.\n\n🔧 **Script Tools Created**: 1 tool(s)\n- `imagegen`: Image Generation (codex exec) (trigger: explicit)\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/user-message.md\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/tools/imagegen\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/tools/imagegen/tool.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/tools/imagegen/schema.json\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/tools/imagegen/script.py\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "create",
+    "valid": true,
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "create",
+      "id": "showcase_layout_sheet",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/prompt.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/user-message.md",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/tools/imagegen",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/tools/imagegen/tool.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/tools/imagegen/schema.json",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/tools/imagegen/script.py"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 1
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Created**: Showcase Cinematography Sheet (showcase_layout_sheet)\n\n📝 Once per shot before its keys (D77): generate the cinematography sheet through the imagegen tool (frame at the start and end of the move, top-down staging plan with the camera path and leading line, emitter, D74 hue pair, figure on-screen height in heads) from the actors' model sheets and the owner's Composition cards, measure it, and write v3/layouts/<shot>.json as the camera contract the key sheet is drawn at and the render study is measured against (C25).\n🧠 single\n\n💡 **Suggested Gates**: Consider adding these gates:\n- research-quality\nUse `update` action with `gate_configuration` parameter to add gates.\n\n🔧 **Script Tools Created**: 1 tool(s)\n- `imagegen`: Image Generation (codex exec) (trigger: explicit)\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/user-message.md\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/tools/imagegen\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/tools/imagegen/tool.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/tools/imagegen/schema.json\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_layout_sheet/tools/imagegen/script.py\n"
+  },
+  "isError": false
+}

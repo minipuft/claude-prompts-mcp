@@ -1,0 +1,19 @@
+{
+ "valid": true,
+ "path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/bubble/muse-01.png",
+ "source": "/home/minipuft/.codex/generated_images/01a14226-c33d-7643-8653-31aee712f1e2/exec-2a1ed218-6003-4201-a464-d6f6843548d9.png",
+ "sha256": "76084b282b97e33175d8f64d3cf0bb169fb79b7c0fe6c11889e5f25714409c0b",
+ "bytes": 1081437,
+ "referenced_image_paths": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFI6QTUP15009.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-nested-frames.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/codex-official.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFIYY3RT6SJS2.png"
+ ],
+ "tool_arguments": {
+  "raw": "{\n  \"prompt\": \"Use case: stylized-concept. Create ONE 16:9 design variant sheet for a separable prop in a silent hand-drawn animated film. Variant muse-01, Window bubble (do not print this name). Pure solid black field #000000. Show the SAME bubble in exactly three states, left to right, resting on one implied baseline: small and whole; swollen with a small world inside; burst ring with flying fragments. No drawn baseline. Generous black separation between the three states and all loose pieces, no cropping.\\nDesign: a thick-skinned bubble whose skin is a window: a pale contour ring with a slightly turned inner frame, the small world visible through it with a few rays. Rounded soft cloud-like silhouette surrounding a rounded screen-glyph window, combined with gently irregular receding hand-drawn frames, each slightly rotated. Keep the nested frame motif restrained and readable as bubble skin. The small world contains a tiny abstract rounded companion-like figure, not a copied mascot, with a simple nonverbal glyph-shaped window. Tilted view. The burst state retains the same window-bubble identity as a broken annular skin with distinct flying shards and a few radial rays around the ti"
+ },
+ "summary": {
+  "references": 4
+ }
+}

@@ -1,0 +1,68 @@
+{
+  "character": "human",
+  "sheet": "assets/human/model-01.png",
+  "sheetSha256": "c6175dec2002b05d3140f45a0f369efcdf87edd2c8709fcff671db4c9f3521f2",
+  "plate": "v3/studies/human-gen-16-swoop.png",
+  "plateSha256": "3cc53dccbf15ec8f9d272c463d7b906c97ff175667f5578dfb7e675f32a9c4c5",
+  "figureHeightPx": 437,
+  "measured": {
+    "figureHeightPx": 437,
+    "by": "scripts/animation/plate_tools.py model_figure(): the turnaround figure's hair top (row 20) to the baseline rule it stands on (row 457) on assets/human/model-01.png",
+    "note": "The numeral under the figure's baseline was inside the 470 / 471 that scripts/model_measure.py read from each cell (heightPx of the three views below still carry that merge: 470, 471, 469); the figure itself is 437 px tall. Corrected by owner authorisation (row 6.9, 2026-10-15); plates are drawn at this height (plate px per rest mask px 0.4745).",
+    "was": 471
+  },
+  "heads": 8.0,
+  "views": [
+    {
+      "cell": 1,
+      "view": "front",
+      "heightPx": 470,
+      "headPx": 195,
+      "limbRatios": {}
+    },
+    {
+      "cell": 2,
+      "view": "three-quarter",
+      "heightPx": 471,
+      "headPx": 197,
+      "limbRatios": {}
+    },
+    {
+      "cell": 3,
+      "view": "side",
+      "heightPx": 469,
+      "headPx": 217,
+      "limbRatios": {}
+    }
+  ],
+  "scaleAgreementPct": 0.4,
+  "contour": {
+    "measuredPx": 2.83,
+    "targetPx": 2.83,
+    "tolerancePct": 20,
+    "tapered": true,
+    "closed": true,
+    "ratio": 166,
+    "standard": "D76: the approved model sheet's own measured line is the standard; keys match it within 20 % at the same figure height"
+  },
+  "expressions": [
+    "neutral",
+    "blink",
+    "open-mouth",
+    "look"
+  ],
+  "hands": [
+    "open",
+    "point",
+    "grip",
+    "hold"
+  ],
+  "receipt": "evidence/call-XB3Fat",
+  "measuredWith": "scripts/model_measure.py: heads from the sheet's own proportion ruler when present (circle crossings on its centre column), else height / top-12%-width proxy; contour = 2 x median half-width of thin pale pixels (proxy)",
+  "provisional": false,
+  "approved": {
+    "by": "owner",
+    "date": "2026-10-13",
+    "ruling": "D75"
+  }
+}

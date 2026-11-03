@@ -1,0 +1,33 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "create",
+    "id": "showcase_asset_sheet",
+    "name": "Showcase Asset Sheet",
+    "category": "development",
+    "description": "Turn design_muse directions for one asset into 3+ sprite variants rendered side by side in the Remotion AssetSheet, each citing borrowed reference properties and the cast property it sits between.",
+    "arguments": [
+      {
+        "name": "asset",
+        "type": "string",
+        "required": true,
+        "description": "The asset's job in the script's resource vocabulary (e.g. 'the human: resource_manager, the hands that place pieces')."
+      },
+      {
+        "name": "context",
+        "type": "string",
+        "required": false,
+        "description": "The design_muse output for this asset (directions, reference set, capability contract)."
+      },
+      {
+        "name": "files",
+        "type": "string",
+        "required": false,
+        "defaultValue": "media/showcase/src/sheets/",
+        "description": "Owned path for the variant components and the sheet scene."
+      }
+    ],
+    "user_message_template": "Asset: {{asset}}\nMuse directions:\n{{context | default(\"Run design_muse first; report missing handoff.\")}}\n\nRead `v3/creative-spec.md` (palette law, contour language, animation language), `v3/script.md` (the asset's job) and `v3/rubric.md` (C1–C19). Build one sprite component per muse direction (3 or more) under {{files}}, each a five-role flat SVG with a pale contour, designed shadow shapes and 2–3 boil variants, fills by role never hex. Each variant's label names the reference properties it borrows (by file in `v3/references/` and the property, e.g. 'Seuss cat-stairway: elongated neck, flowing hair mass') and the existing cast property it sits between (e.g. 'Clawd's block mass and Codex's cloud lobes'). Register the variants in an `AssetSheet` composition and render one still at frame 0. Do not pick; the owner picks from the still. Losers remain as controls, not deleted.\n\nReturn: Variants (id, title, borrows, between, file); Sheet Path; What Was Held Constant; Concerns."
+  }
+}

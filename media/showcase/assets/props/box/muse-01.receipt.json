@@ -1,0 +1,19 @@
+{
+ "valid": true,
+ "path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/box/muse-01.png",
+ "source": "/home/minipuft/.codex/generated_images/01a14224-b996-72b3-8a7e-42d134498ce4/exec-05dc1778-f3e8-4f12-bf7b-7aa98cd4173e.png",
+ "sha256": "0155b6eb9f96b2830eb976cbff8a54bf82bb5d918e2fea126e4dcf43382d0057",
+ "bytes": 1033225,
+ "referenced_image_paths": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/clawd-official.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-no-one-youer.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MTR8RSMQ452E8.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFJFTELGH6FD8.png"
+ ],
+ "tool_arguments": {
+  "raw": "{\n  \"prompt\": \"Use case: stylized-concept. Create ONE 16:9 design variant sheet for a prop of a silent hand-drawn animated film. Variant muse-01, 'Block box' (do not write these words in the image). Pure black field #000000. Show the SAME plain ordinary stout package exactly twice, side by side on one baseline, same scale and viewing angle: left lid closed with one hairline light seam; right lid lifted about 100 degrees around its BACK EDGE hinge, with hard-edged light spilling from the opening. The box is built from two stacked soft block forms, flat plates, a lobed cap lid, and ONE small curled flag-leaf latch. Stubby, blocky proportions with modest organic swoops; a few small dark slit marks. Preserve identical body construction and latch design across the two states. This is the box whose back-hinged lid will let a bubble swell out later; emphasize a clear usable opening, without adding an extra bubble prop.\\nReference images are property references ONLY, do not copy their subjects or compositions: Image 1 supplies ONLY the Clawd companion's stubby blocky body, flat plates and small dark slit marks; no terminal, UI, text or mascot face. Image 2 supplies ONLY swooping organic lo"
+ },
+ "summary": {
+  "references": 4
+ }
+}

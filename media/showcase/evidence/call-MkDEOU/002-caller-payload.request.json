@@ -1,0 +1,42 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "animation-pose-contract",
+    "name": "Animation Pose Contract",
+    "description": "Check-tier gate on the pose step: every chart key has a pose with a moment; the key sheet's spine fits the declared curve with a bow of at least 6 % of height; limbs do not twin without a why; a weight foot is declared; every key pair has a breakdown that is a pose; secondaries lag one to three drawings; long holds move.",
+    "type": "validation",
+    "gate_type": "custom",
+    "severity": "high",
+    "subject": "animation-pose-contract",
+    "enforcement_mode": "blocking",
+    "guidance": "Ground truth by exit code (D81). The probe runs `python3 scripts/animation/probe-poses.py v3/poses v3/keys v3/charts` in the renderer root and passes only when every check it prints passes; its first printed line is its positive control and it refuses to report if the control does not trip. On FAIL quote the probe's line naming the key or breakdown and fix the pose sheet or the key sheet, never the probe. Control: a straight spine declared S is refused.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-poses.py",
+          "v3/poses",
+          "v3/keys",
+          "v3/charts"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 600000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ],
+    "activation": {
+      "prompt_categories": [
+        "animation"
+      ],
+      "explicit_request": true
+    },
+    "retry_config": {
+      "max_attempts": 2,
+      "improvement_hints": true
+    }
+  }
+}

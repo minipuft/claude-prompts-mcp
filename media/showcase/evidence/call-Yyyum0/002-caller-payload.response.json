@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ Gate 'animation-timeline-contract' updated successfully\n\n📁 Files updated:\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/animation-timeline-contract\n  - /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/gates/animation-timeline-contract/gate.yaml\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +2 additions, -1 deletions\n\n```diff\n===================================================================\n--- a/animation-timeline-contract/gate.yaml\n+++ b/animation-timeline-contract/gate.yaml\n@@ -12,7 +12,7 @@\n       - scripts/animation/probe-timeline.py\n       - v3/timeline.json\n     shell_timeout: 600000\n-    shell_working_dir: media/showcase\n+    shell_working_dir: ../media/showcase\n     shell_max_attempts: 1\n     shell_preset: full\n activation:\n@@ -22,6 +22,7 @@\n retry_config:\n   max_attempts: 2\n   improvement_hints: true\n+  preserve_context: true\n subject: animation-timeline-contract\n severity: high\n enforcementMode: blocking\n\n```\n\n🔄 Gate reloaded"
+    }
+  ],
+  "isError": false
+}

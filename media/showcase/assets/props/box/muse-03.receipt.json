@@ -1,0 +1,19 @@
+{
+ "valid": true,
+ "path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/box/muse-03.png",
+ "source": "/home/minipuft/.codex/generated_images/01a14225-c7bf-7a83-92a9-a7d8012fa0f4/exec-e0f62d67-ce9b-49cf-b805-9e92ab360331.png",
+ "sha256": "38ca3a67e362c4fb4a2c0b716ef8a0502dea4aa6c23375532f75d75a2b56e104",
+ "bytes": 1056966,
+ "referenced_image_paths": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/codex-official.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-nested-frames.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFI6QTUOYA66U.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFI6SELJDBV13.png"
+ ],
+ "tool_arguments": {
+  "raw": "{\n  \"prompt\": \"Create ONE 16:9 design variant sheet for a prop of a silent hand-drawn animated film. Variant muse-03, Nested lid (do not print this name). Pure black field #000000. Show the SAME low rounded plain ordinary package box twice side by side on one baseline, matching scale and viewpoint: LEFT lid closed with one hairline cream light seam; RIGHT lid lifted about 100 degrees on its back hinge, with light spilling out. The lid is a slightly turned hand-drawn frame holding a smaller slightly turned frame: lifting it opens a window into the box. Keep the design between a soft rounded cloud silhouette with a screen-like window and receding irregular nested frames. This is a box prop, not a robot or character. The box must remain flat and ordinary, with a low soft rounded body and a clearly separate hinged lid; its opening allows a bubble to swell out later, but do not add a bubble now.\\nUse every attached reference, ONLY for these specified properties, without copying their subjects or compositions: Image 1 codex-official.png: rounded soft cloud-and-prompt silhouette and screen-glyph window as the cast property, abstracted into the box silhouette/window, with no literal glyph "
+ },
+ "summary": {
+  "references": 4
+ }
+}

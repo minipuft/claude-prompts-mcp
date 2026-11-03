@@ -1,0 +1,456 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "v3/materials.json (D97): the material contract, twelve properties per material",
+  "description": "Each material maps every property to {value, intent, ref} or, where the material has none, null. The ranges below are read by probe-materials.py, the bible server and the bible page; cross-rules (a transmissive declares refraction, an emissive has albedo 1, cloth stiffness below 0.3, a lag declares a settle) are in probe-materials.py.",
+  "type": "object",
+  "required": [
+    "cloth",
+    "hair",
+    "body",
+    "box",
+    "glass",
+    "light",
+    "paper",
+    "line"
+  ],
+  "propertyNames": {
+    "enum": [
+      "cloth",
+      "hair",
+      "body",
+      "box",
+      "glass",
+      "light",
+      "paper",
+      "line"
+    ]
+  },
+  "additionalProperties": {
+    "$ref": "#/$defs/material"
+  },
+  "$defs": {
+    "intent": {
+      "description": "The word the value is for: how it should read on screen.",
+      "enum": [
+        "snap",
+        "float",
+        "weighted",
+        "drape",
+        "crisp",
+        "soft",
+        "still"
+      ]
+    },
+    "ref": {
+      "description": "A card id in v3/references/board.json that shows the value, or null.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "material": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mass",
+        "lagFrames",
+        "settleFrames",
+        "overshoot",
+        "drag",
+        "stiffness",
+        "contact",
+        "boil",
+        "shadowClass",
+        "occluder",
+        "albedo",
+        "refraction",
+        "diffusion"
+      ],
+      "properties": {
+        "mass": {
+          "description": "How hard a secondary falls and how far it swings when its primary stops: gravity scales with it. Above 0 up to 4 (a cloak is 1, a box 2). Null where the material has no motion (paper).",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "intent",
+                "ref"
+              ],
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 4
+                },
+                "intent": {
+                  "$ref": "#/$defs/intent"
+                },
+                "ref": {
+                  "$ref": "#/$defs/ref"
+                }
+              }
+            }
+          ]
+        },
+        "lagFrames": {
+          "description": "Frames the secondary trails its primary: a floor the solver must clear, read by cross-correlation. 0 to 12. A lag declares a settle.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "intent",
+                "ref"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 12
+                },
+                "intent": {
+                  "$ref": "#/$defs/intent"
+                },
+                "ref": {
+                  "$ref": "#/$defs/ref"
+                }
+              }
+            }
+          ]
+        },
+        "settleFrames": {
+          "description": "Frames after the primary stops during which the secondary still moves (tip speed above 0.5 % of 720 px per frame). 1 to 30.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "intent",
+                "ref"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 30
+                },
+                "intent": {
+                  "$ref": "#/$defs/intent"
+                },
+                "ref": {
+                  "$ref": "#/$defs/ref"
+                }
+              }
+            }
+          ]
+        },
+        "overshoot": {
+          "description": "How far past rest the first return swings, as a fraction of the move. 0 to 0.5.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "intent",
+                "ref"
+              ],
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 0.5
+                },
+                "intent": {
+                  "$ref": "#/$defs/intent"
+                },
+                "ref": {
+                  "$ref": "#/$defs/ref"
+                }
+              }
+            }
+          ]
+        },
+        "drag": {
+          "description": "Air resistance, as velocity lost per frame. 0 to 1: high is slow and floaty, low is snappy.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "intent",
+                "ref"
+              ],
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "intent": {
+                  "$ref": "#/$defs/intent"
+                },
+                "ref": {
+                  "$ref": "#/$defs/ref"
+                }
+              }
+            }
+          ]
+        },
+        "stiffness": {
+          "description": "How much of the gravity load the drawn shape holds (Spine \"follow the unconstrained pose\"). 0 to 1; cloth stays below 0.3, hair above 0.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "intent",
+                "ref"
+              ],
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "intent": {
+                  "$ref": "#/$defs/intent"
+                },
+                "ref": {
+                  "$ref": "#/$defs/ref"
+                }
+              }
+            }
+          ]
+        },
+        "contact": {
+          "description": "Frames of the settle breakdown that follows a contact key. 1 to 12. Null where the material makes no contact.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "intent",
+                "ref"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 12
+                },
+                "intent": {
+                  "$ref": "#/$defs/intent"
+                },
+                "ref": {
+                  "$ref": "#/$defs/ref"
+                }
+              }
+            }
+          ]
+        },
+        "boil": {
+          "description": "Line wobble amplitude per material, 1 being the house line. 0 to 3; crayon paper is above 0.",
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "intent",
+                "ref"
+              ],
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 3
+                },
+                "intent": {
+                  "$ref": "#/$defs/intent"
+                },
+                "ref": {
+                  "$ref": "#/$defs/ref"
+                }
+              }
+            }
+          ]
+        },
+        "shadowClass": {
+          "description": "Which stipple scale the material shadow uses (two-scale dither); none casts none.",
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "intent",
+                "ref"
+              ],
+              "properties": {
+                "value": {
+                  "enum": [
+                    "none",
+                    "stipple-1",
+                    "stipple-2",
+                    "stipple-3"
+                  ]
+                },
+                "intent": {
+                  "$ref": "#/$defs/intent"
+                },
+                "ref": {
+                  "$ref": "#/$defs/ref"
+                }
+              }
+            }
+          ]
+        },
+        "occluder": {
+          "description": "Whether the material blocks, bends or gives light. A transmissive declares refraction and diffusion; an emissive has albedo 1.",
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "intent",
+                "ref"
+              ],
+              "properties": {
+                "value": {
+                  "enum": [
+                    "solid",
+                    "transmissive",
+                    "emissive"
+                  ]
+                },
+                "intent": {
+                  "$ref": "#/$defs/intent"
+                },
+                "ref": {
+                  "$ref": "#/$defs/ref"
+                }
+              }
+            }
+          ]
+        },
+        "albedo": {
+          "description": "How much of its own hue a lit edge gives back to what is near it. 0 to 1; above 1 an edge would outshine the emitter.",
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "intent",
+                "ref"
+              ],
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "intent": {
+                  "$ref": "#/$defs/intent"
+                },
+                "ref": {
+                  "$ref": "#/$defs/ref"
+                }
+              }
+            }
+          ]
+        },
+        "refraction": {
+          "description": "How far what is behind the material is displaced (glass pass, D45). Above 0 up to 1; null unless transmissive.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "intent",
+                "ref"
+              ],
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1
+                },
+                "intent": {
+                  "$ref": "#/$defs/intent"
+                },
+                "ref": {
+                  "$ref": "#/$defs/ref"
+                }
+              }
+            }
+          ]
+        },
+        "diffusion": {
+          "description": "How far what is behind the material is softened. 0 to 1; null unless transmissive.",
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "intent",
+                "ref"
+              ],
+              "properties": {
+                "value": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "intent": {
+                  "$ref": "#/$defs/intent"
+                },
+                "ref": {
+                  "$ref": "#/$defs/ref"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

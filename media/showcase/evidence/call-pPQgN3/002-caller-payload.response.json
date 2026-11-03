@@ -1,0 +1,57 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🔍 **Prompt Inspect**: Showcase Model Sheet (`showcase_model_sheet`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Once per character after the owner's pick (D72): generate the model sheet through the imagegen tool from the approved plate and its board cards (turnaround, construction, proportion ruler, expression states, hands), measure it against the clean-up standard, and write assets/<character>/model.json as the identity contract every key sheet is checked against.\n\n**Arguments**:\n- `character` `string` *(required)*: Character id (assets/<character>/), e.g. human, cloak, codex, clawd.\n- `pick` `string` *(required)*: Absolute path of the owner-approved plate (the pick from the muse sheet).\n- `cards` `string`: Board card ids the pick cites (v3/references/board.json); their files are the references.\n- `output_root` `string`: Caller-owned production artifact directory.\n\n**System Message**:\n```\nUse the animation-direction vocabulary (media/showcase/v3/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n```\n\n**User Message Template**:\n```\nCharacter: {{character}}\nApproved pick: {{pick}}\nBoard cards: {{cards | default(\"the cards the pick's study receipt cites\")}}\nProduction root: {{output_root}}\n\nRead `v3/creative-spec.md` (D65–D72 and the Craft baseline section: the model sheet is the identity contract; the clean-up standard) and `v3/rubric.md` (C20–C22). Generate ONE model sheet through the `imagegen` tool (`tool:imagegen`), never by hand: `references` are the absolute paths of the pick and the cited card files; the `prompt` asks for a pure black field, five flat colors with identity pigments by hex, pale contour one step lighter, and this layout at one scale on one baseline: row 1 turnaround front / three-quarter / side; row 2 the same three views as construction volumes (spheres, cylinders, wedges) with a proportion ruler in heads at the left; row 3 the expression states neutral, blink, open mouth, look (D70) and a hands row (open, point, grip, hold); every cell numbered. `out` is `out/<character>-model-<NN>.png`. Measure on the plate: head count per view, limb lengths per view as ratios of height, scale agreement between views (reject above 5 % and regenerate once naming the drift), contour weight in px (D76: on the first sheet of a character, record the measured line as the character's standard in model.json `contour.ratio`; on a later sheet, compare to it ± 20 % at the same figure height), taper and closure (C22). Lay the sheet and its measurements into the `ModelSheet` composition and render one still. Write `assets/<character>/model.json` (views, heads, limb ratios, contour weight, sha256 of the plate, the generation receipt). Cut nothing here. Do not pick: the owner approves the sheet from the still, and until then it is provisional.\n\nReturn: Views (cell, measured heads and ratios); Scale Agreement; Clean-up Measured; Sheet Path; model.json Path; Generation Receipt; Rejected Generations; Concerns.\n```\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "inspect",
+    "resource_type": "prompt",
+    "id": "showcase_model_sheet",
+    "current_version": 0,
+    "prompt": {
+      "id": "showcase_model_sheet",
+      "name": "Showcase Model Sheet",
+      "category": "development",
+      "description": "Once per character after the owner's pick (D72): generate the model sheet through the imagegen tool from the approved plate and its board cards (turnaround, construction, proportion ruler, expression states, hands), measure it against the clean-up standard, and write assets/<character>/model.json as the identity contract every key sheet is checked against.",
+      "systemMessage": "Use the animation-direction vocabulary (media/showcase/v3/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.",
+      "userMessageTemplate": "Character: {{character}}\nApproved pick: {{pick}}\nBoard cards: {{cards | default(\"the cards the pick's study receipt cites\")}}\nProduction root: {{output_root}}\n\nRead `v3/creative-spec.md` (D65–D72 and the Craft baseline section: the model sheet is the identity contract; the clean-up standard) and `v3/rubric.md` (C20–C22). Generate ONE model sheet through the `imagegen` tool (`tool:imagegen`), never by hand: `references` are the absolute paths of the pick and the cited card files; the `prompt` asks for a pure black field, five flat colors with identity pigments by hex, pale contour one step lighter, and this layout at one scale on one baseline: row 1 turnaround front / three-quarter / side; row 2 the same three views as construction volumes (spheres, cylinders, wedges) with a proportion ruler in heads at the left; row 3 the expression states neutral, blink, open mouth, look (D70) and a hands row (open, point, grip, hold); every cell numbered. `out` is `out/<character>-model-<NN>.png`. Measure on the plate: head count per view, limb lengths per view as ratios of height, scale agreement between views (reject above 5 % and regenerate once naming the drift), contour weight in px (D76: on the first sheet of a character, record the measured line as the character's standard in model.json `contour.ratio`; on a later sheet, compare to it ± 20 % at the same figure height), taper and closure (C22). Lay the sheet and its measurements into the `ModelSheet` composition and render one still. Write `assets/<character>/model.json` (views, heads, limb ratios, contour weight, sha256 of the plate, the generation receipt). Cut nothing here. Do not pick: the owner approves the sheet from the still, and until then it is provisional.\n\nReturn: Views (cell, measured heads and ratios); Scale Agreement; Clean-up Measured; Sheet Path; model.json Path; Generation Receipt; Rejected Generations; Concerns.",
+      "arguments": [
+        {
+          "name": "character",
+          "required": true,
+          "description": "Character id (assets/<character>/), e.g. human, cloak, codex, clawd.",
+          "type": "string"
+        },
+        {
+          "name": "pick",
+          "required": true,
+          "description": "Absolute path of the owner-approved plate (the pick from the muse sheet).",
+          "type": "string"
+        },
+        {
+          "name": "cards",
+          "required": false,
+          "description": "Board card ids the pick cites (v3/references/board.json); their files are the references.",
+          "type": "string"
+        },
+        {
+          "name": "output_root",
+          "required": false,
+          "description": "Caller-owned production artifact directory.",
+          "type": "string",
+          "defaultValue": "media/showcase"
+        }
+      ],
+      "chainSteps": []
+    },
+    "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+    "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+    "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "source_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "edit_copies_on_write": false,
+    "message": "🔍 **Prompt Inspect**: Showcase Model Sheet (`showcase_model_sheet`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Once per character after the owner's pick (D72): generate the model sheet through the imagegen tool from the approved plate and its board cards (turnaround, construction, proportion ruler, expression states, hands), measure it against the clean-up standard, and write assets/<character>/model.json as the identity contract every key sheet is checked against.\n\n**Arguments**:\n- `character` `string` *(required)*: Character id (assets/<character>/), e.g. human, cloak, codex, clawd.\n- `pick` `string` *(required)*: Absolute path of the owner-approved plate (the pick from the muse sheet).\n- `cards` `string`: Board card ids the pick cites (v3/references/board.json); their files are the references.\n- `output_root` `string`: Caller-owned production artifact directory.\n\n**System Message**:\n```\nUse the animation-direction vocabulary (media/showcase/v3/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n```\n\n**User Message Template**:\n```\nCharacter: {{character}}\nApproved pick: {{pick}}\nBoard cards: {{cards | default(\"the cards the pick's study receipt cites\")}}\nProduction root: {{output_root}}\n\nRead `v3/creative-spec.md` (D65–D72 and the Craft baseline section: the model sheet is the identity contract; the clean-up standard) and `v3/rubric.md` (C20–C22). Generate ONE model sheet through the `imagegen` tool (`tool:imagegen`), never by hand: `references` are the absolute paths of the pick and the cited card files; the `prompt` asks for a pure black field, five flat colors with identity pigments by hex, pale contour one step lighter, and this layout at one scale on one baseline: row 1 turnaround front / three-quarter / side; row 2 the same three views as construction volumes (spheres, cylinders, wedges) with a proportion ruler in heads at the left; row 3 the expression states neutral, blink, open mouth, look (D70) and a hands row (open, point, grip, hold); every cell numbered. `out` is `out/<character>-model-<NN>.png`. Measure on the plate: head count per view, limb lengths per view as ratios of height, scale agreement between views (reject above 5 % and regenerate once naming the drift), contour weight in px (D76: on the first sheet of a character, record the measured line as the character's standard in model.json `contour.ratio`; on a later sheet, compare to it ± 20 % at the same figure height), taper and closure (C22). Lay the sheet and its measurements into the `ModelSheet` composition and render one still. Write `assets/<character>/model.json` (views, heads, limb ratios, contour weight, sha256 of the plate, the generation receipt). Cut nothing here. Do not pick: the owner approves the sheet from the still, and until then it is provisional.\n\nReturn: Views (cell, measured heads and ratios); Scale Agreement; Clean-up Measured; Sheet Path; model.json Path; Generation Receipt; Rejected Generations; Concerns.\n```\n"
+  },
+  "isError": false
+}

@@ -1,0 +1,273 @@
+{
+ "keys": {
+  "K1": {
+   "name": "rest-on-lid",
+   "plateScale": 0.5114,
+   "figureHeightPx": 458,
+   "figureHeightMaskPx": 895.6,
+   "figureHeightVsModelPct": -2.8,
+   "contourPx": 3.65,
+   "contourRatio": 125.4,
+   "contourVsModelPct": -11.5,
+   "reachRatios": {
+    "wristL": 0.682,
+    "wristR": 0.739,
+    "ankleL": 0.942,
+    "ankleR": 0.926
+   },
+   "over105": []
+  },
+  "K2": {
+   "name": "grip",
+   "plateScale": 1.245,
+   "figureHeightPx": 1121,
+   "figureHeightMaskPx": 900.4,
+   "figureHeightVsModelPct": -2.2,
+   "contourPx": 3.79,
+   "contourRatio": 296.2,
+   "contourVsModelPct": 109.0,
+   "reachRatios": {
+    "wristL": 0.914,
+    "wristR": 1.113,
+    "ankleL": 0.556,
+    "ankleR": 0.57
+   },
+   "over105": [
+    "wristR"
+   ]
+  },
+  "K3": {
+   "name": "lift",
+   "plateScale": 1.245,
+   "figureHeightPx": 1149,
+   "figureHeightMaskPx": 922.9,
+   "figureHeightVsModelPct": 0.2,
+   "contourPx": 3.88,
+   "contourRatio": 295.8,
+   "contourVsModelPct": 108.7,
+   "reachRatios": {
+    "wristL": 0.378,
+    "wristR": 0.744,
+    "ankleL": 0.994,
+    "ankleR": 0.929
+   },
+   "over105": []
+  },
+  "K4": {
+   "name": "awe",
+   "plateScale": 1.245,
+   "figureHeightPx": 1141,
+   "figureHeightMaskPx": 916.5,
+   "figureHeightVsModelPct": -0.5,
+   "contourPx": 3.92,
+   "contourRatio": 291.1,
+   "contourVsModelPct": 105.4,
+   "reachRatios": {
+    "wristL": 0.825,
+    "wristR": 0.861,
+    "ankleL": 0.996,
+    "ankleR": 0.891
+   },
+   "over105": []
+  },
+  "K5": {
+   "name": "brace",
+   "plateScale": 1.245,
+   "figureHeightPx": 1103,
+   "figureHeightMaskPx": 885.9,
+   "figureHeightVsModelPct": -3.8,
+   "contourPx": 3.72,
+   "contourRatio": 296.8,
+   "contourVsModelPct": 109.5,
+   "reachRatios": {
+    "wristL": 0.137,
+    "wristR": 0.317,
+    "ankleL": 0.901,
+    "ankleR": 0.861
+   },
+   "over105": []
+  },
+  "K6": {
+   "name": "joy-a",
+   "plateScale": 1.245,
+   "figureHeightPx": 1116,
+   "figureHeightMaskPx": 896.4,
+   "figureHeightVsModelPct": -2.7,
+   "contourPx": 3.7,
+   "contourRatio": 301.3,
+   "contourVsModelPct": 112.6,
+   "reachRatios": {
+    "wristL": 0.619,
+    "wristR": 0.698,
+    "ankleL": 0.699,
+    "ankleR": 0.713
+   },
+   "over105": []
+  },
+  "K7": {
+   "name": "joy-b",
+   "plateScale": 0.5114,
+   "figureHeightPx": 485,
+   "figureHeightMaskPx": 948.4,
+   "figureHeightVsModelPct": 3.0,
+   "contourPx": 3.43,
+   "contourRatio": 141.3,
+   "contourVsModelPct": -0.3,
+   "reachRatios": {
+    "wristL": 0.48,
+    "wristR": 1.021,
+    "ankleL": 0.896,
+    "ankleR": 0.73
+   },
+   "over105": []
+  },
+  "K8": {
+   "name": "shrink",
+   "plateScale": 0.5114,
+   "figureHeightPx": 272,
+   "figureHeightMaskPx": 531.9,
+   "figureHeightVsModelPct": -42.3,
+   "contourPx": 3.32,
+   "contourRatio": 81.8,
+   "contourVsModelPct": -42.2,
+   "reachRatios": {
+    "wristL": 0.645,
+    "wristR": 0.661,
+    "ankleL": 0.329,
+    "ankleR": 0.32
+   },
+   "over105": []
+  }
+ },
+ "frames": {
+  "F1": {
+   "box": [
+    26,
+    587,
+    419,
+    829
+   ],
+   "blueBrightest": {
+    "x": 0.19,
+    "y": 0.792,
+    "px": 1851
+   }
+  },
+  "F2": {
+   "box": [
+    436,
+    587,
+    829,
+    829
+   ],
+   "blueBrightest": {
+    "x": 0.209,
+    "y": 0.785,
+    "px": 1881
+   }
+  },
+  "F3": {
+   "box": [
+    843,
+    586,
+    1235,
+    829
+   ],
+   "blueBrightest": {
+    "x": 0.243,
+    "y": 0.774,
+    "px": 2151
+   }
+  },
+  "F4": {
+   "box": [
+    1249,
+    586,
+    1645,
+    829
+   ],
+   "blueBrightest": {
+    "x": 0.404,
+    "y": 0.626,
+    "px": 3610
+   }
+  },
+  "F5": {
+   "box": [
+    26,
+    597,
+    417,
+    853
+   ],
+   "dial": {
+    "x": 0.472,
+    "y": 0.258,
+    "px": 856
+   },
+   "blueBrightest": {
+    "x": 0.516,
+    "y": 0.432,
+    "px": 13054
+   }
+  },
+  "F6": {
+   "box": [
+    425,
+    597,
+    831,
+    853
+   ],
+   "dial": {
+    "x": 0.498,
+    "y": 0.32,
+    "px": 1056
+   },
+   "blueBrightest": {
+    "x": 0.49,
+    "y": 0.396,
+    "px": 9929
+   }
+  },
+  "F7": {
+   "box": [
+    840,
+    597,
+    1246,
+    853
+   ],
+   "dial": {
+    "x": 0.448,
+    "y": 0.324,
+    "px": 1070
+   },
+   "blueBrightest": {
+    "x": 0.528,
+    "y": 0.38,
+    "px": 9040
+   }
+  },
+  "F8": {
+   "box": [
+    1255,
+    596,
+    1646,
+    853
+   ],
+   "dial": {
+    "x": 0.462,
+    "y": 0.276,
+    "px": 883
+   },
+   "blueBrightest": {
+    "x": 0.497,
+    "y": 0.359,
+    "px": 6825
+   }
+  }
+ },
+ "model": {
+  "figureHeightPx": 494,
+  "contourPx": 3.49,
+  "ratio": 141.7
+ }
+}

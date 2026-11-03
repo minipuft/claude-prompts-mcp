@@ -1,0 +1,35 @@
+{
+ "plate": "out/world-crayon-01.png",
+ "size": [
+  1774,
+  887
+ ],
+ "field": "#f1dcbc",
+ "contour_px": 2.0,
+ "contour_target_px": 2.71,
+ "torso_dominant_colours": 12,
+ "torso_minor_colours": 40,
+ "fills": "stepped",
+ "identity_pigments": {
+  "codex": {
+   "hex": "#4f7df2",
+   "fraction": 0.00674
+  },
+  "codex_accent": {
+   "hex": "#9fe8ff",
+   "fraction": 0.00016
+  },
+  "clawd": {
+   "hex": "#e8694a",
+   "fraction": 0.03546
+  },
+  "skin": {
+   "hex": "#67b479",
+   "fraction": 0.02817
+  },
+  "skin_shadow": {
+   "hex": "#c885c2",
+   "fraction": 0.02265
+  }
+ }
+}

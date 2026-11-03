@@ -1,0 +1,47 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "animation-animatic-probes",
+    "name": "Animation Animatic Probes",
+    "description": "Check-tier gate on the animatic render step: the rendered frame sequence passes every episode-tier probe (C26–C30 and C12): twos/ones split, hold band, screen time per beat, eye trace, loop closure in line phases, colour pair per beat, byte-identical double render.",
+    "type": "validation",
+    "gate_type": "custom",
+    "severity": "high",
+    "subject": "animation-animatic-probes",
+    "enforcement_mode": "blocking",
+    "guidance": "Ground truth by exit code (D81). The probe runs `python3 scripts/animation/probe-all.py out/animatic-seq --timeline v3/timeline.json --xsheet v3/xsheet.json --second-frames out/animatic-seq-b --subset` in the renderer root and passes only when every check it prints passes; its first printed line is its positive control and it refuses to report if the control does not trip. One line per probe: name · pass/fail · control. On FAIL quote the probe's own line naming the frame or beat and fix the contract or the render, never the probe. Control: each probe trips its own fixture control (scripts/animation/fixtures).",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-all.py",
+          "out/animatic-seq",
+          "--timeline",
+          "v3/timeline.json",
+          "--xsheet",
+          "v3/xsheet.json",
+          "--second-frames",
+          "out/animatic-seq-b",
+          "--subset"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 600000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ],
+    "activation": {
+      "prompt_categories": [
+        "animation"
+      ],
+      "explicit_request": true
+    },
+    "retry_config": {
+      "max_attempts": 2,
+      "improvement_hints": true
+    }
+  }
+}

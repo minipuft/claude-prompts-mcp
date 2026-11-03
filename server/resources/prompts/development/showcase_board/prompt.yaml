@@ -1,0 +1,26 @@
+id: showcase_board
+name: Showcase Board
+description: "Validate and rebuild the design-bible board from
+  v3/references/board.json: references, laws, lineage only (D56), every card
+  with borrow/refuse/governs; reports rulings without a card."
+category: development
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: brief
+    type: string
+    description: Audience, product goal and desired silent showcase outcome.
+    required: true
+  - name: context
+    type: string
+    description: Prior step output; read shared chain history for earlier evidence
+      and decisions.
+    required: false
+  - name: output_root
+    type: string
+    description: Caller-owned production artifact directory.
+    required: false
+    defaultValue: media/showcase
+artifacts:
+  produces:
+    - docs
+systemMessageFile: system-message.md

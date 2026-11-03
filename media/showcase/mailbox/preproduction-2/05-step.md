@@ -1,0 +1,88 @@
+### Original Request Intent
+
+This step was given the following request. Your work must satisfy this intent:
+
+- **brief**: A silent ~40 s showcase film for Claude Prompts MCP: a box arrives with a radiant gadget (raw capability) that overwhelms; a companion holds up a frame whose interior is someplace else; through it the...
+- **constraints**: ~40 s at 30 fps, 1280x720, silent, poster at frame 0; swangle renderer here, final render on the Windows host; drawn on twos, light on ones; one locked camera and one emitter per shot; no asset accept...
+- **output_root**: media/showcase
+
+Brief: A silent ~40 s showcase film for Claude Prompts MCP: a box arrives with a radiant gadget (raw capability) that overwhelms; a companion holds up a frame whose interior is someplace else; through it the human scaffolds one lit join at a time (category, prompt, chain, gate, framework, workspace); the trio settles. Audience: developers landing on the GitHub README; frame 0 is the poster. The bots are standardizing their own design process (D49), and this run is the trail. Clean slate on assets (D56): every object is mused from the board before it enters a shot.
+Constraints: ~40 s at 30 fps, 1280x720, silent, poster at frame 0; swangle renderer here, final render on the Windows host; drawn on twos, light on ones; one locked camera and one emitter per shot; no asset accepted as a first iteration.
+Production root: media/showcase
+Previous handoff:
+## Context
+Story step of `showcase_preproduction` run 1. Read `v3/creative-spec.md` (v4-brief-11), `v3/script.md` (rev 1, owner-ruled six beats and the resource vocabulary) and `v3/rubric.md` (v1.3). Board step handoff received (board-04, 31 cards, no uncovered rulings). creed: n/a — no CloudySky visual surface.
+
+## Analysis
+`script.md` rev 1 already carries the thesis, the fixed vocabulary and six beats with provisional frame ranges that sum to 1200 frames (40 s at 30 fps). The owner's text is not rewritten (D56 clean slate applies to assets, not to the script; D60 says only measured ranges go back into it). What was missing was the artifact the compositions read: `beats.json` in the shape this step specifies.
+
+## Goals
+Emit `v3/beats.json` faithful to the script, in the house phase vocabulary, with one emitter and one light state per beat and the six joins of beat 5 as seam pulses.
+
+## Execution
+Thesis: raw capability is radiant and overwhelming; scaffolding is one lit join at a time (unchanged).
+
+Vocabulary Check: box = the package (opens into the bubble); bubble = capability seen through glass; gadget = prompt capability raw, the Midnight-Gospel-style hybrid machine; frame = prompt_engine; frame interior rings = framework; stalk = prompt; beaded string = chain; arch = gate; patch = category; light state = style; the human's hands = resource_manager; Codex and Clawd = companions. No second symbol was invented for any resource.
+
+Beats (id · start · duration · light · emitter · joins):
+1. arrival · 0 · 150 · settled · box seam · none. Human lifts the lid at 60 after a 60-frame hold; the bubble swells over 40 frames; companions lean in staggered by 4.
+2. everything-at-once · 150 · 180 · overwhelm · gadget dial · none. Pop is a 1-frame smear; projections arrive staggered by 3 until nothing is staggered, the beat's one permitted violation of law 1.
+3. cant-build · 330 · 150 · overwhelm · gadget dial, lost · none. Two reaches, a slide-back, a dark arch, a three-piece collapse, two winces.
+4. the-frame · 480 · 120 · overwhelm → scaffold through the lag chain · the frame interior · none. Clawd raises the frame from the hand's side; a 24-frame reveal; the human looks.
+5. scaffold · 600 · 420 · scaffold · the lit join of the moment · six joins at 634, 698, 786, 882, 920, 982 (patch, stalk, string, arch keystone, ring, second patch seam). The gadget's dial closes across the whole beat.
+6. settle · 1020 · 180 · settled · gadget rimming the structure · none. Title held from 1140; frame 1199 is the second poster.
+
+Total 1200 frames = 40.0 s, matching the request.
+
+## Evaluation
+Artifact Handoff: `v3/beats.json` written (revision beats-01; 6 beats; `{id, start, duration, purpose, actors[], actions[{actor, phase_frames, start, stagger_after}], light_state, emitter, joins[]}`). `v3/script.md` unchanged this step; its §Open already states that measured ranges come back from shot runs (D60).
+
+Concerns: (1) the current `src/story.ts` and the `Showcase` composition still read the legacy `story.json` typographic film; the scenes under `src/scenes/` do not yet read `beats.json`, so a shot run's render study will need the composition for its shot wired to this file. (2) Phase frames inside a beat are a first table; the motion step of each `showcase_shot` run owns the final timing. (3) No server activity is depicted as real: every resource on screen is illustrative until a receipt exists.
+
+## Refinement
+Paths written: `media/showcase/v3/beats.json`. Next step (shot list) should cut these beats into locked-camera shots and emit `v3/shots.json` with the object inventory and one muse command per object.
+
+Read `v3/script.md` (resource vocabulary, six beats), the story step's `beats.json`, `v3/creative-spec.md` (animation language: the camera is locked within a beat and moves at most once per beat; one actor at a time; one emitter per shot) and `v3/references/board.json` (card ids). Write `v3/shots.json`: an array of shots, each `{id, beat, title, frames:[start,end], camera, actors:[], emitter, join, objects:[], cards:[], measured:null}`. Rules: a shot is one locked camera; a cut starts a new shot; `frames` are provisional until a shot run writes `measured`; `cards` cite board card ids for the shot's look; `objects` lists every asset the shot needs in the resource vocabulary (box, bubble, gadget, frame, human, stalk, string, arch, patch, ring, companions). Then write the object inventory: every distinct object across shots, which has a muse sheet accepted (none at a clean slate), and the exact command to muse each: `>>showcase_asset_muse asset:"<object: its job>"`. The muse runs per object from this inventory, not inside this chain. Keep `script.md` the owner's text: do not rewrite beats, only reference them.
+
+Return: Shot Table (id · beat · frames · camera · emitter · join · cards); Object Inventory With Muse Commands; Frame Total Versus Script; Concerns.
+
+---
+
+## Inline Gates
+
+### Reminders
+
+### Framework Compliance
+**CAGEERF Framework Guidelines:**
+- Include Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework considerations
+- Structure responses according to framework principles
+- Include systematic thinking and framework awareness
+- Show iterative improvement and refinement processes
+
+Attest reminders in the verdict's `reminders` field; checks are recorded by the engine.
+
+---
+
+---
+
+### Required Response Format
+
+**Summary**: What was implemented (2-3 sentences)
+
+**Required Sections** — emit these headers verbatim; they are graded structurally:
+- `## Context` (required)
+- `## Analysis` (required)
+- `## Goals` (required)
+- `## Execution` (required)
+- `## Evaluation` (optional)
+- `## Refinement` (optional)
+
+**Gate Coverage**:
+- [1] PASS|FAIL: rationale
+- [2] PASS|FAIL: rationale
+
+**GATE_REVIEW: PASS|FAIL - overall assessment**
+
+Chain: chain-showcase_preproduction#1
+→ Progress 3/4
+Next: chain_id="chain-showcase_preproduction#1", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"

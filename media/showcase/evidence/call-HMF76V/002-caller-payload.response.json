@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🚦 Gate: Animation Pose Contract\n\n📋 Details:\n  - ID: animation-pose-contract\n  - Type: ✓ validation\n  - Description: Check-tier gate on the pose step: every chart key has a pose with a moment; the key sheet's spine fits the declared curve with a bow of at least 6 % of height; limbs do not twin without a why; a weight foot is declared; every key pair has a breakdown that is a pose; secondaries lag one to three drawings; long holds move. On the pose step the spine fit and weight are measured on the sheet's solved joints (the key sheet is drawn afterwards and measures its own keys against the same declarations with --joints keys).\n  - Severity: high\n  - Enforcement Mode: blocking\n  - Classification: custom\n\n📝 Guidance:\nGround truth by exit code (D81). The probe runs `python3 scripts/animation/probe-poses.py v3/poses v3/keys v3/charts --joints solved` in the renderer root: every chart key has a pose with a moment; timing shape per move (3–6 drawings, kinds in order and in band); lead arm never a secondary; secondaries lag 1–3; long holds move; and the spine fit, bow and weight are measured on the pose sheet's `solved` joints (what the solver built from the declaration), because the key sheet is drawn in the nex..."
+    }
+  ],
+  "isError": false
+}

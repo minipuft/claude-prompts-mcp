@@ -1,0 +1,111 @@
+{
+ "name": "resource_manager",
+ "arguments": {
+  "resource_type": "prompt",
+  "action": "create",
+  "id": "showcase_render_study",
+  "name": "Showcase Render Study",
+  "category": "development",
+  "description": "Render one shot's frame set through Remotion (default) or, when explicitly requested with tool:blender_render, through Blender; writes the stills, the consecutive-frame strip and the measured probes the review needs, and the receipt skeleton.",
+  "arguments": [
+   {
+    "name": "brief",
+    "type": "string",
+    "required": true,
+    "description": "Audience, product goal and desired silent showcase outcome."
+   },
+   {
+    "name": "context",
+    "type": "string",
+    "required": false,
+    "description": "Prior step output; read shared chain history for earlier evidence and decisions."
+   },
+   {
+    "name": "output_root",
+    "type": "string",
+    "required": false,
+    "defaultValue": "media/showcase",
+    "description": "Caller-owned production artifact directory."
+   },
+   {
+    "name": "shot",
+    "type": "string",
+    "required": true,
+    "description": "Shot id from v3/shots.json."
+   },
+   {
+    "name": "renderer",
+    "type": "string",
+    "required": false,
+    "defaultValue": "remotion",
+    "description": "remotion (default) or blender. Blender runs only when the request also names tool:blender_render; it refuses when no Blender binary is reachable.",
+    "validation": {
+     "allowedValues": [
+      "remotion",
+      "blender"
+     ]
+    }
+   },
+   {
+    "name": "frames",
+    "type": "string",
+    "required": false,
+    "defaultValue": "first,key,last,strip",
+    "description": "Frame set: first, key (the shot's action frame), last, and a 6-frame consecutive strip around the key, plus any explicit frame numbers."
+   },
+   {
+    "name": "blend_file",
+    "type": "string",
+    "required": false,
+    "description": "Blender: path to the .blend for this shot."
+   },
+   {
+    "name": "python_script",
+    "type": "string",
+    "required": false,
+    "description": "Blender: optional driver script run with --python; receives --frame and --out after --."
+   }
+  ],
+  "user_message_template": "Brief: {{brief}}\nShot: {{shot}} \u00b7 renderer: {{renderer}} \u00b7 frames: {{frames}}\nProduction root: {{output_root}}\nPrevious handoff (motion contract):\n{{context | default(\"Read the motion step's timing table from chain history.\")}}\n\nRead the shot row in `v3/shots.json` and the timing table. Remotion path: render the shot's composition at the frame set with `npx remotion still` / `npx remotion render --frames`, on the pinned `swangle` renderer, into `out/<shot>-f###.png` and `out/<shot>-strip.png` (consecutive frames tiled with ffmpeg); render the key frame twice and record both sha256 (C12); measure per-frame pixel change across the strip for the drawn region and the light region (C16, C18); sample one pixel on each identity pigment (C1). Blender path: only when `renderer` is blender AND the request names `tool:blender_render`; the tool refuses with a reason when Blender is not reachable, and a refusal is BLOCKED, not a render. Multiple frames are the point: a single still cannot prove motion and the review grades by evidence tier. Write `out/<shot>-probes.json` with every measurement and the receipt skeleton (Changed, Grades left empty, Controls, Owner, Next) for the review step. Never describe a frame you did not open.\n\nReturn: Frames Rendered (path, sha256 prefix); Probes (determinism, twos/ones change %, identity samples); Receipt Skeleton Path; Renderer Used; Concerns.",
+  "tools": [
+   {
+    "id": "blender_render",
+    "name": "Blender Render",
+    "description": "Render frames of a .blend headlessly; explicit trigger, confirm before running.",
+    "runtime": "python",
+    "script": "#!/usr/bin/env python3\n\"\"\"Blender path for a showcase shot. Explicit trigger only (tool:blender_render). Refuses with a named reason when Blender is not reachable; never reports a render it did not make.\"\"\"\nimport json, os, shutil, subprocess, sys\ndata = json.load(sys.stdin)\nblend = data.get(\"blend_file\"); script = data.get(\"python_script\"); out = data.get(\"out_dir\", \"out/blender\")\nframes = data.get(\"frames\", [0])\nexe = os.environ.get(\"BLENDER\") or shutil.which(\"blender\")\nif not exe:\n    print(json.dumps({\"valid\": False, \"errors\": [\"blender is not on PATH and BLENDER is unset; this box (WSL2) has no Blender; run the shot on the Windows host or set BLENDER to the host binary\"]}))\n    sys.exit(0)\nif not blend or not os.path.isfile(blend):\n    print(json.dumps({\"valid\": False, \"errors\": [f\"blend_file missing or not a file: {blend}\"]}))\n    sys.exit(0)\nos.makedirs(out, exist_ok=True)\nrendered = []\nfor f in frames:\n    cmd = [exe, \"-b\", blend, \"-o\", os.path.join(out, \"frame_####\"), \"-F\", \"PNG\", \"-f\", str(int(f))]\n    if script:\n        cmd = [exe, \"-b\", blend, \"--python\", script, \"--\", \"--frame\", str(int(f)), \"--out\", out]\n    r = subprocess.run(cmd, capture_output=True, text=True, timeout=240)\n    if r.returncode != 0:\n        print(json.dumps({\"valid\": False, \"errors\": [f\"blender exited {r.returncode} on frame {f}\", r.stderr[-800:]], \"rendered\": rendered}))\n        sys.exit(0)\n    rendered.append(f)\nprint(json.dumps({\"valid\": True, \"summary\": {\"renderer\": \"blender\", \"executable\": exe, \"frames\": rendered, \"out_dir\": out}}))\n",
+    "timeout": 270000,
+    "trigger": "explicit",
+    "confirm": true,
+    "schema": {
+     "type": "object",
+     "properties": {
+      "blend_file": {
+       "type": "string"
+      },
+      "python_script": {
+       "type": "string"
+      },
+      "out_dir": {
+       "type": "string"
+      },
+      "frames": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       }
+      }
+     },
+     "required": [
+      "blend_file"
+     ]
+    }
+   }
+  ],
+  "artifacts": {
+   "produces": [
+    "docs"
+   ]
+  }
+ }
+}

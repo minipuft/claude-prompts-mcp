@@ -1,0 +1,10 @@
+{
+  "id": "line",
+  "field": "#07060c",
+  "line": {"ratio": 166, "colour": "pale", "interior": true},
+  "fills": "none",
+  "boil": {"variants": 3, "rate": 4},
+  "radiance": {"on": true, "note": "the world draws no light of its own; it draws the emitter only where the beat's blocking lights an actor (`lit`): the stalk the human carries in the crossing, so the eye finds the piece"},
+  "provisional": true,
+  "cards": ["D78 line world: every crossing", "board-06 §8 leading line"]
+}

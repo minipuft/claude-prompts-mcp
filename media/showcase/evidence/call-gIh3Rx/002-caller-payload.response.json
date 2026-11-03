@@ -1,0 +1,29 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Updated**: Showcase Asset Muse (showcase_asset_muse)\n\nUpdated prompt: showcase_asset_muse\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +2 additions, -9 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_asset_muse/prompt.yaml\n+++ b/development/showcase_asset_muse/prompt.yaml\n@@ -1,9 +1,6 @@\n id: showcase_asset_muse\n name: Showcase Asset Muse\n-description: \"Between-iteration muse for one showcase asset: design_muse on the\n-  filed references and the existing cast, then 3+ variants rendered side by side\n-  in the substrate, then a rubric grade. No asset enters a scene without it\n-  (D55).\"\n+description: \"Between-iteration muse for one showcase asset: design_muse on the board and the existing cast, then 3+ generated sheets side by side in the substrate, then a rubric grade. No asset enters a scene without it (D55); the pick proceeds to a model sheet (D72).\"\n category: development\n userMessageTemplateFile: user-message.md\n arguments:\n@@ -15,11 +12,7 @@\n     type: string\n     description: The style envelope the variants must stay inside.\n     required: false\n-    defaultValue: Five-role flat SVG on a black field; Seuss contour language;\n-      Midnight Gospel stipple shadows; identity pigments fixed; drawn on twos.\n-      Variants must sit between the filed references\n-      (v3/references/style-references.json) and the existing cast (Clawd, Codex,\n-      gadget, frame).\n+    defaultValue: Generated sheets only (D65/D66), pure black field, five flat roles with identity pigments pinned, pale contour, clean-up standard (D72); variants must sit between the board cards cited and the existing cast. The owner's pick then gets a model sheet (showcase_model_sheet) before any key sheet; nothing is animated by generation (D68).\n chainSteps:\n   - promptId: design_muse\n     args:\n\n```\n\n🧠 chain\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse/prompt.yaml\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "update",
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "update",
+      "id": "showcase_asset_muse",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse/prompt.yaml"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 2
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Updated**: Showcase Asset Muse (showcase_asset_muse)\n\nUpdated prompt: showcase_asset_muse\n\n📜 **Version 2** saved (use `action:\"history\"` to view)\n\n**Changes**: +2 additions, -9 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_asset_muse/prompt.yaml\n+++ b/development/showcase_asset_muse/prompt.yaml\n@@ -1,9 +1,6 @@\n id: showcase_asset_muse\n name: Showcase Asset Muse\n-description: \"Between-iteration muse for one showcase asset: design_muse on the\n-  filed references and the existing cast, then 3+ variants rendered side by side\n-  in the substrate, then a rubric grade. No asset enters a scene without it\n-  (D55).\"\n+description: \"Between-iteration muse for one showcase asset: design_muse on the board and the existing cast, then 3+ generated sheets side by side in the substrate, then a rubric grade. No asset enters a scene without it (D55); the pick proceeds to a model sheet (D72).\"\n category: development\n userMessageTemplateFile: user-message.md\n arguments:\n@@ -15,11 +12,7 @@\n     type: string\n     description: The style envelope the variants must stay inside.\n     required: false\n-    defaultValue: Five-role flat SVG on a black field; Seuss contour language;\n-      Midnight Gospel stipple shadows; identity pigments fixed; drawn on twos.\n-      Variants must sit between the filed references\n-      (v3/references/style-references.json) and the existing cast (Clawd, Codex,\n-      gadget, frame).\n+    defaultValue: Generated sheets only (D65/D66), pure black field, five flat roles with identity pigments pinned, pale contour, clean-up standard (D72); variants must sit between the board cards cited and the existing cast. The owner's pick then gets a model sheet (showcase_model_sheet) before any key sheet; nothing is animated by generation (D68).\n chainSteps:\n   - promptId: design_muse\n     args:\n\n```\n\n🧠 chain\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `2`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_asset_muse/prompt.yaml\n"
+  },
+  "isError": false
+}

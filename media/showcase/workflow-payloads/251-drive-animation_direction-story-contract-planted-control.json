@@ -1,0 +1,24 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "workflow": {
+      "version": 1,
+      "nodes": [
+        {
+          "id": "ask",
+          "promptId": "animation_direction",
+          "stepName": "Interview question",
+          "args": {
+            "episode_root": "media/showcase/v3",
+            "beat": "arrival",
+            "frame": "10",
+            "question": "Should the lid lift read as soft or hard?"
+          },
+          "inlineGateIds": [
+            "animation-story-contract-planted-control"
+          ]
+        }
+      ]
+    }
+  }
+}

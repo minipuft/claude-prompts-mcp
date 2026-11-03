@@ -1,0 +1,19 @@
+{
+  "id": "p016",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "the-frame",
+    "frame": 760
+  },
+  "title": "The cloak that falls in beat 4 is the Swoop's own poncho, and the ledger says the garment flip is permanent",
+  "text": "D69 says the human arrives wearing the heavy Cloak and becomes the Swoop; the pose sheet of beat 4 calls the cloth that drops at frame 760 'cloak', and it is the rig's `poncho` part, the diamond poncho the Swoop itself wears. No heavy Cloak was ever drawn or cut as an asset. The ledger answers what the first version of this record asked: beats-v2.json carries `human.garment: cloak -> swoop, scope permanent` on the-frame, so the flip is permanent and the poncho does not come back. Row 9.5 drew it that way in every world. From frame 760 the parts rig draws the human without the poncho part, the heap lies on the floor from the same frame and the figure loses 14 % of its area; every other figure the film draws from then on (the crossing's line phase, the line, crayon and shaded worlds, the home settle) is the one-piece mesh without the poncho's pixels and its all-poncho triangles (`assets/human/cutout-swoop.png`, `assets/human/swoop.json`, written by `scripts/animation/cut-swoop.py`; the animatic sets `figure.swoop` on every frame from `dropsAt`). compare-renders of the same code with and without the change reads identical on frames 0-899 and different from 900 on (the crossing's reduce phase begins there); the draft's poncho had come back from frame 900. What stays true of the picture is a limit of the asset, not a decision: the plate has no torso or hips under the poncho, so the figure that is revealed is four separate pieces (head with hair and collar, two arms with their sleeves, the legs) that the rig draws overlapping. If the owner wants a body under the cloak, that is a new plate and a new part, and a ruling of its own.",
+  "references": [
+    "spirited-away-shoes"
+  ],
+  "before": "the figure wears its poncho through all of beat 4's contour worlds and from frame 900 in every world after it",
+  "after": "the poncho is off from frame 760 in every world, the heap stays; a ruling is needed only if the revealed figure should have a body under the cloak",
+  "status": "open",
+  "ruling": null
+}

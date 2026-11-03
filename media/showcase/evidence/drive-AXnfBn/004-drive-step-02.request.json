@@ -1,0 +1,22 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_asset_muse#1",
+    "user_response": "## Context\nDelegated sheet step for the human, executed in-session by the planner (no sub-agent was spawned: the style contracts, the board and the muse directions live in this session's context, and a fresh agent would have lost them; stated here so the trail is honest). Inputs: the muse's three directions (A Bell, B Kite, C Kin; D Stalk refused as a vocabulary collision), `v3/creative-spec.md` v4-brief-12, `v3/rubric.md` v1.3, `v3/references/board.json` board-05. creed: n/a — no CloudySky visual surface.\n\n## Analysis\nShared across variants: skin `--skin`/`--skin-shadow` from `identity.humanSkin`; garment roles from `settled.human`; pale contour one step behind (light-role stroke 9 under outline 3); two-scale stipple form shadow with the mauve shift and a stippled cast shadow; `lift` 0..1 moving the hands from hip to above the head; `variant` 0..2 boil offsets; hands radius 12–13 against head radius 20–26 (≥ 0.45). Only construction differs.\n\n## Goals\nThree rendered constructions side by side with cited borrows, a 64 px silhouette under each so readability is judged before fills, companions at the edges for scale, no pick.\n\n## Execution\nVariants (id, title, borrows, between, file):\n- A · Bell — borrows seuss-archbishop-katz (layered mauve/blue/cream bands, rounded apex), lin-fosters (long arms, enlarged hands), chetas (dot eyes, one mouth stroke) — between Codex's lobed cap and the gadget's stacked lobes — `src/sheets/human-v2.tsx` `HumanBell`.\n- B · Kite — borrows lin-fosters (stick limbs, enlarged hands and feet), seuss-freebird (hair as one trailing line), chetas (expression economy) — between Clawd's compact mass and Codex's rounder head — `HumanKite`.\n- C · Kin — borrows clawd-official (block mass, stub legs), codex-official (lobed cap), seuss-cat-stairway (feathered contour) — between Clawd's block and Codex's cloud lobes, the trio as one species — `HumanKin`.\n\nSheet Path: `out/human-sheet-15.png`, copied unchanged to `v3/studies/human-sheet-15.png` (sha256 703690f3fc95…). Composition `HumanSheet2` in `src/Root.tsx`; `AssetSheet` gained an optional 64 px silhouette box per variant (`src/scenes/AssetSheet.tsx`), roles bound inside the box and the node run through brightness(0).\n\nWhat Was Held Constant: pigments, garment roles, contour widths, stipple scales, lift 0.6, scale 1, companion placement (Codex left at 1.3, Clawd right at 1.2).\n\n## Evaluation\nViewed the still. At 64 px: Kite reads unmistakably as a posed figure with hands; Kin reads as a compact figure; Bell reads as a bell with two dots, which is the gate-collision risk the muse named, though its rounded apex keeps it off the arch. At full size all three are distinct constructions in one contour language; the companions and the human share dot-eye economy. Known flaw: variant A's silhouette box is clipped by the frame bottom because its label runs longer; cosmetic, the silhouette is still legible.\n\nConcerns: the chain's `challenge: asset` mapping rendered empty on step 1 (constraints carried); the asset was restated by hand. Not a sheet defect, a chain-authoring one to fix on `showcase_asset_muse`.\n\n## Refinement\nNo pick made. The grade step should mark C19 by the sheet and leave motion criteria UNPROVEN; the owner picks from the still.\n\nHANDOFF RESULT\nnode: sheet\nProposed Gate Review:\n- framework-compliance: PASS — required sections present, each phase builds on the previous\n- creed-fidelity: PASS — n/a stated, no CloudySky surface\n",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "Three constructions rendered side by side with cited board cards and 64 px silhouettes; no pick; losers retained as controls.",
+      "reminders": {
+        "satisfied": [
+          "framework-compliance"
+        ],
+        "not_applicable": [
+          {
+            "id": "creed-fidelity",
+            "reason": "no CloudySky visual surface"
+          }
+        ]
+      }
+    }
+  }
+}

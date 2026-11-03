@@ -1,0 +1,148 @@
+{
+  "asset": "pieces",
+  "covers": [
+    "stalk",
+    "arch",
+    "ring",
+    "patch",
+    "frame",
+    "string",
+    "block"
+  ],
+  "status": "proposed",
+  "picked": null,
+  "job": "the piece family the gadget projects, one sheet: a stalk (a prompt: a curling stalk with a flag leaf), a pointed arch (a gate, with a keystone), a ring (a framework: a receding turned frame), a block, a frame (prompt_engine, held up), a soft ground patch and a beaded light string (a chain) joining two stalks; hand-coded today in Pieces.tsx and Frame.tsx",
+  "prompt": {
+    "chain": ">>showcase_asset_muse",
+    "payload": "workflow-payloads/73-muse-pieces.json",
+    "tool": "imagegen (showcase_asset_sheet tools/imagegen/script.py, codex exec)",
+    "common": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.",
+    "variant_prompts": {
+      "muse-01": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the piece family the gadget projects, one sheet: a stalk (a prompt: a curling stalk with a flag leaf), a pointed arch (a gate, with a keystone), a ring (a framework: a receding turned frame), a block, a frame (prompt_engine, held up), a soft ground patch and a beaded light string (a chain) joining two stalks; hand-coded today in Pieces.tsx and Frame.tsx.\nLAYOUT: Show all seven members at ONE scale on one baseline in one row, the beaded string hanging between two stalks, no overlaps. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: Dr. Seuss Midnight Painting: swooping organic lobes, curling stalks with flag leaves and pale thin contour on black.\nImage 2: Dr. Seuss Midnight Painting: stacked pointed arches in interlocking layered shapes.\nImage 3: Dr. Seuss Midnight Painting: receding hand-drawn frames, each slightly turned.\nImage 4: owner card MFI6SELJHX04J: height by a single vertical and a flat pattern.\nImage 5: the Codex companion: take only its rounded soft cloud-and-prompt silhouette and its screen-glyph window as the cast property.\nVARIANT muse-01 'Seuss grammar': Every member in the Seuss grammar: stalks with flag leaves, a stacked pointed arch, a nested turned frame as the ring, beads as the string. The design sits between codex (rounded soft silhouette) and the Seuss paintings.",
+      "muse-02": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the piece family the gadget projects, one sheet: a stalk (a prompt: a curling stalk with a flag leaf), a pointed arch (a gate, with a keystone), a ring (a framework: a receding turned frame), a block, a frame (prompt_engine, held up), a soft ground patch and a beaded light string (a chain) joining two stalks; hand-coded today in Pieces.tsx and Frame.tsx.\nLAYOUT: Show all seven members at ONE scale on one baseline in one row, the beaded string hanging between two stalks, no overlaps. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: owner card MFI6QTUOYA66U: windows framing characters inside architecture.\nImage 2: owner card MFP3WX8X3LIX2: a lit doorway in a dark field, the interior the only emitter.\nImage 3: Dr. Seuss Midnight Painting: light as strings of beads strung between forms.\nImage 4: the Clawd companion: take only its stubby blocky body, flat plates and small dark slit marks as the cast property.\nVARIANT muse-02 'Window family': Every member reads as a window or doorway kit: arch as a doorway, ring as a window frame, frame as a window pair, string as lit lead lines. The design sits between clawd (stubby plated block bodies) and the Seuss paintings.",
+      "muse-03": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the piece family the gadget projects, one sheet: a stalk (a prompt: a curling stalk with a flag leaf), a pointed arch (a gate, with a keystone), a ring (a framework: a receding turned frame), a block, a frame (prompt_engine, held up), a soft ground patch and a beaded light string (a chain) joining two stalks; hand-coded today in Pieces.tsx and Frame.tsx.\nLAYOUT: Show all seven members at ONE scale on one baseline in one row, the beaded string hanging between two stalks, no overlaps. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: owner card LYCZ7B8LTHX9V: pure thin lines on a blank field.\nImage 2: owner card LYCYY9LR7XD55: lit edges as glowing lines in a dark space.\nImage 3: Dr. Seuss Midnight Painting: light as strings of beads strung between forms.\nImage 4: the human's model sheet: take only its long swooping neck-and-hair line, tapered tips and thin pale contour as the cast property.\nVARIANT muse-03 'Line family': Every member is mostly thin lit lines: stalk and arch as glowing edges, ring as concentric lines, the string a web of beaded lines. The design sits between human (thin tapered pale contour) and the Seuss paintings."
+    },
+    "chain_receipt": "evidence/drive-hvki1n",
+    "mailbox": "mailbox/muse-pieces"
+  },
+  "variants": [
+    {
+      "id": "muse-01",
+      "title": "Seuss grammar",
+      "image": "assets/props/pieces/muse-01.png",
+      "sha256": "854a2f764b4f088b26a31665b521dac6eafca38e742783b28e6001bf3e64d218",
+      "design": "Every member in the Seuss grammar: stalks with flag leaves, a stacked pointed arch, a nested turned frame as the ring, beads as the string.",
+      "borrows": [
+        {
+          "card": "MFI6SELJHX04J",
+          "facet": "composition.framing",
+          "value": "tower",
+          "property": "height told by one vertical and a flat pattern"
+        },
+        {
+          "card": "MFI6SELJHX04J",
+          "facet": "colour.scheme",
+          "value": "two-tone",
+          "property": "two tones per member"
+        }
+      ],
+      "cast_property": {
+        "cast": "codex",
+        "property": "rounded soft silhouette"
+      },
+      "board_cards": [
+        "seuss-no-one-youer",
+        "seuss-archbishop-katz",
+        "seuss-nested-frames",
+        "codex-official"
+      ],
+      "reference_images": [
+        "assets/props/_refs/seuss-no-one-youer.png",
+        "assets/props/_refs/seuss-archbishop-katz.png",
+        "assets/props/_refs/seuss-nested-frames.png",
+        "assets/props/_refs/MFI6SELJHX04J.png",
+        "assets/props/_refs/codex-official.png"
+      ],
+      "generation_receipt": "assets/props/pieces/muse-01.receipt.json",
+      "request": "assets/props/pieces/muse-01.request.json",
+      "observed": "seven members at one scale, one baseline, chunky Seuss grammar with two-tone fills; the string hangs between two stalks"
+    },
+    {
+      "id": "muse-02",
+      "title": "Window family",
+      "image": "assets/props/pieces/muse-02.png",
+      "sha256": "f774eb14644c4085f9b2a2b089a9d5bb4c0c3d97295785ab98a809d4c1e4f32e",
+      "design": "Every member reads as a window or doorway kit: arch as a doorway, ring as a window frame, frame as a window pair, string as lit lead lines.",
+      "borrows": [
+        {
+          "card": "MFI6QTUOYA66U",
+          "facet": "composition.framing",
+          "value": "window",
+          "property": "windows framing what is inside the architecture"
+        },
+        {
+          "card": "MFP3WX8X3LIX2",
+          "facet": "composition.framing",
+          "value": "doorway",
+          "property": "a lit doorway the interior shows through"
+        }
+      ],
+      "cast_property": {
+        "cast": "clawd",
+        "property": "stubby plated block bodies"
+      },
+      "board_cards": [
+        "seuss-green-cat-lights",
+        "clawd-official"
+      ],
+      "reference_images": [
+        "assets/props/_refs/MFI6QTUOYA66U.png",
+        "assets/props/_refs/MFP3WX8X3LIX2.png",
+        "assets/props/_refs/seuss-green-cat-lights.png",
+        "assets/props/_refs/clawd-official.png"
+      ],
+      "generation_receipt": "assets/props/pieces/muse-02.receipt.json",
+      "request": "assets/props/pieces/muse-02.request.json",
+      "observed": "seven members in a window and doorway kit; the string is a short bead line between two stalks; the patch is the smallest member and reads as a pad"
+    },
+    {
+      "id": "muse-03",
+      "title": "Line family",
+      "image": "assets/props/pieces/muse-03.png",
+      "sha256": "fd765b42ecb903cf32d83771370cb233739d948de69b332c74ef1589b9f49e0a",
+      "design": "Every member is mostly thin lit lines: stalk and arch as glowing edges, ring as concentric lines, the string a web of beaded lines.",
+      "borrows": [
+        {
+          "card": "LYCZ7B8LTHX9V",
+          "facet": "fx",
+          "value": "none",
+          "property": "pure thin lines on a blank field"
+        },
+        {
+          "card": "LYCYY9LR7XD55",
+          "facet": "fx",
+          "value": "glow",
+          "property": "lit edges as glowing lines"
+        }
+      ],
+      "cast_property": {
+        "cast": "human",
+        "property": "thin tapered pale contour"
+      },
+      "board_cards": [
+        "seuss-green-cat-lights",
+        "human-model"
+      ],
+      "reference_images": [
+        "assets/props/_refs/LYCZ7B8LTHX9V.png",
+        "assets/props/_refs/LYCYY9LR7XD55.png",
+        "assets/props/_refs/seuss-green-cat-lights.png",
+        "assets/props/_refs/human-model.png"
+      ],
+      "generation_receipt": "assets/props/pieces/muse-03.receipt.json",
+      "request": "assets/props/pieces/muse-03.request.json",
+      "observed": "seven members drawn mostly as pale lines; the thinnest, with the most contour, and the string a web of bead lines; fill roles are weakest here"
+    }
+  ],
+  "grade": "assets/props/pieces/grade.md"
+}

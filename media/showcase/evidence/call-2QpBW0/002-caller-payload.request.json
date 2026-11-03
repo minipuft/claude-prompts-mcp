@@ -1,0 +1,9 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "inspect",
+    "id": "showcase_shotlist",
+    "detail": "full"
+  }
+}

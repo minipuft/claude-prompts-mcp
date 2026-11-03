@@ -1,0 +1,8 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "inspect",
+    "id": "animation-story"
+  }
+}

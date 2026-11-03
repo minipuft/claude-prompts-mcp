@@ -1,0 +1,16 @@
+{
+  "command": "/home/minipuft/.nvm/versions/node/v24.15.0/bin/node",
+  "args": [
+    "/home/minipuft/Applications/claude-prompts-mcp/server/dist/index.js",
+    "--transport=stdio",
+    "--quiet"
+  ],
+  "cwd": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+  "pathSettings": {
+    "workspace": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+    "resources": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources",
+    "runtime": "/tmp/showcase-mcp-runtime-avtL2p"
+  },
+  "sdkVersion": "2.x: resolved from installed package",
+  "mode": "call"
+}

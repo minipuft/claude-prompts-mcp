@@ -1,0 +1,19 @@
+{
+  "id": "p021",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "arrival",
+    "frame": 0
+  },
+  "title": "The frame is on stage from frame 0; the script carries it in at sp-4.2",
+  "text": "On the beats 1-2 restage strip (and on every earlier render) the gold frame hangs at top right from frame 0. The screenplay sp-4.2 has Clawd carry the lit frame in: it is the portal, and its first appearance is the turn of beat 4. The beat-4 restage made it enter at 690, but the arrival and everything-at-once blocking still place it. Nothing checked this because no probe reads the film themes. The screenplay now carries a theme ledger (th-frame-portal: the frame prop is absent before 690 and present from 690 to 1950) and row 9.8 puts theme invariants on the blocking; the beats 1-3 blocking drops the frame as part of that row.",
+  "references": [
+    "spirited-away-shoes"
+  ],
+  "before": "frame prop present in arrival, everything-at-once and cant-build blocking from frame 0",
+  "after": "frame prop on from 690 only; theme invariant th-frame-portal enforced by probe-theme",
+  "status": "open",
+  "ruling": null
+}

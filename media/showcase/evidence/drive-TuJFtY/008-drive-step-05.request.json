@@ -1,0 +1,22 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_shot#1",
+    "user_response": "Key sheet: noise probe, no work done.\n\nHANDOFF RESULT\nnode: keys\nProposed Gate Review:\n- Animation Key Fit: PASS - noise probe",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "noise probe",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "probe exit 0"
+        }
+      ],
+      "reminders": {
+        "satisfied": [],
+        "not_applicable": []
+      }
+    }
+  }
+}

@@ -1,0 +1,1417 @@
+{
+ "shot": "s01-arrival-overwhelm",
+ "actor": "human",
+ "provisional": true,
+ "note": "Joints placed by eye on the key plates, registered to the rig by one similarity per key (scripts/s01_keys_to_rig.py), bone directions from the plate and bone lengths from the rest skeleton; `registeredJoints` are the unrestrained positions and `limbRatios` the raw/rest lengths (C20). Frames are shot-local = film frames (the shot starts at 0). Holds and breakdowns are the chart's (v3/charts/s01-arrival-overwhelm.json).",
+ "keys": [
+  {
+   "name": "rest-on-lid",
+   "frame": 0,
+   "hold": 26,
+   "joints": {
+    "root": [
+     332.59,
+     554.64
+    ],
+    "torso": [
+     359.86,
+     281.91
+    ],
+    "neck": [
+     359.86,
+     257.94
+    ],
+    "head": [
+     381.27,
+     244.02
+    ],
+    "shoulderL": [
+     314.41,
+     309.18
+    ],
+    "elbowL": [
+     259.86,
+     409.18
+    ],
+    "wristL": [
+     187.14,
+     523.73
+    ],
+    "shoulderR": [
+     423.5,
+     309.18
+    ],
+    "elbowR": [
+     472.59,
+     409.18
+    ],
+    "wristR": [
+     496.23,
+     527.36
+    ],
+    "hipL": [
+     303.5,
+     554.64
+    ],
+    "kneeL": [
+     265.32,
+     709.18
+    ],
+    "ankleL": [
+     219.86,
+     851.0
+    ],
+    "hipR": [
+     361.68,
+     558.27
+    ],
+    "kneeR": [
+     405.32,
+     709.18
+    ],
+    "ankleR": [
+     447.14,
+     851.0
+    ],
+    "ponchoPoint": [
+     338.59,
+     549.64
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     396.23,
+     209.18
+    ],
+    "neck": [
+     359.86,
+     232.82
+    ],
+    "torso": [
+     359.86,
+     281.91
+    ],
+    "shoulderL": [
+     314.41,
+     309.18
+    ],
+    "shoulderR": [
+     423.5,
+     309.18
+    ],
+    "elbowL": [
+     259.86,
+     409.18
+    ],
+    "wristL": [
+     187.14,
+     523.73
+    ],
+    "elbowR": [
+     472.59,
+     409.18
+    ],
+    "wristR": [
+     496.23,
+     527.36
+    ],
+    "root": [
+     332.59,
+     554.64
+    ],
+    "hipL": [
+     303.5,
+     554.64
+    ],
+    "hipR": [
+     361.68,
+     558.27
+    ],
+    "kneeL": [
+     265.32,
+     709.18
+    ],
+    "kneeR": [
+     405.32,
+     709.18
+    ],
+    "ankleL": [
+     219.86,
+     851.0
+    ],
+    "ankleR": [
+     447.14,
+     851.0
+    ],
+    "ponchoPoint": [
+     332.59,
+     512.82
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K1.png",
+   "plateSha256": "c7de997703dc9405793a7e9ade51cfe31be8d6df911177ca7439410011133731",
+   "reachRatios": {
+    "wristL": 1.045,
+    "wristR": 0.99,
+    "ankleL": 0.836,
+    "ankleR": 0.832
+   },
+   "status": "accepted",
+   "flags": [
+    "the spine bows right, the declaration left"
+   ]
+  },
+  {
+   "name": "grip",
+   "frame": 42,
+   "hold": 16,
+   "joints": {
+    "root": [
+     259.92,
+     590.62
+    ],
+    "torso": [
+     297.65,
+     307.6
+    ],
+    "neck": [
+     309.29,
+     286.65
+    ],
+    "head": [
+     332.27,
+     275.51
+    ],
+    "shoulderL": [
+     241.05,
+     354.77
+    ],
+    "elbowL": [
+     197.65,
+     430.25
+    ],
+    "wristL": [
+     250.48,
+     534.02
+    ],
+    "shoulderR": [
+     371.07,
+     353.49
+    ],
+    "elbowR": [
+     367.3,
+     457.27
+    ],
+    "wristR": [
+     380.51,
+     523.3
+    ],
+    "hipL": [
+     229.73,
+     590.62
+    ],
+    "kneeL": [
+     203.31,
+     760.43
+    ],
+    "ankleL": [
+     256.14,
+     867.98
+    ],
+    "hipR": [
+     290.1,
+     594.4
+    ],
+    "kneeR": [
+     373.12,
+     760.43
+    ],
+    "ankleR": [
+     410.86,
+     864.21
+    ],
+    "ponchoPoint": [
+     265.92,
+     585.62
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     388.22,
+     226.47
+    ],
+    "neck": [
+     325.95,
+     256.66
+    ],
+    "torso": [
+     297.65,
+     307.6
+    ],
+    "shoulderL": [
+     241.05,
+     354.77
+    ],
+    "shoulderR": [
+     373.12,
+     354.77
+    ],
+    "elbowL": [
+     197.65,
+     430.25
+    ],
+    "wristL": [
+     250.48,
+     534.02
+    ],
+    "elbowR": [
+     369.35,
+     458.55
+    ],
+    "wristR": [
+     382.56,
+     524.58
+    ],
+    "root": [
+     259.92,
+     590.62
+    ],
+    "hipL": [
+     229.73,
+     590.62
+    ],
+    "hipR": [
+     290.1,
+     594.4
+    ],
+    "kneeL": [
+     203.31,
+     760.43
+    ],
+    "kneeR": [
+     373.12,
+     760.43
+    ],
+    "ankleL": [
+     256.14,
+     867.98
+    ],
+    "ankleR": [
+     410.86,
+     864.21
+    ],
+    "ponchoPoint": [
+     325.95,
+     524.58
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K2.png",
+   "plateSha256": "5461dfe851446336e7a64e114f9ce6d1dfdd18f731f21362ce60f7a976836c0c",
+   "reachRatios": {
+    "wristL": 0.752,
+    "wristR": 0.732,
+    "ankleL": 0.756,
+    "ankleR": 0.807
+   },
+   "status": "rejected",
+   "rejectedFor": [
+    "weight on R at 0.60: the root is at x 260, expected 349 between the ankles (256, 411); 58% of the stance away, over 25%"
+   ],
+   "flags": [
+    "the spine bows right, the declaration left"
+   ]
+  },
+  {
+   "name": "lift",
+   "frame": 66,
+   "hold": 26,
+   "joints": {
+    "root": [
+     442.32,
+     474.53
+    ],
+    "torso": [
+     338.4,
+     219.63
+    ],
+    "neck": [
+     326.76,
+     198.68
+    ],
+    "head": [
+     331.25,
+     173.54
+    ],
+    "shoulderL": [
+     289.38,
+     258.84
+    ],
+    "elbowL": [
+     289.38,
+     366.69
+    ],
+    "wristL": [
+     407.03,
+     311.78
+    ],
+    "shoulderR": [
+     383.5,
+     252.96
+    ],
+    "elbowR": [
+     475.66,
+     307.86
+    ],
+    "wristR": [
+     540.36,
+     323.55
+    ],
+    "hipL": [
+     410.95,
+     474.53
+    ],
+    "kneeL": [
+     294.09,
+     691.28
+    ],
+    "ankleL": [
+     190.43,
+     823.21
+    ],
+    "hipR": [
+     473.7,
+     478.45
+    ],
+    "kneeR": [
+     481.54,
+     660.8
+    ],
+    "ankleR": [
+     485.46,
+     837.27
+    ],
+    "ponchoPoint": [
+     448.32,
+     469.53
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     318.79,
+     111.78
+    ],
+    "neck": [
+     308.99,
+     166.69
+    ],
+    "torso": [
+     338.4,
+     219.63
+    ],
+    "shoulderL": [
+     289.38,
+     258.84
+    ],
+    "shoulderR": [
+     383.5,
+     252.96
+    ],
+    "elbowL": [
+     289.38,
+     366.69
+    ],
+    "wristL": [
+     407.03,
+     311.78
+    ],
+    "elbowR": [
+     475.66,
+     307.86
+    ],
+    "wristR": [
+     540.36,
+     323.55
+    ],
+    "root": [
+     442.32,
+     474.53
+    ],
+    "hipL": [
+     410.95,
+     474.53
+    ],
+    "hipR": [
+     473.7,
+     478.45
+    ],
+    "kneeL": [
+     289.38,
+     700.02
+    ],
+    "kneeR": [
+     481.54,
+     660.8
+    ],
+    "ankleL": [
+     181.54,
+     837.27
+    ],
+    "ankleR": [
+     485.46,
+     837.27
+    ],
+    "ponchoPoint": [
+     416.83,
+     445.12
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K3.png",
+   "plateSha256": "b125e5adb7888d20c210800b5fc1e7063ba689980c39201df5535e1221ca0d0c",
+   "reachRatios": {
+    "wristL": 0.54,
+    "wristR": 0.741,
+    "ankleL": 1.165,
+    "ankleR": 0.98
+   },
+   "status": "rejected",
+   "rejectedFor": [
+    "declared line of action C, the key sheet draws I (bow 0.035 of the figure, sign -1)",
+    "the spine bows 0.035 of the figure, under 0.06 and the key does not declare a stiff line with a reason"
+   ],
+   "flags": [
+    "the spine bows left, the declaration right"
+   ]
+  },
+  {
+   "name": "awe",
+   "frame": 104,
+   "hold": 26,
+   "joints": {
+    "root": [
+     292.76,
+     399.15
+    ],
+    "torso": [
+     268.69,
+     145.44
+    ],
+    "neck": [
+     262.22,
+     122.36
+    ],
+    "head": [
+     256.26,
+     97.52
+    ],
+    "shoulderL": [
+     231.65,
+     191.74
+    ],
+    "elbowL": [
+     169.71,
+     309.85
+    ],
+    "wristL": [
+     109.21,
+     429.41
+    ],
+    "shoulderR": [
+     347.51,
+     181.27
+    ],
+    "elbowR": [
+     440.7,
+     308.34
+    ],
+    "wristR": [
+     525.41,
+     371.04
+    ],
+    "hipL": [
+     263.13,
+     399.15
+    ],
+    "kneeL": [
+     207.38,
+     604.73
+    ],
+    "ankleL": [
+     151.63,
+     796.36
+    ],
+    "hipR": [
+     322.39,
+     402.85
+    ],
+    "kneeR": [
+     417.42,
+     584.72
+    ],
+    "ankleR": [
+     499.34,
+     773.14
+    ],
+    "ponchoPoint": [
+     298.76,
+     394.15
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     244.61,
+     52.85
+    ],
+    "neck": [
+     255.72,
+     99.15
+    ],
+    "torso": [
+     268.69,
+     145.44
+    ],
+    "shoulderL": [
+     231.65,
+     191.74
+    ],
+    "shoulderR": [
+     370.54,
+     191.74
+    ],
+    "elbowL": [
+     152.02,
+     343.59
+    ],
+    "wristL": [
+     74.24,
+     497.3
+    ],
+    "elbowR": [
+     472.39,
+     330.63
+    ],
+    "wristR": [
+     564.98,
+     399.15
+    ],
+    "root": [
+     292.76,
+     399.15
+    ],
+    "hipL": [
+     263.13,
+     399.15
+    ],
+    "hipR": [
+     322.39,
+     402.85
+    ],
+    "kneeL": [
+     203.87,
+     617.67
+    ],
+    "kneeR": [
+     429.8,
+     608.41
+    ],
+    "ankleL": [
+     144.61,
+     821.37
+    ],
+    "ankleR": [
+     522.39,
+     821.37
+    ],
+    "ponchoPoint": [
+     342.76,
+     386.19
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K4.png",
+   "plateSha256": "1770dc2e197c95a44674b6273e7deef77f154fad975cc2f721a76196fefff4bb",
+   "reachRatios": {
+    "wristL": 1.44,
+    "wristR": 1.224,
+    "ankleL": 1.191,
+    "ankleR": 1.266
+   },
+   "status": "rejected",
+   "rejectedFor": [
+    "declared line of action S, the key sheet draws C (bow 0.051 of the figure, sign +1)",
+    "the spine bows 0.051 of the figure, under 0.06 and the key does not declare a stiff line with a reason",
+    "the limbs are twinned (score 0.84, over 0.7) and the key does not say why"
+   ],
+   "flags": [
+    "the spine bows right, the declaration left"
+   ]
+  },
+  {
+   "name": "brace",
+   "frame": 154,
+   "hold": 24,
+   "joints": {
+    "root": [
+     289.91,
+     506.56
+    ],
+    "torso": [
+     190.76,
+     279.21
+    ],
+    "neck": [
+     186.4,
+     255.64
+    ],
+    "head": [
+     177.14,
+     231.84
+    ],
+    "shoulderL": [
+     156.58,
+     270.66
+    ],
+    "elbowL": [
+     221.53,
+     407.41
+    ],
+    "wristL": [
+     236.92,
+     279.21
+    ],
+    "shoulderR": [
+     233.5,
+     296.3
+    ],
+    "elbowR": [
+     353.16,
+     339.03
+    ],
+    "wristR": [
+     301.88,
+     270.66
+    ],
+    "hipL": [
+     262.56,
+     506.56
+    ],
+    "kneeL": [
+     272.82,
+     680.91
+    ],
+    "ankleL": [
+     211.28,
+     838.18
+    ],
+    "hipR": [
+     317.26,
+     509.97
+    ],
+    "kneeR": [
+     395.89,
+     680.91
+    ],
+    "ankleR": [
+     455.72,
+     843.31
+    ],
+    "ponchoPoint": [
+     295.91,
+     501.56
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     170.25,
+     202.28
+    ],
+    "neck": [
+     182.22,
+     233.05
+    ],
+    "torso": [
+     190.76,
+     279.21
+    ],
+    "shoulderL": [
+     156.58,
+     270.66
+    ],
+    "shoulderR": [
+     233.5,
+     296.3
+    ],
+    "elbowL": [
+     221.53,
+     407.41
+    ],
+    "wristL": [
+     236.92,
+     279.21
+    ],
+    "elbowR": [
+     353.16,
+     339.03
+    ],
+    "wristR": [
+     301.88,
+     270.66
+    ],
+    "root": [
+     289.91,
+     506.56
+    ],
+    "hipL": [
+     262.56,
+     506.56
+    ],
+    "hipR": [
+     317.26,
+     509.97
+    ],
+    "kneeL": [
+     272.82,
+     680.91
+    ],
+    "kneeR": [
+     395.89,
+     680.91
+    ],
+    "ankleL": [
+     211.28,
+     838.18
+    ],
+    "ankleR": [
+     455.72,
+     843.31
+    ],
+    "ponchoPoint": [
+     318.97,
+     484.33
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K5.png",
+   "plateSha256": "f37778e93a7b25a9e4d06e5900259c3f5dc3f76e40ba74e9601615e623439eb3",
+   "reachRatios": {
+    "wristL": 0.338,
+    "wristR": 0.314,
+    "ankleL": 0.911,
+    "ankleR": 0.985
+   },
+   "status": "rejected",
+   "rejectedFor": [
+    "declared line of action C, the key sheet draws I (bow 0.013 of the figure, sign -1)",
+    "the spine bows 0.013 of the figure, under 0.06 and the key does not declare a stiff line with a reason"
+   ]
+  },
+  {
+   "name": "joy-a",
+   "frame": 190,
+   "hold": 22,
+   "joints": {
+    "root": [
+     465.67,
+     509.26
+    ],
+    "torso": [
+     456.98,
+     274.48
+    ],
+    "neck": [
+     444.65,
+     253.93
+    ],
+    "head": [
+     430.01,
+     233.0
+    ],
+    "shoulderL": [
+     380.86,
+     249.1
+    ],
+    "elbowL": [
+     289.19,
+     172.71
+    ],
+    "wristL": [
+     166.98,
+     88.69
+    ],
+    "shoulderR": [
+     517.85,
+     300.57
+    ],
+    "elbowR": [
+     622.2,
+     312.74
+    ],
+    "wristR": [
+     709.15,
+     300.57
+    ],
+    "hipL": [
+     437.85,
+     509.26
+    ],
+    "kneeL": [
+     329.75,
+     686.61
+    ],
+    "ankleL": [
+     182.81,
+     833.55
+    ],
+    "hipR": [
+     493.5,
+     512.74
+    ],
+    "kneeR": [
+     483.07,
+     709.26
+    ],
+    "ankleR": [
+     491.76,
+     843.17
+    ],
+    "ponchoPoint": [
+     471.67,
+     504.26
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     401.33,
+     187.52
+    ],
+    "neck": [
+     425.67,
+     222.3
+    ],
+    "torso": [
+     456.98,
+     274.48
+    ],
+    "shoulderL": [
+     378.72,
+     248.39
+    ],
+    "shoulderR": [
+     517.85,
+     300.57
+    ],
+    "elbowL": [
+     274.37,
+     161.43
+    ],
+    "wristL": [
+     135.24,
+     65.78
+    ],
+    "elbowR": [
+     622.2,
+     312.74
+    ],
+    "wristR": [
+     709.15,
+     300.57
+    ],
+    "root": [
+     465.67,
+     509.26
+    ],
+    "hipL": [
+     437.85,
+     509.26
+    ],
+    "hipR": [
+     493.5,
+     512.74
+    ],
+    "kneeL": [
+     326.54,
+     691.87
+    ],
+    "kneeR": [
+     483.07,
+     709.26
+    ],
+    "ankleL": [
+     175.24,
+     843.17
+    ],
+    "ankleR": [
+     491.76,
+     843.17
+    ],
+    "ponchoPoint": [
+     526.54,
+     500.57
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K6.png",
+   "plateSha256": "b071217d8ff9e017b296ec52097a4365eecb4e767da22de9578e452e120c7cce",
+   "reachRatios": {
+    "wristL": 1.275,
+    "wristR": 0.824,
+    "ankleL": 1.153,
+    "ankleR": 0.902
+   },
+   "status": "rejected",
+   "rejectedFor": [
+    "declared line of action C, the key sheet draws I (bow 0.033 of the figure, sign +1)",
+    "the spine bows 0.033 of the figure, under 0.06 and the key does not declare a stiff line with a reason"
+   ],
+   "flags": [
+    "the spine bows right, the declaration left"
+   ]
+  },
+  {
+   "name": "joy-b",
+   "frame": 228,
+   "hold": 20,
+   "joints": {
+    "root": [
+     329.26,
+     483.2
+    ],
+    "torso": [
+     312.18,
+     261.15
+    ],
+    "neck": [
+     301.78,
+     239.55
+    ],
+    "head": [
+     294.35,
+     215.12
+    ],
+    "shoulderL": [
+     244.39,
+     303.53
+    ],
+    "elbowL": [
+     153.98,
+     393.94
+    ],
+    "wristL": [
+     55.34,
+     492.57
+    ],
+    "shoulderR": [
+     397.37,
+     245.67
+    ],
+    "elbowR": [
+     490.59,
+     194.82
+    ],
+    "wristR": [
+     583.81,
+     155.83
+    ],
+    "hipL": [
+     302.14,
+     483.2
+    ],
+    "kneeL": [
+     222.48,
+     712.02
+    ],
+    "ankleL": [
+     134.35,
+     847.61
+    ],
+    "hipR": [
+     356.38,
+     486.59
+    ],
+    "kneeR": [
+     464.86,
+     695.07
+    ],
+    "ankleR": [
+     532.65,
+     847.61
+    ],
+    "ponchoPoint": [
+     335.26,
+     478.2
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     278.42,
+     178.12
+    ],
+    "neck": [
+     290.28,
+     217.1
+    ],
+    "torso": [
+     312.31,
+     262.86
+    ],
+    "shoulderL": [
+     244.52,
+     305.24
+    ],
+    "shoulderR": [
+     405.53,
+     245.92
+    ],
+    "elbowL": [
+     151.3,
+     398.46
+    ],
+    "wristL": [
+     49.6,
+     500.15
+    ],
+    "elbowR": [
+     498.75,
+     195.07
+    ],
+    "wristR": [
+     591.97,
+     156.08
+    ],
+    "root": [
+     329.26,
+     483.2
+    ],
+    "hipL": [
+     302.14,
+     483.2
+    ],
+    "hipR": [
+     356.38,
+     486.59
+    ],
+    "kneeL": [
+     222.48,
+     712.02
+    ],
+    "kneeR": [
+     464.86,
+     695.07
+    ],
+    "ankleL": [
+     134.35,
+     847.61
+    ],
+    "ankleR": [
+     532.65,
+     847.61
+    ],
+    "ponchoPoint": [
+     422.48,
+     525.58
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K7.png",
+   "plateSha256": "a6ca64350aaa3922a7dc397a6f5c5a1f9f5146c16e9512e5aa5a67649164a844",
+   "reachRatios": {
+    "wristL": 1.155,
+    "wristR": 0.891,
+    "ankleL": 1.089,
+    "ankleR": 1.096
+   },
+   "status": "rejected",
+   "rejectedFor": [
+    "declared line of action S, the key sheet draws C (bow 0.048 of the figure, sign +1)",
+    "the spine bows 0.048 of the figure, under 0.06 and the key does not declare a stiff line with a reason",
+    "weight on L at 0.80: the root is at x 329, expected 214 between the ankles (134, 533); 29% of the stance away, over 25%"
+   ]
+  },
+  {
+   "name": "shrink",
+   "frame": 272,
+   "hold": 148,
+   "joints": {
+    "root": [
+     366.54,
+     522.43
+    ],
+    "torso": [
+     332.61,
+     326.0
+    ],
+    "neck": [
+     340.84,
+     303.49
+    ],
+    "head": [
+     364.87,
+     294.84
+    ],
+    "shoulderL": [
+     312.27,
+     298.27
+    ],
+    "elbowL": [
+     383.7,
+     325.06
+    ],
+    "wristL": [
+     406.92,
+     101.85
+    ],
+    "shoulderR": [
+     407.79,
+     283.04
+    ],
+    "elbowR": [
+     550.06,
+     306.16
+    ],
+    "wristR": [
+     519.83,
+     48.29
+    ],
+    "hipL": [
+     337.96,
+     522.43
+    ],
+    "kneeL": [
+     336.18,
+     611.71
+    ],
+    "ankleL": [
+     193.32,
+     834.93
+    ],
+    "hipR": [
+     395.11,
+     526.0
+    ],
+    "kneeR": [
+     443.32,
+     665.29
+    ],
+    "ankleR": [
+     473.68,
+     834.93
+    ],
+    "ponchoPoint": [
+     372.54,
+     517.43
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     455.82,
+     201.0
+    ],
+    "neck": [
+     366.54,
+     233.14
+    ],
+    "torso": [
+     332.61,
+     326.0
+    ],
+    "shoulderL": [
+     312.96,
+     299.21
+    ],
+    "shoulderR": [
+     420.11,
+     276.0
+    ],
+    "elbowL": [
+     384.39,
+     326.0
+    ],
+    "wristL": [
+     407.61,
+     102.79
+    ],
+    "elbowR": [
+     562.96,
+     299.21
+    ],
+    "wristR": [
+     532.61,
+     40.29
+    ],
+    "root": [
+     366.54,
+     522.43
+    ],
+    "hipL": [
+     337.96,
+     522.43
+    ],
+    "hipR": [
+     395.11,
+     526.0
+    ],
+    "kneeL": [
+     336.18,
+     611.71
+    ],
+    "kneeR": [
+     443.32,
+     665.29
+    ],
+    "ankleL": [
+     193.32,
+     834.93
+    ],
+    "ankleR": [
+     473.68,
+     834.93
+    ],
+    "ponchoPoint": [
+     407.61,
+     504.57
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K8.png",
+   "plateSha256": "78e4a575f9b77f9c1dd4315fe58e6a2c58b05b984f8120c40505afceaa40171c",
+   "reachRatios": {
+    "wristL": 0.913,
+    "wristR": 1.125,
+    "ankleL": 0.935,
+    "ankleR": 0.87
+   },
+   "status": "accepted",
+   "flags": [
+    "measured bow 0.072 is more than 0.02 under the declared 0.14"
+   ]
+  }
+ ],
+ "breakdowns": [
+  {
+   "frame": 26,
+   "favour": 0.104
+  },
+  {
+   "frame": 30,
+   "favour": 0.352
+  },
+  {
+   "frame": 34,
+   "favour": 0.648
+  },
+  {
+   "frame": 38,
+   "favour": 0.896
+  },
+  {
+   "frame": 58,
+   "favour": 0.104
+  },
+  {
+   "frame": 60,
+   "favour": 0.352
+  },
+  {
+   "frame": 62,
+   "favour": 0.648
+  },
+  {
+   "frame": 64,
+   "favour": 0.896
+  },
+  {
+   "frame": 92,
+   "favour": 0.156
+  },
+  {
+   "frame": 96,
+   "favour": 0.58
+  },
+  {
+   "frame": 100,
+   "favour": 0.844
+  },
+  {
+   "frame": 130,
+   "favour": 0.055
+  },
+  {
+   "frame": 134,
+   "favour": 0.198
+  },
+  {
+   "frame": 138,
+   "favour": 0.394
+  },
+  {
+   "frame": 142,
+   "favour": 0.606
+  },
+  {
+   "frame": 146,
+   "favour": 0.802
+  },
+  {
+   "frame": 150,
+   "favour": 0.945
+  },
+  {
+   "frame": 178,
+   "favour": 0.055
+  },
+  {
+   "frame": 180,
+   "favour": 0.198
+  },
+  {
+   "frame": 182,
+   "favour": 0.394
+  },
+  {
+   "frame": 184,
+   "favour": 0.606
+  },
+  {
+   "frame": 186,
+   "favour": 0.802
+  },
+  {
+   "frame": 188,
+   "favour": 0.945
+  },
+  {
+   "frame": 212,
+   "favour": 0.104
+  },
+  {
+   "frame": 216,
+   "favour": 0.352
+  },
+  {
+   "frame": 220,
+   "favour": 0.648
+  },
+  {
+   "frame": 224,
+   "favour": 0.896
+  },
+  {
+   "frame": 248,
+   "favour": 0.055
+  },
+  {
+   "frame": 252,
+   "favour": 0.198
+  },
+  {
+   "frame": 256,
+   "favour": 0.394
+  },
+  {
+   "frame": 260,
+   "favour": 0.606
+  },
+  {
+   "frame": 264,
+   "favour": 0.802
+  },
+  {
+   "frame": 268,
+   "favour": 0.945
+  }
+ ]
+}

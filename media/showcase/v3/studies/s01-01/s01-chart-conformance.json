@@ -1,0 +1,335 @@
+{
+ "rows": [
+  {
+   "frame": 26,
+   "from": "rest-on-lid",
+   "to": "grip",
+   "favour": 0.104,
+   "measured": 0.115,
+   "delta": 0.011,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 30,
+   "from": "rest-on-lid",
+   "to": "grip",
+   "favour": 0.352,
+   "measured": 0.378,
+   "delta": 0.026,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 34,
+   "from": "rest-on-lid",
+   "to": "grip",
+   "favour": 0.648,
+   "measured": 0.674,
+   "delta": 0.026,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 38,
+   "from": "rest-on-lid",
+   "to": "grip",
+   "favour": 0.896,
+   "measured": 0.906,
+   "delta": 0.01,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 58,
+   "from": "grip",
+   "to": "lift",
+   "favour": 0.104,
+   "measured": 0.099,
+   "delta": -0.005,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 60,
+   "from": "grip",
+   "to": "lift",
+   "favour": 0.352,
+   "measured": 0.346,
+   "delta": -0.006,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 62,
+   "from": "grip",
+   "to": "lift",
+   "favour": 0.648,
+   "measured": 0.647,
+   "delta": -0.001,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 64,
+   "from": "grip",
+   "to": "lift",
+   "favour": 0.896,
+   "measured": 0.897,
+   "delta": 0.001,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 92,
+   "from": "lift",
+   "to": "awe",
+   "favour": 0.156,
+   "measured": 0.152,
+   "delta": -0.004,
+   "joints": 16,
+   "within10": true
+  },
+  {
+   "frame": 96,
+   "from": "lift",
+   "to": "awe",
+   "favour": 0.58,
+   "measured": 0.581,
+   "delta": 0.001,
+   "joints": 16,
+   "within10": true
+  },
+  {
+   "frame": 100,
+   "from": "lift",
+   "to": "awe",
+   "favour": 0.844,
+   "measured": 0.848,
+   "delta": 0.004,
+   "joints": 16,
+   "within10": true
+  },
+  {
+   "frame": 130,
+   "from": "awe",
+   "to": "brace",
+   "favour": 0.055,
+   "measured": 0.049,
+   "delta": -0.006,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 134,
+   "from": "awe",
+   "to": "brace",
+   "favour": 0.198,
+   "measured": 0.183,
+   "delta": -0.015,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 138,
+   "from": "awe",
+   "to": "brace",
+   "favour": 0.394,
+   "measured": 0.378,
+   "delta": -0.016,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 142,
+   "from": "awe",
+   "to": "brace",
+   "favour": 0.606,
+   "measured": 0.6,
+   "delta": -0.006,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 146,
+   "from": "awe",
+   "to": "brace",
+   "favour": 0.802,
+   "measured": 0.804,
+   "delta": 0.002,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 150,
+   "from": "awe",
+   "to": "brace",
+   "favour": 0.945,
+   "measured": 0.947,
+   "delta": 0.002,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 178,
+   "from": "brace",
+   "to": "joy-a",
+   "favour": 0.055,
+   "measured": 0.06,
+   "delta": 0.005,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 180,
+   "from": "brace",
+   "to": "joy-a",
+   "favour": 0.198,
+   "measured": 0.216,
+   "delta": 0.018,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 182,
+   "from": "brace",
+   "to": "joy-a",
+   "favour": 0.394,
+   "measured": 0.428,
+   "delta": 0.034,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 184,
+   "from": "brace",
+   "to": "joy-a",
+   "favour": 0.606,
+   "measured": 0.647,
+   "delta": 0.041,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 186,
+   "from": "brace",
+   "to": "joy-a",
+   "favour": 0.802,
+   "measured": 0.833,
+   "delta": 0.031,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 188,
+   "from": "brace",
+   "to": "joy-a",
+   "favour": 0.945,
+   "measured": 0.956,
+   "delta": 0.011,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 212,
+   "from": "joy-a",
+   "to": "joy-b",
+   "favour": 0.104,
+   "measured": 0.108,
+   "delta": 0.004,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 216,
+   "from": "joy-a",
+   "to": "joy-b",
+   "favour": 0.352,
+   "measured": 0.366,
+   "delta": 0.014,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 220,
+   "from": "joy-a",
+   "to": "joy-b",
+   "favour": 0.648,
+   "measured": 0.667,
+   "delta": 0.019,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 224,
+   "from": "joy-a",
+   "to": "joy-b",
+   "favour": 0.896,
+   "measured": 0.905,
+   "delta": 0.009,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 248,
+   "from": "joy-b",
+   "to": "shrink",
+   "favour": 0.055,
+   "measured": 0.069,
+   "delta": 0.014,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 252,
+   "from": "joy-b",
+   "to": "shrink",
+   "favour": 0.198,
+   "measured": 0.237,
+   "delta": 0.039,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 256,
+   "from": "joy-b",
+   "to": "shrink",
+   "favour": 0.394,
+   "measured": 0.442,
+   "delta": 0.048,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 260,
+   "from": "joy-b",
+   "to": "shrink",
+   "favour": 0.606,
+   "measured": 0.642,
+   "delta": 0.036,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 264,
+   "from": "joy-b",
+   "to": "shrink",
+   "favour": 0.802,
+   "measured": 0.819,
+   "delta": 0.017,
+   "joints": 17,
+   "within10": true
+  },
+  {
+   "frame": 268,
+   "from": "joy-b",
+   "to": "shrink",
+   "favour": 0.945,
+   "measured": 0.949,
+   "delta": 0.004,
+   "joints": 17,
+   "within10": true
+  }
+ ],
+ "outside": 0
+}

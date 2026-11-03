@@ -1,0 +1,11 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "command": "%lean >>animation_direction episode_root:\"media/showcase/v3\" beat:\"arrival\" frame:10 question:\"Should the box seam light be soft or hard?\"",
+    "gates": [
+      {
+        "id": "animation-vocabulary"
+      }
+    ]
+  }
+}

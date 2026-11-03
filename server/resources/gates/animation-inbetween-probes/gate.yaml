@@ -1,0 +1,38 @@
+id: animation-inbetween-probes
+name: Animation Inbetween Probes
+type: validation
+description: "Check-tier gate on a shot's render step: one probe line per shot
+  runs twos, hold band (3–6 drawings per move, holds 11–27) and the inbetween
+  checks (one-sided arcs with declared reversals only, eased spacing,
+  secondaries landing after the body, moving holds) on the figure-only frames
+  and the joints dump, so no probe can be made green by breaking another; a
+  linear tween, a zigzag or a 10-drawing move is refused."
+guidanceFile: guidance.md
+pass_criteria:
+  - type: shell_verify
+    shell_command:
+      - python3
+      - scripts/animation/probe-all.py
+      - --shots
+      - v3/poses
+      - --frames-root
+      - out
+      - --joints-root
+      - out
+    shell_timeout: 600000
+    shell_working_dir: ../media/showcase
+    shell_max_attempts: 1
+    shell_preset: full
+activation:
+  prompt_categories:
+    - animation
+    - development
+  explicit_request: true
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+subject: animation-inbetween-probes
+severity: high
+enforcementMode: blocking
+gate_type: custom

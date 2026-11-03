@@ -1,0 +1,29 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Updated**: Showcase Key Sheet (showcase_key_sheet)\n\nUpdated prompt: showcase_key_sheet\n\n📜 No change to record — still at version 1 (use `action:\"history\"` to view)\n\n**Changes**: +7 additions, -3 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_key_sheet/prompt.yaml\n+++ b/development/showcase_key_sheet/prompt.yaml\n@@ -1,6 +1,12 @@\n id: showcase_key_sheet\n name: Showcase Key Sheet\n-description: \"Per shot and actor after the pose sheet (D72, D77, D83, D85): build every key plate from the pose sheet's solved joints through its plate family's mesh at model-sheet scale, measure what the rubric contracts per key (C20 overlay, C21 silhouette, C22 contour, C31 spine fit), propose a new plate family through the imagegen tool only for a silhouette the rig cannot hold and register it by toolchain, and render the staging row at the layout camera (C25); the key gate reads the measured joints.\"\n+description: \"Per shot and actor after the pose sheet (D72, D77, D83, D85):\n+  build every key plate from the pose sheet's solved joints through its plate\n+  family's mesh at model-sheet scale, measure what the rubric contracts per key\n+  (C20 overlay, C21 silhouette, C22 contour, C31 spine fit), propose a new plate\n+  family through the imagegen tool only for a silhouette the rig cannot hold and\n+  register it by toolchain, and render the staging row at the layout camera\n+  (C25); the key gate reads the measured joints.\"\n category: development\n userMessageTemplateFile: user-message.md\n arguments:\n@@ -23,5 +29,3 @@\n     description: Caller-owned production artifact directory.\n     required: false\n     defaultValue: media/showcase\n-tools:\n-  - imagegen\n\n```\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/prompt.yaml\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "update",
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "update",
+      "id": "showcase_key_sheet",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/prompt.yaml"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 1
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Updated**: Showcase Key Sheet (showcase_key_sheet)\n\nUpdated prompt: showcase_key_sheet\n\n📜 No change to record — still at version 1 (use `action:\"history\"` to view)\n\n**Changes**: +7 additions, -3 deletions\n\n```diff\n===================================================================\n--- a/development/showcase_key_sheet/prompt.yaml\n+++ b/development/showcase_key_sheet/prompt.yaml\n@@ -1,6 +1,12 @@\n id: showcase_key_sheet\n name: Showcase Key Sheet\n-description: \"Per shot and actor after the pose sheet (D72, D77, D83, D85): build every key plate from the pose sheet's solved joints through its plate family's mesh at model-sheet scale, measure what the rubric contracts per key (C20 overlay, C21 silhouette, C22 contour, C31 spine fit), propose a new plate family through the imagegen tool only for a silhouette the rig cannot hold and register it by toolchain, and render the staging row at the layout camera (C25); the key gate reads the measured joints.\"\n+description: \"Per shot and actor after the pose sheet (D72, D77, D83, D85):\n+  build every key plate from the pose sheet's solved joints through its plate\n+  family's mesh at model-sheet scale, measure what the rubric contracts per key\n+  (C20 overlay, C21 silhouette, C22 contour, C31 spine fit), propose a new plate\n+  family through the imagegen tool only for a silhouette the rig cannot hold and\n+  register it by toolchain, and render the staging row at the layout camera\n+  (C25); the key gate reads the measured joints.\"\n category: development\n userMessageTemplateFile: user-message.md\n arguments:\n@@ -23,5 +29,3 @@\n     description: Caller-owned production artifact directory.\n     required: false\n     defaultValue: media/showcase\n-tools:\n-  - imagegen\n\n```\n\n🧠 single\n\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/prompt.yaml\n"
+  },
+  "isError": false
+}

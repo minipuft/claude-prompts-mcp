@@ -1,0 +1,19 @@
+{
+ "valid": true,
+ "path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/gadget/muse-01.png",
+ "source": "/home/minipuft/.codex/generated_images/01a14225-c78f-7611-a184-166ed16d1db1/exec-84cdff0d-a610-4a2d-985a-1b1f6edac80f.png",
+ "sha256": "55c4203e11cd5d4f417e3a1e84c70042516ccf78d1560ffad521a6c5eed04f76",
+ "bytes": 914440,
+ "referenced_image_paths": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-no-one-youer.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-freebird.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFJFTELGH6FD8.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/clawd-official.png"
+ ],
+ "tool_arguments": {
+  "raw": "{\n  \"prompt\": \"Create ONE 16:9 design variant sheet for a prop in a silent hand-drawn animated film. Variant muse-01, Clock-stalk machine (this identifier must NOT appear as text). Pure black field #000000. Show the SAME machine exactly twice, same scale and same view, feet on one shared implied baseline: left dormant, right with its round dial opened and light pouring out. No drawn baseline. Generous black separation and margins, all parts fully inside the frame.\\nASSET: raw capability, a hybrid universe-simulator machine with the surreal organic/mechanical sensibility of The Midnight Gospel: familiar parts in an impossible whole. Stacked blobby lobes like a clock-stalk, crooked funnel, curled antenna bearing a flag leaf, one round dial emitter, stubby plated legs and body blocks, small dark slit marks. Between stubby blocky companion and swooping organic plant-machine. Not an orb, not a conventional device with buttons. No buttons. Dial is the ONLY emitter. Left dial shut and dark; right dial lid swings open as a distinct hinged closed shape, revealing one radiant blue core. Preserve identical body geometry between the two states.\\nREFERENCE ROLES ONLY, do not copy reference comp"
+ },
+ "summary": {
+  "references": 4
+ }
+}

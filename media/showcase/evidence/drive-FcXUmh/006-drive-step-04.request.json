@@ -1,0 +1,38 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_shot#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "The motion step output names the files it writes (v3/charts/s01-arrival-overwhelm.json, its .md, scripts/s01_chart.py), the steps, the risks (hold band, the rig cannot turn, declared long hold) and the edge cases; the documentation and CloudySky reminders have no surface in a timing chart.",
+      "reminders": {
+        "satisfied": [
+          "plan-quality",
+          "prose-hygiene"
+        ],
+        "not_applicable": [
+          {
+            "id": "api-documentation",
+            "reason": "a timing chart documents no API endpoint"
+          },
+          {
+            "id": "creed-fidelity",
+            "reason": "creed: n/a — no visual surface of the CloudySky repo; the chart is data for a showcase shot"
+          },
+          {
+            "id": "information-placement",
+            "reason": "no documentation page is placed or changed"
+          },
+          {
+            "id": "product-positioning-fidelity",
+            "reason": "no public documentation of the client/server boundary is written"
+          },
+          {
+            "id": "semantic-discoverability",
+            "reason": "no documentation is written; no search terminology is chosen"
+          }
+        ]
+      }
+    }
+  }
+}

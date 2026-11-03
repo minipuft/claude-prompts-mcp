@@ -1,0 +1,1366 @@
+{
+ "shot": "s01-arrival-overwhelm",
+ "actor": "human",
+ "provisional": true,
+ "note": "Joints placed by eye on the key plates, registered to the rig by one similarity per key (scripts/s01_keys_to_rig.py), bone directions from the plate and bone lengths from the rest skeleton; `registeredJoints` are the unrestrained positions and `limbRatios` the raw/rest lengths (C20). Frames are shot-local = film frames (the shot starts at 0). Holds and breakdowns are the chart's (v3/charts/s01-arrival-overwhelm.json).",
+ "keys": [
+  {
+   "name": "rest-on-lid",
+   "frame": 0,
+   "hold": 26,
+   "joints": {
+    "root": [
+     330.57,
+     514.94
+    ],
+    "torso": [
+     389.23,
+     299.85
+    ],
+    "neck": [
+     401.73,
+     279.4
+    ],
+    "head": [
+     417.9,
+     259.63
+    ],
+    "shoulderL": [
+     342.3,
+     338.95
+    ],
+    "elbowL": [
+     326.66,
+     421.08
+    ],
+    "wristL": [
+     408.78,
+     487.57
+    ],
+    "shoulderR": [
+     436.16,
+     335.04
+    ],
+    "elbowR": [
+     443.98,
+     424.99
+    ],
+    "wristR": [
+     518.29,
+     485.61
+    ],
+    "hipL": [
+     305.15,
+     514.94
+    ],
+    "kneeL": [
+     281.68,
+     685.06
+    ],
+    "ankleL": [
+     262.13,
+     859.1
+    ],
+    "hipR": [
+     359.9,
+     522.76
+    ],
+    "kneeR": [
+     385.32,
+     690.93
+    ],
+    "ankleR": [
+     404.87,
+     859.1
+    ],
+    "ponchoPoint": [
+     336.57,
+     509.94
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     428.34,
+     243.14
+    ],
+    "neck": [
+     410.74,
+     264.65
+    ],
+    "torso": [
+     389.23,
+     299.85
+    ],
+    "shoulderL": [
+     342.3,
+     338.95
+    ],
+    "shoulderR": [
+     436.16,
+     335.04
+    ],
+    "elbowL": [
+     326.66,
+     421.08
+    ],
+    "wristL": [
+     408.78,
+     487.57
+    ],
+    "elbowR": [
+     443.98,
+     424.99
+    ],
+    "wristR": [
+     518.29,
+     485.61
+    ],
+    "root": [
+     330.57,
+     514.94
+    ],
+    "hipL": [
+     305.15,
+     514.94
+    ],
+    "hipR": [
+     359.9,
+     522.76
+    ],
+    "kneeL": [
+     281.68,
+     685.06
+    ],
+    "kneeR": [
+     385.32,
+     690.93
+    ],
+    "ankleL": [
+     262.13,
+     859.1
+    ],
+    "ankleR": [
+     404.87,
+     859.1
+    ],
+    "ponchoPoint": [
+     369.68,
+     436.73
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K1.png",
+   "plateSha256": "c3ee48b0c134bd2d70147b95d30bc118e0e191dea7b0d52b019cb634460591e0",
+   "reachRatios": {
+    "wristL": 0.682,
+    "wristR": 0.739,
+    "ankleL": 0.942,
+    "ankleR": 0.926
+   }
+  },
+  {
+   "name": "grip",
+   "frame": 42,
+   "hold": 16,
+   "joints": {
+    "root": [
+     380.09,
+     616.86
+    ],
+    "torso": [
+     415.0,
+     330.78
+    ],
+    "neck": [
+     432.36,
+     314.25
+    ],
+    "head": [
+     457.25,
+     308.53
+    ],
+    "shoulderL": [
+     346.2,
+     372.07
+    ],
+    "elbowL": [
+     326.12,
+     504.6
+    ],
+    "wristL": [
+     394.39,
+     584.92
+    ],
+    "shoulderR": [
+     427.05,
+     397.45
+    ],
+    "elbowR": [
+     527.45,
+     505.89
+    ],
+    "wristR": [
+     603.76,
+     586.21
+    ],
+    "hipL": [
+     338.56,
+     610.6
+    ],
+    "kneeL": [
+     278.32,
+     698.95
+    ],
+    "ankleL": [
+     242.17,
+     791.32
+    ],
+    "hipR": [
+     417.55,
+     621.91
+    ],
+    "kneeR": [
+     421.57,
+     730.34
+    ],
+    "ankleR": [
+     421.57,
+     830.74
+    ],
+    "ponchoPoint": [
+     386.09,
+     611.86
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     504.58,
+     231.32
+    ],
+    "neck": [
+     455.59,
+     242.57
+    ],
+    "torso": [
+     421.85,
+     274.69
+    ],
+    "shoulderL": [
+     337.52,
+     325.3
+    ],
+    "shoulderR": [
+     433.9,
+     341.36
+    ],
+    "elbowL": [
+     317.44,
+     457.83
+    ],
+    "wristL": [
+     385.71,
+     538.15
+    ],
+    "elbowR": [
+     534.3,
+     449.8
+    ],
+    "wristR": [
+     610.61,
+     530.12
+    ],
+    "root": [
+     380.09,
+     616.86
+    ],
+    "hipL": [
+     337.52,
+     610.44
+    ],
+    "hipR": [
+     421.85,
+     622.49
+    ],
+    "kneeL": [
+     277.28,
+     698.79
+    ],
+    "kneeR": [
+     425.87,
+     730.92
+    ],
+    "ankleL": [
+     241.13,
+     791.16
+    ],
+    "ankleR": [
+     425.87,
+     831.32
+    ],
+    "ponchoPoint": [
+     349.56,
+     385.54
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K2.png",
+   "plateSha256": "90cda83c3b31584b7dbe1ad7737eacc27ac0b2166dab05c11fb6baef1f62b98f",
+   "reachRatios": {
+    "wristL": 0.914,
+    "wristR": 1.113,
+    "ankleL": 0.556,
+    "ankleR": 0.57
+   }
+  },
+  {
+   "name": "lift",
+   "frame": 66,
+   "hold": 26,
+   "joints": {
+    "root": [
+     415.83,
+     503.61
+    ],
+    "torso": [
+     407.8,
+     236.14
+    ],
+    "neck": [
+     405.26,
+     212.3
+    ],
+    "head": [
+     405.26,
+     198.55
+    ],
+    "shoulderL": [
+     335.51,
+     266.66
+    ],
+    "elbowL": [
+     293.74,
+     367.06
+    ],
+    "wristL": [
+     259.2,
+     314.86
+    ],
+    "shoulderR": [
+     488.12,
+     266.66
+    ],
+    "elbowR": [
+     584.5,
+     324.49
+    ],
+    "wristR": [
+     660.81,
+     274.69
+    ],
+    "hipL": [
+     391.73,
+     499.59
+    ],
+    "kneeL": [
+     335.51,
+     676.3
+    ],
+    "ankleL": [
+     259.2,
+     840.96
+    ],
+    "hipR": [
+     439.93,
+     507.63
+    ],
+    "kneeR": [
+     431.89,
+     684.33
+    ],
+    "ankleR": [
+     407.8,
+     846.58
+    ],
+    "ponchoPoint": [
+     421.83,
+     498.61
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     403.78,
+     186.34
+    ],
+    "neck": [
+     403.78,
+     198.39
+    ],
+    "torso": [
+     407.8,
+     236.14
+    ],
+    "shoulderL": [
+     335.51,
+     266.66
+    ],
+    "shoulderR": [
+     488.12,
+     266.66
+    ],
+    "elbowL": [
+     293.74,
+     367.06
+    ],
+    "wristL": [
+     259.2,
+     314.86
+    ],
+    "elbowR": [
+     584.5,
+     324.49
+    ],
+    "wristR": [
+     660.81,
+     274.69
+    ],
+    "root": [
+     415.83,
+     503.61
+    ],
+    "hipL": [
+     391.73,
+     499.59
+    ],
+    "hipR": [
+     439.93,
+     507.63
+    ],
+    "kneeL": [
+     335.51,
+     676.3
+    ],
+    "kneeR": [
+     431.89,
+     684.33
+    ],
+    "ankleL": [
+     259.2,
+     840.96
+    ],
+    "ankleR": [
+     407.8,
+     846.58
+    ],
+    "ponchoPoint": [
+     407.8,
+     443.37
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K3.png",
+   "plateSha256": "82f5b0ae66722886dafe766472eb0a85e80f25aa9fc0e8285246081a77e15d8c",
+   "reachRatios": {
+    "wristL": 0.378,
+    "wristR": 0.744,
+    "ankleL": 0.994,
+    "ankleR": 0.929
+   }
+  },
+  {
+   "name": "awe",
+   "frame": 104,
+   "hold": 26,
+   "joints": {
+    "root": [
+     441.93,
+     522.89
+    ],
+    "torso": [
+     418.33,
+     235.66
+    ],
+    "neck": [
+     422.34,
+     213.98
+    ],
+    "head": [
+     422.34,
+     200.23
+    ],
+    "shoulderL": [
+     360.16,
+     290.93
+    ],
+    "elbowL": [
+     315.98,
+     383.3
+    ],
+    "wristL": [
+     287.87,
+     474.06
+    ],
+    "shoulderR": [
+     485.34,
+     290.49
+    ],
+    "elbowR": [
+     533.53,
+     390.9
+    ],
+    "wristR": [
+     561.65,
+     475.23
+    ],
+    "hipL": [
+     417.84,
+     514.86
+    ],
+    "kneeL": [
+     337.52,
+     683.53
+    ],
+    "ankleL": [
+     253.18,
+     842.57
+    ],
+    "hipR": [
+     462.01,
+     522.89
+    ],
+    "kneeR": [
+     433.9,
+     683.53
+    ],
+    "ankleR": [
+     413.82,
+     845.78
+    ],
+    "ponchoPoint": [
+     447.93,
+     517.89
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     421.85,
+     195.98
+    ],
+    "neck": [
+     421.85,
+     208.03
+    ],
+    "torso": [
+     417.84,
+     229.71
+    ],
+    "shoulderL": [
+     337.52,
+     306.02
+    ],
+    "shoulderR": [
+     506.19,
+     302.0
+    ],
+    "elbowL": [
+     293.34,
+     398.39
+    ],
+    "wristL": [
+     265.23,
+     489.15
+    ],
+    "elbowR": [
+     554.38,
+     402.41
+    ],
+    "wristR": [
+     582.5,
+     486.74
+    ],
+    "root": [
+     441.93,
+     522.89
+    ],
+    "hipL": [
+     417.84,
+     514.86
+    ],
+    "hipR": [
+     462.01,
+     522.89
+    ],
+    "kneeL": [
+     337.52,
+     683.53
+    ],
+    "kneeR": [
+     433.9,
+     683.53
+    ],
+    "ankleL": [
+     253.18,
+     842.57
+    ],
+    "ankleR": [
+     413.82,
+     845.78
+    ],
+    "ponchoPoint": [
+     433.9,
+     466.66
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K4.png",
+   "plateSha256": "2c2a82c2f64a7fe7e75c299e322756afaee2ab77dd2cc5833704e90a44b67ae1",
+   "reachRatios": {
+    "wristL": 0.825,
+    "wristR": 0.861,
+    "ankleL": 0.996,
+    "ankleR": 0.891
+   }
+  },
+  {
+   "name": "brace",
+   "frame": 154,
+   "hold": 24,
+   "joints": {
+    "root": [
+     417.84,
+     549.39
+    ],
+    "torso": [
+     395.15,
+     262.08
+    ],
+    "neck": [
+     393.1,
+     238.2
+    ],
+    "head": [
+     388.47,
+     213.08
+    ],
+    "shoulderL": [
+     332.17,
+     311.8
+    ],
+    "elbowL": [
+     255.86,
+     380.08
+    ],
+    "wristL": [
+     344.21,
+     281.28
+    ],
+    "shoulderR": [
+     455.39,
+     310.28
+    ],
+    "elbowR": [
+     547.76,
+     338.39
+    ],
+    "wristR": [
+     491.54,
+     246.02
+    ],
+    "hipL": [
+     393.74,
+     545.38
+    ],
+    "kneeL": [
+     333.5,
+     697.99
+    ],
+    "ankleL": [
+     273.26,
+     854.61
+    ],
+    "hipR": [
+     441.93,
+     553.41
+    ],
+    "kneeR": [
+     470.05,
+     689.96
+    ],
+    "ankleR": [
+     393.74,
+     865.06
+    ],
+    "ponchoPoint": [
+     423.84,
+     544.39
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     385.71,
+     185.54
+    ],
+    "neck": [
+     391.33,
+     216.06
+    ],
+    "torso": [
+     393.74,
+     244.17
+    ],
+    "shoulderL": [
+     317.44,
+     304.41
+    ],
+    "shoulderR": [
+     453.98,
+     292.37
+    ],
+    "elbowL": [
+     241.13,
+     372.69
+    ],
+    "wristL": [
+     329.48,
+     273.89
+    ],
+    "elbowR": [
+     546.35,
+     320.48
+    ],
+    "wristR": [
+     490.13,
+     228.11
+    ],
+    "root": [
+     417.84,
+     549.39
+    ],
+    "hipL": [
+     393.74,
+     545.38
+    ],
+    "hipR": [
+     441.93,
+     553.41
+    ],
+    "kneeL": [
+     333.5,
+     697.99
+    ],
+    "kneeR": [
+     470.05,
+     689.96
+    ],
+    "ankleL": [
+     273.26,
+     854.61
+    ],
+    "ankleR": [
+     393.74,
+     865.06
+    ],
+    "ponchoPoint": [
+     421.85,
+     497.18
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K5.png",
+   "plateSha256": "37d561e11bc5de398dd3d20acc02db6eacd1410017b4104e7c5e39896bbde3eb",
+   "reachRatios": {
+    "wristL": 0.137,
+    "wristR": 0.317,
+    "ankleL": 0.901,
+    "ankleR": 0.861
+   }
+  },
+  {
+   "name": "joy-a",
+   "frame": 190,
+   "hold": 22,
+   "joints": {
+    "root": [
+     311.41,
+     615.26
+    ],
+    "torso": [
+     323.46,
+     362.24
+    ],
+    "neck": [
+     338.64,
+     343.69
+    ],
+    "head": [
+     358.03,
+     327.07
+    ],
+    "shoulderL": [
+     254.01,
+     322.04
+    ],
+    "elbowL": [
+     221.89,
+     249.75
+    ],
+    "wristL": [
+     197.79,
+     185.49
+    ],
+    "shoulderR": [
+     359.6,
+     398.39
+    ],
+    "elbowR": [
+     447.96,
+     430.52
+    ],
+    "wristR": [
+     512.21,
+     453.01
+    ],
+    "hipL": [
+     296.44,
+     605.27
+    ],
+    "kneeL": [
+     256.28,
+     717.72
+    ],
+    "ankleL": [
+     248.25,
+     858.29
+    ],
+    "hipR": [
+     331.49,
+     615.26
+    ],
+    "kneeR": [
+     359.6,
+     711.64
+    ],
+    "ankleR": [
+     415.83,
+     862.65
+    ],
+    "ponchoPoint": [
+     317.41,
+     610.26
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     387.72,
+     293.97
+    ],
+    "neck": [
+     359.6,
+     318.07
+    ],
+    "torso": [
+     323.46,
+     362.24
+    ],
+    "shoulderL": [
+     247.15,
+     318.07
+    ],
+    "shoulderR": [
+     359.6,
+     398.39
+    ],
+    "elbowL": [
+     215.03,
+     245.78
+    ],
+    "wristL": [
+     190.93,
+     181.52
+    ],
+    "elbowR": [
+     447.96,
+     430.52
+    ],
+    "wristR": [
+     512.21,
+     453.01
+    ],
+    "root": [
+     311.41,
+     615.26
+    ],
+    "hipL": [
+     299.36,
+     607.22
+    ],
+    "hipR": [
+     331.49,
+     615.26
+    ],
+    "kneeL": [
+     259.2,
+     719.67
+    ],
+    "kneeR": [
+     359.6,
+     711.64
+    ],
+    "ankleL": [
+     251.17,
+     860.24
+    ],
+    "ankleR": [
+     415.83,
+     862.65
+    ],
+    "ponchoPoint": [
+     319.44,
+     567.06
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K6.png",
+   "plateSha256": "80ce50ebcaadfa3f0b24c7ac5d321c0a10d36ed8e574c59503f460b405ebb17c",
+   "reachRatios": {
+    "wristL": 0.619,
+    "wristR": 0.698,
+    "ankleL": 0.699,
+    "ankleR": 0.713
+   }
+  },
+  {
+   "name": "joy-b",
+   "frame": 228,
+   "hold": 20,
+   "joints": {
+    "root": [
+     413.67,
+     554.05
+    ],
+    "torso": [
+     374.56,
+     309.62
+    ],
+    "neck": [
+     360.63,
+     290.11
+    ],
+    "head": [
+     342.57,
+     272.05
+    ],
+    "shoulderL": [
+     294.94,
+     299.67
+    ],
+    "elbowL": [
+     240.19,
+     307.49
+    ],
+    "wristL": [
+     181.52,
+     315.31
+    ],
+    "shoulderR": [
+     405.85,
+     286.16
+    ],
+    "elbowR": [
+     478.2,
+     192.3
+    ],
+    "wristR": [
+     550.55,
+     98.44
+    ],
+    "hipL": [
+     388.25,
+     550.14
+    ],
+    "kneeL": [
+     321.77,
+     681.15
+    ],
+    "ankleL": [
+     257.24,
+     853.23
+    ],
+    "hipR": [
+     439.09,
+     561.87
+    ],
+    "kneeR": [
+     413.67,
+     671.38
+    ],
+    "ankleR": [
+     409.76,
+     827.81
+    ],
+    "ponchoPoint": [
+     419.67,
+     549.05
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     331.54,
+     258.78
+    ],
+    "neck": [
+     355.01,
+     282.25
+    ],
+    "torso": [
+     374.56,
+     309.62
+    ],
+    "shoulderL": [
+     249.42,
+     293.98
+    ],
+    "shoulderR": [
+     405.85,
+     286.16
+    ],
+    "elbowL": [
+     194.67,
+     301.8
+    ],
+    "wristL": [
+     136.0,
+     309.62
+    ],
+    "elbowR": [
+     478.2,
+     192.3
+    ],
+    "wristR": [
+     550.55,
+     98.44
+    ],
+    "root": [
+     413.67,
+     554.05
+    ],
+    "hipL": [
+     388.25,
+     550.14
+    ],
+    "hipR": [
+     439.09,
+     561.87
+    ],
+    "kneeL": [
+     321.77,
+     681.15
+    ],
+    "kneeR": [
+     413.67,
+     671.38
+    ],
+    "ankleL": [
+     257.24,
+     853.23
+    ],
+    "ankleR": [
+     409.76,
+     827.81
+    ],
+    "ponchoPoint": [
+     370.65,
+     456.28
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K7.png",
+   "plateSha256": "9b89e1d36d2481a9b3b03ee4f958bbc57a64056da5c499a822efaede9a3a399c",
+   "reachRatios": {
+    "wristL": 0.48,
+    "wristR": 1.021,
+    "ankleL": 0.896,
+    "ankleR": 0.73
+   }
+  },
+  {
+   "name": "shrink",
+   "frame": 272,
+   "hold": 148,
+   "joints": {
+    "root": [
+     339.37,
+     761.32
+    ],
+    "torso": [
+     362.83,
+     624.45
+    ],
+    "neck": [
+     374.47,
+     603.5
+    ],
+    "head": [
+     384.24,
+     580.03
+    ],
+    "shoulderL": [
+     300.26,
+     628.36
+    ],
+    "elbowL": [
+     319.81,
+     569.69
+    ],
+    "wristL": [
+     362.83,
+     487.57
+    ],
+    "shoulderR": [
+     401.94,
+     632.27
+    ],
+    "elbowR": [
+     450.82,
+     608.8
+    ],
+    "wristR": [
+     431.27,
+     481.7
+    ],
+    "hipL": [
+     308.08,
+     761.32
+    ],
+    "kneeL": [
+     362.83,
+     814.12
+    ],
+    "ankleL": [
+     265.06,
+     874.74
+    ],
+    "hipR": [
+     372.61,
+     765.24
+    ],
+    "kneeR": [
+     417.58,
+     814.12
+    ],
+    "ankleR": [
+     401.94,
+     878.65
+    ],
+    "ponchoPoint": [
+     345.37,
+     756.32
+    ]
+   },
+   "registeredJoints": {
+    "head": [
+     392.16,
+     565.78
+    ],
+    "neck": [
+     382.39,
+     589.25
+    ],
+    "torso": [
+     362.83,
+     624.45
+    ],
+    "shoulderL": [
+     300.26,
+     628.36
+    ],
+    "shoulderR": [
+     401.94,
+     632.27
+    ],
+    "elbowL": [
+     319.81,
+     569.69
+    ],
+    "wristL": [
+     362.83,
+     487.57
+    ],
+    "elbowR": [
+     450.82,
+     608.8
+    ],
+    "wristR": [
+     431.27,
+     481.7
+    ],
+    "root": [
+     339.37,
+     761.32
+    ],
+    "hipL": [
+     308.08,
+     761.32
+    ],
+    "hipR": [
+     372.61,
+     765.24
+    ],
+    "kneeL": [
+     362.83,
+     814.12
+    ],
+    "kneeR": [
+     417.58,
+     814.12
+    ],
+    "ankleL": [
+     265.06,
+     874.74
+    ],
+    "ankleR": [
+     401.94,
+     878.65
+    ],
+    "ponchoPoint": [
+     304.17,
+     706.57
+    ]
+   },
+   "plate": "assets/human/keys/s01-arrival-overwhelm/K8.png",
+   "plateSha256": "3b34faf69077908aee52f1b11dbcb9e1bffb065e7fbba80a9e9f003e9c974864",
+   "reachRatios": {
+    "wristL": 0.645,
+    "wristR": 0.661,
+    "ankleL": 0.329,
+    "ankleR": 0.32
+   }
+  }
+ ],
+ "breakdowns": [
+  {
+   "frame": 26,
+   "favour": 0.104
+  },
+  {
+   "frame": 30,
+   "favour": 0.352
+  },
+  {
+   "frame": 34,
+   "favour": 0.648
+  },
+  {
+   "frame": 38,
+   "favour": 0.896
+  },
+  {
+   "frame": 58,
+   "favour": 0.104
+  },
+  {
+   "frame": 60,
+   "favour": 0.352
+  },
+  {
+   "frame": 62,
+   "favour": 0.648
+  },
+  {
+   "frame": 64,
+   "favour": 0.896
+  },
+  {
+   "frame": 92,
+   "favour": 0.156
+  },
+  {
+   "frame": 96,
+   "favour": 0.58
+  },
+  {
+   "frame": 100,
+   "favour": 0.844
+  },
+  {
+   "frame": 130,
+   "favour": 0.055
+  },
+  {
+   "frame": 134,
+   "favour": 0.198
+  },
+  {
+   "frame": 138,
+   "favour": 0.394
+  },
+  {
+   "frame": 142,
+   "favour": 0.606
+  },
+  {
+   "frame": 146,
+   "favour": 0.802
+  },
+  {
+   "frame": 150,
+   "favour": 0.945
+  },
+  {
+   "frame": 178,
+   "favour": 0.055
+  },
+  {
+   "frame": 180,
+   "favour": 0.198
+  },
+  {
+   "frame": 182,
+   "favour": 0.394
+  },
+  {
+   "frame": 184,
+   "favour": 0.606
+  },
+  {
+   "frame": 186,
+   "favour": 0.802
+  },
+  {
+   "frame": 188,
+   "favour": 0.945
+  },
+  {
+   "frame": 212,
+   "favour": 0.104
+  },
+  {
+   "frame": 216,
+   "favour": 0.352
+  },
+  {
+   "frame": 220,
+   "favour": 0.648
+  },
+  {
+   "frame": 224,
+   "favour": 0.896
+  },
+  {
+   "frame": 248,
+   "favour": 0.055
+  },
+  {
+   "frame": 252,
+   "favour": 0.198
+  },
+  {
+   "frame": 256,
+   "favour": 0.394
+  },
+  {
+   "frame": 260,
+   "favour": 0.606
+  },
+  {
+   "frame": 264,
+   "favour": 0.802
+  },
+  {
+   "frame": 268,
+   "favour": 0.945
+  }
+ ]
+}

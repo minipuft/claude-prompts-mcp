@@ -1,0 +1,42 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "showcase-asset-muse",
+    "name": "Showcase Asset Muse",
+    "description": "Check-tier gate on the render step (C19, D55): every prop a shot's inventory names has a muse sheet with 3+ rendered variants, each citing a reference card from the owner library (by facet) and one existing cast property; a prop with no sheet, a sheet with 2 variants or a variant citing an unknown card is refused before render. Acceptance (`sheet_accepted`) is tracked, not gated.",
+    "type": "validation",
+    "gate_type": "custom",
+    "severity": "high",
+    "subject": "showcase-asset-muse",
+    "enforcement_mode": "blocking",
+    "guidance": "Ground truth by exit code (D81). The probe runs `python3 scripts/animation/probe-muse.py v3/shots.json assets/props` in the renderer root: for every prop the shots name, `assets/props/<asset>/muse.json` must cover it with 3+ variants, each with an image whose sha256 matches, a `borrows` entry whose card is in v3/references/owner/picks.json and carries the cited facet and value, and a `cast_property`. Its first line is its control (a complete fixture passes; no sheet, 2 variants, an unknown card, an unknown facet and no cast property are each named) and it refuses to report if a control does not trip. On FAIL quote the probe's line naming the prop and what is missing, then run `>>showcase_asset_muse` for that asset; never edit the probe or muse.json to make it pass. `--require-accepted` (the owner's pick) is not passed: acceptance is tracked, not gated. Control: a prop with no sheet is refused.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-muse.py",
+          "v3/shots.json",
+          "assets/props"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ],
+    "activation": {
+      "prompt_categories": [
+        "animation",
+        "development"
+      ],
+      "explicit_request": true
+    },
+    "retry_config": {
+      "max_attempts": 2,
+      "improvement_hints": true
+    }
+  }
+}

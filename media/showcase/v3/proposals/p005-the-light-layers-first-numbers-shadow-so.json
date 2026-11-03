@@ -1,0 +1,25 @@
+{
+  "id": "p005",
+  "kind": "change",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "arrival"
+  },
+  "title": "The light layer's first numbers: shadow softness per class, bounce strength, the lit volume",
+  "text": "Row 8.6 built the light layer (D98) and the rulings name no numbers for it, so it ships with the contract's first values, all in src/library/light/sdf.ts: penumbra sharpness k of min(k*h/t) by shadow class stipple-1 soft 4, stipple-2 medium 12, stipple-3 hard 48 (none casts nothing), and the dot size of the shadow's own edge 1, 2 and 3 px; one bounce at gain 1.0 over 48 px of the lit edge, drawn at 0.5 of the pair colour and always under the direct dots; the lit volume as density 1/(1+(d/r0)^2) with r0 = 110 + 140 x intensity stage px, cut to nothing at a reach of 380 + 320 x intensity, floored at a density of 0.08 (the light script declares the emitter's luma floor, 200, not a density floor); the dots drawn at 0.6 of the emitter's colour times its intensity so the lamp stays the brightest thing; the solid the emitter sits in lets its light out within 140 stage px (the gadget, which is the lamp, entirely). On s01 every solid is stipple-2 (the cast is `body`, the box, gadget and kit pieces are `box`), so the three classes are not yet told apart on screen. Grade by eye on frames 0, 90 and 300 of v3/studies/light-01.md; a number you change is a one-line edit.",
+  "references": [
+    "seuss-no-one-youer"
+  ],
+  "before": {
+    "note": "light is the lamp's core and the feathered radiance mask; no occlusion, no shadow, no bounce"
+  },
+  "after": {
+    "files": [
+      "src/library/light/sdf.ts"
+    ],
+    "note": "soft/medium/hard shadows at k 4/12/48, bounce gain 1.0 at 0.5 luma, density floor 0.08, dot gain 0.6, owner seat 140 px; all first values"
+  },
+  "status": "open",
+  "ruling": null
+}

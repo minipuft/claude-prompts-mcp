@@ -1,0 +1,76 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "create",
+    "id": "showcase_world_sheet",
+    "name": "Showcase World Sheet",
+    "category": "development",
+    "description": "Once per world (D78): generate the world sheet through the imagegen tool (the human, the companions, one piece of architecture and one lit join in that world's language, plus the join reduced to lines and a swatch row) from the model sheet, the official companion plates and the owner's cards; measure field, contour, fill language and identity pigments; write v3/worlds/<world>.json as the world's style contract and render the code renderer's WorldSheet still beside the plate so the gap names the next renderer change.",
+    "arguments": [
+      {
+        "name": "world",
+        "type": "string",
+        "required": true,
+        "description": "World id: home, crayon, line, shaded (v3/worlds/<world>.json)."
+      },
+      {
+        "name": "context",
+        "type": "string",
+        "required": false,
+        "description": "Card ids, the owner's wishes for this world, or the beat it serves; default reads the ledger and the board."
+      },
+      {
+        "name": "output_root",
+        "type": "string",
+        "required": false,
+        "defaultValue": "media/showcase",
+        "description": "Caller-owned production artifact directory."
+      }
+    ],
+    "user_message_template": "World: {{world}}\nProduction root: {{output_root}}\nNotes and cards:\n{{context | default(\"Read v3/creative-spec.md D78 and the beat ledger v3/beats-v2.json for the beats this world serves; cards from board §7–§8 and the owner's picks (sections shaded-world, crossing).\")}}\n\nRead `v3/creative-spec.md` (D78 worlds and guides, D74, D76, D77, the Craft baseline), `v3/rubric.md` (C1, C21, C22, C24), `v3/beats-v2.json` (the beats in this world: who leads, the one action, the effects), the world's provisional contract `v3/worlds/<world>.json` (schema in `src/library/worlds/types.ts`) and the human's `assets/human/model.json`. Choose two to four cards for this world through the `/inspiration` skill (filed with folder, why and source; new cards go on the board with eagle:// provenance). Generate ONE world sheet through the `imagegen` tool (`tool:imagegen`), never by hand: `references` are the absolute paths of the human's model sheet, the companions' official plates, one Seuss architecture card and the chosen world cards; the `prompt` names which reference supplies which property and asks for ONE plate in this world's language holding, on one baseline at one scale: the human in the beat's action pose, Clawd and Codex (identity pigments by hex, unchanged), one piece of architecture of this world, and one join (two pieces touching, lit) — plus, as a strip under it, the same join reduced to its contour lines (the crossing) and a swatch row (field, radiance hue, accent, contour colour). `out` is `out/world-<world>-<NN>.png`. Measure on the plate: field colour (median of the empty area), contour weight in px against the human's `model.json` ratio (D76: a world may set its own ratio; record it), whether fills are flat / stroked / stepped (count of distinct colours inside the human's torso: ≤ 6 flat, > 40 stroked, 7–12 stepped), the companions' identity pigments sampled (C1; reject and regenerate once if they drift), and the join's emitter position. Write the measured values into `v3/worlds/<world>.json` (keep `provisional: true`, add `sheet`, `sheetSha256`, `cards`, `receipt`, `measured`), copy the plate to `assets/worlds/<world>-<NN>.png` and `public/assets/worlds/`, and render the `WorldSheet<World>` composition still (the code renderer of the same scene) next to the plate as the comparison the owner judges: the plate is the target, the composition is the implementation, and the gap between them is the next renderer change, named in the study.\n\nReturn: World Contract (measured fields); Companions (pigments sampled, C1); Contour; Fills; Cards Used (eagle ids); Sheet Path; Composition Still; Renderer Gap (what the code must change to match the plate); Generation Receipt; Rejected Generations; Concerns.",
+    "tools": [
+      {
+        "id": "imagegen",
+        "name": "Image Generation (codex exec)",
+        "description": "Draw one asset with Codex's image tool from board images as references (D65/D66); copies the result to `out` unchanged and returns prompt, referenced_image_paths, source path and sha256; refuses on a missing file.",
+        "runtime": "python",
+        "script": "#!/usr/bin/env python3\n\"\"\"imagegen: draw one asset with Codex's image tool from board images (D65/D66).\nstdin JSON: {prompt, references: [abs paths], out: abs png path, workdir?}\nRuns `codex exec --skip-git-repo-check -C <workdir> -i ref... -- \"<prompt>\"` (the `--` is required or the prompt is read from stdin),\nparses the generated path Codex prints, copies it to `out` unchanged, and returns {valid, path, sha256, bytes, referenced_image_paths}.\nRefuses, never fabricates: a missing file or a missing path in the output is valid:false with the reason.\"\"\"\nimport hashlib, json, os, re, shutil, subprocess, sys, tempfile\ndata = json.load(sys.stdin)\nprompt = data.get(\"prompt\", \"\").strip(); refs = data.get(\"references\", []); out = data.get(\"out\")\nif not prompt or not out: print(json.dumps({\"valid\": False, \"errors\": [\"prompt and out are required\"]})); sys.exit(0)\nmissing = [r for r in refs if not os.path.isfile(r)]\nif missing: print(json.dumps({\"valid\": False, \"errors\": [f\"reference missing: {m}\" for m in missing]})); sys.exit(0)\nif not shutil.which(\"codex\"): print(json.dumps({\"valid\": False, \"errors\": [\"codex CLI not on PATH\"]})); sys.exit(0)\nworkdir = data.get(\"workdir\") or tempfile.mkdtemp(prefix=\"imagegen-\")\nask = (\"Use your image generation tool exactly once, with every attached image as a reference, for this request:\\n\" + prompt +\n       \"\\nThen print only: the absolute path of the generated file on one line, and on the next lines a JSON object with the exact tool arguments you used (prompt, referenced_image_paths, transparent_background).\")\ncmd = [\"codex\", \"exec\", \"--skip-git-repo-check\", \"-C\", workdir]\nfor r in refs: cmd += [\"-i\", r]\ncmd += [\"--\", ask]\ntry:\n    run = subprocess.run(cmd, capture_output=True, text=True, timeout=int(data.get(\"timeout\", 280)))\nexcept subprocess.TimeoutExpired:\n    print(json.dumps({\"valid\": False, \"errors\": [\"codex exec timed out\"]})); sys.exit(0)\ntext = run.stdout + \"\\n\" + run.stderr\npaths = re.findall(r\"(/[^\\s'\\\"`]+\\.png)\", text)\npaths = [p for p in paths if os.path.isfile(p) and \"generated_images\" in p]\nif not paths: print(json.dumps({\"valid\": False, \"errors\": [\"no generated file path found in codex output\", text[-600:]]})); sys.exit(0)\nsrc = paths[-1]\nargs = None\nm = re.search(r\"\\{[\\s\\S]*\\\"referenced_image_paths\\\"[\\s\\S]*?\\}\\s*$\", text.strip()) or re.search(r\"\\{[\\s\\S]*\\\"referenced_image_paths\\\"[\\s\\S]*\\}\", text)\nif m:\n    try: args = json.loads(m.group(0))\n    except Exception: args = {\"raw\": m.group(0)[:1200]}\nos.makedirs(os.path.dirname(out), exist_ok=True)\nshutil.copyfile(src, out)\nraw = open(out, \"rb\").read()\nprint(json.dumps({\"valid\": True, \"path\": out, \"source\": src, \"sha256\": hashlib.sha256(raw).hexdigest(), \"bytes\": len(raw), \"referenced_image_paths\": refs, \"tool_arguments\": args, \"summary\": {\"references\": len(refs)}}))\n",
+        "timeout": 295000,
+        "trigger": "explicit",
+        "confirm": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "description": "The generation request; names which reference supplies which property."
+            },
+            "references": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Absolute paths of board images (v3/references/*) attached as references."
+            },
+            "out": {
+              "type": "string",
+              "description": "Absolute output PNG path under media/showcase/out/."
+            },
+            "workdir": {
+              "type": "string"
+            },
+            "timeout": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "prompt",
+            "references",
+            "out"
+          ]
+        }
+      }
+    ]
+  }
+}

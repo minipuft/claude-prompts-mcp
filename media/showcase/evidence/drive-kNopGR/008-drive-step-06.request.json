@@ -1,0 +1,26 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_animatic#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "After restoring arrival.json (cmp identical to the backup) the engine ran the blocking gate again: exit 0 in 251 ms, all 5 checks ok",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "Animation Blocking Contract PASSED exit 0 in 251 ms: 8 beats staged, actors placed, emitter inside the frame, a card cited, identity boxes apart; control line tripped on 5 planted defects"
+        }
+      ],
+      "reminders": {
+        "satisfied": [],
+        "not_applicable": [
+          {
+            "id": "framework-compliance",
+            "reason": "the answer keeps the required section headers and structure is graded by the engine"
+          }
+        ]
+      }
+    }
+  }
+}

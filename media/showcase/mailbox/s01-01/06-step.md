@@ -1,0 +1,147 @@
+═════════════════════════════════════════════════════════════════
+EXECUTION BRIEF (sub-agent prompt — pass everything between these delimiters)
+═════════════════════════════════════════════════════════════════
+
+### Original Request Intent
+
+This step was given the following request. Your work must satisfy this intent:
+
+- **shot**: s01-arrival-overwhelm
+- **output_root**: media/showcase
+- **brief**: First demo of the film's intro, beats arrival (frames 0-180) and everything-at-once (180-420) of v3/beats-v2.json, home world, 420 frames at 30 fps (v3/timeline.json wins over shots.json's older 0-330...
+- **renderer**: remotion
+- **frames**: first,key,last,strip
+- **constraints**: 1280x720 at 30 fps, swangle here; one locked camera; one emitter; drawn on twos, light on ones.
+
+Shot: s01-arrival-overwhelm
+Actors: every actor with keys in the chart
+Production root: media/showcase
+Timing chart:
+**Summary**: Timing chart for s01 (frames 0-420 from `v3/timeline.json`: arrival 0-180, everything-at-once 180-420, no crossing) written as `v3/charts/s01-arrival-overwhelm.json` (`python3 scripts/s01_chart.py --write`; parsed and sampled by `src/library/animation/chart.ts`), plus `v3/charts/s01-arrival-overwhelm.md`. 8 human keys with 33 authored breakdowns, 13 scalar actors, 50 pieces staggered 3-5 frames, camera numbers from the layout contract.
+
+## Key List (human, the brief for the key sheet)
+- K1 `rest-on-lid` f0 (hold 26): upright behind the box, weight even, forearms resting on the lid's near edge, chin down, eyes on the lid. Line of action: a gentle forward arc from the hips over the box: head, shoulders and forearms on one soft C. Changes: the poster pose.
+- K2 `grip` f42 (hold 16): shoulders drop and round, elbows bend, fingertips curl under the lid's near edge: the gather before the lift. Line of action: the C deepens: spine curves toward the box, elbows out. Changes: anticipation: shoulders down 8 %, elbows bent, hands under the edge.
+- K3 `lift` f66 (hold 26): arms rise to chest height pulling the lid, torso straightens and leans a little back, chin lifts. Line of action: a rising diagonal from the planted feet up through the lifted forearms. Changes: the lid is in the hands: arms up, spine from a C to a straight lean.
+- K4 `awe` f104 (hold 26): one step back, arms drop open and low at the sides, palms out, head tipped back to follow the rising bubble. Line of action: an open S: heels, hips back, ribs forward, chin up. Changes: release: arms fall open, weight shifts back.
+- K5 `brace` f154 (hold 24): hands drawn in to the chest, shoulders up, weight leaning back on the heels, eyes fixed up on the swelling bubble. Line of action: a backward lean from heels to crown, hands as the fulcrum. Changes: wonder tightens into held breath as the bubble swells.
+- K6 `joy-a` f190 (hold 22): arms flung up and out, back arched, hips pushed to the left, face up: the burst after the pop. Line of action: one big diagonal from the right foot up through the left hand. Changes: the pop lands: everything in the body opens.
+- K7 `joy-b` f228 (hold 20): the same joy turned the other way: hips to the right, arms swapped, the hair swoop swinging across (the turn). Line of action: the diagonal reverses, an S-curve through the torso. Changes: the turn: weight crosses over, arms trade sides.
+- K8 `shrink` f272 (hold 148): knees bent, back rounded, chin to chest, forearms crossed over the head: small and covering. Line of action: a closing C from the crown down to the bent knees. Changes: joy is overrun: the figure folds in on itself and holds (the field floods).
+
+Other actors (scalar tracks on twos, light on ones): `box.lid` lid angle, 0 closed .. 1 about 105 degrees; hinge on the back edge; `bubble.size` bubble radius in units of 140 px; 0 = not there; `gadget.rise` position along its path, 0 inside the box .. 1 above the box at the pop .. 2 hovering high with the dial at its end-of-move position; `gadget.glow` dial opening 0..1 (the accent dot's radius); `codex.lean` lean toward the box, 0 upright .. 1 full lean; `codex.catch` arms up to catch, 0..1; `clawd.lean` lean toward the box, 0..1; `clawd.push` pushed by a stalk, 0 none .. 1 pushed right and tipped; `stalk0.grow` the first stalk's curl, 0 not there .. 1 fully unrolled; rooted at the gadget's funnel; `light.seam` box seam light, 0..1 (the one emitter before the pop); `light.dial` dial emitter, 0..1 (the one emitter after the pop); `light.flood` Turrell blue radiance flooding the field, 0..1; `light.grain` grain amount, 0..1.
+
+## Charts (per key pair)
+- rest-on-lid f0 > grip f42: hold 26 frames (run f0-25), 4 breakdowns on 4-frame drawings at f26, 30, 34, 38 favouring 0.104, 0.352, 0.648, 0.896 (slow in, slow out, never 1/2), lands on f42.
+- grip f42 > lift f66: hold 16 frames (run f42-57), 4 breakdowns on 2-frame drawings at f58, 60, 62, 64 favouring 0.104, 0.352, 0.648, 0.896 (slow in, slow out, never 1/2), lands on f66.
+- lift f66 > awe f104: hold 26 frames (run f66-91), 3 breakdowns on 4-frame drawings at f92, 96, 100 favouring 0.156, 0.58, 0.844 (slow in, slow out, never 1/2), lands on f104.
+- awe f104 > brace f154: hold 26 frames (run f104-129), 6 breakdowns on 4-frame drawings at f130, 134, 138, 142, 146, 150 favouring 0.055, 0.198, 0.394, 0.606, 0.802, 0.945 (slow in, slow out, never 1/2), lands on f154.
+- brace f154 > joy-a f190: hold 24 frames (run f154-177), 6 breakdowns on 2-frame drawings at f178, 180, 182, 184, 186, 188 favouring 0.055, 0.198, 0.394, 0.606, 0.802, 0.945 (slow in, slow out, never 1/2), lands on f190.
+- joy-a f190 > joy-b f228: hold 22 frames (run f190-211), 4 breakdowns on 4-frame drawings at f212, 216, 220, 224 favouring 0.104, 0.352, 0.648, 0.896 (slow in, slow out, never 1/2), lands on f228.
+- joy-b f228 > shrink f272: hold 20 frames (run f228-247), 6 breakdowns on 4-frame drawings at f248, 252, 256, 260, 264, 268 favouring 0.055, 0.198, 0.394, 0.606, 0.802, 0.945 (slow in, slow out, never 1/2), lands on f272.
+- shrink f272: declared long hold of 148 frames to the end of the shot (no breakdown; the field floods, the figure stays folded). Anticipation is the gather (K1>K2), overshoot is the box lid's 1.07 at 90 and the bubble's stretch to 1.55 at 178, settle is 12 frames (lid 90-102). Smear: none (see concerns).
+
+## Staggers and Lag
+- codex leans at f98, clawd at f102 (+4): related elements; the box lid cracks at 44 (2 after the grip key), opens 66+8 (lift key + 8); the bubble starts at 88, the gadget at 90 (+2 with it); pieces launch from 186 with gaps 3, 4, 5 cycling (50 pieces, last start 382) in a sweep around the gadget; the Codex piece lands at 234, the Clawd stalk at 262 (pinned).
+- light lags drawing 2-4 frames: pop at 180 (drawn), seam off 178 (the bubble covers the mouth), dial on 182 (+2, handoff gap 4), flood from 190 (+4 after the dial wakes at 186... the chart's flood key), grain from 190; recovery 12 frames, no snapping.
+
+## Boil and Pulses
+3 variants, 4 changes per second, seed 11 (`boil` in motion.ts), on twos; seam pulse at 44 (14 frames), the pop at 180 (12 frames: burst ring in the accent).
+
+## Camera
+Locked (640, 360, x1) frames 0-150; widen 150-210 on ones to (634, -144, x0.425), held to 420; led by the bubble (150-180) then stalk0's curl from the funnel up and right (180-210). Numbers: `cameraPose` in the layout contract, read by `cameraFromLayout`.
+
+## Library Changes Needed
+Done in this run: `chart.ts` (parseChart, scalarAt, pathAt, pieceAt), `cameraPose` in `cameraFromLayout`, a hinge-on-the-back-edge lid for `Box` (the old hinge swings the lid across the front plane: `v3/studies/beat1-12-f110.png`), `lean` for `Codex` and `Clawd`, a `Bubble` prop, shot palette `s01` in tokens, piece props over the existing stalk, arch, ring and kit-block geometry. Missing: a smear primitive for the figure; a stroke draw-on track for a stalk's growth (done with a dash offset, hand-coded in the scene); a light flood that does not reseed its grain per frame (Radiance.tsx does, which breaks C27 inside the figure crop).
+
+## Artifact Handoff
+`v3/charts/s01-arrival-overwhelm.json`, `v3/charts/s01-arrival-overwhelm.md`, generator `scripts/s01_chart.py`. The `beats.json` merge the prompt asks for is not done: `beats.json` is the retired 40 s ledger and `timeline.json` is the pacing source (deviation).
+
+## Concerns
+1. Hold band: the human's holds are 14-26 frames and the last key is a declared 148-frame hold; a living hold (breath, tremble) would need extra drawn keys because the rig must not fake a pose (probe-holds C28 forces this choice).
+2. The `showcase_shot` default constraint text still says 'one locked camera' and the motion step's `Previous handoff` is only the shot id: both contradict D64 and the layout (the camera widens; the layout's result never reaches this step).
+3. `turns with joy` is two joy keys with the hips and arms swapped; the single-texture mesh cannot turn in depth.
+
+Read `v3/creative-spec.md` (D65–D72, D74, D77, Craft baseline, clean-up standard), `v3/rubric.md` (C20–C25), `v3/layouts/<shot>.json` (the camera contract: the frame at the start and end of the move, emitter positions, the lead actor's on-screen height; a missing or unapproved layout is BLOCKED, run showcase_layout_sheet) and each actor's `assets/<actor>/model.json` (contour standard in `contour.ratio`, D76); an actor with no approved model sheet is BLOCKED (run showcase_model_sheet). Companions are drawn from their official plates under `assets/codex` and `assets/clawd`, never from the layout sheet's loose versions; a garment transition (D69) is drawn as five flat roles, never as cloth. For each actor generate ONE key sheet through the `imagegen` tool (`tool:imagegen`): `references` are the absolute paths of the actor's model sheet, the approved pick and the shot's card files; the `prompt` lists every key from the chart in order (K1…Kn: pose in words, line of action, what changes) and asks for TWO rows on one plate: ROW 1 every key as a full figure at the model sheet's scale and baseline, numbered K1…Kn left to right, pure black field, five flat colors with identity pigments by hex, pale contour at the model sheet's line (D76); ROW 2 the same keys as frame thumbnails at the layout's camera (the figure at the layout's on-screen height, the emitter where the layout puts it at that frame, the D74 hue pair as the only radiance, the leading line of the move visible), numbered F1…Fn under their keys; `out` is `out/<shot>-keys-<actor>-<NN>.png`. Row 1 is the plate that is cut; row 2 is the staging proof the render study is compared against (C25) and never cut. When the shot visits a world with its own style contract (`v3/worlds/<world>.json`, if any), row 2 is drawn in that world's line and fill language and names it; row 1 stays in the home style so the plate cuts cleanly. Then, per key: overlay it on the model sheet and report head count and limb ratios (C20, reject above 5 %); fill its silhouette black and judge whether the pose reads (C21); measure contour weight, taper and closure (C22). A rejected key is regenerated once on its own plate with the failing property named in the prompt; a second failure stays REJECTED on the sheet for the owner. Cut every accepted key into `assets/<actor>/keys/<shot>/K<n>.png` with `scripts/cutout.py --field black` (role quantization, soft alpha and contour per D71) and record sha256. If the skeleton toolchain of `v3/studies/tech-rig-01.md` is installed, run it on each key plate and save `K<n>.skeleton.yaml`; otherwise mark joints UNPROVEN, never estimate them by hand. No key is ever tweened by generation (D68). Measure row 2 against the layout: the figure's height at the start-of-move key within 5 points of the layout's, the emitter within 3 % of frame width (C25). Lay the sheet (both rows), overlays and silhouettes into the `KeySheet` composition and render one still.
+
+Return: Keys (actor, id, frame, line of action, plate path, sha256, joints registered yes/no); Frame Keys (F1…Fn: figure height vs layout, emitter vs layout, world); Model-sheet Overlay (per key); Silhouettes; Clean-up Measured; Sheet Path; Generation Receipts; Rejected Keys; Concerns.
+
+### Chain History (prior step outputs)
+
+#### Step 1: Showcase Cinematography Sheet
+
+**Summary**: Cinematography sheet for s01 generated through the `imagegen` script (`codex exec -i`, five references), the first sheet rejected and regenerated once, measured, the contract `v3/layouts/s01-arrival-overwhelm.json` written with the camera as numbers (centre, zoom, span) that `cameraFromLayout` now reads, and the `LayoutSheetS01` still rendered.
+
+## Camera
+- start (f0 = f150): locked medium-wide, identity pose (640, 360, zoom 1): the human upright behind a hip-high box, hands on its lid, Codex small left, Clawd small right, a hairline seam of blue light, the rest black.
+- end (f210): full field, pose (634, -144, zoom 0.425): trio small at the bottom centre, gadget towering above with its dial as the emitter, pieces filling the frame.
+- move: widen, pull back and up, no cut, frames 150-210 (`cameraPose.span`), on ones; led by the bubble swelling out of the box (f150-180) then the first stalk's curl from the gadget funnel projecting up and right (f180-210) (panel 3 draws the wedge opening and the leading line to a stalk tip at the upper right).
+
+## Emitter
+seam (0.520, 0.777) of panel 1 -> dial (0.532, 0.512) of panel 2, measured by `scripts/s01_layout_measure.py` (brightest blue pixels right of Codex; centroid of the largest yellow disc, 639 px). One emitter per frame holds (C6): the seam in panel 1, the dial in panel 2.
+
+## Figure Heights
+Panel 1 face 47 px, panel 2 face 20 px of a 472 px panel, times the model sheet's figure-over-face ratio 7.84: 78.1 % -> 33.2 %. The ratio 0.426 = 33.2/78.1 is what the widen's zoom is (0.425, `cameraFromLayout` derives the same from these two numbers). The absolute 78 % over-reads (the sheet draws a bent figure with a head larger than the model's 1/8; stood upright at that face size the human's feet would sit below the sheet's own floor line), so the render stands the human at 48.6 % of frame height (350 px, feet behind the box) and C25 is measured against that choice, recorded under `staging` in the contract. heads 8.0 (model.json).
+
+## Hue
+Turrell blue #0a51fb radiance, accent #fad204 (the yellow dial ring and the scarce beads): the D74 pair.
+
+## Cards Used
+eagle-lyio3is7tokub (poster framing), eagle-mf83t1h77o7bm (scale, converging lines for the widen), eagle-m92nkizilu1cb (new, density of the full field; filed on board section 8 with eagle:// provenance, the library holds a 300x168 copy only), hue card eagle-mram46lymigko (Aten Reign blue), object cards seuss-no-one-youer, seuss-freebird, seuss-green-cat-lights, companions codex-official and clawd-official (cropped to PNG plates).
+
+## Sheet Path
+`out/s01-layout-02.png` (sha256 66445f7f...), copied to `assets/layouts/s01-layout-02.png` and `public/assets/layouts/`; still `out/s01-layout-sheet.png` from `LayoutSheetS01`.
+
+## layout.json Path
+`v3/layouts/s01-arrival-overwhelm.json` (provisional: true).
+
+## Generation Receipt
+`evidence/s01/imagegen-layout-s01-02.json` (request `layout-req-02.json`, references `evidence/s01/refs/`), session `/home/minipuft/.codex/generated_images/01a13c7f-4cf5-72a2-8a5c-5d75c3620c0c/`.
+
+## Rejected Generations
+`out/s01-layout-01.png` (sha256 978f97ea...), receipt `evidence/s01/imagegen-layout-s01-01.json`: the human at about 95 % of the panel height in panel 1 against the 50 % asked; regenerated once with that property named. The second sheet is still not at 50 % by the face method (78 %), recorded as above, not regenerated a third time.
+
+## Concerns
+1. `layout_measure.py` cannot measure this sheet: panel 1 merges the human with the box (84.5 %), panel 2 picks a tower (13.6 %), its emitter reads blue and cyan area not the dial (x 0.337 in panel 1 is Codex's glyph). `s01_layout_measure.py` is the stand-in; the prompt's "figure in percent of panel height" needs a defined method for a hidden-legs figure.
+2. The gadget is drawn ~25 times the human's volume in panel 2: it must grow with the bubble (rises on its bubble, then towers); existing `Gadget` scales as a vector.
+3. Companions are drawn from the official plates only for colour and silhouette; there is no companion model sheet (D63), so no companion key can be checked against one.
+
+### Result Contract
+
+Return your complete work product as plain text — it becomes the chain’s step output verbatim.
+
+You are the worker for this one step. Do not call `prompt_engine` or any other chain tool, and do not put chain metadata or tool calls in your reply — the orchestrating agent owns the run and resumes it with your text.
+
+End your reply with this exact block — `node` is how the server matches your result back to this step:
+
+```
+HANDOFF RESULT
+node: keys
+```
+
+═════════════════════════════════════════════════════════════════
+END EXECUTION BRIEF
+═════════════════════════════════════════════════════════════════
+
+⚡ HANDOFF: Execute Step 3 ("Showcase Key Sheet") via sub-agent for context isolation.
+
+═════════════════════════════════════════════════════════════════
+HANDOFF INSTRUCTIONS
+═════════════════════════════════════════════════════════════════
+
+→ Handoff: Use your client's sub-agent/handoff capability
+→ Prompt: Pass the EXECUTION BRIEF above (everything between the BRIEF delimiters) as the agent's prompt
+→ Result: Include the sub-agent's result in user_response to continue the chain
+
+⚠️ CONSTRAINT: Use handed-off execution when available; do not answer inline if handoff exists.
+⚠️ RESULT CONTRACT: Include handed-off output in user_response and then resume the chain.
+
+---
+
+### Required Response Format
+
+**Summary**: What was implemented (2-3 sentences)
+
+Chain: chain-showcase_shot#1
+→ Progress 3/6
+Next: Handoff via your client sub-agent mechanism (see instructions above), then: chain_id="chain-showcase_shot#1", user_response="<sub-agent result>"

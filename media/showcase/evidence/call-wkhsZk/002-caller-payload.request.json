@@ -1,0 +1,76 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "create",
+    "id": "showcase_layout_sheet",
+    "name": "Showcase Cinematography Sheet",
+    "category": "development",
+    "description": "Once per shot before its keys (D77): generate the cinematography sheet through the imagegen tool (frame at the start and end of the move, top-down staging plan with the camera path and leading line, emitter, D74 hue pair, figure on-screen height in heads) from the actors' model sheets and the owner's Composition cards, measure it, and write v3/layouts/<shot>.json as the camera contract the key sheet is drawn at and the render study is measured against (C25).",
+    "arguments": [
+      {
+        "name": "shot",
+        "type": "string",
+        "required": true,
+        "description": "Shot id from v3/shots.json."
+      },
+      {
+        "name": "context",
+        "type": "string",
+        "required": false,
+        "description": "Notes, card ids or the owner's camera wishes for this shot; default reads the shot row and board §8."
+      },
+      {
+        "name": "output_root",
+        "type": "string",
+        "required": false,
+        "defaultValue": "media/showcase",
+        "description": "Caller-owned production artifact directory."
+      }
+    ],
+    "user_message_template": "Shot: {{shot}}\nProduction root: {{output_root}}\nNotes and cards:\n{{context | default(\"Read the shot row in v3/shots.json (camera, move, led_by, emitter, hue, cards) and the board's §8 camera cards.\")}}\n\nRead `v3/creative-spec.md` (D64 moves along leading lines, D74 hue pair per shot, D77 cinematography sheet, D72 craft baseline), `v3/rubric.md` (C5, C6, C24, C25) and the shot row in `v3/shots.json`. Every actor in the shot with keys needs an approved `assets/<actor>/model.json`; a missing one is BLOCKED (run showcase_model_sheet). Choose two to four Composition cards for this shot through the `/inspiration` skill (`eagle_board.py find`, filed with folder, why and source; new cards go on board §8 with eagle:// provenance). Generate ONE cinematography sheet through the `imagegen` tool (`tool:imagegen`), never by hand: `references` are the absolute paths of the actors' model sheets, the chosen camera cards, the shot's object cards and one hue card; the `prompt` names which reference supplies which property and asks for four numbered panels on a pure black field, flat shapes, pale contour, stipple only: PANEL 1 the frame at the START of the shot's camera move (the camera row of the shot, the figure at its on-screen height in percent of frame height), PANEL 2 the frame at the END of the move, PANEL 3 a top-down STAGING PLAN in thin pale lines (actors and objects as marks, the camera as a wedge with the move's arrow, the leading line the move follows drawn through the objects that lead it, suns at the emitter positions), PANEL 4 a SCALE STRIP (the lead actor at panel-1 and panel-2 size on one baseline beside a head-unit ruler, plus the radiance and accent swatches of the D74 pair). `out` is `out/<shot>-layout-<NN>.png`. Measure on the sheet: the lead actor's height in panels 1 and 2 as percent of panel height and in heads (against model.json), the emitter position in each panel as a fraction of panel width and height, the panel-3 camera arrow direction against the shot's move type; reject and regenerate once if the figure's panel-1 height is off the camera row's size by more than 10 points or the hue is not the D74 pair. Write `v3/layouts/<shot>.json` (camera start and end in words, move and led_by, hue, emitter start and end positions, figure heights, heads, panels, cards, sheet sha256, receipt, provisional: true), copy the sheet to `assets/layouts/<shot>-layout-<NN>.png` and `public/assets/layouts/`, lay it into the `LayoutSheet` composition and render one still. The key sheet of this shot is drawn at this camera; the render study measures against this file (C25). The owner approves the sheet from the still.\n\nReturn: Camera (start, end, move, led by); Emitter; Figure Heights (panel 1, panel 2, heads); Hue; Cards Used (eagle ids); Sheet Path; layout.json Path; Generation Receipt; Rejected Generations; Concerns.",
+    "tools": [
+      {
+        "id": "imagegen",
+        "name": "Image Generation (codex exec)",
+        "description": "Draw one asset with Codex's image tool from board images as references (D65/D66); copies the result to `out` unchanged and returns prompt, referenced_image_paths, source path and sha256; refuses on a missing file.",
+        "runtime": "python",
+        "script": "#!/usr/bin/env python3\n\"\"\"imagegen: draw one asset with Codex's image tool from board images (D65/D66).\nstdin JSON: {prompt, references: [abs paths], out: abs png path, workdir?}\nRuns `codex exec --skip-git-repo-check -C <workdir> -i ref... -- \"<prompt>\"` (the `--` is required or the prompt is read from stdin),\nparses the generated path Codex prints, copies it to `out` unchanged, and returns {valid, path, sha256, bytes, referenced_image_paths}.\nRefuses, never fabricates: a missing file or a missing path in the output is valid:false with the reason.\"\"\"\nimport hashlib, json, os, re, shutil, subprocess, sys, tempfile\ndata = json.load(sys.stdin)\nprompt = data.get(\"prompt\", \"\").strip(); refs = data.get(\"references\", []); out = data.get(\"out\")\nif not prompt or not out: print(json.dumps({\"valid\": False, \"errors\": [\"prompt and out are required\"]})); sys.exit(0)\nmissing = [r for r in refs if not os.path.isfile(r)]\nif missing: print(json.dumps({\"valid\": False, \"errors\": [f\"reference missing: {m}\" for m in missing]})); sys.exit(0)\nif not shutil.which(\"codex\"): print(json.dumps({\"valid\": False, \"errors\": [\"codex CLI not on PATH\"]})); sys.exit(0)\nworkdir = data.get(\"workdir\") or tempfile.mkdtemp(prefix=\"imagegen-\")\nask = (\"Use your image generation tool exactly once, with every attached image as a reference, for this request:\\n\" + prompt +\n       \"\\nThen print only: the absolute path of the generated file on one line, and on the next lines a JSON object with the exact tool arguments you used (prompt, referenced_image_paths, transparent_background).\")\ncmd = [\"codex\", \"exec\", \"--skip-git-repo-check\", \"-C\", workdir]\nfor r in refs: cmd += [\"-i\", r]\ncmd += [\"--\", ask]\ntry:\n    run = subprocess.run(cmd, capture_output=True, text=True, timeout=int(data.get(\"timeout\", 280)))\nexcept subprocess.TimeoutExpired:\n    print(json.dumps({\"valid\": False, \"errors\": [\"codex exec timed out\"]})); sys.exit(0)\ntext = run.stdout + \"\\n\" + run.stderr\npaths = re.findall(r\"(/[^\\s'\\\"`]+\\.png)\", text)\npaths = [p for p in paths if os.path.isfile(p) and \"generated_images\" in p]\nif not paths: print(json.dumps({\"valid\": False, \"errors\": [\"no generated file path found in codex output\", text[-600:]]})); sys.exit(0)\nsrc = paths[-1]\nargs = None\nm = re.search(r\"\\{[\\s\\S]*\\\"referenced_image_paths\\\"[\\s\\S]*?\\}\\s*$\", text.strip()) or re.search(r\"\\{[\\s\\S]*\\\"referenced_image_paths\\\"[\\s\\S]*\\}\", text)\nif m:\n    try: args = json.loads(m.group(0))\n    except Exception: args = {\"raw\": m.group(0)[:1200]}\nos.makedirs(os.path.dirname(out), exist_ok=True)\nshutil.copyfile(src, out)\nraw = open(out, \"rb\").read()\nprint(json.dumps({\"valid\": True, \"path\": out, \"source\": src, \"sha256\": hashlib.sha256(raw).hexdigest(), \"bytes\": len(raw), \"referenced_image_paths\": refs, \"tool_arguments\": args, \"summary\": {\"references\": len(refs)}}))\n",
+        "timeout": 295000,
+        "trigger": "explicit",
+        "confirm": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "description": "The generation request; names which reference supplies which property."
+            },
+            "references": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Absolute paths of board images (v3/references/*) attached as references."
+            },
+            "out": {
+              "type": "string",
+              "description": "Absolute output PNG path under media/showcase/out/."
+            },
+            "workdir": {
+              "type": "string"
+            },
+            "timeout": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "prompt",
+            "references",
+            "out"
+          ]
+        }
+      }
+    ]
+  }
+}

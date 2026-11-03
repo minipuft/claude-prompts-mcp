@@ -1,0 +1,30 @@
+**Summary**: Shot s01 is rendered through the pose chart on the re-keyed sheet: `out/s01-02.mp4` (420 frames, 30 fps, 1280x720), the figure-only sequence, the joints dump and the gate's one-line probe. The first run of the gate on the new keys FAILED 16 of 17 inbetween checks (the breakdown arcs and lags had been authored for the run 1 key geometry); the pose sheet was re-authored and the gate now passes 3 of 3.
+
+## Frames Rendered (path, sha256 prefix)
+`out/s01-02.mp4` (3.3 MB); strip `out/s01-02-strip.png` (12 frames, 0 42 66 104 130 154 178 190 228 272 330 419; also `out/s01-arrival-overwhelm-strip.png`). Stills `out/s01-arrival-overwhelm-f<NNN>.png`: 000 4fd7a328a17e, 042 57a3ca6e34a2, 066 e9b1888a95e1, 104 e453b6d97125, 154 ba8652b45240, 190 1d3b8b86d345, 228 10943ec15dd7, 272 9a91dc42fcbf, 330 36b59964fa7b, 419 6d308d7dfe2e. Figure-only: `out/s01-arrival-overwhelm-figure-seq/` (420 PNG), `out/s01-arrival-overwhelm-joints.json`, `out/s01-arrival-overwhelm-xsheet.json`. Before the re-key: `out/s01-02-pose-chart-run1-keys.mp4`, `out/s01-arrival-overwhelm-joints-run1-keys.json`. Arcs before and after: `out/s01-02-arcs.png`.
+
+## Probes
+- Gate command `python3 scripts/animation/probe-all.py --shots v3/poses --frames-root out --joints-root out` (exit 0, `out/s01-02-probe-all-shots.txt`): twos-ones pass, hold-band pass, inbetweens pass; `pass: probe-all --shots - 3 of 3 probe runs passed, 0 shot(s) skipped`. Controls tripped first (zigzag refused on a, double-back on bc, hairpin on c, linear lerp refused on arcs/spacing/overlap-and-moving-holds, snapped secondary refused on overlap).
+- Inbetween lines (`out/s01-02-inbetweens.txt`): `s01-arrival-overwhelm · pass · 7 moves, 57 items measured, 0 failed`. Lead-wrist arcs: max deviation 25-107 px, 0 sign changes, 1 declared back-step (the anticipation on awe -> brace), 0 undeclared. Before this row's fix (first gate run on the new keys): 16 of 17 checks failed (arcs 8, overlap 6, spacing 1, pixel ease 1; `out/s01-02-probe-all-shots.txt` was overwritten by the passing run).
+- Determinism (C12, same pipeline): frame 0 sha 4fd7a328a17e twice, frame 154 ba8652b45240 twice, identical.
+- Twos and ones (C16, C27, full frames at half scale, `out/s01-02-frame-change.json`): in the locked frames 1-149 the figure crop changes on 0.016 % of pixels per odd frame (max 0.30 %) against 2.10 % per even frame (max 7.3 %); frames 210-419, whole frame, odd 0.000 % against even 5.08 %. Light (C18): whole-frame change 176-190 shows the pop at 180 (10.1 %), the lamp 182 (11.5 %), the flood 183-185 (10.9, 9.5, 7.6 %), decaying to 0.9 % by 190.
+- Model-sheet overlay (C20): from the key step (heights -3 to +12 %, limbs over 105 % on K3, K4, K6, K7, K8), not re-measured on frames.
+- Identity samples (C1): Clawd coral at (231, 106, 75) on frames 0 and 154 and (232, 108, 78) on 330 against #e8694a; Codex blue (80, 126, 241), (80, 125, 242), (75, 132, 246) against #4f7df2.
+- Identity pass (D70): `out/s01-02-identity-pass.png`, the head on frame 0 at 4x of a face about 35 px wide: green skin, hair swoop and poncho roles read. From frame 272 the folded human shows only raised hands above the box; the face is not visible on 330 and 419 (viewed).
+
+## What changed to get the gate green (pose sheet, `v3/poses/s01-arrival-overwhelm.json`)
+- Settle favour 0.98 on every move (0.95 left the lead wrist outside the 10 % arrival band, which hid the secondaries' lag); breakdown arc offsets re-authored to the new chords (root arcs 30-38 px on grip -> lift, lift -> awe, awe -> brace, brace -> joy-a); rest-on-lid -> grip favours 0.25 / 0.65 / 0.75 / 0.98.
+- `scripts/animation/author-breakdowns.mjs` (new): for awe -> brace, brace -> joy-a and joy-b -> shrink the angle-space blend swings a wrist round a bone longer than the move (a zigzag or back-step on the lead wrist), so those breakdowns carry authored `joints` (the straight world-space blend plus one arc per joint, `authored: "world blend + arc"`). Numbers: 30/60, 55/55, 25/90 px (root/wrist).
+- brace -> joy-a lost its overshoot (the declared shape still holds: 3-6 drawings, one settle): with it the lagging right hand read "too early". poncho stretch 0.6 -> 1.0, handR stretch 0.5.
+- The gate was not changed. `probe-poses.py --joints solved` still passes (`out/s01-02-probe-poses-solved.txt`).
+
+## Receipt Skeleton Path
+`out/s01-arrival-overwhelm-probes.json` (frames, determinism, gate line, keys table; Changed, Grades, Controls, Owner, Next left empty for the study).
+
+## Renderer Used
+Remotion 4.0.530 (`ShotS01`, `ShotS01Figure`), h264 crf 18.
+
+## Concerns
+- The human is small and her rig deformations are rough on K2, K3, K5, K6, K7, K8 (`out/s01-02-pose-sheet.png`): the single mesh cannot hold crossed arms or hands to the chest (gap 9 of run 1), and the K8 fold shows only hands.
+- Straight world-space blends on three moves shorten limbs mid-move; they were not viewed in motion (the mp4 was not watched).
+- The study's strip frames 42-190 were viewed; the other frames were not opened one by one.

@@ -1,0 +1,675 @@
+{
+  "revision": "edit-sheet · 2026-10-19 · animatic animatic-03 · D90",
+  "fps": 30,
+  "durationInFrames": 1950,
+  "seconds": 65,
+  "animatic": "animatic-03",
+  "rulings": [
+    "D88 register",
+    "D89 whose film",
+    "D90 this sheet",
+    "D91 light leads composition",
+    "D92 timing references"
+  ],
+  "beats": [
+    {
+      "id": "arrival",
+      "index": 0,
+      "world": "home",
+      "seconds": 6,
+      "start": 0,
+      "end": 180,
+      "frames": 180,
+      "guide": "",
+      "register": "warm, inviting",
+      "lightPushes": "curiosity: the seam's tiny glow asks to be opened",
+      "camera": "medium-wide on the trio and the box; locked (frame 0 is the poster, D53)",
+      "emitter": {
+        "anchor": "box seam",
+        "intensity": 0.824,
+        "colour": "#eff3ff"
+      },
+      "pair": {
+        "radiance": "#0a51fb",
+        "accent": "#fad204"
+      },
+      "radiance": "settled",
+      "actions": [
+        "human: opens the box lid",
+        "box: lid lifts; the gadget rises on its bubble",
+        "codex: leans in",
+        "clawd: leans in"
+      ],
+      "transitionIn": "title held",
+      "transitionOut": "the bubble swells (leading line up) into beat 2, no cut",
+      "asks": [],
+      "references": [
+        "board §1 world",
+        "seuss-no-one-youer"
+      ],
+      "keys": [
+        {
+          "frame": 0,
+          "key": "rest-on-lid",
+          "hold": 26
+        },
+        {
+          "frame": 42,
+          "key": "grip",
+          "hold": 16
+        },
+        {
+          "frame": 66,
+          "key": "lift",
+          "hold": 26
+        },
+        {
+          "frame": 104,
+          "key": "awe",
+          "hold": 26
+        },
+        {
+          "frame": 154,
+          "key": "brace",
+          "hold": 24
+        }
+      ],
+      "keyCount": 5,
+      "breakdowns": 17,
+      "holdFrames": 118,
+      "holdShare": 66,
+      "longestHold": 26,
+      "flags": [],
+      "frameAt": {
+        "first": "animatic-seq/element-0000.png",
+        "mid": "animatic-seq/element-0090.png",
+        "last": "animatic-seq/element-0179.png"
+      },
+      "midFrame": 90
+    },
+    {
+      "id": "everything-at-once",
+      "index": 1,
+      "world": "home",
+      "seconds": 8,
+      "start": 180,
+      "end": 420,
+      "frames": 240,
+      "guide": "",
+      "register": "playful tipping to overwhelm",
+      "lightPushes": "delight then overwhelm: the flood is fun before it is too much",
+      "camera": "widen to the full field, led by the first stalk's curl",
+      "emitter": {
+        "anchor": "gadget dial",
+        "intensity": 0.9,
+        "colour": "#d1dffe"
+      },
+      "pair": {
+        "radiance": "#0a51fb",
+        "accent": "#fad204"
+      },
+      "radiance": "floods, Turrell blue (D74 s01)",
+      "actions": [
+        "gadget: projects every piece, structure and route around the trio",
+        "human: turns with joy, then shrinks",
+        "codex: catches a piece",
+        "clawd: is pushed by a stalk"
+      ],
+      "transitionIn": "continuous from beat 1",
+      "transitionOut": "pieces keep arriving as the human reaches, into beat 3",
+      "asks": [],
+      "references": [
+        "GIANT CRUSH gold figure (board §7)",
+        "Aten Reign blue"
+      ],
+      "keys": [
+        {
+          "frame": 190,
+          "key": "joy-a",
+          "hold": 22
+        },
+        {
+          "frame": 228,
+          "key": "joy-b",
+          "hold": 20
+        },
+        {
+          "frame": 272,
+          "key": "shrink",
+          "hold": 148
+        }
+      ],
+      "keyCount": 3,
+      "breakdowns": 11,
+      "holdFrames": 200,
+      "holdShare": 83,
+      "longestHold": 148,
+      "flags": [],
+      "frameAt": {
+        "first": "animatic-seq/element-0180.png",
+        "mid": "animatic-seq/element-0300.png",
+        "last": "animatic-seq/element-0419.png"
+      },
+      "midFrame": 300
+    },
+    {
+      "id": "cant-build",
+      "index": 2,
+      "world": "home",
+      "seconds": 7,
+      "start": 420,
+      "end": 630,
+      "frames": 210,
+      "guide": "",
+      "register": "gentle gag",
+      "lightPushes": "frustration kept kind: the light is lost on the floor, the join will not take",
+      "camera": "medium on the human, panning right (s02 layout, approved pending)",
+      "emitter": {
+        "anchor": "gadget dial, lost on the floor (the join)",
+        "intensity": 0.9,
+        "colour": "#d5e0ee"
+      },
+      "pair": {
+        "radiance": "#17263a",
+        "accent": "#457ca4"
+      },
+      "radiance": "Styx steel (D74 s02), noisy",
+      "actions": [
+        "human: reaches for the stalk and misses; grabs pieces; a stack collapses",
+        "codex: winces, small at frame left",
+        "clawd: winces, then goes to fetch the frame"
+      ],
+      "transitionIn": "continuous",
+      "transitionOut": "the stalk slides back toward Clawd; the frame's left bar rises (leading line) into beat 4",
+      "asks": [],
+      "references": [
+        "s02 cinematography sheet",
+        "corner of a cold room (board §8)"
+      ],
+      "keys": [
+        {
+          "frame": 420,
+          "key": "rest",
+          "hold": 24
+        },
+        {
+          "frame": 444,
+          "key": "raise",
+          "hold": null
+        },
+        {
+          "frame": 470,
+          "key": "settle",
+          "hold": null
+        }
+      ],
+      "keyCount": 3,
+      "breakdowns": 0,
+      "holdFrames": 210,
+      "holdShare": 100,
+      "longestHold": 24,
+      "flags": [
+        "held over 90 % of the beat: nothing moves",
+        "no breakdowns between keys: straight inbetweens"
+      ],
+      "frameAt": {
+        "first": "animatic-seq/element-0420.png",
+        "mid": "animatic-seq/element-0525.png",
+        "last": "animatic-seq/element-0629.png"
+      },
+      "midFrame": 525
+    },
+    {
+      "id": "the-frame",
+      "index": 3,
+      "world": "home",
+      "seconds": 10,
+      "start": 630,
+      "end": 930,
+      "frames": 300,
+      "guide": "",
+      "register": "reverent",
+      "lightPushes": "wonder: the field narrows to the frame and the frame is lit from inside",
+      "camera": "the raised frame at frame right; push toward its interior",
+      "emitter": {
+        "anchor": "frame interior",
+        "intensity": 0.9,
+        "colour": "#d5e0ee"
+      },
+      "pair": {
+        "radiance": "#17263a",
+        "accent": "#457ca4"
+      },
+      "radiance": "narrows to the frame",
+      "actions": [
+        "clawd: holds the frame up",
+        "human: turns to the frame; the cloak drops (D69); the Swoop is revealed hands first; looks through",
+        "codex: joins Clawd at the frame",
+        "frame: interior lights: the crayon world visible inside, refracted (D45)"
+      ],
+      "transitionIn": "the frame rising",
+      "transitionOut": "the human steps through alone; the guides follow (plot default 3); the push crosses the frame edge into beat 5, no cut",
+      "asks": [],
+      "references": [
+        "figure in a lit doorway (board §8)",
+        "seuss-nested-frames"
+      ],
+      "keys": [],
+      "keyCount": 0,
+      "breakdowns": 0,
+      "holdFrames": 265,
+      "holdShare": 88,
+      "longestHold": null,
+      "flags": [
+        "no keys: the figure is not posed in this beat"
+      ],
+      "frameAt": {
+        "first": "animatic-seq/element-0630.png",
+        "mid": "animatic-seq/element-0780.png",
+        "last": "animatic-seq/element-0929.png"
+      },
+      "midFrame": 780
+    },
+    {
+      "id": "art-world",
+      "index": 4,
+      "world": "crayon",
+      "seconds": 10,
+      "start": 930,
+      "end": 1230,
+      "frames": 300,
+      "guide": "clawd",
+      "register": "playful",
+      "lightPushes": "play: warm amber on paper, the drawing fills with light as it becomes real",
+      "camera": "wide, flat, paper-like depth; a slow lateral drift along a drawn horizon",
+      "emitter": {
+        "anchor": "join (the drawn piece as it fills)",
+        "intensity": 0.9,
+        "colour": "#fbdab9"
+      },
+      "pair": {
+        "radiance": "#e1750c",
+        "accent": "#fad204"
+      },
+      "radiance": "warm, s03 amber (D74) on a paper-coloured field, not black",
+      "actions": [
+        "clawd: guides: hands the human a crayon (Clawd owns the art workflow)",
+        "human: draws one piece in the air; the drawing fills in and becomes a real piece (a prompt becoming a resource)",
+        "codex: watches, small, keeps the piece from drifting",
+        "world: crayon architecture: stacked arches as paper scribbles, stalks as waxy lines"
+      ],
+      "transitionIn": "refill from the frame's glass into crayon",
+      "transitionOut": "the piece and the world reduce to their contour lines (the crossing, beat 6)",
+      "asks": [
+        "which object the human draws first (default: the first stalk)"
+      ],
+      "references": [
+        "Boy and the World (to file)",
+        "Lulu Mckown chartreuse (board §7, the refused limit)"
+      ],
+      "keys": [
+        {
+          "frame": 930,
+          "key": "rest",
+          "hold": 24
+        },
+        {
+          "frame": 954,
+          "key": "raise",
+          "hold": null
+        },
+        {
+          "frame": 980,
+          "key": "settle",
+          "hold": null
+        }
+      ],
+      "keyCount": 3,
+      "breakdowns": 0,
+      "holdFrames": 230,
+      "holdShare": 77,
+      "longestHold": 24,
+      "flags": [
+        "no breakdowns between keys: straight inbetweens",
+        "plot ask open"
+      ],
+      "frameAt": {
+        "first": "animatic-seq/element-0930.png",
+        "mid": "animatic-seq/element-1080.png",
+        "last": "animatic-seq/element-1229.png"
+      },
+      "midFrame": 1080
+    },
+    {
+      "id": "crossing",
+      "index": 5,
+      "world": "line",
+      "seconds": 4,
+      "start": 1230,
+      "end": 1350,
+      "frames": 120,
+      "guide": "codex",
+      "register": "focused",
+      "lightPushes": "focus: no light, only lines; the eye follows the re-routing contour",
+      "camera": "locked; the lines re-route across the frame along the move's leading line",
+      "emitter": null,
+      "pair": {
+        "radiance": "#e1750c",
+        "accent": "#fad204"
+      },
+      "radiance": "off",
+      "actions": [
+        "world: everything reduces to pale contour lines; the lines re-route and connect (a chain being wired)",
+        "human: holds the drawn piece; its lines connect to the next world's grid",
+        "codex: takes the lead (the programming workflow is his)",
+        "clawd: follows"
+      ],
+      "transitionIn": "reduce-to-lines",
+      "transitionOut": "refill into the shaded world (beat 7)",
+      "asks": [],
+      "references": [
+        "Spider-Verse glitch frames (owner's folder, to pick)",
+        "Midnight Gospel reality shift (board)"
+      ],
+      "keys": [
+        {
+          "frame": 1230,
+          "key": "rest",
+          "hold": 24
+        },
+        {
+          "frame": 1254,
+          "key": "raise",
+          "hold": null
+        },
+        {
+          "frame": 1280,
+          "key": "settle",
+          "hold": null
+        }
+      ],
+      "keyCount": 3,
+      "breakdowns": 0,
+      "holdFrames": 50,
+      "holdShare": 42,
+      "longestHold": 24,
+      "flags": [
+        "no breakdowns between keys: straight inbetweens"
+      ],
+      "frameAt": {
+        "first": "animatic-seq/element-1230.png",
+        "mid": "animatic-seq/element-1290.png",
+        "last": "animatic-seq/element-1349.png"
+      },
+      "midFrame": 1290
+    },
+    {
+      "id": "programming-world",
+      "index": 6,
+      "world": "shaded",
+      "seconds": 10,
+      "start": 1350,
+      "end": 1650,
+      "frames": 300,
+      "guide": "codex",
+      "register": "playful, satisfied",
+      "lightPushes": "satisfaction: each gate lights in turn, the human's own gate last",
+      "camera": "three-quarter perspective, slow push along a lit grid line",
+      "emitter": {
+        "anchor": "gates, first to last",
+        "intensity": 0.9,
+        "colour": "#c5e4f0"
+      },
+      "pair": {
+        "radiance": "#17263a",
+        "accent": "#457ca4"
+      },
+      "radiance": "cold cyan on black, s02 accent as the world's hue",
+      "actions": [
+        "codex: guides: points to the join",
+        "human: places the drawn piece against another; the join lights; the chain runs down the grid (a step passing a gate)",
+        "clawd: watches from the edge",
+        "world: shaded architecture with emissive edges; gates as rings that light in sequence"
+      ],
+      "transitionIn": "refill from lines into shaded forms",
+      "transitionOut": "the structure's silhouette leads the pull back home (beat 8); the shaded world's lines fold into the Seuss stalks",
+      "asks": [
+        "how many gates light (default: three, the third is the one the human made)"
+      ],
+      "references": [
+        "Tron: Uprising (to file)",
+        "Arcane S1 (owner's folder, to pick)"
+      ],
+      "keys": [
+        {
+          "frame": 1350,
+          "key": "rest",
+          "hold": 24
+        },
+        {
+          "frame": 1374,
+          "key": "raise",
+          "hold": null
+        },
+        {
+          "frame": 1400,
+          "key": "settle",
+          "hold": null
+        }
+      ],
+      "keyCount": 3,
+      "breakdowns": 0,
+      "holdFrames": 230,
+      "holdShare": 77,
+      "longestHold": 24,
+      "flags": [
+        "no breakdowns between keys: straight inbetweens",
+        "plot ask open"
+      ],
+      "frameAt": {
+        "first": "animatic-seq/element-1350.png",
+        "mid": "animatic-seq/element-1500.png",
+        "last": "animatic-seq/element-1649.png"
+      },
+      "midFrame": 1500
+    },
+    {
+      "id": "home-settle",
+      "index": 7,
+      "world": "home",
+      "seconds": 10,
+      "start": 1650,
+      "end": 1950,
+      "frames": 300,
+      "guide": "",
+      "register": "reverent, content",
+      "lightPushes": "contentment: the glow is bounded and rests inside the structure",
+      "camera": "pull back to a wide with the structure centred and the trio at its base",
+      "emitter": {
+        "anchor": "gadget, rimming the structure",
+        "intensity": 0.9,
+        "colour": "#f4d9d6"
+      },
+      "pair": {
+        "radiance": "#a63a2e",
+        "accent": "#f8c496"
+      },
+      "radiance": "Soup! coral (D74 s04)",
+      "actions": [
+        "structure: stands, the crayon piece and the lit joins inside it",
+        "gadget: rests inside, bright but bounded",
+        "human: at ease; one last look through the frame, now a window",
+        "codex: settles left",
+        "clawd: settles right"
+      ],
+      "transitionIn": "pull along the structure's silhouette",
+      "transitionOut": "title; settled state returns",
+      "asks": [],
+      "references": [
+        "Soup! coral (board §7)"
+      ],
+      "keys": [
+        {
+          "frame": 1650,
+          "key": "rest",
+          "hold": 24
+        },
+        {
+          "frame": 1674,
+          "key": "raise",
+          "hold": null
+        },
+        {
+          "frame": 1700,
+          "key": "settle",
+          "hold": null
+        }
+      ],
+      "keyCount": 3,
+      "breakdowns": 0,
+      "holdFrames": 265,
+      "holdShare": 88,
+      "longestHold": 24,
+      "flags": [
+        "no breakdowns between keys: straight inbetweens"
+      ],
+      "frameAt": {
+        "first": "animatic-seq/element-1650.png",
+        "mid": "animatic-seq/element-1800.png",
+        "last": "animatic-seq/element-1949.png"
+      },
+      "midFrame": 1800
+    }
+  ],
+  "shifts": [
+    {
+      "id": "arrival",
+      "laterBeatsShiftBy": 30,
+      "laterBeats": [
+        "everything-at-once",
+        "cant-build",
+        "the-frame",
+        "art-world",
+        "crossing",
+        "programming-world",
+        "home-settle"
+      ]
+    },
+    {
+      "id": "everything-at-once",
+      "laterBeatsShiftBy": 30,
+      "laterBeats": [
+        "cant-build",
+        "the-frame",
+        "art-world",
+        "crossing",
+        "programming-world",
+        "home-settle"
+      ]
+    },
+    {
+      "id": "cant-build",
+      "laterBeatsShiftBy": 30,
+      "laterBeats": [
+        "the-frame",
+        "art-world",
+        "crossing",
+        "programming-world",
+        "home-settle"
+      ]
+    },
+    {
+      "id": "the-frame",
+      "laterBeatsShiftBy": 30,
+      "laterBeats": [
+        "art-world",
+        "crossing",
+        "programming-world",
+        "home-settle"
+      ]
+    },
+    {
+      "id": "art-world",
+      "laterBeatsShiftBy": 30,
+      "laterBeats": [
+        "crossing",
+        "programming-world",
+        "home-settle"
+      ]
+    },
+    {
+      "id": "crossing",
+      "laterBeatsShiftBy": 30,
+      "laterBeats": [
+        "programming-world",
+        "home-settle"
+      ]
+    },
+    {
+      "id": "programming-world",
+      "laterBeatsShiftBy": 30,
+      "laterBeats": [
+        "home-settle"
+      ]
+    },
+    {
+      "id": "home-settle",
+      "laterBeatsShiftBy": 30,
+      "laterBeats": []
+    }
+  ],
+  "crossings": [
+    {
+      "from": "the-frame",
+      "to": "art-world",
+      "fromWorld": "home",
+      "toWorld": "crayon",
+      "start": 895,
+      "end": 965,
+      "length": 70,
+      "split": [
+        35,
+        35
+      ]
+    },
+    {
+      "from": "art-world",
+      "to": "crossing",
+      "fromWorld": "crayon",
+      "toWorld": "line",
+      "start": 1195,
+      "end": 1265,
+      "length": 70,
+      "split": [
+        35,
+        35
+      ]
+    },
+    {
+      "from": "crossing",
+      "to": "programming-world",
+      "fromWorld": "line",
+      "toWorld": "shaded",
+      "start": 1315,
+      "end": 1385,
+      "length": 70,
+      "split": [
+        35,
+        35
+      ]
+    },
+    {
+      "from": "programming-world",
+      "to": "home-settle",
+      "fromWorld": "shaded",
+      "toWorld": "home",
+      "start": 1615,
+      "end": 1685,
+      "length": 70,
+      "split": [
+        35,
+        35
+      ]
+    }
+  ]
+}

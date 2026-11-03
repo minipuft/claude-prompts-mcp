@@ -1,0 +1,143 @@
+---
+
+## 🎯 C.A.G.E.E.R.F Framework Active
+
+**C.A.G.E.E.R.F Framework**
+
+You are operating under the C.A.G.E.E.R.F Framework for Animation Animatic Render.
+
+Apply the C.A.G.E.E.R.F framework systematically:
+
+**Context**: Establish comprehensive situational awareness and environmental factors
+**Analysis**: Apply structured, systematic examination of the problem or opportunity
+**Goals**: Define specific, measurable, actionable objectives with clear success criteria
+**Execution**: Develop practical, implementable approach with detailed action steps
+**Evaluation**: Create robust success metrics and assessment methods
+**Refinement**: Enable continuous improvement and iteration processes
+
+Ensure each phase builds logically on the previous phases while maintaining focus on practical, actionable outcomes. Consider stakeholder perspectives, resource constraints, and environmental factors throughout the framework application.
+
+
+Apply this framework systematically to ensure comprehensive and structured responses.
+
+---
+
+
+> Use the animation-direction vocabulary (<episode_root>/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.
+
+## Original Task Instructions
+
+### Original Request Intent
+
+This step was given the following request. Your work must satisfy this intent:
+
+- **episode_root**: media/showcase/v3
+- **renderer**: media/showcase
+- **output_root**: media/showcase
+- **brief**: Animatic 10 of the 65 s eight-beat episode, the first run with the film reading story point by story point: every one of the 28 story points of v3/screenplay.json passes probe-story, the four themes p...
+- **context**: 
+
+Episode root: media/showcase/v3
+Renderer: media/showcase
+Production root: media/showcase
+Notes:
+
+
+Read `timeline.json`, `blocking/`, `keys/` (named poses per shot; missing shots use the placeholder chart and are listed), `light.json`, `worlds/*.json`. In the renderer run `npm run xsheet` (writes `xsheet.html` and `xsheet.json`: one row per frame with beat, world, key or hold, breakdown, camera, emitter, crossing phase), then `npm run animatic` twice into `out/animatic-01.mp4` and `out/animatic-01b.mp4` (the watched previews: one process at `--concurrency=4`, which drifts on scribble edges and is not the determinism render). The frames the probes read are rendered by `npm run render:shards` (N separate `remotion render` processes at `--concurrency=1`, each over a contiguous frame shard, 4 shards by default; the sequence is pixel-identical however it is sharded): `npm run render:shards -- Animatic65 out/animatic-seq --props='{"captions":false}'` for the frames the probes read, the same command into `out/animatic-seq-b` with `--frames=<comma list>` (every 10th frame suffices) for the determinism probe, and the figure-only layers `Animatic65Figure` into `out/animatic-fig-seq` and `Animatic65FigureLine` into `out/animatic-figline-seq` (`--frames=<the line-phase frames>`) the same way. Each writes `shards.json` beside its frames (plan, per-shard wall time and exit code, peak RSS, sha256 per frame); a non-zero exit names the missing frames. Run `python3 scripts/animation/probe-all.py out/animatic-seq --timeline <episode_root>/timeline.json --xsheet <episode_root>/xsheet.json --second-frames out/animatic-seq-b --subset --figure-frames out/animatic-fig-seq --figure-line-frames out/animatic-figline-seq` (determinism on the second render, holds and loop closure on the figure layers); every probe prints its control line first. Compose a strip of one frame per beat plus every crossing's mid-frame. Write `<output_root>/v3/studies/animatic-<NN>.md` in reader voice: what the viewer sees per beat (one line each), the probe table (claim · command · control → measured), what is placeholder (keys, blocking), wall time, and the TASTE questions for the owner, each with a default. The gate runs the same `probe-all.py`; quote its lines. Reply: Watched (mp4 path, strip), Probes (table), Shards (from each `shards.json`: shard count, frames per shard, wall time, peak RSS), Placeholders, Owner (questions with defaults), Changed, Receipt.
+
+---
+
+
+
+
+---
+
+## Inline Gates
+
+### Checks
+
+- **Animation Animatic Probes** — check: runs `python3 scripts/animation/probe-all.py out/animatic-seq --timeline v3/timeline.json --xsheet v3/xsheet.json --second-frames out/animatic-seq-b --subset --figure-frames out/animatic-fig-seq --figure-line-frames out/animatic-figline-seq`
+
+### Reminders
+
+### Framework Compliance
+**CAGEERF Framework Guidelines:**
+- Include Context, Analysis, Goals, Execution, Evaluation, Refinement, Framework considerations
+- Structure responses according to framework principles
+- Include systematic thinking and framework awareness
+- Show iterative improvement and refinement processes
+
+Attest reminders in the verdict's `reminders` field; checks are recorded by the engine.
+
+---
+
+**Inline Gate Priority:** These inline gates triggered the review. Fix them before checking framework standards.
+
+---
+
+### Required Response Format
+
+**Summary**: What was implemented (2-3 sentences)
+
+**Required Sections** — emit these headers verbatim; they are graded structurally:
+- `## Context` (required)
+- `## Analysis` (required)
+- `## Goals` (required)
+- `## Execution` (required)
+- `## Evaluation` (optional)
+- `## Refinement` (optional)
+
+**Gate Coverage**:
+- [1] PASS|FAIL: rationale
+- [2] PASS|FAIL: rationale
+
+
+## Shell Verification Results
+
+### Animation Animatic Probes — FAILED
+
+**Command:** `python3 scripts/animation/probe-all.py out/animatic-seq --timeline v3/timeline.json --xsheet v3/xsheet.json --second-frames out/animatic-seq-b --subset --figure-frames out/animatic-fig-seq --figure-line-frames out/animatic-figline-seq`
+**Exit Code:** 1
+**Duration:** 454579ms
+
+```
+[...truncated...]
+, 4.6, 'join'), (1510, 4.6, 'join'), (1511, 4.6, 'join'), (1516, 5.8, 'join'), (1517, 5.8, 'join'), (1518, 11.1, 'join'), (1519, 11.1, 'join'), (1532, 10.2, 'prop'), (1533, 9.8, 'prop'), (1534, 22.3, 'prop'), (1535, 21.9, 'prop')]
+    FAIL: eye-trace - 1 of 3 checks failed: target within tolerance
+loop-closure · pass · control: synthetic closed outline closed=True (height 1.000, share 1.000); 4 px band erased across the shins (row 127) closed=False (height 0.744, share 0.588) flips
+colour-continuity · FAIL · control: a crossing whose frames pass through a tan -> FAIL (crossing 100-105: the dominant colour dips at frame 101 (value 0.55 under the floor 0.83); 2 of 5 frames read dip); through a grey -> FAIL (crossing 100-105: the dominant colour dips at frame 101 (chroma 0.00 under the lower endpoint's 0.82); 3 of 5 frames read dip); a hue walk between the same ends that holds both floors -> pass
+    FAIL radiance hue per frame: the light's own hue sits inside the beat's pair on 1464 of 1560 frames where it is drawn and readable (376 drawn but unreadable: the brightest region outside the fixed fills is not on the emitter, or has no chroma to read a hue from); off the pair on 96: [(1428, 190, [214, 205]), (1429, 190, [214, 205]), (1430, 190, [214, 205]), (1431, 190, [214, 205]), (1432, 189, [214, 205]), (1433, 189, [214, 205]), (1434, 189, [214, 205]), (1435, 189, [214, 205])] (frame, hue, pair hues)
+    FAIL crossing hue path: crossing 1615-1685 detours: sample 7 (39 deg) sits 153 deg behind the start
+    FAIL: colour-continuity - 2 of 4 checks failed: radiance hue per frame, crossing hue path
+determinism · pass · control: two writes of the same frame -> pass; 1 pixel 1 level off (rasteriser noise) -> pass; 40 pixels 1 level off (noise) -> pass; 60 pixels 40 levels off -> FAIL (60 beyond 2 levels, allowance 5); every pixel 3 levels off -> FAIL (57600 beyond 2 levels); 1 pixel 40 levels off -> tolerated (inside the allowance of 5)
+FAIL: probe-all - 5 of 7 probes passed
+```
+
+
+---
+
+**Gate Review Required** (attempt 1/2)
+
+
+
+Review your output above against the gates, then submit:
+
+```
+chain_id="chain-animation_animatic#1"
+gate_verdict={
+  "overall": "PASS",
+  "rationale": "<overall assessment>",
+  "per_gate": [
+    {"index": 1, "passed": false, "rationale": "Animation Animatic Probes — Ground truth by exit code (D81). The probe runs `python3 scripts/animation/probe-all.py out/animatic-seq --timeline v3/timeline.json --xsheet v3/xsheet.json --second-frames out/animatic-seq-b --subset --figure-frames out/animatic-fig-seq --figure-line-frames out/animatic-figline-seq` in the renderer root: twos, hold band, screen time, eye trace, loop closure (on the figure-only line-phase frames, because the floor grid merges with the outline on full frames), colour continuity and determinism (second render, tolerant within 2 levels on at most 0.01 % of pixels). Every probe prints its control first and refuses to report if it does not trip. On FAIL quote the probe's line naming the beat or frame and fix the contract or the render, never the probe.: <recorded: python3 scripts/animation/probe-all.py out/animatic-seq --timeline v3/timeline.json --xsheet v3/xsheet.json --second-frames out/animatic-seq-b --subset --figure-frames out/animatic-fig-seq --figure-l…>"}
+  ],
+  "reminders": {"satisfied": ["framework-compliance"], "not_applicable": []}
+}
+```
+
+Set `"overall": "FAIL"` and say what needs improvement if the gates are not met. Rationales are single-line.
+
+A legacy string form is still accepted: `gate_verdict="GATE_REVIEW: PASS - [assessment]"`.
+
+Chain: chain-animation_animatic#1
+→ Progress 4/6
+Next: chain_id="chain-animation_animatic#1", user_response="<your step output>", gate_verdict="GATE_REVIEW: PASS|FAIL - <why>"

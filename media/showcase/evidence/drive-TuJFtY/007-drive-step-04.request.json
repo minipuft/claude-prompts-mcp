@@ -1,0 +1,23 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-showcase_shot#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "noise probe; the solved-joints check exited 0",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "probe-poses.py exited 0 in 367 ms"
+        }
+      ],
+      "reminders": {
+        "satisfied": [
+          "framework-compliance"
+        ],
+        "not_applicable": []
+      }
+    }
+  }
+}

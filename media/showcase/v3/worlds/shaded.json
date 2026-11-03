@@ -1,0 +1,64 @@
+{
+  "id": "shaded",
+  "field": "#02050b",
+  "line": {
+    "ratio": 166,
+    "colour": "emissive"
+  },
+  "fills": "stepped",
+  "shading": {
+    "steps": 2,
+    "emissiveEdges": true,
+    "edgeColour": "#457ca4",
+    "bloom": {
+      "widths": [
+        3,
+        7
+      ],
+      "opacities": [
+        0.28,
+        0.1
+      ]
+    },
+    "lightDir": [
+      -0.5,
+      -0.6,
+      0.65
+    ],
+    "shadowFloor": 0.52,
+    "stepAt": 0.5
+  },
+  "boil": {
+    "variants": 3,
+    "rate": 4,
+    "figuresOnly": true
+  },
+  "radiance": {
+    "on": true,
+    "colour": "#56b0d4"
+  },
+  "provisional": true,
+  "cards": [
+    "eagle-lycyy9lr7xd55 (Arcane lit stairs)",
+    "seuss-no-one-youer",
+    "Tron: Uprising reel (inbox)"
+  ],
+  "sheet": "assets/worlds/shaded-01.png",
+  "sheetSha256": "405d1f43e0031d8cf785ab7871fb62efb2aa3b276585a12e4146f07caf03f84e",
+  "receipt": "evidence/call-0DTIFE + imagegen-world-shaded-01.json",
+  "measured": {
+    "field": "#02050b",
+    "contour_px": 2.0,
+    "contour_target_px": 3.61,
+    "fills": "stepped",
+    "torso_dominant_colours": 8,
+    "torso_minor_colours": 26,
+    "identity_pigments": {
+      "codex": 0.01875,
+      "codex_accent": 0.0373,
+      "clawd": 0.00545,
+      "skin": 0.01467,
+      "skin_shadow": 0.01451
+    }
+  }
+}

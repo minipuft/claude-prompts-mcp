@@ -1,0 +1,38 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "create",
+    "id": "showcase_board",
+    "name": "Showcase Board",
+    "category": "development",
+    "description": "Validate and rebuild the design-bible board from v3/references/board.json: references, laws, lineage only (D56), every card with borrow/refuse/governs; reports rulings without a card.",
+    "arguments": [
+      {
+        "name": "brief",
+        "type": "string",
+        "required": true,
+        "description": "Audience, product goal and desired silent showcase outcome."
+      },
+      {
+        "name": "context",
+        "type": "string",
+        "required": false,
+        "description": "Prior step output; read shared chain history for earlier evidence and decisions."
+      },
+      {
+        "name": "output_root",
+        "type": "string",
+        "required": false,
+        "defaultValue": "media/showcase",
+        "description": "Caller-owned production artifact directory."
+      }
+    ],
+    "user_message_template": "Brief: {{brief}}\nProduction root: {{output_root}}\nPrevious handoff:\n{{context | default(\"Start of pre-production; no prior step.\")}}\n\nThe board is the bible at a glance. Read `v3/references/board.json` and `v3/creative-spec.md` (rulings list). Check, in order: every card has title, by, borrow, refuse and governs; every `src`/`poster` path exists; no card shows anything the project drew (D56: no study still, no muse sheet, no failing control); every ruling D41 and later is governed by at least one card or named in the laws block; every video card has a local study copy or an explicit external href. Run `npm run board` from the production root; it refuses on a missing path. Do not add references on your own: a new card needs an owner ruling or a filed provenance entry in `style-references.json` with bytes and sha256.\n\nReturn: Board Revision; Sections and Card Count; Rulings Without a Card; Paths Fixed; Build Output (html, png size); Concerns.",
+    "artifacts": {
+      "produces": [
+        "docs"
+      ]
+    }
+  }
+}

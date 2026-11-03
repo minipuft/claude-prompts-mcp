@@ -1,0 +1,16 @@
+[
+  {
+    "path": "codex-official-v4.webp",
+    "url": "https://persistent.oaistatic.com/codex/pets/v1/codex-spritesheet-v4.webp",
+    "bytes": 887954,
+    "sha256": "5cd7af9cfeae88fe9c6e47a72460e0dc4c6fb04baf7fdc6cca14a212f0bf44d1",
+    "kind": "unchanged official identity reference, not production asset"
+  },
+  {
+    "path": "clawd-official-demo.gif",
+    "url": "https://raw.githubusercontent.com/anthropics/claude-code/732e167ee9d71296b4b63d6f529ac1334513826a/demo.gif",
+    "bytes": 11002760,
+    "sha256": "461cf109f52648929acd9959a87e5673541f8249497512b8e4f1d32d10f0fd57",
+    "kind": "unchanged official identity reference, not production asset"
+  }
+]

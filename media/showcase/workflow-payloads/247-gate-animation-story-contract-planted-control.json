@@ -1,0 +1,91 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "animation-story-contract-planted-control",
+    "name": "Animation Story Contract (planted control)",
+    "description": "Temporary control: probe-screenplay on copies of the screenplay with the want and turn of a beat removed, the recipes of a story point removed and the themes of a story point removed, and probe-theme on the clean copy against the blocking as committed (the frame on stage from frame 0).",
+    "type": "validation",
+    "gate_type": "custom",
+    "severity": "high",
+    "subject": "animation-story-contract-planted-control",
+    "enforcement_mode": "blocking",
+    "guidance": "Temporary control gate for the row 9.8 in-chain proof (the commands of animation-story-contract pointed at planted copies under ~/.cache/rows-97-99); deleted after the proof.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-screenplay.py",
+          "/home/minipuft/.cache/rows-97-99/planted/want-turn/screenplay.json",
+          "--md",
+          "/home/minipuft/.cache/rows-97-99/planted/want-turn/screenplay.md",
+          "--fountain",
+          "/home/minipuft/.cache/rows-97-99/planted/want-turn/screenplay.fountain"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      },
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-screenplay.py",
+          "/home/minipuft/.cache/rows-97-99/planted/recipe/screenplay.json",
+          "--md",
+          "/home/minipuft/.cache/rows-97-99/planted/recipe/screenplay.md",
+          "--fountain",
+          "/home/minipuft/.cache/rows-97-99/planted/recipe/screenplay.fountain"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      },
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-screenplay.py",
+          "/home/minipuft/.cache/rows-97-99/planted/theme/screenplay.json",
+          "--md",
+          "/home/minipuft/.cache/rows-97-99/planted/theme/screenplay.md",
+          "--fountain",
+          "/home/minipuft/.cache/rows-97-99/planted/theme/screenplay.fountain"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      },
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-theme.py",
+          "/home/minipuft/.cache/rows-97-99/planted/clean/screenplay.json",
+          "--blocking",
+          "/home/minipuft/.cache/rows-97-99/blocking-head/media/showcase/v3/blocking"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ],
+    "activation": {
+      "prompt_categories": [
+        "animation",
+        "development"
+      ],
+      "explicit_request": true
+    },
+    "retry_config": {
+      "max_attempts": 2,
+      "improvement_hints": true
+    }
+  }
+}

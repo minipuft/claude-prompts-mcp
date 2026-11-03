@@ -1,0 +1,17 @@
+{
+  "id": "p024",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "the-frame",
+    "frame": 740
+  },
+  "title": "sp-4.3 'heap stays to 1950' reads the blocking of beats 5-8, and none of them names a heap",
+  "text": "The recipe `{kind: stage, actor: heap, expect: persists, until: 1949}` reads the heap as `blocking.actors.heap` on every sampled frame to 1949 (probe-story `read_stage`). Beat 4 holds it from 760 (the pose sheet's `dropsAt`) to its last frame, 929; art-world, crossing, programming-world and home-settle name no actors, so the heap is gone from 930 (the probe reads 'on stage at f799 and gone at f934'). The staging that meets the line is in files the worlds slice owns (the four later blocking files each need a `heap` at (444, 602), where Codex left it, and the crayon, line and shaded prop layers need to draw it: the heap is a home-world actor today), so row 9.6's beats 1-4 slice could not make it. Beat 4's own file is unchanged for this line.",
+  "references": [],
+  "before": "the heap is on stage from 760 to 929 and in no later beat",
+  "after": "the heap is in every later beat's blocking at (444, 602) and the worlds draw it, so the cloak that was dropped stays to 1949",
+  "status": "open",
+  "ruling": null
+}

@@ -1,0 +1,37 @@
+id: animation-vocabulary
+name: Animation Vocabulary
+type: validation
+description: "Check-tier gate on the blocking/poses, review and evidence steps
+  (D96, D81): every intent word a step writes is a term of the controlled
+  direction vocabulary. The probe reads the vocabulary and the film's overrides,
+  then the intent words of every proposal file, the because clause of every
+  ruling written in the ruling form, the breakdown kinds and key intents of the
+  pose sheets and the intents of the material contract, and refuses a word that
+  is not a vocabulary term or a film alias. A proposal, ruling, pose sheet or
+  material that says 'vibey' fails the gate until the word is replaced by the
+  term that says what was meant."
+guidanceFile: guidance.md
+pass_criteria:
+  - type: shell_verify
+    shell_command:
+      - python3
+      - scripts/animation/probe-vocabulary.py
+      - v3/vocabulary.json
+      - --overrides
+      - v3/vocabulary-overrides.json
+    shell_timeout: 120000
+    shell_working_dir: ../media/showcase
+    shell_max_attempts: 1
+    shell_preset: full
+activation:
+  prompt_categories:
+    - animation
+    - development
+  explicit_request: true
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+subject: animation-vocabulary
+severity: high
+enforcementMode: blocking
+gate_type: custom

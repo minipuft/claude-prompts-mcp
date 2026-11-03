@@ -1,0 +1,40 @@
+--- v3/blocking/arrival.json (read only)
++++ proposed by shot s01 (s01-arrival-overwhelm)
+@@ figure
+- {"scale":0.68,"x":420,"y":40}
++ {"scale":0.3553,"x":485.6,"y":293}
+@@ codex
+- {"x":60,"y":440,"scale":1.8}
++ {"x":255,"y":523,"scale":1.25}
+@@ clawd
+- {"x":940,"y":470,"scale":1.5}
++ {"x":864,"y":544,"scale":1.45}
+@@ actors.box
+- {"x":1010,"y":440,"scale":1}
++ {"x":469.5,"y":386,"scale":1.9}
+@@ actors.bubble
+- {"x":1010,"y":380,"scale":0.5}
++ {"x":699,"y":330,"scale":1.2}
+@@ emitter
+- {"start":[1000,396],"end":[1010,384],"anchor":"box seam"}
++ {"start":[650,538],"end":[650,538],"anchor":"box seam"}
+--- v3/blocking/everything-at-once.json (read only)
++++ proposed by shot s01 (s01-arrival-overwhelm)
+@@ figure
+- {"scale":0.68,"x":420,"y":40}
++ {"scale":0.3553,"x":485.6,"y":293}
+@@ codex
+- {"x":60,"y":440,"scale":1.8}
++ {"x":255,"y":523,"scale":1.25}
+@@ clawd
+- {"x":940,"y":470,"scale":1.5}
++ {"x":864,"y":544,"scale":1.45}
+@@ actors.box
+- undefined
++ {"x":469.5,"y":386,"scale":1.9}
+@@ actors.gadget
+- {"x":1040,"y":330,"scale":0.8}
++ {"x":699,"y":-124,"scale":2.9}
+@@ emitter
+- {"start":[1010,384],"end":[1040,330],"anchor":"gadget dial"}
++ {"start":[745,330],"end":[699,-124],"anchor":"gadget dial"}

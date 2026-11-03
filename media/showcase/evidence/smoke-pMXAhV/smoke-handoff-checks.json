@@ -1,0 +1,9 @@
+[
+  {
+    "from": "story",
+    "expectedNext": "NEXT_STORY_MARKER",
+    "outputSentinelPresent": true,
+    "nextPromptPresent": false,
+    "previousHandoffInContext": true
+  }
+]

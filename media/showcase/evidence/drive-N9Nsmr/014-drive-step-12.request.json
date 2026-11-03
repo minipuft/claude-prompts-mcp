@@ -1,0 +1,23 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_animatic#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "Artifacts gate ran in the engine: check-artifacts.js exit 0 in 45 ms; a hand run from the server directory printed ok for the same 5 paths and the control with an empty reply exited 1",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "Handoff Artifacts Exist: engine shell verification PASSED exit 0 in 45 ms, all 5 named paths exist; hand control with no artifacts line exits 1"
+        }
+      ],
+      "reminders": {
+        "satisfied": [
+          "framework-compliance"
+        ],
+        "not_applicable": []
+      }
+    }
+  }
+}

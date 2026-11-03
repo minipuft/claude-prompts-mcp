@@ -1,0 +1,112 @@
+{
+  "note": "Fixed fills: identity pigments never grade (C1/C2), the human's, kit and gadget roles are fixed per palette, not per beat, and each world's texture colours are the look track's, not the radiance. The frame probes mask a neighbourhood of each. Written by scripts/animation/compile-roles.mjs from src/library/tokens.ts (the settled palette and, in kit and gadget, the shot palette s01Turrell with the box tape and the title mark); do not edit.",
+  "identity": {
+    "codex": [
+      "#4f7df2",
+      "#2c49b8",
+      "#1f2f7a",
+      "#8fb1ff",
+      "#9fe8ff"
+    ],
+    "clawd": [
+      "#e8694a",
+      "#c94a2f",
+      "#8c2f1c",
+      "#ffa184",
+      "#2a1410"
+    ],
+    "humanSkin": [
+      "#67b479",
+      "#4f9a62",
+      "#c885c2",
+      "#9fd9a8",
+      "#1d1d36"
+    ]
+  },
+  "human": [
+    "#2f45a8",
+    "#b983c0",
+    "#1d1d36",
+    "#e7e4da",
+    "#d28a21"
+  ],
+  "kit": [
+    "#0c6ca0",
+    "#56b0d4",
+    "#142b3e",
+    "#d9e5e3",
+    "#c8323a",
+    "#1f4fe8",
+    "#5b86ff",
+    "#0a2a9c",
+    "#dbe6ff",
+    "#fad204",
+    "#101c52",
+    "#182a78",
+    "#080d2c",
+    "#33489a",
+    "#fad204",
+    "#0b1030",
+    "#1d3bb0",
+    "#d7b710",
+    "#e1c94c",
+    "#fbdd43",
+    "#ebdb88",
+    "#fde982",
+    "#f5edc3",
+    "#fef4c0",
+    "#e5e7e6",
+    "#c5c7c7",
+    "#afb8b8",
+    "#969798",
+    "#858c8d",
+    "#66666a",
+    "#5b5f62",
+    "#37363b",
+    "#313337"
+  ],
+  "gadget": [
+    "#d28a21",
+    "#a45820",
+    "#64341b",
+    "#f2c56a",
+    "#56b0d4",
+    "#2a5cf0",
+    "#0e3ccb",
+    "#0b2370",
+    "#e4ecff",
+    "#fad204"
+  ],
+  "worlds": {
+    "crayon": [
+      "#f1dcbc",
+      "#2b2016",
+      "#1f427b",
+      "#3f78c8",
+      "#ab3f37",
+      "#f0b341"
+    ],
+    "home": [
+      "#07060c"
+    ],
+    "line": [
+      "#07060c"
+    ],
+    "shaded": [
+      "#02050b",
+      "#457ca4"
+    ]
+  },
+  "emissive": [
+    "#c8f6ff",
+    "#8fdcf2"
+  ],
+  "plates": [
+    "assets/human/cutout.png"
+  ],
+  "sheets": [
+    "out/baseline/final-world-sheet-Shaded.png"
+  ],
+  "field": "#07060c",
+  "outline": "#131818"
+}

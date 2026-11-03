@@ -1,0 +1,31 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_animatic#1",
+    "gate_verdict": {
+      "overall": "PASS",
+      "rationale": "The engine ran all five commands after the answer and each exited 0: probe-blocking.py (586 ms), probe-vocabulary.py (92 ms), probe-screenplay.py (119 ms), probe-theme.py (503 ms), probe-story.py on out/animatic-seq and out/animatic-fig-seq (76 159 ms). The eye trace, which is not one of this step's gates, is named as failing on 20 frames in the answer.",
+      "per_gate": [
+        {
+          "index": 1,
+          "passed": true,
+          "rationale": "Animation Blocking Contract: engine shell verification PASSED exit 0 in 586 ms (8 beats staged, identity boxes apart, props apart)"
+        },
+        {
+          "index": 2,
+          "passed": true,
+          "rationale": "Animation Vocabulary: engine shell verification PASSED exit 0 in 92 ms"
+        },
+        {
+          "index": 3,
+          "passed": true,
+          "rationale": "Animation Story: engine shell verification PASSED for probe-screenplay.py (exit 0, 119 ms), probe-theme.py (exit 0, 503 ms) and probe-story.py (exit 0, 76 159 ms); every story point reads in the frames the chain gates on"
+        }
+      ],
+      "reminders": {
+        "satisfied": [],
+        "not_applicable": []
+      }
+    }
+  }
+}

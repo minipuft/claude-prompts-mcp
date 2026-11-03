@@ -1,0 +1,59 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "gate",
+    "action": "create",
+    "id": "animation-story-contract-clean-control",
+    "name": "Animation Story Contract (clean control)",
+    "description": "Temporary control: the animation-story-contract commands on a clean copy of the screenplay (the seven emitter lines the eye trace cannot resolve reworded) against the blocking with the frame removed from beats 1-3.",
+    "type": "validation",
+    "gate_type": "custom",
+    "severity": "high",
+    "subject": "animation-story-contract-clean-control",
+    "enforcement_mode": "blocking",
+    "guidance": "Temporary control gate for the row 9.8 in-chain proof (the commands of animation-story-contract pointed at planted copies under ~/.cache/rows-97-99); deleted after the proof.",
+    "pass_criteria": [
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-screenplay.py",
+          "/home/minipuft/.cache/rows-97-99/planted/clean/screenplay.json",
+          "--md",
+          "/home/minipuft/.cache/rows-97-99/planted/clean/screenplay.md",
+          "--fountain",
+          "/home/minipuft/.cache/rows-97-99/planted/clean/screenplay.fountain"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      },
+      {
+        "type": "shell_verify",
+        "shell_command": [
+          "python3",
+          "scripts/animation/probe-theme.py",
+          "/home/minipuft/.cache/rows-97-99/planted/clean/screenplay.json",
+          "--blocking",
+          "/home/minipuft/.cache/rows-97-99/blocking-frame-removed"
+        ],
+        "shell_working_dir": "../media/showcase",
+        "shell_timeout": 120000,
+        "shell_max_attempts": 1,
+        "shell_preset": "full"
+      }
+    ],
+    "activation": {
+      "prompt_categories": [
+        "animation",
+        "development"
+      ],
+      "explicit_request": true
+    },
+    "retry_config": {
+      "max_attempts": 2,
+      "improvement_hints": true
+    }
+  }
+}

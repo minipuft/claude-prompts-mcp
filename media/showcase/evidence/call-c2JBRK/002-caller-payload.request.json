@@ -1,0 +1,13 @@
+{
+  "name": "resource_manager",
+  "arguments": {
+    "resource_type": "prompt",
+    "action": "update",
+    "id": "showcase_key_sheet",
+    "tool_operation": "remove",
+    "tool_ids": [
+      "imagegen"
+    ],
+    "confirm": true
+  }
+}

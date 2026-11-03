@@ -1,0 +1,20 @@
+{
+ "valid": true,
+ "path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/pieces/muse-01.png",
+ "source": "/home/minipuft/.codex/generated_images/01a14227-b518-74c3-a238-488b3e5539a3/exec-79b77f5d-4ce8-49ed-90e0-31fe4e3ae7c3.png",
+ "sha256": "854a2f764b4f088b26a31665b521dac6eafca38e742783b28e6001bf3e64d218",
+ "bytes": 791094,
+ "referenced_image_paths": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-no-one-youer.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-archbishop-katz.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-nested-frames.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFI6SELJHX04J.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/codex-official.png"
+ ],
+ "tool_arguments": {
+  "raw": "{\n  \"prompt\": \"Use case: stylized-concept. Create ONE 16:9 design variant sheet for a prop family in a silent hand-drawn animated film, variant muse-01 'Seuss grammar' (do not print this name). Pure solid black field #000000. Show exactly SEVEN family members at one consistent scale on ONE shared baseline in ONE horizontal row, with generous clear black gaps and no overlaps: (1) a curling stalk with a flag leaf, (2) a stacked pointed arch gate with a distinct keystone, (3) a ring represented by nested receding hand-drawn frames each slightly turned, (4) a softly rounded block, (5) a held-up rectangular frame with an open screen-glyph-like window and soft rounded cloud-derived silhouette, (6) a soft lobed ground patch, (7) a beaded light string hanging in a catenary between TWO curling flag-leaf stalks, treated together as the seventh member. The two support stalks belong only to member seven. Keep each member fully inside the canvas; no second row, no extra studies. All seven are separate movable prop designs. Each component must be a closed flat shape, with clear cuttable boundaries; gate layers, keystone, frame rings, beads, stalks and leaves must read as separable parts. The str"
+ },
+ "summary": {
+  "references": 5
+ }
+}

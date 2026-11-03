@@ -1,0 +1,7 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "chain_id": "chain-animation_direction#1",
+    "user_response": "Question put to the owner (smoke reply for the vocabulary gate proof): Situation, Options (soft, hard), Default (soft), Changes (light), Reference (seuss-no-one-youer).\n"
+  }
+}

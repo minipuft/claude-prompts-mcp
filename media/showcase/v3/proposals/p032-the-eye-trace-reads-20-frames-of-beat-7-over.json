@@ -1,0 +1,17 @@
+{
+  "id": "p032",
+  "kind": "finding",
+  "from": "worker",
+  "date": "2026-10-20",
+  "anchor": {
+    "beat": "programming-world",
+    "frame": 1508
+  },
+  "title": "Eye trace: 20 frames of beat 7 are over 3 %: the join's glow and the bead's glow are outranked by lit pale edges beside them",
+  "text": "`probe-eyetrace.py` on animatic 10 (`out/animatic-10-chain-probe-all.txt`, 1950 frames, 1504 measured): 1484 frames are within 3 % of their story point's target; the 20 over are 1508-1511 (4.6 %) and 1516-1519 (5.8 to 11.1 %) under `the lit join` (sp-7.2) and 1532-1537 (up to 22.3 %), 1540-1541 and 1552-1555 under `the running bead` (sp-7.3). The cause by frame: the brightest 0.5 % of the unmasked, blurred picture is the pale edge of the left kit block next to the join (about (731, 252) and (749, 304)) and the human's head highlight (about (653, 191)), not the glow. While the bead stands on a gate ring its glow sits on a ring and outranks both (the frames not listed pass); while it hops between rings its glow is on dark field and its pixels are fewer and dimmer than the edge pixels. What was tried: the frame's rim is dimmed to a quarter until the light stands at it (FRAME_DIM: the run's frames read 22 to 24 % over before it (1540, 1550, 1560), 1544 and 1556 and the resting frames 0 after); a glow radius of 90 or 130 instead of 60 for the run makes the second gate change on the same frame as the first (sp-7.3 `lit-in-order`: `[1520, 1520, 1540]`), so 60 holds while it runs and 100 while it rests at the third gate (cleared 1560-1576); a white core on the glow changed nothing (21.3 against 22.6 %, the edge pixels are as bright). Options for a ruling: (a) dim the shaded world's other emissive edges (the human's rim, the kit blocks, the arch) by their distance from the light, as the rim and the gates already are, which changes the look of the whole shaded beat; (b) let the eye trace skip a frame whose target glow is a hop between two lit things (a named exemption, not a wider tolerance); (c) read the join as the region of the two blocks, not a point, which says what sp-7.2's eye line means (the join between the blocks).",
+  "references": [],
+  "before": "1508-1511, 1516-1519, 1532-1537, 1540-1541, 1552-1555: 4.6 to 22.3 % of the width off the target",
+  "after": "every measured frame within 3 %",
+  "status": "open",
+  "ruling": null
+}

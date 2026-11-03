@@ -1,0 +1,24 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "workflow": {
+      "version": 1,
+      "nodes": [
+        {
+          "id": "ask",
+          "promptId": "animation_direction",
+          "stepName": "Interview question",
+          "args": {
+            "episode_root": "media/showcase/v3",
+            "beat": "the-frame",
+            "frame": "700",
+            "question": "Should the eye trace of beat 4 follow the frame's glow or the human?"
+          },
+          "inlineGateIds": [
+            "animation-bible"
+          ]
+        }
+      ]
+    }
+  }
+}

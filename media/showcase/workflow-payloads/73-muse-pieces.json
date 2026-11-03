@@ -1,0 +1,10 @@
+{
+ "name": "prompt_engine",
+ "arguments": {
+  "command": ">>showcase_asset_muse",
+  "inputs": {
+   "asset": "pieces: the family the gadget projects as one sheet: stalk (prompt, curling with a flag leaf), arch (gate, pointed with keystone), ring (framework, a receding turned frame), block, frame (prompt_engine, held up), soft ground patch, and the beaded light string (chain). Hand-coded today: src/library/props/Pieces.tsx and Frame.tsx.",
+   "constraints": "Five-role flat drawing on a pure black field, pale contour one step lighter than each fill (D76/D71), Seuss silhouette grammar (swooping lobes, curling stalks with flag leaves, stacked pointed arches), Midnight Gospel two-scale stipple shadow, identity pigments untouched. Proposal only: the hand-coded SVG prop stays until the owner accepts a sheet (sheet_accepted null). Each variant cites owner-library cards by eagle id and facet (v3/references/owner/picks.json) and names one existing cast property it sits between (Codex, Clawd or the human's Swoop). Cards to consider: MFI6QTUOYA66U (composition.framing window), MFI6SELJHX04J (composition.framing tower), MFP3WX8X3LIX2 (composition.framing doorway), LYCZ7B8LTHX9V (line web as the string), LYCYY9LR7XD55 (light.source lit edges). All members on one baseline at one scale."
+  }
+ }
+}

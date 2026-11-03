@@ -1,0 +1,35 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Created**: Showcase Key Sheet (showcase_key_sheet)\n\n📝 Once per shot and actor (D72): from the timing chart's key list, generate one key sheet through the imagegen tool from the actor's model sheet, overlay-check it against the model sheet, measure silhouettes and clean-up, cut each key into its own plate, and register joints when the skeleton toolchain is present. Keys are drawn; everything between them is the puppet's.\n🧠 single\n\n🔧 **Script Tools Created**: 1 tool(s)\n- `imagegen`: Image Generation (codex exec) (trigger: explicit)\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/user-message.md\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/tools/imagegen\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/tools/imagegen/tool.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/tools/imagegen/schema.json\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/tools/imagegen/script.py\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "create",
+    "valid": true,
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "create",
+      "id": "showcase_key_sheet",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/prompt.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/user-message.md",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/tools/imagegen",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/tools/imagegen/tool.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/tools/imagegen/schema.json",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/tools/imagegen/script.py"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 1
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Created**: Showcase Key Sheet (showcase_key_sheet)\n\n📝 Once per shot and actor (D72): from the timing chart's key list, generate one key sheet through the imagegen tool from the actor's model sheet, overlay-check it against the model sheet, measure silhouettes and clean-up, cut each key into its own plate, and register joints when the skeleton toolchain is present. Keys are drawn; everything between them is the puppet's.\n🧠 single\n\n🔧 **Script Tools Created**: 1 tool(s)\n- `imagegen`: Image Generation (codex exec) (trigger: explicit)\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/user-message.md\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/tools/imagegen\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/tools/imagegen/tool.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/tools/imagegen/schema.json\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/development/showcase_key_sheet/tools/imagegen/script.py\n"
+  },
+  "isError": false
+}

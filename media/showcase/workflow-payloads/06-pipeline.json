@@ -1,0 +1,18 @@
+{
+ "name": "resource_manager",
+ "arguments": {
+  "resource_type": "prompt",
+  "action": "update",
+  "id": "showcase_pipeline",
+  "description": "Seven-step silent film production on the settled substrate: reference direction, script and beats in the resource vocabulary, five-role asset contract, timing table in the animation language, lane conformance check, bounded Remotion implementation, rubric-graded review.",
+  "chain_step_operation": "update",
+  "chain_step_index": 4,
+  "chain_step_data": {
+   "promptId": "tech_recommendation",
+   "stepName": "Lane Conformance",
+   "args": {
+    "subject": "The substrate is settled (D41): Remotion with @remotion/three for the frame interior and kit beats, src/library primitives, swangle renderer on this machine. Do not reopen the engine choice. Check that the timing table and asset contract can be produced on this substrate; name only the library additions needed, as a re-issuable implementation brief with exact owned files under media/showcase/src, render commands and the artifact paths the review step will grade."
+   }
+  }
+ }
+}

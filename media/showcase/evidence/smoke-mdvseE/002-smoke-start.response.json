@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "### Original Request Intent\n\nThis step was given the following request. Your work must satisfy this intent:\n\n- **brief**: SMOKE: recorded validation fixture for silent showcase mapping; do not produce creative work.\n- **constraints**: SMOKE fixture only. No creative evaluation, no filesystem changes, no executable check or publication.\n- **output_root**: media/showcase/output\n\nBrief: SMOKE: recorded validation fixture for silent showcase mapping; do not produce creative work.\nProduction root: media/showcase/output\nPrevious handoff:\nStart of pre-production; no prior step.\n\nThe board is the bible at a glance. Read `v3/references/board.json` and `v3/creative-spec.md` (rulings list). Check, in order: every card has title, by, borrow, refuse and governs; every `src`/`poster` path exists; no card shows anything the project drew (D56: no study still, no muse sheet, no failing control); every ruling D41 and later is governed by at least one card or named in the laws block; every video card has a local study copy or an explicit external href. Run `npm run board` from the production root; it refuses on a missing path. Do not add references on your own: a new card needs an owner ruling or a filed provenance entry in `style-references.json` with bytes and sha256.\n\nReturn: Board Revision; Sections and Card Count; Rulings Without a Card; Paths Fixed; Build Output (html, png size); Concerns.\n\n---\n\n### Required Response Format\n\n**Summary**: What was implemented (2-3 sentences)\n\nChain: chain-showcase_preproduction#1\n→ Progress 1/4\nNext: chain_id=\"chain-showcase_preproduction#1\", user_response=\"<your step output>\""
+    }
+  ],
+  "isError": false
+}

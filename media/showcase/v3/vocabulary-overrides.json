@@ -1,0 +1,62 @@
+{
+  "schema": "animation-direction.overrides.1",
+  "film": "the 65 s animatic (v3/timeline.json)",
+  "note": "The film's own words, layered on the base vocabulary (v3/vocabulary.json) the way card-schema.json layers on the inspiration facets: an alias maps a phrase the film already uses to base terms, a term adds a word the base does not carry. Nothing here restates a base term; probe-vocabulary.py refuses an alias whose target is not a base term and a term that duplicates one.",
+  "aliases": {
+    "warm, inviting": ["warm", "inviting"],
+    "playful tipping to overwhelm": ["playful", "overwhelm"],
+    "gentle gag": ["comic"],
+    "frustration kept kind": ["frustration"],
+    "reverent": ["reverent"],
+    "playful": ["playful"],
+    "focused": ["focused"],
+    "playful, satisfied": ["playful", "satisfaction"],
+    "reverent, content": ["reverent", "contentment"]
+  },
+  "terms": {
+    "home": {
+      "domain": "world",
+      "definition": "The Seuss black field with the box, the gadget and the bubble; the film's first and last world (D78).",
+      "governs": "look"
+    },
+    "crayon": {
+      "domain": "world",
+      "definition": "The art world drawn in crayon on a paper-coloured field; Clawd leads (D78).",
+      "governs": "look"
+    },
+    "line": {
+      "domain": "world",
+      "definition": "The world every crossing passes through: everything reduced to contour lines (D78).",
+      "governs": "look"
+    },
+    "shaded": {
+      "domain": "world",
+      "definition": "The programming world, shaded and futuristic with emissive edges; Codex leads (D78).",
+      "governs": "look"
+    },
+    "Turrell blue": {
+      "domain": "colour.pair",
+      "definition": "Shot s01's pair: a flood of blue radiance with a yellow accent on the black field (D74).",
+      "governs": "colour-script",
+      "pair": {"radiance": "#0a51fb", "accent": "#fad204"}
+    },
+    "Styx steel": {
+      "domain": "colour.pair",
+      "definition": "Shot s02's pair: steel-blue radiance with a cold cyan accent, noisy (D74).",
+      "governs": "colour-script",
+      "pair": {"radiance": "#17263a", "accent": "#457ca4"}
+    },
+    "amber": {
+      "domain": "colour.pair",
+      "definition": "Shot s03's pair: amber radiance with a yellow accent on a paper-coloured field (D74).",
+      "governs": "colour-script",
+      "pair": {"radiance": "#e1750c", "accent": "#fad204"}
+    },
+    "Soup! coral": {
+      "domain": "colour.pair",
+      "definition": "Shot s04's pair: coral radiance with a pale peach accent for the home settle (D74).",
+      "governs": "colour-script",
+      "pair": {"radiance": "#a63a2e", "accent": "#f8c496"}
+    }
+  }
+}

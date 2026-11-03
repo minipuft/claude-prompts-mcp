@@ -1,0 +1,139 @@
+{
+  "asset": "bubble",
+  "covers": [
+    "bubble"
+  ],
+  "status": "proposed",
+  "picked": null,
+  "job": "the bubble: capability seen through glass; it swells out of the box, holds a small world with rays, and pops; hand-coded today in Bubble.tsx",
+  "prompt": {
+    "chain": ">>showcase_asset_muse",
+    "payload": "workflow-payloads/72-muse-bubble.json",
+    "tool": "imagegen (showcase_asset_sheet tools/imagegen/script.py, codex exec)",
+    "common": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.",
+    "variant_prompts": {
+      "muse-01": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the bubble: capability seen through glass; it swells out of the box, holds a small world with rays, and pops; hand-coded today in Bubble.tsx.\nLAYOUT: Show the SAME bubble in three states on one baseline: small and whole, swollen with the small world inside, and the burst ring with flying fragments. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: owner card MFI6QTUP15009: a figure inside a bubble with rays, a tilted view.\nImage 2: Dr. Seuss Midnight Painting: receding hand-drawn frames, each slightly turned.\nImage 3: the Codex companion: take only its rounded soft cloud-and-prompt silhouette and its screen-glyph window as the cast property.\nImage 4: owner card MFIYY3RT6SJS2: a radial burst with a tiny figure at its centre.\nVARIANT muse-01 'Window bubble': A thick-skinned bubble whose skin is a window: a pale contour ring with a turned inner frame, the small world visible through it with a few rays. The design sits between codex (rounded soft silhouette and glyph window) and the Seuss paintings.",
+      "muse-02": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the bubble: capability seen through glass; it swells out of the box, holds a small world with rays, and pops; hand-coded today in Bubble.tsx.\nLAYOUT: Show the SAME bubble in three states on one baseline: small and whole, swollen with the small world inside, and the burst ring with flying fragments. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: owner card MRAM46LYMIGKO: light as a volume, nested glowing ovals, forms read as silhouettes.\nImage 2: Dr. Seuss Midnight Painting: light as strings of beads strung between forms.\nImage 3: the human's model sheet: take only its long swooping neck-and-hair line, tapered tips and thin pale contour as the cast property.\nImage 4: owner card MFJFTELGH6FD8: a single radiant core behind a flat silhouette, the shape never whites out.\nVARIANT muse-02 'Volume bubble': A bubble drawn as nested glowing ovals, each a flat band, the small world a silhouette in the innermost oval, light as a volume. The design sits between human (tapered tips and thin pale contour) and the Seuss paintings.",
+      "muse-03": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the bubble: capability seen through glass; it swells out of the box, holds a small world with rays, and pops; hand-coded today in Bubble.tsx.\nLAYOUT: Show the SAME bubble in three states on one baseline: small and whole, swollen with the small world inside, and the burst ring with flying fragments. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: owner card MFIYY3RT6SJS2: a radial burst with a tiny figure at its centre.\nImage 2: Dr. Seuss Midnight Painting: swooping organic lobes, curling stalks with flag leaves and pale thin contour on black.\nImage 3: the Clawd companion: take only its stubby blocky body, flat plates and small dark slit marks as the cast property.\nImage 4: owner card MFJFTELGH6FD8: a single radiant core behind a flat silhouette, the shape never whites out.\nVARIANT muse-03 'Pop-star bubble': A bubble with a lobed Seuss skin that bulges unevenly; on the pop it bursts into pointed star shards radiating like a burst. The design sits between clawd (blocky plates as the shards) and the Seuss paintings."
+    },
+    "chain_receipt": "evidence/drive-iCf6Tv",
+    "mailbox": "mailbox/muse-bubble"
+  },
+  "variants": [
+    {
+      "id": "muse-01",
+      "title": "Window bubble",
+      "image": "assets/props/bubble/muse-01.png",
+      "sha256": "76084b282b97e33175d8f64d3cf0bb169fb79b7c0fe6c11889e5f25714409c0b",
+      "design": "A thick-skinned bubble whose skin is a window: a pale contour ring with a turned inner frame, the small world visible through it with a few rays.",
+      "borrows": [
+        {
+          "card": "MFI6QTUP15009",
+          "facet": "composition.framing",
+          "value": "window",
+          "property": "a figure inside a bubble framed as a window"
+        },
+        {
+          "card": "MFI6QTUP15009",
+          "facet": "fx",
+          "value": "rays",
+          "property": "rays from a single emitter inside the bubble"
+        }
+      ],
+      "cast_property": {
+        "cast": "codex",
+        "property": "rounded soft silhouette and glyph window"
+      },
+      "board_cards": [
+        "seuss-nested-frames",
+        "codex-official"
+      ],
+      "reference_images": [
+        "assets/props/_refs/MFI6QTUP15009.png",
+        "assets/props/_refs/seuss-nested-frames.png",
+        "assets/props/_refs/codex-official.png",
+        "assets/props/_refs/MFIYY3RT6SJS2.png"
+      ],
+      "generation_receipt": "assets/props/bubble/muse-01.receipt.json",
+      "request": "assets/props/bubble/muse-01.request.json",
+      "observed": "three states (whole, swollen, burst) with a small sprite inside; the contents echo Codex's face rather than the resource world"
+    },
+    {
+      "id": "muse-02",
+      "title": "Volume bubble",
+      "image": "assets/props/bubble/muse-02.png",
+      "sha256": "4559f52cf760eec9735197974fc4a6a3b2274b43a5f35086687f9148c437749f",
+      "design": "A bubble drawn as nested glowing ovals, each a flat band, the small world a silhouette in the innermost oval, light as a volume.",
+      "borrows": [
+        {
+          "card": "MRAM46LYMIGKO",
+          "facet": "light.contrast",
+          "value": "silhouette",
+          "property": "forms read as silhouettes inside nested volume"
+        },
+        {
+          "card": "MRAM46LYMIGKO",
+          "facet": "composition.scale",
+          "value": "figure-small",
+          "property": "the contents stay small inside the volume"
+        }
+      ],
+      "cast_property": {
+        "cast": "human",
+        "property": "tapered tips and thin pale contour"
+      },
+      "board_cards": [
+        "seuss-green-cat-lights",
+        "human-model"
+      ],
+      "reference_images": [
+        "assets/props/_refs/MRAM46LYMIGKO.png",
+        "assets/props/_refs/seuss-green-cat-lights.png",
+        "assets/props/_refs/human-model.png",
+        "assets/props/_refs/MFJFTELGH6FD8.png"
+      ],
+      "generation_receipt": "assets/props/bubble/muse-02.receipt.json",
+      "request": "assets/props/bubble/muse-02.request.json",
+      "observed": "an egg of nested bands with a floating tower inside and bead strings; the burst states are curved shards on a ring"
+    },
+    {
+      "id": "muse-03",
+      "title": "Pop-star bubble",
+      "image": "assets/props/bubble/muse-03.png",
+      "sha256": "35709bb12cec817a3490ef2286b35ab52938cf6643ea0ecc587ea6de85f2dc65",
+      "design": "A bubble with a lobed Seuss skin that bulges unevenly; on the pop it bursts into pointed star shards radiating like a burst.",
+      "borrows": [
+        {
+          "card": "MFIYY3RT6SJS2",
+          "facet": "fx",
+          "value": "burst",
+          "property": "a radial burst of rays on the pop"
+        },
+        {
+          "card": "MFJFTELGH6FD8",
+          "facet": "fx",
+          "value": "bloom",
+          "property": "bloom behind the silhouette that never whites out"
+        }
+      ],
+      "cast_property": {
+        "cast": "clawd",
+        "property": "blocky plates as the shards"
+      },
+      "board_cards": [
+        "seuss-no-one-youer",
+        "clawd-official"
+      ],
+      "reference_images": [
+        "assets/props/_refs/MFIYY3RT6SJS2.png",
+        "assets/props/_refs/seuss-no-one-youer.png",
+        "assets/props/_refs/clawd-official.png",
+        "assets/props/_refs/MFJFTELGH6FD8.png"
+      ],
+      "generation_receipt": "assets/props/bubble/muse-03.receipt.json",
+      "request": "assets/props/bubble/muse-03.request.json",
+      "observed": "a lobed skin with a small world and rays inside; the pop is pointed shards with yellow bolts, the accent is used on four marks (scarce rule strained)"
+    }
+  ],
+  "grade": "assets/props/bubble/grade.md"
+}

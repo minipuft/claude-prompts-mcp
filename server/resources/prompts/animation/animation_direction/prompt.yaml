@@ -1,0 +1,32 @@
+id: animation_direction
+name: Animation Direction
+description: "Direct an animation production in the controlled vocabulary (D96):
+  put one question per turn to the owner in the fixed interview form (situation,
+  options as vocabulary words, default, what it changes, reference card), file
+  it as an owner-ask proposal on the bible, and write rulings in the form D<N>,
+  <who>, <date>: <verb> <object> <value> because <intent word> (ref <card id>)
+  (closes p<NNN>). The vocabulary is a file beside the episode's contracts; this
+  prompt never restates it."
+category: animation
+systemMessageFile: system-message.md
+userMessageTemplateFile: user-message.md
+arguments:
+  - name: episode_root
+    type: string
+    description: Episode directory holding the vocabulary (vocabulary.json and
+      vocabulary-overrides.json), the timeline, the bible, proposals/ and
+      references/board.json (e.g. media/showcase/v3).
+    required: true
+  - name: beat
+    type: string
+    description: Beat id from the episode's timeline.json the question is about.
+    required: true
+  - name: frame
+    type: number
+    description: Episode frame inside that beat that the page shows when the
+      question is asked.
+    required: true
+  - name: question
+    type: string
+    description: What the owner has to decide, in one sentence.
+    required: true

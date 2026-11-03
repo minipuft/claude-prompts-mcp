@@ -1,0 +1,6 @@
+{
+  "name": "prompt_engine",
+  "arguments": {
+    "command": ">>showcase_review brief:\"gate control probe\" constraints:\"none\" context:\"none\" motion_contract:\"none\" output_root:\"media/showcase\" :: id:\"showcase-review\""
+  }
+}

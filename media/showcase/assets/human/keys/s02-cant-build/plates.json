@@ -1,0 +1,66 @@
+[
+ {
+  "key": "K1",
+  "name": "ready",
+  "plate": "assets/human/keys/s02-cant-build/K1.png",
+  "family": "home",
+  "cropPx": [
+   243,
+   436
+  ],
+  "baselineInCrop": 432,
+  "scale": 0.4745,
+  "originMask": [
+   65,
+   41
+  ]
+ },
+ {
+  "key": "K2",
+  "name": "reach",
+  "plate": "assets/human/keys/s02-cant-build/K2.png",
+  "family": "home",
+  "cropPx": [
+   352,
+   425
+  ],
+  "baselineInCrop": 422,
+  "scale": 0.4745,
+  "originMask": [
+   96,
+   61
+  ]
+ },
+ {
+  "key": "K3",
+  "name": "stack",
+  "plate": "assets/human/keys/s02-cant-build/K3.png",
+  "family": "home",
+  "cropPx": [
+   238,
+   493
+  ],
+  "baselineInCrop": 490,
+  "scale": 0.4745,
+  "originMask": [
+   65,
+   -82
+  ]
+ },
+ {
+  "key": "K4",
+  "name": "sit",
+  "plate": "assets/human/keys/s02-cant-build/K4.png",
+  "family": "home",
+  "cropPx": [
+   247,
+   355
+  ],
+  "baselineInCrop": 353,
+  "scale": 0.4745,
+  "originMask": [
+   75,
+   208
+  ]
+ }
+]

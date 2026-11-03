@@ -1,0 +1,105 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🔍 **Prompt Inspect**: Showcase Render Study (`showcase_render_study`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Render one shot's frame set through Remotion (default) or, when explicitly requested with tool:blender_render, through Blender, from the shot's key plates and pose chart (D72, D83): the puppet holds and plays authored breakdowns between keys and never redraws; writes the stills, the consecutive-frame strip, the figure-only sequence and joints dump the inbetween probe reads, the identity probes, and the receipt skeleton.\n\n**Arguments**:\n- `brief` `string` *(required)*: Audience, product goal and desired silent showcase outcome.\n- `context` `string`: Prior step output; read shared chain history for earlier evidence and decisions.\n- `output_root` `string`: Caller-owned production artifact directory.\n- `shot` `string` *(required)*: Shot id from v3/shots.json.\n- `renderer` `string`: remotion (default) or blender. Blender runs only when the request also names tool:blender_render; it refuses when no Blender binary is reachable.\n- `frames` `string`: Frame set: first, key (the shot's action frame), last, and a 6-frame consecutive strip around the key, plus any explicit frame numbers.\n- `blend_file` `string`: Blender: path to the .blend for this shot.\n- `python_script` `string`: Blender: optional driver script run with --python; receives --frame and --out after --.\n\n**System Message**:\n```\nUse the animation-direction vocabulary (media/showcase/v3/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n```\n\n**User Message Template**:\n```\nBrief: {{brief}}\nShot: {{shot}} · renderer: {{renderer}} · frames: {{frames}}\nProduction root: {{output_root}}\nPrevious handoff (key sheet):\n{{context | default(\"Read the key-sheet and motion steps from chain history.\")}}\n\nRead the shot row in `v3/shots.json`, the chart `v3/charts/<shot>.json` and each actor's key plates under `assets/<actor>/keys/<shot>/` (a missing plate or chart is BLOCKED). Pose-to-pose (D72, D83): the composition plays the pose chart (`poseChartFrom` over `v3/poses/<shot>.json` and the registered key sheet; a missing pose sheet is BLOCKED, run animation_poses): each key plate held for its charted hold with its moving hold, every breakdown a pose (passing position on an arc, anticipation, overshoot, settle), secondaries lagging by their declared drawings, stepped on twos, drawing nothing new; a shot that needs a pose no key supplies is sent back to the key sheet, never approximated by rotating parts. Render path (D87): run `npm run render -- <shot>` in the renderer root (scripts/animation/render-cached.mjs). It hashes every layer's inputs (figure, props, world, light, camera), draws each distinct drawing once through the browser into the cache, composes `out/<shot>-seq/element-NNN.png`, the figure-only layer `out/<shot>-figure-seq/` and `out/<shot>.mp4` from the cache, then draws a sample of frames whole through the browser (`out/<shot>-confirm/`) and compares them with the composed ones. It exits 1 naming the frame and the layer when a confirm frame is beyond the determinism tolerance (2 levels on at most 0.01 % of the pixels): that is BLOCKED, not a reason to `--force` or to render the sequence by hand. Quote the manifest's hit/miss table (`out/<shot>/render-manifest.json`: per layer status, drawings reused and rendered) and the confirm frames (frame, MAD, pixels beyond 2 levels, allowance). Stills for the strip and the identity pass: `npx remotion still` on the pinned `swangle` renderer into `out/<shot>-f###.png` and `out/<shot>-strip.png` (consecutive composed frames tiled with ffmpeg); render the key frame twice and record both sha256 (C12); measure per-frame pixel change across the strip for the drawn and light regions (C16, C18); the figure-only layer is already at `out/<shot>-figure-seq/` (composed from the same cached figure drawings), write the joints dump (`npm run joints -- <shot>`) and run `python3 scripts/animation/probe-inbetweens.py out/<shot>-figure-seq --joints out/<shot>-joints.json --poses v3/poses/<shot>.json` (C23, C32, C33: holds, one-sided arcs with monotone progress, eased spacing, overlap, moving holds; the gate runs the same probe over every pose sheet), quoting its control and summary lines; overlay each key frame on the model sheet (C20); render the head at its on-screen size for the identity pass (D70); sample one pixel per identity pigment (C1). Blender path: only when `renderer` is blender AND the request names `tool:blender_render`; a refusal is BLOCKED, not a render. A single still cannot prove motion. Write `out/<shot>-probes.json` with every measurement and the receipt skeleton (Changed, Grades left empty, Controls, Owner, Next). Never describe a frame you did not open.\n\nReturn: Frames Rendered (path, sha256 prefix); Render Manifest (hit/miss table, confirm frames); Probes (determinism, twos/ones change %, inbetween probe lines per check, model-sheet overlay, identity samples, identity pass); Receipt Skeleton Path; Renderer Used; Concerns.\n```\n\n**Gate Configuration**:\n- Exclude: api-documentation, creed-fidelity, information-placement, plan-quality, product-positioning-fidelity, prose-hygiene, semantic-discoverability\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "inspect",
+    "resource_type": "prompt",
+    "id": "showcase_render_study",
+    "current_version": 0,
+    "prompt": {
+      "id": "showcase_render_study",
+      "name": "Showcase Render Study",
+      "category": "development",
+      "description": "Render one shot's frame set through Remotion (default) or, when explicitly requested with tool:blender_render, through Blender, from the shot's key plates and pose chart (D72, D83): the puppet holds and plays authored breakdowns between keys and never redraws; writes the stills, the consecutive-frame strip, the figure-only sequence and joints dump the inbetween probe reads, the identity probes, and the receipt skeleton.",
+      "systemMessage": "Use the animation-direction vocabulary (media/showcase/v3/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.",
+      "userMessageTemplate": "Brief: {{brief}}\nShot: {{shot}} · renderer: {{renderer}} · frames: {{frames}}\nProduction root: {{output_root}}\nPrevious handoff (key sheet):\n{{context | default(\"Read the key-sheet and motion steps from chain history.\")}}\n\nRead the shot row in `v3/shots.json`, the chart `v3/charts/<shot>.json` and each actor's key plates under `assets/<actor>/keys/<shot>/` (a missing plate or chart is BLOCKED). Pose-to-pose (D72, D83): the composition plays the pose chart (`poseChartFrom` over `v3/poses/<shot>.json` and the registered key sheet; a missing pose sheet is BLOCKED, run animation_poses): each key plate held for its charted hold with its moving hold, every breakdown a pose (passing position on an arc, anticipation, overshoot, settle), secondaries lagging by their declared drawings, stepped on twos, drawing nothing new; a shot that needs a pose no key supplies is sent back to the key sheet, never approximated by rotating parts. Render path (D87): run `npm run render -- <shot>` in the renderer root (scripts/animation/render-cached.mjs). It hashes every layer's inputs (figure, props, world, light, camera), draws each distinct drawing once through the browser into the cache, composes `out/<shot>-seq/element-NNN.png`, the figure-only layer `out/<shot>-figure-seq/` and `out/<shot>.mp4` from the cache, then draws a sample of frames whole through the browser (`out/<shot>-confirm/`) and compares them with the composed ones. It exits 1 naming the frame and the layer when a confirm frame is beyond the determinism tolerance (2 levels on at most 0.01 % of the pixels): that is BLOCKED, not a reason to `--force` or to render the sequence by hand. Quote the manifest's hit/miss table (`out/<shot>/render-manifest.json`: per layer status, drawings reused and rendered) and the confirm frames (frame, MAD, pixels beyond 2 levels, allowance). Stills for the strip and the identity pass: `npx remotion still` on the pinned `swangle` renderer into `out/<shot>-f###.png` and `out/<shot>-strip.png` (consecutive composed frames tiled with ffmpeg); render the key frame twice and record both sha256 (C12); measure per-frame pixel change across the strip for the drawn and light regions (C16, C18); the figure-only layer is already at `out/<shot>-figure-seq/` (composed from the same cached figure drawings), write the joints dump (`npm run joints -- <shot>`) and run `python3 scripts/animation/probe-inbetweens.py out/<shot>-figure-seq --joints out/<shot>-joints.json --poses v3/poses/<shot>.json` (C23, C32, C33: holds, one-sided arcs with monotone progress, eased spacing, overlap, moving holds; the gate runs the same probe over every pose sheet), quoting its control and summary lines; overlay each key frame on the model sheet (C20); render the head at its on-screen size for the identity pass (D70); sample one pixel per identity pigment (C1). Blender path: only when `renderer` is blender AND the request names `tool:blender_render`; a refusal is BLOCKED, not a render. A single still cannot prove motion. Write `out/<shot>-probes.json` with every measurement and the receipt skeleton (Changed, Grades left empty, Controls, Owner, Next). Never describe a frame you did not open.\n\nReturn: Frames Rendered (path, sha256 prefix); Render Manifest (hit/miss table, confirm frames); Probes (determinism, twos/ones change %, inbetween probe lines per check, model-sheet overlay, identity samples, identity pass); Receipt Skeleton Path; Renderer Used; Concerns.",
+      "arguments": [
+        {
+          "name": "brief",
+          "required": true,
+          "description": "Audience, product goal and desired silent showcase outcome.",
+          "type": "string"
+        },
+        {
+          "name": "context",
+          "required": false,
+          "description": "Prior step output; read shared chain history for earlier evidence and decisions.",
+          "type": "string"
+        },
+        {
+          "name": "output_root",
+          "required": false,
+          "description": "Caller-owned production artifact directory.",
+          "type": "string",
+          "defaultValue": "media/showcase"
+        },
+        {
+          "name": "shot",
+          "required": true,
+          "description": "Shot id from v3/shots.json.",
+          "type": "string"
+        },
+        {
+          "name": "renderer",
+          "required": false,
+          "description": "remotion (default) or blender. Blender runs only when the request also names tool:blender_render; it refuses when no Blender binary is reachable.",
+          "type": "string",
+          "defaultValue": "remotion",
+          "validation": {
+            "allowedValues": [
+              "remotion",
+              "blender"
+            ]
+          }
+        },
+        {
+          "name": "frames",
+          "required": false,
+          "description": "Frame set: first, key (the shot's action frame), last, and a 6-frame consecutive strip around the key, plus any explicit frame numbers.",
+          "type": "string",
+          "defaultValue": "first,key,last,strip"
+        },
+        {
+          "name": "blend_file",
+          "required": false,
+          "description": "Blender: path to the .blend for this shot.",
+          "type": "string"
+        },
+        {
+          "name": "python_script",
+          "required": false,
+          "description": "Blender: optional driver script run with --python; receives --frame and --out after --.",
+          "type": "string"
+        }
+      ],
+      "chainSteps": [],
+      "gateConfiguration": {
+        "exclude": [
+          "api-documentation",
+          "creed-fidelity",
+          "information-placement",
+          "plan-quality",
+          "product-positioning-fidelity",
+          "prose-hygiene",
+          "semantic-discoverability"
+        ]
+      },
+      "artifacts": {
+        "produces": [
+          "docs"
+        ]
+      }
+    },
+    "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+    "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+    "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "source_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "edit_copies_on_write": false,
+    "message": "🔍 **Prompt Inspect**: Showcase Render Study (`showcase_render_study`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Render one shot's frame set through Remotion (default) or, when explicitly requested with tool:blender_render, through Blender, from the shot's key plates and pose chart (D72, D83): the puppet holds and plays authored breakdowns between keys and never redraws; writes the stills, the consecutive-frame strip, the figure-only sequence and joints dump the inbetween probe reads, the identity probes, and the receipt skeleton.\n\n**Arguments**:\n- `brief` `string` *(required)*: Audience, product goal and desired silent showcase outcome.\n- `context` `string`: Prior step output; read shared chain history for earlier evidence and decisions.\n- `output_root` `string`: Caller-owned production artifact directory.\n- `shot` `string` *(required)*: Shot id from v3/shots.json.\n- `renderer` `string`: remotion (default) or blender. Blender runs only when the request also names tool:blender_render; it refuses when no Blender binary is reachable.\n- `frames` `string`: Frame set: first, key (the shot's action frame), last, and a 6-frame consecutive strip around the key, plus any explicit frame numbers.\n- `blend_file` `string`: Blender: path to the .blend for this shot.\n- `python_script` `string`: Blender: optional driver script run with --python; receives --frame and --out after --.\n\n**System Message**:\n```\nUse the animation-direction vocabulary (media/showcase/v3/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n```\n\n**User Message Template**:\n```\nBrief: {{brief}}\nShot: {{shot}} · renderer: {{renderer}} · frames: {{frames}}\nProduction root: {{output_root}}\nPrevious handoff (key sheet):\n{{context | default(\"Read the key-sheet and motion steps from chain history.\")}}\n\nRead the shot row in `v3/shots.json`, the chart `v3/charts/<shot>.json` and each actor's key plates under `assets/<actor>/keys/<shot>/` (a missing plate or chart is BLOCKED). Pose-to-pose (D72, D83): the composition plays the pose chart (`poseChartFrom` over `v3/poses/<shot>.json` and the registered key sheet; a missing pose sheet is BLOCKED, run animation_poses): each key plate held for its charted hold with its moving hold, every breakdown a pose (passing position on an arc, anticipation, overshoot, settle), secondaries lagging by their declared drawings, stepped on twos, drawing nothing new; a shot that needs a pose no key supplies is sent back to the key sheet, never approximated by rotating parts. Render path (D87): run `npm run render -- <shot>` in the renderer root (scripts/animation/render-cached.mjs). It hashes every layer's inputs (figure, props, world, light, camera), draws each distinct drawing once through the browser into the cache, composes `out/<shot>-seq/element-NNN.png`, the figure-only layer `out/<shot>-figure-seq/` and `out/<shot>.mp4` from the cache, then draws a sample of frames whole through the browser (`out/<shot>-confirm/`) and compares them with the composed ones. It exits 1 naming the frame and the layer when a confirm frame is beyond the determinism tolerance (2 levels on at most 0.01 % of the pixels): that is BLOCKED, not a reason to `--force` or to render the sequence by hand. Quote the manifest's hit/miss table (`out/<shot>/render-manifest.json`: per layer status, drawings reused and rendered) and the confirm frames (frame, MAD, pixels beyond 2 levels, allowance). Stills for the strip and the identity pass: `npx remotion still` on the pinned `swangle` renderer into `out/<shot>-f###.png` and `out/<shot>-strip.png` (consecutive composed frames tiled with ffmpeg); render the key frame twice and record both sha256 (C12); measure per-frame pixel change across the strip for the drawn and light regions (C16, C18); the figure-only layer is already at `out/<shot>-figure-seq/` (composed from the same cached figure drawings), write the joints dump (`npm run joints -- <shot>`) and run `python3 scripts/animation/probe-inbetweens.py out/<shot>-figure-seq --joints out/<shot>-joints.json --poses v3/poses/<shot>.json` (C23, C32, C33: holds, one-sided arcs with monotone progress, eased spacing, overlap, moving holds; the gate runs the same probe over every pose sheet), quoting its control and summary lines; overlay each key frame on the model sheet (C20); render the head at its on-screen size for the identity pass (D70); sample one pixel per identity pigment (C1). Blender path: only when `renderer` is blender AND the request names `tool:blender_render`; a refusal is BLOCKED, not a render. A single still cannot prove motion. Write `out/<shot>-probes.json` with every measurement and the receipt skeleton (Changed, Grades left empty, Controls, Owner, Next). Never describe a frame you did not open.\n\nReturn: Frames Rendered (path, sha256 prefix); Render Manifest (hit/miss table, confirm frames); Probes (determinism, twos/ones change %, inbetween probe lines per check, model-sheet overlay, identity samples, identity pass); Receipt Skeleton Path; Renderer Used; Concerns.\n```\n\n**Gate Configuration**:\n- Exclude: api-documentation, creed-fidelity, information-placement, plan-quality, product-positioning-fidelity, prose-hygiene, semantic-discoverability\n"
+  },
+  "isError": false
+}

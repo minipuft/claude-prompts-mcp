@@ -1,0 +1,5 @@
+# The showcase film tree is generated artifacts, studies and contracts written by scripts, probes
+# and the MCP client; CI's change classifier runs `git diff --check`, and trailing whitespace in a
+# study table or a board page is not a defect to edit by hand (the studies record their copies'
+# sha256). Whitespace checking is off for this tree.
+* -whitespace

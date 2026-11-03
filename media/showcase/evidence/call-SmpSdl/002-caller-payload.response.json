@@ -1,0 +1,58 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🔍 **Prompt Inspect**: Animation Blocking (`animation_blocking`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Step 2: write one blocking contract per beat (where every actor, prop, gate and the emitter stand, with scale and a cited composition card), derived from the layouts where they exist and from the test scene otherwise, so every world renders the beat at the same staging.\n\n**Arguments**:\n- `episode_root` `string` *(required)*: Episode directory holding the beat ledger (beats-v2.json or beats.json), contracts (timeline.json, blocking/, keys/, light.json, worlds/), rubric.md and studies/ (e.g. media/showcase/v3).\n- `renderer` `string`: The rendering project root (Remotion here): where `npm run animatic`, `npm run xsheet` and scripts/animation/ live.\n- `context` `string`: Owner notes, rulings or the previous step's result.\n- `output_root` `string`: Caller-owned production artifact directory for studies and receipts.\n\n**System Message**:\n```\nUse the animation-direction vocabulary (<episode_root>/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n```\n\n**User Message Template**:\n```\nEpisode root: {{episode_root}}\nRenderer: {{renderer}}\nProduction root: {{output_root}}\nNotes:\n{{context | default(\"none\")}}\n\nRead `timeline.json`, the ledger's actions per beat, every `layouts/<shot>.json` (D77 cinematography sheets: camera, figure heights, emitter path), `blocking/test-scene.json` (the schema and the proven test staging) and board §8 composition cards. For each beat write `blocking/<beat-id>.json`: every actor the beat's actions name with position, scale and facing; props and gates; the emitter anchor at the beat's start and end; `card` (a composition card id, through the /inspiration skill, filed with provenance); `derivedFrom` (the layout or test-scene) and `provisional: true`. Keep identity boxes apart (Codex and Clawd never overlap each other or the human's crop) and keep the arch, gates and floor where the world contracts expect them unless the beat says otherwise. Render `PoseSheet`/`WorldSheet` with the beat's blocking for one beat per world as a staging still under `studies/`. The gate runs `probe-blocking.py`; quote its lines. Reply: Blocking (table: beat · actors placed · emitter start→end · card · derivedFrom), Stills, Deviations from the layouts (with why), Changed, Receipt.\n```\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "inspect",
+    "resource_type": "prompt",
+    "id": "animation_blocking",
+    "current_version": 0,
+    "prompt": {
+      "id": "animation_blocking",
+      "name": "Animation Blocking",
+      "category": "animation",
+      "description": "Step 2: write one blocking contract per beat (where every actor, prop, gate and the emitter stand, with scale and a cited composition card), derived from the layouts where they exist and from the test scene otherwise, so every world renders the beat at the same staging.",
+      "systemMessage": "Use the animation-direction vocabulary (<episode_root>/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.",
+      "userMessageTemplate": "Episode root: {{episode_root}}\nRenderer: {{renderer}}\nProduction root: {{output_root}}\nNotes:\n{{context | default(\"none\")}}\n\nRead `timeline.json`, the ledger's actions per beat, every `layouts/<shot>.json` (D77 cinematography sheets: camera, figure heights, emitter path), `blocking/test-scene.json` (the schema and the proven test staging) and board §8 composition cards. For each beat write `blocking/<beat-id>.json`: every actor the beat's actions name with position, scale and facing; props and gates; the emitter anchor at the beat's start and end; `card` (a composition card id, through the /inspiration skill, filed with provenance); `derivedFrom` (the layout or test-scene) and `provisional: true`. Keep identity boxes apart (Codex and Clawd never overlap each other or the human's crop) and keep the arch, gates and floor where the world contracts expect them unless the beat says otherwise. Render `PoseSheet`/`WorldSheet` with the beat's blocking for one beat per world as a staging still under `studies/`. The gate runs `probe-blocking.py`; quote its lines. Reply: Blocking (table: beat · actors placed · emitter start→end · card · derivedFrom), Stills, Deviations from the layouts (with why), Changed, Receipt.",
+      "arguments": [
+        {
+          "name": "episode_root",
+          "required": true,
+          "description": "Episode directory holding the beat ledger (beats-v2.json or beats.json), contracts (timeline.json, blocking/, keys/, light.json, worlds/), rubric.md and studies/ (e.g. media/showcase/v3).",
+          "type": "string"
+        },
+        {
+          "name": "renderer",
+          "required": false,
+          "description": "The rendering project root (Remotion here): where `npm run animatic`, `npm run xsheet` and scripts/animation/ live.",
+          "type": "string",
+          "defaultValue": "media/showcase"
+        },
+        {
+          "name": "context",
+          "required": false,
+          "description": "Owner notes, rulings or the previous step's result.",
+          "type": "string"
+        },
+        {
+          "name": "output_root",
+          "required": false,
+          "description": "Caller-owned production artifact directory for studies and receipts.",
+          "type": "string",
+          "defaultValue": "media/showcase"
+        }
+      ],
+      "chainSteps": []
+    },
+    "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+    "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+    "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "source_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "edit_copies_on_write": false,
+    "message": "🔍 **Prompt Inspect**: Animation Blocking (`animation_blocking`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Step 2: write one blocking contract per beat (where every actor, prop, gate and the emitter stand, with scale and a cited composition card), derived from the layouts where they exist and from the test scene otherwise, so every world renders the beat at the same staging.\n\n**Arguments**:\n- `episode_root` `string` *(required)*: Episode directory holding the beat ledger (beats-v2.json or beats.json), contracts (timeline.json, blocking/, keys/, light.json, worlds/), rubric.md and studies/ (e.g. media/showcase/v3).\n- `renderer` `string`: The rendering project root (Remotion here): where `npm run animatic`, `npm run xsheet` and scripts/animation/ live.\n- `context` `string`: Owner notes, rulings or the previous step's result.\n- `output_root` `string`: Caller-owned production artifact directory for studies and receipts.\n\n**System Message**:\n```\nUse the animation-direction vocabulary (<episode_root>/vocabulary.json); an intent word outside it is refused by the animation-vocabulary gate.\n```\n\n**User Message Template**:\n```\nEpisode root: {{episode_root}}\nRenderer: {{renderer}}\nProduction root: {{output_root}}\nNotes:\n{{context | default(\"none\")}}\n\nRead `timeline.json`, the ledger's actions per beat, every `layouts/<shot>.json` (D77 cinematography sheets: camera, figure heights, emitter path), `blocking/test-scene.json` (the schema and the proven test staging) and board §8 composition cards. For each beat write `blocking/<beat-id>.json`: every actor the beat's actions name with position, scale and facing; props and gates; the emitter anchor at the beat's start and end; `card` (a composition card id, through the /inspiration skill, filed with provenance); `derivedFrom` (the layout or test-scene) and `provisional: true`. Keep identity boxes apart (Codex and Clawd never overlap each other or the human's crop) and keep the arch, gates and floor where the world contracts expect them unless the beat says otherwise. Render `PoseSheet`/`WorldSheet` with the beat's blocking for one beat per world as a staging still under `studies/`. The gate runs `probe-blocking.py`; quote its lines. Reply: Blocking (table: beat · actors placed · emitter start→end · card · derivedFrom), Stills, Deviations from the layouts (with why), Changed, Receipt.\n```\n"
+  },
+  "isError": false
+}

@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🚦 Gate: Animation Pose Contract\n\n📋 Details:\n  - ID: animation-pose-contract\n  - Type: ✓ validation\n  - Description: Check-tier gate on the pose step: every chart key has a pose with a moment; the key sheet's spine fits the declared curve with a bow of at least 6 % of height; limbs do not twin without a why; a weight foot is declared; every key pair has a breakdown that is a pose; long holds move; and every secondary made of a material (D97) trails its primary by the material's lag, settles after it and answers a step as the material declares. A secondary with a hand-written lag and no material is not measured by the follow-through probe, and a sheet that mixes the two is refused on the hand-written part. On the pose step the spine fit and weight are measured on the sheet's solved joints (the key sheet is drawn afterwards and measures its own keys against the same declarations with --joints keys).\n  - Severity: high\n  - Enforcement Mode: blocking\n  - Classification: custom\n\n📝 Guidance:\nGround truth by exit code (D81, D97). The probe runs `python3 scripts/animation/probe-all.py --contract v3/poses v3/keys v3/charts` in the renderer root and prints one line per probe: `probe-poses.py --joints solved` (every chart key has a pose with a moment; timing shape per move; lead arm never a secondary; long holds move; spine fit, bow and weight on the pose sheet's `solved` joints), then, for every pose sheet that has a secondary made of a material, the joints the chart plays (`scripts/ani..."
+    }
+  ],
+  "isError": false
+}

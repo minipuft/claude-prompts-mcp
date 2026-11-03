@@ -1,0 +1,170 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🔍 **Prompt Inspect**: Showcase Pipeline (`showcase_pipeline`)\n\n⚡ **Type**: chain\n🧠 **Requires Framework**: No\n📜 **Current Version**: 1\n📝 **Description**: Seven-step silent motion production: reference inspiration, evidence-backed story, color/storyboard treatment, motion/editing contract, renderer decision, bounded client implementation and actual render review.\n\n**Arguments**:\n- `brief` `string` *(required)*: Audience, product goals, actual interaction and desired silent film outcome.\n- `constraints` `string`: Duration, dimensions, accessibility, renderer and evidence limits.\n- `output_root` `string`: Caller-owned production artifact directory.\n- `files` `string`: Exact renderer/source files implementation may edit; empty means discovery-only.\n- `moodboard` `string`: Existing logo/reference path or URL.\n- `seed_refs` `string`: Optional reference works or creators to examine.\n\n**System Message**:\n```\nYou produce client-side creative work guided by the Claude Prompts MCP server. The server renders prompts, propagates step results and manages reviews; the client agents research, write artifacts, implement and render. Use existing services and authored resource contracts. Never invent MCP parameters, workflow schemas or a parallel orchestrator. Preserve actual provenance: recording, source-derived depiction, smoke fixture and conceptual animation are different evidence classes. Do not imply a simulated agent or UI is a recorded Claude/Codex run. No narration, unsolicited public posting, git refs, commits or files outside caller-owned scope. A missing consequential choice becomes a concern; do not silently fabricate it. Read prior context and chain history, and cite actual paths/URLs used. Revisions must have observable rationale. This is a planner-supervised chain. The planner judges the reference direction, accepts/revises specialist handoffs and submits actual gate verdicts. Per-step delegation requests a client agent; the server does not spawn LLMs or render video by itself. Workers never self-authorize scope, choose a new schema authority or publish. A seven-step chain is one ordered workflow, not proof of concurrent agent execution. Renderer implementation consumes its motion task and the immediately preceding renderer decision. Runtime gate reviews, if advertised, must be judged against actual output; no fabricated PASS or FAIL.\n```\n\n**User Message Template**:\n```\nProduce a silent outward-facing motion showcase for {{brief}}. Respect {{constraints}}. Write production artifacts only under {{output_root}} and implement only the exact caller-owned files: {{files | default('none: discovery-only')}}. The client executes these seven steps and the planner judges handoffs.\n```\n\n**Chain Steps** (7):\n1. `design_muse` - Reference Direction\n2. `showcase_story` - Silent Story\n3. `showcase_treatment` - Visual Treatment\n4. `showcase_motion` - Motion Contract\n5. `tech_recommendation` - Renderer Decision\n6. `strategic_worker` - Render Implementation\n7. `showcase_review` - Finish Review\n\n**Gate Configuration**:\n- Framework gates: false\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "inspect",
+    "resource_type": "prompt",
+    "id": "showcase_pipeline",
+    "current_version": 1,
+    "prompt": {
+      "id": "showcase_pipeline",
+      "name": "Showcase Pipeline",
+      "category": "development",
+      "description": "Seven-step silent motion production: reference inspiration, evidence-backed story, color/storyboard treatment, motion/editing contract, renderer decision, bounded client implementation and actual render review.",
+      "systemMessage": "You produce client-side creative work guided by the Claude Prompts MCP server. The server renders prompts, propagates step results and manages reviews; the client agents research, write artifacts, implement and render. Use existing services and authored resource contracts. Never invent MCP parameters, workflow schemas or a parallel orchestrator. Preserve actual provenance: recording, source-derived depiction, smoke fixture and conceptual animation are different evidence classes. Do not imply a simulated agent or UI is a recorded Claude/Codex run. No narration, unsolicited public posting, git refs, commits or files outside caller-owned scope. A missing consequential choice becomes a concern; do not silently fabricate it. Read prior context and chain history, and cite actual paths/URLs used. Revisions must have observable rationale. This is a planner-supervised chain. The planner judges the reference direction, accepts/revises specialist handoffs and submits actual gate verdicts. Per-step delegation requests a client agent; the server does not spawn LLMs or render video by itself. Workers never self-authorize scope, choose a new schema authority or publish. A seven-step chain is one ordered workflow, not proof of concurrent agent execution. Renderer implementation consumes its motion task and the immediately preceding renderer decision. Runtime gate reviews, if advertised, must be judged against actual output; no fabricated PASS or FAIL.",
+      "userMessageTemplate": "Produce a silent outward-facing motion showcase for {{brief}}. Respect {{constraints}}. Write production artifacts only under {{output_root}} and implement only the exact caller-owned files: {{files | default('none: discovery-only')}}. The client executes these seven steps and the planner judges handoffs.",
+      "arguments": [
+        {
+          "name": "brief",
+          "required": true,
+          "description": "Audience, product goals, actual interaction and desired silent film outcome.",
+          "type": "string"
+        },
+        {
+          "name": "constraints",
+          "required": false,
+          "description": "Duration, dimensions, accessibility, renderer and evidence limits.",
+          "type": "string",
+          "defaultValue": "Silent motion film; evidence-backed product claims; client-owned rendering; no publishing."
+        },
+        {
+          "name": "output_root",
+          "required": false,
+          "description": "Caller-owned production artifact directory.",
+          "type": "string",
+          "defaultValue": "media/showcase/output"
+        },
+        {
+          "name": "files",
+          "required": false,
+          "description": "Exact renderer/source files implementation may edit; empty means discovery-only.",
+          "type": "string",
+          "defaultValue": ""
+        },
+        {
+          "name": "moodboard",
+          "required": false,
+          "description": "Existing logo/reference path or URL.",
+          "type": "string"
+        },
+        {
+          "name": "seed_refs",
+          "required": false,
+          "description": "Optional reference works or creators to examine.",
+          "type": "string"
+        }
+      ],
+      "chainSteps": [
+        {
+          "promptId": "design_muse",
+          "stepName": "Reference Direction",
+          "id": "reference",
+          "args": {
+            "mode": "recommend"
+          },
+          "inputMapping": {
+            "challenge": "chain_args.brief",
+            "constraints": "chain_args.constraints",
+            "moodboard": "chain_args.moodboard",
+            "seed_refs": "chain_args.seed_refs"
+          }
+        },
+        {
+          "promptId": "showcase_story",
+          "stepName": "Silent Story",
+          "id": "story",
+          "inputMapping": {
+            "brief": "chain_args.brief",
+            "constraints": "chain_args.constraints",
+            "context": "steps.Reference Direction.result",
+            "output_root": "chain_args.output_root"
+          },
+          "delegated": true
+        },
+        {
+          "promptId": "showcase_treatment",
+          "stepName": "Visual Treatment",
+          "id": "treatment",
+          "inputMapping": {
+            "brief": "chain_args.brief",
+            "constraints": "chain_args.constraints",
+            "context": "steps.Silent Story.result",
+            "output_root": "chain_args.output_root"
+          },
+          "delegated": true
+        },
+        {
+          "promptId": "showcase_motion",
+          "stepName": "Motion Contract",
+          "id": "motion",
+          "inputMapping": {
+            "brief": "chain_args.brief",
+            "constraints": "chain_args.constraints",
+            "context": "steps.Visual Treatment.result",
+            "output_root": "chain_args.output_root"
+          },
+          "delegated": true
+        },
+        {
+          "promptId": "tech_recommendation",
+          "stepName": "Renderer Decision",
+          "id": "technique",
+          "args": {
+            "subject": "Deterministic silent motion rendering from the authored story, color and timing contract"
+          },
+          "inputMapping": {
+            "context": "steps.Motion Contract.result"
+          }
+        },
+        {
+          "promptId": "strategic_worker",
+          "stepName": "Render Implementation",
+          "id": "implementation",
+          "args": {
+            "branch_mode": "shared-tree",
+            "row_id": "showcase-render"
+          },
+          "inputMapping": {
+            "task": "steps.Motion Contract.result",
+            "files": "chain_args.files"
+          },
+          "delegated": true
+        },
+        {
+          "promptId": "showcase_review",
+          "stepName": "Finish Review",
+          "id": "review",
+          "inputMapping": {
+            "brief": "chain_args.brief",
+            "constraints": "chain_args.constraints",
+            "context": "steps.Render Implementation.result",
+            "motion_contract": "steps.Motion Contract.result",
+            "output_root": "chain_args.output_root"
+          },
+          "delegated": true
+        }
+      ],
+      "gateConfiguration": {
+        "framework_gates": false
+      },
+      "artifacts": {
+        "produces": [
+          "source",
+          "docs",
+          "plan"
+        ]
+      }
+    },
+    "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+    "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+    "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "source_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "edit_copies_on_write": false,
+    "message": "🔍 **Prompt Inspect**: Showcase Pipeline (`showcase_pipeline`)\n\n⚡ **Type**: chain\n🧠 **Requires Framework**: No\n📜 **Current Version**: 1\n📝 **Description**: Seven-step silent motion production: reference inspiration, evidence-backed story, color/storyboard treatment, motion/editing contract, renderer decision, bounded client implementation and actual render review.\n\n**Arguments**:\n- `brief` `string` *(required)*: Audience, product goals, actual interaction and desired silent film outcome.\n- `constraints` `string`: Duration, dimensions, accessibility, renderer and evidence limits.\n- `output_root` `string`: Caller-owned production artifact directory.\n- `files` `string`: Exact renderer/source files implementation may edit; empty means discovery-only.\n- `moodboard` `string`: Existing logo/reference path or URL.\n- `seed_refs` `string`: Optional reference works or creators to examine.\n\n**System Message**:\n```\nYou produce client-side creative work guided by the Claude Prompts MCP server. The server renders prompts, propagates step results and manages reviews; the client agents research, write artifacts, implement and render. Use existing services and authored resource contracts. Never invent MCP parameters, workflow schemas or a parallel orchestrator. Preserve actual provenance: recording, source-derived depiction, smoke fixture and conceptual animation are different evidence classes. Do not imply a simulated agent or UI is a recorded Claude/Codex run. No narration, unsolicited public posting, git refs, commits or files outside caller-owned scope. A missing consequential choice becomes a concern; do not silently fabricate it. Read prior context and chain history, and cite actual paths/URLs used. Revisions must have observable rationale. This is a planner-supervised chain. The planner judges the reference direction, accepts/revises specialist handoffs and submits actual gate verdicts. Per-step delegation requests a client agent; the server does not spawn LLMs or render video by itself. Workers never self-authorize scope, choose a new schema authority or publish. A seven-step chain is one ordered workflow, not proof of concurrent agent execution. Renderer implementation consumes its motion task and the immediately preceding renderer decision. Runtime gate reviews, if advertised, must be judged against actual output; no fabricated PASS or FAIL.\n```\n\n**User Message Template**:\n```\nProduce a silent outward-facing motion showcase for {{brief}}. Respect {{constraints}}. Write production artifacts only under {{output_root}} and implement only the exact caller-owned files: {{files | default('none: discovery-only')}}. The client executes these seven steps and the planner judges handoffs.\n```\n\n**Chain Steps** (7):\n1. `design_muse` - Reference Direction\n2. `showcase_story` - Silent Story\n3. `showcase_treatment` - Visual Treatment\n4. `showcase_motion` - Motion Contract\n5. `tech_recommendation` - Renderer Decision\n6. `strategic_worker` - Render Implementation\n7. `showcase_review` - Finish Review\n\n**Gate Configuration**:\n- Framework gates: false\n"
+  },
+  "isError": false
+}

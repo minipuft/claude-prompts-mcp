@@ -1,0 +1,194 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🔍 **Prompt Inspect**: Showcase Shot (`showcase_shot`)\n\n⚡ **Type**: chain\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Once per shot (D72 pose-to-pose, D83 pose-first): cinematography sheet, timing chart with the key list, the pose sheet (every key a curve the solver builds, breakdowns that are poses, secondaries that lag, moving holds) behind the pose gate, the key sheet generated from the model sheet and the pose sheet and cut into key plates per family, the render study (Remotion, or Blender when tool:blender_render is named) behind the inbetween probes, the rubric grade behind the showcase-review gate, and the evidence step that files the receipt and feeds the measured range back into shots.json and the script.\n\n**Arguments**:\n- `shot` `string` *(required)*: Shot id from v3/shots.json.\n- `brief` `string`: Audience, product goal and desired silent showcase outcome.\n- `renderer` `string`: remotion or blender (blender also needs tool:blender_render on the request).\n- `frames` `string`: Frame set the render study produces.\n- `constraints` `string`: Renderer and evidence limits.\n- `output_root` `string`: Caller-owned production artifact directory.\n\n**Chain Steps** (7):\n1. `showcase_layout_sheet` - Cinematography Sheet\n2. `showcase_motion` - Timing Table\n3. `animation_poses` - Pose Sheet\n4. `showcase_key_sheet` - Key Sheet\n5. `showcase_render_study` - Render Study\n6. `showcase_review` - Rubric Grade\n7. `showcase_evidence` - File and Feed Back\n\n**Gate Configuration**:\n- Exclude: api-documentation, creed-fidelity, information-placement, plan-quality, product-positioning-fidelity, prose-hygiene, semantic-discoverability\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "inspect",
+    "resource_type": "prompt",
+    "id": "showcase_shot",
+    "current_version": 0,
+    "prompt": {
+      "id": "showcase_shot",
+      "name": "Showcase Shot",
+      "category": "development",
+      "description": "Once per shot (D72 pose-to-pose, D83 pose-first): cinematography sheet, timing chart with the key list, the pose sheet (every key a curve the solver builds, breakdowns that are poses, secondaries that lag, moving holds) behind the pose gate, the key sheet generated from the model sheet and the pose sheet and cut into key plates per family, the render study (Remotion, or Blender when tool:blender_render is named) behind the inbetween probes, the rubric grade behind the showcase-review gate, and the evidence step that files the receipt and feeds the measured range back into shots.json and the script.",
+      "systemMessage": "",
+      "userMessageTemplate": "",
+      "arguments": [
+        {
+          "name": "shot",
+          "required": true,
+          "description": "Shot id from v3/shots.json.",
+          "type": "string"
+        },
+        {
+          "name": "brief",
+          "required": false,
+          "description": "Audience, product goal and desired silent showcase outcome.",
+          "type": "string",
+          "defaultValue": "Silent showcase film for Claude Prompts MCP; see v3/script.md."
+        },
+        {
+          "name": "renderer",
+          "required": false,
+          "description": "remotion or blender (blender also needs tool:blender_render on the request).",
+          "type": "string",
+          "defaultValue": "remotion",
+          "validation": {
+            "allowedValues": [
+              "remotion",
+              "blender"
+            ]
+          }
+        },
+        {
+          "name": "frames",
+          "required": false,
+          "description": "Frame set the render study produces.",
+          "type": "string",
+          "defaultValue": "first,key,last,strip"
+        },
+        {
+          "name": "constraints",
+          "required": false,
+          "description": "Renderer and evidence limits.",
+          "type": "string",
+          "defaultValue": "1280x720 at 30 fps, swangle here; the camera follows the layout contract (D64, D77); one emitter at a time; drawn on twos, light on ones; every key a pose on one curve, every breakdown a pose, never a favour alone (D83)."
+        },
+        {
+          "name": "output_root",
+          "required": false,
+          "description": "Caller-owned production artifact directory.",
+          "type": "string",
+          "defaultValue": "media/showcase"
+        }
+      ],
+      "chainSteps": [
+        {
+          "promptId": "showcase_layout_sheet",
+          "stepName": "Cinematography Sheet",
+          "id": "layout",
+          "inputMapping": {
+            "shot": "shot",
+            "output_root": "output_root"
+          }
+        },
+        {
+          "promptId": "showcase_motion",
+          "stepName": "Timing Table",
+          "id": "motion",
+          "inputMapping": {
+            "brief": "brief",
+            "constraints": "constraints",
+            "context": "previous_step_result",
+            "output_root": "output_root"
+          }
+        },
+        {
+          "promptId": "animation_poses",
+          "stepName": "Pose Sheet",
+          "id": "poses",
+          "inputMapping": {
+            "shot": "shot",
+            "context": "previous_step_result",
+            "output_root": "output_root"
+          },
+          "inlineGateIds": [
+            "animation-pose-contract"
+          ]
+        },
+        {
+          "promptId": "showcase_key_sheet",
+          "stepName": "Key Sheet",
+          "id": "keys",
+          "inputMapping": {
+            "shot": "shot",
+            "context": "previous_step_result",
+            "output_root": "output_root"
+          },
+          "inlineGateIds": [
+            "animation-key-fit"
+          ],
+          "delegated": true
+        },
+        {
+          "promptId": "showcase_render_study",
+          "stepName": "Render Study",
+          "id": "render",
+          "inputMapping": {
+            "brief": "brief",
+            "shot": "shot",
+            "renderer": "renderer",
+            "frames": "frames",
+            "context": "previous_step_result",
+            "output_root": "output_root"
+          },
+          "inlineGateIds": [
+            "animation-inbetween-probes",
+            "showcase-asset-muse",
+            "animation-render-manifest"
+          ]
+        },
+        {
+          "promptId": "showcase_review",
+          "stepName": "Rubric Grade",
+          "id": "grade",
+          "inputMapping": {
+            "brief": "brief",
+            "constraints": "constraints",
+            "context": "previous_step_result",
+            "motion_contract": "step2_result",
+            "output_root": "output_root"
+          },
+          "inlineGateIds": [
+            "showcase-review"
+          ]
+        },
+        {
+          "promptId": "showcase_evidence",
+          "stepName": "File and Feed Back",
+          "id": "evidence",
+          "inputMapping": {
+            "brief": "brief",
+            "shot": "shot",
+            "context": "previous_step_result",
+            "output_root": "output_root"
+          },
+          "inlineGateIds": [
+            "animation-bible"
+          ]
+        }
+      ],
+      "gateConfiguration": {
+        "exclude": [
+          "api-documentation",
+          "creed-fidelity",
+          "information-placement",
+          "plan-quality",
+          "product-positioning-fidelity",
+          "prose-hygiene",
+          "semantic-discoverability"
+        ]
+      },
+      "budget": {
+        "pauseOnBlocking": true
+      },
+      "artifacts": {
+        "produces": [
+          "docs",
+          "plan"
+        ]
+      }
+    },
+    "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+    "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+    "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "source_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "edit_copies_on_write": false,
+    "message": "🔍 **Prompt Inspect**: Showcase Shot (`showcase_shot`)\n\n⚡ **Type**: chain\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: Once per shot (D72 pose-to-pose, D83 pose-first): cinematography sheet, timing chart with the key list, the pose sheet (every key a curve the solver builds, breakdowns that are poses, secondaries that lag, moving holds) behind the pose gate, the key sheet generated from the model sheet and the pose sheet and cut into key plates per family, the render study (Remotion, or Blender when tool:blender_render is named) behind the inbetween probes, the rubric grade behind the showcase-review gate, and the evidence step that files the receipt and feeds the measured range back into shots.json and the script.\n\n**Arguments**:\n- `shot` `string` *(required)*: Shot id from v3/shots.json.\n- `brief` `string`: Audience, product goal and desired silent showcase outcome.\n- `renderer` `string`: remotion or blender (blender also needs tool:blender_render on the request).\n- `frames` `string`: Frame set the render study produces.\n- `constraints` `string`: Renderer and evidence limits.\n- `output_root` `string`: Caller-owned production artifact directory.\n\n**Chain Steps** (7):\n1. `showcase_layout_sheet` - Cinematography Sheet\n2. `showcase_motion` - Timing Table\n3. `animation_poses` - Pose Sheet\n4. `showcase_key_sheet` - Key Sheet\n5. `showcase_render_study` - Render Study\n6. `showcase_review` - Rubric Grade\n7. `showcase_evidence` - File and Feed Back\n\n**Gate Configuration**:\n- Exclude: api-documentation, creed-fidelity, information-placement, plan-quality, product-positioning-fidelity, prose-hygiene, semantic-discoverability\n"
+  },
+  "isError": false
+}

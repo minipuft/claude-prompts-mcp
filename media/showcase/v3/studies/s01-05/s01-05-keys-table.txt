@@ -1,0 +1,26 @@
+keys table · s01-arrival-overwhelm · 8 keys · model sheet scale 0.4745 plate px per mask px
+control C22: the model sheet's three figures read 3.55, 3.57, 3.69 px (mean 3.60; model.json records 2.83 by model_measure's coarser median); the same plate with its pale lines grown by two pixels reads 4.42 px (band 2.88-4.32)
+control FILM: key rest-on-lid: film rig as drawn -> mad 9.54, worst centroid head 0.93 px (pass True); with upperLegL, handR exchanging their places in the draw order -> mad 12.28 (bar 10.0), worst centroid handR 6.22 px (bar 3.6) -> named
+silhouette script: positive control: intact frame 0 = 1 component(s), same frame with a 4 px band erased across the shins (row 372) = 3
+silhouette script: frames: 8; field colour (236, 236, 236); blobs under 12 px ignored
+silhouette script: 8-connected: min 1, max 1, frames != 1: none
+silhouette script: 4-connected: min 1, max 1, frames != 1: none
+key   name        family  source  C20 head/limbs (worst dev)        C21 comps/solid/wrists    C22 contour       C31 class bow sign twin    verdict
+K1    rest-on-lid home    solver  8.00 heads / 1.00/1.00/1.00/1.00 (0.0%)1/0.37/0.08               4.18px +16%       C 0.062 -1 tw 0.74         accepted
+K2    grip        home    solver  8.00 heads / 1.00/1.00/1.00/1.00 (0.0%)1/0.38/0.08               3.85px +7%        C 0.102 -1 tw 0.28         accepted
+K3    lift        home    solver  8.00 heads / 1.00/1.00/1.00/1.00 (0.0%)1/0.33/0.28               4.15px +15%       C 0.062 +1 tw 0.00         accepted
+K4    awe         home    solver  8.00 heads / 1.00/1.00/1.00/1.00 (0.0%)1/0.31/0.29               4.18px +16%       S 0.075 -1 tw 0.64         accepted
+K5    brace       home    solver  8.00 heads / 1.00/1.00/1.00/1.00 (0.0%)1/0.38/0.05               4.11px +14%       C 0.082 +1 tw 0.50         accepted
+K6    joy-a       home    solver  8.00 heads / 1.00/1.00/1.00/1.00 (0.0%)1/0.32/0.23               4.19px +16%       C 0.122 -1 tw 0.00         accepted
+K7    joy-b       home    solver  8.00 heads / 1.00/1.00/1.00/1.00 (0.0%)1/0.27/0.29               4.11px +14%       S 0.071 +1 tw 0.44         accepted
+K8    shrink      home    solver  8.00 heads / 1.00/1.00/1.00/1.00 (0.0%)1/0.38/0.10               3.99px +11%       C 0.142 -1 tw 0.00         accepted
+
+parts rig · per key: worst tear metric over the parts (limits inverted 1%, strained 6%, overlap 5%), hinge measure at shoulders/elbows/knees (fill = share of the contour-width disc drawn, overlap = the fade or depth in contour widths), limbs in front and draw order
+K1    rest-on-lid parts   worst inverted 0.02% poncho       strained 1.40% poncho         overlap 0.00%     joints fill 1.00 overlap 1.51cw        in front: armR:crossing; order handR > upperArmR > foreArmR > head > torso ... | film mad 9.5 worst head 0.93px
+K2    grip        parts   worst inverted 0.34% poncho       strained 2.42% poncho         overlap 0.00%     joints fill 1.00 overlap 1.54cw        in front: armR:lead; order handR > upperArmR > foreArmR > head > torso ... | film mad 8.2 worst head 0.77px
+K3    lift        parts   worst inverted 0.06% poncho       strained 0.27% poncho         overlap 0.00%     joints fill 1.00 overlap 1.41cw        in front: armR:lead, legL:lead; order handR > upperArmR > foreArmR > head > torso ... | film mad 7.9 worst head 0.46px
+K4    awe         parts   worst inverted 0.00% None         strained 0.02% poncho         overlap 0.00%     joints fill 1.00 overlap 1.44cw        in front: armR:lead, legR:lead; order handR > upperArmR > foreArmR > head > torso ... | film mad 9.6 worst head 0.63px
+K5    brace       parts   worst inverted 0.06% poncho       strained 1.44% poncho         overlap 0.00%     joints fill 1.00 overlap 1.48cw        in front: armL:lead, legR:lead; order handL > upperArmL > foreArmL > head > torso ... | film mad 7.3 worst handR 0.70px
+K6    joy-a       parts   worst inverted 0.51% poncho       strained 3.37% poncho         overlap 0.12%     joints fill 1.00 overlap 1.53cw        in front: armL:lead, armR:crossing, legL:lead; order handL > upperArmL > foreArmL > handR > upperArmR ... | film mad 7.8 worst handR 0.56px
+K7    joy-b       parts   worst inverted 0.00% None         strained 0.02% poncho         overlap 0.00%     joints fill 1.00 overlap 1.08cw        in front: armR:lead, legL:lead; order handR > upperArmR > foreArmR > head > torso ... | film mad 9.0 worst head 0.77px
+K8    shrink      parts   worst inverted 0.68% poncho       strained 4.11% poncho         overlap 0.00%     joints fill 1.00 overlap 1.53cw        in front: none; order head > torso > upperArmL > upperArmR > poncho ... | film mad 7.5 worst head 0.55px

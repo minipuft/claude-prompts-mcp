@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🚦 Gate: Animation Vocabulary\n\n📋 Details:\n  - ID: animation-vocabulary\n  - Type: ✓ validation\n  - Description: Check-tier gate on the blocking/poses, review and evidence steps (D96, D81): every intent word a step writes is a term of the controlled direction vocabulary. The probe reads the vocabulary and the film's overrides, then the intent words of every proposal file, the because clause of every ruling written in the ruling form, the breakdown kinds and key intents of the pose sheets and the intents of the material contract, and refuses a word that is not a vocabulary term or a film alias. A proposal, ruling, pose sheet or material that says 'vibey' fails the gate until the word is replaced by the term that says what was meant.\n  - Severity: high\n  - Enforcement Mode: blocking\n  - Classification: custom\n\n📝 Guidance:\nGround truth by exit code (D81, D96). The probe runs `python3 scripts/animation/probe-vocabulary.py v3/vocabulary.json --overrides v3/vocabulary-overrides.json` in the renderer root: it reads the vocabulary and the film's overrides, then the `intent`, `options` and `default` of every file under v3/proposals/, the because clause of every ruling in the ruling form in v3/rulings.json (parsed by scripts/animation/rulings.mjs; older free prose is not checked), the breakdown kinds and key intents of v..."
+    }
+  ],
+  "isError": false
+}

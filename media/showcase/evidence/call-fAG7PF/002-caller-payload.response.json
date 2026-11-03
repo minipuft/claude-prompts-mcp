@@ -1,0 +1,31 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "✅ **Prompt Created**: Animation Poses (animation_poses)\n\n📝 Per shot, after the timing chart and before the key sheet (D83): write the pose sheet poses/<shot>.json, the keys of the whole shot as curves the solver can build (line of action class and bow, weight foot, lead side, silhouette, plate family), with breakdowns that are poses (passing position, anticipation, overshoot, settle), secondaries that lag, and moving holds; the gate measures the key sheet against it.\n🧠 single\n\n💡 **Suggested Gates**: Consider adding these gates:\n- code-quality\nUse `update` action with `gate_configuration` parameter to add gates.\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_poses\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_poses/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_poses/user-message.md\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "create",
+    "valid": true,
+    "receipt": {
+      "resource_type": "prompt",
+      "action": "create",
+      "id": "animation_poses",
+      "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+      "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+      "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+      "affected_files": [
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_poses",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_poses/prompt.yaml",
+        "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_poses/user-message.md"
+      ],
+      "refresh_status": "loaded",
+      "loaded_after_refresh": true,
+      "current_version": 1
+    },
+    "mutated": true,
+    "message": "✅ **Prompt Created**: Animation Poses (animation_poses)\n\n📝 Per shot, after the timing chart and before the key sheet (D83): write the pose sheet poses/<shot>.json, the keys of the whole shot as curves the solver can build (line of action class and bow, weight foot, lead side, silhouette, plate family), with breakdowns that are poses (passing position, anticipation, overshoot, settle), secondaries that lag, and moving holds; the gate measures the key sheet against it.\n🧠 single\n\n💡 **Suggested Gates**: Consider adding these gates:\n- code-quality\nUse `update` action with `gate_configuration` parameter to add gates.\n\n📍 **Write Receipt**\n- Resource root: `/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts`\n- Refresh: `loaded`\n- Current version: `1`\n- Affected files:\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_poses\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_poses/prompt.yaml\n- /home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts/animation/animation_poses/user-message.md\n"
+  },
+  "isError": false
+}

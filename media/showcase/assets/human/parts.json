@@ -1,0 +1,501 @@
+{
+  "plate": "out/human-gen-18-parts.png",
+  "plate_sha256": "53c504a04d8616d8e576d079c1c1dcc26ff93f56986195feea081e430cb64c31",
+  "size": [
+    1536,
+    1024
+  ],
+  "roles": {
+    "main1": "#2f45a8",
+    "main2": "#b983c0",
+    "shadow": "#1d1d36",
+    "light": "#e7e4da",
+    "accent": "#d28a21"
+  },
+  "pins": {
+    "skin": "#67b479",
+    "skinShadow": "#c885c2"
+  },
+  "parts": [
+    {
+      "id": "part00",
+      "bbox": [
+        31,
+        30,
+        620,
+        951
+      ],
+      "pivot": [
+        328.9847925709223,
+        447.59036182973546
+      ],
+      "area": 156897,
+      "control": "part00-control.png",
+      "control_sha256": "9a7bc7a401f1d0a7d5c142da198b78fc5983b7ece8705b574305b1b1463475ba",
+      "png": "part00.png",
+      "sha256": "8cb3f3b285fe2d36e24278eea8558cf890b41f783e1fb44e2dd69692709947cb",
+      "role_pixels": {
+        "skin": 27902,
+        "skinShadow": 12054,
+        "main1": 36591,
+        "main2": 36447,
+        "shadow": 6392,
+        "light": 37510,
+        "accent": 1
+      },
+      "svg": "part00.svg",
+      "svg_sha256": "79be5543698fc9d695b97efe42998a6ad29c530d6cb983c19574a1b291257f36",
+      "soft": "part00-soft.png",
+      "contour": "part00-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part01",
+      "bbox": [
+        905,
+        195,
+        1196,
+        503
+      ],
+      "pivot": [
+        1053.1950426929025,
+        355.05977006342306
+      ],
+      "area": 44621,
+      "control": "part01-control.png",
+      "control_sha256": "2a45390e55e1468aa4cf41450a5f3cf9dd1d79d1c61940e542534273fe865bb1",
+      "png": "part01.png",
+      "sha256": "4b0d1ebc202dc45182c4d9323a50ce87d34aa23fc3f99e4270e0bee8b2c342d9",
+      "role_pixels": {
+        "skin": 446,
+        "skinShadow": 3793,
+        "main1": 16637,
+        "main2": 11642,
+        "shadow": 2384,
+        "light": 9714,
+        "accent": 5
+      },
+      "svg": "part01.svg",
+      "svg_sha256": "87a19ec2cfb9f1cacc5834f9fd11cfea8de89f68d3673504a4ae7f6438b48c4e",
+      "soft": "part01-soft.png",
+      "contour": "part01-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part02",
+      "bbox": [
+        878,
+        18,
+        1301,
+        176
+      ],
+      "pivot": [
+        1127.544599799824,
+        99.1965060204422
+      ],
+      "area": 32971,
+      "control": "part02-control.png",
+      "control_sha256": "322e3fd2617e0cd153fe13bde4d08092e6e3ed9e1c15fda4935b448da78d16e6",
+      "png": "part02.png",
+      "sha256": "874eae2878fd523218e4429d3025f68204dc6b56c48e6d87d427752da415f454",
+      "role_pixels": {
+        "skin": 94,
+        "skinShadow": 2591,
+        "main1": 348,
+        "main2": 16749,
+        "shadow": 518,
+        "light": 12671,
+        "accent": 0
+      },
+      "svg": "part02.svg",
+      "svg_sha256": "d2b4964c47ce6bac4acd40ffa9a21865a759f325aa624277beae51c7ff5e9b24",
+      "soft": "part02-soft.png",
+      "contour": "part02-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part03",
+      "bbox": [
+        860,
+        479,
+        996,
+        923
+      ],
+      "pivot": [
+        930.8460636942675,
+        725.5505732484077
+      ],
+      "area": 19625,
+      "control": "part03-control.png",
+      "control_sha256": "2082ecc21c3fab78fbaa4b04ecdf54aa050c46b25fac3bb1609c868973e54361",
+      "png": "part03.png",
+      "sha256": "b8435d899e95172179f7115bee8c8648b8724994be2884d16800a1b20ce136f6",
+      "role_pixels": {
+        "skin": 966,
+        "skinShadow": 962,
+        "main1": 13332,
+        "main2": 1127,
+        "shadow": 556,
+        "light": 2682,
+        "accent": 0
+      },
+      "svg": "part03.svg",
+      "svg_sha256": "c1436f3032b1003a0fda9bbdecf59d334f75c55ba31dd8ca88eb9c35f1ff24ea",
+      "soft": "part03-soft.png",
+      "contour": "part03-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part04",
+      "bbox": [
+        1121,
+        480,
+        1241,
+        925
+      ],
+      "pivot": [
+        1173.809592276882,
+        729.2677416041902
+      ],
+      "area": 19474,
+      "control": "part04-control.png",
+      "control_sha256": "91328f80413277c773de7f8e72cbed713d3cb60bf2b5bea6ee6eab09de763cf9",
+      "png": "part04.png",
+      "sha256": "fd4a55f9ba3e4a4f9b789eeb9663c2b801fc93deda4c8e197240372f000a59e2",
+      "role_pixels": {
+        "skin": 1360,
+        "skinShadow": 1759,
+        "main1": 2086,
+        "main2": 8102,
+        "shadow": 587,
+        "light": 5580,
+        "accent": 0
+      },
+      "svg": "part04.svg",
+      "svg_sha256": "f6ed82a9f7a52af6dff8726fc15313dcb5643db588417e2cc1cc217bd34849ee",
+      "soft": "part04-soft.png",
+      "contour": "part04-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part05",
+      "bbox": [
+        1367,
+        548,
+        1498,
+        705
+      ],
+      "pivot": [
+        1426.4252589130235,
+        627.4831821097974
+      ],
+      "area": 10911,
+      "control": "part05-control.png",
+      "control_sha256": "532c96bc55a6f1886e5895cef34d215a0c5da197b9a91674a1850f23da1259f8",
+      "png": "part05.png",
+      "sha256": "140026e9f668d0bebd96d71464a7a38f2a57775de2794618cf62bb5ee3b2b09f",
+      "role_pixels": {
+        "skin": 8068,
+        "skinShadow": 1087,
+        "main1": 57,
+        "main2": 1318,
+        "shadow": 379,
+        "light": 2,
+        "accent": 0
+      },
+      "svg": "part05.svg",
+      "svg_sha256": "837bec08fab54b047a674e2c332d14c3dbe3a8d9a4101f8480b2a0139c4cb56f",
+      "soft": "part05-soft.png",
+      "contour": "part05-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part06",
+      "bbox": [
+        668,
+        548,
+        796,
+        703
+      ],
+      "pivot": [
+        738.1663747810858,
+        625.2951424094387
+      ],
+      "area": 10849,
+      "control": "part06-control.png",
+      "control_sha256": "b7c5ee48eb5e5ab239c1ae889660c735e6922d761922cb59d0e1cad7a12d9b46",
+      "png": "part06.png",
+      "sha256": "2dae9a8306a8a47c8066f1bec3baf44346fce433c29f18bf763911a4c713dfa6",
+      "role_pixels": {
+        "skin": 8034,
+        "skinShadow": 433,
+        "main1": 60,
+        "main2": 1903,
+        "shadow": 401,
+        "light": 18,
+        "accent": 0
+      },
+      "svg": "part06.svg",
+      "svg_sha256": "8d5dced0ac2dde2d5a9b16daab7004f9bf5bc92b299b34be440eb89f50d0bfde",
+      "soft": "part06-soft.png",
+      "contour": "part06-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part07",
+      "bbox": [
+        1316,
+        808,
+        1451,
+        957
+      ],
+      "pivot": [
+        1364.947033898305,
+        896.0157225691347
+      ],
+      "area": 8968,
+      "control": "part07-control.png",
+      "control_sha256": "9ae65b51564d597fb0692333a8b54ae617a662741918ec8d8322436ddb754a9c",
+      "png": "part07.png",
+      "sha256": "a44a18735587f5860898313c153552633382b74247d17169dc492893ed7155ef",
+      "role_pixels": {
+        "skin": 64,
+        "skinShadow": 541,
+        "main1": 4529,
+        "main2": 353,
+        "shadow": 287,
+        "light": 3193,
+        "accent": 1
+      },
+      "svg": "part07.svg",
+      "svg_sha256": "7d969868303d35f7bab2a9d3e58b85502dba03cd60f9fae5d5f25286e4d02977",
+      "soft": "part07-soft.png",
+      "contour": "part07-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part08",
+      "bbox": [
+        706,
+        218,
+        802,
+        376
+      ],
+      "pivot": [
+        758.2858427977061,
+        299.03924434948834
+      ],
+      "area": 8893,
+      "control": "part08-control.png",
+      "control_sha256": "e583088a1ebe94842b7294fe65a90423fc2c0e4375b55eaf7c69cdd654799aa4",
+      "png": "part08.png",
+      "sha256": "17af91e2c90ca7fab30244567f548d24862dfa95c31c7906a2f34b55e32b3aa8",
+      "role_pixels": {
+        "skin": 1202,
+        "skinShadow": 315,
+        "main1": 5045,
+        "main2": 325,
+        "shadow": 582,
+        "light": 1424,
+        "accent": 0
+      },
+      "svg": "part08.svg",
+      "svg_sha256": "4da3e0014ad9bbf11179c9271168b616a73f8fb4326f52fb657dc571a365ee41",
+      "soft": "part08-soft.png",
+      "contour": "part08-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part09",
+      "bbox": [
+        1311,
+        217,
+        1407,
+        375
+      ],
+      "pivot": [
+        1354.3586760054225,
+        297.81089019430635
+      ],
+      "area": 8852,
+      "control": "part09-control.png",
+      "control_sha256": "fb97a50541dc2748772673d07f3c40d76a8bd18b2e7201cfa89b20f8b7800558",
+      "png": "part09.png",
+      "sha256": "471ecfa85edc387fbddcd806f4bce1d844fb881ab232ad5d2622306052577023",
+      "role_pixels": {
+        "skin": 1200,
+        "skinShadow": 296,
+        "main1": 4956,
+        "main2": 371,
+        "shadow": 569,
+        "light": 1460,
+        "accent": 0
+      },
+      "svg": "part09.svg",
+      "svg_sha256": "1345f878f24c71be884e2d0ca5e55b13eec1d29eced097cfc32bc3b3fce8d1aa",
+      "soft": "part09-soft.png",
+      "contour": "part09-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part10",
+      "bbox": [
+        657,
+        816,
+        799,
+        955
+      ],
+      "pivot": [
+        747.8510092171275,
+        898.6164974915413
+      ],
+      "area": 8571,
+      "control": "part10-control.png",
+      "control_sha256": "d9e0c37736a37f7132792780123a9fa4220f6ff05766df6740767b4a8352af30",
+      "png": "part10.png",
+      "sha256": "2da8946156408807bdb0f7109fddda217553b1a66d37de1809498747d73eda10",
+      "role_pixels": {
+        "skin": 69,
+        "skinShadow": 555,
+        "main1": 2943,
+        "main2": 362,
+        "shadow": 259,
+        "light": 4382,
+        "accent": 1
+      },
+      "svg": "part10.svg",
+      "svg_sha256": "c646aec2a410f970d6d2948fcba412aa54f2be28d3152a78a713ae0f45eeafdb",
+      "soft": "part10-soft.png",
+      "contour": "part10-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part11",
+      "bbox": [
+        733,
+        58,
+        829,
+        163
+      ],
+      "pivot": [
+        780.6571247625079,
+        110.14515516149461
+      ],
+      "area": 7895,
+      "control": "part11-control.png",
+      "control_sha256": "f5d153cf8a395b091de49e2ccc65049156b4a2b65f97f2ae204c8a48e7855740",
+      "png": "part11.png",
+      "sha256": "18579c62892c8dc6eb5fb36c6d47504e2fd791dad87dd175da421042f98521c8",
+      "role_pixels": {
+        "skin": 6620,
+        "skinShadow": 175,
+        "main1": 19,
+        "main2": 198,
+        "shadow": 387,
+        "light": 496,
+        "accent": 0
+      },
+      "svg": "part11.svg",
+      "svg_sha256": "ef7a5bd2fdb30319ea55b2750122cd505b0d7f962cc937130061b240b631c58e",
+      "soft": "part11-soft.png",
+      "contour": "part11-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part12",
+      "bbox": [
+        709,
+        389,
+        779,
+        537
+      ],
+      "pivot": [
+        742.5035164835165,
+        462.63714285714286
+      ],
+      "area": 4550,
+      "control": "part12-control.png",
+      "control_sha256": "f62f819b2799975c5c982704b5fe9e59bebea910d1033b9ab8dc9e75a18cf18b",
+      "png": "part12.png",
+      "sha256": "3a88222c45fa7ad8e1661c0c64286f552df3688af6f88b0da6cdebe8638197b1",
+      "role_pixels": {
+        "skin": 2416,
+        "skinShadow": 516,
+        "main1": 546,
+        "main2": 914,
+        "shadow": 158,
+        "light": 0,
+        "accent": 0
+      },
+      "svg": "part12.svg",
+      "svg_sha256": "495e2f017040acd637304edfd3c2101378681620b787b8b3afd0bdf408e37025",
+      "soft": "part12-soft.png",
+      "contour": "part12-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part13",
+      "bbox": [
+        1371,
+        388,
+        1432,
+        537
+      ],
+      "pivot": [
+        1400.012238540276,
+        462.7225189141077
+      ],
+      "area": 4494,
+      "control": "part13-control.png",
+      "control_sha256": "5312fc6067edd9f91dff304c24d44472070e708379a04cae62c6cb4fc96262b5",
+      "png": "part13.png",
+      "sha256": "bbb8df36e7d777fd4343dca32c963b60820d5cc359d1776191af7d7bbfcffcda",
+      "role_pixels": {
+        "skin": 2385,
+        "skinShadow": 553,
+        "main1": 487,
+        "main2": 900,
+        "shadow": 160,
+        "light": 7,
+        "accent": 2
+      },
+      "svg": "part13.svg",
+      "svg_sha256": "4a2f506cddc11dbba595681fbb33f1b092c3e6aac0096174771362c74ac0b1a5",
+      "soft": "part13-soft.png",
+      "contour": "part13-contour.png",
+      "pad": 8
+    },
+    {
+      "id": "part14",
+      "bbox": [
+        1382,
+        101,
+        1448,
+        163
+      ],
+      "pivot": [
+        1414.7227638830013,
+        135.73717676981772
+      ],
+      "area": 2359,
+      "control": "part14-control.png",
+      "control_sha256": "cf593772306b488cd95f6d34dedd1d17a113d9270807245c97ae375df8469376",
+      "png": "part14.png",
+      "sha256": "0b5f8d027cc2ab8bb512d8481d89f7d0cc25978f7cae7ada6daaa0e18a6f4658",
+      "role_pixels": {
+        "skin": 1516,
+        "skinShadow": 106,
+        "main1": 10,
+        "main2": 500,
+        "shadow": 110,
+        "light": 117,
+        "accent": 0
+      },
+      "svg": "part14.svg",
+      "svg_sha256": "cf9235e8ad2f4e743a8305555589a3bee74e3211a776687f2d1764736ed069a8",
+      "soft": "part14-soft.png",
+      "contour": "part14-contour.png",
+      "pad": 8
+    }
+  ]
+}

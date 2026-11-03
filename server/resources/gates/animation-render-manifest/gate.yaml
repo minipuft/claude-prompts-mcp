@@ -1,0 +1,34 @@
+id: animation-render-manifest
+name: Animation Render Manifest
+type: validation
+description: "Check-tier gate on the render step (D87, D81): a frame set is
+  current only when its render manifest still matches the contracts on disk.
+  Every layer's inputs (files and JSON subtrees) are hashed again, a stale layer
+  is named, a layer missing from the manifest, a composed frame missing or
+  changed, or a confirm frame (drawn whole by the browser and compared with the
+  composed one) beyond the determinism tolerance is refused. A contract edited
+  after the render fails the gate until the shot is rendered again."
+guidanceFile: guidance.md
+pass_criteria:
+  - type: shell_verify
+    shell_command:
+      - python3
+      - scripts/animation/probe-render-manifest.py
+      - --all
+      - out
+    shell_timeout: 120000
+    shell_working_dir: ../media/showcase
+    shell_max_attempts: 1
+    shell_preset: full
+activation:
+  prompt_categories:
+    - animation
+    - development
+  explicit_request: true
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+subject: animation-render-manifest
+severity: high
+enforcementMode: blocking
+gate_type: custom

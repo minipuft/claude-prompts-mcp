@@ -1,0 +1,74 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "🔍 **Prompt Inspect**: Showcase Evidence (`showcase_evidence`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: File a graded shot: copy the stills and strip under v3/studies with sha256, save the five-part receipt, write the measured frame range back into v3/shots.json and the beat's range in v3/script.md, and update the plan's Now block; a ruling that landed adds a board card.\n\n**Arguments**:\n- `brief` `string` *(required)*: Audience, product goal and desired silent showcase outcome.\n- `context` `string`: Prior step output; read shared chain history for earlier evidence and decisions.\n- `output_root` `string`: Caller-owned production artifact directory.\n- `shot` `string` *(required)*: Shot id from v3/shots.json.\n\n**User Message Template**:\n```\nBrief: {{brief}}\nShot: {{shot}}\nProduction root: {{output_root}}\nPrevious handoff (the review's receipt):\n{{context | default(\"Read the review step from chain history; a missing receipt is BLOCKED.\")}}\n\nFile the shot so the next run starts from it. Copy the rendered stills and strip from `out/` to `v3/studies/<shot>-<pass>/` unchanged, recording sha256 prefixes. Save the review's five-part receipt as `v3/studies/<shot>-<pass>.md`. Feed the script: set the shot's `measured` in `v3/shots.json` to the frame range and timing actually rendered and graded, and update only that beat's provisional frame range in `v3/script.md` with a dated note; never rewrite the owner's beat text. If the receipt's Owner section was answered, record the ruling in `v3/creative-spec.md` (next D number) and add or amend the board card it governs in `v3/references/board.json`, then run `npm run board`. Update the plan's `## Now` block with the pass. Every write is listed with its path; nothing is committed or pushed.\n\nReturn: Filed (paths, sha256 prefixes); Script Feed (shots.json and script.md deltas); Rulings Recorded; Board Rebuilt (yes/no); Concerns.\n```\n\n**Gate Configuration**:\n- Exclude: api-documentation, creed-fidelity, information-placement, plan-quality, product-positioning-fidelity, prose-hygiene, semantic-discoverability\n"
+    }
+  ],
+  "structuredContent": {
+    "action": "inspect",
+    "resource_type": "prompt",
+    "id": "showcase_evidence",
+    "current_version": 0,
+    "prompt": {
+      "id": "showcase_evidence",
+      "name": "Showcase Evidence",
+      "category": "development",
+      "description": "File a graded shot: copy the stills and strip under v3/studies with sha256, save the five-part receipt, write the measured frame range back into v3/shots.json and the beat's range in v3/script.md, and update the plan's Now block; a ruling that landed adds a board card.",
+      "systemMessage": "",
+      "userMessageTemplate": "Brief: {{brief}}\nShot: {{shot}}\nProduction root: {{output_root}}\nPrevious handoff (the review's receipt):\n{{context | default(\"Read the review step from chain history; a missing receipt is BLOCKED.\")}}\n\nFile the shot so the next run starts from it. Copy the rendered stills and strip from `out/` to `v3/studies/<shot>-<pass>/` unchanged, recording sha256 prefixes. Save the review's five-part receipt as `v3/studies/<shot>-<pass>.md`. Feed the script: set the shot's `measured` in `v3/shots.json` to the frame range and timing actually rendered and graded, and update only that beat's provisional frame range in `v3/script.md` with a dated note; never rewrite the owner's beat text. If the receipt's Owner section was answered, record the ruling in `v3/creative-spec.md` (next D number) and add or amend the board card it governs in `v3/references/board.json`, then run `npm run board`. Update the plan's `## Now` block with the pass. Every write is listed with its path; nothing is committed or pushed.\n\nReturn: Filed (paths, sha256 prefixes); Script Feed (shots.json and script.md deltas); Rulings Recorded; Board Rebuilt (yes/no); Concerns.",
+      "arguments": [
+        {
+          "name": "brief",
+          "required": true,
+          "description": "Audience, product goal and desired silent showcase outcome.",
+          "type": "string"
+        },
+        {
+          "name": "context",
+          "required": false,
+          "description": "Prior step output; read shared chain history for earlier evidence and decisions.",
+          "type": "string"
+        },
+        {
+          "name": "output_root",
+          "required": false,
+          "description": "Caller-owned production artifact directory.",
+          "type": "string",
+          "defaultValue": "media/showcase"
+        },
+        {
+          "name": "shot",
+          "required": true,
+          "description": "Shot id from v3/shots.json.",
+          "type": "string"
+        }
+      ],
+      "chainSteps": [],
+      "gateConfiguration": {
+        "exclude": [
+          "api-documentation",
+          "creed-fidelity",
+          "information-placement",
+          "plan-quality",
+          "product-positioning-fidelity",
+          "prose-hygiene",
+          "semantic-discoverability"
+        ]
+      },
+      "artifacts": {
+        "produces": [
+          "docs",
+          "plan"
+        ]
+      }
+    },
+    "config_path": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/config.json",
+    "server_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server",
+    "resource_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "source_root": "/home/minipuft/Applications/claude-prompts-mcp-showcase/server/resources/prompts",
+    "edit_copies_on_write": false,
+    "message": "🔍 **Prompt Inspect**: Showcase Evidence (`showcase_evidence`)\n\n⚡ **Type**: single\n🧠 **Requires Framework**: No\n📜 **Current Version**: 0\n📝 **Description**: File a graded shot: copy the stills and strip under v3/studies with sha256, save the five-part receipt, write the measured frame range back into v3/shots.json and the beat's range in v3/script.md, and update the plan's Now block; a ruling that landed adds a board card.\n\n**Arguments**:\n- `brief` `string` *(required)*: Audience, product goal and desired silent showcase outcome.\n- `context` `string`: Prior step output; read shared chain history for earlier evidence and decisions.\n- `output_root` `string`: Caller-owned production artifact directory.\n- `shot` `string` *(required)*: Shot id from v3/shots.json.\n\n**User Message Template**:\n```\nBrief: {{brief}}\nShot: {{shot}}\nProduction root: {{output_root}}\nPrevious handoff (the review's receipt):\n{{context | default(\"Read the review step from chain history; a missing receipt is BLOCKED.\")}}\n\nFile the shot so the next run starts from it. Copy the rendered stills and strip from `out/` to `v3/studies/<shot>-<pass>/` unchanged, recording sha256 prefixes. Save the review's five-part receipt as `v3/studies/<shot>-<pass>.md`. Feed the script: set the shot's `measured` in `v3/shots.json` to the frame range and timing actually rendered and graded, and update only that beat's provisional frame range in `v3/script.md` with a dated note; never rewrite the owner's beat text. If the receipt's Owner section was answered, record the ruling in `v3/creative-spec.md` (next D number) and add or amend the board card it governs in `v3/references/board.json`, then run `npm run board`. Update the plan's `## Now` block with the pass. Every write is listed with its path; nothing is committed or pushed.\n\nReturn: Filed (paths, sha256 prefixes); Script Feed (shots.json and script.md deltas); Rulings Recorded; Board Rebuilt (yes/no); Concerns.\n```\n\n**Gate Configuration**:\n- Exclude: api-documentation, creed-fidelity, information-placement, plan-quality, product-positioning-fidelity, prose-hygiene, semantic-discoverability\n"
+  },
+  "isError": false
+}

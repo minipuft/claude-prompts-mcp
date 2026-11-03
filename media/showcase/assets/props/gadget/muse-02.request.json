@@ -1,0 +1,12 @@
+{
+ "prompt": "Create ONE design variant sheet for a prop of a silent hand-drawn animated film. Pure black field (#000000), flat shapes in five roles only (main1, main2, shadow, light, accent), thin pale contour one step lighter than each fill with tapered tips, shadow as a designed shape with two-scale stipple (never a smooth gradient), no text, no labels, no UI, no gradients, no photographic texture, no black outline. Colour script of the shot: deep blues with cream light and one scarce yellow accent #fad204 (radiance blue #0a51fb). The design must separate into movable parts on the black field (each part a closed flat shape) so it can be cut and moved later.\nASSET: the gadget: raw capability, a hybrid universe-simulator machine in the spirit of The Midnight Gospel, familiar parts in an impossible whole, organic and mechanical at once; not a device with buttons, not an orb; its dial is the one emitter; hand-coded today in Gadget.tsx.\nLAYOUT: Show the SAME machine twice on one baseline: left dormant, right with its dial open and light pouring out. 16:9 sheet.\nREFERENCE ROLES (each image supplies only the property named; do not copy any of them):\nImage 1: Dr. Seuss Midnight Painting: receding hand-drawn frames, each slightly turned.\nImage 2: owner card MFP3WX8X3LIX2: a lit doorway in a dark field, the interior the only emitter.\nImage 3: owner card MFI6QTUOYA66U: windows framing characters inside architecture.\nImage 4: the Codex companion: take only its rounded soft cloud-and-prompt silhouette and its screen-glyph window as the cast property.\nVARIANT muse-02 'Doorway engine': A machine built as a stack of turned doorways and windows with a belly lamp, organs and gears as curling stalks, the dial a doorway of light. The design sits between codex (rounded cloud silhouette and glyph window) and the Seuss paintings.",
+ "references": [
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/seuss-nested-frames.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFP3WX8X3LIX2.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/MFI6QTUOYA66U.png",
+  "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/_refs/codex-official.png"
+ ],
+ "out": "/home/minipuft/Applications/claude-prompts-mcp-showcase/media/showcase/assets/props/gadget/muse-02.png",
+ "workdir": "/home/minipuft/.cache/muse-work/cwd",
+ "timeout": 280
+}

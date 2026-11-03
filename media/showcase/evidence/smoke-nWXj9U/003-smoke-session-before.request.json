@@ -1,0 +1,7 @@
+{
+  "name": "system_control",
+  "arguments": {
+    "action": "session",
+    "operation": "list"
+  }
+}

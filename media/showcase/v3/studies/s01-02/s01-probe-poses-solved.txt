@@ -1,0 +1,22 @@
+control: a straight spine declared S -> FAIL (['line of action']); mirrored limbs with no twinned.why -> FAIL (['twinning']); a long move with only a favour -> FAIL (['breakdowns']); a 10-drawing move -> FAIL (['timing shape']: 10 drawings, a move uses 3-6 (C28)); a passing drawing at 0.10 -> FAIL (['timing shape']: passing on frame 28 draws at +0.100 along the chord (favour 0.1), the band is 0.25 to 0.75); a lead-arm joint declared as a lagging secondary -> FAIL (['lead arm']: A -> B: the lead arm (R) joint wristR belongs to secondary 'hand', which lags on that move; give it side 'R' or leave the arm out); a clean sheet -> pass on 9 checks (A -> B: 4 drawings [anticipation -0.10@22, passing +0.30@28, overshoot +1.10@32, settle +0.95@36]); [--joints solved] solved joints of a straight spine declared S -> FAIL (['line of action']); the same clean sheet with straight solved joints -> FAIL under solved (['line of action']), pass under keys; a sheet with no solved joints -> refused (unsolved ['A', 'B']); solved joints equal to the key sheet's -> pass on 9 checks
+  ok   s01-arrival-overwhelm: keys: 8 item(s) ok
+  ok   s01-arrival-overwhelm: line of action: 16 item(s) ok
+  ok   s01-arrival-overwhelm: twinning: 8 item(s) ok
+  ok   s01-arrival-overwhelm: weight: 8 item(s) ok
+  ok   s01-arrival-overwhelm: breakdowns: 7 item(s) ok
+  ok   s01-arrival-overwhelm: secondaries: 3 item(s) ok
+  ok   s01-arrival-overwhelm: holds: 8 item(s) ok
+  ok   s01-arrival-overwhelm: timing shape: rest-on-lid -> grip: 4 drawings [passing +0.25@26, passing +0.60@30, passing +0.75@34, settle +0.98@38]
+  ok   s01-arrival-overwhelm: timing shape: grip -> lift: 3 drawings [passing +0.25@58, passing +0.65@62, settle +0.98@64]
+  ok   s01-arrival-overwhelm: timing shape: lift -> awe: 3 drawings [passing +0.25@92, passing +0.65@96, settle +0.98@100]
+  ok   s01-arrival-overwhelm: timing shape: awe -> brace: 6 drawings [anticipation -0.10@130, passing +0.25@134, passing +0.45@138, passing +0.60@142, passing +0.75@146, settle +0.98@150]
+  ok   s01-arrival-overwhelm: timing shape: brace -> joy-a: 4 drawings [passing +0.25@178, passing +0.55@182, passing +0.75@186, settle +0.98@188]
+  ok   s01-arrival-overwhelm: timing shape: joy-a -> joy-b: 3 drawings [passing +0.25@216, passing +0.65@220, settle +0.98@224]
+  ok   s01-arrival-overwhelm: timing shape: joy-b -> shrink: 5 drawings [passing +0.25@254, passing +0.40@258, passing +0.55@262, passing +0.70@266, settle +0.98@268]
+  ok   s01-arrival-overwhelm: lead arm: rest-on-lid -> grip: the lead arm is no lagging secondary on this move
+  ok   s01-arrival-overwhelm: lead arm: grip -> lift: the lead arm is no lagging secondary on this move
+  ok   s01-arrival-overwhelm: lead arm: lift -> awe: the lead arm is no lagging secondary on this move
+  ok   s01-arrival-overwhelm: lead arm: awe -> brace: the lead arm is no lagging secondary on this move
+  ok   s01-arrival-overwhelm: lead arm: brace -> joy-a: the lead arm is no lagging secondary on this move
+  ok   s01-arrival-overwhelm: lead arm: joy-a -> joy-b: the lead arm is no lagging secondary on this move
+pass: poses - 1 shot(s) (solved joints): keys, line of action, twinning, weight, breakdowns, secondaries, holds, timing shape and lead arm all as declared

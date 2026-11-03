@@ -1,0 +1,17 @@
+{
+  "id": "p017",
+  "kind": "finding",
+  "from": "director",
+  "date": "2026-10-19",
+  "anchor": {
+    "beat": "arrival",
+    "frame": 60
+  },
+  "title": "sp-1.2 asks the hands to appear after the lift: the human's hands are drawn from frame 0",
+  "text": "sp-1.1 says the cloak covers both hands and sp-1.2 says the hands are visible after the lift, not before. In animatic 06 (out/animatic-06-draft-seq, frame 0) both hands are drawn at her chest from the first frame. The cause is in how the figure is drawn, not in the staging: only a shot whose pose sheet drops a garment (`dropsAt`) is drawn as the parts rig in a draw order that can put cloth over the hands (`animaticPlan.garmentAt`, beat 4), and s01's sheet drops nothing, so its human is the one-piece mesh with hands and forearms in front. Nothing in the blocking, the key sheet or the pose sheet can hide a hand. Two ways to meet the line: give s01 a sleeve (a part drawn over the hands until the lift, which the parts rig's `order` already knows how to place) or read the line against the rest-on-lid pose, where the forearms lie on the lid and the hands are not the point of the picture. The staging of row 9.6 cannot do either, and the first is a change to the figure's drawing (animaticPlan, parts.tsx).",
+  "references": [],
+  "before": "both hands are drawn at the chest on frame 0",
+  "after": "the hands appear on the lift (60)",
+  "status": "open",
+  "ruling": null
+}

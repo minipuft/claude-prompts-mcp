@@ -1,0 +1,8 @@
+control: zigzag path with the same 8 px off-chord distance as the bow -> refused on [a] (one sign); path that doubles back -> refused on [bc] (monotone); hairpin -> refused on [c] (turn at most 90 degrees); one-sided bow -> refused on [none]; a reversal into an undeclared anticipation -> refused on [bc], the same declared -> refused on [none]; a return from an undeclared overshoot -> refused on [bc], declared -> [none]; a 3 px step back at 880 px -> [none] (bar 4.4 px); linear lerp -> FAIL on ['arcs', 'moving holds', 'overlap', 'spacing']; arc offset with eased favours -> pass on all 5 checks (8 items); secondary snapped to the primary -> FAIL on ['overlap']; declared moving hold that does not move -> FAIL on ['moving holds']
+  ok   arcs: 21 item(s) measured, all ok
+  ok   spacing: 7 item(s) measured, all ok
+  ok   overlap: 11 item(s) measured, all ok
+  ok   moving holds: 8 item(s) measured, all ok
+  ok   pixel ease: 7 item(s) measured, all ok
+s01-arrival-overwhelm · pass · 7 moves, 54 items measured, 0 failed
+pass: inbetweens - 1 shot(s): arcs, spacing, overlap, moving holds and pixel ease measured

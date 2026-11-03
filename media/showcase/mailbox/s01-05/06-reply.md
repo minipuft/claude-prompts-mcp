@@ -1,0 +1,51 @@
+**Summary**: `npm run plates -- s01-arrival-overwhelm` rebuilt the eight key plates from the pose sheet's solved joints through the home family's parts rig (`out/s01-05-plates.log`, exit 0, 8 plates, 0 needing a family). All eight keys are accepted on C20, C21, C22 and C31, and the gate command `probe-poses.py v3/poses v3/keys v3/charts --joints keys` exits 0. The plates, the key sheet JSON and the keys table are byte-identical to run 4 (the build is deterministic), which is the expected result since no declaration changed.
+
+## Context
+Inputs read: `v3/poses/s01-arrival-overwhelm.json` (solved joints on all 8 keys), `v3/layouts/s01-arrival-overwhelm.json`, `assets/human/model.json`, plate families under `assets/human/families/`, `scripts/animation/README.md` §plates, parts and families, `v3/rubric.md` C20-C22, C25, C31. The step was done inline, not by a sub-agent (the prompt asks for a handoff; the work is a single script and a probe).
+
+## Analysis
+- Every key was built by the home family (skeleton registration, parts rig, per-key draw order); no key reports NEEDS FAMILY, so no image was generated and no generation receipt exists for this step.
+- Tear metrics per key (limits inverted 1 percent, strained 6, overlap 5): worst inverted 0.68 percent (shrink, poncho), worst strained 4.11 percent (shrink, poncho), worst overlap 0.12 percent (joy-a, foreArmL). Hinge measure: joint fill 1.00 on every key, soft overlap 1.08 to 1.54 contour widths.
+- Plate against film: MAD 7.3 to 9.6 against the bar 10, worst centroid 0.46 to 0.93 px against 3.6 (the film rig draws the same pose the plate shows).
+- Silhouettes viewed (`out/s01-05-keys-silhouettes.png`): all eight are one component. The open keys (K3 lift, K4 awe, K7 joy-b) read at a glance; K5 brace and K8 shrink read as a closed mass with the face hidden; K6 joy-a has a straight-edged dark slab behind the raised arm at the left of the torso.
+
+## Goals
+Eight plates at the model sheet's scale (0.4745 plate px per mask px) whose measured spine reads as declared, accepted on every C20, C21, C22, C31 column, with the gate probe passing.
+
+## Execution
+Keys (id · name · family · source · C20 heads / limb scales (worst deviation) · C21 components / solid / wrists · C22 contour · C31 measured class bow sign twin · plate · sha256 prefix):
+
+| id | key | family | source | C20 | C21 | C22 | C31 | plate | sha256 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| K1 | rest-on-lid | home | solver | 8.00 / 1.00 x4 (0.0 %) | 1 / 0.37 / 0.08 | 4.18 px +16 % | C 0.062 -1 tw 0.74 | `assets/human/keys/s01-arrival-overwhelm/K1.png` | 99540c3fe697 |
+| K2 | grip | home | solver | 8.00 / 1.00 x4 (0.0 %) | 1 / 0.38 / 0.08 | 3.85 px +7 % | C 0.102 -1 tw 0.28 | `.../K2.png` | 9b4c0f45abc3 |
+| K3 | lift | home | solver | 8.00 / 1.00 x4 (0.0 %) | 1 / 0.33 / 0.28 | 4.15 px +15 % | C 0.062 +1 tw 0.00 | `.../K3.png` | bb0f4373b651 |
+| K4 | awe | home | solver | 8.00 / 1.00 x4 (0.0 %) | 1 / 0.31 / 0.29 | 4.18 px +16 % | S 0.075 -1 tw 0.64 | `.../K4.png` | 4a2398c9e4f0 |
+| K5 | brace | home | solver | 8.00 / 1.00 x4 (0.0 %) | 1 / 0.38 / 0.05 | 4.11 px +14 % | C 0.082 +1 tw 0.50 | `.../K5.png` | a492e30043bb |
+| K6 | joy-a | home | solver | 8.00 / 1.00 x4 (0.0 %) | 1 / 0.32 / 0.23 | 4.19 px +16 % | C 0.122 -1 tw 0.00 | `.../K6.png` | a6a2c4fca077 |
+| K7 | joy-b | home | solver | 8.00 / 1.00 x4 (0.0 %) | 1 / 0.27 / 0.29 | 4.11 px +14 % | S 0.071 +1 tw 0.44 | `.../K7.png` | c6892ec85569 |
+| K8 | shrink | home | solver | 8.00 / 1.00 x4 (0.0 %) | 1 / 0.38 / 0.10 | 3.99 px +11 % | C 0.142 -1 tw 0.00 | `.../K8.png` | c18a5708b2c4 |
+
+All eight verdicts: accepted (`out/s01-05-keys-table.txt`). Declared against measured: every class and sign match; the two S keys read under their declared bow (K4 0.075 against 0.10, K7 0.071 against 0.12), above the 0.06 floor.
+
+Families: none new. Needs Family: none. Generation Receipts: none (no family plate proposed).
+
+Frame Keys: the layout's figure and emitter numbers (350 px figure at rest, emitter (0.52, 0.777) to (0.545, 0.311)) were not re-measured on key-sheet row 2 thumbnails this step; the `KeySheet` row-2 composition was not rendered (the film render step measures the figure and emitter against the contract).
+
+Probe Lines (`out/s01-05-probe-poses-keys.txt`), exit 0, 20 ok lines, control line tripped:
+`pass: poses - 1 shot(s) (keys joints): keys, line of action, twinning, weight, breakdowns, secondaries, holds, timing shape and lead arm all as declared`
+
+Sheet Paths: `v3/keys/s01-arrival-overwhelm.json`, `assets/human/keys/s01-arrival-overwhelm/` (K1..K8 and crops), `out/s01-05-keys-silhouettes.png`, `out/s01-05-keys-table.txt`, `out/s01-05-pose-sheet.png` (PoseSheetS01 still).
+
+## Evaluation
+Done: `plates` exit 0 with its three controls tripped (a left arm turned 140 degrees refused, the poncho turned 150 degrees refused, two parts' draw order swapped named by the film compare); keys probe exit 0. Not done: the 3x crop for C22 contour clean-up, row-2 thumbnails, the mp4.
+
+Concerns: the plates are byte-identical to run 4's, so this step measured the same artifact again, not a new one; K6's dark slab behind the raised arm and K8's hidden face are readings of the silhouette sheet, not measured.
+
+**Gate Coverage**:
+- [1] PASS: `probe-poses.py v3/poses v3/keys v3/charts --joints keys` exited 0 with 20 ok lines and its control line.
+
+**GATE_REVIEW: PASS - eight of eight keys accepted and the measured-joints probe passes.**
+
+HANDOFF RESULT
+node: keys
