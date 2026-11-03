@@ -40,7 +40,7 @@ Claude Prompts adds reusable prompt resources, composable chains, validation gat
 
 - **Use this if** you write the same prompts repeatedly, run multi-step workflows, or want to share reusable prompts with a team.
 - **Skip if** your client's built-in `/commands` already handle what you need, or you're looking for a no-code prompt library.
-- **Works with** Claude Code, Claude Desktop, Cursor, OpenCode, Gemini CLI, Codex, Windsurf, and Zed. Plugin installers add hooks (chain tracking, gate enforcement, state preservation) for Claude Code, OpenCode, Gemini CLI, and Codex (experimental); other clients run MCP-only.
+- **Works with** Claude Code, Claude Desktop, Cursor, VS Code, OpenCode, Gemini CLI, Codex, Windsurf, and Zed. Hook coverage differs by client; the [setup table](#every-client) lists it.
 
 ---
 
@@ -48,7 +48,9 @@ Claude Prompts adds reusable prompt resources, composable chains, validation gat
 
 ## Quick Start
 
-### Claude Code (Recommended)
+<table>
+<tr><th><a id="claude-code-recommended"></a>Claude Code (Recommended)</th><th><a id="codex-install"></a>Codex (Experimental)</th></tr>
+<tr valign="top"><td>
 
 ```bash
 # Add marketplace (first time only)
@@ -61,28 +63,9 @@ Claude Prompts adds reusable prompt resources, composable chains, validation gat
 >>tech_evaluation_chain library:'zod' context:'API validation'
 ```
 
-<details>
-<summary>Development setup</summary>
+</td><td>
 
-Load plugin from local source for development:
-
-```bash
-git clone https://github.com/minipuft/claude-prompts-mcp ~/Applications/claude-prompts-mcp
-cd ~/Applications/claude-prompts-mcp/server && npm install && npm run build
-claude --plugin-dir ~/Applications/claude-prompts-mcp
-```
-
-Edit hooks/prompts → restart Claude Code. Edit TypeScript → rebuild first.
-
-</details>
-
-<a id="codex-install"></a>
-
-### Codex (Experimental)
-
-Codex hooks require Codex CLI 0.117 or later and are unavailable on Windows. See the [codex-prompts requirements](https://github.com/minipuft/codex-prompts#requirements) for Python and Node.js prerequisites.
-
-Enable hooks in `~/.codex/config.toml`:
+Hooks need Codex CLI 0.117 or later and are unavailable on Windows ([codex-prompts requirements](https://github.com/minipuft/codex-prompts#requirements)). Enable them in `~/.codex/config.toml`:
 
 ```toml
 [features]
@@ -98,28 +81,52 @@ codex plugin add codex-prompts@minipuft
 
 Restart Codex, run `/hooks` to review the plugin hooks, then try `>>tech_evaluation_chain library:'zod' context:'API validation'`.
 
+</td></tr></table>
+
+<details>
+<summary>Claude Code development setup: load the plugin from local source</summary>
+
+```bash
+git clone https://github.com/minipuft/claude-prompts-mcp ~/Applications/claude-prompts-mcp
+cd ~/Applications/claude-prompts-mcp/server && npm install && npm run build
+claude --plugin-dir ~/Applications/claude-prompts-mcp
+```
+
+Edit hooks/prompts → restart Claude Code. Edit TypeScript → rebuild first.
+
+</details>
+
+### Every client
+
+<!-- BEGIN GENERATED: client-matrix:table (generated from docs/reference/clients.json: edit that file, run npm --prefix server run generate:client-matrix) -->
+
+| Client         | Install                      | Hooks          | Steps                             |
+| -------------- | ---------------------------- | -------------- | --------------------------------- |
+| Claude Code    | Plugin                       | Full           | [Steps](#claude-code-recommended) |
+| Codex          | Plugin                       | Experimental   | [Steps](#codex-install)           |
+| Claude Desktop | Desktop bundle or npx config | MCP tools only | [Steps](#setup-claude-desktop)    |
+| OpenCode       | npm installer                | Full           | [Steps](#setup-opencode)          |
+| Gemini CLI     | Extension                    | Partial        | [Steps](#setup-gemini-cli)        |
+| Cursor         | MCP config                   | MCP tools only | [Steps](#setup-cursor)            |
+| VS Code        | MCP config                   | MCP tools only | [Steps](#setup-vs-code)           |
+| Windsurf       | MCP config                   | MCP tools only | [Steps](#setup-windsurf)          |
+| Zed            | MCP config                   | MCP tools only | [Steps](#setup-zed)               |
+
+**Hooks** are what make `>>`, `-->`, and `::` work in conversation; "MCP tools only" means the three MCP tools without them. See [With Hooks](#with-hooks). Config locations and `--client` presets: [Client Capabilities Reference](docs/reference/client-capabilities.md).
+<!-- END GENERATED: client-matrix:table -->
+
 ---
 
 <!-- diataxis: how-to -->
 
 ## More Client Setups
 
-### Claude Desktop
+<!-- BEGIN GENERATED: client-matrix:details (generated from docs/reference/clients.json: edit that file, run npm --prefix server run generate:client-matrix) -->
+<details><summary><a id="setup-claude-desktop"></a><strong>Claude Desktop</strong></summary>
 
-**Option A: GitHub Release** (recommended)
+**Option A: GitHub Release** (recommended): download `claude-prompts-{version}.mcpb` from [Releases](https://github.com/minipuft/claude-prompts-mcp/releases/latest) and drag it into Claude Desktop Settings → MCP Servers. The `.mcpb` bundle is self-contained (~5MB); no npm required.
 
-1. Download `claude-prompts-{version}.mcpb` from [Releases](https://github.com/minipuft/claude-prompts-mcp/releases/latest)
-2. Drag into Claude Desktop Settings → MCP Servers
-3. Done
-
-The `.mcpb` bundle is self-contained (~5MB); no npm required.
-
-**Option B: NPX** (auto-updates)
-
-Add to your config file:
-
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+**Option B: NPX** (auto-updates): add this to your config file (macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`, Windows: `%APPDATA%\Claude\claude_desktop_config.json`):
 
 ```json
 {
@@ -133,23 +140,40 @@ Add to your config file:
 ```
 
 Restart Claude Desktop and test: `>>research_chain topic:'remote team policies'`
-
-<details>
-<summary><strong>Other clients</strong>: VS Code · Cursor · OpenCode · Gemini CLI · Windsurf · Zed · From Source</summary>
-
-**Client setup:** VS Code, Cursor, and other MCP-only clients use the manual configuration guide below.
-
-**Plugin installers** (recommended where available; adds hooks):
+</details>
+<details><summary><a id="setup-opencode"></a><strong>OpenCode</strong></summary>
 
 ```bash
-# OpenCode (full hooks)
 npm install -g opencode-prompts && opencode-prompts install
+```
 
-# Gemini CLI (partial hooks)
+For MCP tools without hooks, use the manual config in the [Client Integration Guide](docs/guides/client-integration.md).
+</details>
+<details><summary><a id="setup-gemini-cli"></a><strong>Gemini CLI</strong></summary>
+
+```bash
 gemini extensions install https://github.com/minipuft/gemini-prompts
 ```
 
-**Manual config** for VS Code, Cursor, OpenCode (no hooks), Gemini CLI (no hooks), Codex (no plugin hooks), Windsurf, and Zed: see [Client Integration Guide](docs/guides/client-integration.md) for per-client config locations, JSON examples, and `--client` preset matrix. [Client Capabilities Reference](docs/reference/client-capabilities.md) covers profile mapping and limits.
+For MCP tools without hooks, use the manual config in the [Client Integration Guide](docs/guides/client-integration.md).
+</details>
+<details><summary><a id="setup-cursor"></a><strong>Cursor</strong></summary>
+
+Add the server to `~/.cursor/mcp.json`. The [Client Integration Guide](docs/guides/client-integration.md) has the JSON example and the `--client` preset.
+</details>
+<details><summary><a id="setup-vs-code"></a><strong>VS Code</strong></summary>
+
+Add the server through VS Code's MCP configuration. The [Client Integration Guide](docs/guides/client-integration.md) has the JSON example and the `--client` preset.
+</details>
+<details><summary><a id="setup-windsurf"></a><strong>Windsurf</strong></summary>
+
+Add the server to `~/.codeium/windsurf/mcp_config.json`. The [Client Integration Guide](docs/guides/client-integration.md) has the JSON example and the `--client` preset.
+</details>
+<details><summary><a id="setup-zed"></a><strong>Zed</strong></summary>
+
+Add the server under the `mcp` key of `~/.config/zed/settings.json`. The [Client Integration Guide](docs/guides/client-integration.md) has the JSON example and the `--client` preset.
+</details>
+<!-- END GENERATED: client-matrix:details -->
 
 **From source** (developers):
 
@@ -159,8 +183,6 @@ cd claude-prompts-mcp/server && npm install && npm run build && npm test
 ```
 
 Point your MCP config to `server/dist/index.js`. Transport: `--transport=stdio` (default) or `--transport=streamable-http`.
-
-</details>
 
 **Custom resources**: `--init=~/my-prompts` scaffolds a starter workspace: three example prompts plus `config.jsonc`. Edit them (YAML schema), or have your AI author new prompts, gates, and frameworks via `resource_manager`. Point `MCP_RESOURCES_PATH` at an existing workspace if you already have one in the right shape. Resources that belong to one repository go in `.claude-prompts/` at its root (`cpm init --project` scaffolds it) and load above your workspace over STDIO. See [Custom Resources Guide](docs/guides/custom-resources.md).
 
@@ -230,7 +252,7 @@ Validation runs between steps, not only at the end. For the full operator gramma
 <img src="assets/demos/hero-demo.gif" alt="One Claude Code session, with a side panel showing what the hooks and the server do: npm test fails, >>status is routed by the hook, resource_manager creates a prompt, a two-step chain runs it under ^ReACT, the server runs npm test as the gate, and the review step approves the result" width="720" />
 </details>
 
-<sub>Recorded live in Claude Code on Sonnet, sped up, nothing re-ordered or retyped. The side panel is a second recording of the same moments, shown while the session pauses: what each hook did and the server's own <code>npm test</code> run for the gate. The tests are red, the AI authors a prompt through <code>resource_manager</code>, a two-step chain implements under <code>^ReACT</code>, the <code>verify:"npm test"</code> gate passes, and <code>review</code> approves. Replay the source yourself: <code>asciinema play assets/demos/src/hero/hero.cast</code> (recorder and storyboard beside it).</sub>
+<sub>Recorded live in Claude Code (Sonnet), sped up, nothing re-ordered or retyped. The side panel shows what each hook and the server's <code>npm test</code> gate did.</sub>
 
 </div>
 
@@ -322,7 +344,7 @@ What hooks unlock:
 | **Native agent handoffs**              | `==>` routes to your client's subagent system automatically; no manual subagent invocation                   |
 | **Session persistence**                | Workflow state preserved when context compacts mid-chain                                                     |
 
-Hooks ship with the plugin install. Full support on Claude Code (this repo) and [OpenCode](https://github.com/minipuft/opencode-prompts); partial on [Gemini CLI](https://github.com/minipuft/gemini-prompts); experimental on [Codex](https://github.com/minipuft/codex-prompts), where Codex hooks are off by default and each install requires a one-time `/hooks` trust review. Other clients get the three MCP tools but no hook-driven behaviors. Detail: [hooks/README.md](hooks/README.md).
+Hooks ship with the plugin install; the [setup table](#every-client) lists which clients have them. Detail: [hooks/README.md](hooks/README.md).
 
 ---
 

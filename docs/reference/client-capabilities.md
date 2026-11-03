@@ -15,24 +15,37 @@ Lookup table for client presets, handoff profiles, and integration limits.
 
 ## Config Shape by Client
 
+<!-- BEGIN GENERATED: client-matrix:config (generated from docs/reference/clients.json: edit that file, run npm --prefix server run generate:client-matrix) -->
+
 | Client         | Typical config file                                                       | Config format                  |
 | -------------- | ------------------------------------------------------------------------- | ------------------------------ |
-| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) | JSON (`mcpServers`)            |
 | Codex          | `~/.codex/config.toml`                                                    | TOML (`[mcp_servers.*]`)       |
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) | JSON (`mcpServers`)            |
+| OpenCode       | `~/.config/opencode/opencode.json`                                        | JSON (`mcp`)                   |
+| Gemini CLI     | extension-managed                                                         | Extension or manual CLI launch |
 | Cursor         | `~/.cursor/mcp.json`                                                      | JSON                           |
 | Windsurf       | `~/.codeium/windsurf/mcp_config.json`                                     | JSON                           |
 | Zed            | `~/.config/zed/settings.json` (`mcp` key)                                 | JSON                           |
-| OpenCode       | `~/.config/opencode/opencode.json`                                        | JSON (`mcp`)                   |
-| Gemini CLI     | extension-managed                                                         | Extension or manual CLI launch |
+
+<!-- END GENERATED: client-matrix:config -->
 
 ## Hooks / Companion Integration Coverage
 
-| Client family                   | Companion package in ecosystem          | Coverage       |
-| ------------------------------- | --------------------------------------- | -------------- |
-| Claude Code                     | `claude-prompts` plugin hooks           | full           |
-| OpenCode                        | `opencode-prompts` hooks                | full           |
-| Gemini CLI                      | `gemini-prompts` hooks                  | partial        |
-| Codex / Cursor / Windsurf / Zed | no dedicated hooks package in this repo | MCP tools only |
+<!-- BEGIN GENERATED: client-matrix:hooks (generated from docs/reference/clients.json: edit that file, run npm --prefix server run generate:client-matrix) -->
+
+| Client         | Companion package in ecosystem                                            | Coverage       | Notes                                                                                                                                |
+| -------------- | ------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Claude Code    | `claude-prompts` plugin hooks                                             | Full           | Hooks ship in this repo's plugin.                                                                                                    |
+| Codex          | [`codex-prompts` plugin hooks](https://github.com/minipuft/codex-prompts) | Experimental   | Codex hooks are off by default and need a one-time `/hooks` trust review. Requires Codex CLI 0.117 or later; unavailable on Windows. |
+| Claude Desktop | none                                                                      | MCP tools only |                                                                                                                                      |
+| OpenCode       | [`opencode-prompts` hooks](https://github.com/minipuft/opencode-prompts)  | Full           | Installed by the opencode-prompts companion.                                                                                         |
+| Gemini CLI     | [`gemini-prompts` hooks](https://github.com/minipuft/gemini-prompts)      | Partial        | Installed by the gemini-prompts extension.                                                                                           |
+| Cursor         | none                                                                      | MCP tools only |                                                                                                                                      |
+| VS Code        | none                                                                      | MCP tools only |                                                                                                                                      |
+| Windsurf       | none                                                                      | MCP tools only |                                                                                                                                      |
+| Zed            | none                                                                      | MCP tools only |                                                                                                                                      |
+
+<!-- END GENERATED: client-matrix:hooks -->
 
 ## Client Profile Resolution Order
 
