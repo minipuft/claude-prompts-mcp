@@ -1,11 +1,13 @@
 ---
 title: "Demo Video Recording Plan"
 date: 2026-07-31
-status: active
+status: done
 tags: []
 ---
 
 # Demo Video Recording Plan
+
+**Status**: DONE, superseded 2026-11-03. The README shows one recorded hero video instead of these clips (its recorder is `assets/demos/src/hero/`). The v1 GIFs this plan produced were removed by `plans/readme-client-setup-2026-11-03.md` row 2.1; `chain-workflow-demo.gif` and `hero-demo.gif` remain because the README still shows them.
 
 ## Format Decision
 

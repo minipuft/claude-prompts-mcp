@@ -257,6 +257,12 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:client-matrix',
+    io: 'read',
+    reads: ['file'],
+    converse: 'unexamined',
+  },
+  {
     script: 'validate:versions',
     io: 'read',
     reads: ['file'],

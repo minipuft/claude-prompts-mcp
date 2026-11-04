@@ -30,7 +30,7 @@
 
 - The operator can rule on everything in one message, without opening a file.
 - Consequential guesses are settled before dependent work; facts and answered decisions do not become redundant questions.
-- The output is pasteable: a `rulings` block the planner files in full in the plan's `## Now` block (a round line in its implementation notes) and as an /evidence-report bundle, so a later session finds each decision without the transcript{% if route != 'interview' %}, or the next prompt's arguments{% endif %}.
+- The output is pasteable: a `rulings` block the planner files in full in the plan's Now block (a round line in its implementation notes) and as an /evidence-report bundle, so a later session finds each decision without the transcript{% if route != 'interview' %}, or the next prompt's arguments{% endif %}.
 
 ## Execution
 
@@ -64,7 +64,7 @@ live:
   - <question deferred to the live round, and what the owner will see there>
 ```
 
-File the block: rulings in full in the plan's `## Now` block, and an /evidence-report bundle with one `decision` item per ruling (`ruling {option, by: owner, date}`) and one `interview` item (owner-grade) per `live:` round. A round asked in chat is recorded the same way.
+File the block: rulings in full in the plan's Now block, and an /evidence-report bundle with one `decision` item per ruling (`ruling {option, by: owner, date}`) and one `interview` item (owner-grade) per `live:` round. A round asked in chat is recorded the same way.
 
 {% else %}
 
