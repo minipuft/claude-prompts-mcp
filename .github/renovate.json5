@@ -39,6 +39,23 @@
   // Vulnerability alerts and the MCP SDK rule carry their own `at any time` schedule.
   updateNotScheduled: false,
 
+  // `ignorePaths` replaces the list `config:recommended` brings through `:ignoreModulesAndTests`
+  // rather than adding to it, so that list is spelled out here unchanged. `assets/demos/**` is the
+  // one addition: the hero recording's fixture project (`assets/demos/src/hero/fixture/`) is a
+  // stage prop, not a dependency anyone installs, and `validate-renovate-extraction.js` pins the
+  // npm package files to the four real ones.
+  ignorePaths: [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "**/vendor/**",
+    "**/examples/**",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/tests/**",
+    "**/__fixtures__/**",
+    "assets/demos/**",
+  ],
+
   // Rebase a branch only when it conflicts, not on every main merge. The default `auto`
   // resolves to `behind-base-branch` here because `main` requires up-to-date branches, so
   // every merge to main re-ran the full CI on every open Renovate branch (148 CI runs on 7
