@@ -90,6 +90,8 @@ export interface ArgumentParsingResult {
 export interface ArgumentContext {
   environmentVars?: Record<string, string>;
   promptDefaults?: Record<string, string | number | boolean | null>;
+  /** The caller merges request-level inputs and validates the final map (`validateResolvedArguments`). */
+  deferSchemaValidation?: boolean;
 }
 
 /**
@@ -755,16 +757,18 @@ export class ArgumentParser {
   private async enrichResult(
     result: ArgumentParsingResult,
     promptData: PromptDefinition,
-    _context: ArgumentContext
+    context: ArgumentContext
   ): Promise<ArgumentParsingResult> {
     // Check if prompt has validation rules that need enforcement
-    const hasValidationRules = promptData.arguments.some(
-      (arg) =>
-        arg.validation &&
-        (arg.validation.minLength !== undefined ||
-          arg.validation.maxLength !== undefined ||
-          arg.validation.pattern !== undefined)
-    );
+    const hasValidationRules =
+      context.deferSchemaValidation !== true &&
+      promptData.arguments.some(
+        (arg) =>
+          arg.validation &&
+          (arg.validation.minLength !== undefined ||
+            arg.validation.maxLength !== undefined ||
+            arg.validation.pattern !== undefined)
+      );
 
     if (hasValidationRules) {
       // Build a ConvertedPrompt-compatible object for the validator

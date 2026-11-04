@@ -65,12 +65,13 @@ gateConfiguration:
         - Each question is numbered and carries ➡ a recommended answer with its reasoning
         - Each question names its class: architecture | contract | scope | taste
         - A question whose answer depends on another question open this round waits for a later round
+        - A question whose answer depends on an artifact the owner has not seen (a live flip, a strip, a blind pair) waits for the round that shows it: one live demo, judged in the owner's own words
         - Facts (repo, filesystem, docs) are probed by the planner, never asked of the operator
       pass_criteria:
         - Every numbered question has a ➡ recommended answer
         - Every numbered question names a class from architecture, contract,
           scope, taste
         - No question in the round depends on the answer to another question in
-          the same round
+          the same round, or on an artifact the owner has not yet seen
         - The output ends in a rulings block, or, for a non-interview exit, that
           prompt's arguments plus a one-line routing reason
