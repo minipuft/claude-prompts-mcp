@@ -91,17 +91,17 @@ Edit hooks/prompts → restart Claude Code. Edit TypeScript → rebuild first.
 
 <!-- BEGIN GENERATED: client-matrix:table (generated from docs/reference/clients.json: edit that file, run npm --prefix server run generate:client-matrix) -->
 
-| Client         | Install                      | Hooks          | Steps                             |
-| -------------- | ---------------------------- | -------------- | --------------------------------- |
-| Claude Code    | Plugin                       | Full           | [Steps](#claude-code-recommended) |
-| Codex          | Plugin                       | Experimental   | [Steps](#codex-install)           |
-| Claude Desktop | Desktop bundle or npx config | MCP tools only | [Steps](#setup-claude-desktop)    |
-| OpenCode       | npm installer                | Full           | [Steps](#setup-opencode)          |
-| Gemini CLI     | Extension                    | Partial        | [Steps](#setup-gemini-cli)        |
-| Cursor         | MCP config                   | MCP tools only | [Steps](#setup-cursor)            |
-| VS Code        | MCP config                   | MCP tools only | [Steps](#setup-vs-code)           |
-| Windsurf       | MCP config                   | MCP tools only | [Steps](#setup-windsurf)          |
-| Zed            | MCP config                   | MCP tools only | [Steps](#setup-zed)               |
+| Client                                  | Install                      | Hooks          |
+| --------------------------------------- | ---------------------------- | -------------- |
+| [Claude Code](#claude-code-recommended) | Plugin                       | Full           |
+| [Codex](#codex-install)                 | Plugin                       | Experimental   |
+| [Claude Desktop](#setup-claude-desktop) | Desktop bundle or npx config | MCP tools only |
+| [OpenCode](#setup-opencode)             | npm installer                | Full           |
+| [Gemini CLI](#setup-gemini-cli)         | Extension                    | Partial        |
+| [Cursor](#setup-cursor)                 | MCP config                   | MCP tools only |
+| [VS Code](#setup-vs-code)               | MCP config                   | MCP tools only |
+| [Windsurf](#setup-windsurf)             | MCP config                   | MCP tools only |
+| [Zed](#setup-zed)                       | MCP config                   | MCP tools only |
 
 **Hooks** are what make `>>`, `-->`, and `::` work in conversation; "MCP tools only" means the three MCP tools without them. See [With Hooks](#with-hooks). Config locations and `--client` presets: [Client Capabilities Reference](docs/reference/client-capabilities.md).
 <!-- END GENERATED: client-matrix:table -->

@@ -81,15 +81,10 @@ function renderTable(header, rows) {
 }
 
 export function renderReadmeTable(clients) {
-  const rows = clients.map((c) => [
-    c.name,
-    c.install,
-    HOOK_LABELS[c.hooks],
-    `[Steps](#${c.anchor})`,
-  ]);
+  const rows = clients.map((c) => [`[${c.name}](#${c.anchor})`, c.install, HOOK_LABELS[c.hooks]]);
   return [
     '',
-    renderTable(['Client', 'Install', 'Hooks', 'Steps'], rows),
+    renderTable(['Client', 'Install', 'Hooks'], rows),
     '',
     '**Hooks** are what make `>>`, `-->`, and `::` work in conversation; "MCP tools only" means the three MCP tools without them. See [With Hooks](#with-hooks). Config locations and `--client` presets: [Client Capabilities Reference](docs/reference/client-capabilities.md).',
   ].join('\n');
