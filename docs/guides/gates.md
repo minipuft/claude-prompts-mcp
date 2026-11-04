@@ -232,6 +232,18 @@ Refused environment keys: `PATH`, anything starting `LD_` or `DYLD_`, `NODE_OPTI
 `BASHOPTS`, `PERL5LIB`, `PERL5OPT`, `RUBYLIB`, `RUBYOPT`. Ordinary variables — including
 anything your own scripts read — pass through untouched.
 
+### Allowlist entry format
+
+Both `MCP_SHELL_VERIFY_ALLOWLIST` and `MCP_SHELL_VERIFY_ALLOWED_DIRS` take **newline-separated**
+entries, not comma-separated: commands contain commas. An entry ending in `*` is a prefix. A command
+carrying shell control characters (`;`, `&`, `|`, a backtick, `<`, `>`, `$(` or a newline) must match
+an entry exactly, because a prefix cannot bound what follows a `;`. The single entry
+`UNSAFE_ALLOW_ALL` permits everything, for an operator who authors all their own gates and accepts
+the risk. The two variables are deliberately separate declarations: accepting arbitrary commands is
+not accepting arbitrary directories. There is no third variable for the environment, by design: with
+`git status` allowlisted and `PATH` author-supplied, the gate author's `git` would run (measured
+2026-08-29), so the resolution-affecting keys above are refused without an opt-out.
+
 Why the third row has no dial: measured 2026-08-29 against a running server, an operator
 who allowlisted exactly `git status` and a gate that set
 `PATH: /gate-author/bin:/usr/bin:/bin` ran the gate author's `git`. A dial that can be
