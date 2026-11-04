@@ -33,3 +33,6 @@ executing the plan. Conservative option taken, logged, work continued.
   which fixes to make; not in this plan's scope.
 - 2026-11-03 · not checked on GitHub: whether following a `#setup-*` link opens the folded
   `<details>` it lands on. Check live after merge.
+- 2026-11-04 · row 1.5: CI on PR #526 failed `validate:phase-header-drift` (Lint & Validate) and its self-test (both unit jobs). Cause was on `main`, not this branch: `a4dbed49` was pushed without a PR on 2026-11-02 and wrote the plan's Now heading as inline code in the interview prompt (3 lines); main's CI has been red since. Merged main into the branch and reworded the 3 lines (`20a72da4`); the check and its self-test pass locally.
+- 2026-11-04 · `Validate Renovate Configuration` (not required) fails on every PR touching a `package.json` since #517 added `assets/demos/src/hero/fixture/package.json` (5 npm files, the check expects 4). Left out of this PR; owner asked whether to fix it separately.
+- 2026-11-04 · a plan hook rewrote `plans/backlog/cpm-setup-client-detection-2026-11-03.md` to `status: active` with an empty Now skeleton and created a notes file beside it, after the session read that backlog plan. Restored from git and deleted the notes file.
