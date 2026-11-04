@@ -74,19 +74,6 @@ codex plugin add codex-prompts@minipuft
 
 Restart Codex, run `/hooks` to review and trust the plugin hooks, then try the same `>>tech_evaluation_chain` command. Needs Codex CLI 0.117 or later; not available on Windows ([requirements](https://github.com/minipuft/codex-prompts#requirements)).
 
-<details>
-<summary>Claude Code development setup: load the plugin from local source</summary>
-
-```bash
-git clone https://github.com/minipuft/claude-prompts-mcp ~/Applications/claude-prompts-mcp
-cd ~/Applications/claude-prompts-mcp/server && npm install && npm run build
-claude --plugin-dir ~/Applications/claude-prompts-mcp
-```
-
-Edit hooks/prompts → restart Claude Code. Edit TypeScript → rebuild first.
-
-</details>
-
 ### Every client
 
 <!-- BEGIN GENERATED: client-matrix:table (generated from docs/reference/clients.json: edit that file, run npm --prefix server run generate:client-matrix) -->
@@ -166,17 +153,6 @@ Add the server under the `mcp` key of `~/.config/zed/settings.json`. The [Client
 </details>
 <!-- END GENERATED: client-matrix:details -->
 
-**From source** (developers):
-
-```bash
-git clone https://github.com/minipuft/claude-prompts-mcp.git
-cd claude-prompts-mcp/server && npm install && npm run build && npm test
-```
-
-Point your MCP config to `server/dist/index.js`. Transport: `--transport=stdio` (default) or `--transport=streamable-http`.
-
-**Custom resources**: `--init=~/my-prompts` scaffolds a starter workspace: three example prompts plus `config.jsonc`. Edit them (YAML schema), or have your AI author new prompts, gates, and frameworks via `resource_manager`. Point `MCP_RESOURCES_PATH` at an existing workspace if you already have one in the right shape. Resources that belong to one repository go in `.claude-prompts/` at its root (`cpm init --project` scaffolds it) and load above your workspace over STDIO. See [Custom Resources Guide](docs/guides/custom-resources.md).
-
 ---
 
 <!-- diataxis: reference -->
@@ -193,6 +169,10 @@ Four primitives you author, version, and compose. The bundled set ships 52 promp
 | Style           | `#`    | Output formatting and tone                                                                                                                                                                                               | `#analytical` · `#procedural`                |
 
 Prompts, gates, and frameworks are managed through the `resource_manager` tool. Your AI creates, edits, versions, and rolls them back through MCP, no file editing required. Styles are managed with the bundled `cpm` CLI. Failed gate checks can retry automatically or pause for your decision ([Gates Guide](docs/guides/gates.md)). Build your first primitive: [Prompt Authoring Tutorial](docs/tutorials/build-first-prompt.md).
+
+### Your own prompts
+
+Your own prompts, gates and frameworks live in a workspace you choose. `--init=~/my-prompts` scaffolds a starter workspace: three example prompts plus `config.jsonc`. Edit them (YAML schema), or have your AI author new prompts, gates, and frameworks via `resource_manager`. Point `MCP_RESOURCES_PATH` at an existing workspace if you already have one in the right shape. Resources that belong to one repository go in `.claude-prompts/` at its root (`cpm init --project` scaffolds it) and load above your workspace over STDIO. See [Custom Resources Guide](docs/guides/custom-resources.md).
 
 ### The Three Tools
 
@@ -365,10 +345,18 @@ Quick jumps: [Build your first prompt](docs/tutorials/build-first-prompt.md) · 
 
 ## Contributing
 
+Run it from source, as a Claude Code plugin or for any other MCP client:
+
+```bash
+git clone https://github.com/minipuft/claude-prompts-mcp.git && cd claude-prompts-mcp
+(cd server && npm install && npm run build)   # esbuild bundles to server/dist/index.js
+claude --plugin-dir .                         # load it as a Claude Code plugin
+```
+
+For any other MCP client, point its config at `server/dist/index.js`; transport is `--transport=stdio` (default) or `--transport=streamable-http`. Edit hooks or prompts → restart the client. Edit TypeScript → rebuild first.
+
 ```bash
 cd server
-npm install
-npm run build        # esbuild bundles to dist/index.js
 npm test             # Run test suite
 npm run validate:all # Full CI validation
 ```
