@@ -2,8 +2,6 @@
 
 Thank you for contributing to the Claude Prompts MCP server. This guide covers everything from your first PR to advanced contribution workflows.
 
-New here? [How This Repo Is Run](docs/concepts/how-this-repo-is-run.md) explains on one page how a change moves from plan to release and why each check exists; this guide holds the exact commands.
-
 ## Quick Start
 
 ```bash
