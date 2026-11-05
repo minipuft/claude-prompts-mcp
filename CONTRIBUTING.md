@@ -2,6 +2,8 @@
 
 Thank you for contributing to the Claude Prompts MCP server. This guide covers everything from your first PR to advanced contribution workflows.
 
+New here? [How This Repo Is Run](docs/concepts/how-this-repo-is-run.md) explains on one page how a change moves from plan to release and why each check exists; this guide holds the exact commands.
+
 ## Quick Start
 
 ```bash
@@ -615,35 +617,31 @@ Hooks auto-install via `prepare` on first `npm install` inside `server/`.
 <details>
 <summary><strong>Pre-commit (staged files)</strong></summary>
 
-Runs on staged files only:
+Runs on staged files only, in order:
 
-1. `eslint --fix`
-2. `prettier --write`
-3. `npm run typecheck`
+1. Generated files: a staged contract source is regenerated and its output staged; a direct edit
+   to a generated file is refused
+2. Formatting: `prettier --check` on staged `server/` files (`lint:staged`) and on staged
+   repo-level JSON, Markdown and YAML. It checks and never rewrites; fix with
+   `npm --prefix server run format`
+3. `AGENTS.md` is regenerated when `CLAUDE.md` or `.claude/rules/` changed
+4. `validate:python`, only when `hooks/**` changed
+5. `npm run typecheck`, skipped for docs-only and `hooks/**`-only commits
 
-Commits are blocked if checks fail. Staged files may be auto-modified by formatters.
+Commits are blocked if a check fails.
 
 </details>
 
 <details>
-<summary><strong>Pre-push (full workspace)</strong></summary>
+<summary><strong>Pre-push (every push)</strong></summary>
 
-Runs before every `git push`:
+Runs before every `git push`, on every route:
 
-On the full route, in order:
+1. Type checking (`typecheck`)
+2. Linting (`lint:ratchet`)
 
-1. Lockfile sync (`validate:lockfile-sync`) — first, because every step below measures the installed tree
-2. Type checking (`typecheck`, then `typecheck:committed`)
-3. Linting (`lint:ratchet`)
-4. Format checking
-5. Python hook validation (`validate:python`, only when `hooks/**` changed)
-6. Tests (`test:ci`)
-7. Dependency validation (`validate:arch`)
-8. Version consistency (`validate:versions`)
-9. Build
-
-Docs-only and `hooks/**`-only pushes take lighter routes. `scripts/classify-validation-scope.js`
-decides which. Pushes are blocked if any step fails.
+Everything else (format, lockfile sync, architecture, versions, Python hooks, tests, build) runs
+once in CI on the pull request. A push that only deletes remote branches runs nothing.
 
 </details>
 

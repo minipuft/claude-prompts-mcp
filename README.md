@@ -363,7 +363,7 @@ npm run validate:all # Full CI validation
 
 The build produces a self-contained bundle. `server/dist/` is gitignored, and CI builds fresh from source.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow details.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow details, and [How This Repo Is Run](docs/concepts/how-this-repo-is-run.md) for how a change moves from plan to release.
 
 ---
 

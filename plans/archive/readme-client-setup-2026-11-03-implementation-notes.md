@@ -2,7 +2,7 @@
 title: "README Client Setup — Implementation Notes"
 plan: readme-client-setup-2026-11-03.md
 date: 2026-11-03
-status: active
+status: done
 tags: []
 ---
 
