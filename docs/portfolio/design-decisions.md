@@ -37,22 +37,30 @@ Transport is selected at startup. The separate HTTP+SSE transport was removed in
 upgrade — keeping it would have meant hand-maintaining a transport upstream had deleted. The
 `SSE streams` above are `text/event-stream` framing inside Streamable HTTP, which remains.
 
-### Data Storage: File-Based Persistence (Intentional)
+### Data Storage: Resources as Files, Runtime State in SQLite
 
-| Aspect         | Decision                        | Trade-off                                                                                         |
-| -------------- | ------------------------------- | ------------------------------------------------------------------------------------------------- |
-| **Storage**    | JSON files + Markdown templates | _Pro_: Zero-dependency deployment. Git-versionable prompts. <br>_Con_: Parsing overhead at scale. |
-| **State**      | `runtime-state/*.json`          | Sessions survive STDIO process restarts.                                                          |
-| **Hot-Reload** | File watchers with debouncing   | Changes propagate without server restart.                                                         |
+| Aspect            | Decision                                                  | Trade-off                                                                                                       |
+| ----------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Resources**     | Prompts, gates, frameworks as YAML + Markdown files       | _Pro_: Git-versionable, human-readable, editable in any editor. <br>_Con_: Parsing on load and on every change. |
+| **Hot-Reload**    | File watchers with debouncing                             | Resource changes propagate without a server restart.                                                            |
+| **Runtime state** | One SQLite file, `state.db`, through Node's `node:sqlite` | _Pro_: Safe concurrent writers, readable from the Python hooks. <br>_Con_: Not inspectable with a text editor.  |
 
-**Why file-based?**
+**Why resources stay files:**
 
-- `git clone && npm start` — no database setup
-- Version prompts alongside code
-- Human-readable: debug by reading files, not SQL queries
+- Version prompts alongside code, and review them in a diff
+- Human-readable: debug by reading the file
 - File watchers work natively for hot-reload
 
-The in-memory registry caches parsed content. JSON parsing (~5-20ms for hundreds of prompts) is negligible for single-user MCP servers.
+**Why runtime state is a database:** the MCP server and the `cpm` CLI both write
+it and the Python hooks read it, so it needs safe concurrent access and reads
+from another language. `node:sqlite` is built into Node, so there is no native
+dependency to install; it is the reason the server needs Node 22.13 or later.
+Each table declares whether its rows are durable, derived or ephemeral, and
+durable rows are carried across schema upgrades
+([ADR 0005](../adr/0005-runtime-state-lives-in-one-sqlite-file.md),
+[SQLite Persistence](../architecture/sqlite-persistence.md)).
+
+The in-memory registry caches parsed resources, and hot-reload refreshes it.
 
 ---
 

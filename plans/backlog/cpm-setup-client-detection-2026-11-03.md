@@ -10,7 +10,7 @@ tags: [cli, install, clients]
 **Status**: BACKLOG. Saved on the owner's ruling of 2026-11-03 (interview round 1, `cpm-setup`: "write it down as a future plan, no work started"). No rows have run.
 **Owner**: minipuft
 **Created**: 2026-11-03
-**Source**: `plans/readme-client-setup-2026-11-03.md` row 2.3
+**Source**: `plans/archive/readme-client-setup-2026-11-03.md` row 2.3
 
 ## Why this exists
 

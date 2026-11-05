@@ -66,6 +66,7 @@ _I want to understand how it works._
 
 - **[Chains Lifecycle](concepts/chains-lifecycle.md)**: State machine and session management.
 - **[Quality Gates](concepts/quality-gates.md)**: Precedence ladder and verification types.
+- **[How This Repo Is Run](concepts/how-this-repo-is-run.md)**: How a change moves from plan to release, and why each check exists.
 - **[Architecture Overview](architecture/overview.md)**: Runtime, transports, pipeline.
 - **[SQLite Persistence](architecture/sqlite-persistence.md)**: Table contracts, durability, scope, schema bumps, and writer ownership.
 
