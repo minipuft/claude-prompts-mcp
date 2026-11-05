@@ -8,7 +8,7 @@
 2. **Contract ownership** -- Hand-written schemas in `src/mcp/tools/schemas/` own runtime validation; `tooling/contracts/*.json` own descriptions/parameter metadata generated into `src/mcp/contracts/schemas/_generated/`. Run `npm run generate:contracts`, never edit `_generated/`. `config.schema.json` <- `ConfigFile` (`generate:config-schema`).
 3. **Transport Parity** -- Runtime changes must work in STDIO and Streamable HTTP. The two differ in instance lifetime, and that difference is load-bearing: STDIO pins one `McpServer` per connection, while HTTP builds a fresh one per request. A change that mutates a registered instance passes STDIO and silently no-ops over HTTP. HTTP+SSE was removed in the SDK v2 upgrade.
 4. **Docs/Code Lockstep** -- Update relevant doc in `docs/` when behavior changes.
-5. **Validation Discipline** -- **CI owns the full test suite; local checks are a subset chosen by who is running them.** A change's own check (the test, validator or probe that reads what the change wrote) runs with the change, and nothing wider. Before a push: `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run validate:all`. `test:all` (unit, integration and e2e) runs once, in CI, at the pull request, and a red CI run is fixed on the branch before merge -- never merged around. Run `test:all` locally only to reproduce a CI failure or when no pull request will carry the change. `validate:arch` (module boundaries) is not a separate add-on: it is a member of the `validate:all` suite, and runs there. **`typecheck:tests:ratchet` is not optional**: `tsconfig.json` excludes `tests/`, so `typecheck` is blind to every call site a signature change breaks, and `validate:all` -- which CI runs whole -- runs the ratchet second. **`test:ci` is not the full suite**: it is an alias for `test:unit` and runs neither `tests/integration` nor `tests/e2e`, so a local `test:ci` says nothing about the jobs CI runs. Why local `test:all` stopped being the minimum (owner ruling 2026-10-05): a profile of one planning thread measured the full suite running three times in series per change -- inside workers (46.6 h against 39.6 h of inference), again before the push (23.1 h over 71 runs), and again in CI, which was green on 32 of 33 of those pull requests. The 2026-08-27 incident this item used to cite -- 20 integration and 17 e2e failures unseen for five commits because every local check stopped at `test:ci` -- happened on commits that reached `main` without a pull request's CI run; with every change going through one, CI is where those failures surface. *(flips when a defect reaches `main` that a local `test:all` would have caught and the pull request's CI did not)*
+5. **Validation Discipline** -- **CI owns the full test suite; local checks are a subset chosen by who is running them.** A change's own check (the test, validator or probe that reads what the change wrote) runs with the change, and nothing wider. Before a push: `npm run typecheck && npm run lint:ratchet && npm run typecheck:tests:ratchet && npm run validate:all`. `test:all` (unit, integration and e2e) runs once, in CI, at the pull request; a red run is fixed on the branch, never merged around. Run `test:all` locally only to reproduce a CI failure or when no pull request will carry the change. `typecheck:tests:ratchet` is not optional: `tsconfig.json` excludes `tests/`, so `typecheck` is blind to every call site a signature change breaks. `test:ci` is an alias for `test:unit` and says nothing about the integration or e2e jobs. Owner ruling 2026-10-05, after a profile measured the full suite running three times in series per change while CI was green on 32 of 33 pull requests. *(flips when a defect reaches `main` that a local `test:all` would have caught and the pull request's CI did not)*
 
 ## Node.js Support Boundaries
 
@@ -24,88 +24,38 @@ The server floor is where `node:sqlite` is available without an experimental fla
 
 **CI is the contract; every other gate is a documented strict subset of it.**
 
-*(Not projected into `AGENTS.md` -- this is CI-routing history a Codex or OpenCode reader does not
-need to act on. `CONTRIBUTING.md` and the `Pull Request Boundary` section below carry the commands
-those readers actually run.)*
+*(Not projected into `AGENTS.md`: CI-routing detail a Codex or OpenCode reader does not act on.
+`CONTRIBUTING.md` §Testing and §Git Hooks carry the commands those readers run.)*
 
-The three gates once ran three different suites with no subset relation, so a green
-`pre-push` did not predict CI, and neither did the local full-validation wrapper that
-existed at the time -- that is how a pyrefly failure reached `main` from a clean local
-push. That wrapper was deleted once the subset relation made it redundant.
-
-`scripts/classify-validation-scope.js` is the changed-path SSOT for local push and CI.
-It recognizes two narrow safe scopes and sends every empty, mixed, executable,
-configuration, dependency, deleted-unknown, or unrecognized change to `full`.
+`scripts/classify-validation-scope.js` is the changed-path SSOT for CI routing. It recognizes two
+narrow safe scopes and sends every empty, mixed, executable, configuration, dependency,
+deleted-unknown, or unrecognized change to `full`.
 
 | Scope   | Trigger                                                                                 | CI                                                                                                |
-| ------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `docs`  | documented root handbooks, `docs/**/*.md`, `plans/**/*.md`, and server/CLI READMEs only | classifier hygiene · CONTRIBUTING commands · plan row tracking · README charter · guidance projection; four protected jobs report intentional lightweight passes |
-| `hooks` | only `hooks/**` plus optional docs                                                      | pinned Ruff/Pyrefly/Pytest/PyYAML · the same four documentation checks as `docs`; other protected jobs report intentional lightweight passes |
+| ------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `docs`  | documented root handbooks, `docs/**/*.md`, `plans/**/*.md`, and server/CLI READMEs only | classifier hygiene · CONTRIBUTING commands · plan row tracking · README charter · guidance projection; protected jobs report intentional lightweight passes |
+| `hooks` | only `hooks/**` plus optional docs                                                      | pinned Ruff/Pyrefly/Pytest/PyYAML · the same four documentation checks as `docs`                  |
 | `full`  | everything else; empty/unknown input                                                    | typecheck · `validate:all` · CLI · build/smoke/schema · Node 22/24 unit/coverage/integration/E2E   |
 
-`.husky/pre-push` does not branch by scope: every push runs `typecheck` and `lint:ratchet`
-only -- a deletion-only push (`git push --delete`) skips even that. CI stays scope-routed and
-owns the rest -- format, lockfile-sync, architecture, versions, Python hooks, unit/integration/
-E2E, build, and post-build schema gates -- once, at the PR boundary.
+Invariants, each of which has been broken once and is now enforced:
 
-The CI workflow remains unconditional. Do not add workflow-level `paths` or
-`paths-ignore`: a required workflow skipped before jobs exist leaves its context
-pending. Routing happens inside the workflow while the literal `Lint & Validate`,
-`CLI`, `Build`, and `Test Suite` job names remain stable.
-
-`.husky/pre-commit` remains the fast contract-regeneration, staged-lint, conditional
-Python, and typecheck gate. Every local route remains a subset of CI.
-
-**A local gate is only as trustworthy as the toolchain it ran against**, which is a
-different axis from which steps run where. CI installs with `npm ci` and pinned pip
-versions; a developer box installs whenever it last installed. Measured 2026-08-19: a local
-tree sat 18 packages off the lockfile with knip at 6.32.1 against the lockfile's 6.32.2, and
-the knip ratchet baseline was regenerated with the wrong binary. Two commands close it, both
-reading the same file CI reads -- `validate:lockfile-sync` (inside `validate:all`) and
-`setup:python` (`requirements-dev.txt`). Node no longer forks either: every job reads
-`.node-version`, and the test matrix is the only place 22.13.0 appears.
-
-**`lint:ratchet` does NOT run at pre-commit** (since `a5d8cb51`). It is a whole-project
-DIRECTION measure, and direction is a push concern; per-commit conformance is `lint:staged`,
-which lints exactly what is staged. Running it per-commit also meant an unrelated violation
-anywhere in `src` blocked every commit -- in a shared worktree, blocking on work that is not
-yours. Coverage is unchanged: `pre-push` runs it and CI runs it. Pre-commit floor measured
-4.4s against the `ci-release.md` <10s budget.
-
-**Adding a step to a hook that CI does not run breaks the contract** -- add it to
-`validate:all` first, which CI runs whole. Removing a step CI depends on breaks it too.
-
-Formatting is covered by `validate:format` in the full CI route and by `pre-commit`'s
-staged-file check; `pre-push` does not check formatting. `validate:format` checks every tracked
-`*.json`/`*.md`/`*.yml`/`*.yaml` in the repo, in two passes: repo-level files outside `server/**`
-against the root Prettier config, and every tracked file under `server/**` (including
-`resources/**` and `tests/**`) against `server/.prettierrc.json` and `server/.prettierignore`.
-Anything a generator owns belongs in `.prettierignore` with a reason -- otherwise the generator
-and Prettier disagree.
-
-**Every formatting gate CHECKS; none of them writes** (since 2026-08-25). `pre-commit` and
-`lint-staged` used to `prettier --write` the staged paths and re-`git add` them, so the bytes
-committed were not the bytes any gate had validated -- each check ran against one version of
-the file and the commit captured another. Formatting-only, so the blast radius was small, but
-it is the same shape as a step that silently changes an artifact after the check that blessed
-it. It also broke anchored editing: a rewrite between a read and the next fixed-string edit
-makes that edit miss **silently**, which cost real work here on 2026-08-25. `--check` is also
-a strict subset of CI, which only ever checks -- the old `--write` was a local step CI does
-not run, which this section otherwise forbids. Fix with `npm --prefix server run format`
-(same combined file set `validate:format` reads) or `format:server` (server TS/JS sources plus
-the top-level `server/` config files -- narrower than `format`, since it does not recurse into
-`resources/**` or `tests/**`).
-
-**Format at authoring time; the gate is a backstop, not the boundary.** A gate you routinely
-fail is a gate in the wrong place -- so format on save (editors) or as part of the edit itself
-(agents: run `format` on what you touched BEFORE you validate, not after a hook rejects it).
-This only works if your editor and the gate agree, which needs one contract per file: prettier
-resolves the NEAREST config, so `server/**` takes `server/.prettierrc.json` (printWidth 100)
-and everything else takes the root `.prettierrc.json` (printWidth 80). The root file was added
-2026-08-25 and pins what was already happening -- root paths previously resolved NO config and
-ran on prettier's built-in defaults, so the contract was whatever the installed major version
-happened to do, and an editor plugin resolving its own settings would silently disagree with
-the gate. Verified at the time: adding it reformatted zero files on either side.
+- **The workflow stays unconditional.** No workflow-level `paths` or `paths-ignore`: a required
+  workflow skipped before jobs exist leaves its context pending. Routing happens inside the
+  workflow and the `Lint & Validate`, `CLI`, `Build`, and `Test Suite` job names stay stable.
+- **Hooks are subsets of CI.** `.husky/pre-commit` runs contract regeneration, staged lint,
+  conditional Python, and typecheck. `.husky/pre-push` runs `typecheck` and `lint:ratchet` only, on
+  every push regardless of scope. A step added to a hook that CI does not run breaks the contract:
+  add it to `validate:all` first. `lint:ratchet` is a whole-project direction measure, so it runs at
+  push and in CI, never per commit, where an unrelated violation would block a shared worktree.
+- **A local gate is only as trustworthy as its toolchain.** `validate:lockfile-sync` (inside
+  `validate:all`) and `setup:python` (`requirements-dev.txt`) read the same files CI installs from;
+  every job reads `.node-version`, and the test matrix is the only place 22.13.0 appears.
+- **Every formatting gate CHECKS; none writes.** A gate that rewrites a file after validating it
+  commits bytes nothing checked and silently breaks anchored edits. Format at authoring time:
+  `npm --prefix server run format` covers the same combined set `validate:format` reads
+  (repo-level `*.json`/`*.md`/`*.yml` outside `server/**` against the root Prettier config at
+  printWidth 80; every tracked file under `server/**` against `server/.prettierrc.json` at 100).
+  Anything a generator owns belongs in `.prettierignore` with a reason.
 
 ## Pull Request Boundary
 
@@ -149,20 +99,12 @@ Leave it to an adoption PR.
 
 Parity is enforced rather than documented: `scripts/pr-check.mjs` names each workflow step it
 mirrors and `server/tests/unit/scripts/pr-check-ci-parity.test.ts` reads `pr-conventions.yml` and
-fails when the two sets diverge. That test exists because the relation had already broken in the
-direction that costs a CI cycle -- `CONTRIBUTING.md` documented only the body check, and the body
-checker states outright that it "does not read the title beyond its type", so following the
-instructions exactly still shipped an unchecked title (#283, `subject-case`, 2026-09-14). A
-hand-written body cost a second run three missing sections and a 488-word fold (#312, 2026-09-16).
+fails when the two sets diverge. Both exist because following the documented steps once still
+shipped an unchecked title (#283) and a hand-written body cost a second CI run (#312).
 
-**This section IS projected into `AGENTS.md`** (`PROJECTED_HANDBOOK_SECTIONS` in
-`scripts/sync-project-guidance.js`). It previously was not: the projection measured 32,709 of its
-32,768-byte ceiling with this section absent -- 59 bytes of headroom, not enough to add it. Evicting
-`## Validation Gates (one contract, impact-aware subsets)` (below) freed the room: that section is
-CI-routing detail a Codex or OpenCode reader does not need to act on, while this one is a command
-they run before every PR. Codex and OpenCode also still reach this contract through
-`CONTRIBUTING.md` §Pull Request Process and the usage text `pr-check.mjs` prints when invoked
-without arguments.
+This section is projected into `AGENTS.md` (`PROJECTED_HANDBOOK_SECTIONS` in
+`scripts/sync-project-guidance.js`); Codex and OpenCode also reach it through `CONTRIBUTING.md`
+§Pull Request Process and the usage text `pr-check.mjs` prints without arguments.
 
 ## Fleet Standards Upstream (`minipuft/repository-standards`)
 
@@ -186,6 +128,8 @@ mistake was made and reverted on 2026-08-15. Two gates keep the relationship hon
 | -------------------------------------------- | ----------------------------------------- |
 | Architecture & runtime                       | `docs/architecture/overview.md`           |
 | SQLite persistence                           | `docs/architecture/sqlite-persistence.md` |
+| Configuration file, precedence, startup refusals | `docs/reference/configuration.md`      |
+| Workspaces, overlays, resource paths         | `docs/guides/custom-resources.md`         |
 | MCP tools & symbolic commands                | `docs/reference/mcp-tools.md`             |
 | MCP contract maintenance                     | `docs/guides/mcp-contract-maintenance.md` |
 | Prompt authoring                             | `docs/tutorials/build-first-prompt.md`    |
@@ -266,7 +210,7 @@ system_control → SystemControl Router → 12 action handlers
 | `resource_manager` (framework) | `FrameworkToolHandler`      | `FrameworkLifecycleProcessor`, `FrameworkDiscoveryProcessor`, `FrameworkVersioningProcessor`, `FrameworkValidator`                                                                                                                                                                            |
 | `resource_manager` (category)  | `CategoryToolHandler`       | `CategoryLifecycleProcessor`, `CategoryDiscoveryProcessor`, `CategoryVersioningProcessor`, `CategoryFileWriter`. Its resource is `category.yaml`, NOT the directory of prompts around it, which is why its mutation transaction targets the file and its `delete` leaves every prompt in place |
 | `prompt_engine`                | `PromptExecutor`            | `PipelineBuilder` (factory), `ChainSessionRouter`                                                                                                                                                                                                                                             |
-| `system_control`               | `ConsolidatedSystemControl` | 12 action handlers in `system-control/handlers/` (`analytics`, `changes`, `config`, `execution_history`, `framework`, `gates`, `guide`, `injection`, `maintenance`, `session`, `skills_sync`, `status`) -- `skills_sync` was absent from this list while present on disk, measured 2026-08-25 |
+| `system_control`               | `ConsolidatedSystemControl` | 12 action handlers in `system-control/handlers/` (`analytics`, `changes`, `config`, `execution_history`, `framework`, `gates`, `guide`, `injection`, `maintenance`, `session`, `skills_sync`, `status`) |
 
 ## Runtime State (SQLite -- never commit `state.db`)
 
@@ -281,10 +225,26 @@ system_control → SystemControl Router → 12 action handlers
 
 State stores using `kv_state` pass `tableName: 'kv_state'` + a discriminator `key` to `SqliteStateStoreConfig`. **`state.db` is mixed-posture, not ephemeral.** A `SCHEMA_VERSION` bump drops and recreates every table, but the four durable ones (`version_history`, `skills_sync_manifests`, `objects`, `version_entries`) are carried across: `ensureSchema()` snapshots their rows, applies the `DURABLE_MIGRATIONS` steps for the version range (pure transforms, `infra/database/durable-migrations.ts`), recreates, and restores strictly -- a column that vanishes without a step's `droppedColumns` entry throws and rolls the whole upgrade back, so a new `NOT NULL` column with no default needs a step that supplies it. A file below `MIGRATION_FLOOR` is refused at startup, unchanged; every upgrade is first backed up to `<db>.v<version>.bak`; `validate:table-contracts` fails a durable schema change that has no step or no `durable-schema.lock.json` update (`-- --update`). Per-table owner, posture, scope, and retention are declared in `src/infra/database/table-contracts.ts`, which is the SSOT.
 
-**`state.db` is shared across projects, and TWO columns compete to isolate it.** One file serves every project. `workspace_id` has four readers, not zero as this handbook claimed on 2026-08-25 (re-measured 2026-08-27): `SqliteStateStore` filters on it in three queries, `run-registry` compares it to refuse a cross-workspace handoff claim -- a security decision -- `execution-record-store` projects it, and `v_execution_status` selects it. What is true is narrower and more awkward: for `version_history`, `execution_records` and `resource_changes` the column that actually isolates is `tenant_id` (9, 3 and 2 filter sites), so `workspace_id` there is a redundant second scope channel, indexed and written and never the thing that scopes. `tenant_id` meanwhile carries three incompatible meanings across the schema (server PID, workspace id, literal `'default'`). Choosing one scope column per table is open work, not a defect to patch. **Isolation tightened on 2026-08-27** and state written before then under the `'default'` key is not reachable from a workspace-scoped read, with two exceptions: active framework and gate enablement copy a legacy `'default'` row into the launch workspace once, when that workspace has no row of its own (`FrameworkStateStore`; `GateStateStore` since 2026-09-14). Argument history re-derives from config on first read, which costs a re-toggle. No bulk backfill was written on purpose -- it would have run against producers that were still truncating, which hides the defect rather than fixing it, and nothing stated what would ever retire it. Gate enablement could not stay a re-toggle: disabling runtime gates narrows the `gates` and `gate_verdict` parameter surface while core run control stays available, and before 2026-09-14 every restart silently advertised them again -- the store loaded only the `'default'` row and created any other scope enabled without reading SQLite. It now loads every persisted `gates` row at startup, one per scope.
+**`state.db` is shared across projects, and two columns compete to isolate it.** `workspace_id`
+has four readers, but for `version_history`, `execution_records` and `resource_changes` the column
+that isolates is `tenant_id`, resolved by `resolveContinuityScopeId` to `workspaceId ?? organizationId
+?? 'default'`; there `workspace_id` is a redundant second channel. `tenant_id` carries three
+meanings across the schema (server PID, workspace id, literal `'default'`). Choosing one scope column
+per table is open work, not a defect to patch. Consequences an agent meets:
 
-What actually isolates `version_history` is `tenant_id`, which `resolveContinuityScopeId` resolves to `workspaceId ?? organizationId ?? 'default'` -- so rollback history IS workspace-scoped, and every read filters on it. **This paragraph previously claimed the opposite** ("`kv_state` is the only table that writes it… rollback history is shared across every project on the machine"); both halves were false, and the error is kept visible here because a security claim that overstates exposure gets discounted wholesale once someone checks it. The residual limit is real but narrower: a process that resolves no workspace shares the `'default'` bucket with every other such process. For `kv_state`: a scope with no row falls back to `frameworks.defaultFramework`; the scope id derives from `CLAUDE_PROJECT_DIR` → cwd (basename) unless `--workspace-id` is passed. Reading or writing without a scope resolves to the process default set at startup -- passing one explicitly is required only when serving several workspaces from one process (HTTP). -> `docs/guides/identity-scope.md`
+- Isolation tightened on 2026-08-27, with no bulk backfill on purpose. State written earlier under
+  `'default'` is unreachable from a scoped read, except that active framework and gate enablement
+  copy a legacy `'default'` row into the launch workspace once, when it has no row of its own.
+- Gate enablement loads every persisted `gates` row at startup, one per scope (since 2026-09-14);
+  before that, every restart silently re-advertised disabled runtime gates.
+- A `kv_state` scope with no row falls back to `frameworks.defaultFramework`. The scope id derives
+  from `CLAUDE_PROJECT_DIR`, then cwd basename, unless `--workspace-id` is passed; pass a scope
+  explicitly only when one process serves several workspaces (HTTP).
+- A process that resolves no workspace shares the `'default'` bucket with every other such process.
+  That is the whole residual exposure; an earlier version of this handbook claimed rollback history
+  was shared across every project, which was false.
 
+-> `docs/architecture/sqlite-persistence.md` §`tenant_id` Means Three Things · `docs/guides/identity-scope.md`
 ## Public API Contract (what a major version protects)
 
 **Declared surface over "anything that feels significant"; consumer-observable over internal.**
@@ -302,81 +262,49 @@ breaking and major versions inflate until they carry no information.
 | Symbolic command language (`>>`, `==>`)                                                                       | Build tooling, validation scripts, CI                                                              |
 
 **The Python hook contract covers the durable surface, not every table a hook can open.**
-`chain_sessions` is `derived`; `chain_runs` and `chain_run_nodes` are `ephemeral`. All three's rows are
-`DELETE`d per-PID at cleanup, cleared when the owning process exits, and dropped outright by any
-`SCHEMA_VERSION` bump. Nothing a hook reads there survives a restart -- they are a live-process
-projection, closer to a cache than to an interface. Listing them as major-version-protected was a
-mis-classification: it priced a rename of a column nobody can hold a durable reference to at the
-same rate as breaking `prompt_engine`.
-
-What IS protected on the hook side: the **module API** of `hooks/lib/*` that plugins import
-(`load_active_chain_state`, `load_prompts`, and their return shapes), the `hooks-state.db` schema,
-and the JSON payload contract hooks exchange with Claude Code. Those persist across restarts and
-have no other source.
-
-Renaming `chain_sessions.tenant_id` -> `run_owner_pid` was therefore **in-contract** — done at
-schema v20, both sides in one commit, no dual-write. It is kept here as the worked example, provided the
-reader lands in the same PR (verified 2026-08-05: zero readers of these columns exist across
-`minipuft-plugins`, `gemini-prompts`, and `opencode-prompts`). A change here still requires the
-Python side to move with it -- the constraint is atomicity, not a version bump.
+`chain_sessions`, `chain_runs` and `chain_run_nodes` are per-PID projections, deleted at cleanup and
+dropped by any `SCHEMA_VERSION` bump; nothing a hook reads there survives a restart. What IS
+protected: the module API of `hooks/lib/*` that plugins import (`load_active_chain_state`,
+`load_prompts`, their return shapes), the `hooks-state.db` schema, and the JSON payload contract
+hooks exchange with Claude Code. Renaming `chain_sessions.tenant_id` -> `run_owner_pid` (schema v20)
+is the worked example: in-contract, both sides in one commit, no dual-write. The constraint on a
+hook-side change is atomicity, not a version bump.
 
 **The tool surface is a union, not a snapshot.** `prompt_engine` builds its `inputSchema` from
-runtime state: `gates` and `gate_verdict` are runtime-feature-gated; `gate_action` is core with
-its widest enum (`retry`, `skip`, `abort`, `resume`, `accept_alternative`). Abort and the blocking-
-unknown resolution verbs remain available while runtime gates are off; retry/skip receive a
-named unavailable-action refusal before execution. The contract is the **union of every reachable shape** --
-`tooling/contracts/prompt-engine.json`. Narrowing within that union is not breaking; adding or
-removing a union member is. The alternative reading (contract = shape at current state) makes
-every state change a major bump, which drains the major version of meaning. Since P4.93 a
-narrowed-away gate parameter is REFUSED, not stripped, with its own "declared, but not advertised
-right now" message -- "not a parameter" would be false of a name the contract carries.
+runtime state: `gates` and `gate_verdict` are runtime-feature-gated; `gate_action` is core with its
+widest enum. The contract is the union of every reachable shape (`tooling/contracts/prompt-engine.json`).
+Narrowing within the union is not breaking; adding or removing a member is. A narrowed-away gate
+parameter is REFUSED with its own "declared, but not advertised right now" message, never stripped
+and never called "not a parameter".
 
-**Abort is whole-run control.** `prompt_engine(chain_id:"...", gate_action:"abort")` exits before
-command parsing, report routing or review admission, retaining durable `cancelled` state and
-artifacts. It needs no node, trailer, report or retry exhaustion and applies in every nonterminal
-run state. Repeated abort is idempotent; terminal completed/failed, missing and out-of-scope runs
-receive truthful non-applied results. The public `cancel` property is removed from the union;
-retired true/false/mixed calls use ordinary undeclared-input refusal, with no mutation or alias.
-Keep internal `cancelChain`, persisted `cancelled` and historical cancellation records.
+**`gate_verdict` accepts one shape, the structured object** (`{overall, rationale, per_gate?,
+reminders?}`); a string is refused at the schema with the object to resend. Other text channels keep
+their own grammar: an exported skill's Stop hook reads a `GATE_REVIEW:` line, a delegated worker's
+trailer carries `Proposed Gate Review:`. Abort (`gate_action:"abort"` with `chain_id`) is whole-run
+control: it exits before parsing, needs no node or report, is idempotent, and terminal, missing or
+out-of-scope runs receive a truthful non-applied result. The public `cancel` property is gone from
+the union. -> `docs/reference/mcp-tools.md`
 
-Gate status distinguishes the runtime switch, `Configuration Enabled`, and
-`Effective Review/Guidance` (runtime AND configuration); health labels the runtime switch. Configuration
-false does not imply schema withdrawal.
-
-**`gate_verdict` accepts one shape: the structured object** (`{overall, rationale, per_gate?,
-reminders?}`), which is schema-validated and cannot be malformed. A string -- including the
-`GATE_REVIEW: PASS - reason` form earlier majors accepted -- is refused at the schema with a message
-that shows the object to resend. Check-tier gates answer through `per_gate[{index, passed,
-rationale}]`, semantic gates through `per_gate[].evaluation`, reminder gates through
-`reminders:{satisfied, not_applicable}`. Text channels that are not this parameter keep their own
-grammar: an exported skill's Stop hook reads a `GATE_REVIEW:` line, and a delegated worker's
-trailer carries `Proposed Gate Review:`.
-
-**This package is a binary distribution** -- an MCP server, the `cpm` CLI, and Python hooks.
-It publishes no library API: `src/index.ts` exports only `startServer`, `gracefulShutdown`,
-`getApplicationHealth`, `getDetailedDiagnostics` (server lifecycle). Consumers run it; they do not
-import it. Adding a library surface is a deliberate act -- restore `types`, `exports["."].types`,
-`declaration: true` and `src` in `files` together, which `validate:package-entries` enforces.
+**This package is a binary distribution** -- an MCP server, the `cpm` CLI, and Python hooks. It
+publishes no library API: `src/index.ts` exports only the server lifecycle (`startServer`,
+`gracefulShutdown`, `getApplicationHealth`, `getDetailedDiagnostics`). Adding a library surface is a
+deliberate act -- restore `types`, `exports["."].types`, `declaration: true` and `src` in `files`
+together, which `validate:package-entries` enforces.
 
 -> `CONTRIBUTING.md` §Breaking Changes for how to mark one.
-
 ## Key Constraints
 
 - **MCP Contract Dev**: Verify upstream first (`rg "paramName" src/mcp/tools src/modules src/engine`). Contract, schema, generated metadata, router, manager/types, and service must agree.
-- **Client-work boundary**: Prompt and chain steps guide the client LLM, and resource operations may write only server-owned resource and runtime-state paths. **The server DOES execute shell commands, under one operator-held control.** `shell_verify` gate criteria and the inline `:: verify:"..."` operator both run their command through `sh -c` (`shared/utils/process.ts:381`), and script tools run an author-supplied file through a fixed interpreter. This is not incidental — ground-truth verification by exit code is the feature. What bounds it is three operator-held controls (below), not the absence of the capability: `MCP_SHELL_VERIFY_ALLOWLIST` over WHICH command, `MCP_SHELL_VERIFY_ALLOWED_DIRS` over WHERE, and a non-negotiable refusal of resource-supplied environment keys that decide what a command resolves to. This line previously claimed the opposite; it was false from the first `shell_verify` gate, and it is the sentence a reader consults when deciding how far to trust a third-party gate.
-- **Instruction surface (accepted, documented)**: A prompt's `systemMessage`, `userMessageTemplate`, `description`, and argument descriptions ARE instruction to the client LLM. That is the product, not a defect — but it means installing a third-party prompt pack is equivalent to letting its author write into your model's context, and two surfaces deliver that text **before anyone invokes anything**: the MCP-standard `prompts/list` (which clients typically fetch at connect) carries every prompt's `description` and every argument description, and `resource_manager list detail:"full"` returns every prompt's `systemMessage` in a single call. Measured 2026-08-25. Treat a prompt pack the way you would treat a dependency, not a config file. The HTTP catalog route serving the same fields is credential-gated (`MCP_CATALOG_READ_TOKEN`); the MCP surface is not, by design, because the operator chose the client.
-
+- **The server executes shell commands, under operator-held controls.** `shell_verify` gate criteria and the inline `:: verify:"..."` operator run through `sh -c` (`shared/utils/process.ts`); script tools run an author-supplied file through a fixed interpreter. Ground-truth verification by exit code is the feature. What bounds it: `MCP_SHELL_VERIFY_ALLOWLIST` over WHICH command (unset refuses every shell verification with a message naming the variable; never a degrade-to-advisory), `MCP_SHELL_VERIFY_ALLOWED_DIRS` over WHERE (unset means the server's own directory), and an unconditional refusal of resource-supplied environment keys that decide what a command resolves to (`PATH`, `LD_*`, `NODE_OPTIONS`, `PYTHONPATH`, `BASH_ENV`, `IFS` and siblings). Both transports reach the same sink. Entry format, the `UNSAFE_ALLOW_ALL` sentinel and the refused-key list: `docs/guides/gates.md` §`shell_verify`.
+- **Instruction surface (accepted, documented)**: a prompt's `systemMessage`, `userMessageTemplate`, `description` and argument descriptions ARE instruction to the client LLM. Two surfaces deliver that text before anyone invokes anything: `prompts/list` (fetched at connect) carries every description, and `resource_manager list detail:"full"` returns every `systemMessage`. Treat a prompt pack as a dependency, not a config file. The HTTP catalog route is credential-gated; the MCP surface is not, because the operator chose the client.
 - **Guidance owner**: `PromptGuidanceService` remains the central framework-guidance service. Do not introduce a parallel coordinator/orchestrator with overlapping responsibility.
 - **Framework validity**: Always `frameworkManager.getFramework(id)` -- never hardcode framework lists.
 - **Consolidation over addition**: Enhance existing systems vs creating new ones.
 - **Pipeline state**: Use `context.gates`, `context.frameworkAuthority`, `context.diagnostics` -- never mutate arrays directly.
-- **Module organization**: import the defining module directly. **Banned is the compat re-export shim** -- a file whose whole body is `export ... from` AND which carries a back-compat marker, giving a symbol a second import path so `rg` for the canonical one misses consumers (the ESLint rule `claude/no-compat-reexport-shim` enforces exactly this). A markerless barrel is NOT banned and `src/` has ~60 of them; prefer direct imports anyway, because `validate:arch` expresses layer + cycle boundaries as **paths**, and a barrel spanning layers launders the real edge. Intra-layer barrels launder nothing -- judge by whether consumers cross a layer. A file that re-exports _and_ defines something is not a barrel (`infra/logging/index.ts`). Dead-barrel detection is `npx knip`; `validate:arch` cannot see it (`no-orphans` needs no incoming AND no outgoing edges, and a re-export always has outgoing). Use `internal/` for a genuinely private region.
-- **Concurrent sessions**: work in a linked worktree, never a second session in this checkout — worktrees share `.git/config` but not HEAD, and a shared HEAD moves under whoever is mid-edit. Create with `npm run worktree:create -- <path> <branch> --from origin/main` (the path resolves from the repo root). **Do not use Claude Code's `--worktree`/`EnterWorktree` here**: anthropics/claude-code#72714 writes an absolutized `core.hooksPath` into the shared `.git/config`, disabling hooks in every worktree including this one — plain `git worktree add` is equally unsafe, for the reason `CONTRIBUTING.md` §Working in a second worktree records. A new worktree's installed `node_modules` trees (root, `server/`, and `cli/` when present) are symlinks pointing back at this checkout, so `npm ci` or an install from a branch that changed `package-lock.json` writes **through** them and mutates every worktree's dependency tree at once. Set a distinct `PORT` if two trees run servers.
+- **Module organization**: import the defining module directly. Banned is the compat re-export shim -- a file whose whole body is `export ... from` AND which carries a back-compat marker, giving a symbol a second import path `rg` misses (ESLint `claude/no-compat-reexport-shim`). A markerless barrel is not banned (~60 exist) but prefer direct imports: `validate:arch` expresses layer and cycle boundaries as paths, and a barrel spanning layers launders the real edge. Dead barrels are found by `npx knip`, not `validate:arch`. Use `internal/` for a genuinely private region.
+- **Concurrent sessions**: work in a linked worktree created with `npm run worktree:create -- <path> <branch> --from origin/main`, never a second session in this checkout and never Claude Code's `--worktree`/`EnterWorktree` (`CONTRIBUTING.md` §Working in a second worktree records why, including the shared `node_modules` symlinks). Set a distinct `PORT` if two trees run servers.
 - **Commit convention**: Conventional Commits enforced. Scopes (`commitlint.config.mjs` is the enforced list; keep this and `CONTRIBUTING.md` in lockstep with it): `server`, `cli`, `runtime`, `pipeline`, `gates`, `frameworks`, `prompts`, `chains`, `styles`, `scripts`, `hooks`, `resources`, `mcp-tools`, `contracts`, `parsers`, `ci`, `deps`, `config`, `logging`, `metrics`, `docs`, `tests`, `semantic`, `execution`.
-- **Environment (execution capability)**: `MCP_SHELL_VERIFY_ALLOWLIST` declares which commands `shell_verify` may run. **Unset means every shell verification is refused** — the gate fails with a message naming this variable, and the server keeps serving. Entries are newline-separated (not comma: commands contain commas); an entry ending `*` is a prefix, but a command carrying shell control characters (`; & | \` < > $(`or a newline) must match exactly, because a prefix cannot bound what follows a`;`. The single entry `UNSAFE_ALLOW_ALL` permits everything, for an operator who authors all their own gates and accepts the risk. Both transports read it — this is not a listener concern: the sink is reached identically over STDIO and HTTP. The refusal is deliberately not a degrade-to-advisory; a gate reporting as passed while having verified nothing is a defect this repo has already fixed once.
-- **Environment (execution capability, continued)**: `MCP_SHELL_VERIFY_ALLOWED_DIRS` declares directories, beyond the server's own, that a gate's `shell_working_dir` may resolve inside. **Unset does not mean "anywhere"** — it means the server's own directory, which is where a gate that says nothing already runs. Same newline-separated form and same `UNSAFE_ALLOW_ALL` sentinel as the command allowlist, and deliberately a _separate_ declaration: accepting arbitrary commands is not accepting arbitrary directories. There is no third variable for the environment, and that asymmetry is the point. A resource-supplied `shell_env` / `tool.env` naming a key that decides what a command RESOLVES to — `PATH`, `LD_*`, `DYLD_*`, `NODE_OPTIONS`, `PYTHONPATH`, `BASH_ENV`, `IFS` and their siblings — is **refused outright, with no opt-out**, because otherwise the allowlist bounds a string whose meaning the author still picks: measured 2026-08-29, an operator allowlisting exactly `git status` ran the gate author's `git`. Ordinary variables pass through untouched. The full list and the mechanism behind each entry are in `shared/utils/process.ts`.
-
-- **Environment (paths)**: `MCP_WORKSPACE` (primary — the default for resources AND runtime state), `MCP_RESOURCES_PATH` (resources base override), `MCP_RUNTIME_ROOT` (writable root for `runtime-state/` and relative `logs/`), `MCP_CONFIG_PATH` (config file override, same as `--config`). **Every path setting the server cannot use refuses startup** on both transports, before serving, naming the flag or variable, the value, its resolved path, what is wrong and what removing it falls back to: a config path that is not a readable JSON file, an `MCP_WORKSPACE`/`--workspace` or `MCP_RESOURCES_PATH` that is not an existing directory, and a workspace `config.json` that exists but is unreadable, a directory, or not a JSON object. Before 2026-09-14 each booted on something nobody asked for -- a named config file ignored, a missing workspace created by the logs `mkdir`, a missing resources path served as the bundled catalog, a malformed workspace config replaced by built-in defaults. One check (`PathResolver.assertUsablePathSettings`) runs in `createRuntimeFoundation` before the watcher, the transport choice and any `mkdir`; the path getters stay unchecked because tests and tooling resolve paths that need not exist. What still falls back, on purpose: a workspace with no `config.json` (packaged config), an empty value (unset), `MCP_RUNTIME_ROOT` (created on demand), and the packaged `config.json` itself (built-in defaults). `MCP_WORKSPACE` is not the SSOT for all paths: the other three each override it for their own concern, which is what lets a personal resource library live under `MCP_WORKSPACE` while `state.db` and logs stay put. Workspace resources overlay bundled ones — **the bundled tree stays loaded underneath**, and a same-id workspace entry wins. Before 2026-08-28 the workspace root REPLACED the bundle: one workspace framework was enough to make the server exit with `FATAL: Framework 'cageerf' not found`, and one workspace prompt made the served catalog that one prompt. Overlay detection compares the workspace to the package root, so `MCP_RESOURCES_PATH` alone does not enable overlays — a personal store must set `MCP_WORKSPACE`. **The Claude Code plugin sets both `MCP_WORKSPACE` and `MCP_RUNTIME_ROOT` to `${CLAUDE_PLUGIN_DATA}`** (`.mcp.json`, rendered from `mcp.json` by `scripts/render-distributions.mjs`): the directory Claude Code keeps across plugin updates and creates before the server starts, while the entry point stays under `${CLAUDE_PLUGIN_ROOT}`, which every update replaces. The canonical Agent Plugins `mcp.json` keeps `MCP_WORKSPACE=${PLUGIN_ROOT}`, because Codex does not pass `PLUGIN_DATA` to the MCP server. Hooks do not inherit the server's environment, so `get_state_db_path()` probes `${CLAUDE_PLUGIN_DATA}/runtime-state/state.db` after `MCP_RUNTIME_ROOT`. **A custom workspace is the write root**: without `MCP_RESOURCES_PATH`, a type resolves to `<workspace>/resources/<type>/` even before it exists (a legacy `<workspace>/<type>/` keeps it), the first write creates it, loaders read it as empty until then, and the file observer watches it once it appears.
+- **Environment (paths)**: `MCP_WORKSPACE` is the default root for resources AND runtime state; `MCP_RESOURCES_PATH`, `MCP_RUNTIME_ROOT` and `MCP_CONFIG_PATH` (same as `--config`) each override it for their own concern, so `MCP_WORKSPACE` is not the SSOT for all paths. Every path setting the server cannot use refuses startup on both transports, before serving, naming the setting, the value, the resolved path and the fallback (`PathResolver.assertUsablePathSettings`, run in `createRuntimeFoundation` before the watcher or any `mkdir`). Workspace resources OVERLAY the bundle -- the bundled tree stays loaded underneath and a same-id workspace entry wins; `MCP_RESOURCES_PATH` alone does not enable overlays. A custom workspace is the write root: a type resolves to `<workspace>/resources/<type>/` before it exists and the first write creates it. The Claude Code plugin sets `MCP_WORKSPACE` and `MCP_RUNTIME_ROOT` to `${CLAUDE_PLUGIN_DATA}`; the canonical Agent Plugins `mcp.json` keeps `${PLUGIN_ROOT}` because Codex passes no `PLUGIN_DATA`. -> `docs/reference/configuration.md` · `docs/guides/custom-resources.md`
 - **Environment (secrets)**: `MCP_CATALOG_READ_TOKEN` gates executable prompt detail/history/compare; `MCP_CATALOG_WRITE_TOKEN` independently gates preview/apply/rollback and every legacy `/api/v1/tools/*` mutation. Either unset value refuses its surface (`503`), equal read/write values disable writes, and authentication runs before prompt lookup/body parsing. `MCP_HTTP_ALLOWED_ORIGINS` is a comma-separated allowlist for requests carrying `Origin`; absent `Origin` remains valid for server-side clients. HTTP transport only — STDIO reads none of these values.
 
 -> `.claude/rules/mcp-contracts.md` for critical contract constraints (path-loaded)

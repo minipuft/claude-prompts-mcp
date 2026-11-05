@@ -51,6 +51,14 @@ npx --prefix /path/to/main-worktree husky
 and it passes without inspecting anything outside a linked worktree, so CI and plain clones are
 unaffected.
 
+Do not create the second worktree with Claude Code's `--worktree` flag or `EnterWorktree`:
+anthropics/claude-code#72714 writes an absolutized `core.hooksPath` into the shared `.git/config`,
+which disables hooks in every worktree, including the main one. Plain `git worktree add` is unsafe
+for the reason above. Note also that the bootstrap script links `node_modules` by symlink, so
+`npm ci` or an install from a branch that changed `package-lock.json` writes **through** the link
+and mutates every worktree's dependency tree at once; a dependency change needs a worktree with a
+real install.
+
 ## Development Environment
 
 | Surface / requirement                | Version                    | Notes                                            |
