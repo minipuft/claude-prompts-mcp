@@ -294,18 +294,7 @@ The publish workflow verifies the packed npm consumer before publishing. The ext
 
 ### Claude Desktop Configurations
 
-**Basic — Use package defaults (good for trying it out):**
-
-```json
-{
-  "mcpServers": {
-    "claude-prompts": {
-      "command": "npx",
-      "args": ["-y", "claude-prompts@latest", "--client", "claude-code"]
-    }
-  }
-}
-```
+The basic config is in [Quick Start](#quick-start).
 
 **Recommended — Your own workspace:**
 
@@ -339,20 +328,7 @@ The publish workflow verifies the packed npm consumer before publishing. The ext
 }
 ```
 
-**Codex launch profile — Handoff preset (`spawn_agent_v1`):**
-
-```json
-{
-  "mcpServers": {
-    "claude-prompts": {
-      "command": "npx",
-      "args": ["-y", "claude-prompts@latest", "--client", "codex"]
-    }
-  }
-}
-```
-
-Supported presets:
+Supported presets (other clients: [Client Integration Guide](../docs/guides/client-integration.md)):
 
 | `--client` value | Handoff profile      | Status               | Notes                                                       |
 | ---------------- | -------------------- | -------------------- | ----------------------------------------------------------- |
