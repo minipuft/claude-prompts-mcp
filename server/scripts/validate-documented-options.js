@@ -64,6 +64,7 @@ const NOT_OUR_OPTIONS = new Set([
   '--title', // gh release create
   '--notes', // gh release create
   '--plugin-dir', // claude --plugin-dir
+  '--worktree', // claude --worktree (CONTRIBUTING says not to use it)
   '--print', // claude --print
   '--mode', // npm run validate:readme --mode=block
   '--test', // truncation of jest's --testPathPattern
