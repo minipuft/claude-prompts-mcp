@@ -40,7 +40,7 @@ Claude Prompts adds reusable prompt resources, composable chains, validation gat
 
 - **Use this if** you write the same prompts repeatedly, run multi-step workflows, or want to share reusable prompts with a team.
 - **Skip if** your client's built-in `/commands` already handle what you need, or you're looking for a no-code prompt library.
-- **Works with** Claude Code, Claude Desktop, Cursor, VS Code, OpenCode, Gemini CLI, Codex, Windsurf, and Zed. Hook coverage differs by client; the [setup table](#every-client) lists it.
+- **Works with** Claude Code, Claude Desktop, Cursor, VS Code, OpenCode, Gemini CLI, Codex, and Windsurf. Hook coverage differs by client; the [client list](#every-client) shows it.
 
 ---
 
@@ -74,33 +74,48 @@ codex plugin add codex-prompts@minipuft
 
 Restart Codex, run `/hooks` to review and trust the plugin hooks, then try the same `>>tech_evaluation_chain` command. Needs Codex CLI 0.117 or later; not available on Windows ([requirements](https://github.com/minipuft/codex-prompts#requirements)).
 
-### Every client
-
-<!-- BEGIN GENERATED: client-matrix:table (generated from docs/reference/clients.json: edit that file, run npm --prefix server run generate:client-matrix) -->
-
-| Client                                  | Install                      | Hooks          |
-| --------------------------------------- | ---------------------------- | -------------- |
-| [Claude Code](#claude-code-recommended) | Plugin                       | Full           |
-| [Codex](#codex-install)                 | Plugin                       | Experimental   |
-| [Claude Desktop](#setup-claude-desktop) | Desktop bundle or npx config | MCP tools only |
-| [OpenCode](#setup-opencode)             | npm installer                | Full           |
-| [Gemini CLI](#setup-gemini-cli)         | Extension                    | Partial        |
-| [Cursor](#setup-cursor)                 | MCP config                   | MCP tools only |
-| [VS Code](#setup-vs-code)               | MCP config                   | MCP tools only |
-| [Windsurf](#setup-windsurf)             | MCP config                   | MCP tools only |
-| [Zed](#setup-zed)                       | MCP config                   | MCP tools only |
-
-**Hooks** are what make `>>`, `-->`, and `::` work in conversation; "MCP tools only" means the three MCP tools without them. See [With Hooks](#with-hooks). Config locations and `--client` presets: [Client Capabilities Reference](docs/reference/client-capabilities.md).
-<!-- END GENERATED: client-matrix:table -->
-
 ---
 
 <!-- diataxis: how-to -->
 
-## More Client Setups
+## Every Client
 
-<!-- BEGIN GENERATED: client-matrix:details (generated from docs/reference/clients.json: edit that file, run npm --prefix server run generate:client-matrix) -->
-<details><summary><a id="setup-claude-desktop"></a><strong>Claude Desktop</strong></summary>
+<!-- BEGIN GENERATED: client-matrix:setup (generated from docs/reference/clients.json: edit that file, run npm --prefix server run generate:client-matrix) -->
+
+<details>
+<summary><strong>All 8 clients: setup and hook coverage</strong><br><sub>2 full · 1 experimental · 1 partial · 4 MCP tools only</sub></summary>
+
+**Hooks** are what make `>>`, `-->`, and `::` work in conversation; "MCP tools only" means the three MCP tools without them. See [With Hooks](#with-hooks). Config locations and `--client` presets: [Client Capabilities Reference](docs/reference/client-capabilities.md).
+
+<details name="clients"><summary><picture><img src="https://img.shields.io/badge/Hooks-Full-2A8F83?style=flat-square&amp;labelColor=111715" alt="Hooks: Full" height="20"></picture> <strong>Claude Code</strong> <sub>Plugin</sub></summary>
+
+[Steps in Quick Start](#claude-code-recommended).
+
+</details>
+<details name="clients"><summary><picture><img src="https://img.shields.io/badge/Hooks-Full-2A8F83?style=flat-square&amp;labelColor=111715" alt="Hooks: Full" height="20"></picture> <strong>OpenCode</strong> <sub>npm installer</sub></summary>
+
+```bash
+npm install -g opencode-prompts && opencode-prompts install
+```
+
+For MCP tools without hooks, use the manual config in the [Client Integration Guide](docs/guides/client-integration.md).
+
+</details>
+<details name="clients"><summary><picture><img src="https://img.shields.io/badge/Hooks-Experimental-D97757?style=flat-square&amp;labelColor=111715" alt="Hooks: Experimental" height="20"></picture> <strong>Codex</strong> <sub>Plugin</sub></summary>
+
+[Steps in Quick Start](#codex-install). Hooks are off by default and need a one-time `/hooks` trust review.
+
+</details>
+<details name="clients"><summary><picture><img src="https://img.shields.io/badge/Hooks-Partial-B7892B?style=flat-square&amp;labelColor=111715" alt="Hooks: Partial" height="20"></picture> <strong>Gemini CLI</strong> <sub>Extension</sub></summary>
+
+```bash
+gemini extensions install https://github.com/minipuft/gemini-prompts
+```
+
+For MCP tools without hooks, use the manual config in the [Client Integration Guide](docs/guides/client-integration.md).
+
+</details>
+<details name="clients"><summary><picture><img src="https://img.shields.io/badge/Hooks-MCP_tools_only-555E5A?style=flat-square&amp;labelColor=111715" alt="Hooks: MCP tools only" height="20"></picture> <strong>Claude Desktop</strong> <sub>Desktop bundle or npx config</sub></summary>
 
 **Option A: GitHub Release** (recommended): download `claude-prompts-{version}.mcpb` from [Releases](https://github.com/minipuft/claude-prompts-mcp/releases/latest) and drag it into Claude Desktop Settings → MCP Servers. The `.mcpb` bundle is self-contained (~5MB); no npm required.
 
@@ -118,40 +133,44 @@ Restart Codex, run `/hooks` to review and trust the plugin hooks, then try the s
 ```
 
 Restart Claude Desktop and test: `>>research_chain topic:'remote team policies'`
-</details>
-<details><summary><a id="setup-opencode"></a><strong>OpenCode</strong></summary>
 
-```bash
-npm install -g opencode-prompts && opencode-prompts install
+</details>
+<details name="clients"><summary><picture><img src="https://img.shields.io/badge/Hooks-MCP_tools_only-555E5A?style=flat-square&amp;labelColor=111715" alt="Hooks: MCP tools only" height="20"></picture> <strong>Cursor, VS Code, Windsurf</strong> <sub>MCP config</sub></summary>
+
+**Cursor and Windsurf** (now Devin Desktop) use the same block. Add it to `~/.cursor/mcp.json` for Cursor, or to `~/.config/devin/mcp_config.json` for Windsurf (Windows: `%APPDATA%\devin\mcp_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "claude-prompts": {
+      "command": "npx",
+      "args": ["-y", "claude-prompts@latest", "--client=cursor"]
+    }
+  }
+}
 ```
 
-For MCP tools without hooks, use the manual config in the [Client Integration Guide](docs/guides/client-integration.md).
-</details>
-<details><summary><a id="setup-gemini-cli"></a><strong>Gemini CLI</strong></summary>
+**VS Code** uses a different shape. Add this to `.vscode/mcp.json` in your project, or to your user profile's `mcp.json`:
 
-```bash
-gemini extensions install https://github.com/minipuft/gemini-prompts
+```json
+{
+  "servers": {
+    "claude-prompts": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "claude-prompts@latest", "--client=unknown"]
+    }
+  }
+}
 ```
 
-For MCP tools without hooks, use the manual config in the [Client Integration Guide](docs/guides/client-integration.md).
-</details>
-<details><summary><a id="setup-cursor"></a><strong>Cursor</strong></summary>
+Restart the client after saving. Presets and verification: [Client Integration Guide](docs/guides/client-integration.md).
 
-Add the server to `~/.cursor/mcp.json`. The [Client Integration Guide](docs/guides/client-integration.md) has the JSON example and the `--client` preset.
 </details>
-<details><summary><a id="setup-vs-code"></a><strong>VS Code</strong></summary>
 
-Add the server through VS Code's MCP configuration. The [Client Integration Guide](docs/guides/client-integration.md) has the JSON example and the `--client` preset.
 </details>
-<details><summary><a id="setup-windsurf"></a><strong>Windsurf</strong></summary>
 
-Add the server to `~/.codeium/windsurf/mcp_config.json`. The [Client Integration Guide](docs/guides/client-integration.md) has the JSON example and the `--client` preset.
-</details>
-<details><summary><a id="setup-zed"></a><strong>Zed</strong></summary>
-
-Add the server under the `mcp` key of `~/.config/zed/settings.json`. The [Client Integration Guide](docs/guides/client-integration.md) has the JSON example and the `--client` preset.
-</details>
-<!-- END GENERATED: client-matrix:details -->
+<!-- END GENERATED: client-matrix:setup -->
 
 ---
 
@@ -315,7 +334,7 @@ What hooks unlock:
 | **Native agent handoffs**              | `==>` routes to your client's subagent system automatically; no manual subagent invocation                   |
 | **Session persistence**                | Workflow state preserved when context compacts mid-chain                                                     |
 
-Hooks ship with the plugin install; the [setup table](#every-client) lists which clients have them. Detail: [hooks/README.md](hooks/README.md).
+Hooks ship with the plugin install; the [client list](#every-client) shows which clients have them. Detail: [hooks/README.md](hooks/README.md).
 
 ---
 

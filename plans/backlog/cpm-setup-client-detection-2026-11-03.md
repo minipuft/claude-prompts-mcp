@@ -26,7 +26,7 @@ client's MCP configuration.
   and each config path already live in `docs/reference/clients.json`, which would become the
   command's source too, so the README table and the installer cannot disagree.
 - Plugin clients (Claude Code, Codex, OpenCode, Gemini CLI) install through their own plugin or
-  extension command; MCP-config clients (Claude Desktop, Cursor, VS Code, Windsurf, Zed) need a JSON
+  extension command; MCP-config clients (Claude Desktop, Cursor, VS Code, Windsurf) need a JSON
   or TOML edit. Whether `cpm setup` runs the plugin commands or prints them.
 - Editing a user's config file safely: back it up, merge rather than overwrite, and refuse a file it
   cannot parse.

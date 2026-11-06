@@ -6,8 +6,7 @@
  * hook coverage, config file or setup steps. The data file is the only place those facts are
  * written; the generated regions are derived, never edited by hand.
  *
- *   README.md                          client-matrix:table    all-clients table + hooks definition
- *                                      client-matrix:details  one folded <details> per non-featured client
+ *   README.md                          client-matrix:setup    one dropdown: hooks definition + a row per client
  *   docs/reference/client-capabilities.md
  *                                      client-matrix:hooks    hook coverage table
  *                                      client-matrix:config   config shape table
@@ -34,37 +33,84 @@ const HOOK_LABELS = Object.freeze({
   none: 'MCP tools only',
 });
 
+// GitHub strips `style` and `class`, so a hook level can only carry colour through an image.
+const HOOK_BADGE_COLORS = Object.freeze({
+  full: '2A8F83',
+  partial: 'B7892B',
+  experimental: 'D97757',
+  none: '555E5A',
+});
+
+const SUMMARY_ORDER = Object.freeze(['full', 'experimental', 'partial', 'none']);
+
 const REGENERATE_HINT =
   '(generated from docs/reference/clients.json: edit that file, run npm --prefix server run generate:client-matrix)';
 
 // ============================================
 // DATA
 // ============================================
-export function validateClients(data) {
-  const errors = [];
-  const clients = data?.clients;
-  if (!Array.isArray(clients) || clients.length === 0) return ['clients must be a non-empty array'];
-  const ids = new Set();
-  const anchors = new Set();
-  for (const client of clients) {
-    const label = client?.id ?? '(no id)';
-    for (const field of ['id', 'name', 'install', 'hooks', 'anchor']) {
-      if (typeof client?.[field] !== 'string' || client[field] === '') {
-        errors.push(`${label}: "${field}" must be a non-empty string`);
-      }
+const isFilledString = (value) => typeof value === 'string' && value !== '';
+const hasSteps = (entry) => Array.isArray(entry?.steps) && entry.steps.length > 0;
+
+function missingFields(label, entry, fields) {
+  return fields
+    .filter((field) => !isFilledString(entry?.[field]))
+    .map((field) => `${label}: "${field}" must be a non-empty string`);
+}
+
+function validateClient(client, sharedMemberIds) {
+  const label = client?.id ?? '(no id)';
+  const errors = missingFields(label, client, ['id', 'name', 'hooks']);
+  if (!(client?.hooks in HOOK_LABELS)) {
+    errors.push(`${label}: hooks "${client?.hooks}" is not one of ${Object.keys(HOOK_LABELS)}`);
+  }
+  if (sharedMemberIds.has(client?.id)) {
+    if (client?.steps || client?.install) {
+      errors.push(
+        `${label}: a client in a shared setup carries no "steps" or "install" of its own`
+      );
     }
-    if (!(client?.hooks in HOOK_LABELS)) {
-      errors.push(`${label}: hooks "${client?.hooks}" is not one of ${Object.keys(HOOK_LABELS)}`);
-    }
-    if (!client?.featured && !(Array.isArray(client?.steps) && client.steps.length > 0)) {
-      errors.push(`${label}: a non-featured client needs "steps"`);
-    }
-    if (ids.has(client?.id)) errors.push(`${label}: duplicate id`);
-    if (anchors.has(client?.anchor)) errors.push(`${label}: duplicate anchor "${client.anchor}"`);
-    ids.add(client?.id);
-    anchors.add(client?.anchor);
+    return errors;
+  }
+  errors.push(...missingFields(label, client, ['install']));
+  if (!hasSteps(client)) errors.push(`${label}: needs "steps" or a place in a shared setup`);
+  return errors;
+}
+
+function validateSharedSetup(shared, clientsById) {
+  const label = shared?.id ?? '(no id)';
+  const errors = missingFields(label, shared, ['id', 'name', 'install']);
+  if (!hasSteps(shared)) errors.push(`${label}: needs "steps"`);
+  const memberIds = Array.isArray(shared?.clients) ? shared.clients : [];
+  if (memberIds.length < 2) errors.push(`${label}: a shared setup needs at least two clients`);
+  const members = memberIds.map((id) => clientsById.get(id));
+  memberIds
+    .filter((id) => !clientsById.has(id))
+    .forEach((id) => errors.push(`${label}: unknown client "${id}"`));
+  const hookLevels = new Set(members.filter(Boolean).map((client) => client.hooks));
+  if (hookLevels.size > 1) {
+    errors.push(`${label}: its clients differ in hook coverage, so one row would misstate them`);
   }
   return errors;
+}
+
+function duplicates(values) {
+  return values.filter((value, index) => values.indexOf(value) !== index);
+}
+
+export function validateClients(data) {
+  const clients = data?.clients;
+  if (!Array.isArray(clients) || clients.length === 0) return ['clients must be a non-empty array'];
+  const sharedSetups = data.sharedSetups ?? [];
+  const memberIds = sharedSetups.flatMap((shared) => shared?.clients ?? []);
+  const sharedMemberIds = new Set(memberIds);
+  const clientsById = new Map(clients.map((client) => [client?.id, client]));
+  return [
+    ...clients.flatMap((client) => validateClient(client, sharedMemberIds)),
+    ...sharedSetups.flatMap((shared) => validateSharedSetup(shared, clientsById)),
+    ...duplicates(clients.map((client) => client?.id)).map((id) => `${id}: duplicate id`),
+    ...duplicates(memberIds).map((id) => `${id}: listed in more than one shared setup`),
+  ];
 }
 
 // ============================================
@@ -80,28 +126,62 @@ function renderTable(header, rows) {
   ].join('\n');
 }
 
-export function renderReadmeTable(clients) {
-  const rows = clients.map((c) => [`[${c.name}](#${c.anchor})`, c.install, HOOK_LABELS[c.hooks]]);
-  return [
-    '',
-    renderTable(['Client', 'Install', 'Hooks'], rows),
-    '',
-    '**Hooks** are what make `>>`, `-->`, and `::` work in conversation; "MCP tools only" means the three MCP tools without them. See [With Hooks](#with-hooks). Config locations and `--client` presets: [Client Capabilities Reference](docs/reference/client-capabilities.md).',
-  ].join('\n');
+// A bare <img> in a <summary> gets wrapped in a link to the image, so a click on the badge would
+// open it instead of the row. GitHub leaves an image inside <picture> unwrapped.
+function renderHookBadge(hooks) {
+  const label = HOOK_LABELS[hooks];
+  const src = `https://img.shields.io/badge/Hooks-${label.replaceAll(' ', '_')}-${HOOK_BADGE_COLORS[hooks]}?style=flat-square&amp;labelColor=111715`;
+  return `<picture><img src="${src}" alt="Hooks: ${label}" height="20"></picture>`;
 }
 
-export function renderReadmeDetails(clients) {
-  const blocks = clients
-    .filter((c) => !c.featured)
-    .map((c) =>
-      [
-        `<details><summary><a id="${c.anchor}"></a><strong>${c.name}</strong></summary>`,
-        '',
-        c.steps.join('\n'),
-        '</details>',
-      ].join('\n')
-    );
-  return blocks.join('\n');
+function setupRows(clients, sharedSetups) {
+  const clientsById = new Map(clients.map((client) => [client.id, client]));
+  const emitted = new Set();
+  const rows = [];
+  for (const client of clients) {
+    const shared = sharedSetups.find((setup) => setup.clients.includes(client.id));
+    if (!shared) {
+      rows.push(client);
+    } else if (!emitted.has(shared.id)) {
+      emitted.add(shared.id);
+      rows.push({ ...shared, hooks: clientsById.get(shared.clients[0]).hooks });
+    }
+  }
+  return rows;
+}
+
+function renderHookCounts(clients) {
+  return SUMMARY_ORDER.map((hooks) => {
+    const count = clients.filter((client) => client.hooks === hooks).length;
+    const label = hooks === 'none' ? HOOK_LABELS[hooks] : HOOK_LABELS[hooks].toLowerCase();
+    return count > 0 ? `${count} ${label}` : null;
+  })
+    .filter(Boolean)
+    .join(' · ');
+}
+
+export function renderReadmeSetup(clients, sharedSetups = []) {
+  const rows = setupRows(clients, sharedSetups).map((row) =>
+    [
+      `<details name="clients"><summary>${renderHookBadge(row.hooks)} <strong>${row.name}</strong> <sub>${row.install}</sub></summary>`,
+      '',
+      row.steps.join('\n'),
+      '',
+      '</details>',
+    ].join('\n')
+  );
+  return [
+    '',
+    '<details>',
+    `<summary><strong>All ${clients.length} clients: setup and hook coverage</strong><br><sub>${renderHookCounts(clients)}</sub></summary>`,
+    '',
+    '**Hooks** are what make `>>`, `-->`, and `::` work in conversation; "MCP tools only" means the three MCP tools without them. See [With Hooks](#with-hooks). Config locations and `--client` presets: [Client Capabilities Reference](docs/reference/client-capabilities.md).',
+    '',
+    ...rows,
+    '',
+    '</details>',
+    '',
+  ].join('\n');
 }
 
 export function renderHooksTable(clients) {
@@ -147,14 +227,11 @@ export function replaceRegion(text, name, body) {
   return `${text.slice(0, opening.index)}${beginMarker(name)}\n${body}\n${text.slice(to)}`;
 }
 
-function targets(clients) {
+function targets({ clients, sharedSetups }) {
   return [
     {
       path: README_PATH,
-      regions: [
-        ['table', renderReadmeTable(clients)],
-        ['details', renderReadmeDetails(clients)],
-      ],
+      regions: [['setup', renderReadmeSetup(clients, sharedSetups)]],
     },
     {
       path: CAPABILITIES_PATH,
@@ -183,7 +260,7 @@ function main() {
   }
 
   const stale = [];
-  for (const { path, regions } of targets(data.clients)) {
+  for (const { path, regions } of targets(data)) {
     const current = existsSync(path) ? readFileSync(path, 'utf-8') : '';
     const next = applyRegions(current, regions);
     if (next === current) continue;

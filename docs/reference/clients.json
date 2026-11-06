@@ -1,23 +1,40 @@
 {
-  "$comment": "Single source for per-client install kind, hook coverage and setup steps. Edit here, then run: npm --prefix server run generate:client-matrix. Generated into README.md and docs/reference/client-capabilities.md.",
+  "$comment": "Single source for per-client install kind, hook coverage and setup steps. Edit here, then run: npm --prefix server run generate:client-matrix. Generated into README.md and docs/reference/client-capabilities.md. Clients listed in sharedSetups take one README row and carry no install or steps of their own. Order sets the README order, strongest hook coverage first.",
   "clients": [
     {
       "id": "claude-code",
       "name": "Claude Code",
-      "featured": true,
-      "anchor": "claude-code-recommended",
       "install": "Plugin",
       "hooks": "full",
       "hooksNote": "Hooks ship in this repo's plugin.",
       "companion": {
         "name": "`claude-prompts` plugin hooks"
-      }
+      },
+      "steps": ["[Steps in Quick Start](#claude-code-recommended)."]
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode",
+      "install": "npm installer",
+      "hooks": "full",
+      "hooksNote": "Installed by the opencode-prompts companion.",
+      "companion": {
+        "name": "`opencode-prompts` hooks",
+        "url": "https://github.com/minipuft/opencode-prompts"
+      },
+      "configFile": "`~/.config/opencode/opencode.json`",
+      "configFormat": "JSON (`mcp`)",
+      "steps": [
+        "```bash",
+        "npm install -g opencode-prompts && opencode-prompts install",
+        "```",
+        "",
+        "For MCP tools without hooks, use the manual config in the [Client Integration Guide](docs/guides/client-integration.md)."
+      ]
     },
     {
       "id": "codex",
       "name": "Codex",
-      "featured": true,
-      "anchor": "codex-install",
       "install": "Plugin",
       "hooks": "experimental",
       "hooksNote": "Codex hooks are off by default and need a one-time `/hooks` trust review. Requires Codex CLI 0.117 or later; unavailable on Windows.",
@@ -26,14 +43,36 @@
         "url": "https://github.com/minipuft/codex-prompts"
       },
       "configFile": "`~/.codex/config.toml`",
-      "configFormat": "TOML (`[mcp_servers.*]`)"
+      "configFormat": "TOML (`[mcp_servers.*]`)",
+      "steps": [
+        "[Steps in Quick Start](#codex-install). Hooks are off by default and need a one-time `/hooks` trust review."
+      ]
+    },
+    {
+      "id": "gemini-cli",
+      "name": "Gemini CLI",
+      "install": "Extension",
+      "hooks": "partial",
+      "hooksNote": "Installed by the gemini-prompts extension.",
+      "companion": {
+        "name": "`gemini-prompts` hooks",
+        "url": "https://github.com/minipuft/gemini-prompts"
+      },
+      "configFile": "extension-managed",
+      "configFormat": "Extension or manual CLI launch",
+      "steps": [
+        "```bash",
+        "gemini extensions install https://github.com/minipuft/gemini-prompts",
+        "```",
+        "",
+        "For MCP tools without hooks, use the manual config in the [Client Integration Guide](docs/guides/client-integration.md)."
+      ]
     },
     {
       "id": "claude-desktop",
       "name": "Claude Desktop",
       "install": "Desktop bundle or npx config",
       "hooks": "none",
-      "anchor": "setup-claude-desktop",
       "configFile": "`~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)",
       "configFormat": "JSON (`mcpServers`)",
       "steps": [
@@ -56,91 +95,62 @@
       ]
     },
     {
-      "id": "opencode",
-      "name": "OpenCode",
-      "install": "npm installer",
-      "hooks": "full",
-      "hooksNote": "Installed by the opencode-prompts companion.",
-      "companion": {
-        "name": "`opencode-prompts` hooks",
-        "url": "https://github.com/minipuft/opencode-prompts"
-      },
-      "anchor": "setup-opencode",
-      "configFile": "`~/.config/opencode/opencode.json`",
-      "configFormat": "JSON (`mcp`)",
-      "steps": [
-        "```bash",
-        "npm install -g opencode-prompts && opencode-prompts install",
-        "```",
-        "",
-        "For MCP tools without hooks, use the manual config in the [Client Integration Guide](docs/guides/client-integration.md)."
-      ]
-    },
-    {
-      "id": "gemini-cli",
-      "name": "Gemini CLI",
-      "install": "Extension",
-      "hooks": "partial",
-      "hooksNote": "Installed by the gemini-prompts extension.",
-      "companion": {
-        "name": "`gemini-prompts` hooks",
-        "url": "https://github.com/minipuft/gemini-prompts"
-      },
-      "anchor": "setup-gemini-cli",
-      "configFile": "extension-managed",
-      "configFormat": "Extension or manual CLI launch",
-      "steps": [
-        "```bash",
-        "gemini extensions install https://github.com/minipuft/gemini-prompts",
-        "```",
-        "",
-        "For MCP tools without hooks, use the manual config in the [Client Integration Guide](docs/guides/client-integration.md)."
-      ]
-    },
-    {
       "id": "cursor",
       "name": "Cursor",
-      "install": "MCP config",
       "hooks": "none",
-      "anchor": "setup-cursor",
       "configFile": "`~/.cursor/mcp.json`",
-      "configFormat": "JSON",
-      "steps": [
-        "Add the server to `~/.cursor/mcp.json`. The [Client Integration Guide](docs/guides/client-integration.md) has the JSON example and the `--client` preset."
-      ]
+      "configFormat": "JSON (`mcpServers`)"
     },
     {
       "id": "vs-code",
       "name": "VS Code",
-      "install": "MCP config",
       "hooks": "none",
-      "anchor": "setup-vs-code",
-      "steps": [
-        "Add the server through VS Code's MCP configuration. The [Client Integration Guide](docs/guides/client-integration.md) has the JSON example and the `--client` preset."
-      ]
+      "configFile": "`.vscode/mcp.json` or your user profile's `mcp.json`",
+      "configFormat": "JSON (`servers`)"
     },
     {
       "id": "windsurf",
-      "name": "Windsurf",
-      "install": "MCP config",
+      "name": "Windsurf (now Devin Desktop)",
       "hooks": "none",
-      "anchor": "setup-windsurf",
-      "configFile": "`~/.codeium/windsurf/mcp_config.json`",
-      "configFormat": "JSON",
-      "steps": [
-        "Add the server to `~/.codeium/windsurf/mcp_config.json`. The [Client Integration Guide](docs/guides/client-integration.md) has the JSON example and the `--client` preset."
-      ]
-    },
+      "configFile": "`~/.config/devin/mcp_config.json`",
+      "configFormat": "JSON (`mcpServers`)"
+    }
+  ],
+  "sharedSetups": [
     {
-      "id": "zed",
-      "name": "Zed",
+      "id": "mcp-config-editors",
+      "name": "Cursor, VS Code, Windsurf",
       "install": "MCP config",
-      "hooks": "none",
-      "anchor": "setup-zed",
-      "configFile": "`~/.config/zed/settings.json` (`mcp` key)",
-      "configFormat": "JSON",
+      "clients": ["cursor", "vs-code", "windsurf"],
       "steps": [
-        "Add the server under the `mcp` key of `~/.config/zed/settings.json`. The [Client Integration Guide](docs/guides/client-integration.md) has the JSON example and the `--client` preset."
+        "**Cursor and Windsurf** (now Devin Desktop) use the same block. Add it to `~/.cursor/mcp.json` for Cursor, or to `~/.config/devin/mcp_config.json` for Windsurf (Windows: `%APPDATA%\\devin\\mcp_config.json`):",
+        "",
+        "```json",
+        "{",
+        "  \"mcpServers\": {",
+        "    \"claude-prompts\": {",
+        "      \"command\": \"npx\",",
+        "      \"args\": [\"-y\", \"claude-prompts@latest\", \"--client=cursor\"]",
+        "    }",
+        "  }",
+        "}",
+        "```",
+        "",
+        "**VS Code** uses a different shape. Add this to `.vscode/mcp.json` in your project, or to your user profile's `mcp.json`:",
+        "",
+        "```json",
+        "{",
+        "  \"servers\": {",
+        "    \"claude-prompts\": {",
+        "      \"type\": \"stdio\",",
+        "      \"command\": \"npx\",",
+        "      \"args\": [\"-y\", \"claude-prompts@latest\", \"--client=unknown\"]",
+        "    }",
+        "  }",
+        "}",
+        "```",
+        "",
+        "Restart the client after saving. Presets and verification: [Client Integration Guide](docs/guides/client-integration.md)."
       ]
     }
   ]

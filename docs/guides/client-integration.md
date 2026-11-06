@@ -20,11 +20,12 @@ This guide shows you how to configure the `--client` launch flag so the server e
    | OpenCode                        | `opencode`     |
    | Cursor                          | `cursor`       |
    | Windsurf (experimental mapping) | `cursor`       |
+   | VS Code                         | `unknown`      |
    | Unknown/unsupported client      | `unknown`      |
 
 2. **Add the flag to your client MCP config**
 
-   **JSON-based clients (Claude Desktop / Cursor / Windsurf / Zed style):**
+   **`mcpServers` clients (Claude Desktop, Cursor, and Windsurf, now Devin Desktop):**
 
    ```json
    {
@@ -32,6 +33,20 @@ This guide shows you how to configure the `--client` launch flag so the server e
        "claude-prompts": {
          "command": "npx",
          "args": ["-y", "claude-prompts@latest", "--client=cursor"]
+       }
+     }
+   }
+   ```
+
+   **VS Code (`.vscode/mcp.json` or your user profile's `mcp.json`):**
+
+   ```json
+   {
+     "servers": {
+       "claude-prompts": {
+         "type": "stdio",
+         "command": "npx",
+         "args": ["-y", "claude-prompts@latest", "--client=unknown"]
        }
      }
    }
