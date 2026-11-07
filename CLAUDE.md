@@ -33,8 +33,8 @@ deleted-unknown, or unrecognized change to `full`.
 
 | Scope   | Trigger                                                                                 | CI                                                                                                |
 | ------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `docs`  | documented root handbooks, `docs/**/*.md`, `plans/**/*.md`, and server/CLI READMEs only | classifier hygiene · CONTRIBUTING commands · plan row tracking · README charter · guidance projection; protected jobs report intentional lightweight passes |
-| `hooks` | only `hooks/**` plus optional docs                                                      | pinned Ruff/Pyrefly/Pytest/PyYAML · the same four documentation checks as `docs`                  |
+| `docs`  | documented root handbooks, `docs/**/*.md`, `plans/**/*.md`, and server/CLI READMEs only | classifier hygiene · CONTRIBUTING commands · plan row tracking · README charter · documented options · guidance projection; protected jobs report intentional lightweight passes |
+| `hooks` | only `hooks/**` plus optional docs                                                      | pinned Ruff/Pyrefly/Pytest/PyYAML · the same documentation checks as `docs`                  |
 | `full`  | everything else; empty/unknown input                                                    | typecheck · `validate:all` · CLI · build/smoke/schema · Node 22/24 unit/coverage/integration/E2E   |
 
 Invariants, each of which has been broken once and is now enforced:

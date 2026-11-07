@@ -134,7 +134,7 @@ jobs:
       # GitHub runner image does not ship. This was latent until validate:all started
       # running in CI below — the guards exited 127 (`rg: not found`), not 0.
       - name: Install ripgrep
-        if: needs.classify.outputs.scope == 'full'
+        if: needs.classify.result == 'success'
         run: sudo apt-get install -y --no-install-recommends ripgrep
 
       - name: Typecheck
@@ -209,6 +209,14 @@ jobs:
         if: needs.classify.outputs.scope != 'full'
         working-directory: .
         run: node server/scripts/validate-table-map-docs.js
+
+      # A doc naming a flag or env var the source does not back is a documentation defect, and a
+      # docs-only pull request is where it arrives: one reached main that way and failed the next
+      # code pull request instead. Needs node: builtins and ripgrep, no node_modules.
+      - name: Validate documented options (lightweight routes)
+        if: needs.classify.outputs.scope != 'full'
+        working-directory: .
+        run: node server/scripts/validate-documented-options.js
 
       # CLAUDE.md, AGENTS.md, and .claude/rules/*.md are documentation paths, so their pull
       # requests intentionally skip validate:all. The full route checks this inside that suite;
