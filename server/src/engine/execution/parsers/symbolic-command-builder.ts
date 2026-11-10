@@ -1,5 +1,6 @@
 // @lifecycle canonical - Builds ParsedCommand structures from symbolic operator parse results.
 
+import { hasRequestArguments, mergeRequestArguments } from './argument-parser.js';
 import { projectChainPromptSteps } from './chain-step-projection.js';
 import { namedGateBindingKey } from './symbolic-operator-parser.js';
 import { declaredNodesOf } from './workflow-command-builder.js';
@@ -12,8 +13,6 @@ import type {
   WorkflowNode,
   WorkflowRejection,
 } from '#modules/workflow-ir/types.js';
-import { hasRequestArguments, mergeRequestArguments } from './argument-parser.js';
-
 import type { ArgumentContext, ArgumentParser, RequestArgumentLayers } from './argument-parser.js';
 import type { ShellVerifyGate } from '../../gates/shell/types.js';
 import type { ParsedCommand } from '../context/index.js';
@@ -51,6 +50,14 @@ export interface CollectedNamedGate {
 export interface CollectedGateCriteria {
   anonymousCriteria: string[];
   namedGates: CollectedNamedGate[];
+}
+
+/**
+ * The text a segment's explicit argument keys are read from: the sanitized argument input when it
+ * says anything, else the segment's raw args — the same preference `resolveArgumentPayload` takes.
+ */
+function segmentArgumentText(input: string | undefined, rawArgs: string | undefined): string {
+  return input !== undefined && input.trim() !== '' ? input : (rawArgs ?? '');
 }
 
 /**
@@ -307,7 +314,7 @@ export class SymbolicCommandBuilder {
     const promptArgs = this.applyRequestArguments(
       convertedPrompt,
       resolvedArgs.processedArgs,
-      argumentInput?.trim() ? argumentInput : (baseStep.args ?? ''),
+      segmentArgumentText(argumentInput, baseStep.args),
       requestArguments
     );
 
@@ -502,7 +509,7 @@ export class SymbolicCommandBuilder {
     const stepArgs = this.applyRequestArguments(
       convertedPrompt,
       resolvedArgs.processedArgs,
-      stepArgumentInput?.trim() ? stepArgumentInput : (step.args ?? ''),
+      segmentArgumentText(stepArgumentInput, step.args),
       requestArguments
     );
 
