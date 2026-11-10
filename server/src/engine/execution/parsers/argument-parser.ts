@@ -69,6 +69,44 @@ export function getExplicitArgumentKeys(rawArgs: string): string[] {
 }
 
 /**
+ * The request's own argument channels, which sit under the command string: `inputs` beats the
+ * legacy `options`, and both lose to anything the command text names.
+ */
+export interface RequestArgumentLayers {
+  readonly options?: Record<string, unknown>;
+  readonly inputs?: Record<string, unknown>;
+}
+
+/** Whether the request carried either channel; a caller then validates the MERGED map, once. */
+export function hasRequestArguments(layers: RequestArgumentLayers | undefined): boolean {
+  return layers?.options !== undefined || layers?.inputs !== undefined;
+}
+
+/**
+ * Lay the request's `options` then `inputs` over one command segment's resolved arguments,
+ * leaving every key the segment's text named untouched: inline > inputs > options > defaults.
+ *
+ * `segmentArgs` is the text of THAT segment only. A chain command's first step is merged against
+ * its own text, so a key named in a later segment cannot shadow the first step's `inputs`.
+ */
+export function mergeRequestArguments(
+  resolved: Record<string, unknown>,
+  segmentArgs: string,
+  layers: RequestArgumentLayers | undefined
+): Record<string, unknown> {
+  if (!hasRequestArguments(layers)) return resolved;
+  const explicitKeys = new Set(getExplicitArgumentKeys(segmentArgs));
+  const merged: Record<string, unknown> = { ...resolved };
+  for (const values of [layers?.options, layers?.inputs]) {
+    if (values === undefined) continue;
+    for (const [key, value] of Object.entries(values)) {
+      if (!explicitKeys.has(key)) merged[key] = value;
+    }
+  }
+  return merged;
+}
+
+/**
  * Processing result with detailed metadata
  */
 export interface ArgumentParsingResult {
