@@ -52,7 +52,7 @@ const scanKeyValueKeys = (rawArgs: string): string[] =>
     .filter((key): key is string => key !== undefined);
 
 /** Keys authored explicitly in command text, used to preserve inline precedence. */
-export function getExplicitArgumentKeys(rawArgs: string): string[] {
+function getExplicitArgumentKeys(rawArgs: string): string[] {
   const trimmed = rawArgs.trim();
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
     const parsed = safeJsonParse(trimmed);
