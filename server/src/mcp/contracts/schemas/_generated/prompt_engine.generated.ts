@@ -170,7 +170,7 @@ export const prompt_engineParameters: ToolParameter[] = [
     name: 'inputs',
     type: 'record',
     description:
-      'Typed prompt arguments supplied outside command-string grammar. Use for arrays, objects, quotes, backslashes, or any value that must arrive byte-for-byte. Precedence: inline command argument > inputs > legacy options > prompt default.',
+      "Typed prompt arguments supplied outside command-string grammar. Use for arrays, objects, quotes, backslashes, or any value that must arrive byte-for-byte. Precedence: inline command argument > inputs > legacy options > prompt default. On a `-->` chain command they apply to the first segment's prompt; later segments take their arguments from the command text and the previous step's output.",
     status: 'working',
     compatibility: 'canonical',
   },

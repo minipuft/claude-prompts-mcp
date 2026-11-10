@@ -241,7 +241,8 @@ This applies only to values typed into `command`. Values passed through `inputs`
 bypass the command grammar and retain their original JSON types, so paths, regular expressions,
 nested objects, and arrays arrive exactly as sent. Use `inputs` for prompt arguments; `options` is
 the legacy/execution-hint channel. Resolution precedence is: explicit inline argument → `inputs`
-→ `options` → prompt default.
+→ `options` → prompt default. On a `-->` chain command they apply to the first segment's prompt;
+later segments take their arguments from the command text and the previous step's output.
 
 ### Operators Quick Reference
 

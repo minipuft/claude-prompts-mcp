@@ -1,5 +1,5 @@
 // @lifecycle canonical - Parses incoming commands into structured operators.
-import { getExplicitArgumentKeys } from '../../parsers/argument-parser.js';
+import { hasRequestArguments, mergeRequestArguments } from '../../parsers/argument-parser.js';
 import { projectChainPromptSteps } from '../../parsers/chain-step-projection.js';
 import { COMMAND_SOURCE_EXCLUSIVITY_MESSAGE } from '../../validation/schemas.js';
 import { BasePipelineStage } from '../stage.js';
@@ -9,7 +9,11 @@ import type { Logger } from '#infra/logging/index.js';
 // ChainSessionService no longer needed — blueprint resolution delegated to ChainBlueprintResolver
 import type { WorkflowIR, WorkflowRejection } from '#modules/workflow-ir/types.js';
 import type { PromptRequestContext, ParsedCommand } from '../../context/index.js';
-import type { ArgumentParser, ArgumentContext } from '../../parsers/argument-parser.js';
+import type {
+  ArgumentContext,
+  ArgumentParser,
+  RequestArgumentLayers,
+} from '../../parsers/argument-parser.js';
 import type { ChainBlueprintResolver } from '../../parsers/chain-blueprint-resolver.js';
 import type { UnifiedCommandParser } from '../../parsers/command-parser.js';
 import type { SymbolicCommandBuilder } from '../../parsers/symbolic-command-builder.js';
@@ -127,7 +131,8 @@ export class CommandParsingStage extends BasePipelineStage {
         const symbolic = await this.symbolicCommandBuilder.buildSymbolicCommand(
           parseResult as SymbolicCommandParseResult,
           (idOrName) => this.findConvertedPrompt(idOrName),
-          requestedGates(context)
+          requestedGates(context),
+          requestArgumentLayers(context)
         );
         if (!symbolic.ok) {
           // An arrow-chain the Workflow IR validator refused (P6.105), or a request gate
@@ -138,14 +143,6 @@ export class CommandParsingStage extends BasePipelineStage {
         }
         const symbolicCommand = symbolic.parsedCommand;
         retargetRequestedGates(context, symbolic.retargetRequestedGates);
-
-        const symbolicPrompt = this.findConvertedPrompt(symbolicCommand.promptId);
-        this.mergeRequestArguments(
-          symbolicCommand.promptArgs,
-          parseResult.rawArgs,
-          symbolicPrompt,
-          context
-        );
 
         context.parsedCommand = symbolicCommand;
         this.logExit({
@@ -301,25 +298,22 @@ export class CommandParsingStage extends BasePipelineStage {
       this.createArgumentContext(context)
     );
 
-    const parsedCommand: ParsedCommand = {
-      ...parseResult,
-      convertedPrompt,
-      promptArgs: (argResult as any).processedArgs,
-    };
-
-    this.mergeRequestArguments(
-      parsedCommand.promptArgs,
+    const promptArgs = this.mergeRequestArguments(
+      (argResult as any).processedArgs,
       parseResult.rawArgs,
       convertedPrompt,
       context
     );
+    const parsedCommand: ParsedCommand = {
+      ...parseResult,
+      convertedPrompt,
+      promptArgs,
+    };
 
     // After the request merge above, so a step sharing the run's arguments sees it (P6.74: the
     // symbolic builder calls the same projection).
-    const projection = projectChainPromptSteps(
-      convertedPrompt,
-      (argResult as any).processedArgs,
-      (idOrName) => this.findConvertedPrompt(idOrName)
+    const projection = projectChainPromptSteps(convertedPrompt, promptArgs, (idOrName) =>
+      this.findConvertedPrompt(idOrName)
     );
     if (projection !== undefined) {
       Object.assign(parsedCommand, projection);
@@ -328,34 +322,22 @@ export class CommandParsingStage extends BasePipelineStage {
     return parsedCommand;
   }
 
-  /** Merge defaults, legacy options, and typed inputs while preserving explicit inline values. */
+  /**
+   * Merge legacy options and typed inputs under the inline values, validate the merged map and
+   * return it. Symbolic commands merge in `SymbolicCommandBuilder`, onto their first prompt.
+   */
   private mergeRequestArguments(
-    promptArgs: Record<string, any> | undefined,
+    promptArgs: Record<string, any>,
     rawArgs: string,
-    prompt: ConvertedPrompt | undefined,
+    prompt: ConvertedPrompt,
     context: PromptRequestContext
-  ): void {
-    const requestOptions = context.state.normalization.requestOptions;
-    const requestInputs = context.state.normalization.requestInputs;
-    if (
-      promptArgs === undefined ||
-      prompt === undefined ||
-      (requestOptions === undefined && requestInputs === undefined)
-    ) {
-      return;
-    }
+  ): Record<string, any> {
+    const layers = requestArgumentLayers(context);
+    if (!hasRequestArguments(layers)) return promptArgs;
 
-    const explicitKeys = new Set(getExplicitArgumentKeys(rawArgs));
-    for (const values of [requestOptions, requestInputs]) {
-      if (values === undefined) continue;
-      for (const [key, value] of Object.entries(values)) {
-        if (!explicitKeys.has(key)) {
-          promptArgs[key] = value;
-        }
-      }
-    }
-
-    this.argumentParser.validateResolvedArguments(prompt, promptArgs);
+    const merged = mergeRequestArguments(promptArgs, rawArgs, layers);
+    this.argumentParser.validateResolvedArguments(prompt, merged);
+    return merged;
   }
 
   private findConvertedPrompt(idOrName: string): ConvertedPrompt | undefined {
@@ -371,13 +353,21 @@ export class CommandParsingStage extends BasePipelineStage {
 
   /** Request inputs/options merge later; `mergeRequestArguments` validates the merged map, not the inline one. */
   private createArgumentContext(context: PromptRequestContext): ArgumentContext {
-    const { requestOptions, requestInputs } = context.state.normalization;
     return {
       environmentVars: process.env as Record<string, string>,
       promptDefaults: {},
-      deferSchemaValidation: requestOptions !== undefined || requestInputs !== undefined,
+      deferSchemaValidation: hasRequestArguments(requestArgumentLayers(context)),
     };
   }
+}
+
+/** The request's `options` and `inputs` as stage 01 captured them. */
+function requestArgumentLayers(context: PromptRequestContext): RequestArgumentLayers {
+  const { requestOptions, requestInputs } = context.state.normalization;
+  return {
+    ...(requestOptions !== undefined ? { options: requestOptions } : {}),
+    ...(requestInputs !== undefined ? { inputs: requestInputs } : {}),
+  };
 }
 
 /**
