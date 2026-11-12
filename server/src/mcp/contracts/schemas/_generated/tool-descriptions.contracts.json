@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-10-15T21:58:33.967Z",
+  "lastUpdated": "2026-11-10T08:09:47.111Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -21,7 +21,7 @@
         "handoff": "Mint a single-use handoff token for the run named by 'chain_id', so another client (Codex, OpenCode, a different Claude Code conversation) can claim and continue it. Requires 'chain_id'; nothing else is read. Minting again rotates the token. The run stays yours until the claim lands; your copy is retired on the next persist after that.",
         "claim_token": "Claim a run minted elsewhere with 'handoff' and resume it in this conversation in the same call. Send the token ALONE — it names the run, so omit command and chain_id. Single-use: a claimed, rotated, or ended token is refused by name. A claim never rewrites workspace scope; a run from another workspace is refused.",
         "options": "Legacy prompt argument/options map. Values remain typed; inline command arguments take precedence. Prefer `inputs` for prompt arguments, especially arrays and objects.",
-        "inputs": "Typed prompt arguments supplied outside command-string grammar. Use for arrays, objects, quotes, backslashes, or any value that must arrive byte-for-byte. Precedence: inline command argument > inputs > legacy options > prompt default.",
+        "inputs": "Typed prompt arguments supplied outside command-string grammar. Use for arrays, objects, quotes, backslashes, or any value that must arrive byte-for-byte. Precedence: inline command argument > inputs > legacy options > prompt default. On a `-->` chain command they apply to the first segment's prompt; later segments take their arguments from the command text and the previous step's output.",
         "observations": {
           "type": "array",
           "description": "Declare typed unknowns discovered or resolved this step, feeding the per-run unknowns ledger. Two shapes: `{type:'unknown_discovered', id:'kebab-case-slug', statement:'...', blocking?:true|false, target_step_id?:'...'}` opens a ledger entry; `{type:'unknown_resolved', id:'kebab-case-slug', statement:'...', resolution:'answered'|'irrelevant'}` closes one (statement carries the resolution statement). `target_step_id` on a discovered entry names the downstream step (stable node id, e.g. 'draft-outline' or 'n3') the adaptive mutation policy skips if this unknown later resolves 'irrelevant'."

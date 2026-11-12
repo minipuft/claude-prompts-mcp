@@ -1,5 +1,6 @@
 // @lifecycle canonical - Builds ParsedCommand structures from symbolic operator parse results.
 
+import { hasRequestArguments, mergeRequestArguments } from './argument-parser.js';
 import { projectChainPromptSteps } from './chain-step-projection.js';
 import { namedGateBindingKey } from './symbolic-operator-parser.js';
 import { declaredNodesOf } from './workflow-command-builder.js';
@@ -12,7 +13,7 @@ import type {
   WorkflowNode,
   WorkflowRejection,
 } from '#modules/workflow-ir/types.js';
-import type { ArgumentContext, ArgumentParser } from './argument-parser.js';
+import type { ArgumentContext, ArgumentParser, RequestArgumentLayers } from './argument-parser.js';
 import type { ShellVerifyGate } from '../../gates/shell/types.js';
 import type { ParsedCommand } from '../context/index.js';
 import type { ConvertedPrompt } from '../types.js';
@@ -49,6 +50,14 @@ export interface CollectedNamedGate {
 export interface CollectedGateCriteria {
   anonymousCriteria: string[];
   namedGates: CollectedNamedGate[];
+}
+
+/**
+ * The text a segment's explicit argument keys are read from: the sanitized argument input when it
+ * says anything, else the segment's raw args — the same preference `resolveArgumentPayload` takes.
+ */
+function segmentArgumentText(input: string | undefined, rawArgs: string | undefined): string {
+  return input !== undefined && input.trim() !== '' ? input : (rawArgs ?? '');
 }
 
 /**
@@ -135,21 +144,34 @@ export class SymbolicCommandBuilder {
    * The same result shape the workflow source returns: an arrow-chain the validator refuses is a
    * client error the caller renders before any store is touched, and an unregistered prompt
    * still throws `PromptError`.
+   *
+   * `requestArguments` (the request's `inputs` and legacy `options`) are merged here, onto the
+   * arguments of the command's FIRST prompt, before anything is derived from them — a chain
+   * prompt's steps, the IR the validator checks, the run-level `promptArgs` — and the merged map
+   * is validated once. Merged afterwards, as the stage once did, the values landed on a copy
+   * (`compileWorkflowIR` clones step 1's args into `promptArgs`) while the step the run renders
+   * kept the map the command string alone produced. A later segment is a different prompt with
+   * its own declared arguments and takes none of them: it reads what the first step produced.
    */
   async buildSymbolicCommand(
     parseResult: SymbolicCommandParseResult,
     findPrompt: PromptLookup,
-    requestGates: NonNullable<WorkflowIR['gates']> = []
+    requestGates: NonNullable<WorkflowIR['gates']> = [],
+    requestArguments?: RequestArgumentLayers
   ): Promise<WorkflowCommandResult> {
     const hasChainOperator = this.hasChainOperator(parseResult);
     if (!hasChainOperator) {
-      const parsedCommand = await this.buildSingleSymbolicPrompt(parseResult, findPrompt);
+      const parsedCommand = await this.buildSingleSymbolicPrompt(
+        parseResult,
+        findPrompt,
+        requestArguments
+      );
       const rejections = this.requestGateTargetRejections(parsedCommand, requestGates);
       return rejections.length > 0
         ? { ok: false, rejections }
         : { ok: true, parsedCommand, retargetRequestedGates: (gates) => [...gates] };
     }
-    return this.buildSymbolicChain(parseResult, findPrompt, requestGates);
+    return this.buildSymbolicChain(parseResult, findPrompt, requestGates, requestArguments);
   }
 
   /**
@@ -263,7 +285,8 @@ export class SymbolicCommandBuilder {
 
   private async buildSingleSymbolicPrompt(
     parseResult: SymbolicCommandParseResult,
-    findPrompt: PromptLookup
+    findPrompt: PromptLookup,
+    requestArguments?: RequestArgumentLayers
   ): Promise<ParsedCommand> {
     const baseStep = parseResult.executionPlan.steps[0];
     if (!baseStep?.promptId) {
@@ -278,14 +301,21 @@ export class SymbolicCommandBuilder {
     const argumentInput = this.getStepArgumentInput(parseResult.executionPlan, 0);
     const fallbackArgs =
       baseStep.args && baseStep.args.trim().length > 0
-        ? await this.parseArgumentsSafely(baseStep.args, convertedPrompt)
+        ? await this.parseArgumentsSafely(baseStep.args, convertedPrompt, requestArguments)
         : undefined;
 
     const resolvedArgs = await this.resolveArgumentPayload(
       convertedPrompt,
       argumentInput,
       baseStep.inlineGateCriteria,
-      fallbackArgs?.processedArgs
+      fallbackArgs?.processedArgs,
+      requestArguments
+    );
+    const promptArgs = this.applyRequestArguments(
+      convertedPrompt,
+      resolvedArgs.processedArgs,
+      segmentArgumentText(argumentInput, baseStep.args),
+      requestArguments
     );
 
     const { anonymousCriteria, namedGates } = this.collectGateCriteria(parseResult);
@@ -296,17 +326,13 @@ export class SymbolicCommandBuilder {
     const parsedCommand: ParsedCommand = {
       ...parseResult,
       convertedPrompt,
-      promptArgs: resolvedArgs.processedArgs,
+      promptArgs,
       inlineGateCriteria: inlineCriteria,
     };
 
     // A chain prompt named with an operator (`>>chain :: verify:"…"`, `>>chain :: "criterion"`)
     // runs its declared steps, projected exactly as a bare `>>chain` is (P6.74).
-    const projection = projectChainPromptSteps(
-      convertedPrompt,
-      resolvedArgs.processedArgs,
-      findPrompt
-    );
+    const projection = projectChainPromptSteps(convertedPrompt, promptArgs, findPrompt);
     if (projection !== undefined) {
       Object.assign(parsedCommand, projection);
       foldCommandGatesOntoSteps(parsedCommand, inlineCriteria, namedGates);
@@ -353,7 +379,8 @@ export class SymbolicCommandBuilder {
   private async buildSymbolicChain(
     parseResult: SymbolicCommandParseResult,
     findPrompt: PromptLookup,
-    requestGates: NonNullable<WorkflowIR['gates']>
+    requestGates: NonNullable<WorkflowIR['gates']>,
+    requestArguments?: RequestArgumentLayers
   ): Promise<WorkflowCommandResult> {
     const nodes: WorkflowNode[] = [];
     const order: string[] = [];
@@ -380,7 +407,9 @@ export class SymbolicCommandBuilder {
         { ...step, promptId: step.promptId },
         argumentInputs[index],
         findPrompt,
-        nodes.length
+        nodes.length,
+        // The first segment only: see `buildSymbolicCommand`.
+        nodes.length === 0 ? requestArguments : undefined
       );
       promptsById.set(prompt.id, prompt);
       order.push(node.id);
@@ -455,7 +484,8 @@ export class SymbolicCommandBuilder {
     step: SymbolicCommandParseResult['executionPlan']['steps'][number] & { promptId: string },
     stepArgumentInput: string | undefined,
     findPrompt: PromptLookup,
-    precedingNodes: number
+    precedingNodes: number,
+    requestArguments?: RequestArgumentLayers
   ): Promise<{ node: WorkflowNode; prompt: ConvertedPrompt }> {
     const convertedPrompt = findPrompt(step.promptId);
     if (!convertedPrompt) {
@@ -464,7 +494,7 @@ export class SymbolicCommandBuilder {
 
     const fallbackArgs =
       step.args && step.args.trim().length > 0
-        ? await this.parseArgumentsSafely(step.args, convertedPrompt)
+        ? await this.parseArgumentsSafely(step.args, convertedPrompt, requestArguments)
         : undefined;
 
     const stepGateCriteria = step.inlineGateCriteria ?? [];
@@ -473,7 +503,14 @@ export class SymbolicCommandBuilder {
       convertedPrompt,
       stepArgumentInput,
       stepGateCriteria,
-      fallbackArgs?.processedArgs
+      fallbackArgs?.processedArgs,
+      requestArguments
+    );
+    const stepArgs = this.applyRequestArguments(
+      convertedPrompt,
+      resolvedArgs.processedArgs,
+      segmentArgumentText(stepArgumentInput, step.args),
+      requestArguments
     );
 
     // Frozen at mint by `symbolic-operator-parser.generateExecutionPlan`, never re-minted here:
@@ -486,7 +523,7 @@ export class SymbolicCommandBuilder {
       node: {
         id: nodeId,
         promptId: convertedPrompt.id,
-        args: resolvedArgs.processedArgs,
+        args: stepArgs,
         // Written even when empty: this path has always put an `inlineGateCriteria` array on
         // every step, and `compileNode` spreads what it is given. An absent key and an empty
         // array are the same to `InlineGateProcessor` but not to a reader doing `.length`.
@@ -511,7 +548,8 @@ export class SymbolicCommandBuilder {
     prompt: ConvertedPrompt,
     sanitizedArgs?: string,
     inlineCriteriaSeed: string[] = [],
-    fallbackArgs?: Record<string, any>
+    fallbackArgs?: Record<string, any>,
+    requestArguments?: RequestArgumentLayers
   ): Promise<ParsedArgumentsResult & { inlineCriteria: string[] }> {
     // Blank entries are kept: a step's `:: "   "` reaches stage 05's `gate-criteria-invalid`
     // refusal instead of being dropped here with the step run ungated.
@@ -534,7 +572,7 @@ export class SymbolicCommandBuilder {
       // dropped `text` and failed its script tool's input validation. The empty-args case is
       // the ONLY one a gate-token-only command produces, which is why attaching a gate to any
       // prompt whose arguments are all optional-or-defaulted was a latent failure.
-      const resolved = await this.parseArgumentsSafely('', prompt);
+      const resolved = await this.parseArgumentsSafely('', prompt, requestArguments);
       return {
         processedArgs: { ...resolved.processedArgs, ...defaults, ...(fallbackArgs ?? {}) },
         resolvedPlaceholders: resolved.resolvedPlaceholders,
@@ -542,7 +580,7 @@ export class SymbolicCommandBuilder {
       };
     }
 
-    const parsed = await this.parseArgumentsSafely(sanitizedArgs, prompt);
+    const parsed = await this.parseArgumentsSafely(sanitizedArgs, prompt, requestArguments);
 
     const processedArgs =
       parsed.processedArgs && Object.keys(parsed.processedArgs).length > 0
@@ -560,7 +598,8 @@ export class SymbolicCommandBuilder {
 
   private async parseArgumentsSafely(
     argsString: string,
-    prompt: ConvertedPrompt
+    prompt: ConvertedPrompt,
+    requestArguments?: RequestArgumentLayers
   ): Promise<ParsedArgumentsResult> {
     // No empty-string short-circuit. An empty argument string is a REAL case the parser
     // answers (its fallback strategy resolves every declared argument), and returning `{}`
@@ -570,7 +609,7 @@ export class SymbolicCommandBuilder {
       const argResult = await this.argumentParser.parseArguments(
         argsString,
         prompt,
-        this.createArgumentContext()
+        this.createArgumentContext(requestArguments)
       );
       return {
         processedArgs: argResult.processedArgs ?? {},
@@ -604,11 +643,31 @@ export class SymbolicCommandBuilder {
     return defaults;
   }
 
-  private createArgumentContext(): ArgumentContext {
+  /**
+   * The request's `inputs`/`options` merge AFTER the command text resolves, and the merged map is
+   * what `applyRequestArguments` validates; checking the text-only map first refused `''` against
+   * a pattern the request's own value satisfies, and `parseArgumentsSafely` turned the refusal
+   * into an empty map.
+   */
+  private createArgumentContext(requestArguments?: RequestArgumentLayers): ArgumentContext {
     return {
       environmentVars: process.env as Record<string, string>,
       promptDefaults: {},
+      deferSchemaValidation: hasRequestArguments(requestArguments),
     };
+  }
+
+  /** The request channels laid under the segment's text, then the merged map validated. */
+  private applyRequestArguments(
+    prompt: ConvertedPrompt,
+    resolved: Record<string, unknown>,
+    segmentArgs: string,
+    requestArguments?: RequestArgumentLayers
+  ): Record<string, unknown> {
+    if (!hasRequestArguments(requestArguments)) return resolved;
+    const merged = mergeRequestArguments(resolved, segmentArgs, requestArguments);
+    this.argumentParser.validateResolvedArguments(prompt, merged);
+    return merged;
   }
 
   private getStepArgumentInput(
