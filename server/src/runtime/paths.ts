@@ -50,7 +50,7 @@ const PROJECT_WORKSPACE_DIR_NAME = '.claude-prompts';
 const BUNDLED_RESOURCES_ENTRY = 'bundled';
 
 /** One folder that contributes definitions of a resource type, and why it is in the list. */
-export interface ResourceLocation {
+interface ResourceLocationEntry {
   path: string;
   /**
    * `project`: `<project>/.claude-prompts/resources/<type>`. `profile`: the profile's own folder
@@ -65,7 +65,7 @@ export interface ResourceLocation {
 /** The effective locations of one resource type (the plan's Design decisions table, R3c/R3j/R3k/R3l/R3p). */
 export interface ResourceLocations {
   /** Highest precedence first, each path once: an earlier location wins a duplicate id (R3l). */
-  locations: ResourceLocation[];
+  locations: ResourceLocationEntry[];
   /** Where a write of this type lands: the project folder when `.claude-prompts/` exists, else the profile's. */
   writeRoot: string;
   /**
@@ -220,6 +220,7 @@ export class PathResolver {
 
     let resolved: string;
     let source: string;
+    const pluginData = process.env['CLAUDE_PLUGIN_DATA'];
 
     // 1. CLI flag (highest priority)
     if (this.config.cli.workspace) {
@@ -232,8 +233,8 @@ export class PathResolver {
       source = 'MCP_WORKSPACE env var';
     }
     // 3. The Claude Code plugin data directory, which survives plugin updates
-    else if (process.env['CLAUDE_PLUGIN_DATA']) {
-      resolved = this.resolvePath(process.env['CLAUDE_PLUGIN_DATA']);
+    else if (pluginData !== undefined && pluginData !== '') {
+      resolved = this.resolvePath(pluginData);
       source = 'CLAUDE_PLUGIN_DATA (plugin data directory)';
     }
     // 4. Package root (default - npx fallback)
@@ -709,7 +710,7 @@ export class PathResolver {
    * A path appears once, at its first position. Reports only: nothing is created.
    */
   getResourceLocations(resourceType: string): ResourceLocations {
-    const candidates: ResourceLocation[] = [];
+    const candidates: ResourceLocationEntry[] = [];
 
     const projectWorkspace = this.projectWorkspacePath();
     if (projectWorkspace !== undefined) {

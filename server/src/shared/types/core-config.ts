@@ -55,7 +55,7 @@ export const DEFAULT_PROMPTS_CONFIG: PromptsConfig = {
  * as that literal. Empty when the file names no list. `PathResolver.getResourceLocations` is its
  * one reader; nothing else derives a location from it.
  */
-export interface PathsConfig {
+interface PathsConfig {
   resources: string[];
 }
 

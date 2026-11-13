@@ -205,24 +205,7 @@ export class CategoryDiscoveryProcessor {
    * order, so a listing here and the served catalog cannot disagree about which categories exist.
    */
   private collectViews(): CategoryView[] {
-    const primary = this.writableRoot();
-    const bundled = this.ctx.configManager.getBundledResourceDirectory('prompts');
-
-    // Lowest precedence first, so a later root's declaration simply overwrites the recorded one.
-    // The overlay list carries the bundle AT ITS POSITION — first with no `paths.resources` list,
-    // where the list names `"bundled"`, absent when a list leaves it out — exactly the order
-    // `loadPromptsAcrossRoots` merges in, so this listing and the served catalog agree.
-    const roots: CategoryRoot[] = [];
-    for (const overlay of this.ctx.configManager.getOverlayResourceDirectories(
-      'prompts',
-      primary
-    )) {
-      if (path.resolve(overlay) === path.resolve(primary)) continue;
-      const isBundled = bundled !== undefined && path.resolve(overlay) === path.resolve(bundled);
-      roots.push({ path: overlay, label: isBundled ? 'bundled' : 'overlay' });
-    }
-    roots.push({ path: primary, label: 'primary' });
-
+    const roots = this.categoryRootsByPrecedence();
     const byId = new Map<string, { view: CategoryView; promptCount: number }>();
 
     for (const root of roots) {
@@ -250,6 +233,30 @@ export class CategoryDiscoveryProcessor {
     return [...byId.values()]
       .map(({ view, promptCount }) => ({ ...view, promptCount }))
       .sort((a, b) => a.id.localeCompare(b.id));
+  }
+
+  /**
+   * Every root that can hold a category, lowest precedence first, so a later root's declaration
+   * simply overwrites the recorded one. The overlay list carries the bundle AT ITS POSITION —
+   * first with no `paths.resources` list, where the list names `"bundled"`, absent when a list
+   * leaves it out — exactly the order `loadPromptsAcrossRoots` merges in, so this listing and the
+   * served catalog agree. The writable root comes last.
+   */
+  private categoryRootsByPrecedence(): CategoryRoot[] {
+    const primary = this.writableRoot();
+    const bundled = this.ctx.configManager.getBundledResourceDirectory('prompts');
+
+    const roots: CategoryRoot[] = [];
+    for (const overlay of this.ctx.configManager.getOverlayResourceDirectories(
+      'prompts',
+      primary
+    )) {
+      if (path.resolve(overlay) === path.resolve(primary)) continue;
+      const isBundled = bundled !== undefined && path.resolve(overlay) === path.resolve(bundled);
+      roots.push({ path: overlay, label: isBundled ? 'bundled' : 'overlay' });
+    }
+    roots.push({ path: primary, label: 'primary' });
+    return roots;
   }
 
   private success(text: string): ToolResponse {
