@@ -124,7 +124,7 @@ function customCollisions(group: DuplicateGroup): string[] {
  * What a `workspaces.jsonc` beside the workspace's parent says about it. Optional and read-only: an
  * absent file is `none`, a malformed one is `unreadable` with its reason, never a throw.
  */
-export function readProfileRegistry(workspace: string): ProfileRegistryReading {
+function readProfileRegistry(workspace: string): ProfileRegistryReading {
   const registryPath = join(dirname(workspace), PROFILE_REGISTRY_FILE_NAME);
   if (!existsSync(registryPath)) return { state: 'none' };
 

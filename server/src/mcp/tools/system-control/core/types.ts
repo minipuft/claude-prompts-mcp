@@ -7,7 +7,6 @@ import type { GateStateStore } from '#engine/gates/gate-state-store.js';
 import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type { SkillsSyncPaths } from '#modules/skills-sync/service.js';
-import type { ResourceLocationsView } from '#shared/types/resource-location-report.js';
 import type {
   StateStoreOptions,
   ConfigManager,
@@ -17,6 +16,7 @@ import type {
   ChainSessionService,
   DatabasePort,
 } from '#shared/types/index.js';
+import type { ResourceLocationsView } from '#shared/types/resource-location-report.js';
 import type { ResponseFormatter } from '../../prompt-engine/processors/response-formatter.js';
 
 /**

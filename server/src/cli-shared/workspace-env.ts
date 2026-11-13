@@ -13,7 +13,7 @@
  * caller's to apply first; this reads the environment only.
  */
 
-export type WorkspaceEnvName = 'MCP_WORKSPACE' | 'CLAUDE_PLUGIN_DATA';
+type WorkspaceEnvName = 'MCP_WORKSPACE' | 'CLAUDE_PLUGIN_DATA';
 
 export interface WorkspaceFromEnv {
   /** The variable's value, unresolved. */

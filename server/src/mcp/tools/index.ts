@@ -57,7 +57,6 @@ import type { ChainSessionStore } from '#modules/chains/manager.js';
 import type { StyleManager } from '#modules/formatting/index.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { SkillsSyncPaths } from '#modules/skills-sync/service.js';
-import type { ResourceLocationsView } from '#shared/types/resource-location-report.js';
 import type { GateSpecification } from '#shared/types/execution.js';
 import type {
   StateStoreOptions,
@@ -67,6 +66,7 @@ import type {
   HookRegistryPort,
   McpNotificationEmitterPort,
 } from '#shared/types/index.js';
+import type { ResourceLocationsView } from '#shared/types/resource-location-report.js';
 import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
 import type { FrameworkManagerDependencies } from './framework-manager/core/types.js';
 import type { Implementation } from '@modelcontextprotocol/server';

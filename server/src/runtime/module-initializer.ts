@@ -11,12 +11,12 @@ import {
   type TrackedResourceRoots,
 } from './resource-change-tracking.js';
 import { syncResourceIndex } from './resource-index-resync.js';
-import { ResourceLocationLedger } from './resource-location-report.js';
 import {
   formatIndexReconciliation,
   formatResourceInventory,
   type ResourceInventory,
 } from './resource-inventory.js';
+import { ResourceLocationLedger } from './resource-location-report.js';
 import {
   createLoaderRootsSource,
   createResourceFileLocator,

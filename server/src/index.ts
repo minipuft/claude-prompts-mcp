@@ -521,6 +521,12 @@ function validateAndHandleEarlyExit(cli: ServerCliArgs): { shouldExit: boolean; 
   return { shouldExit: false, exitCode: 0 };
 }
 
+/** The workspace the environment names, for the startup-test debug line. */
+function envWorkspaceLabel(): string {
+  const fromEnv = workspaceFromEnv();
+  return fromEnv === undefined ? 'not set' : JSON.stringify(fromEnv);
+}
+
 /**
  * Main application entry point with comprehensive error handling and validation
  */
@@ -545,7 +551,7 @@ async function main(): Promise<void> {
       debugLog(`DEBUG: Platform: ${process.platform}`);
       debugLog(`DEBUG: Node.js version: ${process.version}`);
       debugLog(`DEBUG: Working directory: ${process.cwd()}`);
-      debugLog(`DEBUG: Workspace from env: ${JSON.stringify(workspaceFromEnv()) ?? 'not set'}`);
+      debugLog(`DEBUG: Workspace from env: ${envWorkspaceLabel()}`);
     }
 
     // Setup error handlers first
