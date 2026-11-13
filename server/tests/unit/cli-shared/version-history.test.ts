@@ -438,11 +438,13 @@ describe('version-history', () => {
   // resolveStateDbPath actually reads, so a wrong precedence fails loudly instead of both
   // candidates looking equally plausible.
   describe('runtime root resolution honors MCP_RUNTIME_ROOT / MCP_WORKSPACE', () => {
-    const envKeys = ['MCP_RUNTIME_ROOT', 'MCP_WORKSPACE'] as const;
+    const envKeys = ['MCP_RUNTIME_ROOT', 'MCP_WORKSPACE', 'CLAUDE_PLUGIN_DATA'] as const;
     const savedEnv: Record<string, string | undefined> = {};
 
     beforeEach(() => {
       for (const key of envKeys) savedEnv[key] = process.env[key];
+      // A plugin session exports CLAUDE_PLUGIN_DATA; each case below names the variables it means.
+      delete process.env['CLAUDE_PLUGIN_DATA'];
     });
 
     afterEach(() => {
@@ -487,6 +489,27 @@ describe('version-history', () => {
         expect(loadHistory(promptDir, PROMPT_REF)).toBeNull();
       } finally {
         rmSync(workspaceDir, { recursive: true, force: true });
+      }
+    });
+
+    it('CLAUDE_PLUGIN_DATA is the runtime root when MCP_RUNTIME_ROOT and MCP_WORKSPACE are unset', async () => {
+      delete process.env['MCP_RUNTIME_ROOT'];
+      delete process.env['MCP_WORKSPACE'];
+      const pluginDataDir = mkdtempSync(join(tmpdir(), 'cpm-vh-plugin-data-'));
+      try {
+        await seedStateDbSchema(pluginDataDir);
+        process.env['CLAUDE_PLUGIN_DATA'] = pluginDataDir;
+
+        const result = saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt' });
+        expect(result.success).toBe(true);
+        expect(loadHistory(promptDir, PROMPT_REF)?.current_version).toBe(1);
+
+        // Positive control: with the variable gone the same read finds the ancestor database,
+        // which received nothing, so the write above went to the plugin data directory.
+        delete process.env['CLAUDE_PLUGIN_DATA'];
+        expect(loadHistory(promptDir, PROMPT_REF)).toBeNull();
+      } finally {
+        rmSync(pluginDataDir, { recursive: true, force: true });
       }
     });
 

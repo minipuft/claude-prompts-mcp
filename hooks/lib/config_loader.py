@@ -166,8 +166,9 @@ def get_config_path() -> Path | None:
     not where an operator's config or the Claude Code plugin's persistent data
     directory sits. `CLAUDE_PLUGIN_DATA` is probed for the same reason
     `workspace.get_state_db_path()` probes it: hooks do not inherit the MCP server's
-    own environment, and the Claude Code plugin's `.mcp.json` points the server's own
-    `MCP_WORKSPACE` at `${CLAUDE_PLUGIN_DATA}`.
+    own environment, and the Claude Code plugin's `.mcp.json` carries no `env`, so the
+    server's own workspace falls back to `${CLAUDE_PLUGIN_DATA}` when `MCP_WORKSPACE` is
+    unset.
 
     Within each directory, `config.jsonc` is tried before `config.json`. The first
     file that EXISTS wins -- a file found but unreadable or unparsable is not retried
