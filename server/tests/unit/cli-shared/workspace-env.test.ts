@@ -1,6 +1,7 @@
 import { describe, expect, it } from '@jest/globals';
 
 import { workspaceFromEnv } from '../../../src/cli-shared/workspace-env.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
 
 describe('workspaceFromEnv', () => {
   it('prefers MCP_WORKSPACE when both variables are set', () => {
@@ -29,19 +30,11 @@ describe('workspaceFromEnv', () => {
   });
 
   it('reads process.env by default', () => {
-    const saved = {
-      workspace: process.env['MCP_WORKSPACE'],
-      plugin: process.env['CLAUDE_PLUGIN_DATA'],
-    };
+    const locations = withResourceLocations({ pluginData: '/plugin/data' });
     try {
-      delete process.env['MCP_WORKSPACE'];
-      process.env['CLAUDE_PLUGIN_DATA'] = '/plugin/data';
       expect(workspaceFromEnv()?.source).toBe('CLAUDE_PLUGIN_DATA');
     } finally {
-      if (saved.workspace === undefined) delete process.env['MCP_WORKSPACE'];
-      else process.env['MCP_WORKSPACE'] = saved.workspace;
-      if (saved.plugin === undefined) delete process.env['CLAUDE_PLUGIN_DATA'];
-      else process.env['CLAUDE_PLUGIN_DATA'] = saved.plugin;
+      locations.cleanup();
     }
   });
 });

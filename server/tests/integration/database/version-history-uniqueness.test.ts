@@ -37,6 +37,7 @@ import { VersionHistoryService } from '../../../src/modules/versioning/version-h
 import { loadHistory, renameHistoryResource } from '../../../src/cli-shared/version-history.js';
 import { saveVersion } from '../../helpers/version-history-writer.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 import { STATE_DB_BUSY_TIMEOUT_MS } from '../../../src/shared/utils/runtime-state-location.js';
 
 import type { DatabasePort } from '../../../src/shared/types/persistence.js';
@@ -65,21 +66,13 @@ describe('version_history uniqueness', () => {
   });
 
   describe('renaming onto an id that already has history', () => {
-    const savedEnv = process.env['MCP_RUNTIME_ROOT'];
+    const locations = isolateResourceLocations();
 
     beforeEach(async () => {
-      process.env['MCP_RUNTIME_ROOT'] = testDir;
+      locations.set({ runtimeRoot: testDir });
       const engine = await SqliteEngine.getInstance(logger as never, { dbPath });
       await engine.initialize();
       await engine.shutdown();
-    });
-
-    afterEach(() => {
-      if (savedEnv === undefined) {
-        delete process.env['MCP_RUNTIME_ROOT'];
-      } else {
-        process.env['MCP_RUNTIME_ROOT'] = savedEnv;
-      }
     });
 
     it('continues after the target id newest version instead of colliding with it', () => {
