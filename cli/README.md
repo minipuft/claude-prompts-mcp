@@ -38,6 +38,22 @@ The published copy is emitted to `server/dist/cpm.js` by `npm --prefix server ru
 
 All commands support `--json` for machine-readable output and `-w`/`--workspace` for workspace selection.
 
+## `cpm workspace`
+
+Workspace profiles are folders that sit side by side under one parent. The registry is `workspaces.jsonc` in the parent of the workspace `cpm` resolves (`-w`, then `MCP_WORKSPACE`, then the current directory), never in your home directory. It maps each label to a folder beside it:
+
+```jsonc
+{ "dev": "./dev", "shared": "./shared" }
+```
+
+- `cpm workspace add <label> [dir]` registers a folder in the registry's parent, creating the file if needed; with no `dir` it takes the folder `MCP_RESOURCES_PATH` names (its parent when that folder is called `resources`).
+- `cpm workspace remove <label>` drops the label and leaves the folder on disk.
+- `cpm workspace list` prints each label and folder, marks the current one, and lists an `MCP_RESOURCES_PATH` folder no profile holds under `unregistered:`.
+- `cpm workspace show <label>` prints the folder, its `config.jsonc` or `config.json`, and how many prompts, gates, frameworks and styles it holds.
+- `cpm workspace use <label>` prints the `MCP_WORKSPACE=<folder>` line to put in your MCP client's server env; it writes nothing.
+
+Edits to an existing registry keep its comments.
+
 ## Architecture
 
 Self-contained esbuild bundle (~260KB) with zero runtime dependencies. Shares validation logic with the server via `server/src/cli-shared/` (Zod schemas, YAML utilities). A dependency-cruiser rule prevents transitive imports of server runtime modules.
