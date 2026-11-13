@@ -17,7 +17,11 @@ The server checks six locations, in order, and stops at the first match:
    strict JSON.
 2. **`<project>/.claude-prompts/config.jsonc`**, when the project directory has a
    `.claude-prompts/` folder (STDIO only; see [Custom Resources](../guides/custom-resources.md)).
-   A project's own settings outrank the workspace shared across projects.
+   A project's own settings outrank the workspace shared across projects. A project config may not
+   set `paths.resources`: the list of resource locations is a machine-level setting, because a
+   committed file must not point a collaborator's server at a path on someone else's machine. Put
+   the key in the workspace config or the file `MCP_CONFIG_PATH` names; the project folder
+   contributes its own `resources/` without listing locations.
 3. **`<project>/.claude-prompts/config.json`**, read only if the project's `config.jsonc` is not
    present.
 4. **`<workspace>/config.jsonc`**, where the workspace is the first of the four in
@@ -52,6 +56,7 @@ same way for a workspace. The message names both paths. Delete whichever file yo
 | A project or workspace `config.jsonc`/`config.json`       | Unreadable, a directory, or valid JSON that is not an object   | Refuses to start                                                     |
 | A workspace holding both `config.jsonc` and `config.json` | Ambiguous                                                      | Refuses to start                                                     |
 | A project `.claude-prompts/` holding both files           | Ambiguous                                                      | Refuses to start                                                     |
+| A project `.claude-prompts/config.jsonc`/`config.json`    | Sets `paths.resources`, a machine-level setting                | Refuses to start; the message names the file and the config to use   |
 | A workspace with no config file at all                    | n/a                                                            | Falls back to the packaged default                                   |
 | The packaged `config.json`                                | Invalid JSON                                                   | Falls back to built-in defaults, logs a warning, does **not** refuse |
 

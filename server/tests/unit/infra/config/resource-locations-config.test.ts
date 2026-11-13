@@ -219,3 +219,95 @@ describe('paths.resources in the config file', () => {
     expect(loader.getConfig().prompts.registerWithMcp).toBe(false);
   });
 });
+
+describe('paths.resources in a project config', () => {
+  let root: string;
+  let projectWorkspace: string;
+  let workspaceConfigPath: string;
+  let errorSpy: jest.SpiedFunction<typeof console.error>;
+  let warnSpy: jest.SpiedFunction<typeof console.warn>;
+
+  beforeEach(async () => {
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    root = await mkdtemp(path.join(tmpdir(), 'cfg-project-locations-'));
+    projectWorkspace = path.join(root, 'project', '.claude-prompts');
+    workspaceConfigPath = path.join(root, 'workspace', 'config.jsonc');
+    await mkdir(path.join(projectWorkspace, 'custom'), { recursive: true });
+    await mkdir(path.join(root, 'workspace', 'custom'), { recursive: true });
+  });
+
+  afterEach(async () => {
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  async function loadFile(
+    configPath: string,
+    file: Record<string, unknown>
+  ): Promise<ConfigLoader> {
+    await writeFile(configPath, JSON.stringify(file), 'utf8');
+    const loader = new ConfigLoader(configPath, undefined, {
+      schemaPath: SCHEMA_PATH,
+      projectConfigScope: { projectWorkspace, workspaceConfigPath },
+    });
+    await loader.loadConfig();
+    return loader;
+  }
+
+  it('refuses a project config that sets "paths.resources", naming the file, the key and the workspace config', async () => {
+    const projectConfig = path.join(projectWorkspace, 'config.jsonc');
+    const refusal = loadFile(projectConfig, { version: 5, paths: { resources: ['./custom'] } });
+
+    await expect(refusal).rejects.toBeInstanceOf(PathSettingError);
+    await expect(refusal).rejects.toThrow(
+      `Refusing to start: ${projectConfig} sets "paths.resources", which is a machine-level setting.`
+    );
+    await expect(refusal).rejects.toThrow(`the workspace config (${workspaceConfigPath})`);
+    await expect(refusal).rejects.toThrow(/MCP_CONFIG_PATH/);
+  });
+
+  it('names MCP_WORKSPACE instead when the workspace is the package and has no config of its own', async () => {
+    const projectConfig = path.join(projectWorkspace, 'config.jsonc');
+    await writeFile(
+      projectConfig,
+      JSON.stringify({ version: 5, paths: { resources: [] } }),
+      'utf8'
+    );
+    const loader = new ConfigLoader(projectConfig, undefined, {
+      projectConfigScope: { projectWorkspace, workspaceConfigPath: undefined },
+    });
+
+    await expect(loader.loadConfig()).rejects.toThrow(
+      /Expected the key in a workspace config \(set MCP_WORKSPACE to a directory holding config\.jsonc\) or MCP_CONFIG_PATH/
+    );
+  });
+
+  it('refuses the key in a project config.json too, and before it checks the list shape', async () => {
+    const projectConfig = path.join(projectWorkspace, 'config.json');
+    const refusal = loadFile(projectConfig, { version: 5, paths: { resources: './custom' } });
+
+    await expect(refusal).rejects.toThrow(
+      `Refusing to start: ${projectConfig} sets "paths.resources", which is a machine-level setting.`
+    );
+  });
+
+  it('CONTROL: the same key in the workspace config loads and serves the listed location', async () => {
+    const loader = await loadFile(workspaceConfigPath, {
+      version: 5,
+      paths: { resources: ['./custom'] },
+    });
+
+    expect(loader.getConfig().paths.resources).toEqual([path.join(root, 'workspace', 'custom')]);
+  });
+
+  it('loads a project config without the key, and one that sets other keys', async () => {
+    const loader = await loadFile(path.join(projectWorkspace, 'config.jsonc'), {
+      version: 5,
+      prompts: { registerWithMcp: false },
+    });
+
+    expect(loader.getConfig().prompts.registerWithMcp).toBe(false);
+  });
+});

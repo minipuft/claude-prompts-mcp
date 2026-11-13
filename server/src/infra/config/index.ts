@@ -688,6 +688,50 @@ function assertResourceLocationEntries(locations: readonly unknown[], configPath
   });
 }
 
+/**
+ * Where a project's own `.claude-prompts/` folder is, and the machine config that may list
+ * resource locations instead. Passed by the composition root, which knows both; absent when no
+ * project folder applies (HTTP, or no `.claude-prompts/` directory).
+ */
+export interface ProjectConfigScope {
+  /** The project's `.claude-prompts/` directory. */
+  readonly projectWorkspace: string;
+  /**
+   * The workspace's config file, named in the refusal as the place the key belongs. Undefined when
+   * the workspace is the package itself, whose shipped config is no place for a user's setting.
+   */
+  readonly workspaceConfigPath: string | undefined;
+}
+
+function describeMachineConfig(scope: ProjectConfigScope): string {
+  return scope.workspaceConfigPath === undefined
+    ? 'a workspace config (set MCP_WORKSPACE to a directory holding config.jsonc)'
+    : `the workspace config (${scope.workspaceConfigPath})`;
+}
+
+/**
+ * Refuses a config file inside the project's `.claude-prompts/` folder that sets `paths.resources`.
+ * The list is a machine-level setting (ruling R3e): a committed file must not point a
+ * collaborator's server at a path on someone else's machine. The folder still contributes its own
+ * `resources/` without listing it. Nothing else in a project config is refused here.
+ */
+function assertNoProjectResourceLocations(
+  rawConfig: Record<string, unknown>,
+  configPath: string,
+  scope: ProjectConfigScope | undefined
+): void {
+  if (scope === undefined) return;
+  if (path.resolve(path.dirname(configPath)) !== path.resolve(scope.projectWorkspace)) return;
+  const paths = rawConfig['paths'];
+  if (!isConfigObject(paths) || !('resources' in paths)) return;
+  refuseConfigSetting(
+    configPath,
+    'sets "paths.resources", which is a machine-level setting',
+    `the key in ${describeMachineConfig(scope)} or MCP_CONFIG_PATH; a project ` +
+      'folder contributes its own resources/ without listing locations'
+  );
+}
+
 /** True when a removed `prompts.directory` value resolves to the default, so it says nothing. */
 function namesDefaultPromptsDirectory(value: unknown, configPath: string): boolean {
   if (typeof value !== 'string') return false;
@@ -831,6 +875,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    * config's `$schema`, which is an editor hint. Undefined means the file is not schema-checked.
    */
   private readonly schemaPath: string | undefined;
+  /** The project folder and the machine config a project's `paths.resources` is redirected to. */
+  private readonly projectConfigScope: ProjectConfigScope | undefined;
   /** The schema check of the last successful parse; undefined when none ran or the load failed. */
   private schemaValidation: ConfigSchemaValidationResult | undefined;
   /**
@@ -860,13 +906,14 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   constructor(
     configPath: string,
     private readonly resourcePaths?: ResourcePathSource,
-    options: { readonly schemaPath?: string } = {}
+    options: { readonly schemaPath?: string; readonly projectConfigScope?: ProjectConfigScope } = {}
   ) {
     super();
     this.configPath = configPath;
     this.config = DEFAULT_CONFIG;
     this.frameworksConfigCache = { ...DEFAULT_FRAMEWORKS_CONFIG };
     this.schemaPath = options.schemaPath;
+    this.projectConfigScope = options.projectConfigScope;
   }
 
   /**
@@ -883,6 +930,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       // continuing would silently ignore an explicit operator request instead of naming
       // --transport as the fix.
       assertServerTransportIsStdio(parsedRecord, this.configPath);
+      assertNoProjectResourceLocations(parsedRecord, this.configPath, this.projectConfigScope);
       assertResourceLocationSettings(parsedRecord, this.configPath);
 
       // A file that declares no `version` was written against the 4.x shape: it is translated here,
