@@ -18,7 +18,13 @@ import { isAbsolute, resolve } from 'path';
 
 /** An operator path setting: the flag or environment variable, and the value it was given. */
 export interface PathSetting {
-  name: '--config' | 'MCP_CONFIG_PATH' | '--workspace' | 'MCP_WORKSPACE' | 'MCP_RESOURCES_PATH';
+  name:
+    | '--config'
+    | 'MCP_CONFIG_PATH'
+    | '--workspace'
+    | 'MCP_WORKSPACE'
+    | 'CLAUDE_PLUGIN_DATA'
+    | 'MCP_RESOURCES_PATH';
   value: string;
 }
 

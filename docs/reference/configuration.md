@@ -20,11 +20,24 @@ The server checks six locations, in order, and stops at the first match:
    A project's own settings outrank the workspace shared across projects.
 3. **`<project>/.claude-prompts/config.json`**, read only if the project's `config.jsonc` is not
    present.
-4. **`<workspace>/config.jsonc`**, where the workspace comes from `--workspace` or
-   `MCP_WORKSPACE`.
+4. **`<workspace>/config.jsonc`**, where the workspace is the first of the four in
+   [Where the Workspace Comes From](#where-the-workspace-comes-from) that is set.
 5. **`<workspace>/config.json`**, read only if `config.jsonc` is not present.
 6. **`<package>/config.json`**: the file that ships with the server, used when no workspace is
    configured or the workspace holds neither file.
+
+### Where the Workspace Comes From
+
+The workspace, which is also the runtime root unless `MCP_RUNTIME_ROOT` names one, is the first of
+these that is set to a non-empty value:
+
+1. `--workspace`
+2. `MCP_WORKSPACE`
+3. `CLAUDE_PLUGIN_DATA`, the data directory Claude Code creates for a plugin and keeps across
+   plugin updates. The Claude Code plugin sets no path environment of its own, so a plugin install
+   lands here and nothing else needs configuring; set `MCP_WORKSPACE` in Claude Code's settings
+   `env` to use a library of your own instead.
+4. The package root, which is what a plain `npx claude-prompts` runs on.
 
 A project directory or workspace holding **both** `config.jsonc` and `config.json` is ambiguous,
 so the server refuses to start rather than silently preferring `.jsonc`; `cpm config` refuses the
@@ -34,7 +47,7 @@ same way for a workspace. The message names both paths. Delete whichever file yo
 
 | Setting                                                   | Problem                                                        | Result                                                               |
 | --------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `--workspace` / `MCP_WORKSPACE`                           | Not an existing directory                                      | Refuses to start                                                     |
+| `--workspace` / `MCP_WORKSPACE` / `CLAUDE_PLUGIN_DATA`    | Not an existing directory                                      | Refuses to start                                                     |
 | `--config` / `MCP_CONFIG_PATH`                            | Missing, a directory, unreadable, or invalid for its extension | Refuses to start                                                     |
 | A project or workspace `config.jsonc`/`config.json`       | Unreadable, a directory, or valid JSON that is not an object   | Refuses to start                                                     |
 | A workspace holding both `config.jsonc` and `config.json` | Ambiguous                                                      | Refuses to start                                                     |
@@ -178,7 +191,8 @@ actually accepts:
 
 Claude Code hooks under `hooks/` resolve the config file independently of the server process
 (hooks don't inherit the server's environment), but land on the same file when both are pointed at
-the same workspace:
+the same workspace. They read the same two variables in the same order the server does after
+`--workspace`, which a hook has no flag for:
 
 1. `MCP_WORKSPACE`
 2. `CLAUDE_PLUGIN_DATA`

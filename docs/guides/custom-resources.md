@@ -16,7 +16,11 @@ This creates `~/my-prompts/resources/` with starter prompts you own. Set `MCP_WO
 
 ## Option B — Plugin install (bundled resources + hooks)
 
-Plugin installs (Claude Code, OpenCode, Gemini) set `MCP_WORKSPACE` automatically and ship the bundled prompts, gates, and frameworks. Where created resources are saved follows the rules below; for the Claude Code plugin the workspace is its plugin data folder, which Claude Code keeps across plugin updates.
+Plugin installs (Claude Code, OpenCode, Gemini) ship the bundled prompts, gates, and frameworks. Where created resources are saved follows the rules below.
+
+The Claude Code plugin's `.mcp.json` carries no path environment. Claude Code hands every plugin's server `CLAUDE_PLUGIN_DATA`, a folder it creates and keeps across plugin updates, and the server takes it as the workspace and runtime root when `MCP_WORKSPACE` and `MCP_RUNTIME_ROOT` are unset. A plugin that wrote no `env` block also lets a `MCP_WORKSPACE` you set in Claude Code's settings reach the server unchanged, so pointing the plugin at your own library is one setting. Uninstalling the plugin deletes the data folder unless you pass `--keep-data`, so a library you want to keep belongs in a workspace of your own.
+
+The Agent Plugins `mcp.json` that Codex reads keeps `"MCP_WORKSPACE": "${PLUGIN_ROOT}"`: Codex passes its MCP child no data variable, so without that line the server would fall back to the package root and write beside the plugin's own files.
 
 ## Option C — Project workspace
 
@@ -67,10 +71,10 @@ changes what a file _means_ — only how much of its formatting an edit disturbs
 
 ## Environment variables
 
-| Variable             | Effect                                                                                                                                                                       |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MCP_RESOURCES_PATH` | Sets the base resources directory (replaces the package default). Must be an existing directory, or startup is refused.                                                      |
-| `MCP_WORKSPACE`      | Enables overlay — custom resources in your workspace load **alongside** bundled ones. Same-ID resources take priority. Must be an existing directory, or startup is refused. |
+| Variable             | Effect                                                                                                                                                                                                                                                            |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MCP_RESOURCES_PATH` | Sets the base resources directory (replaces the package default). Must be an existing directory, or startup is refused.                                                                                                                                           |
+| `MCP_WORKSPACE`      | Enables overlay — custom resources in your workspace load **alongside** bundled ones. Same-ID resources take priority. Must be an existing directory, or startup is refused. When unset, `CLAUDE_PLUGIN_DATA` (set by Claude Code for a plugin) is the workspace. |
 
 ## Config examples per client
 

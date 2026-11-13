@@ -9,6 +9,7 @@
  *
  * Environment Variables:
  * - MCP_WORKSPACE: Full plugin/workspace directory (server/, hooks/, etc.)
+ * - CLAUDE_PLUGIN_DATA: Claude Code's plugin data directory; the workspace when MCP_WORKSPACE is unset
  * - MCP_RUNTIME_ROOT: Writable directory for state and logs
  * - MCP_RESOURCES_PATH: Custom resources base directory (replaces package default)
  *
@@ -102,7 +103,9 @@ export interface ResolvedPaths {
 type ExplicitConfigSource = PathSetting & { name: '--config' | 'MCP_CONFIG_PATH' };
 
 /** A workspace path and the flag or variable that named it. */
-type WorkspaceSource = PathSetting & { name: '--workspace' | 'MCP_WORKSPACE' };
+type WorkspaceSource = PathSetting & {
+  name: '--workspace' | 'MCP_WORKSPACE' | 'CLAUDE_PLUGIN_DATA';
+};
 
 /**
  * Why `resolved` cannot serve as a config file, or `undefined` when it can.
@@ -181,8 +184,10 @@ export class PathResolver {
    *
    * Priority:
    *   1. --workspace CLI flag
-   *   2. MCP_WORKSPACE environment variable (user-defined or set by plugin hooks)
-   *   3. Package root (default - npx fallback)
+   *   2. MCP_WORKSPACE environment variable
+   *   3. CLAUDE_PLUGIN_DATA environment variable (Claude Code passes it to a plugin's server;
+   *      the Python hooks read the same two variables in the same order)
+   *   4. Package root (default - npx fallback)
    */
   getWorkspace(): string {
     if (this.cache.workspace) return this.cache.workspace;
@@ -200,7 +205,12 @@ export class PathResolver {
       resolved = this.resolvePath(process.env['MCP_WORKSPACE']);
       source = 'MCP_WORKSPACE env var';
     }
-    // 3. Package root (default - npx fallback)
+    // 3. The Claude Code plugin data directory, which survives plugin updates
+    else if (process.env['CLAUDE_PLUGIN_DATA']) {
+      resolved = this.resolvePath(process.env['CLAUDE_PLUGIN_DATA']);
+      source = 'CLAUDE_PLUGIN_DATA (plugin data directory)';
+    }
+    // 4. Package root (default - npx fallback)
     else {
       resolved = this.config.packageRoot;
       source = 'package root (default)';
@@ -371,20 +381,31 @@ export class PathResolver {
     }
   }
 
-  /** The workspace path, flag before variable; an empty value counts as unset. */
+  /** The workspace path: flag, then `MCP_WORKSPACE`, then `CLAUDE_PLUGIN_DATA`; an empty value counts as unset. */
   private readWorkspaceSource(): WorkspaceSource | undefined {
     const fromFlag = this.config.cli.workspace;
     if (fromFlag !== undefined && fromFlag !== '') return { name: '--workspace', value: fromFlag };
     const fromEnv = process.env['MCP_WORKSPACE'];
     if (fromEnv !== undefined && fromEnv !== '') return { name: 'MCP_WORKSPACE', value: fromEnv };
+    const fromPlugin = process.env['CLAUDE_PLUGIN_DATA'];
+    if (fromPlugin !== undefined && fromPlugin !== '') {
+      return { name: 'CLAUDE_PLUGIN_DATA', value: fromPlugin };
+    }
     return undefined;
   }
 
-  /** What removing a workspace setting falls back to: the variable behind the flag, else the package root. */
+  /** What removing a workspace setting falls back to: the next variable in the order, else the package root. */
   private describeWorkspaceFallback(workspace: WorkspaceSource): PathFallback {
     const fromEnv = process.env['MCP_WORKSPACE'];
     if (workspace.name === '--workspace' && fromEnv !== undefined && fromEnv !== '') {
       return { label: 'the MCP_WORKSPACE workspace', resolved: resolveSettingPath(fromEnv) };
+    }
+    const fromPlugin = process.env['CLAUDE_PLUGIN_DATA'];
+    if (workspace.name !== 'CLAUDE_PLUGIN_DATA' && fromPlugin !== undefined && fromPlugin !== '') {
+      return {
+        label: 'the CLAUDE_PLUGIN_DATA workspace',
+        resolved: resolveSettingPath(fromPlugin),
+      };
     }
     return { label: 'the package root', resolved: this.config.packageRoot };
   }

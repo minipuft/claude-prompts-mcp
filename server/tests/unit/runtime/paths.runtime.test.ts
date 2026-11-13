@@ -38,6 +38,7 @@ const PATH_ENV_KEYS = [
   'MCP_WORKSPACE',
   'MCP_RESOURCES_PATH',
   'MCP_CONFIG_PATH',
+  'CLAUDE_PLUGIN_DATA',
 ] as const;
 
 const originalPathEnv = new Map<string, string | undefined>(
@@ -79,6 +80,114 @@ describe('PathResolver writable runtime paths', () => {
     const resolver = new PathResolver({ cli: {}, packageRoot: '/package' });
 
     expect(resolver.getRuntimeRoot()).toBe(path.join('/tmp', 'workspace'));
+  });
+});
+
+describe('PathResolver takes CLAUDE_PLUGIN_DATA as the workspace when MCP_WORKSPACE is unset', () => {
+  const packageRoot = '/claude-prompts/package';
+
+  it('lets MCP_WORKSPACE win when both variables are set', () => {
+    process.env['MCP_WORKSPACE'] = '/tmp/chosen-workspace';
+    process.env['CLAUDE_PLUGIN_DATA'] = '/tmp/plugin-data';
+    const resolver = new PathResolver({ cli: {}, packageRoot });
+
+    expect(resolver.getWorkspace()).toBe('/tmp/chosen-workspace');
+    expect(resolver.getRuntimeRoot()).toBe('/tmp/chosen-workspace');
+  });
+
+  it('uses CLAUDE_PLUGIN_DATA as the workspace and, through it, the runtime root', () => {
+    process.env['CLAUDE_PLUGIN_DATA'] = '/tmp/plugin-data';
+    const resolver = new PathResolver({ cli: {}, packageRoot });
+
+    expect(resolver.getWorkspace()).toBe('/tmp/plugin-data');
+    expect(resolver.getRuntimeRoot()).toBe('/tmp/plugin-data');
+    expect(resolver.isUsingCustomWorkspace()).toBe(true);
+  });
+
+  it('lets --workspace win over CLAUDE_PLUGIN_DATA', () => {
+    process.env['CLAUDE_PLUGIN_DATA'] = '/tmp/plugin-data';
+    const resolver = new PathResolver({ cli: { workspace: '/tmp/flag-workspace' }, packageRoot });
+
+    expect(resolver.getWorkspace()).toBe('/tmp/flag-workspace');
+  });
+
+  it('falls back to the package root when neither variable is set, or CLAUDE_PLUGIN_DATA is empty', () => {
+    expect(new PathResolver({ cli: {}, packageRoot }).getWorkspace()).toBe(packageRoot);
+
+    process.env['CLAUDE_PLUGIN_DATA'] = '';
+    expect(new PathResolver({ cli: {}, packageRoot }).getWorkspace()).toBe(packageRoot);
+  });
+
+  describe('refusal', () => {
+    let dir: string;
+
+    beforeEach(() => {
+      dir = mkdtempSync(path.join(tmpdir(), 'plugin-data-refusal-'));
+    });
+
+    afterEach(() => {
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    function refusalFor(resolver: PathResolver): string {
+      try {
+        resolver.assertUsablePathSettings();
+      } catch (error) {
+        expect(error).toBeInstanceOf(PathSettingError);
+        return (error as Error).message;
+      }
+      throw new Error('assertUsablePathSettings() returned instead of refusing');
+    }
+
+    it('refuses a CLAUDE_PLUGIN_DATA naming a missing directory, naming the variable and the package root', () => {
+      const missing = path.join(dir, 'no-plugin-data');
+      process.env['CLAUDE_PLUGIN_DATA'] = missing;
+
+      const message = refusalFor(new PathResolver({ cli: {}, packageRoot }));
+
+      expect(message).toBe(
+        [
+          `Refusing to start: the CLAUDE_PLUGIN_DATA environment variable is set to "${missing}", which resolves to ${missing}, and that path does not exist.`,
+          `Expected an existing directory at that path, or unset CLAUDE_PLUGIN_DATA to use the package root at ${packageRoot}.`,
+        ].join('\n')
+      );
+    });
+
+    it('accepts an existing CLAUDE_PLUGIN_DATA, and ignores a missing one when MCP_WORKSPACE outranks it', () => {
+      process.env['CLAUDE_PLUGIN_DATA'] = dir;
+      expect(() =>
+        new PathResolver({ cli: {}, packageRoot }).assertUsablePathSettings()
+      ).not.toThrow();
+
+      process.env['MCP_WORKSPACE'] = dir;
+      process.env['CLAUDE_PLUGIN_DATA'] = path.join(dir, 'never-created');
+      expect(() =>
+        new PathResolver({ cli: {}, packageRoot }).assertUsablePathSettings()
+      ).not.toThrow();
+    });
+
+    it('names CLAUDE_PLUGIN_DATA as the fallback of an unusable MCP_WORKSPACE', () => {
+      process.env['MCP_WORKSPACE'] = path.join(dir, 'missing-workspace');
+      process.env['CLAUDE_PLUGIN_DATA'] = dir;
+
+      const message = refusalFor(new PathResolver({ cli: {}, packageRoot }));
+
+      expect(message).toContain(
+        `unset MCP_WORKSPACE to use the CLAUDE_PLUGIN_DATA workspace at ${dir}`
+      );
+    });
+
+    it('names CLAUDE_PLUGIN_DATA behind an unusable --workspace when MCP_WORKSPACE is unset', () => {
+      process.env['CLAUDE_PLUGIN_DATA'] = dir;
+
+      const message = refusalFor(
+        new PathResolver({ cli: { workspace: path.join(dir, 'missing-flag') }, packageRoot })
+      );
+
+      expect(message).toContain(
+        `remove --workspace to use the CLAUDE_PLUGIN_DATA workspace at ${dir}`
+      );
+    });
   });
 });
 
