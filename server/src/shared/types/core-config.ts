@@ -48,6 +48,18 @@ export const DEFAULT_PROMPTS_CONFIG: PromptsConfig = {
 // ===== Configuration Types =====
 
 /**
+ * The `paths` section of the RESOLVED runtime config.
+ *
+ * `resources` is the file's `paths.resources` list in its own order, each path entry absolute
+ * (resolved against the config file's directory by the loader) and the reserved `"bundled"` kept
+ * as that literal. Empty when the file names no list. `PathResolver.getResourceLocations` is its
+ * one reader; nothing else derives a location from it.
+ */
+export interface PathsConfig {
+  resources: string[];
+}
+
+/**
  * Configuration for the server
  */
 export interface ServerConfig {
@@ -485,6 +497,8 @@ export interface Config {
   server: ServerConfig;
   /** Prompts subsystem configuration */
   prompts: PromptsConfig;
+  /** Resource locations named by the config file (`paths.resources`), resolved */
+  paths: PathsConfig;
   /** Gates system configuration (quality validation) */
   gates: GatesConfig;
   /** Phase guard enforcement for framework structural validation */

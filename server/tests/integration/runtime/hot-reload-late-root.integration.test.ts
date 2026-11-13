@@ -371,7 +371,8 @@ describe('a project .claude-prompts/ created while the server runs', () => {
     const roots = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
     expect(roots.primary).toBe(path.join(workspace, 'resources', 'gates'));
     expect(roots.overlays.at(-1)).toBe(projectGates);
-    expect(roots.lookupDirs.slice(0, 2)).toEqual([roots.primary, projectGates]);
+    // Listed first, where it ranks once it exists; it holds nothing until then.
+    expect(roots.lookupDirs.slice(0, 2)).toEqual([projectGates, roots.primary]);
 
     const loader = new GateDefinitionLoader({
       gatesDir: roots.primary!,

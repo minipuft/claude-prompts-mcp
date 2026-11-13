@@ -57,8 +57,9 @@ export function resolveSettingPath(value: string): string {
  * Why `resolved` cannot serve as a directory setting, or `undefined` when it can.
  *
  * Checked with `stat`, not `existsSync`: a file at that path "exists" and is still no workspace.
+ * Exported for the config loader, which refuses a `paths.resources` entry by the same test.
  */
-function describeUnusableDirectory(resolved: string): string | undefined {
+export function describeUnusableDirectory(resolved: string): string | undefined {
   try {
     if (!statSync(resolved).isDirectory()) return 'is not a directory';
   } catch (error) {

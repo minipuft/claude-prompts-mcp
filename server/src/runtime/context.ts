@@ -135,6 +135,9 @@ export async function createRuntimeFoundation(
       schemaPath: path.join(serverRoot, 'config.schema.json'),
     });
   await configManager.loadConfig();
+  // The resolver chose the config file, so it learns that file's `paths.resources` only now. The
+  // loader has already refused an entry naming no directory, on both transports alike.
+  pathResolver.readResourceLocationsFrom(() => configManager.getConfig().paths.resources);
   const derivedProjectScope = applyRuntimeIdentityOverrides(configManager.getConfig(), options);
 
   const serviceOrchestrator = dependencies.serviceOrchestrator ?? new ServiceOrchestrator();

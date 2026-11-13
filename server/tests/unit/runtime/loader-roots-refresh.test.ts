@@ -214,6 +214,9 @@ describe('loader.refreshRoots follows a project .claude-prompts/ created after c
                 ...config,
               });
 
+      // Served once before the project copy exists, so the definition is cached: the project folder
+      // already leads the held order, so an uncached lookup would find its copy without a refresh.
+      expect(served(loader, type).origin).toBe('FROM WORKSPACE');
       write(projectRoot, type, 'FROM PROJECT');
 
       expect(loader.refreshRoots()).toBe(false);

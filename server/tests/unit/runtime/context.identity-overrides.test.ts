@@ -23,6 +23,7 @@ function createBaseConfig(): Config {
       port: 3456,
     },
     prompts: DEFAULT_PROMPTS_CONFIG,
+    paths: { resources: [] },
     gates: {
       enabled: true,
       frameworkGates: true,

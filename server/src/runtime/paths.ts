@@ -3,19 +3,17 @@
  * PathResolver - Unified Path Resolution System
  *
  * CLI flags take precedence over their workspace/config environment settings.
- * Resource types resolve through an explicit MCP_RESOURCES_PATH base, else the project's
- * `.claude-prompts/` when discovery is on and it exists, else workspace layouts, then package
- * defaults. An absent type directory is created by its first write.
+ * Each resource type reads from one ordered location list, `getResourceLocations`: the project's
+ * `.claude-prompts/` (STDIO discovery), the profile's own folder or the `MCP_RESOURCES_PATH`
+ * folder in its place, the config's `paths.resources` entries, then the bundle. An earlier
+ * location wins a duplicate id. An absent type directory is created by its first write.
  *
  * Environment Variables:
  * - MCP_WORKSPACE: Full plugin/workspace directory (server/, hooks/, etc.)
  * - CLAUDE_PLUGIN_DATA: Claude Code's plugin data directory; the workspace when MCP_WORKSPACE is unset
  * - MCP_RUNTIME_ROOT: Writable directory for state and logs
- * - MCP_RESOURCES_PATH: Custom resources base directory (replaces package default)
- *
- * User Customization:
- * - Set MCP_RESOURCES_PATH to point to a directory with your custom resources
- * - Type subdirs (prompts/, gates/, frameworks/, etc.) are created on first write
+ * - MCP_RESOURCES_PATH: One folder that replaces the profile's own resources folder; the config's
+ *   paths.resources entries still follow it. This file is its only reader.
  */
 
 import { existsSync, readFileSync, statSync } from 'fs';
@@ -47,8 +45,31 @@ import {
 /** The directory a project keeps its own resources in, directly under the project directory. */
 const PROJECT_WORKSPACE_DIR_NAME = '.claude-prompts';
 
-/** The per-type resource directories `resolveResourceSubdir` answers for. */
-type ResourceSubdir = 'prompts' | 'frameworks' | 'gates' | 'scripts' | 'styles';
+/** The reserved `paths.resources` entry naming the package's own resources (`infra/config`). */
+const BUNDLED_RESOURCES_ENTRY = 'bundled';
+
+/** One folder that contributes definitions of a resource type, and why it is in the list. */
+export interface ResourceLocation {
+  path: string;
+  /**
+   * `project`: `<project>/.claude-prompts/resources/<type>`. `profile`: the profile's own folder
+   * (or the `MCP_RESOURCES_PATH` folder in its place) and the workspace's other layout beside it.
+   * `listed`: a `paths.resources` entry. `bundled`: the package's own folder.
+   */
+  kind: 'project' | 'profile' | 'listed' | 'bundled';
+  /** The setting or convention that put it in the list, for a reader of the list. */
+  source: string;
+}
+
+/** The effective locations of one resource type (the plan's Design decisions table, R3c/R3j/R3k/R3l/R3p). */
+export interface ResourceLocations {
+  /** Highest precedence first, each path once: an earlier location wins a duplicate id (R3l). */
+  locations: ResourceLocation[];
+  /** Where a write of this type lands: the project folder when `.claude-prompts/` exists, else the profile's. */
+  writeRoot: string;
+  /** A `paths.resources` list is in force and does not name `"bundled"`, so the bundle was appended last. */
+  bundledImplicit: boolean;
+}
 
 /**
  * CLI flag values parsed from command line arguments
@@ -159,13 +180,12 @@ export class PathResolver {
   private config: PathResolverConfig;
   private cache: Partial<ResolvedPaths> = {};
   /**
-   * The per-type directories, kept apart from {@link cache} because they alone depend on a
-   * directory that can appear or vanish while the server runs. Valid only for
-   * {@link typePathsProject}.
+   * The profile's own per-type directories (entry two of the location list), kept apart from
+   * {@link cache} because they are keyed by type.
    */
-  private typePaths: Partial<Record<ResourceSubdir, string>> = {};
-  /** The project workspace {@link typePaths} was resolved under; `undefined` when there was none. */
-  private typePathsProject: string | undefined;
+  private typePaths: Partial<Record<string, { resolved: string; source: string }>> = {};
+  /** The config's `paths.resources`, resolved; empty until the composition root hands it over. */
+  private configuredLocations: () => readonly string[] = () => [];
   private debug: boolean;
 
   constructor(config: PathResolverConfig) {
@@ -586,7 +606,7 @@ export class PathResolver {
 
   /**
    * Get prompts directory path: where prompts are read from first, and where a write to them lands.
-   * Resolution order: `resolveResourceSubdir`.
+   * Resolution order: `resourceSubdirPath`.
    */
   getPromptsPath(): string {
     return this.resourceSubdirPath('prompts');
@@ -594,7 +614,7 @@ export class PathResolver {
 
   /**
    * Get frameworks directory path: where frameworks are read from first, and where a write to them lands.
-   * Resolution order: `resolveResourceSubdir`.
+   * Resolution order: `resourceSubdirPath`.
    */
   getFrameworksPath(): string {
     return this.resourceSubdirPath('frameworks');
@@ -602,7 +622,7 @@ export class PathResolver {
 
   /**
    * Get gates directory path: where gates are read from first, and where a write to them lands.
-   * Resolution order: `resolveResourceSubdir`.
+   * Resolution order: `resourceSubdirPath`.
    */
   getGatesPath(): string {
     return this.resourceSubdirPath('gates');
@@ -610,7 +630,7 @@ export class PathResolver {
 
   /**
    * Get scripts directory path: where scripts are read from first, and where a write to them lands.
-   * Resolution order: `resolveResourceSubdir`.
+   * Resolution order: `resourceSubdirPath`.
    */
   getScriptsPath(): string {
     return this.resourceSubdirPath('scripts');
@@ -618,7 +638,7 @@ export class PathResolver {
 
   /**
    * Get styles directory path: where styles are read from first, and where a write to them lands.
-   * Resolution order: `resolveResourceSubdir`.
+   * Resolution order: `resourceSubdirPath`.
    */
   getStylesPath(): string {
     return this.resourceSubdirPath('styles');
@@ -644,15 +664,93 @@ export class PathResolver {
   }
 
   /**
-   * Get overlay resource directories derived from workspace.
+   * Hand the resolver the config's `paths.resources` list, absolute and in the file's order.
    *
-   * When MCP_WORKSPACE differs from package root, the workspace may contain
-   * supplementary resources that overlay the shipped defaults. This is the
-   * reusable pattern for all resource types (gates, frameworks, styles, etc.).
+   * Called once by the composition root, after the config loads: the resolver picks the config
+   * file, so it cannot be constructed with what that file says. Read through `read` on every
+   * resolution, so a reloaded config is the list the next resolution sees. Until then the list
+   * is empty, which is also what a config without the key means.
+   */
+  readResourceLocationsFrom(read: () => readonly string[]): void {
+    this.configuredLocations = read;
+  }
+
+  /**
+   * THE location list for one resource type, highest precedence first — every other reader of
+   * "which folders contribute, in what order" takes it from here (`resolveResourceRoots`, the
+   * overlay getters below, the per-type write roots).
    *
-   * Checks two conventions:
-   *   - `${workspace}/${resourceType}/`           (e.g., ~/.claude/gates/)
-   *   - `${workspace}/resources/${resourceType}/` (e.g., ~/.claude/resources/gates/)
+   * 1. the project folder `<project>/.claude-prompts/resources/<type>` whenever discovery names a
+   *    project, with or without `MCP_RESOURCES_PATH`. Listed before `.claude-prompts/` exists too:
+   *    loaders read it as empty and the file observer watches it, so a folder created while the
+   *    server runs is served without a restart. It is the write root only once it exists.
+   * 2. the profile's own folder, or the `MCP_RESOURCES_PATH` folder in its place
+   *    ({@link resolveResourceSubdir}), then the custom workspace's other layout beside it, so a
+   *    workspace whose collection sits in both `resources/<type>` and `<type>` keeps both.
+   * 3. each `paths.resources` entry as `<entry>/<type>`, in the file's order.
+   * 4. the bundle at the position `"bundled"` is listed, else appended last.
+   *
+   * A path appears once, at its first position. Reports only: nothing is created.
+   */
+  getResourceLocations(resourceType: string): ResourceLocations {
+    const candidates: ResourceLocation[] = [];
+
+    const projectWorkspace = this.projectWorkspacePath();
+    if (projectWorkspace !== undefined) {
+      candidates.push({
+        path: join(projectWorkspace, 'resources', resourceType),
+        kind: 'project',
+        source:
+          this.getProjectWorkspace() !== undefined
+            ? 'project .claude-prompts/'
+            : 'project .claude-prompts/ (not created yet; read once it exists)',
+      });
+    }
+
+    const profile = this.profileResourceDir(resourceType);
+    candidates.push({ path: profile.resolved, kind: 'profile', source: profile.source });
+    if (this.isUsingCustomWorkspace()) {
+      const workspace = this.getWorkspace();
+      candidates.push(
+        {
+          path: join(workspace, 'resources', resourceType),
+          kind: 'profile',
+          source: `workspace resources/${resourceType}/`,
+        },
+        {
+          path: join(workspace, resourceType),
+          kind: 'profile',
+          source: `workspace ${resourceType}/ (legacy)`,
+        }
+      );
+    }
+
+    const bundledDir = this.getBundledResourceDir(resourceType);
+    const configured = this.configuredLocations();
+    configured.forEach((entry, index) => {
+      candidates.push(
+        entry === BUNDLED_RESOURCES_ENTRY
+          ? { path: bundledDir, kind: 'bundled', source: `paths.resources[${index}] "bundled"` }
+          : { path: join(entry, resourceType), kind: 'listed', source: `paths.resources[${index}]` }
+      );
+    });
+    const bundledImplicit = configured.length > 0 && !configured.includes(BUNDLED_RESOURCES_ENTRY);
+    if (!configured.includes(BUNDLED_RESOURCES_ENTRY)) {
+      candidates.push({ path: bundledDir, kind: 'bundled', source: 'package resources (last)' });
+    }
+
+    const seen = new Set<string>();
+    const locations = candidates.filter((location) => {
+      if (seen.has(location.path)) return false;
+      seen.add(location.path);
+      return true;
+    });
+
+    return { locations, writeRoot: this.resourceSubdirPath(resourceType), bundledImplicit };
+  }
+
+  /**
+   * The locations beside `primaryDir` that exist right now, lowest precedence first.
    *
    * The answer describes the disk NOW, so a caller that re-resolves on every load (prompt reload,
    * category listing) sees an overlay created since startup. A caller that fixes its roots once —
@@ -660,7 +758,6 @@ export class PathResolver {
    *
    * @param resourceType - Resource subdirectory name (gates, frameworks, styles, scripts)
    * @param primaryDir - Primary resource dir to exclude from results (dedup)
-   * @returns Existing workspace-relative directories not matching primary
    */
   getOverlayResourceDirs(resourceType: string, primaryDir?: string): string[] {
     return this.getOverlayResourceCandidates(resourceType, primaryDir).filter((dir) =>
@@ -669,7 +766,9 @@ export class PathResolver {
   }
 
   /**
-   * Every directory that IS an overlay once it exists, whether or not it exists yet.
+   * Every location of {@link getResourceLocations} except `primaryDir` and the bundle, whether or
+   * not it exists yet, LOWEST precedence first: the reverse of the list, because the prompt
+   * loader and the category listing merge in that direction and a later root wins there.
    *
    * For roots fixed at startup. Filtering these by existence once, at startup, is how a workspace
    * overlay created while the server ran contributed to neither the catalog nor the watch set
@@ -677,26 +776,11 @@ export class PathResolver {
    * file observer watches it once it appears and reconciles it then.
    */
   getOverlayResourceCandidates(resourceType: string, primaryDir?: string): string[] {
-    const candidates: string[] = [];
-
-    if (this.isUsingCustomWorkspace()) {
-      const workspace = this.getWorkspace();
-      candidates.push(join(workspace, resourceType), join(workspace, 'resources', resourceType));
-    }
-
-    // The project's own folder, listed last (highest overlay) whether or not `.claude-prompts/`
-    // exists yet. Once it exists it is the primary and the dedup below drops it; until then it is
-    // a root the loaders read as empty and the file observer watches, so a `.claude-prompts/`
-    // created while the server runs is served without a restart. An explicit MCP_RESOURCES_PATH
-    // keeps every type on its own boundary (see resolveResourceSubdir), so no project root joins.
-    const projectWorkspace = this.hasExplicitResourcesPath()
-      ? undefined
-      : this.projectWorkspacePath();
-    if (projectWorkspace !== undefined) {
-      candidates.push(join(projectWorkspace, 'resources', resourceType));
-    }
-
-    return candidates.filter((dir) => dir !== primaryDir);
+    const bundledDir = this.getBundledResourceDir(resourceType);
+    return this.getResourceLocations(resourceType)
+      .locations.map((location) => location.path)
+      .filter((dir) => dir !== primaryDir && dir !== bundledDir)
+      .reverse();
   }
 
   /**
@@ -754,50 +838,40 @@ export class PathResolver {
     return explicitResources !== undefined && explicitResources !== '';
   }
 
-  /**
-   * The directory a type is written to, answered from a cache that is only as old as the project
-   * directory's existence.
-   *
-   * `resolveResourceSubdir` consults the project workspace before anything else, so a `.claude-prompts/`
-   * created (or removed) while the server runs changes every type's answer at once. The cache used
-   * to be keyed on nothing: after the directory appeared, writes kept landing in the workspace and
-   * a same-id copy there kept outranking the project's, until a restart. The key is the project
-   * workspace itself (`undefined` while there is none), probed once per call, so the first call
-   * after the directory's existence changes resolves every type again.
-   */
-  private resourceSubdirPath(subdir: ResourceSubdir): string {
-    const projectWorkspace = this.hasExplicitResourcesPath()
-      ? undefined
-      : this.getProjectWorkspace();
-    if (projectWorkspace !== this.typePathsProject) {
-      this.typePaths = {};
-      this.typePathsProject = projectWorkspace;
-    }
-
+  /** Entry two of the location list for `subdir`, resolved once per type. */
+  private profileResourceDir(subdir: string): { resolved: string; source: string } {
     const cached = this.typePaths[subdir];
     if (cached !== undefined) return cached;
-
-    const { resolved, source } = this.resolveResourceSubdir(subdir, projectWorkspace);
-    this.typePaths[subdir] = resolved;
-    this.logResolution(subdir, resolved, source);
-    return resolved;
+    const resolution = this.resolveResourceSubdir(subdir);
+    this.typePaths[subdir] = resolution;
+    this.logResolution(subdir, resolution.resolved, resolution.source);
+    return resolution;
   }
 
   /**
-   * Resolve a resource subdirectory: the directory a type is written to, and the root the shared
-   * precedence in `resourceRootPrecedence` calls the primary. `projectWorkspace` is the answer of
-   * `getProjectWorkspace()`, already withheld when `MCP_RESOURCES_PATH` is set.
+   * The directory a type is written to: the project folder when `.claude-prompts/` exists
+   * (R3j keeps its precedence, whether or not `MCP_RESOURCES_PATH` is set), else the profile's.
    *
-   * A project workspace (`getProjectWorkspace`) with no `MCP_RESOURCES_PATH` is the primary for
-   * every type: `<project>/.claude-prompts/resources/${subdir}/`, existing or not yet created.
-   * There is no legacy `<project>/.claude-prompts/${subdir}/` convention to keep from splitting.
+   * The project directory is probed on every call, so a `.claude-prompts/` created (or removed)
+   * while the server runs changes every type's answer on the next call. The profile's folder is
+   * resolved once per type ({@link profileResourceDir}).
+   */
+  private resourceSubdirPath(subdir: string): string {
+    const projectWorkspace = this.getProjectWorkspace();
+    if (projectWorkspace !== undefined) return join(projectWorkspace, 'resources', subdir);
+    return this.profileResourceDir(subdir).resolved;
+  }
+
+  /**
+   * Resolve the profile's own folder for a type: entry two of {@link getResourceLocations}, and
+   * the write root whenever no project `.claude-prompts/` exists.
    *
-   * Otherwise, a custom workspace with no `MCP_RESOURCES_PATH` resolves inside the workspace:
+   * A custom workspace with no `MCP_RESOURCES_PATH` resolves inside the workspace:
    *   1. ${workspace}/resources/${subdir}/ (if exists)
    *   2. ${workspace}/${subdir}/ (legacy, if exists, so an existing collection does not split)
    *   3. ${workspace}/resources/${subdir}/ (not created yet; the first write creates it)
    *
-   * An explicit `MCP_RESOURCES_PATH` resolves each type through:
+   * An explicit `MCP_RESOURCES_PATH` takes the profile folder's place (R3p), each type through:
    *   1. ${resources}/${subdir}/ (if exists)
    *   2. ${workspace}/${subdir}/ (legacy, if exists)
    *   3. ${resources}/${subdir}/ (not created yet; the first write creates it)
@@ -810,23 +884,10 @@ export class PathResolver {
    * Readers treat the absent directory as empty; bundled resources still load underneath
    * (`getBundledResourceDir`).
    */
-  private resolveResourceSubdir(
-    subdir: ResourceSubdir,
-    projectWorkspace: string | undefined
-  ): { resolved: string; source: string } {
+  private resolveResourceSubdir(subdir: string): { resolved: string; source: string } {
     const workspace = this.getWorkspace();
     const legacyDir = join(workspace, subdir);
     const hasExplicitResources = this.hasExplicitResourcesPath();
-
-    if (projectWorkspace !== undefined) {
-      const projectDir = join(projectWorkspace, 'resources', subdir);
-      return {
-        resolved: projectDir,
-        source: existsSync(projectDir)
-          ? `project resources/${subdir}/`
-          : `project resources/${subdir}/ (created on first write)`,
-      };
-    }
 
     if (!hasExplicitResources && this.isUsingCustomWorkspace()) {
       const workspaceDir = join(workspace, 'resources', subdir);

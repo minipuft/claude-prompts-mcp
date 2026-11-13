@@ -211,6 +211,7 @@ describe('config file -> runtime config mapping', () => {
     const DEFAULTS = {
       server: { name: 'claude-prompts', version: SERVER_PACKAGE_VERSION, port: 9090 },
       prompts: { directory: 'resources/prompts', registerWithMcp: true },
+      paths: { resources: [] },
       // No `analysis`: the section is not a config key any more, so the loader defaults nothing
       // for it and `Config.analysis` stays unset.
       execution: { judge: true, delegation: { evidence: 'required' } },

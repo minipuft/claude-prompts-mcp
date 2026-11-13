@@ -7,7 +7,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -47,13 +47,21 @@ describe('paths.resources in the config file', () => {
 
   it('accepts an ordered list of paths and "bundled", keeps its order, and passes the schema', async () => {
     const absolute = path.join(tempDir, 'abs-lib');
+    await mkdir(absolute);
+    await mkdir(path.join(tempDir, 'lib'));
     const loader = await load({ version: 5, paths: { resources: ['bundled', './lib', absolute] } });
 
     expect(loader.getSchemaValidation()?.status).toBe('valid');
+    // The effective value: each path absolute against the config's directory, "bundled" kept.
     expect(loader.getConfigValueWithSource('paths.resources')).toMatchObject({
-      value: ['bundled', './lib', absolute],
+      value: ['bundled', path.join(tempDir, 'lib'), absolute],
       source: 'file',
     });
+    expect(loader.getConfig().paths.resources).toEqual([
+      'bundled',
+      path.join(tempDir, 'lib'),
+      absolute,
+    ]);
     // The first entry that is a path feeds the readers `prompts.directory` fed.
     expect(loader.getConfig().prompts.directory).toBe(path.join('lib', 'prompts'));
     expect(loader.getPromptsDirectory()).toBe(path.join(tempDir, 'lib', 'prompts'));
@@ -61,6 +69,7 @@ describe('paths.resources in the config file', () => {
 
   it('resolves an absolute first entry as itself, not under the config directory', async () => {
     const absolute = path.join(tempDir, 'abs-lib');
+    await mkdir(absolute);
     const loader = await load({ version: 5, paths: { resources: [absolute, 'bundled'] } });
 
     expect(loader.getPromptsDirectory()).toBe(path.join(absolute, 'prompts'));
@@ -130,6 +139,29 @@ describe('paths.resources in the config file', () => {
       await expect(refusal).rejects.toThrow(shown);
     }
   );
+
+  it('refuses a listed entry naming a missing directory, naming the file, the key, the entry and its resolved path', async () => {
+    await mkdir(path.join(tempDir, 'present'));
+    const refusal = load({ version: 5, paths: { resources: ['./present', 'bundled', '../gone'] } });
+
+    await expect(refusal).rejects.toBeInstanceOf(PathSettingError);
+    await expect(refusal).rejects.toThrow(configPath);
+    await expect(refusal).rejects.toThrow(
+      `lists "../gone" in "paths.resources[2]", which resolves to ${path.resolve(tempDir, '..', 'gone')}, and that path does not exist`
+    );
+    await expect(refusal).rejects.toThrow(/Expected an existing directory there/);
+  });
+
+  it('refuses a listed entry naming a file (CONTROL: the same list with the directory present loads)', async () => {
+    await writeFile(path.join(tempDir, 'a-file'), 'x', 'utf8');
+    await expect(load({ version: 5, paths: { resources: ['./a-file'] } })).rejects.toThrow(
+      /"paths\.resources\[0\]", which resolves to .*a-file, and that path is not a directory/
+    );
+
+    await mkdir(path.join(tempDir, 'a-dir'));
+    const loader = await load({ version: 5, paths: { resources: ['./a-dir'] } });
+    expect(loader.getConfig().paths.resources).toEqual([path.join(tempDir, 'a-dir')]);
+  });
 
   it('refuses an empty "paths.resources", naming the key and what to write instead', async () => {
     const refusal = load({ version: 5, paths: { resources: [] } });

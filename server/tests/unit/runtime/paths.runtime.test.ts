@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { GateDefinitionLoader } from '../../../src/engine/gates/core/gate-definition-loader.js';
+import { ConfigLoader } from '../../../src/infra/config/index.js';
 import { parseServerCliArgs } from '../../../src/runtime/cli.js';
 import { createPathResolver, PathResolver } from '../../../src/runtime/paths.js';
 import { indexerResourceRoots, resolveResourceRoots } from '../../../src/runtime/resource-roots.js';
@@ -880,9 +881,9 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     expect(directoriesOf(withDiscovery)).toEqual(expectedUnder(path.join(workspace, 'resources')));
     expect(directoriesOf(withDiscovery)).toEqual(directoriesOf(withoutDiscovery));
 
-    // The one addition is the project folder as a not-yet-existing overlay (it is what lets a
-    // `.claude-prompts/` created later be served), listed above the workspace's legacy folder and
-    // below the primary. The primary, the bundle and what is served do not move.
+    // The one addition is the project folder as a not-yet-existing location (it is what lets a
+    // `.claude-prompts/` created later be served), listed first, where it will rank once it
+    // exists. The primary, the bundle and what is served do not move.
     const pending = path.join(project, '.claude-prompts', 'resources', 'gates');
     const baseline = resolveResourceRoots(
       withoutDiscovery,
@@ -895,8 +896,8 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     expect(roots.bundled).toBe(baseline.bundled);
     expect(roots.overlays).toEqual([...baseline.overlays, pending]);
     expect(roots.lookupDirs).toEqual([
-      path.join(workspace, 'resources', 'gates'),
       pending,
+      path.join(workspace, 'resources', 'gates'),
       path.join(workspace, 'gates'),
       path.join(packageRoot, 'resources', 'gates'),
     ]);
@@ -920,14 +921,16 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     expect(directoriesOf(resolver)).toEqual(expectedUnder(path.join(workspace, 'resources')));
   });
 
-  it('lets an explicit MCP_RESOURCES_PATH keep every type, so a project directory does not widen an explicit boundary', () => {
+  it('keeps the project folder as the write root of every type with MCP_RESOURCES_PATH set', () => {
     mkdirSync(path.join(project, '.claude-prompts'));
     const resources = path.join(dir, 'explicit-resources');
     mkdirSync(resources);
     process.env['MCP_RESOURCES_PATH'] = resources;
     const resolver = resolverWithDiscovery();
 
-    expect(directoriesOf(resolver)).toEqual(expectedUnder(resources));
+    expect(directoriesOf(resolver)).toEqual(
+      expectedUnder(path.join(project, '.claude-prompts', 'resources'))
+    );
   });
 
   it('puts the project over the bundle when the workspace is the package root, with no overlays', () => {
@@ -964,21 +967,22 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     expect(directoriesOf(resolver)).toEqual(expectedUnder(path.join(workspace, 'resources')));
   });
 
-  it('moves the primary and the precedence together: the workspace copy is the overlay once the project appears', () => {
+  it('moves only the primary once the project appears: the project folder already led the order', () => {
     const resolver = resolverWithDiscovery();
     const projectGates = path.join(project, '.claude-prompts', 'resources', 'gates');
     const workspaceGates = path.join(workspace, 'resources', 'gates');
 
     const before = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
-    expect(before.lookupDirs.slice(0, 2)).toEqual([workspaceGates, projectGates]);
+    expect(before.primary).toBe(workspaceGates);
+    expect(before.lookupDirs.slice(0, 2)).toEqual([projectGates, workspaceGates]);
 
     mkdirSync(path.join(project, '.claude-prompts'));
     const after = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
     expect(after.primary).toBe(projectGates);
-    expect(after.lookupDirs.slice(0, 2)).toEqual([projectGates, workspaceGates]);
+    expect(after.lookupDirs).toEqual(before.lookupDirs);
   });
 
-  it('keeps an explicit MCP_RESOURCES_PATH boundary when .claude-prompts/ appears later', () => {
+  it('moves the write root from the MCP_RESOURCES_PATH folder to the project when .claude-prompts/ appears later', () => {
     const resources = path.join(dir, 'explicit-resources');
     mkdirSync(resources);
     process.env['MCP_RESOURCES_PATH'] = resources;
@@ -986,7 +990,9 @@ describe('PathResolver resolves the project directory as a resource root', () =>
 
     expect(directoriesOf(resolver)).toEqual(expectedUnder(resources));
     mkdirSync(path.join(project, '.claude-prompts'));
-    expect(directoriesOf(resolver)).toEqual(expectedUnder(resources));
+    expect(directoriesOf(resolver)).toEqual(
+      expectedUnder(path.join(project, '.claude-prompts', 'resources'))
+    );
   });
 
   describe('by transport, built through createPathResolver', () => {
@@ -1025,5 +1031,208 @@ describe('PathResolver resolves the project directory as a resource root', () =>
         );
       }
     });
+  });
+});
+
+/**
+ * The one ordered location list per resource type (`PathResolver.getResourceLocations`).
+ *
+ * The config list goes through a real `ConfigLoader`, so the entries the resolver sees are the ones
+ * the loader resolved against the config file's directory — the resolver never reads the file.
+ */
+describe('PathResolver.getResourceLocations builds one ordered list per type', () => {
+  let dir: string;
+  let packageRoot: string;
+  let project: string;
+  let resources: string;
+  let configDir: string;
+
+  /** A resolver with discovery on, `project` as the project directory and `list` as `paths.resources`. */
+  async function resolverWith(list: string[] | undefined): Promise<PathResolver> {
+    const configPath = path.join(configDir, 'config.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({ version: 5, ...(list !== undefined && { paths: { resources: list } }) })
+    );
+    const loader = new ConfigLoader(configPath);
+    await loader.loadConfig();
+    const resolver = new PathResolver({
+      cli: {},
+      packageRoot,
+      projectDiscovery: true,
+      projectLaunch: { env: { CLAUDE_PROJECT_DIR: project }, cwd: dir },
+    });
+    resolver.readResourceLocationsFrom(() => loader.getConfig().paths.resources);
+    return resolver;
+  }
+
+  const pathsAndKinds = (resolver: PathResolver, type: string): Array<[string, string]> =>
+    resolver.getResourceLocations(type).locations.map(({ path: dirPath, kind }) => [dirPath, kind]);
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'resource-locations-'));
+    packageRoot = path.join(dir, 'package');
+    project = path.join(dir, 'project');
+    resources = path.join(dir, 'var-resources');
+    configDir = path.join(dir, 'cfg');
+    for (const created of [
+      path.join(packageRoot, 'resources', 'prompts'),
+      path.join(packageRoot, 'resources', 'gates'),
+      path.join(project, '.claude-prompts'),
+      resources,
+      path.join(dir, 'shared'),
+      path.join(configDir, 'extra'),
+    ]) {
+      mkdirSync(created, { recursive: true });
+    }
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('orders project, the MCP_RESOURCES_PATH folder, then each listed entry with "bundled" where it is listed', async () => {
+    process.env['MCP_RESOURCES_PATH'] = resources;
+    const resolver = await resolverWith(['../shared', 'bundled', './extra']);
+
+    expect(pathsAndKinds(resolver, 'prompts')).toEqual([
+      [path.join(project, '.claude-prompts', 'resources', 'prompts'), 'project'],
+      [path.join(resources, 'prompts'), 'profile'],
+      [path.join(dir, 'shared', 'prompts'), 'listed'],
+      [path.join(packageRoot, 'resources', 'prompts'), 'bundled'],
+      [path.join(configDir, 'extra', 'prompts'), 'listed'],
+    ]);
+    expect(resolver.getResourceLocations('prompts').bundledImplicit).toBe(false);
+  });
+
+  it('appends the bundle last and reports it implicit when the list does not name "bundled"', async () => {
+    process.env['MCP_RESOURCES_PATH'] = resources;
+    const resolver = await resolverWith(['../shared', './extra']);
+
+    expect(pathsAndKinds(resolver, 'prompts')).toEqual([
+      [path.join(project, '.claude-prompts', 'resources', 'prompts'), 'project'],
+      [path.join(resources, 'prompts'), 'profile'],
+      [path.join(dir, 'shared', 'prompts'), 'listed'],
+      [path.join(configDir, 'extra', 'prompts'), 'listed'],
+      [path.join(packageRoot, 'resources', 'prompts'), 'bundled'],
+    ]);
+    expect(resolver.getResourceLocations('prompts').bundledImplicit).toBe(true);
+  });
+
+  it('reports no implicit bundle when the config names no list at all', async () => {
+    const resolver = await resolverWith(undefined);
+
+    expect(resolver.getResourceLocations('prompts').bundledImplicit).toBe(false);
+    expect(pathsAndKinds(resolver, 'prompts').at(-1)).toEqual([
+      path.join(packageRoot, 'resources', 'prompts'),
+      'profile',
+    ]);
+  });
+
+  it("makes entry two the profile's <workspace>/resources/<type> when MCP_RESOURCES_PATH is unset", async () => {
+    const workspace = path.join(dir, 'workspace');
+    mkdirSync(workspace);
+    process.env['MCP_WORKSPACE'] = workspace;
+    const resolver = await resolverWith(['../shared']);
+
+    expect(pathsAndKinds(resolver, 'prompts')).toEqual([
+      [path.join(project, '.claude-prompts', 'resources', 'prompts'), 'project'],
+      [path.join(workspace, 'resources', 'prompts'), 'profile'],
+      [path.join(workspace, 'prompts'), 'profile'],
+      [path.join(dir, 'shared', 'prompts'), 'listed'],
+      [path.join(packageRoot, 'resources', 'prompts'), 'bundled'],
+    ]);
+  });
+
+  it('keeps a legacy <workspace>/<type> as entry two, and the write root, when it is the only layout present', async () => {
+    const workspace = path.join(dir, 'workspace');
+    mkdirSync(path.join(workspace, 'prompts'), { recursive: true });
+    process.env['MCP_WORKSPACE'] = workspace;
+    rmSync(path.join(project, '.claude-prompts'), { recursive: true });
+    const resolver = await resolverWith(undefined);
+
+    const { locations, writeRoot } = resolver.getResourceLocations('prompts');
+    expect(locations.map((location) => location.path)).toEqual([
+      path.join(project, '.claude-prompts', 'resources', 'prompts'),
+      path.join(workspace, 'prompts'),
+      path.join(workspace, 'resources', 'prompts'),
+      path.join(packageRoot, 'resources', 'prompts'),
+    ]);
+    expect(writeRoot).toBe(path.join(workspace, 'prompts'));
+    expect(resolver.getPromptsPath()).toBe(writeRoot);
+  });
+
+  it('lists the project folder first and writes into it with MCP_RESOURCES_PATH set', async () => {
+    process.env['MCP_RESOURCES_PATH'] = resources;
+    const resolver = await resolverWith(undefined);
+    const projectPrompts = path.join(project, '.claude-prompts', 'resources', 'prompts');
+
+    expect(resolver.getResourceLocations('prompts').locations[0]).toMatchObject({
+      path: projectPrompts,
+      kind: 'project',
+    });
+    expect(resolver.getResourceLocations('prompts').writeRoot).toBe(projectPrompts);
+    expect(resolver.getPromptsPath()).toBe(projectPrompts);
+    expect(resolveResourceRoots(resolver, 'prompts', resolver.getPromptsPath()).lookupDirs).toEqual(
+      [
+        projectPrompts,
+        path.join(resources, 'prompts'),
+        path.join(packageRoot, 'resources', 'prompts'),
+      ]
+    );
+  });
+
+  it('hands the loaders the list in order with the bundle last, and the overlays as its reversed middle', async () => {
+    process.env['MCP_RESOURCES_PATH'] = resources;
+    const resolver = await resolverWith(['../shared', 'bundled', './extra']);
+    const roots = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
+
+    expect(roots.primary).toBe(path.join(project, '.claude-prompts', 'resources', 'gates'));
+    expect(roots.lookupDirs).toEqual([
+      path.join(project, '.claude-prompts', 'resources', 'gates'),
+      path.join(resources, 'gates'),
+      path.join(dir, 'shared', 'gates'),
+      path.join(configDir, 'extra', 'gates'),
+      path.join(packageRoot, 'resources', 'gates'),
+    ]);
+    expect(roots.overlays).toEqual([
+      path.join(configDir, 'extra', 'gates'),
+      path.join(dir, 'shared', 'gates'),
+      path.join(resources, 'gates'),
+    ]);
+    expect(roots.bundled).toBe(path.join(packageRoot, 'resources', 'gates'));
+  });
+
+  it('serves a gate from the earliest location that holds it', async () => {
+    const gate = (name: string) =>
+      [
+        'id: shadowed',
+        `name: ${name}`,
+        'type: validation',
+        'severity: medium',
+        'description: Test gate shadowed',
+        'pass_criteria:',
+        '  - type: inline_guidance',
+        '',
+      ].join('\n');
+    const writeGate = (root: string, name: string) => {
+      mkdirSync(path.join(root, 'shadowed'), { recursive: true });
+      writeFileSync(path.join(root, 'shadowed', 'gate.yaml'), gate(name), 'utf-8');
+    };
+    writeGate(path.join(dir, 'shared', 'gates'), 'FROM SHARED');
+    writeGate(path.join(configDir, 'extra', 'gates'), 'FROM EXTRA');
+    writeGate(path.join(packageRoot, 'resources', 'gates'), 'FROM BUNDLE');
+    const servedBy = async (list: string[]) => {
+      const resolver = await resolverWith(list);
+      const roots = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
+      return new GateDefinitionLoader({
+        gatesDir: roots.primary as string,
+        additionalGatesDirs: roots.lookupDirs,
+      }).loadGate('shadowed')?.name;
+    };
+
+    expect(await servedBy(['../shared', './extra'])).toBe('FROM SHARED');
+    // CONTROL: the same three copies, the list reversed, serve the other listed copy.
+    expect(await servedBy(['./extra', '../shared'])).toBe('FROM EXTRA');
   });
 });

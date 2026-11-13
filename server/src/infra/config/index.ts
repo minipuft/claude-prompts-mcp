@@ -60,7 +60,7 @@ import {
 } from '#shared/types/index.js';
 import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
-import { PathSettingError } from '#shared/utils/path-setting.js';
+import { describeUnusableDirectory, PathSettingError } from '#shared/utils/path-setting.js';
 // Removed: ToolDescriptionLoader import to break circular dependency
 // Now injected via dependency injection pattern
 
@@ -489,7 +489,8 @@ function normalizeTelemetry(file: ConfigFile): TelemetryConfig {
  * Maps a config FILE onto the resolved runtime `Config`. The one function that crosses that
  * boundary, and the reason the loader no longer casts one shape to the other.
  *
- * Pure: its inputs are the file and this module's `DEFAULT_*` constants, and it mutates neither.
+ * Pure: its inputs are the file, the path it was read from (relative `paths.resources` entries
+ * resolve against its directory) and this module's `DEFAULT_*` constants, and it mutates none.
  *
  * **Every section resolves here** (row 6.2 / Ruling R57). There is no longer a class of key that
  * stays absent until its owning getter defaults it at read time, which is what let
@@ -508,7 +509,7 @@ function normalizeTelemetry(file: ConfigFile): TelemetryConfig {
  * `Config.analysis` is left unset on purpose. The section is no longer a config key at all: a 4.x
  * file carrying it has it dropped, with a notice naming the replacement.
  */
-function normalizeConfigFile(file: ConfigFile): Config {
+function normalizeConfigFile(file: ConfigFile, configPath: string): Config {
   return {
     server: {
       name: file.server?.name ?? DEFAULT_SERVER_CONFIG.name,
@@ -519,6 +520,11 @@ function normalizeConfigFile(file: ConfigFile): Config {
     prompts: {
       directory: promptsDirectoryFromLocations(file.paths?.resources),
       registerWithMcp: file.prompts?.registerWithMcp ?? DEFAULT_PROMPTS_CONFIG.registerWithMcp,
+    },
+    paths: {
+      resources: (file.paths?.resources ?? []).map((entry) =>
+        resolveResourceLocation(entry, configPath)
+      ),
     },
     gates: normalizeGates(file),
     phaseGuards: normalizePhaseGuards(file),
@@ -538,6 +544,16 @@ function normalizeConfigFile(file: ConfigFile): Config {
 const BUNDLED_RESOURCES_ENTRY = 'bundled';
 
 /**
+ * One `paths.resources` entry as the runtime reads it: `"bundled"` kept as that literal, a path
+ * resolved against the config file's directory (an absolute one stays itself). The refusals and
+ * the runtime list both resolve through here, so a duplicate the refusal compares and a location
+ * the resolver serves are the same string.
+ */
+function resolveResourceLocation(entry: string, configPath: string): string {
+  return entry === BUNDLED_RESOURCES_ENTRY ? entry : path.resolve(path.dirname(configPath), entry);
+}
+
+/**
  * `prompts.directory` for the readers that still consult it: the `prompts/` folder of the first
  * `paths.resources` entry that is a path, else the default.
  */
@@ -549,6 +565,9 @@ function promptsDirectoryFromLocations(locations: readonly string[] | undefined)
 /** A 5.0 file that declares nothing: what a missing or unreadable config resolves to. */
 const EMPTY_CONFIG_FILE: ConfigFile = { version: 5 };
 
+/** The config path the defaults resolve against. Never read: an empty file names no location. */
+const NO_CONFIG_PATH = '';
+
 /**
  * The defaults, as one object — literally what an empty 5.0 file resolves to.
  *
@@ -556,7 +575,7 @@ const EMPTY_CONFIG_FILE: ConfigFile = { version: 5 };
  * default added to a section constant cannot fail to appear here, and the config a `ConfigLoader`
  * serves before its first `loadConfig()` is the same shape a loaded one serves.
  */
-const DEFAULT_CONFIG: Config = normalizeConfigFile(EMPTY_CONFIG_FILE);
+const DEFAULT_CONFIG: Config = normalizeConfigFile(EMPTY_CONFIG_FILE, NO_CONFIG_PATH);
 
 /**
  * A config file that asks for a transport other than `"stdio"` via `server.transport`.
@@ -625,9 +644,11 @@ function isConfigObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Refuses a list entry that is not a non-empty string, or that names a location an earlier entry
- * already named. Paths compare resolved against the config file's directory, so `"lib"` and
- * `"./lib"` are one location.
+ * Refuses a list entry that is not a non-empty string, that names a location an earlier entry
+ * already named, or whose path is not an existing directory. Paths compare resolved against the
+ * config file's directory, so `"lib"` and `"./lib"` are one location. A missing folder is a
+ * refusal, not a skip: serving without it would read other resources than the ones listed.
+ * `"bundled"` is never checked; the package ships it.
  */
 function assertResourceLocationEntries(locations: readonly unknown[], configPath: string): void {
   const seen = new Map<string, string>();
@@ -639,8 +660,7 @@ function assertResourceLocationEntries(locations: readonly unknown[], configPath
         `a non-empty string there: "${BUNDLED_RESOURCES_ENTRY}" or a directory path`
       );
     }
-    const location =
-      entry === BUNDLED_RESOURCES_ENTRY ? entry : path.resolve(path.dirname(configPath), entry);
+    const location = resolveResourceLocation(entry, configPath);
     const earlier = seen.get(location);
     if (earlier !== undefined) {
       const spelling = earlier === entry ? '' : ` (also spelled ${JSON.stringify(earlier)})`;
@@ -651,6 +671,20 @@ function assertResourceLocationEntries(locations: readonly unknown[], configPath
       );
     }
     seen.set(location, entry);
+  });
+  // After the shape checks, so a malformed list is named as malformed before any path is probed.
+  (locations as string[]).forEach((entry, index) => {
+    const location = resolveResourceLocation(entry, configPath);
+    const problem =
+      location === BUNDLED_RESOURCES_ENTRY ? undefined : describeUnusableDirectory(location);
+    if (problem !== undefined) {
+      refuseConfigSetting(
+        configPath,
+        `lists ${JSON.stringify(entry)} in "paths.resources[${index}]", which resolves to ` +
+          `${location}, and that path ${problem}`,
+        `an existing directory there, or the entry removed from "paths.resources"`
+      );
+    }
   });
 }
 
@@ -870,7 +904,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
 
       const file = asConfigFile(translation.file);
 
-      this.config = normalizeConfigFile(file);
+      this.config = normalizeConfigFile(file, this.configPath);
 
       this.emitConfigChange(previousFrameworks);
 
@@ -891,7 +925,7 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       console.error('Using default configuration');
       // The same mapping a real file goes through, fed a file that declares nothing — so the
       // fallback config cannot drift from what an empty config.json resolves to.
-      this.config = normalizeConfigFile(EMPTY_CONFIG_FILE);
+      this.config = normalizeConfigFile(EMPTY_CONFIG_FILE, this.configPath);
       this.emitConfigChange(previousFrameworks);
       return this.config;
     }
