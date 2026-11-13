@@ -17,7 +17,7 @@ tags: [resources, config, gates, skills-sync, runtime]
 ## Now (2026-11-12)
 
 Goal: a user keeps resources in labelled profiles that `cpm` manages and a client selects with one variable, the profile's config lists any further locations in one validated key, the server reports what it resolved and where it wrote, a file edited by hand gets the same guarantees as a tool write, and a command-checked gate ships the examples that prove it.
-Slice: T1a on `feat/resource-locations-t1a`, rows 1.1, 1.2, 1.3, 1.4, 1.6, 1.7 and 1.10 done, at its PR boundary. T0 is measured (notes §Tier T0).
+Slice: T1a is PR #539 (rows 1.1, 1.2, 1.3, 1.4, 1.6, 1.7, 1.10), squash auto-merge armed; T1b is cut from `main` once it lands. T0 is measured (notes §Tier T0).
 Next decision: none open; T1b (1.5, 1.8, 1.9, 1.11, 1.12, 1.6b, 1.13) follows T1a on its own branch from `main`.
 Constraint: Tier T1 changes what an existing variable serves, so it ships in 6.0.0. Tiers T2, T3 and T4 are additive and may land in 6.0.0 or the next minor. No new default directory is created under a user's home, and the server never writes a config file.
 
