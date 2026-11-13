@@ -88,8 +88,9 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   }
 
   // Absence is not refused here. A custom workspace's prompts directory is created by its first
-  // write, and until then `loadPromptsAcrossRoots` serves the bundled tree; it still throws when
-  // no bundled tree backs a missing primary. Any other failure to read the path stops startup.
+  // write, and until then `loadPromptsAcrossRoots` serves the other roots; an empty result is
+  // judged by the startup health check (refused without a `paths.resources` list, counted with
+  // one). Any other failure to read the path stops startup.
   const pathStats = await statUnlessAbsent(promptsPath);
   // A directory, or a file for backward compatibility.
   const isDirectory = pathStats?.isDirectory() ?? true;
@@ -116,16 +117,21 @@ export async function loadPromptData(params: PromptDataLoadParams): Promise<Prom
   // `PathResolver.getBundledResourceDir` for the same defect's fatal form on frameworks.
   //
   // Order is the precedence: `mergePromptResults` lets a later result win on a duplicate id, so
-  // bundle → overlays → primary gives the documented "same ID = custom wins".
-  const overlayPromptsDirs = pathResolver?.getOverlayResourceDirs('prompts', promptsPath) ?? [];
+  // walking the overlay list (lowest first, the bundle at its own position in it) and then the
+  // primary gives the documented "same ID = custom wins" over an unlisted bundle. A
+  // `paths.resources` list that leaves `"bundled"` out leaves the bundle out of this list (R3c).
+  const rootsBesidePrimary = pathResolver?.getOverlayResourceDirs('prompts', promptsPath) ?? [];
+  const bundledPromptsDir = pathResolver?.getBundledResourceDir('prompts');
+  // The inventory reports the bundle as `base`, apart from the overlays.
+  const overlayPromptsDirs = rootsBesidePrimary.filter((dir) => dir !== bundledPromptsDir);
 
   const loaded = await loadPromptsAcrossRoots(
     promptManager,
     {
       primary: promptsPath,
       basePath: isDirectory ? promptsPath : path.dirname(promptsPath),
-      bundled: pathResolver?.getBundledResourceDir('prompts'),
-      overlays: overlayPromptsDirs,
+      bundled: bundledPromptsDir,
+      overlays: rootsBesidePrimary,
     },
     mergePromptResults,
     logger

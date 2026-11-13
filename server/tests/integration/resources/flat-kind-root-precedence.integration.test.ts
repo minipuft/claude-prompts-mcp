@@ -236,7 +236,10 @@ describe('the primary root outranks an overlay for gates, frameworks and styles'
     for (const type of ['gates', 'frameworks', 'styles']) {
       const roots = rootsFor(type);
       expect(roots.primary).toBe(path.join(workspace, 'resources', type));
-      expect(roots.overlays).toEqual([path.join(workspace, type)]);
+      expect(roots.overlays).toEqual([
+        path.join(packageRoot, 'resources', type),
+        path.join(workspace, type),
+      ]);
       expect(roots.lookupDirs).toEqual([
         path.join(workspace, 'resources', type),
         path.join(workspace, type),

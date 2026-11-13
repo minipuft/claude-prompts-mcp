@@ -9,8 +9,9 @@
  * prompts. Three kinds disagreed with the other two, and the docstring that justified it
  * ("workspace wins") held only while the workspace WAS the primary. P4.27 settled the disagreement
  * by putting overlays above the primary. The location list (R3l) settled it for good: one ordered
- * list per type, earlier wins, the project folder first and the bundle last. The documented
- * "same ID = custom wins" over the bundle never moved.
+ * list per type, earlier wins, the project folder first and the bundle where the list puts it
+ * (last when there is no list). The documented "same ID = custom wins" over an unlisted bundle
+ * never moved.
  *
  * TWO HALVES. {@link resourceRootPrecedence} states the order, once, for every caller that has the
  * ordered locations in hand. Everything below it merely WALKS an order it is handed and reports
@@ -24,28 +25,25 @@ import { join } from 'path';
 
 /**
  * THE statement of precedence among the roots that contribute one resource type: an EARLIER root
- * wins a duplicate id, for the whole list (R3l).
+ * wins a duplicate id, for the whole list (R3l) — the bundle included, at its own position.
  *
- * `ordered` is `PathResolver.getResourceLocations` with the bundle taken out, already highest
- * first — the project folder, the profile's folder (or the `MCP_RESOURCES_PATH` folder in its
- * place), the workspace's other layout, then each `paths.resources` entry. The bundled tree goes
- * LAST by construction, whatever position the config lists `"bundled"` at, because the prompt
- * loader and the category listing merge bundle-first (`prompt-root-loader.ts`) and every kind must
- * agree. Each path appears once, at its first position.
+ * `ordered` is `PathResolver.getResourceLocations`, already highest first — the project folder,
+ * the profile's folder (or the `MCP_RESOURCES_PATH` folder in its place), the workspace's other
+ * layout, then each `paths.resources` entry, with the bundle where the list names `"bundled"`,
+ * last when there is no list, and absent when a list leaves it out (R3c). Each path appears once,
+ * at its first position.
  *
  * Read forwards by the flat-layout loaders (first hit wins) and by `classifyOrigin` in
  * `resource-file-set.ts`; read backwards by the resource indexer, which accumulates so the last
- * write wins, and by `prompt-root-loader.ts`, which merges bundle -> overlays -> primary with a
- * later result winning. `ResourceRoots.overlays` is this list's middle, reversed, for those.
+ * write wins, and by `prompt-root-loader.ts` and the category listing, which merge lowest first
+ * with a later result winning. `ResourceRoots.overlays` is this list without the primary,
+ * reversed, for those.
  *
  * It lives in `shared/` because that is where a statement about resource layout belongs and
  * because `mcp/` may not import `runtime/`, where its one caller (`runtime/resource-roots.ts`) is.
  */
-export function resourceRootPrecedence(roots: {
-  ordered: readonly string[];
-  bundled: string | undefined;
-}): string[] {
-  return [...new Set([...roots.ordered, ...(roots.bundled !== undefined ? [roots.bundled] : [])])];
+export function resourceRootPrecedence(ordered: readonly string[]): string[] {
+  return [...new Set(ordered)];
 }
 
 /**

@@ -579,11 +579,14 @@ describe('PathResolver resolves resource directories inside a custom workspace',
     expect(directoriesOf(resolver)).toEqual(expectedUnder(path.join(workspace, 'resources')));
     // Resolution names the directory; only a write creates it.
     expect(readdirSync(workspace)).toEqual([]);
-    // The bundled tree still contributes underneath, and the not-yet-created root is no overlay.
+    // The bundled tree still contributes underneath — lowest, so first in the overlay list — and
+    // the not-yet-created legacy root is no overlay.
     expect(resolver.getBundledResourceDir('prompts')).toBe(
       path.join(packageRoot, 'resources', 'prompts')
     );
-    expect(resolver.getOverlayResourceDirs('prompts', resolver.getPromptsPath())).toEqual([]);
+    expect(resolver.getOverlayResourceDirs('prompts', resolver.getPromptsPath())).toEqual([
+      path.join(packageRoot, 'resources', 'prompts'),
+    ]);
   });
 
   it('resolves the same way for a --workspace flag, and keeps a resources directory that exists', () => {
@@ -606,6 +609,7 @@ describe('PathResolver resolves resource directories inside a custom workspace',
     // With both layouts present, `resources/<type>` is the root and the legacy one is an overlay beneath it.
     expect(resolver.getFrameworksPath()).toBe(path.join(workspace, 'resources', 'frameworks'));
     expect(resolver.getOverlayResourceDirs('frameworks', resolver.getFrameworksPath())).toEqual([
+      path.join(packageRoot, 'resources', 'frameworks'),
       path.join(workspace, 'frameworks'),
     ]);
   });
@@ -638,7 +642,10 @@ describe('PathResolver resolves resource directories inside a custom workspace',
         expect(resolver.getBundledResourceDir(type)).toBe(
           path.join(packageRoot, 'resources', type)
         );
-        expect(resolver.getOverlayResourceDirs(type, writeRoot)).toEqual([]);
+        // Only the bundle beside the write root: no workspace layout exists.
+        expect(resolver.getOverlayResourceDirs(type, writeRoot)).toEqual([
+          path.join(packageRoot, 'resources', type),
+        ]);
       }
       expect(readdirSync(workspace)).toEqual([]);
     }
@@ -659,6 +666,7 @@ describe('PathResolver resolves resource directories inside a custom workspace',
     expect(resolver.getGatesPath()).toBe(path.join(workspace, 'gates'));
     expect(resolver.getFrameworksPath()).toBe(path.join(resources, 'frameworks'));
     expect(resolver.getOverlayResourceDirs('frameworks', resolver.getFrameworksPath())).toEqual([
+      path.join(packageRoot, 'resources', 'frameworks'),
       path.join(workspace, 'frameworks'),
       path.join(workspace, 'resources', 'frameworks'),
     ]);
@@ -805,7 +813,9 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     const resolver = resolverWithDiscovery();
     const primary = resolver.getGatesPath();
 
+    // Lowest first: the bundle, then the workspace candidates.
     expect(resolver.getOverlayResourceCandidates('gates', primary)).toEqual([
+      path.join(packageRoot, 'resources', 'gates'),
       path.join(workspace, 'gates'),
       path.join(workspace, 'resources', 'gates'),
     ]);
@@ -1105,7 +1115,7 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
     expect(resolver.getResourceLocations('prompts').bundledImplicit).toBe(false);
   });
 
-  it('appends the bundle last and reports it implicit when the list does not name "bundled"', async () => {
+  it('leaves the bundle out and reports it implicit when the list does not name "bundled"', async () => {
     process.env['MCP_RESOURCES_PATH'] = resources;
     const resolver = await resolverWith(['../shared', './extra']);
 
@@ -1114,7 +1124,6 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
       [path.join(resources, 'prompts'), 'profile'],
       [path.join(dir, 'shared', 'prompts'), 'listed'],
       [path.join(configDir, 'extra', 'prompts'), 'listed'],
-      [path.join(packageRoot, 'resources', 'prompts'), 'bundled'],
     ]);
     expect(resolver.getResourceLocations('prompts').bundledImplicit).toBe(true);
   });
@@ -1123,9 +1132,10 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
     const resolver = await resolverWith(undefined);
 
     expect(resolver.getResourceLocations('prompts').bundledImplicit).toBe(false);
+    // With no custom workspace the profile's folder IS the package's, placed as the bundle: last.
     expect(pathsAndKinds(resolver, 'prompts').at(-1)).toEqual([
       path.join(packageRoot, 'resources', 'prompts'),
-      'profile',
+      'bundled',
     ]);
   });
 
@@ -1140,7 +1150,6 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
       [path.join(workspace, 'resources', 'prompts'), 'profile'],
       [path.join(workspace, 'prompts'), 'profile'],
       [path.join(dir, 'shared', 'prompts'), 'listed'],
-      [path.join(packageRoot, 'resources', 'prompts'), 'bundled'],
     ]);
   });
 
@@ -1182,7 +1191,7 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
     );
   });
 
-  it('hands the loaders the list in order with the bundle last, and the overlays as its reversed middle', async () => {
+  it('hands the loaders the list in order with "bundled" at its listed position, and the overlays as the list reversed without the primary', async () => {
     process.env['MCP_RESOURCES_PATH'] = resources;
     const resolver = await resolverWith(['../shared', 'bundled', './extra']);
     const roots = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
@@ -1192,11 +1201,12 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
       path.join(project, '.claude-prompts', 'resources', 'gates'),
       path.join(resources, 'gates'),
       path.join(dir, 'shared', 'gates'),
-      path.join(configDir, 'extra', 'gates'),
       path.join(packageRoot, 'resources', 'gates'),
+      path.join(configDir, 'extra', 'gates'),
     ]);
     expect(roots.overlays).toEqual([
       path.join(configDir, 'extra', 'gates'),
+      path.join(packageRoot, 'resources', 'gates'),
       path.join(dir, 'shared', 'gates'),
       path.join(resources, 'gates'),
     ]);

@@ -5,7 +5,8 @@
  * CLI flags take precedence over their workspace/config environment settings.
  * Each resource type reads from one ordered location list, `getResourceLocations`: the project's
  * `.claude-prompts/` (STDIO discovery), the profile's own folder or the `MCP_RESOURCES_PATH`
- * folder in its place, the config's `paths.resources` entries, then the bundle. An earlier
+ * folder in its place, the config's `paths.resources` entries, then the bundle — where the list
+ * names `"bundled"`, last when there is no list, and nowhere when a list leaves it out. An earlier
  * location wins a duplicate id. An absent type directory is created by its first write.
  *
  * Environment Variables:
@@ -67,7 +68,12 @@ export interface ResourceLocations {
   locations: ResourceLocation[];
   /** Where a write of this type lands: the project folder when `.claude-prompts/` exists, else the profile's. */
   writeRoot: string;
-  /** A `paths.resources` list is in force and does not name `"bundled"`, so the bundle was appended last. */
+  /**
+   * A `paths.resources` list is in force and does not name `"bundled"`, so the bundle is NOT in
+   * {@link locations} (R3c): only the listed folders, the project folder and the profile's own
+   * folder serve. The run-required frameworks still load from the package
+   * (`RuntimeFrameworkLoaderConfig.shippedFrameworksDir`), and nothing else does.
+   */
   bundledImplicit: boolean;
 }
 
@@ -676,6 +682,15 @@ export class PathResolver {
   }
 
   /**
+   * The `paths.resources` list in force, absolute and in the file's order, `"bundled"` kept as
+   * that literal; empty when the config names none. For a reader that reports the list itself
+   * (the startup count line, R3n) — which folders serve a type is {@link getResourceLocations}.
+   */
+  getConfiguredResourceLocations(): readonly string[] {
+    return this.configuredLocations();
+  }
+
+  /**
    * THE location list for one resource type, highest precedence first — every other reader of
    * "which folders contribute, in what order" takes it from here (`resolveResourceRoots`, the
    * overlay getters below, the per-type write roots).
@@ -688,7 +703,8 @@ export class PathResolver {
    *    ({@link resolveResourceSubdir}), then the custom workspace's other layout beside it, so a
    *    workspace whose collection sits in both `resources/<type>` and `<type>` keeps both.
    * 3. each `paths.resources` entry as `<entry>/<type>`, in the file's order.
-   * 4. the bundle at the position `"bundled"` is listed, else appended last.
+   * 4. the bundle at the position `"bundled"` is listed; appended last when no list is in force;
+   *    absent when a list is in force and leaves `"bundled"` out (`bundledImplicit`).
    *
    * A path appears once, at its first position. Reports only: nothing is created.
    */
@@ -707,8 +723,15 @@ export class PathResolver {
       });
     }
 
+    const bundledDir = this.getBundledResourceDir(resourceType);
     const profile = this.profileResourceDir(resourceType);
-    candidates.push({ path: profile.resolved, kind: 'profile', source: profile.source });
+    // With neither a custom workspace nor `MCP_RESOURCES_PATH`, the profile's folder IS the
+    // package's: it is the bundle, and is placed by the bundle's rule (entry 4) rather than ranked
+    // as entry two — otherwise a list that leaves `"bundled"` out, or names it later, would still
+    // serve the bundle second.
+    if (profile.resolved !== bundledDir) {
+      candidates.push({ path: profile.resolved, kind: 'profile', source: profile.source });
+    }
     if (this.isUsingCustomWorkspace()) {
       const workspace = this.getWorkspace();
       candidates.push(
@@ -725,7 +748,6 @@ export class PathResolver {
       );
     }
 
-    const bundledDir = this.getBundledResourceDir(resourceType);
     const configured = this.configuredLocations();
     configured.forEach((entry, index) => {
       candidates.push(
@@ -735,7 +757,7 @@ export class PathResolver {
       );
     });
     const bundledImplicit = configured.length > 0 && !configured.includes(BUNDLED_RESOURCES_ENTRY);
-    if (!configured.includes(BUNDLED_RESOURCES_ENTRY)) {
+    if (configured.length === 0) {
       candidates.push({ path: bundledDir, kind: 'bundled', source: 'package resources (last)' });
     }
 
@@ -766,9 +788,14 @@ export class PathResolver {
   }
 
   /**
-   * Every location of {@link getResourceLocations} except `primaryDir` and the bundle, whether or
-   * not it exists yet, LOWEST precedence first: the reverse of the list, because the prompt
-   * loader and the category listing merge in that direction and a later root wins there.
+   * Every location of {@link getResourceLocations} except `primaryDir`, whether or not it exists
+   * yet, LOWEST precedence first: the reverse of the list, because the prompt loader and the
+   * category listing merge in that direction and a later root wins there.
+   *
+   * The bundle is IN this list wherever {@link getResourceLocations} holds it — first here when
+   * there is no `paths.resources` list, at its reversed position where the list names
+   * `"bundled"`, and not at all when a list leaves it out. A merging reader recognises it by
+   * comparing against {@link getBundledResourceDir}; it is never a second, separately placed root.
    *
    * For roots fixed at startup. Filtering these by existence once, at startup, is how a workspace
    * overlay created while the server ran contributed to neither the catalog nor the watch set
@@ -776,15 +803,15 @@ export class PathResolver {
    * file observer watches it once it appears and reconciles it then.
    */
   getOverlayResourceCandidates(resourceType: string, primaryDir?: string): string[] {
-    const bundledDir = this.getBundledResourceDir(resourceType);
     return this.getResourceLocations(resourceType)
       .locations.map((location) => location.path)
-      .filter((dir) => dir !== primaryDir && dir !== bundledDir)
+      .filter((dir) => dir !== primaryDir)
       .reverse();
   }
 
   /**
-   * The package's own resources directory for a type — always a contributing root.
+   * The package's own resources directory for a type: its identity, not a claim that it serves.
+   * Whether and where it contributes is {@link getResourceLocations}'s answer.
    *
    * `resolveResourceSubdir` names ONE directory per type, so a loader reading only that directory
    * never reads the bundled tree once a workspace has `resources/<type>/`. That is not a fallback;
@@ -801,8 +828,9 @@ export class PathResolver {
    * (`src/index.ts` help: "Custom workspace resources overlay bundled ones") describes an overlay;
    * what shipped was a replacement.
    *
-   * Callers pass this as the lowest-precedence contributing root so the bundled definitions are
-   * always present and a workspace entry with the same id still wins.
+   * With no `paths.resources` list the bundle is the lowest-precedence location, so the bundled
+   * definitions are always present and a workspace entry with the same id still wins. A list that
+   * leaves `"bundled"` out removes it (R3c); the six shipped frameworks still load from here.
    */
   getBundledResourceDir(resourceType: string): string {
     return join(this.config.packageRoot, 'resources', resourceType);

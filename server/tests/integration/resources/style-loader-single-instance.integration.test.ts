@@ -221,7 +221,7 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
     // reached into the maintainer's real library, would satisfy everything below for free.
     const roots = resolveResourceRoots(pathResolver, 'styles', pathResolver.getStylesPath());
     expect(roots.primary).toBe(primaryRoot);
-    expect(roots.overlays).toEqual([overlayRoot]);
+    expect(roots.overlays).toEqual([bundledRoot, overlayRoot]);
     expect(roots.lookupDirs).toEqual([primaryRoot, overlayRoot, bundledRoot]);
 
     // RULING R22, asserted as identity rather than as behaviour. This is the line that fails the

@@ -209,15 +209,17 @@ export class CategoryDiscoveryProcessor {
     const bundled = this.ctx.configManager.getBundledResourceDirectory('prompts');
 
     // Lowest precedence first, so a later root's declaration simply overwrites the recorded one.
+    // The overlay list carries the bundle AT ITS POSITION — first with no `paths.resources` list,
+    // where the list names `"bundled"`, absent when a list leaves it out — exactly the order
+    // `loadPromptsAcrossRoots` merges in, so this listing and the served catalog agree.
     const roots: CategoryRoot[] = [];
-    if (bundled !== undefined && path.resolve(bundled) !== path.resolve(primary)) {
-      roots.push({ path: bundled, label: 'bundled' });
-    }
     for (const overlay of this.ctx.configManager.getOverlayResourceDirectories(
       'prompts',
       primary
     )) {
-      roots.push({ path: overlay, label: 'overlay' });
+      if (path.resolve(overlay) === path.resolve(primary)) continue;
+      const isBundled = bundled !== undefined && path.resolve(overlay) === path.resolve(bundled);
+      roots.push({ path: overlay, label: isBundled ? 'bundled' : 'overlay' });
     }
     roots.push({ path: primary, label: 'primary' });
 

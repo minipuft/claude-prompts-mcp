@@ -23,6 +23,7 @@ import {
   type FrameworkSchemaValidationResult,
   type PhasesFileYaml,
 } from './framework-schema.js';
+import { isShippedFrameworkId } from './shipped-frameworks.js';
 
 import type { FrameworkResourceDefinition } from './framework-definition-types.js';
 
@@ -62,6 +63,19 @@ export interface RuntimeFrameworkLoaderConfig {
    * Resolves the roots again — see `GateDefinitionLoaderConfig.rootsSource`, which this mirrors.
    */
   rootsSource?: LoaderRootsSource;
+  /**
+   * The package's own frameworks folder, read for the `SHIPPED_FRAMEWORK_IDS` and nothing
+   * else when the lookup order does not hold it.
+   *
+   * The six shipped frameworks are run-required — `FrameworkRegistry.loadBuiltInGuides` refuses
+   * startup without each — so they load from the package even when a `paths.resources` list
+   * leaves `"bundled"` out and the lookup order holds no bundle (R3c). Only those six: a further
+   * framework in the bundle is not served from this folder, and a lookup root holding a shipped id
+   * still outranks it. When the lookup order already holds this folder (no list, or a list naming
+   * `"bundled"`), it is read there, at its position, and this setting adds nothing. Unset, the
+   * loader reads only its lookup order.
+   */
+  shippedFrameworksDir?: string;
   /** Enable caching of loaded definitions (default: true) */
   enableCache?: boolean;
   /** Validate definitions on load (default: true) */
@@ -99,6 +113,7 @@ export class RuntimeFrameworkLoader {
   /** Every root this loader consults for an id, highest precedence first. */
   private lookupDirs: string[];
   private readonly rootsSource: LoaderRootsSource | undefined;
+  private readonly shippedFrameworksDir: string | undefined;
   private enableCache: boolean;
   private validateOnLoad: boolean;
   private debug: boolean;
@@ -115,6 +130,7 @@ export class RuntimeFrameworkLoader {
     this.lookupDirs = roots.lookupDirs;
     this.additionalFrameworksDirs = roots.besideDirs;
     this.rootsSource = config.rootsSource;
+    this.shippedFrameworksDir = config.shippedFrameworksDir;
     this.enableCache = config.enableCache ?? true;
     this.validateOnLoad = config.validateOnLoad ?? true;
     this.debug = config.debug ?? false;
@@ -173,6 +189,12 @@ export class RuntimeFrameworkLoader {
     for (const dir of this.lookupDirs) {
       for (const id of discoverNestedYamlDirectories(dir, 'framework.yaml')) {
         idSet.add(id.toLowerCase());
+      }
+    }
+    const shippedDir = this.shippedDirOutsideLookup();
+    if (shippedDir !== undefined) {
+      for (const id of discoverNestedYamlDirectories(shippedDir, 'framework.yaml')) {
+        if (isShippedFrameworkId(id)) idSet.add(id.toLowerCase());
       }
     }
 
@@ -317,9 +339,22 @@ export class RuntimeFrameworkLoader {
     }
   }
 
-  /** The roots holding this id, highest precedence first. */
+  /**
+   * The roots holding this id, highest precedence first: the lookup order, then — for a shipped id
+   * only — the package's folder when the lookup order does not hold it ({@link
+   * RuntimeFrameworkLoaderConfig.shippedFrameworksDir}).
+   */
   private entryRootsFor(id: string): string[] {
-    return resourceEntryRoots(this.lookupDirs, id, 'framework.yaml');
+    const roots = resourceEntryRoots(this.lookupDirs, id, 'framework.yaml');
+    const shippedDir = this.shippedDirOutsideLookup();
+    if (shippedDir === undefined || !isShippedFrameworkId(id)) return roots;
+    return [...roots, ...resourceEntryRoots([shippedDir], id, 'framework.yaml')];
+  }
+
+  /** The package's frameworks folder when it must be read apart from the lookup order. */
+  private shippedDirOutsideLookup(): string | undefined {
+    const dir = this.shippedFrameworksDir;
+    return dir !== undefined && !this.lookupDirs.includes(dir) ? dir : undefined;
   }
 
   /**

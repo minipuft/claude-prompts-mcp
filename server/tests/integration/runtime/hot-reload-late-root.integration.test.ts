@@ -286,10 +286,11 @@ describe('an overlay that does not exist yet is still a root', () => {
       const overlay = path.join(workspace, type);
       expect(existsSync(overlay)).toBe(false);
       const roots = resolveResourceRoots(resolver, type, path.join(workspace, 'resources', type));
-      expect(roots.overlays).toEqual([overlay]);
+      // Lowest first: the bundle, then the not-yet-created legacy overlay.
+      expect(roots.overlays).toEqual([roots.bundled, overlay]);
       expect(roots.lookupDirs.slice(0, 2)).toEqual([roots.primary, overlay]);
-      // The present-tense reading still reports only what exists.
-      expect(resolver.getOverlayResourceDirs(type, roots.primary)).toEqual([]);
+      // The present-tense reading still reports only what exists: the bundle alone.
+      expect(resolver.getOverlayResourceDirs(type, roots.primary)).toEqual([roots.bundled]);
     }
 
     const gateRoots = resolveResourceRoots(

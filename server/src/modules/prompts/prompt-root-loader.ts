@@ -19,9 +19,16 @@ export interface PromptRootSet {
   primary: string;
   /** Base path for id derivation — the primary directory, or its parent for a file path. */
   basePath: string;
-  /** The package-shipped tree. Lowest precedence, always read, never written. */
+  /**
+   * The package-shipped tree's IDENTITY, never written. It contributes only where {@link overlays}
+   * holds it, at that position: first with no `paths.resources` list, where the list names
+   * `"bundled"` otherwise, and not at all when a list leaves it out (R3c).
+   */
   bundled?: string | undefined;
-  /** Workspace overlays, applied in order over the bundle and under the primary. */
+  /**
+   * Every root besides the primary, LOWEST precedence first, the bundle included at its position
+   * (`PathResolver.getOverlayResourceDirs`). Applied in order, under the primary.
+   */
   overlays: readonly string[];
 }
 
@@ -38,7 +45,7 @@ export interface PromptRootLoadResult {
 }
 
 /**
- * Load a prompt catalog across every root, bundle → overlays → primary.
+ * Load a prompt catalog across every root, lowest precedence first, the primary last.
  *
  * WHY THIS IS SHARED RATHER THAN DUPLICATED
  * Startup and hot reload were two derivations of one question, and they disagreed. Startup merged
@@ -54,8 +61,11 @@ export interface PromptRootLoadResult {
  * for this asserts on served CONTENT, never on catalog size.
  *
  * Precedence is the call order: `mergePromptResults` lets a later result win on a duplicate id, so
- * bundle → overlays → primary yields the documented "same ID = custom wins" over the bundle, with
- * the root a write lands in outranking every overlay — `resourceRootPrecedence` read backwards.
+ * walking `overlays` (lowest first) then the primary is `resourceRootPrecedence` read backwards,
+ * for the WHOLE list. The bundle is merged where `overlays` holds it — first with no list, which
+ * is the documented "same ID = custom wins", and wherever the list puts `"bundled"` otherwise.
+ * It used to be merged first unconditionally, so a list naming `"bundled"` ahead of a folder
+ * still let that folder win, while the flat-layout loaders served the bundle's copy.
  */
 export async function loadPromptsAcrossRoots(
   promptManager: PromptAssetManager,
@@ -74,40 +84,37 @@ export async function loadPromptsAcrossRoots(
   ) => number,
   logger?: Logger
 ): Promise<PromptRootLoadResult> {
-  // The bundled root only contributes when it is a REAL, distinct directory. Skipping this check
-  // would make an absent bundled path load as an empty catalog and merge nothing — silent, and
-  // indistinguishable from a healthy start.
-  const bundledContributes =
-    roots.bundled !== undefined &&
-    roots.bundled !== roots.primary &&
-    (await directoryExists(roots.bundled));
-
-  // An absent primary is an empty root while the bundled tree backs it: a custom workspace's
-  // `resources/prompts/` is created by its first write, and the bundle serves alone until then.
-  // Without a bundle behind it the loader still throws, because nothing at all would be served.
-  // Only absence qualifies — a primary that exists and cannot be read still fails loudly.
-  const primary =
-    bundledContributes && (await pathIsAbsent(roots.primary))
-      ? { promptsData: [], categories: [], convertedPrompts: [], invalid: 0 }
-      : await promptManager.loadAndConvertPrompts(roots.primary, roots.basePath);
+  // An absent primary is an empty root: a custom workspace's `resources/prompts/` is created by
+  // its first write, and the other roots serve alone until then. Only absence qualifies — a
+  // primary that exists and cannot be read still fails loudly. A catalog that ends up EMPTY is
+  // judged by the caller, not here: the startup health check refuses it when no
+  // `paths.resources` list is in force, and with a list the startup count line reports it (R3n).
+  const primary = (await pathIsAbsent(roots.primary))
+    ? { promptsData: [], categories: [], convertedPrompts: [], invalid: 0 }
+    : await promptManager.loadAndConvertPrompts(roots.primary, roots.basePath);
 
   let overridden = 0;
   let invalid = 0;
   let base: string | undefined;
-  let accumulated: {
+  const accumulated: {
     promptsData: PromptData[];
     categories: Category[];
     convertedPrompts: ConvertedPrompt[];
   } = { promptsData: [], categories: [], convertedPrompts: [] };
 
-  if (bundledContributes && roots.bundled !== undefined) {
-    const bundled = await promptManager.loadAndConvertPrompts(roots.bundled, roots.bundled);
-    invalid += bundled.invalid;
-    base = roots.bundled;
-    accumulated = bundled;
-  }
-
   for (const overlayDir of roots.overlays) {
+    if (overlayDir === roots.primary) continue;
+    if (overlayDir === roots.bundled) {
+      // The bundle only contributes when it is a REAL directory. Loading an absent bundled path
+      // would merge an empty catalog — silent, and indistinguishable from a healthy start. A
+      // bundle that exists and fails to load is not swallowed like an overlay: it is the package.
+      if (!(await directoryExists(overlayDir))) continue;
+      const bundled = await promptManager.loadAndConvertPrompts(overlayDir, overlayDir);
+      overridden += mergeResults(accumulated, bundled);
+      invalid += bundled.invalid;
+      base = overlayDir;
+      continue;
+    }
     try {
       const overlay = await promptManager.loadAndConvertPrompts(overlayDir, overlayDir);
       overridden += mergeResults(accumulated, overlay);
@@ -123,7 +130,7 @@ export async function loadPromptsAcrossRoots(
     }
   }
 
-  // Last, so the root a write lands in has the final say over every overlay and the bundle.
+  // Last, so the root a write lands in has the final say over every other root.
   overridden += mergeResults(accumulated, primary);
   invalid += primary.invalid;
 
