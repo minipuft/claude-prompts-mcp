@@ -8,6 +8,7 @@ import { reregisterFramework } from './framework-reregistration.js';
 import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 import { formatRepairServingLine } from '../../shared/quarantine-report.js';
+import { withSavedLine } from '../../shared/saved-line.js';
 
 import type { ResourceWriteCommitOptions } from '#modules/resources/services/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
@@ -156,7 +157,10 @@ export class FrameworkLifecycleProcessor {
     // Trigger refresh for any dependent systems
     await this.ctx.onRefresh?.();
 
-    return this.success(this.validationService.formatSuccess(id, validation, result.paths ?? []));
+    return withSavedLine(
+      this.success(this.validationService.formatSuccess(id, validation, result.paths ?? [])),
+      this.savedFrameworkPath(id)
+    );
   }
 
   async handleUpdate(args: FrameworkManagerInput): Promise<ToolResponse> {
@@ -306,7 +310,7 @@ export class FrameworkLifecycleProcessor {
         `\`action: "reload"\` retries the same registration and will fail the same way unless the ` +
         `cause was transient — check the server log for the reason, then restart.`;
 
-    return this.success(response);
+    return withSavedLine(this.success(response), this.savedFrameworkPath(id));
   }
 
   /**
@@ -427,12 +431,23 @@ export class FrameworkLifecycleProcessor {
           : `📜 The repaired state already matches version ${versionOutcome.version}, so no new ` +
             `version was recorded (use \`action:"history"\` to view).\n`;
 
-    return this.success(
-      `Repair written for quarantined framework '${target.id}'\n\n` +
-        `📁 Files written:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n` +
-        versionLine +
-        this.formatRepairOutcome(target, writtenPath, writtenRoot)
+    return withSavedLine(
+      this.success(
+        `Repair written for quarantined framework '${target.id}'\n\n` +
+          `📁 Files written:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n` +
+          versionLine +
+          this.formatRepairOutcome(target, writtenPath, writtenRoot)
+      ),
+      writtenPath
     );
+  }
+
+  /**
+   * The `framework.yaml` a create or update of `id` wrote, for the reply's `saved:` line: the
+   * writer resolves its directory through the same `getFrameworkDir`, so the two cannot differ.
+   */
+  private savedFrameworkPath(id: string): string {
+    return path.join(this.ctx.fileService.getFrameworkDir(id), 'framework.yaml');
   }
 
   /**

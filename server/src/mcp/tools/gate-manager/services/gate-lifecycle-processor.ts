@@ -7,6 +7,7 @@ import { callerSuppliedGateKeys, ensureTrailingNewline } from './gate-file-write
 import { gateSnapshotContract } from './gate-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 import { formatRepairServingLine } from '../../shared/quarantine-report.js';
+import { withSavedLine } from '../../shared/saved-line.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
@@ -156,19 +157,25 @@ export class GateLifecycleProcessor {
     // caller has to learn that the gate is not usable yet, and from what to do next rather than
     // from the next action failing.
     if (!registered) {
-      return this.success(
-        `⚠️ Gate '${id}' was written to disk but is NOT active in this server process\n\n` +
-          `${filesWritten}\n\n` +
-          `The files on disk are what you asked for. The in-memory gate registry ` +
-          `did not pick them up, so this gate will not resolve until it does.\n` +
-          `Recover with \`action: "reload"\`, or restart the server.`
+      return withSavedLine(
+        this.success(
+          `⚠️ Gate '${id}' was written to disk but is NOT active in this server process\n\n` +
+            `${filesWritten}\n\n` +
+            `The files on disk are what you asked for. The in-memory gate registry ` +
+            `did not pick them up, so this gate will not resolve until it does.\n` +
+            `Recover with \`action: "reload"\`, or restart the server.`
+        ),
+        result.savedPath
       );
     }
 
-    return this.success(
-      `✅ Gate '${id}' created successfully\n\n` +
-        `${filesWritten}\n\n` +
-        `🔄 Registered in the gate registry — ready to use now`
+    return withSavedLine(
+      this.success(
+        `✅ Gate '${id}' created successfully\n\n` +
+          `${filesWritten}\n\n` +
+          `🔄 Registered in the gate registry — ready to use now`
+      ),
+      result.savedPath
     );
   }
 
@@ -346,7 +353,7 @@ export class GateLifecycleProcessor {
       : `⚠️ Files written, but the gate could not be reloaded into this process — it still holds ` +
         `its previous content. See the server log.`;
 
-    return this.success(response);
+    return withSavedLine(this.success(response), result.savedPath);
   }
 
   /**
@@ -484,11 +491,14 @@ export class GateLifecycleProcessor {
           : `📜 The repaired state already matches version ${versionOutcome.version}, so no new ` +
             `version was recorded (use \`action:"history"\` to view).\n`;
 
-    return this.success(
-      `🩺 Repair written for quarantined gate '${target.id}'\n\n` +
-        `📁 Files written:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n` +
-        versionLine +
-        this.formatRepairOutcome(target, writtenPath, writtenRoot)
+    return withSavedLine(
+      this.success(
+        `🩺 Repair written for quarantined gate '${target.id}'\n\n` +
+          `📁 Files written:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}\n\n` +
+          versionLine +
+          this.formatRepairOutcome(target, writtenPath, writtenRoot)
+      ),
+      result.savedPath
     );
   }
 

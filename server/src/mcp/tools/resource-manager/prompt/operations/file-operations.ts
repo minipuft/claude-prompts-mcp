@@ -184,6 +184,12 @@ export const ALL_PROMPT_DATA_KEYS: ReadonlySet<string> = new Set([
  * ones because they always arrive together from a single `update` call, and a call site reading
  * `undefined, new Set([...]), 'replace', []` tells a reader nothing about which is which.
  */
+/** A landed prompt write: the operation report plus where its `prompt.yaml` now is. */
+export interface PromptWriteResult extends OperationResult {
+  /** Absolute path of the `prompt.yaml` this write produced, for the reply's `saved:` line. */
+  savedPath: string;
+}
+
 export interface PromptWriteIntent {
   /** `promptData` keys to CLEAR. See `resolvePreservedPromptYamlFields` for why deletion is not enough. */
   unsetKeys: ReadonlySet<string>;
@@ -409,7 +415,7 @@ export class FileOperations {
     sourceRoot?: string,
     writeIntent: PromptWriteIntent = NO_WRITE_INTENT,
     options: ResourceWriteCommitOptions = {}
-  ): Promise<OperationResult> {
+  ): Promise<PromptWriteResult> {
     // Everything this write does is resolved here, before the transaction opens, and the mutation
     // below applies the plan and decides nothing of its own. `projectPromptWrite` reads a
     // preview's diff off the same plan, which is what keeps the two from naming different files.
@@ -543,6 +549,7 @@ export class FileOperations {
     return {
       message: result.messages.join('\n'),
       affectedFiles: result.affectedFiles,
+      savedPath: yamlPath,
     };
   }
 

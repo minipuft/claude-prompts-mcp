@@ -59,6 +59,7 @@ export const CONFIG_VALID_KEYS = [
   'logging.directory',
   'logging.level',
   'paths.resources',
+  'paths.writeTarget',
   'phaseGuards.maxRetries',
   'phaseGuards.mode',
   'prompts.registerWithMcp',
@@ -237,6 +238,9 @@ export const CONFIG_KEY_TABLE: Readonly<Record<ConfigKey, ConfigLeafRule>> = {
   'paths.resources': {
     type: 'array',
     items: { type: 'string' },
+  },
+  'paths.writeTarget': {
+    type: 'string',
   },
   'phaseGuards.maxRetries': {
     type: 'integer',

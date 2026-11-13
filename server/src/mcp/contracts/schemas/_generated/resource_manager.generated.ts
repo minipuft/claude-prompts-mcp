@@ -113,7 +113,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'action',
     type: 'enum[create|validate|update|delete|reload|list|inspect|preview|analyze_type|analyze_gates|guide|switch|history|rollback|compare]',
     description:
-      'Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. preview renders what update/delete/rollback would do without writing, naming its target in `preview_action`; it is not destructive, so it takes no `confirm`. Framework-only: switch. Versioning: history/rollback/compare.',
+      'Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. preview renders what update/delete/rollback would do without writing, naming its target in `preview_action`; it is not destructive, so it takes no `confirm`. Framework-only: switch. Versioning: history/rollback/compare. A create or update reply ends with a `saved: <absolute path>` line naming the file it wrote.',
     required: true,
     status: 'working',
     compatibility: 'canonical',

@@ -49,6 +49,12 @@ const PROJECT_WORKSPACE_DIR_NAME = '.claude-prompts';
 /** The reserved `paths.resources` entry naming the package's own resources (`infra/config`). */
 const BUNDLED_RESOURCES_ENTRY = 'bundled';
 
+/** The config's `paths` section as the resolver reads it (`Config.paths`, resolved by the loader). */
+interface ConfiguredResourcePaths {
+  readonly resources: readonly string[];
+  readonly writeTarget?: string;
+}
+
 /** One folder that contributes definitions of a resource type, and why it is in the list. */
 interface ResourceLocationEntry {
   path: string;
@@ -66,7 +72,10 @@ interface ResourceLocationEntry {
 export interface ResourceLocations {
   /** Highest precedence first, each path once: an earlier location wins a duplicate id (R3l). */
   locations: ResourceLocationEntry[];
-  /** Where a write of this type lands: the project folder when `.claude-prompts/` exists, else the profile's. */
+  /**
+   * Where a write of this type lands: the project folder when `.claude-prompts/` exists, else
+   * `<paths.writeTarget>/<type>` when the config names one, else the profile's own folder (R3j).
+   */
   writeRoot: string;
   /**
    * A `paths.resources` list is in force and does not name `"bundled"`, so the bundle is NOT in
@@ -190,8 +199,11 @@ export class PathResolver {
    * {@link cache} because they are keyed by type.
    */
   private typePaths: Partial<Record<string, { resolved: string; source: string }>> = {};
-  /** The config's `paths.resources`, resolved; empty until the composition root hands it over. */
-  private configuredLocations: () => readonly string[] = () => [];
+  /**
+   * The config's `paths` section, resolved: its `resources` list and its `writeTarget`. Empty
+   * until the composition root hands it over.
+   */
+  private configuredPaths: () => ConfiguredResourcePaths = () => ({ resources: [] });
   private debug: boolean;
 
   constructor(config: PathResolverConfig) {
@@ -671,15 +683,30 @@ export class PathResolver {
   }
 
   /**
-   * Hand the resolver the config's `paths.resources` list, absolute and in the file's order.
+   * Hand the resolver the config's `paths` section: the `resources` list, absolute and in the
+   * file's order, and the `writeTarget`, absolute, which the loader has already proven names a
+   * listed entry or {@link getProfileResourcesDir}.
    *
    * Called once by the composition root, after the config loads: the resolver picks the config
    * file, so it cannot be constructed with what that file says. Read through `read` on every
-   * resolution, so a reloaded config is the list the next resolution sees. Until then the list
-   * is empty, which is also what a config without the key means.
+   * resolution, so a reloaded config is the section the next resolution sees. Until then the list
+   * is empty and no write target is set, which is also what a config without the keys means.
    */
-  readResourceLocationsFrom(read: () => readonly string[]): void {
-    this.configuredLocations = read;
+  readResourceLocationsFrom(read: () => ConfiguredResourcePaths): void {
+    this.configuredPaths = read;
+  }
+
+  /**
+   * The profile's own resources folder, the one whose `<type>` folders are entry two of
+   * {@link getResourceLocations}: the `MCP_RESOURCES_PATH` folder when set, else the custom
+   * workspace's `resources/`. Undefined when neither applies, because the profile's folder is
+   * then the package's own, which is never written. `paths.writeTarget` may name it besides the
+   * listed entries.
+   */
+  getProfileResourcesDir(): string | undefined {
+    if (this.hasExplicitResourcesPath()) return this.getResourcesPath();
+    if (this.isUsingCustomWorkspace()) return join(this.getWorkspace(), 'resources');
+    return undefined;
   }
 
   /**
@@ -688,7 +715,7 @@ export class PathResolver {
    * (the startup count line, R3n) — which folders serve a type is {@link getResourceLocations}.
    */
   getConfiguredResourceLocations(): readonly string[] {
-    return this.configuredLocations();
+    return this.configuredPaths().resources;
   }
 
   /**
@@ -749,7 +776,7 @@ export class PathResolver {
       );
     }
 
-    const configured = this.configuredLocations();
+    const configured = this.configuredPaths().resources;
     configured.forEach((entry, index) => {
       candidates.push(
         entry === BUNDLED_RESOURCES_ENTRY
@@ -879,7 +906,9 @@ export class PathResolver {
 
   /**
    * The directory a type is written to: the project folder when `.claude-prompts/` exists
-   * (R3j keeps its precedence, whether or not `MCP_RESOURCES_PATH` is set), else the profile's.
+   * (R3j keeps its precedence, whether or not `MCP_RESOURCES_PATH` or `paths.writeTarget` is set),
+   * else `<paths.writeTarget>/<type>` when the config names a folder other than the profile's,
+   * else the profile's own folder.
    *
    * The project directory is probed on every call, so a `.claude-prompts/` created (or removed)
    * while the server runs changes every type's answer on the next call. The profile's folder is
@@ -888,6 +917,12 @@ export class PathResolver {
   private resourceSubdirPath(subdir: string): string {
     const projectWorkspace = this.getProjectWorkspace();
     if (projectWorkspace !== undefined) return join(projectWorkspace, 'resources', subdir);
+    const { writeTarget } = this.configuredPaths();
+    // Naming the profile's own folder is the unset answer: its legacy `<workspace>/<type>` layout
+    // is kept rather than flattened to `<folder>/<type>`.
+    if (writeTarget !== undefined && writeTarget !== this.getProfileResourcesDir()) {
+      return join(writeTarget, subdir);
+    }
     return this.profileResourceDir(subdir).resolved;
   }
 

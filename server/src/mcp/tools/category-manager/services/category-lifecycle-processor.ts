@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { readCategoryYamlDocument, CATEGORY_YAML_FILENAME } from './category-file-writer.js';
 import { categorySnapshotContract } from './category-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
+import { withSavedLine } from '../../shared/saved-line.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 import type { CategoryResourceContext } from '../core/context.js';
@@ -77,15 +78,18 @@ export class CategoryLifecycleProcessor {
 
     const filesWritten = `📁 Files created:\n${result.paths?.map((p) => `  - ${p}`).join('\n')}`;
 
-    return this.success(
-      `✅ Category '${id}' created successfully\n\n` +
-        `${filesWritten}\n\n` +
-        (directoryExisted
-          ? `ℹ️ The directory already existed and holds ${promptsHeld} prompt(s); this call added ` +
-            `its declaration. Until now those prompts ran under a name and description the loader ` +
-            `derived from the directory name.\n\n`
-          : '') +
-        `🔄 Prompt data reloaded — the category is live now`
+    return withSavedLine(
+      this.success(
+        `✅ Category '${id}' created successfully\n\n` +
+          `${filesWritten}\n\n` +
+          (directoryExisted
+            ? `ℹ️ The directory already existed and holds ${promptsHeld} prompt(s); this call added ` +
+              `its declaration. Until now those prompts ran under a name and description the loader ` +
+              `derived from the directory name.\n\n`
+            : '') +
+          `🔄 Prompt data reloaded — the category is live now`
+      ),
+      result.savedPath
     );
   }
 
@@ -193,7 +197,7 @@ export class CategoryLifecycleProcessor {
 
     response += `🔄 Prompt data reloaded`;
 
-    return this.success(response);
+    return withSavedLine(this.success(response), result.savedPath);
   }
 
   async handleDelete(args: CategoryManagerInput): Promise<ToolResponse> {

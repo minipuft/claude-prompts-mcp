@@ -118,6 +118,8 @@ export interface CategoryFileWriterDependencies {
 export interface CategoryFileWriteResult {
   success: boolean;
   paths?: string[];
+  /** Absolute path of the `category.yaml` written, set when the write landed, for the `saved:` line. */
+  savedPath?: string;
   error?: string;
   verificationFailure?: ResourceVerificationFailurePayload;
 }
@@ -258,7 +260,7 @@ export class CategoryFileWriter {
       };
     }
 
-    return { success: true, paths: transactionResult.result?.paths ?? [] };
+    return { success: true, paths: transactionResult.result?.paths ?? [], savedPath: yamlPath };
   }
 
   /**

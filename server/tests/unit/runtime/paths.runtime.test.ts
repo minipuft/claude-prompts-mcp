@@ -1035,7 +1035,7 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
       projectDiscovery: true,
       projectLaunch: { env: { CLAUDE_PROJECT_DIR: project }, cwd: dir },
     });
-    resolver.readResourceLocationsFrom(() => loader.getConfig().paths.resources);
+    resolver.readResourceLocationsFrom(() => loader.getConfig().paths);
     return resolver;
   }
 
@@ -1207,5 +1207,119 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
     expect(await servedBy(['../shared', './extra'])).toBe('FROM SHARED');
     // CONTROL: the same three copies, the list reversed, serve the other listed copy.
     expect(await servedBy(['./extra', '../shared'])).toBe('FROM EXTRA');
+  });
+});
+
+/**
+ * Where a write lands once the config names `paths.writeTarget` (R3j). The resolver is handed the
+ * config the composition root's way, and the loader is given the same resolver as its port, so the
+ * profile folder the loader accepts is the one the resolver answers with.
+ */
+describe('PathResolver write root follows paths.writeTarget', () => {
+  const TYPES = ['prompts', 'gates', 'frameworks', 'styles', 'scripts'] as const;
+  let dir: string;
+  let packageRoot: string;
+  let project: string;
+  let workspace: string;
+  let configDir: string;
+
+  async function resolverWith(writeTarget: string | undefined): Promise<PathResolver> {
+    const resolver = new PathResolver({
+      cli: {},
+      packageRoot,
+      projectDiscovery: true,
+      projectLaunch: { env: { CLAUDE_PROJECT_DIR: project }, cwd: dir },
+    });
+    const configPath = path.join(configDir, 'config.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        version: 5,
+        paths: {
+          resources: ['./lib', './lib2', 'bundled'],
+          ...(writeTarget !== undefined && { writeTarget }),
+        },
+      })
+    );
+    const loader = new ConfigLoader(configPath, resolver);
+    await loader.loadConfig();
+    resolver.readResourceLocationsFrom(() => loader.getConfig().paths);
+    return resolver;
+  }
+
+  const typeGetters = (resolver: PathResolver): Record<(typeof TYPES)[number], string> => ({
+    prompts: resolver.getPromptsPath(),
+    gates: resolver.getGatesPath(),
+    frameworks: resolver.getFrameworksPath(),
+    styles: resolver.getStylesPath(),
+    scripts: resolver.getScriptsPath(),
+  });
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'write-target-'));
+    packageRoot = path.join(dir, 'package');
+    project = path.join(dir, 'project');
+    workspace = path.join(dir, 'workspace');
+    configDir = path.join(dir, 'cfg');
+    for (const created of [
+      path.join(packageRoot, 'resources', 'prompts'),
+      path.join(workspace, 'resources'),
+      project,
+      path.join(configDir, 'lib'),
+      path.join(configDir, 'lib2'),
+    ]) {
+      mkdirSync(created, { recursive: true });
+    }
+    pathLocations.set({ workspace });
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('writes every type to <writeTarget>/<type> when the config names a listed folder', async () => {
+    const resolver = await resolverWith('./lib2');
+    const getters = typeGetters(resolver);
+
+    for (const type of TYPES) {
+      const expected = path.join(configDir, 'lib2', type);
+      expect(resolver.getResourceLocations(type).writeRoot).toBe(expected);
+      expect(getters[type]).toBe(expected);
+    }
+  });
+
+  it('keeps the project folder as the write root on STDIO with writeTarget set', async () => {
+    mkdirSync(path.join(project, '.claude-prompts'));
+    const resolver = await resolverWith('./lib2');
+    const getters = typeGetters(resolver);
+
+    for (const type of TYPES) {
+      const expected = path.join(project, '.claude-prompts', 'resources', type);
+      expect(resolver.getResourceLocations(type).writeRoot).toBe(expected);
+      expect(getters[type]).toBe(expected);
+    }
+  });
+
+  it("writes to the profile's own folder when writeTarget is unset", async () => {
+    const resolver = await resolverWith(undefined);
+    const getters = typeGetters(resolver);
+
+    for (const type of TYPES) {
+      const expected = path.join(workspace, 'resources', type);
+      expect(resolver.getResourceLocations(type).writeRoot).toBe(expected);
+      expect(getters[type]).toBe(expected);
+    }
+  });
+
+  it("keeps the profile's own layout when writeTarget names the profile's folder", async () => {
+    // A legacy `<workspace>/prompts` collection: naming the profile's folder is the unset answer,
+    // so the write root stays there instead of flattening to `<workspace>/resources/prompts`.
+    mkdirSync(path.join(workspace, 'prompts'));
+    const resolver = await resolverWith(path.join(workspace, 'resources'));
+
+    expect(resolver.getProfileResourcesDir()).toBe(path.join(workspace, 'resources'));
+    expect(resolver.getResourceLocations('prompts').writeRoot).toBe(
+      path.join(workspace, 'prompts')
+    );
   });
 });

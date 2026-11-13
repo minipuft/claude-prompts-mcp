@@ -10,6 +10,7 @@ import {
 } from './prompt-mutation-receipt-service.js';
 import { isPreviewRequest } from '../../../shared/preview-action.js';
 import { formatRepairServingLine } from '../../../shared/quarantine-report.js';
+import { withSavedLine } from '../../../shared/saved-line.js';
 import { ComparisonEngine } from '../analysis/comparison-engine.js';
 import { ObjectDiffGenerator, type DiffResult } from '../analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
@@ -288,21 +289,24 @@ export class PromptLifecycleProcessor {
     });
     response += this.formatMutationReceipt(verification.receipt);
 
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: mutationHeadline('Created', displayName, canonicalId, verification) + response,
+    return withSavedLine(
+      {
+        content: [
+          {
+            type: 'text' as const,
+            text: mutationHeadline('Created', displayName, canonicalId, verification) + response,
+          },
+        ],
+        structuredContent: {
+          action: 'create',
+          valid: true,
+          receipt: verification.receipt,
+          mutated: true,
         },
-      ],
-      structuredContent: {
-        action: 'create',
-        valid: true,
-        receipt: verification.receipt,
-        mutated: true,
+        isError: !verification.verified,
       },
-      isError: !verification.verified,
-    };
+      writeResult.savedPath
+    );
   }
 
   async updatePrompt(args: any): Promise<ToolResponse> {
@@ -830,22 +834,25 @@ export class PromptLifecycleProcessor {
       response += this.formatRepairOutcome(repairTarget);
     }
 
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text:
-            mutationHeadline('Updated', String(promptData.name), String(args.id), verification) +
-            response,
+    return withSavedLine(
+      {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              mutationHeadline('Updated', String(promptData.name), String(args.id), verification) +
+              response,
+          },
+        ],
+        structuredContent: {
+          action: 'update',
+          receipt: verification.receipt,
+          mutated: true,
         },
-      ],
-      structuredContent: {
-        action: 'update',
-        receipt: verification.receipt,
-        mutated: true,
+        isError: !verification.verified,
       },
-      isError: !verification.verified,
-    };
+      result.savedPath
+    );
   }
 
   async deletePrompt(args: any): Promise<ToolResponse> {

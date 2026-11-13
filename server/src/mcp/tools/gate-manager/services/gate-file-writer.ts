@@ -166,6 +166,8 @@ export interface GateFileWriterDependencies {
 export interface GateFileWriteResult {
   success: boolean;
   paths?: string[];
+  /** Absolute path of the gate's `gate.yaml`, set when the write landed, for the `saved:` line. */
+  savedPath?: string;
   error?: string;
   verificationFailure?: ResourceVerificationFailurePayload;
 }
@@ -255,7 +257,7 @@ export class GateFileWriter {
       };
     }
 
-    return { success: true, paths: transactionResult.result?.paths ?? [] };
+    return { success: true, paths: transactionResult.result?.paths ?? [], savedPath: yamlPath };
   }
 
   /**

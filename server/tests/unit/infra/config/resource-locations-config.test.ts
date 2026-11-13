@@ -12,7 +12,7 @@ import { tmpdir } from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import { ConfigLoader } from '../../../../src/infra/config/index.js';
+import { ConfigLoader, type ResourcePathSource } from '../../../../src/infra/config/index.js';
 import { PathSettingError } from '../../../../src/shared/utils/path-setting.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -309,5 +309,108 @@ describe('paths.resources in a project config', () => {
     });
 
     expect(loader.getConfig().prompts.registerWithMcp).toBe(false);
+  });
+});
+
+describe('paths.writeTarget in the config file', () => {
+  let tempDir: string;
+  let configPath: string;
+  let errorSpy: jest.SpiedFunction<typeof console.error>;
+
+  beforeEach(async () => {
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    tempDir = await mkdtemp(path.join(tmpdir(), 'cfg-write-target-'));
+    configPath = path.join(tempDir, 'config.json');
+    await mkdir(path.join(tempDir, 'lib'));
+    await mkdir(path.join(tempDir, 'lib2'));
+  });
+
+  afterEach(async () => {
+    errorSpy.mockRestore();
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  /** A port whose profile folder is `profileDir`; only that member is read at load. */
+  function profileAt(profileDir: string | undefined): ResourcePathSource {
+    const unused = (): string => {
+      throw new Error('not read by loadConfig');
+    };
+    return {
+      getPromptsPath: unused,
+      getGatesPath: unused,
+      getFrameworksPath: unused,
+      getScriptsPath: unused,
+      getStylesPath: unused,
+      getBundledResourceDir: unused,
+      getOverlayResourceDirs: () => [],
+      getRuntimeStatePath: unused,
+      getStateDatabasePath: unused,
+      getProfileResourcesDir: () => profileDir,
+    };
+  }
+
+  async function load(paths: Record<string, unknown>, profileDir?: string): Promise<ConfigLoader> {
+    await writeFile(configPath, JSON.stringify({ version: 5, paths }), 'utf8');
+    const loader = new ConfigLoader(configPath, profileAt(profileDir), {
+      schemaPath: SCHEMA_PATH,
+    });
+    await loader.loadConfig();
+    return loader;
+  }
+
+  it('loads a writeTarget naming a listed entry, resolved against the config directory', async () => {
+    const loader = await load({ resources: ['./lib', './lib2', 'bundled'], writeTarget: 'lib2' });
+
+    expect(loader.getSchemaValidation()?.status).toBe('valid');
+    expect(loader.getConfig().paths.writeTarget).toBe(path.join(tempDir, 'lib2'));
+  });
+
+  it("loads a writeTarget naming the profile's own resources folder, listed or not", async () => {
+    const profileDir = path.join(tempDir, 'profile-resources');
+    await mkdir(profileDir);
+    const loader = await load({ resources: ['./lib'], writeTarget: profileDir }, profileDir);
+
+    expect(loader.getConfig().paths.writeTarget).toBe(profileDir);
+  });
+
+  it('leaves writeTarget absent when the file names none', async () => {
+    const loader = await load({ resources: ['./lib'] });
+
+    expect(loader.getConfig().paths.writeTarget).toBeUndefined();
+  });
+
+  it.each([
+    [
+      '"bundled"',
+      'bundled',
+      /sets "paths\.writeTarget" to "bundled", and the package's own resources are never written/,
+    ],
+    [
+      'a path outside the list',
+      './elsewhere',
+      /sets "paths\.writeTarget" to "\.\/elsewhere", which resolves to .*elsewhere, a folder neither "paths\.resources" nor the profile names/,
+    ],
+    ['an empty string', '', /sets "paths\.writeTarget" to a string \(""\)/],
+  ])(
+    'refuses %s, naming the key, the value and the folders it may name',
+    async (_kind, value, shown) => {
+      const refusal = load({ resources: ['./lib', 'bundled'], writeTarget: value });
+
+      await expect(refusal).rejects.toBeInstanceOf(PathSettingError);
+      await expect(refusal).rejects.toThrow(shown);
+      await expect(refusal).rejects.toThrow(
+        `Expected one of these folders there: ${path.join(tempDir, 'lib')}`
+      );
+    }
+  );
+
+  it("refuses a writeTarget naming the profile's folder when that folder does not exist", async () => {
+    const missing = path.join(tempDir, 'no-such-profile');
+    const refusal = load({ resources: ['./lib'], writeTarget: missing }, missing);
+
+    await expect(refusal).rejects.toBeInstanceOf(PathSettingError);
+    await expect(refusal).rejects.toThrow(
+      /sets "paths\.writeTarget" to .*no-such-profile.*, and that path/
+    );
   });
 });
