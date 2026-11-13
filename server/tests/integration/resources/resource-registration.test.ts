@@ -18,6 +18,8 @@ import type { ResourceDependencies } from '../../../src/modules/resources/types.
 import { RESOURCE_URI_PATTERNS } from '../../../src/modules/resources/types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import { GateManager, createGateManager } from '../../../src/engine/gates/gate-manager.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 // Set up server root for gate loader to find resources
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,7 +28,7 @@ const serverRoot = path.resolve(__dirname, '../../..');
 describe('MCP Resources Registration Integration', () => {
   let gateManager: GateManager;
   let mockLogger: Logger;
-  let originalServerRoot: string | undefined;
+  let locations: ResourceLocationScope;
 
   // Mock MCP server with captured registrations
   let registeredResources: Map<
@@ -45,9 +47,7 @@ describe('MCP Resources Registration Integration', () => {
   };
 
   beforeAll(async () => {
-    // Save and set MCP_SERVER_ROOT for gate loader
-    originalServerRoot = process.env.MCP_SERVER_ROOT;
-    process.env.MCP_SERVER_ROOT = serverRoot;
+    locations = withResourceLocations({ serverRoot });
 
     mockLogger = {
       info: jest.fn(),
@@ -82,12 +82,7 @@ describe('MCP Resources Registration Integration', () => {
   });
 
   afterAll(() => {
-    // Restore original MCP_SERVER_ROOT
-    if (originalServerRoot !== undefined) {
-      process.env.MCP_SERVER_ROOT = originalServerRoot;
-    } else {
-      delete process.env.MCP_SERVER_ROOT;
-    }
+    locations.cleanup();
   });
 
   describe('registerResources()', () => {

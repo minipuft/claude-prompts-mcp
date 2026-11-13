@@ -44,9 +44,10 @@ import { assertNonEmptyScope, trackedFilesUnder } from './lib/tracked-scope.js';
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * The six variables that decide where resources, runtime state, config and the project folder
- * come from. `MCP_SERVER_ROOT`, the seventh key the helper manages, names the skills-sync CLI's
- * package root rather than a location and is not checked here.
+ * Every variable the helper snapshots, clears and restores (`RESOURCE_LOCATION_ENV_KEYS`): the six
+ * that decide where resources, runtime state, config and the project folder come from, and
+ * `MCP_SERVER_ROOT`, the package root the skills-sync CLI reads. A test that
+ * writes `MCP_SERVER_ROOT` by hand restores only that one key, so it is checked like the rest.
  */
 const LOCATION_VARIABLES = [
   'MCP_WORKSPACE',
@@ -55,6 +56,7 @@ const LOCATION_VARIABLES = [
   'MCP_CONFIG_PATH',
   'CLAUDE_PLUGIN_DATA',
   'CLAUDE_PROJECT_DIR',
+  'MCP_SERVER_ROOT',
 ];
 
 /** Files that write these variables directly because writing them is their subject. */

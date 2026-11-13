@@ -31,6 +31,8 @@ import type {
 } from '../../../src/engine/gates/shell/types.js';
 import type { GateOperator } from '../../../src/engine/execution/parsers/types/operator-types.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const serverRoot = path.resolve(__dirname, '../../..');
@@ -50,21 +52,16 @@ const findCriteriaGate = (operators: readonly { type: string }[]): GateOperator 
   ) as GateOperator | undefined;
 
 describe('Shell Verification Flow Integration', () => {
-  let originalServerRoot: string | undefined;
+  let locations: ResourceLocationScope;
   let parser: SymbolicCommandParser;
   let mockLogger: Logger;
 
   beforeAll(() => {
-    originalServerRoot = process.env.MCP_SERVER_ROOT;
-    process.env.MCP_SERVER_ROOT = serverRoot;
+    locations = withResourceLocations({ serverRoot });
   });
 
   afterAll(() => {
-    if (originalServerRoot !== undefined) {
-      process.env.MCP_SERVER_ROOT = originalServerRoot;
-    } else {
-      delete process.env.MCP_SERVER_ROOT;
-    }
+    locations.cleanup();
   });
 
   beforeEach(() => {
