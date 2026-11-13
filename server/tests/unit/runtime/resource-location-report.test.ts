@@ -43,15 +43,21 @@ let packageRoot: string;
 let workspace: string;
 let logger: Logger & { warn: jest.Mock };
 
-function writePrompt(root: string, id: string, description: string, body: string): string {
-  const promptDir = path.join(root, 'prompts', 'examples', id);
+function writePrompt(
+  root: string,
+  id: string,
+  description: string,
+  body: string,
+  category = 'examples'
+): string {
+  const promptDir = path.join(root, 'prompts', category, id);
   mkdirSync(promptDir, { recursive: true });
   writeFileSync(
     path.join(promptDir, 'prompt.yaml'),
     [
       `id: ${id}`,
       `name: ${id}`,
-      'category: examples',
+      `category: ${category}`,
       `description: ${description}`,
       'userMessageTemplateFile: user-message.md',
       '',
@@ -244,6 +250,37 @@ describe('a same-id pair between two custom locations (row 1.8)', () => {
     expect(formatResourceLocations(report)).toContain(
       `- review (prompt): served from ${earlier}, hidden copy in ${later}`
     );
+  });
+
+  it('draws one warning, not the indexer category warning as well, when the copies sit in different categories', async () => {
+    const custom = path.join(dir, 'custom');
+    const custom2 = path.join(dir, 'custom2');
+    const earlier = writePrompt(custom, 'review', 'Review from custom.', 'EARLIER', 'alpha');
+    const later = writePrompt(custom2, 'review', 'Review from custom2.', 'LATER', 'beta');
+    const resolver = resolverWith([custom, custom2]);
+    const ledger = new ResourceLocationLedger(resolver, logger);
+
+    await sync(resolver, ledger);
+    await sync(resolver, ledger);
+
+    expect(warningsAbout('review')).toEqual([
+      `Resource 'review' (prompt) is defined in ${earlier} and ${later}; ` +
+        'the earlier location serves it',
+    ]);
+  });
+
+  it('CONTROL: a custom copy in another category than a bundled one keeps the indexer warning', async () => {
+    const custom = path.join(dir, 'custom');
+    writePrompt(custom, 'review', 'Review from custom.', 'CUSTOM', 'alpha');
+    writePrompt(path.join(packageRoot, 'resources'), 'review', 'Bundled.', 'BUNDLED', 'beta');
+    const resolver = resolverWith([custom, 'bundled']);
+    const ledger = new ResourceLocationLedger(resolver, logger);
+
+    await sync(resolver, ledger);
+
+    const lines = warningsAbout('review');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("duplicate prompt id 'review' in two categories");
   });
 
   it('CONTROL: a custom copy of a bundled id logs nothing and the custom body serves', async () => {

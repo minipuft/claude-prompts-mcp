@@ -908,7 +908,10 @@ export class PathResolver {
    * The directory a type is written to: the project folder when `.claude-prompts/` exists
    * (R3j keeps its precedence, whether or not `MCP_RESOURCES_PATH` or `paths.writeTarget` is set),
    * else `<paths.writeTarget>/<type>` when the config names a folder other than the profile's,
-   * else the profile's own folder.
+   * else the profile's own folder — unless that folder is the package's own and a
+   * `paths.resources` list is in force: the package folder is then the bundle, never written, and
+   * the first listed folder takes the writes (R3r). A list naming only `"bundled"` lists no folder,
+   * so the package folder stays the write root there, as it is with no list at all.
    *
    * The project directory is probed on every call, so a `.claude-prompts/` created (or removed)
    * while the server runs changes every type's answer on the next call. The profile's folder is
@@ -922,6 +925,12 @@ export class PathResolver {
     // is kept rather than flattened to `<folder>/<type>`.
     if (writeTarget !== undefined && writeTarget !== this.getProfileResourcesDir()) {
       return join(writeTarget, subdir);
+    }
+    if (this.getProfileResourcesDir() === undefined) {
+      const firstListed = this.configuredPaths().resources.find(
+        (entry) => entry !== BUNDLED_RESOURCES_ENTRY
+      );
+      if (firstListed !== undefined) return join(firstListed, subdir);
     }
     return this.profileResourceDir(subdir).resolved;
   }

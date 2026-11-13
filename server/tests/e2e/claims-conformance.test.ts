@@ -354,9 +354,12 @@ function applyCaptures(
  *                      `<ws>/resources/prompts` (paths.ts:359-366), so the loader merges it on
  *                      top of the copied tree — which is the documented overlay claim.
  *
- * Both paths are dead code on the shared server: `getOverlayResourceDirs` returns `[]` unless
- * `isUsingCustomWorkspace()`, and until this fixture existed no scenario in the corpus ever ran
- * with a custom workspace, so the entire overlay branch was unexercised.
+ * Both paths are dead code on the shared server: it runs from the package root with no
+ * `paths.resources` list, so the bundle is its only location and that location is the primary,
+ * which leaves `getOverlayResourceDirs` nothing to return. The overlay list carries every other
+ * location, the bundle included at its own position whenever it is not the primary, and until this
+ * fixture existed no scenario in the corpus ever ran with a second location, so the entire overlay
+ * branch was unexercised.
  */
 async function buildIsolatedWorkspace(): Promise<string> {
   const ws = await fs.mkdtemp(path.join(tmpdir(), 'claims-isolated-'));

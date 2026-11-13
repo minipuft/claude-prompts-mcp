@@ -302,6 +302,26 @@ describe('paths.resources in a project config', () => {
     expect(loader.getConfig().paths.resources).toEqual([path.join(root, 'workspace', 'custom')]);
   });
 
+  it('refuses a project config that sets "paths.writeTarget" alone, in the same terms (R3t)', async () => {
+    const projectConfig = path.join(projectWorkspace, 'config.jsonc');
+    const refusal = loadFile(projectConfig, { version: 5, paths: { writeTarget: './custom' } });
+
+    await expect(refusal).rejects.toBeInstanceOf(PathSettingError);
+    await expect(refusal).rejects.toThrow(
+      `Refusing to start: ${projectConfig} sets "paths.writeTarget", which is a machine-level setting.`
+    );
+    await expect(refusal).rejects.toThrow(`the workspace config (${workspaceConfigPath})`);
+  });
+
+  it('CONTROL: writeTarget in the workspace config loads, naming its listed folder', async () => {
+    const loader = await loadFile(workspaceConfigPath, {
+      version: 5,
+      paths: { resources: ['./custom'], writeTarget: './custom' },
+    });
+
+    expect(loader.getConfig().paths.writeTarget).toBe(path.join(root, 'workspace', 'custom'));
+  });
+
   it('loads a project config without the key, and one that sets other keys', async () => {
     const loader = await loadFile(path.join(projectWorkspace, 'config.jsonc'), {
       version: 5,

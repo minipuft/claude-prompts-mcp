@@ -201,6 +201,20 @@ export class ResourceLocationLedger {
     }
   }
 
+  /**
+   * Whether this ledger warns about `pair` — its hidden file is a custom collision of its id's
+   * group in the latest sync. Read after {@link recordSync}, so the indexer leaves those pairs to
+   * this ledger's one warning (`reportSyncFindings`' `warnedElsewhere`) and an id warns once.
+   */
+  warnsAbout(pair: ShadowedResource): boolean {
+    return this.groups.some(
+      (group) =>
+        group.type === pair.type &&
+        group.id === pair.id &&
+        customCollisions(group).includes(pair.shadowed)
+    );
+  }
+
   /** The port `system_control` reads; every call answers from the resolver and the latest sync. */
   view(): ResourceLocationsView {
     return {

@@ -1323,3 +1323,83 @@ describe('PathResolver write root follows paths.writeTarget', () => {
     );
   });
 });
+
+/**
+ * A package-root server (no `--workspace`, `MCP_WORKSPACE` or `CLAUDE_PLUGIN_DATA`) under a
+ * `paths.resources` list (R3r): the package's own folder is the bundle, served only where the list
+ * names `"bundled"`, and never the write root while the list names a folder.
+ */
+describe('PathResolver at the package root under a paths.resources list', () => {
+  const TYPES = ['prompts', 'gates', 'frameworks', 'styles'] as const;
+  let dir: string;
+  let packageRoot: string;
+  let first: string;
+  let second: string;
+
+  function resolverWith(list: readonly string[]): PathResolver {
+    const resolver = new PathResolver({ cli: {}, packageRoot });
+    resolver.readResourceLocationsFrom(() => ({ resources: list }));
+    return resolver;
+  }
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'package-root-list-'));
+    packageRoot = path.join(dir, 'package');
+    first = path.join(dir, 'first');
+    second = path.join(dir, 'second');
+    for (const type of TYPES) {
+      mkdirSync(path.join(packageRoot, 'resources', type), { recursive: true });
+      mkdirSync(path.join(first, type), { recursive: true });
+    }
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it.each(TYPES)(
+    'keeps the package folder out of %s and writes into the first listed folder',
+    (type) => {
+      const resolver = resolverWith([first, second]);
+      const packageDir = path.join(packageRoot, 'resources', type);
+      const writeRoot = resolver.getResourceLocations(type).writeRoot;
+      const roots = resolveResourceRoots(resolver, type, writeRoot);
+
+      expect(resolver.isUsingCustomWorkspace()).toBe(false);
+      expect(writeRoot).toBe(path.join(first, type));
+      expect(roots.primary).toBe(path.join(first, type));
+      expect(roots.lookupDirs).toEqual([path.join(first, type), path.join(second, type)]);
+      expect(roots.lookupDirs).not.toContain(packageDir);
+      expect(roots.bundled).toBeUndefined();
+    }
+  );
+
+  it('answers the same write root through the per-type getters', () => {
+    const resolver = resolverWith([first, 'bundled']);
+
+    expect(resolver.getPromptsPath()).toBe(path.join(first, 'prompts'));
+    expect(resolver.getGatesPath()).toBe(path.join(first, 'gates'));
+    expect(resolver.getFrameworksPath()).toBe(path.join(first, 'frameworks'));
+    expect(resolver.getStylesPath()).toBe(path.join(first, 'styles'));
+  });
+
+  it('CONTROL: with "bundled" listed, the package folder serves at its listed position', () => {
+    const resolver = resolverWith(['bundled', first]);
+    const packageDir = path.join(packageRoot, 'resources', 'prompts');
+    const writeRoot = resolver.getResourceLocations('prompts').writeRoot;
+    const roots = resolveResourceRoots(resolver, 'prompts', writeRoot);
+
+    // The write root is still the first listed FOLDER, never the bundle the list names first.
+    expect(writeRoot).toBe(path.join(first, 'prompts'));
+    expect(roots.lookupDirs).toEqual([packageDir, path.join(first, 'prompts')]);
+    expect(roots.bundled).toBe(packageDir);
+  });
+
+  it('CONTROL: with no list, the package folder stays the primary write root', () => {
+    const resolver = resolverWith([]);
+    const packageDir = path.join(packageRoot, 'resources', 'prompts');
+
+    expect(resolver.getResourceLocations('prompts').writeRoot).toBe(packageDir);
+    expect(resolveResourceRoots(resolver, 'prompts', packageDir).lookupDirs).toEqual([packageDir]);
+  });
+});

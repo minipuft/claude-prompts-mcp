@@ -153,8 +153,12 @@ export interface SkillsSyncPaths {
   sourceRoots: Readonly<Record<SkillsSyncResourceType, readonly string[]>>;
   /** The directory a new resource of a type is written to. */
   writeRoots: Readonly<Record<SkillsSyncResourceType, string>>;
-  /** The package's own directory for a type, which a package update replaces. */
-  bundledRoots: Readonly<Record<SkillsSyncResourceType, string>>;
+  /**
+   * The package's own directory for a type, which a package update replaces — undefined where it
+   * contributes no source apart from the write root: a `paths.resources` list that leaves
+   * `"bundled"` out, or a package-root server whose write root is the bundle itself.
+   */
+  bundledRoots: Readonly<Record<SkillsSyncResourceType, string | undefined>>;
 }
 
 /**
@@ -4263,7 +4267,7 @@ function describeBundledPullRefusal(
 ): string | undefined {
   const bundledRoot = paths.bundledRoots[ir.resourceType];
   const writeRoot = paths.writeRoots[ir.resourceType];
-  if (writeRoot === bundledRoot) return undefined;
+  if (bundledRoot === undefined || writeRoot === bundledRoot) return undefined;
   const sourcePath = primarySourcePath(ir);
   const relative = path.relative(bundledRoot, sourcePath);
   if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) return undefined;

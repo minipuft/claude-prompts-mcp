@@ -9,7 +9,7 @@
  */
 
 import { PathResolver } from './paths.js';
-import { indexerResourceRoots } from './resource-roots.js';
+import { indexerResourceRoots, resolveResourceRoots } from './resource-roots.js';
 
 import {
   locateSkillsSyncPackageRoot,
@@ -56,11 +56,14 @@ export function resolveSkillsSyncPaths(
       framework: pathResolver.getFrameworksPath(),
       style: pathResolver.getStylesPath(),
     },
+    // The bundle as the roots name it: absent when a `paths.resources` list leaves `"bundled"`
+    // out (R3c), and when the bundle IS the write root (the package-root server with no list).
     bundledRoots: {
-      prompt: pathResolver.getBundledResourceDir('prompts'),
-      gate: pathResolver.getBundledResourceDir('gates'),
-      framework: pathResolver.getBundledResourceDir('frameworks'),
-      style: pathResolver.getBundledResourceDir('styles'),
+      prompt: resolveResourceRoots(pathResolver, 'prompts', pathResolver.getPromptsPath()).bundled,
+      gate: resolveResourceRoots(pathResolver, 'gates', pathResolver.getGatesPath()).bundled,
+      framework: resolveResourceRoots(pathResolver, 'frameworks', pathResolver.getFrameworksPath())
+        .bundled,
+      style: resolveResourceRoots(pathResolver, 'styles', pathResolver.getStylesPath()).bundled,
     },
   };
 }

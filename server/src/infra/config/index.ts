@@ -633,11 +633,15 @@ function describeMachineConfig(scope: ProjectConfigScope): string {
     : `the workspace config (${scope.workspaceConfigPath})`;
 }
 
+/** The `paths` keys only a machine config may set (rulings R3e, R3t), in the order refused. */
+const MACHINE_LEVEL_PATH_KEYS = ['resources', 'writeTarget'] as const;
+
 /**
- * Refuses a config file inside the project's `.claude-prompts/` folder that sets `paths.resources`.
- * The list is a machine-level setting (ruling R3e): a committed file must not point a
- * collaborator's server at a path on someone else's machine. The folder still contributes its own
- * `resources/` without listing it. Nothing else in a project config is refused here.
+ * Refuses a config file inside the project's `.claude-prompts/` folder that sets `paths.resources`
+ * or `paths.writeTarget`. Both are machine-level settings (rulings R3e, R3t): a committed file must
+ * not point a collaborator's server at a path on someone else's machine, to read from or to write
+ * into. The folder still contributes its own `resources/` without listing it, and is the write
+ * root on its own (R3j). Nothing else in a project config is refused here.
  */
 function assertNoProjectResourceLocations(
   rawConfig: Record<string, unknown>,
@@ -647,12 +651,15 @@ function assertNoProjectResourceLocations(
   if (scope === undefined) return;
   if (path.resolve(path.dirname(configPath)) !== path.resolve(scope.projectWorkspace)) return;
   const paths = rawConfig['paths'];
-  if (!isConfigObject(paths) || !('resources' in paths)) return;
+  if (!isConfigObject(paths)) return;
+  const key = MACHINE_LEVEL_PATH_KEYS.find((name) => name in paths);
+  if (key === undefined) return;
   refuseConfigSetting(
     configPath,
-    'sets "paths.resources", which is a machine-level setting',
+    `sets "paths.${key}", which is a machine-level setting`,
     `the key in ${describeMachineConfig(scope)} or MCP_CONFIG_PATH; a project ` +
-      'folder contributes its own resources/ without listing locations'
+      'folder contributes its own resources/ without listing locations, and takes the writes ' +
+      'once it exists'
   );
 }
 
@@ -687,7 +694,9 @@ export interface ResourcePathSource {
    */
   getBundledResourceDir(resourceType: string): string;
   /**
-   * Workspace overlay directories for a resource type, highest precedence, read in order.
+   * Every location of a type's list except `primaryDir` that exists now, LOWEST precedence first:
+   * the project, profile and `paths.resources` folders, and the bundle at its own position — last
+   * in precedence with no list, where the list names `"bundled"`, absent when a list leaves it out.
    *
    * On the port for the same reason `getBundledResourceDir` is: the RELOAD path needs the same
    * root SET startup uses, and it lives in `modules/` where `runtime/PathResolver` cannot be

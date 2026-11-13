@@ -93,11 +93,15 @@ export async function syncResourceIndex(params: ResourceIndexSyncParams): Promis
     quarantine: indexQuarantine,
   });
   const syncResult = await indexer.syncAll();
-  reportSyncFindings(syncResult, logger);
+  // The ledger first: it warns about every same-id pair between two custom locations, and the
+  // indexer's report leaves those pairs to it so an id draws one warning, not two.
   locationLedger.recordSync(
     syncResult.shadowed,
     dbManager.query<ServedResourceFile>('SELECT type, file_path AS filePath FROM resource_index')
   );
+  reportSyncFindings(syncResult, logger, {
+    warnedElsewhere: (pair) => locationLedger.warnsAbout(pair),
+  });
   afterSync?.(dbManager);
   logger.info('✅ Resource index synced to SQLite');
 }

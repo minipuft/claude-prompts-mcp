@@ -787,11 +787,10 @@ describe('GateGuidanceRenderer — construction, failure isolation, evaluations,
       );
     });
 
-    test('a missing default framework gate names the location list as the cause, once', async () => {
-      const guidance = await rendererFor(loaderFor({})).renderGuidance(
-        ['framework-compliance'],
-        {}
-      );
+    test('a missing default framework gate under a location list names the list, once', async () => {
+      const guidance = await rendererFor(loaderFor({}), {
+        resourceListInForce: () => true,
+      }).renderGuidance(['framework-compliance'], {});
 
       expect(guidance).toBe('');
       expect(logger.warn).toHaveBeenCalledTimes(1);
@@ -799,6 +798,22 @@ describe('GateGuidanceRenderer — construction, failure isolation, evaluations,
         `[GATE GUIDANCE RENDERER] Gate 'framework-compliance' is not in any listed location; ` +
           'add "bundled" to paths.resources or ship the gate in a listed folder'
       );
+    });
+
+    test('a missing default framework gate with no list in force names a broken package', async () => {
+      // No list means the bundle is always served, so the list cannot be the cause. Both the
+      // explicit `false` and an unwired provider read that way.
+      for (const extra of [{ resourceListInForce: () => false }, {}]) {
+        logger.warn.mockClear();
+        await rendererFor(loaderFor({}), extra).renderGuidance(['framework-compliance'], {});
+
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+        expect(logger.warn).toHaveBeenCalledWith(
+          `[GATE GUIDANCE RENDERER] Gate 'framework-compliance' is missing from the package's own ` +
+            'resources, which ship it; the installed package is incomplete, reinstall it'
+        );
+        expect(String(logger.warn.mock.calls[0]?.[0])).not.toContain('paths.resources');
+      }
     });
 
     test('a loader that throws for one gate does not lose the others', async () => {

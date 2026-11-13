@@ -197,6 +197,31 @@ describe('planByteRestore', () => {
     expect(available.reason).not.toContain('recorded no file tree');
   });
 
+  it('refuses a version recorded from the bundle once no location in force holds it, naming the list', async () => {
+    const version = await recordVersion('gate', 'alpha', { 'gate.yaml': 'id: alpha\n' });
+    // Recorded from the package's tree; the bundle has since left the location list, so the
+    // locator finds the gate under no root and there is no bundled position to re-root.
+    ctx.dbManager.run(`UPDATE version_history SET tree_origin = 'bundled' WHERE version = ?`, [
+      version,
+    ]);
+    await rm(path.join(rootFor('gate'), 'alpha'), { recursive: true, force: true });
+
+    const available = await service().planByteRestore('gate', 'alpha', version);
+    expect(available.status).toBe('refused');
+    if (available.status !== 'refused') throw new Error('unreachable');
+    expect(available.reason).toContain(`version ${version} of gate 'alpha'`);
+    expect(available.reason).toContain('add "bundled" to paths.resources');
+    await expect(stat(path.join(rootFor('gate'), 'alpha'))).rejects.toThrow();
+  });
+
+  it('CONTROL: the same unlocated resource recorded from a workspace stays projection-only', async () => {
+    const version = await recordVersion('gate', 'alpha', { 'gate.yaml': 'id: alpha\n' });
+    await rm(path.join(rootFor('gate'), 'alpha'), { recursive: true, force: true });
+
+    const available = await service().planByteRestore('gate', 'alpha', version);
+    expect(available.status).toBe('projection-only');
+  });
+
   it("does not read another workspace's object for the same digest", async () => {
     // Objects are keyed `(tenant_id, hash)` (ruling R56), so two workspaces holding byte-identical
     // files hold two rows with the SAME digest. Drop one tenant's object and its rollback must
