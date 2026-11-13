@@ -27,12 +27,13 @@ import type { ResourceType } from '#modules/versioning/types.js';
 import { VersionHistoryService } from '#modules/versioning/version-history-service.js';
 import { PathResolver } from '#runtime/paths.js';
 import { createResourceFileLocator } from '#runtime/resource-roots.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
 
-const SCRUBBED = ['MCP_RESOURCES_PATH', 'MCP_WORKSPACE', 'MCP_RUNTIME_ROOT'] as const;
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 let workspace: string;
 let packageRoot: string;
-let saved: Record<string, string | undefined>;
+let locations: ResourceLocationScope;
 
 /** A `VersionHistoryService` wired exactly as the four tool handlers wire theirs. */
 function serviceOver(resolver: PathResolver): VersionHistoryService {
@@ -74,8 +75,7 @@ async function write(file: string, body: string): Promise<void> {
 }
 
 beforeEach(async () => {
-  saved = Object.fromEntries(SCRUBBED.map((key) => [key, process.env[key]]));
-  for (const key of SCRUBBED) delete process.env[key];
+  locations = withResourceLocations();
 
   workspace = await mkdtemp(path.join(tmpdir(), 'cs-write-ws-'));
   packageRoot = await mkdtemp(path.join(tmpdir(), 'cs-write-pkg-'));
@@ -104,11 +104,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  for (const key of SCRUBBED) {
-    const value = saved[key];
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
+  locations.cleanup();
   await rm(workspace, { recursive: true, force: true });
   await rm(packageRoot, { recursive: true, force: true });
 });

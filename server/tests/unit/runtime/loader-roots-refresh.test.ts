@@ -25,6 +25,7 @@ import {
   createLoaderRootsSource,
   resolveResourceRoots,
 } from '../../../src/runtime/resource-roots.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 
 type TypeDir = 'gates' | 'frameworks' | 'styles';
 
@@ -71,7 +72,7 @@ describe('loader.refreshRoots follows a project .claude-prompts/ created after c
   let workspace: string;
   let project: string;
   let resolver: PathResolver;
-  const saved: Record<string, string | undefined> = {};
+  const locations = isolateResourceLocations();
 
   const write = (root: string, type: TypeDir, origin: string): void => {
     mkdirSync(path.join(root, 'shared'), { recursive: true });
@@ -128,7 +129,6 @@ describe('loader.refreshRoots follows a project .claude-prompts/ created after c
   }
 
   beforeEach(() => {
-    for (const key of ['MCP_WORKSPACE', 'MCP_RESOURCES_PATH']) saved[key] = process.env[key];
     dir = mkdtempSync(path.join(tmpdir(), 'loader-roots-refresh-'));
     packageRoot = path.join(dir, 'package');
     workspace = path.join(dir, 'workspace');
@@ -136,8 +136,7 @@ describe('loader.refreshRoots follows a project .claude-prompts/ created after c
     mkdirSync(path.join(packageRoot, 'resources'), { recursive: true });
     mkdirSync(workspace);
     mkdirSync(project);
-    process.env['MCP_WORKSPACE'] = workspace;
-    delete process.env['MCP_RESOURCES_PATH'];
+    locations.set({ workspace });
     resolver = new PathResolver({
       cli: {},
       packageRoot,
@@ -147,10 +146,6 @@ describe('loader.refreshRoots follows a project .claude-prompts/ created after c
   });
 
   afterEach(() => {
-    for (const [key, value] of Object.entries(saved)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -214,6 +209,9 @@ describe('loader.refreshRoots follows a project .claude-prompts/ created after c
                 ...config,
               });
 
+      // Served once before the project copy exists, so the definition is cached: the project folder
+      // already leads the held order, so an uncached lookup would find its copy without a refresh.
+      expect(served(loader, type).origin).toBe('FROM WORKSPACE');
       write(projectRoot, type, 'FROM PROJECT');
 
       expect(loader.refreshRoots()).toBe(false);

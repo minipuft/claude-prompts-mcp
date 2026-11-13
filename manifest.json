@@ -45,7 +45,6 @@
       ],
       "command": "node",
       "env": {
-        "MCP_RESOURCES_PATH": "${__dirname}/server/resources",
         "MCP_WORKSPACE": "${__dirname}"
       }
     },

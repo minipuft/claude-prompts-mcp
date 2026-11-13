@@ -91,6 +91,11 @@ export class Application {
   private _categories: Category[] = [];
   private _convertedPrompts: ConvertedPrompt[] = [];
   private promptsDirectory?: string;
+  /**
+   * The `paths.resources` list the last data load ran under; empty when the config names none.
+   * With a list in force an empty catalog is the operator's choice, not a broken bundle (R3n).
+   */
+  private resourceLocationsInForce: readonly string[] = [];
   private hotReloadInitialized = false;
   private promptReloads = new CoalescingReloadRunner((event) => this.reloadPromptsFromDisk(event));
   private promptHotReloadHandler = (event: HotReloadEvent) => this.handlePromptHotReload(event);
@@ -320,6 +325,18 @@ export class Application {
     this._categories = result.categories;
     this._convertedPrompts = result.convertedPrompts;
     this.promptsDirectory = result.promptsDirectory;
+
+    // R3n: with a `paths.resources` list in force the count is always visible, zero included, on
+    // one stderr line. WARN because it is the level that reaches stderr on both transports; INFO
+    // stays in the log file under STDIO. Read through the resolver, the list's one reader.
+    this.resourceLocationsInForce = this.pathResolver.getConfiguredResourceLocations();
+    if (this.resourceLocationsInForce.length > 0) {
+      this.logger.warn(
+        `Resource locations: ${result.promptsData.length} prompts across ` +
+          `${this.resourceLocationsInForce.length} locations ` +
+          `(${this.resourceLocationsInForce.join(', ')})`
+      );
+    }
   }
 
   /**
@@ -1008,8 +1025,12 @@ export class Application {
       issues.push('Foundation modules not properly initialized');
     }
 
-    // Check data loading
-    const dataLoaded = this._promptsData.length > 0 && this._categories.length > 0;
+    // Check data loading. Without a `paths.resources` list an empty catalog means the bundle itself
+    // is broken and startup refuses. With a list in force, zero prompts is what the operator listed:
+    // the server starts and the startup count line reports it (R3n).
+    const dataLoaded =
+      (this._promptsData.length > 0 && this._categories.length > 0) ||
+      this.resourceLocationsInForce.length > 0;
     moduleStatus['dataLoaded'] = dataLoaded;
     if (!dataLoaded) {
       issues.push('Prompt data not loaded or empty');

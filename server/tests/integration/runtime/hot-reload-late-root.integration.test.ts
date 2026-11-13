@@ -52,6 +52,7 @@ import type { FrameworkManager } from '../../../src/engine/frameworks/framework-
 import type { McpToolRouter } from '../../../src/mcp/tools/index.js';
 import type { AuxiliaryReloadConfig } from '../../../src/modules/hot-reload/hot-reload-observer.js';
 import type { HotReloadEvent, Logger } from '../../../src/shared/types/index.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
 
 const logger: Logger = {
   info: () => {},
@@ -271,25 +272,19 @@ describe('an overlay that does not exist yet is still a root', () => {
     }
     await writeFile(path.join(packageRoot, 'config.json'), '{}', 'utf8');
 
-    const previous = process.env['MCP_WORKSPACE'];
-    const previousResources = process.env['MCP_RESOURCES_PATH'];
-    process.env['MCP_WORKSPACE'] = workspace;
-    delete process.env['MCP_RESOURCES_PATH'];
-    cleanups.push(async () => {
-      if (previous === undefined) delete process.env['MCP_WORKSPACE'];
-      else process.env['MCP_WORKSPACE'] = previous;
-      if (previousResources !== undefined) process.env['MCP_RESOURCES_PATH'] = previousResources;
-    });
+    const locations = withResourceLocations({ workspace });
+    cleanups.push(async () => locations.cleanup());
     const resolver = new PathResolver({ cli: {}, packageRoot });
 
     for (const type of ['prompts', 'gates', 'frameworks', 'styles']) {
       const overlay = path.join(workspace, type);
       expect(existsSync(overlay)).toBe(false);
       const roots = resolveResourceRoots(resolver, type, path.join(workspace, 'resources', type));
-      expect(roots.overlays).toEqual([overlay]);
+      // Lowest first: the bundle, then the not-yet-created legacy overlay.
+      expect(roots.overlays).toEqual([roots.bundled, overlay]);
       expect(roots.lookupDirs.slice(0, 2)).toEqual([roots.primary, overlay]);
-      // The present-tense reading still reports only what exists.
-      expect(resolver.getOverlayResourceDirs(type, roots.primary)).toEqual([]);
+      // The present-tense reading still reports only what exists: the bundle alone.
+      expect(resolver.getOverlayResourceDirs(type, roots.primary)).toEqual([roots.bundled]);
     }
 
     const gateRoots = resolveResourceRoots(
@@ -345,15 +340,8 @@ describe('a project .claude-prompts/ created while the server runs', () => {
     await mkdir(path.join(packageRoot, 'resources', 'gates'), { recursive: true });
     await mkdir(path.join(workspace, 'resources', 'gates'), { recursive: true });
 
-    const previous = process.env['MCP_WORKSPACE'];
-    const previousResources = process.env['MCP_RESOURCES_PATH'];
-    process.env['MCP_WORKSPACE'] = workspace;
-    delete process.env['MCP_RESOURCES_PATH'];
-    cleanups.push(async () => {
-      if (previous === undefined) delete process.env['MCP_WORKSPACE'];
-      else process.env['MCP_WORKSPACE'] = previous;
-      if (previousResources !== undefined) process.env['MCP_RESOURCES_PATH'] = previousResources;
-    });
+    const locations = withResourceLocations({ workspace });
+    cleanups.push(async () => locations.cleanup());
 
     const projectWorkspace = path.join(project, '.claude-prompts');
     const projectGates = path.join(projectWorkspace, 'resources', 'gates');
@@ -371,7 +359,8 @@ describe('a project .claude-prompts/ created while the server runs', () => {
     const roots = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
     expect(roots.primary).toBe(path.join(workspace, 'resources', 'gates'));
     expect(roots.overlays.at(-1)).toBe(projectGates);
-    expect(roots.lookupDirs.slice(0, 2)).toEqual([roots.primary, projectGates]);
+    // Listed first, where it ranks once it exists; it holds nothing until then.
+    expect(roots.lookupDirs.slice(0, 2)).toEqual([projectGates, roots.primary]);
 
     const loader = new GateDefinitionLoader({
       gatesDir: roots.primary!,
@@ -433,15 +422,8 @@ describe('a project .claude-prompts/ created while the server runs becomes the w
       await mkdir(path.join(workspace, 'resources', type), { recursive: true });
     }
 
-    const previous = process.env['MCP_WORKSPACE'];
-    const previousResources = process.env['MCP_RESOURCES_PATH'];
-    process.env['MCP_WORKSPACE'] = workspace;
-    delete process.env['MCP_RESOURCES_PATH'];
-    cleanups.push(async () => {
-      if (previous === undefined) delete process.env['MCP_WORKSPACE'];
-      else process.env['MCP_WORKSPACE'] = previous;
-      if (previousResources !== undefined) process.env['MCP_RESOURCES_PATH'] = previousResources;
-    });
+    const locations = withResourceLocations({ workspace });
+    cleanups.push(async () => locations.cleanup());
 
     const resolver = new PathResolver({
       cli: {},

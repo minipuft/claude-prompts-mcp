@@ -31,14 +31,24 @@
       "additionalProperties": false,
       "description": "Server identity and transport settings."
     },
+    "paths": {
+      "type": "object",
+      "properties": {
+        "resources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Resource locations, in order. \"bundled\" names the package's own resources; any other entry is a resources directory (holding prompts/, gates/, ...), absolute or relative to this file.",
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false,
+      "description": "Where resources are read from."
+    },
     "prompts": {
       "type": "object",
       "properties": {
-        "directory": {
-          "type": "string",
-          "description": "Directory containing prompt definitions (relative to server root).",
-          "default": "resources/prompts"
-        },
         "registerWithMcp": {
           "type": "boolean",
           "description": "Register prompts as MCP resources for client discovery.",

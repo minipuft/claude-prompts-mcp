@@ -380,8 +380,9 @@ RUNTIME OPTIONS:
 ENVIRONMENT VARIABLES:
   MCP_WORKSPACE            Base workspace directory (same as --workspace); the server
                            refuses to start if it is not an existing directory
-  MCP_RESOURCES_PATH       Custom resources base directory (replaces package default);
-                           the server refuses to start if it is not an existing directory
+  MCP_RESOURCES_PATH       Replaces the profile's own resources folder; the config's
+                           paths.resources entries still follow it. The server refuses
+                           to start if it is not an existing directory
   MCP_RUNTIME_ROOT         Writable root for runtime-state/ and relative logs/
                            (defaults to the workspace)
   MCP_CONFIG_PATH          Direct path to your config file (same as --config); the server
@@ -390,10 +391,11 @@ ENVIRONMENT VARIABLES:
 
 PRIORITY ORDER:
   --workspace > MCP_WORKSPACE > Package defaults
-  MCP_RESOURCES_PATH overrides the resources base within the workspace.
+  MCP_RESOURCES_PATH replaces the profile's own resources folder; the config's paths.resources entries still follow it.
   Custom workspace resources overlay bundled ones (same ID = custom wins);
-  the bundled definitions stay loaded underneath, so a workspace holding one
-  prompt serves that prompt PLUS the shipped catalog.
+  the bundle loads unless a paths.resources list in the workspace config leaves
+  "bundled" out; when it loads, a workspace holding one prompt serves that
+  prompt PLUS the shipped catalog.
   Point MCP_WORKSPACE at a personal library and MCP_RUNTIME_ROOT elsewhere to
   keep state.db and logs where they were.
 
@@ -543,7 +545,6 @@ async function main(): Promise<void> {
       debugLog(`DEBUG: Node.js version: ${process.version}`);
       debugLog(`DEBUG: Working directory: ${process.cwd()}`);
       debugLog(`DEBUG: MCP_WORKSPACE: ${process.env['MCP_WORKSPACE'] ?? 'not set'}`);
-      debugLog(`DEBUG: MCP_RESOURCES_PATH: ${process.env['MCP_RESOURCES_PATH'] ?? 'not set'}`);
     }
 
     // Setup error handlers first

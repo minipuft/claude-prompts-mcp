@@ -371,14 +371,17 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     'frameworks',
     pathResolver.getFrameworksPath()
   );
-  const frameworkLoader = getDefaultRuntimeLoader(
-    loaderDirsConfig(
+  // `shippedFrameworksDir`: the six run-required frameworks load from the package even when a
+  // `paths.resources` list leaves `"bundled"` out and `frameworkRoots` holds no bundle (R3c).
+  const frameworkLoader = getDefaultRuntimeLoader({
+    ...loaderDirsConfig(
       frameworkRoots,
       'frameworksDir',
       'additionalFrameworksDirs',
       createLoaderRootsSource(pathResolver, 'frameworks')
-    )
-  );
+    ),
+    shippedFrameworksDir: pathResolver.getBundledResourceDir('frameworks'),
+  });
 
   if (isVerbose) logger.info('🔄 Initializing Framework State Manager...');
   const currentFrameworkConfig = configManager.getFrameworksConfig();

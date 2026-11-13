@@ -18,7 +18,13 @@ import { isAbsolute, resolve } from 'path';
 
 /** An operator path setting: the flag or environment variable, and the value it was given. */
 export interface PathSetting {
-  name: '--config' | 'MCP_CONFIG_PATH' | '--workspace' | 'MCP_WORKSPACE' | 'MCP_RESOURCES_PATH';
+  name:
+    | '--config'
+    | 'MCP_CONFIG_PATH'
+    | '--workspace'
+    | 'MCP_WORKSPACE'
+    | 'CLAUDE_PLUGIN_DATA'
+    | 'MCP_RESOURCES_PATH';
   value: string;
 }
 
@@ -51,8 +57,9 @@ export function resolveSettingPath(value: string): string {
  * Why `resolved` cannot serve as a directory setting, or `undefined` when it can.
  *
  * Checked with `stat`, not `existsSync`: a file at that path "exists" and is still no workspace.
+ * Exported for the config loader, which refuses a `paths.resources` entry by the same test.
  */
-function describeUnusableDirectory(resolved: string): string | undefined {
+export function describeUnusableDirectory(resolved: string): string | undefined {
   try {
     if (!statSync(resolved).isDirectory()) return 'is not a directory';
   } catch (error) {

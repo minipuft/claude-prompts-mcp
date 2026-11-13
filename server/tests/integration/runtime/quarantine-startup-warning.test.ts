@@ -36,6 +36,8 @@ import { PathResolver } from '../../../src/runtime/paths.js';
 import type { ConfigLoader } from '../../../src/infra/config/index.js';
 import type { ConfigManager, Logger } from '../../../src/shared/types/index.js';
 import type { RuntimeLaunchOptions } from '../../../src/runtime/options.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 const warnings: string[] = [];
 
@@ -85,24 +87,8 @@ const configStub = {
   getPromptsRegisterWithMcp: () => false,
 } as unknown as ConfigLoader & ConfigManager;
 
-/**
- * Path settings this test must not inherit from whoever is running it.
- *
- * `PathResolver` reads the environment before it reads its `cli` options, and a developer shell
- * here commonly exports `MCP_RESOURCES_PATH` at a personal prompt library — measured while writing
- * this file: the fixture control below reported 90-odd ids from that library instead of the two
- * written above. Clearing them is not tidiness; without it the test asserts against a tree it did
- * not create, and passes or fails by whose machine it is.
- */
-const INHERITED_PATH_SETTINGS = [
-  'MCP_RESOURCES_PATH',
-  'MCP_WORKSPACE',
-  'MCP_RUNTIME_ROOT',
-  'MCP_CONFIG_PATH',
-] as const;
-
 describe('the startup quarantine warning names the root that is answering (P4.23)', () => {
-  const inherited = new Map<string, string | undefined>();
+  let locations: ResourceLocationScope;
   let tmp: string;
   let packageRoot: string;
   let workspace: string;
@@ -113,10 +99,11 @@ describe('the startup quarantine warning names the root that is answering (P4.23
 
   beforeEach(async () => {
     warnings.length = 0;
-    for (const name of INHERITED_PATH_SETTINGS) {
-      inherited.set(name, process.env[name]);
-      delete process.env[name];
-    }
+    // `PathResolver` reads the environment before its `cli` options, and a developer shell here
+    // commonly exports `MCP_RESOURCES_PATH` at a personal prompt library — measured while writing
+    // this file: the fixture control below reported 90-odd ids from that library instead of the two
+    // written above. Without clearing them the test asserts against a tree it did not create.
+    locations = withResourceLocations();
     tmp = await mkdtemp(path.join(tmpdir(), 'quarantine-startup-warning-'));
     packageRoot = path.join(tmp, 'package');
     workspace = path.join(tmp, 'workspace');
@@ -141,11 +128,7 @@ describe('the startup quarantine warning names the root that is answering (P4.23
   });
 
   afterEach(async () => {
-    for (const [name, value] of inherited) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    }
-    inherited.clear();
+    locations.cleanup();
     if (tmp) await rm(tmp, { recursive: true, force: true, maxRetries: 5 });
   });
 

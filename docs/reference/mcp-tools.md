@@ -2455,26 +2455,29 @@ success. The same check applies to `transport` in your config file.
 
 ### Environment Variables
 
-| Variable                    | Description                                                                                                         |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `MCP_WORKSPACE`             | Workspace root for config resolution; must be an existing directory, or the server refuses to start                 |
-| `MCP_RESOURCES_PATH`        | Base path for all resources (prompts/, gates/, etc.); must be an existing directory, or the server refuses to start |
-| `MCP_CONFIG_PATH`           | Override the config file path (`.jsonc` or `.json`); must name a readable file, or the server refuses to start      |
-| `MCP_SERVER_ROOT`           | Server package root, used by skills export                                                                          |
-| `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file                                                                     |
-| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict validation settings file (rationale requirements)                                         |
+| Variable                    | Description                                                                                                                                                                                                           |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MCP_WORKSPACE`             | Workspace root for config resolution; must be an existing directory, or the server refuses to start                                                                                                                   |
+| `MCP_RESOURCES_PATH`        | A resources directory (prompts/, gates/, etc.) used in place of the workspace's own `resources/`; the config's `paths.resources` list still follows it. Must be an existing directory, or the server refuses to start |
+| `MCP_CONFIG_PATH`           | Override the config file path (`.jsonc` or `.json`); must name a readable file, or the server refuses to start                                                                                                        |
+| `MCP_SERVER_ROOT`           | Server package root, used by skills export                                                                                                                                                                            |
+| `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file                                                                                                                                                                       |
+| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict validation settings file (rationale requirements)                                                                                                                                           |
 
 Per-resource-type variables (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_FRAMEWORKS_PATH`,
 `MCP_STYLES_PATH`, `MCP_SCRIPTS_PATH`) were documented here but are read nowhere in the server.
 
 ### Resolution Priority
 
-Path resolution follows this priority (first match wins):
+Each resource type reads one ordered list of folders, and the first to define an id wins:
 
-1. **Unified env var** — `MCP_RESOURCES_PATH/prompts/` (all resources)
-2. **Package defaults** — `server/resources/prompts/` (lowest priority)
+1. **Project** — `<project>/.claude-prompts/resources/<type>/` (STDIO only)
+2. **Workspace** — `<workspace>/resources/<type>/`, or `MCP_RESOURCES_PATH/<type>/` in its place
+3. **`paths.resources`** — each entry in your config, in order; `"bundled"` names the package's own resources
+4. **Package defaults** — `server/resources/<type>/`, last, only when the config has no `paths.resources` list
 
-Workspace resources overlay the bundled ones. There is no per-resource-type override layer —
+The full rules, and where a created resource is saved, are in
+[Custom Resources](../guides/custom-resources.md#where-resources-come-from). There is no per-resource-type override layer —
 the two tiers previously documented above these (CLI flags and individual env vars) do not exist.
 A set `MCP_RESOURCES_PATH` that does not exist is not "no match": it refuses startup rather than
 falling through to the package defaults, which would serve the bundled catalog under your name.

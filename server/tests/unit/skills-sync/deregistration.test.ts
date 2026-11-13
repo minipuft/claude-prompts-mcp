@@ -19,6 +19,7 @@ import * as yaml from 'js-yaml';
 import { loadSkillsSyncExports } from '../../../src/runtime/data-loader.js';
 import { PathResolver } from '../../../src/runtime/paths.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 
 const silentLogger = {
   info: () => {},
@@ -31,23 +32,7 @@ const ALL_PROMPTS = ['development/dev-workflow', 'general/other', 'analysis/deep
 
 // A workspace or resources path exported by the developer's shell would otherwise decide which
 // skills-sync.yaml these tests read.
-let savedEnv: Record<string, string | undefined>;
-
-beforeEach(() => {
-  savedEnv = {
-    MCP_WORKSPACE: process.env['MCP_WORKSPACE'],
-    MCP_RESOURCES_PATH: process.env['MCP_RESOURCES_PATH'],
-  };
-  delete process.env['MCP_WORKSPACE'];
-  delete process.env['MCP_RESOURCES_PATH'];
-});
-
-afterEach(() => {
-  for (const [key, value] of Object.entries(savedEnv)) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-});
+const locations = isolateResourceLocations();
 
 describe('skills-sync auto-deregistration', () => {
   let serverRoot: string;
@@ -165,7 +150,7 @@ describe('skills-sync auto-deregistration reads the file skills sync registers i
   }
 
   it('reads the workspace skills-sync.yaml over the package copy', async () => {
-    process.env['MCP_WORKSPACE'] = workspace;
+    locations.set({ workspace });
     await registerIn(packageRoot, 'development/dev-workflow');
     await registerIn(workspace, 'general/other');
 
@@ -179,7 +164,7 @@ describe('skills-sync auto-deregistration reads the file skills sync registers i
   });
 
   it('reads the package skills-sync.yaml when the workspace holds none', async () => {
-    process.env['MCP_WORKSPACE'] = workspace;
+    locations.set({ workspace });
     await registerIn(packageRoot, 'development/dev-workflow');
 
     expect([...(await loadAtStartup())]).toEqual(['development/dev-workflow']);

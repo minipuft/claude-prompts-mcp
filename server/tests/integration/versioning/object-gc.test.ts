@@ -44,6 +44,7 @@ import type { ResourceFileLocatorPort } from '../../../src/shared/utils/resource
 
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
 import { createTestDatabaseManager } from '../../helpers/test-database.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
 import {
   DANGLING_ENTRY_SQL,
   EMPTY_TREE_SQL,
@@ -224,21 +225,13 @@ describe('objects are swept by every path that removes the rows referencing them
 
     // `cpm` opens `state.db` itself. The server's engine holds it too; both carry the same
     // busy_timeout, so the second writer waits rather than colliding.
-    const saved = process.env['MCP_RUNTIME_ROOT'];
-    const savedWorkspace = process.env['MCP_WORKSPACE'];
-    const savedResources = process.env['MCP_RESOURCES_PATH'];
-    delete process.env['MCP_RESOURCES_PATH'];
-    delete process.env['MCP_WORKSPACE'];
-    process.env['MCP_RUNTIME_ROOT'] = ctx.testDir;
+    const locations = withResourceLocations({ runtimeRoot: ctx.testDir });
     try {
       expect(deleteVersionRows(ctx.testDir, { resourceType: 'gate', resourceId: 'alpha' })).toBe(
         true
       );
     } finally {
-      if (saved === undefined) delete process.env['MCP_RUNTIME_ROOT'];
-      else process.env['MCP_RUNTIME_ROOT'] = saved;
-      if (savedWorkspace !== undefined) process.env['MCP_WORKSPACE'] = savedWorkspace;
-      if (savedResources !== undefined) process.env['MCP_RESOURCES_PATH'] = savedResources;
+      locations.cleanup();
     }
 
     expect(historyRows()).toHaveLength(0);
@@ -331,18 +324,13 @@ describe('objects are swept by every path that removes the rows referencing them
     const objectsBefore = objects();
     expect(entriesBefore).toHaveLength(2);
 
-    const saved = process.env['MCP_RUNTIME_ROOT'];
-    const savedResources = process.env['MCP_RESOURCES_PATH'];
-    delete process.env['MCP_RESOURCES_PATH'];
-    process.env['MCP_RUNTIME_ROOT'] = ctx.testDir;
+    const locations = withResourceLocations({ runtimeRoot: ctx.testDir });
     try {
       expect(
         renameHistoryResource(ctx.testDir, { resourceType: 'gate', resourceId: 'alpha' }, 'beta')
       ).toBe(true);
     } finally {
-      if (saved === undefined) delete process.env['MCP_RUNTIME_ROOT'];
-      else process.env['MCP_RUNTIME_ROOT'] = saved;
-      if (savedResources !== undefined) process.env['MCP_RESOURCES_PATH'] = savedResources;
+      locations.cleanup();
     }
 
     // Compared as ONE value each: a rename re-keys `version_history.resource_id`, and entries key

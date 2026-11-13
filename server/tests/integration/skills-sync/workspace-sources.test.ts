@@ -25,6 +25,9 @@ import {
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
 import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
+
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 function silentOutput(): SkillsSyncOutput & { logs: string[]; warns: string[] } {
   const logs: string[] = [];
@@ -98,7 +101,7 @@ describe('skills sync reads the workspace over the bundled tree', () => {
   let packageRoot: string;
   let workspace: string;
   let outputDir: string;
-  let savedEnv: Record<string, string | undefined>;
+  let locations: ResourceLocationScope;
 
   beforeEach(async () => {
     tmpDir = mkdtempSync(path.join(os.tmpdir(), 'skills-workspace-'));
@@ -109,23 +112,11 @@ describe('skills sync reads the workspace over the bundled tree', () => {
     await mkdir(path.join(workspace, 'resources'), { recursive: true });
     await mkdir(outputDir, { recursive: true });
 
-    savedEnv = Object.fromEntries(
-      ['MCP_SERVER_ROOT', 'MCP_RESOURCES_PATH', 'MCP_WORKSPACE', 'MCP_RUNTIME_ROOT'].map((key) => [
-        key,
-        process.env[key],
-      ])
-    );
-    process.env['MCP_SERVER_ROOT'] = packageRoot;
-    process.env['MCP_WORKSPACE'] = workspace;
-    delete process.env['MCP_RESOURCES_PATH'];
-    delete process.env['MCP_RUNTIME_ROOT'];
+    locations = withResourceLocations({ serverRoot: packageRoot, workspace });
   });
 
   afterEach(async () => {
-    for (const [key, value] of Object.entries(savedEnv)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    locations.cleanup();
     await rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -279,7 +270,7 @@ describe('skills sync reads the workspace over the bundled tree', () => {
   it('writes patch files under MCP_RUNTIME_ROOT when it is set, not under the package', async () => {
     await writeConfig(workspace, outputDir);
     const runtimeRoot = path.join(tmpDir, 'runtime');
-    process.env['MCP_RUNTIME_ROOT'] = runtimeRoot;
+    locations.set({ runtimeRoot });
 
     await run({ command: 'patch', client: 'claude-code', scope: 'user' });
 
@@ -373,17 +364,10 @@ describe('skills sync reads the workspace over the bundled tree', () => {
 });
 
 describe('locating the package root without an explicit resolver', () => {
-  const ENV_KEYS = [
-    'MCP_SERVER_ROOT',
-    'MCP_RESOURCES_PATH',
-    'MCP_WORKSPACE',
-    'MCP_RUNTIME_ROOT',
-    'MCP_CONFIG_PATH',
-  ];
   // service.ts sits at server/src/modules/skills-sync, so its bundle-relative root is server/.
   const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
   let base: string;
-  let savedEnv: Record<string, string | undefined>;
+  let locations: ResourceLocationScope;
   let savedCwd: string;
 
   const layout = async (...dirs: string[]) => {
@@ -397,8 +381,7 @@ describe('locating the package root without an explicit resolver', () => {
 
   beforeEach(async () => {
     savedCwd = process.cwd();
-    savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
-    for (const key of ENV_KEYS) delete process.env[key];
+    locations = withResourceLocations();
     base = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'skills-locate-')));
     await mkdir(path.join(base, 'cwd'), { recursive: true });
     process.chdir(path.join(base, 'cwd'));
@@ -406,16 +389,13 @@ describe('locating the package root without an explicit resolver', () => {
 
   afterEach(async () => {
     process.chdir(savedCwd);
-    for (const [key, value] of Object.entries(savedEnv)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    locations.cleanup();
     await rm(base, { recursive: true, force: true });
   });
 
   it('takes <MCP_SERVER_ROOT>/server when it holds resources, ahead of <MCP_SERVER_ROOT> itself', async () => {
     await layout('repo/server/resources');
-    process.env['MCP_SERVER_ROOT'] = path.join(base, 'repo');
+    locations.set({ serverRoot: path.join(base, 'repo') });
     expect(located()).toBe(path.join(base, 'repo', 'server'));
 
     // Control: with both present the server/ form still wins, so the answer is not "whatever exists".
@@ -425,16 +405,16 @@ describe('locating the package root without an explicit resolver', () => {
 
   it('takes MCP_SERVER_ROOT itself when only it holds resources, and resolves a relative value against the cwd', async () => {
     await layout('pkg/resources');
-    process.env['MCP_SERVER_ROOT'] = path.join(base, 'pkg');
+    locations.set({ serverRoot: path.join(base, 'pkg') });
     expect(located()).toBe(path.join(base, 'pkg'));
 
-    process.env['MCP_SERVER_ROOT'] = '../pkg';
+    locations.set({ serverRoot: '../pkg' });
     expect(located()).toBe(path.join(base, 'pkg'));
   });
 
   it('ignores an MCP_SERVER_ROOT that holds no resources and looks at the cwd: server/ first, then the cwd itself', async () => {
     await layout('empty');
-    process.env['MCP_SERVER_ROOT'] = path.join(base, 'empty');
+    locations.set({ serverRoot: path.join(base, 'empty') });
 
     await layout('cwd/resources');
     expect(located()).toBe(path.join(base, 'cwd'));

@@ -15,8 +15,15 @@ import {
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
 import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
+import {
+  isolateResourceLocations,
+  withResourceLocations,
+} from '../../helpers/resource-locations.js';
+
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 describe('skills-sync CLI option handling', () => {
+  const locations = isolateResourceLocations();
   const output = {
     log: jest.fn(),
     warn: jest.fn(),
@@ -145,10 +152,9 @@ describe('skills-sync CLI option handling', () => {
     // a diff or sync ran against a tree the operator never named.
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-missing-'));
     const missing = path.join(tempRoot, 'no-such-resources');
-    const previousResourcesPath = process.env['MCP_RESOURCES_PATH'];
 
     try {
-      process.env['MCP_RESOURCES_PATH'] = missing;
+      locations.set({ resourcesPath: missing });
       await expect(
         runSkillsSyncCommand(
           parseSkillsSyncArgs(['node', 'scripts/skills-sync.ts', 'diff']),
@@ -160,11 +166,6 @@ describe('skills-sync CLI option handling', () => {
       );
       expect(existsSync(missing)).toBe(false);
     } finally {
-      if (previousResourcesPath === undefined) {
-        delete process.env['MCP_RESOURCES_PATH'];
-      } else {
-        process.env['MCP_RESOURCES_PATH'] = previousResourcesPath;
-      }
       await rm(tempRoot, { recursive: true, force: true });
     }
   });
@@ -174,12 +175,6 @@ describe('skills-sync CLI option handling', () => {
     // project-scope export resolved into a directory tree the operator never named.
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-workspace-'));
     const missing = path.join(tempRoot, 'no-such-workspace');
-    const saved = new Map(
-      ['MCP_SERVER_ROOT', 'MCP_RESOURCES_PATH', 'MCP_WORKSPACE'].map((key) => [
-        key,
-        process.env[key],
-      ])
-    );
     // Only a registered project-scope client reaches the project root.
     const demo = path.join(tempRoot, 'resources', 'prompts', 'examples', 'demo');
     await mkdir(demo, { recursive: true });
@@ -210,22 +205,15 @@ describe('skills-sync CLI option handling', () => {
       );
 
     try {
-      process.env['MCP_SERVER_ROOT'] = tempRoot;
-      delete process.env['MCP_RESOURCES_PATH'];
-
-      process.env['MCP_WORKSPACE'] = missing;
+      locations.set({ serverRoot: tempRoot, workspace: missing });
       await expect(projectDiff()).rejects.toThrow(
         `Refusing to run: the MCP_WORKSPACE environment variable is set to "${missing}", which resolves to ${missing}, and that path does not exist.`
       );
       expect(existsSync(missing)).toBe(false);
 
-      process.env['MCP_WORKSPACE'] = '';
+      locations.set({ workspace: '' });
       await expect(projectDiff()).resolves.toBeDefined();
     } finally {
-      for (const [key, value] of saved) {
-        if (value === undefined) delete process.env[key];
-        else process.env[key] = value;
-      }
       await rm(tempRoot, { recursive: true, force: true });
     }
   });
@@ -236,12 +224,6 @@ describe('skills-sync CLI option handling', () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-checkout-'));
     const cwdRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-cwd-'));
     const packageRoot = path.join(tempRoot, 'server');
-    const saved = new Map(
-      ['MCP_SERVER_ROOT', 'MCP_RESOURCES_PATH', 'MCP_WORKSPACE'].map((key) => [
-        key,
-        process.env[key],
-      ])
-    );
     const cwd = jest.spyOn(process, 'cwd').mockReturnValue(cwdRoot);
     const demo = path.join(packageRoot, 'resources', 'prompts', 'examples', 'demo');
     await mkdir(demo, { recursive: true });
@@ -272,9 +254,7 @@ describe('skills-sync CLI option handling', () => {
       );
 
     try {
-      process.env['MCP_SERVER_ROOT'] = packageRoot;
-      delete process.env['MCP_RESOURCES_PATH'];
-      delete process.env['MCP_WORKSPACE'];
+      locations.set({ serverRoot: packageRoot });
 
       await writeFile(path.join(tempRoot, '.git'), '', 'utf-8');
       await projectExport();
@@ -288,10 +268,6 @@ describe('skills-sync CLI option handling', () => {
       expect(existsSync(path.join(tempRoot, 'skills'))).toBe(false);
     } finally {
       cwd.mockRestore();
-      for (const [key, value] of saved) {
-        if (value === undefined) delete process.env[key];
-        else process.env[key] = value;
-      }
       await rm(tempRoot, { recursive: true, force: true });
       await rm(cwdRoot, { recursive: true, force: true });
     }
@@ -299,12 +275,9 @@ describe('skills-sync CLI option handling', () => {
 
   it('rolls back clone writes when companion gate validation fails', async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-'));
-    const previousServerRoot = process.env['MCP_SERVER_ROOT'];
-    const previousResourcesPath = process.env['MCP_RESOURCES_PATH'];
 
     try {
-      process.env['MCP_SERVER_ROOT'] = tempRoot;
-      delete process.env['MCP_RESOURCES_PATH'];
+      locations.set({ serverRoot: tempRoot });
 
       await mkdir(path.join(tempRoot, 'resources', 'prompts'), { recursive: true });
       await mkdir(path.join(tempRoot, 'resources', 'gates'), { recursive: true });
@@ -354,16 +327,6 @@ name: Broken Gate
       ).toBe(false);
       expect(existsSync(path.join(tempRoot, 'resources', 'gates', 'broken-gate'))).toBe(false);
     } finally {
-      if (previousServerRoot === undefined) {
-        delete process.env['MCP_SERVER_ROOT'];
-      } else {
-        process.env['MCP_SERVER_ROOT'] = previousServerRoot;
-      }
-      if (previousResourcesPath === undefined) {
-        delete process.env['MCP_RESOURCES_PATH'];
-      } else {
-        process.env['MCP_RESOURCES_PATH'] = previousResourcesPath;
-      }
       await rm(tempRoot, { recursive: true, force: true });
     }
   });
@@ -375,31 +338,26 @@ name: Broken Gate
 // `resources/` and `skills-sync.yaml`. A root without `resources/` silently falls back to the cwd,
 // which is the real `server/`, so the layout is built before any command runs. The shell that runs
 // the suite may export MCP_RESOURCES_PATH or MCP_WORKSPACE, so every variable the path resolution
-// reads is saved, cleared and restored per case.
+// reads is saved, cleared and restored per case (`withResourceLocations`), with HOME and the cwd.
 
-const ENV_KEYS = [
-  'MCP_SERVER_ROOT',
-  'MCP_RESOURCES_PATH',
-  'MCP_WORKSPACE',
-  'MCP_RUNTIME_ROOT',
-  'MCP_CONFIG_PATH',
-  'HOME',
-] as const;
-
-type SavedProcessState = { env: Map<string, string | undefined>; cwd: string };
+type SavedProcessState = {
+  locations: ResourceLocationScope;
+  home: string | undefined;
+  cwd: string;
+};
 
 function saveProcessState(): SavedProcessState {
   return {
-    env: new Map(ENV_KEYS.map((key) => [key, process.env[key]])),
+    locations: withResourceLocations(),
+    home: process.env['HOME'],
     cwd: process.cwd(),
   };
 }
 
 function restoreProcessState(saved: SavedProcessState): void {
-  for (const [key, value] of saved.env) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
+  saved.locations.cleanup();
+  if (saved.home === undefined) delete process.env['HOME'];
+  else process.env['HOME'] = saved.home;
   process.chdir(saved.cwd);
 }
 
@@ -481,16 +439,8 @@ describe('skills-sync usage validation and config resolution against a real temp
     await writePrompt(packageRoot, 'examples', 'beta');
     await writeConfig(`registrations:\n  claude-code: all\n${outputOverride()}`);
 
-    process.env['MCP_SERVER_ROOT'] = packageRoot;
+    saved.locations.set({ serverRoot: packageRoot });
     process.env['HOME'] = homeDir;
-    for (const key of [
-      'MCP_RESOURCES_PATH',
-      'MCP_WORKSPACE',
-      'MCP_RUNTIME_ROOT',
-      'MCP_CONFIG_PATH',
-    ]) {
-      delete process.env[key];
-    }
   });
 
   afterEach(async () => {
@@ -711,7 +661,7 @@ describe('skills-sync usage validation and config resolution against a real temp
     it('points the copy at the workspace when one is set', async () => {
       const workspace = path.join(tempRoot, 'workspace');
       await mkdir(workspace, { recursive: true });
-      process.env['MCP_WORKSPACE'] = workspace;
+      saved.locations.set({ workspace });
       await rm(configPath());
 
       await expect(previewExport()).rejects.toThrow(
@@ -845,14 +795,15 @@ describe('skills-sync usage validation and config resolution against a real temp
 
     beforeEach(() => {
       // The project root resolves from MCP_WORKSPACE, which must name an existing directory.
-      process.env['MCP_WORKSPACE'] = path.join(tempRoot, 'workspace');
-      return mkdir(process.env['MCP_WORKSPACE'], { recursive: true }).then(() => undefined);
+      const workspace = path.join(tempRoot, 'workspace');
+      saved.locations.set({ workspace });
+      return mkdir(workspace, { recursive: true }).then(() => undefined);
     });
 
     it('keeps the registry default for a scope the override leaves out, per scope', async () => {
       const userOnly = `${registered}overrides:\n  claude-code:\n    outputDir:\n      user: ${outDir}\n`;
       const projectOnly = `${registered}overrides:\n  claude-code:\n    outputDir:\n      project: ${outDir}\n`;
-      const workspace = process.env['MCP_WORKSPACE'] as string;
+      const workspace = saved.locations.env['MCP_WORKSPACE'] as string;
 
       expect(await headerDirs(userOnly, 'user')).toBe(outDir);
       expect(await headerDirs(userOnly, 'project')).toBe(path.join(workspace, '.claude', 'skills'));
@@ -904,7 +855,7 @@ describe('skills-sync usage validation and config resolution against a real temp
     it('anchors a relative project dir at an existing MCP_WORKSPACE', async () => {
       const workspace = path.join(tempRoot, 'workspace');
       await mkdir(workspace, { recursive: true });
-      process.env['MCP_WORKSPACE'] = workspace;
+      saved.locations.set({ workspace });
       process.chdir(cwdDir);
       await useDefaultOutputDirs();
 

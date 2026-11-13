@@ -13,9 +13,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { GateDefinitionLoader } from '../../../src/engine/gates/core/gate-definition-loader.js';
+import { ConfigLoader } from '../../../src/infra/config/index.js';
 import { parseServerCliArgs } from '../../../src/runtime/cli.js';
 import { createPathResolver, PathResolver } from '../../../src/runtime/paths.js';
 import { indexerResourceRoots, resolveResourceRoots } from '../../../src/runtime/resource-roots.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 import {
   assertUsableDirectorySetting,
   PathSettingError,
@@ -24,41 +26,20 @@ import {
 /**
  * Every path override `PathResolver` honors, neutralized for the duration of this file.
  *
- * All four, not the two the assertions set. `MCP_RESOURCES_PATH` is exported into the shell by
+ * Every one of them, not the two the assertions set. `MCP_RESOURCES_PATH` is exported into the shell by
  * the Claude Code plugin that runs this very server, so on a maintainer's machine
  * `getResourcesPath()` returned `~/.claude/resources` and the third assertion failed — while CI,
  * where nothing exports it, stayed green. A test that passes only where the product is NOT
  * installed is measuring the environment, not the resolver.
  *
  * Saved and restored rather than merely deleted: this process is shared with every other test
- * file in the run.
+ * file in the run. `helpers/resource-locations.ts` owns the list and the restore.
  */
-const PATH_ENV_KEYS = [
-  'MCP_RUNTIME_ROOT',
-  'MCP_WORKSPACE',
-  'MCP_RESOURCES_PATH',
-  'MCP_CONFIG_PATH',
-] as const;
-
-const originalPathEnv = new Map<string, string | undefined>(
-  PATH_ENV_KEYS.map((key) => [key, process.env[key]])
-);
-
-beforeEach(() => {
-  for (const key of PATH_ENV_KEYS) delete process.env[key];
-});
-
-afterEach(() => {
-  for (const [key, value] of originalPathEnv) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-});
+const pathLocations = isolateResourceLocations();
 
 describe('PathResolver writable runtime paths', () => {
   it('keeps state and relative logs under MCP_RUNTIME_ROOT', () => {
-    process.env['MCP_RUNTIME_ROOT'] = '/tmp/codex-prompts/server';
-    process.env['MCP_WORKSPACE'] = '/read-only/plugin';
+    pathLocations.set({ runtimeRoot: '/tmp/codex-prompts/server', workspace: '/read-only/plugin' });
     const resolver = new PathResolver({ cli: {}, packageRoot: '/read-only/package' });
 
     expect(resolver.getRuntimeStatePath()).toBe('/tmp/codex-prompts/server/runtime-state');
@@ -74,11 +55,115 @@ describe('PathResolver writable runtime paths', () => {
   });
 
   it('falls back to the effective workspace when no runtime root is explicit', () => {
-    delete process.env['MCP_RUNTIME_ROOT'];
-    process.env['MCP_WORKSPACE'] = path.join('/tmp', 'workspace');
+    pathLocations.set({ workspace: path.join('/tmp', 'workspace') });
     const resolver = new PathResolver({ cli: {}, packageRoot: '/package' });
 
     expect(resolver.getRuntimeRoot()).toBe(path.join('/tmp', 'workspace'));
+  });
+});
+
+describe('PathResolver takes CLAUDE_PLUGIN_DATA as the workspace when MCP_WORKSPACE is unset', () => {
+  const packageRoot = '/claude-prompts/package';
+
+  it('lets MCP_WORKSPACE win when both variables are set', () => {
+    pathLocations.set({ workspace: '/tmp/chosen-workspace', pluginData: '/tmp/plugin-data' });
+    const resolver = new PathResolver({ cli: {}, packageRoot });
+
+    expect(resolver.getWorkspace()).toBe('/tmp/chosen-workspace');
+    expect(resolver.getRuntimeRoot()).toBe('/tmp/chosen-workspace');
+  });
+
+  it('uses CLAUDE_PLUGIN_DATA as the workspace and, through it, the runtime root', () => {
+    pathLocations.set({ pluginData: '/tmp/plugin-data' });
+    const resolver = new PathResolver({ cli: {}, packageRoot });
+
+    expect(resolver.getWorkspace()).toBe('/tmp/plugin-data');
+    expect(resolver.getRuntimeRoot()).toBe('/tmp/plugin-data');
+    expect(resolver.isUsingCustomWorkspace()).toBe(true);
+  });
+
+  it('lets --workspace win over CLAUDE_PLUGIN_DATA', () => {
+    pathLocations.set({ pluginData: '/tmp/plugin-data' });
+    const resolver = new PathResolver({ cli: { workspace: '/tmp/flag-workspace' }, packageRoot });
+
+    expect(resolver.getWorkspace()).toBe('/tmp/flag-workspace');
+  });
+
+  it('falls back to the package root when neither variable is set, or CLAUDE_PLUGIN_DATA is empty', () => {
+    expect(new PathResolver({ cli: {}, packageRoot }).getWorkspace()).toBe(packageRoot);
+
+    pathLocations.set({ pluginData: '' });
+    expect(new PathResolver({ cli: {}, packageRoot }).getWorkspace()).toBe(packageRoot);
+  });
+
+  describe('refusal', () => {
+    let dir: string;
+
+    beforeEach(() => {
+      dir = mkdtempSync(path.join(tmpdir(), 'plugin-data-refusal-'));
+    });
+
+    afterEach(() => {
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    function refusalFor(resolver: PathResolver): string {
+      try {
+        resolver.assertUsablePathSettings();
+      } catch (error) {
+        expect(error).toBeInstanceOf(PathSettingError);
+        return (error as Error).message;
+      }
+      throw new Error('assertUsablePathSettings() returned instead of refusing');
+    }
+
+    it('refuses a CLAUDE_PLUGIN_DATA naming a missing directory, naming the variable and the package root', () => {
+      const missing = path.join(dir, 'no-plugin-data');
+      pathLocations.set({ pluginData: missing });
+
+      const message = refusalFor(new PathResolver({ cli: {}, packageRoot }));
+
+      expect(message).toBe(
+        [
+          `Refusing to start: the CLAUDE_PLUGIN_DATA environment variable is set to "${missing}", which resolves to ${missing}, and that path does not exist.`,
+          `Expected an existing directory at that path, or unset CLAUDE_PLUGIN_DATA to use the package root at ${packageRoot}.`,
+        ].join('\n')
+      );
+    });
+
+    it('accepts an existing CLAUDE_PLUGIN_DATA, and ignores a missing one when MCP_WORKSPACE outranks it', () => {
+      pathLocations.set({ pluginData: dir });
+      expect(() =>
+        new PathResolver({ cli: {}, packageRoot }).assertUsablePathSettings()
+      ).not.toThrow();
+
+      pathLocations.set({ workspace: dir, pluginData: path.join(dir, 'never-created') });
+      expect(() =>
+        new PathResolver({ cli: {}, packageRoot }).assertUsablePathSettings()
+      ).not.toThrow();
+    });
+
+    it('names CLAUDE_PLUGIN_DATA as the fallback of an unusable MCP_WORKSPACE', () => {
+      pathLocations.set({ workspace: path.join(dir, 'missing-workspace'), pluginData: dir });
+
+      const message = refusalFor(new PathResolver({ cli: {}, packageRoot }));
+
+      expect(message).toContain(
+        `unset MCP_WORKSPACE to use the CLAUDE_PLUGIN_DATA workspace at ${dir}`
+      );
+    });
+
+    it('names CLAUDE_PLUGIN_DATA behind an unusable --workspace when MCP_WORKSPACE is unset', () => {
+      pathLocations.set({ pluginData: dir });
+
+      const message = refusalFor(
+        new PathResolver({ cli: { workspace: path.join(dir, 'missing-flag') }, packageRoot })
+      );
+
+      expect(message).toContain(
+        `remove --workspace to use the CLAUDE_PLUGIN_DATA workspace at ${dir}`
+      );
+    });
   });
 });
 
@@ -113,7 +198,7 @@ describe('PathResolver refuses an explicit config path it cannot use', () => {
 
   it('names the variable, the value, the resolved path, the problem and the packaged default', () => {
     const missing = path.join(dir, 'nope.json');
-    process.env['MCP_CONFIG_PATH'] = missing;
+    pathLocations.set({ configPath: missing });
 
     const message = refusalFor(new PathResolver({ cli: {}, packageRoot }));
 
@@ -139,7 +224,7 @@ describe('PathResolver refuses an explicit config path it cannot use', () => {
   });
 
   it('refuses a directory', () => {
-    process.env['MCP_CONFIG_PATH'] = dir;
+    pathLocations.set({ configPath: dir });
     expect(refusalFor(new PathResolver({ cli: {}, packageRoot }))).toContain(
       'is a directory, not a file'
     );
@@ -148,12 +233,12 @@ describe('PathResolver refuses an explicit config path it cannot use', () => {
   it('refuses a file that is not valid JSON, and JSON that is not an object', () => {
     const malformed = path.join(dir, 'malformed.json');
     writeFileSync(malformed, '{ not json');
-    process.env['MCP_CONFIG_PATH'] = malformed;
+    pathLocations.set({ configPath: malformed });
     expect(refusalFor(new PathResolver({ cli: {}, packageRoot }))).toContain('is not valid JSON (');
 
     const scalar = path.join(dir, 'scalar.json');
     writeFileSync(scalar, '42');
-    process.env['MCP_CONFIG_PATH'] = scalar;
+    pathLocations.set({ configPath: scalar });
     expect(refusalFor(new PathResolver({ cli: {}, packageRoot }))).toContain(
       'is valid JSON but not a JSON object'
     );
@@ -165,7 +250,7 @@ describe('PathResolver refuses an explicit config path it cannot use', () => {
     const locked = path.join(dir, 'locked.json');
     writeFileSync(locked, '{}');
     chmodSync(locked, 0o000);
-    process.env['MCP_CONFIG_PATH'] = locked;
+    pathLocations.set({ configPath: locked });
 
     expect(refusalFor(new PathResolver({ cli: {}, packageRoot }))).toContain(
       'cannot be read (EACCES)'
@@ -176,8 +261,7 @@ describe('PathResolver refuses an explicit config path it cannot use', () => {
     const workspace = path.join(dir, 'workspace');
     mkdirSync(workspace);
     writeFileSync(path.join(workspace, 'config.json'), '{}');
-    process.env['MCP_WORKSPACE'] = workspace;
-    process.env['MCP_CONFIG_PATH'] = path.join(dir, 'nope.json');
+    pathLocations.set({ workspace, configPath: path.join(dir, 'nope.json') });
 
     expect(refusalFor(new PathResolver({ cli: {}, packageRoot }))).toContain(
       `to use the workspace config at ${path.join(workspace, 'config.json')}`
@@ -187,7 +271,7 @@ describe('PathResolver refuses an explicit config path it cannot use', () => {
   it('returns a usable explicit path unchanged', () => {
     const valid = path.join(dir, 'config.json');
     writeFileSync(valid, '{"logging": {"level": "warn"}}');
-    process.env['MCP_CONFIG_PATH'] = valid;
+    pathLocations.set({ configPath: valid });
 
     expect(new PathResolver({ cli: {}, packageRoot }).getConfigPath()).toBe(valid);
   });
@@ -204,7 +288,7 @@ describe('PathResolver refuses an explicit config path it cannot use', () => {
   it('accepts an explicit --config/MCP_CONFIG_PATH .jsonc path with comments and a trailing comma', () => {
     const valid = path.join(dir, 'config.jsonc');
     writeFileSync(valid, COMMENTED_CONFIG_TEXT);
-    process.env['MCP_CONFIG_PATH'] = valid;
+    pathLocations.set({ configPath: valid });
 
     expect(new PathResolver({ cli: {}, packageRoot }).getConfigPath()).toBe(valid);
   });
@@ -212,7 +296,7 @@ describe('PathResolver refuses an explicit config path it cannot use', () => {
   it('POSITIVE CONTROL — the same commented text named config.json is refused (strict JSON stays strict)', () => {
     const invalid = path.join(dir, 'config.json');
     writeFileSync(invalid, COMMENTED_CONFIG_TEXT);
-    process.env['MCP_CONFIG_PATH'] = invalid;
+    pathLocations.set({ configPath: invalid });
 
     expect(refusalFor(new PathResolver({ cli: {}, packageRoot }))).toContain('is not valid JSON (');
   });
@@ -221,8 +305,7 @@ describe('PathResolver refuses an explicit config path it cannot use', () => {
     const workspace = path.join(dir, 'workspace');
     mkdirSync(workspace);
     writeFileSync(path.join(workspace, 'config.json'), '{ not json');
-    process.env['MCP_WORKSPACE'] = workspace;
-    process.env['MCP_CONFIG_PATH'] = path.join(dir, 'nope.json');
+    pathLocations.set({ workspace, configPath: path.join(dir, 'nope.json') });
 
     expect(refusalFor(new PathResolver({ cli: {}, packageRoot }))).toContain(
       `to use the workspace config at ${path.join(workspace, 'config.json')} (which is not valid JSON (`
@@ -265,7 +348,7 @@ describe('PathResolver.assertUsablePathSettings refuses an unusable path setting
 
   it('refuses a missing MCP_WORKSPACE, naming the value, the resolved path and the package root', () => {
     const missing = path.join(dir, 'no-workspace');
-    process.env['MCP_WORKSPACE'] = missing;
+    pathLocations.set({ workspace: missing });
 
     const message = refusalFor(new PathResolver({ cli: {}, packageRoot }));
 
@@ -281,7 +364,7 @@ describe('PathResolver.assertUsablePathSettings refuses an unusable path setting
     const file = path.join(dir, 'a-file');
     writeFileSync(file, '');
     const behind = path.join(dir, 'behind');
-    process.env['MCP_WORKSPACE'] = behind;
+    pathLocations.set({ workspace: behind });
 
     const message = refusalFor(new PathResolver({ cli: { workspace: file }, packageRoot }));
 
@@ -292,7 +375,7 @@ describe('PathResolver.assertUsablePathSettings refuses an unusable path setting
 
   it('refuses a missing MCP_RESOURCES_PATH, naming the resources it would fall back to', () => {
     const missing = path.join(dir, 'no-resources');
-    process.env['MCP_RESOURCES_PATH'] = missing;
+    pathLocations.set({ resourcesPath: missing });
 
     const message = refusalFor(new PathResolver({ cli: {}, packageRoot }));
 
@@ -308,7 +391,7 @@ describe('PathResolver.assertUsablePathSettings refuses an unusable path setting
     const workspace = path.join(dir, 'workspace');
     mkdirSync(workspace);
     const config = path.join(workspace, 'config.json');
-    process.env['MCP_WORKSPACE'] = workspace;
+    pathLocations.set({ workspace });
 
     writeFileSync(config, '{ not json');
     const malformed = refusalFor(new PathResolver({ cli: {}, packageRoot }));
@@ -339,7 +422,7 @@ describe('PathResolver.assertUsablePathSettings refuses an unusable path setting
     const config = path.join(workspace, 'config.json');
     writeFileSync(config, '{}');
     chmodSync(config, 0o000);
-    process.env['MCP_WORKSPACE'] = workspace;
+    pathLocations.set({ workspace });
 
     try {
       expect(refusalFor(new PathResolver({ cli: {}, packageRoot }))).toContain(
@@ -358,7 +441,7 @@ describe('PathResolver.assertUsablePathSettings refuses an unusable path setting
       jsoncConfig,
       ['{', '  // comment', '  "logging": { "level": "warn" },', '}'].join('\n')
     );
-    process.env['MCP_WORKSPACE'] = workspace;
+    pathLocations.set({ workspace });
 
     const resolver = new PathResolver({ cli: {}, packageRoot });
     expect(() => resolver.assertUsablePathSettings()).not.toThrow();
@@ -372,7 +455,7 @@ describe('PathResolver.assertUsablePathSettings refuses an unusable path setting
     const jsonConfig = path.join(workspace, 'config.json');
     writeFileSync(jsoncConfig, '{}');
     writeFileSync(jsonConfig, '{}');
-    process.env['MCP_WORKSPACE'] = workspace;
+    pathLocations.set({ workspace });
 
     const message = refusalFor(new PathResolver({ cli: {}, packageRoot }));
     expect(message).toContain(jsoncConfig);
@@ -384,23 +467,22 @@ describe('PathResolver.assertUsablePathSettings refuses an unusable path setting
   it('does not refuse a workspace with no config.json, an empty value, or a usable explicit config beside a broken workspace one', () => {
     const workspace = path.join(dir, 'workspace');
     mkdirSync(workspace);
-    process.env['MCP_WORKSPACE'] = workspace;
+    pathLocations.set({ workspace });
     const resolver = new PathResolver({ cli: {}, packageRoot });
     expect(() => resolver.assertUsablePathSettings()).not.toThrow();
     expect(resolver.getConfigPath()).toBe(path.join(packageRoot, 'config.json'));
 
-    process.env['MCP_WORKSPACE'] = '';
-    process.env['MCP_RESOURCES_PATH'] = '';
+    pathLocations.set({ workspace: '', resourcesPath: '' });
     expect(() =>
       new PathResolver({ cli: { workspace: '' }, packageRoot }).assertUsablePathSettings()
     ).not.toThrow();
 
     // The workspace config is not the one in use once an explicit config is named.
-    process.env['MCP_WORKSPACE'] = workspace;
+    pathLocations.set({ workspace });
     writeFileSync(path.join(workspace, 'config.json'), '{ not json');
     const explicit = path.join(dir, 'explicit.json');
     writeFileSync(explicit, '{}');
-    process.env['MCP_CONFIG_PATH'] = explicit;
+    pathLocations.set({ configPath: explicit });
     expect(() =>
       new PathResolver({ cli: {}, packageRoot }).assertUsablePathSettings()
     ).not.toThrow();
@@ -463,17 +545,20 @@ describe('PathResolver resolves resource directories inside a custom workspace',
   });
 
   it('resolves every type to <workspace>/resources/<type> in an empty workspace, creating nothing', () => {
-    process.env['MCP_WORKSPACE'] = workspace;
+    pathLocations.set({ workspace });
     const resolver = new PathResolver({ cli: {}, packageRoot });
 
     expect(directoriesOf(resolver)).toEqual(expectedUnder(path.join(workspace, 'resources')));
     // Resolution names the directory; only a write creates it.
     expect(readdirSync(workspace)).toEqual([]);
-    // The bundled tree still contributes underneath, and the not-yet-created root is no overlay.
+    // The bundled tree still contributes underneath — lowest, so first in the overlay list — and
+    // the not-yet-created legacy root is no overlay.
     expect(resolver.getBundledResourceDir('prompts')).toBe(
       path.join(packageRoot, 'resources', 'prompts')
     );
-    expect(resolver.getOverlayResourceDirs('prompts', resolver.getPromptsPath())).toEqual([]);
+    expect(resolver.getOverlayResourceDirs('prompts', resolver.getPromptsPath())).toEqual([
+      path.join(packageRoot, 'resources', 'prompts'),
+    ]);
   });
 
   it('resolves the same way for a --workspace flag, and keeps a resources directory that exists', () => {
@@ -488,7 +573,7 @@ describe('PathResolver resolves resource directories inside a custom workspace',
     mkdirSync(path.join(workspace, 'prompts'));
     mkdirSync(path.join(workspace, 'frameworks'));
     mkdirSync(path.join(workspace, 'resources', 'frameworks'), { recursive: true });
-    process.env['MCP_WORKSPACE'] = workspace;
+    pathLocations.set({ workspace });
     const resolver = new PathResolver({ cli: {}, packageRoot });
 
     expect(resolver.getPromptsPath()).toBe(path.join(workspace, 'prompts'));
@@ -496,6 +581,7 @@ describe('PathResolver resolves resource directories inside a custom workspace',
     // With both layouts present, `resources/<type>` is the root and the legacy one is an overlay beneath it.
     expect(resolver.getFrameworksPath()).toBe(path.join(workspace, 'resources', 'frameworks'));
     expect(resolver.getOverlayResourceDirs('frameworks', resolver.getFrameworksPath())).toEqual([
+      path.join(packageRoot, 'resources', 'frameworks'),
       path.join(workspace, 'frameworks'),
     ]);
   });
@@ -505,8 +591,8 @@ describe('PathResolver resolves resource directories inside a custom workspace',
     (workspaceSource) => {
       const resources = path.join(dir, 'desired-resource-boundary');
       mkdirSync(resources);
-      process.env['MCP_RESOURCES_PATH'] = resources;
-      if (workspaceSource === 'environment') process.env['MCP_WORKSPACE'] = workspace;
+      pathLocations.set({ resourcesPath: resources });
+      if (workspaceSource === 'environment') pathLocations.set({ workspace });
       const cli = workspaceSource === 'cli' ? { workspace } : {};
       const resolver = new PathResolver({ cli, packageRoot });
       expect(() => resolver.assertUsablePathSettings()).not.toThrow();
@@ -528,7 +614,10 @@ describe('PathResolver resolves resource directories inside a custom workspace',
         expect(resolver.getBundledResourceDir(type)).toBe(
           path.join(packageRoot, 'resources', type)
         );
-        expect(resolver.getOverlayResourceDirs(type, writeRoot)).toEqual([]);
+        // Only the bundle beside the write root: no workspace layout exists.
+        expect(resolver.getOverlayResourceDirs(type, writeRoot)).toEqual([
+          path.join(packageRoot, 'resources', type),
+        ]);
       }
       expect(readdirSync(workspace)).toEqual([]);
     }
@@ -541,14 +630,14 @@ describe('PathResolver resolves resource directories inside a custom workspace',
     mkdirSync(path.join(resources, 'frameworks'));
     mkdirSync(path.join(workspace, 'frameworks'));
     mkdirSync(path.join(workspace, 'resources', 'frameworks'), { recursive: true });
-    process.env['MCP_WORKSPACE'] = workspace;
-    process.env['MCP_RESOURCES_PATH'] = resources;
+    pathLocations.set({ workspace, resourcesPath: resources });
     const resolver = new PathResolver({ cli: {}, packageRoot });
 
     expect(resolver.getPromptsPath()).toBe(path.join(resources, 'prompts'));
     expect(resolver.getGatesPath()).toBe(path.join(workspace, 'gates'));
     expect(resolver.getFrameworksPath()).toBe(path.join(resources, 'frameworks'));
     expect(resolver.getOverlayResourceDirs('frameworks', resolver.getFrameworksPath())).toEqual([
+      path.join(packageRoot, 'resources', 'frameworks'),
       path.join(workspace, 'frameworks'),
       path.join(workspace, 'resources', 'frameworks'),
     ]);
@@ -559,7 +648,7 @@ describe('PathResolver resolves resource directories inside a custom workspace',
       expectedUnder(path.join(packageRoot, 'resources'))
     );
 
-    process.env['MCP_WORKSPACE'] = packageRoot;
+    pathLocations.set({ workspace: packageRoot });
     expect(directoriesOf(new PathResolver({ cli: {}, packageRoot }))).toEqual(
       expectedUnder(path.join(packageRoot, 'resources'))
     );
@@ -640,7 +729,7 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     mkdirSync(workspace);
     mkdirSync(project);
     mkdirSync(elsewhere);
-    process.env['MCP_WORKSPACE'] = workspace;
+    pathLocations.set({ workspace });
   });
 
   afterEach(() => {
@@ -695,7 +784,9 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     const resolver = resolverWithDiscovery();
     const primary = resolver.getGatesPath();
 
+    // Lowest first: the bundle, then the workspace candidates.
     expect(resolver.getOverlayResourceCandidates('gates', primary)).toEqual([
+      path.join(packageRoot, 'resources', 'gates'),
       path.join(workspace, 'gates'),
       path.join(workspace, 'resources', 'gates'),
     ]);
@@ -771,9 +862,9 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     expect(directoriesOf(withDiscovery)).toEqual(expectedUnder(path.join(workspace, 'resources')));
     expect(directoriesOf(withDiscovery)).toEqual(directoriesOf(withoutDiscovery));
 
-    // The one addition is the project folder as a not-yet-existing overlay (it is what lets a
-    // `.claude-prompts/` created later be served), listed above the workspace's legacy folder and
-    // below the primary. The primary, the bundle and what is served do not move.
+    // The one addition is the project folder as a not-yet-existing location (it is what lets a
+    // `.claude-prompts/` created later be served), listed first, where it will rank once it
+    // exists. The primary, the bundle and what is served do not move.
     const pending = path.join(project, '.claude-prompts', 'resources', 'gates');
     const baseline = resolveResourceRoots(
       withoutDiscovery,
@@ -786,8 +877,8 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     expect(roots.bundled).toBe(baseline.bundled);
     expect(roots.overlays).toEqual([...baseline.overlays, pending]);
     expect(roots.lookupDirs).toEqual([
-      path.join(workspace, 'resources', 'gates'),
       pending,
+      path.join(workspace, 'resources', 'gates'),
       path.join(workspace, 'gates'),
       path.join(packageRoot, 'resources', 'gates'),
     ]);
@@ -811,18 +902,20 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     expect(directoriesOf(resolver)).toEqual(expectedUnder(path.join(workspace, 'resources')));
   });
 
-  it('lets an explicit MCP_RESOURCES_PATH keep every type, so a project directory does not widen an explicit boundary', () => {
+  it('keeps the project folder as the write root of every type with MCP_RESOURCES_PATH set', () => {
     mkdirSync(path.join(project, '.claude-prompts'));
     const resources = path.join(dir, 'explicit-resources');
     mkdirSync(resources);
-    process.env['MCP_RESOURCES_PATH'] = resources;
+    pathLocations.set({ resourcesPath: resources });
     const resolver = resolverWithDiscovery();
 
-    expect(directoriesOf(resolver)).toEqual(expectedUnder(resources));
+    expect(directoriesOf(resolver)).toEqual(
+      expectedUnder(path.join(project, '.claude-prompts', 'resources'))
+    );
   });
 
   it('puts the project over the bundle when the workspace is the package root, with no overlays', () => {
-    delete process.env['MCP_WORKSPACE'];
+    pathLocations.reset();
     mkdirSync(path.join(project, '.claude-prompts'));
     const resolver = resolverWithDiscovery();
     const primary = resolver.getGatesPath();
@@ -855,43 +948,38 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     expect(directoriesOf(resolver)).toEqual(expectedUnder(path.join(workspace, 'resources')));
   });
 
-  it('moves the primary and the precedence together: the workspace copy is the overlay once the project appears', () => {
+  it('moves only the primary once the project appears: the project folder already led the order', () => {
     const resolver = resolverWithDiscovery();
     const projectGates = path.join(project, '.claude-prompts', 'resources', 'gates');
     const workspaceGates = path.join(workspace, 'resources', 'gates');
 
     const before = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
-    expect(before.lookupDirs.slice(0, 2)).toEqual([workspaceGates, projectGates]);
+    expect(before.primary).toBe(workspaceGates);
+    expect(before.lookupDirs.slice(0, 2)).toEqual([projectGates, workspaceGates]);
 
     mkdirSync(path.join(project, '.claude-prompts'));
     const after = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
     expect(after.primary).toBe(projectGates);
-    expect(after.lookupDirs.slice(0, 2)).toEqual([projectGates, workspaceGates]);
+    expect(after.lookupDirs).toEqual(before.lookupDirs);
   });
 
-  it('keeps an explicit MCP_RESOURCES_PATH boundary when .claude-prompts/ appears later', () => {
+  it('moves the write root from the MCP_RESOURCES_PATH folder to the project when .claude-prompts/ appears later', () => {
     const resources = path.join(dir, 'explicit-resources');
     mkdirSync(resources);
-    process.env['MCP_RESOURCES_PATH'] = resources;
+    pathLocations.set({ resourcesPath: resources });
     const resolver = resolverWithDiscovery();
 
     expect(directoriesOf(resolver)).toEqual(expectedUnder(resources));
     mkdirSync(path.join(project, '.claude-prompts'));
-    expect(directoriesOf(resolver)).toEqual(expectedUnder(resources));
+    expect(directoriesOf(resolver)).toEqual(
+      expectedUnder(path.join(project, '.claude-prompts', 'resources'))
+    );
   });
 
   describe('by transport, built through createPathResolver', () => {
-    let savedProjectDir: string | undefined;
-
     beforeEach(() => {
-      savedProjectDir = process.env['CLAUDE_PROJECT_DIR'];
-      process.env['CLAUDE_PROJECT_DIR'] = project;
+      pathLocations.set({ projectDir: project });
       mkdirSync(path.join(project, '.claude-prompts'));
-    });
-
-    afterEach(() => {
-      if (savedProjectDir === undefined) delete process.env['CLAUDE_PROJECT_DIR'];
-      else process.env['CLAUDE_PROJECT_DIR'] = savedProjectDir;
     });
 
     const resolverFor = (...args: string[]) =>
@@ -916,5 +1004,208 @@ describe('PathResolver resolves the project directory as a resource root', () =>
         );
       }
     });
+  });
+});
+
+/**
+ * The one ordered location list per resource type (`PathResolver.getResourceLocations`).
+ *
+ * The config list goes through a real `ConfigLoader`, so the entries the resolver sees are the ones
+ * the loader resolved against the config file's directory — the resolver never reads the file.
+ */
+describe('PathResolver.getResourceLocations builds one ordered list per type', () => {
+  let dir: string;
+  let packageRoot: string;
+  let project: string;
+  let resources: string;
+  let configDir: string;
+
+  /** A resolver with discovery on, `project` as the project directory and `list` as `paths.resources`. */
+  async function resolverWith(list: string[] | undefined): Promise<PathResolver> {
+    const configPath = path.join(configDir, 'config.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({ version: 5, ...(list !== undefined && { paths: { resources: list } }) })
+    );
+    const loader = new ConfigLoader(configPath);
+    await loader.loadConfig();
+    const resolver = new PathResolver({
+      cli: {},
+      packageRoot,
+      projectDiscovery: true,
+      projectLaunch: { env: { CLAUDE_PROJECT_DIR: project }, cwd: dir },
+    });
+    resolver.readResourceLocationsFrom(() => loader.getConfig().paths.resources);
+    return resolver;
+  }
+
+  const pathsAndKinds = (resolver: PathResolver, type: string): Array<[string, string]> =>
+    resolver.getResourceLocations(type).locations.map(({ path: dirPath, kind }) => [dirPath, kind]);
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'resource-locations-'));
+    packageRoot = path.join(dir, 'package');
+    project = path.join(dir, 'project');
+    resources = path.join(dir, 'var-resources');
+    configDir = path.join(dir, 'cfg');
+    for (const created of [
+      path.join(packageRoot, 'resources', 'prompts'),
+      path.join(packageRoot, 'resources', 'gates'),
+      path.join(project, '.claude-prompts'),
+      resources,
+      path.join(dir, 'shared'),
+      path.join(configDir, 'extra'),
+    ]) {
+      mkdirSync(created, { recursive: true });
+    }
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('orders project, the MCP_RESOURCES_PATH folder, then each listed entry with "bundled" where it is listed', async () => {
+    pathLocations.set({ resourcesPath: resources });
+    const resolver = await resolverWith(['../shared', 'bundled', './extra']);
+
+    expect(pathsAndKinds(resolver, 'prompts')).toEqual([
+      [path.join(project, '.claude-prompts', 'resources', 'prompts'), 'project'],
+      [path.join(resources, 'prompts'), 'profile'],
+      [path.join(dir, 'shared', 'prompts'), 'listed'],
+      [path.join(packageRoot, 'resources', 'prompts'), 'bundled'],
+      [path.join(configDir, 'extra', 'prompts'), 'listed'],
+    ]);
+    expect(resolver.getResourceLocations('prompts').bundledImplicit).toBe(false);
+  });
+
+  it('leaves the bundle out and reports it implicit when the list does not name "bundled"', async () => {
+    pathLocations.set({ resourcesPath: resources });
+    const resolver = await resolverWith(['../shared', './extra']);
+
+    expect(pathsAndKinds(resolver, 'prompts')).toEqual([
+      [path.join(project, '.claude-prompts', 'resources', 'prompts'), 'project'],
+      [path.join(resources, 'prompts'), 'profile'],
+      [path.join(dir, 'shared', 'prompts'), 'listed'],
+      [path.join(configDir, 'extra', 'prompts'), 'listed'],
+    ]);
+    expect(resolver.getResourceLocations('prompts').bundledImplicit).toBe(true);
+  });
+
+  it('reports no implicit bundle when the config names no list at all', async () => {
+    const resolver = await resolverWith(undefined);
+
+    expect(resolver.getResourceLocations('prompts').bundledImplicit).toBe(false);
+    // With no custom workspace the profile's folder IS the package's, placed as the bundle: last.
+    expect(pathsAndKinds(resolver, 'prompts').at(-1)).toEqual([
+      path.join(packageRoot, 'resources', 'prompts'),
+      'bundled',
+    ]);
+  });
+
+  it("makes entry two the profile's <workspace>/resources/<type> when MCP_RESOURCES_PATH is unset", async () => {
+    const workspace = path.join(dir, 'workspace');
+    mkdirSync(workspace);
+    pathLocations.set({ workspace });
+    const resolver = await resolverWith(['../shared']);
+
+    expect(pathsAndKinds(resolver, 'prompts')).toEqual([
+      [path.join(project, '.claude-prompts', 'resources', 'prompts'), 'project'],
+      [path.join(workspace, 'resources', 'prompts'), 'profile'],
+      [path.join(workspace, 'prompts'), 'profile'],
+      [path.join(dir, 'shared', 'prompts'), 'listed'],
+    ]);
+  });
+
+  it('keeps a legacy <workspace>/<type> as entry two, and the write root, when it is the only layout present', async () => {
+    const workspace = path.join(dir, 'workspace');
+    mkdirSync(path.join(workspace, 'prompts'), { recursive: true });
+    pathLocations.set({ workspace });
+    rmSync(path.join(project, '.claude-prompts'), { recursive: true });
+    const resolver = await resolverWith(undefined);
+
+    const { locations, writeRoot } = resolver.getResourceLocations('prompts');
+    expect(locations.map((location) => location.path)).toEqual([
+      path.join(project, '.claude-prompts', 'resources', 'prompts'),
+      path.join(workspace, 'prompts'),
+      path.join(workspace, 'resources', 'prompts'),
+      path.join(packageRoot, 'resources', 'prompts'),
+    ]);
+    expect(writeRoot).toBe(path.join(workspace, 'prompts'));
+    expect(resolver.getPromptsPath()).toBe(writeRoot);
+  });
+
+  it('lists the project folder first and writes into it with MCP_RESOURCES_PATH set', async () => {
+    pathLocations.set({ resourcesPath: resources });
+    const resolver = await resolverWith(undefined);
+    const projectPrompts = path.join(project, '.claude-prompts', 'resources', 'prompts');
+
+    expect(resolver.getResourceLocations('prompts').locations[0]).toMatchObject({
+      path: projectPrompts,
+      kind: 'project',
+    });
+    expect(resolver.getResourceLocations('prompts').writeRoot).toBe(projectPrompts);
+    expect(resolver.getPromptsPath()).toBe(projectPrompts);
+    expect(resolveResourceRoots(resolver, 'prompts', resolver.getPromptsPath()).lookupDirs).toEqual(
+      [
+        projectPrompts,
+        path.join(resources, 'prompts'),
+        path.join(packageRoot, 'resources', 'prompts'),
+      ]
+    );
+  });
+
+  it('hands the loaders the list in order with "bundled" at its listed position, and the overlays as the list reversed without the primary', async () => {
+    pathLocations.set({ resourcesPath: resources });
+    const resolver = await resolverWith(['../shared', 'bundled', './extra']);
+    const roots = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
+
+    expect(roots.primary).toBe(path.join(project, '.claude-prompts', 'resources', 'gates'));
+    expect(roots.lookupDirs).toEqual([
+      path.join(project, '.claude-prompts', 'resources', 'gates'),
+      path.join(resources, 'gates'),
+      path.join(dir, 'shared', 'gates'),
+      path.join(packageRoot, 'resources', 'gates'),
+      path.join(configDir, 'extra', 'gates'),
+    ]);
+    expect(roots.overlays).toEqual([
+      path.join(configDir, 'extra', 'gates'),
+      path.join(packageRoot, 'resources', 'gates'),
+      path.join(dir, 'shared', 'gates'),
+      path.join(resources, 'gates'),
+    ]);
+    expect(roots.bundled).toBe(path.join(packageRoot, 'resources', 'gates'));
+  });
+
+  it('serves a gate from the earliest location that holds it', async () => {
+    const gate = (name: string) =>
+      [
+        'id: shadowed',
+        `name: ${name}`,
+        'type: validation',
+        'severity: medium',
+        'description: Test gate shadowed',
+        'pass_criteria:',
+        '  - type: inline_guidance',
+        '',
+      ].join('\n');
+    const writeGate = (root: string, name: string) => {
+      mkdirSync(path.join(root, 'shadowed'), { recursive: true });
+      writeFileSync(path.join(root, 'shadowed', 'gate.yaml'), gate(name), 'utf-8');
+    };
+    writeGate(path.join(dir, 'shared', 'gates'), 'FROM SHARED');
+    writeGate(path.join(configDir, 'extra', 'gates'), 'FROM EXTRA');
+    writeGate(path.join(packageRoot, 'resources', 'gates'), 'FROM BUNDLE');
+    const servedBy = async (list: string[]) => {
+      const resolver = await resolverWith(list);
+      const roots = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
+      return new GateDefinitionLoader({
+        gatesDir: roots.primary as string,
+        additionalGatesDirs: roots.lookupDirs,
+      }).loadGate('shadowed')?.name;
+    };
+
+    expect(await servedBy(['../shared', './extra'])).toBe('FROM SHARED');
+    // CONTROL: the same three copies, the list reversed, serve the other listed copy.
+    expect(await servedBy(['./extra', '../shared'])).toBe('FROM EXTRA');
   });
 });

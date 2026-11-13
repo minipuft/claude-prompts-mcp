@@ -19,6 +19,8 @@
  * `hooks.expandedOutput`, which the Python hooks read straight off the file.
  */
 
+import { posix } from 'node:path';
+
 /** One 4.x dot-path folded into its 5.0 dot-path. Both are reported to the operator. */
 export interface ConfigFileTranslatedKey {
   /** The 4.x dot-path the file carried. */
@@ -172,6 +174,9 @@ const DROPS: ReadonlyArray<readonly string[]> = [
   ['gates', 'directory'],
 ];
 
+/** The `prompts.directory` value the 4.x `config.json` shipped. */
+const SHIPPED_4X_PROMPTS_DIRECTORY = 'resources/prompts';
+
 /** True for a plain JSON object — the only thing a dot-path may be walked through. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -280,6 +285,19 @@ function applyDrop(
 }
 
 /**
+ * Deletes a `prompts.directory` that spells the shipped 4.x value, without reporting it: it says
+ * nothing (amended ruling R3o). Any other value stays, for the loader to refuse.
+ */
+function dropShippedPromptsDirectory(file: Record<string, unknown>): void {
+  const prompts = file['prompts'];
+  if (!isRecord(prompts)) return;
+  const directory = prompts['directory'];
+  if (typeof directory !== 'string') return;
+  const spelling = posix.normalize(directory.replace(/\\/g, '/')).replace(/\/$/, '');
+  if (spelling === SHIPPED_4X_PROMPTS_DIRECTORY) delete prompts['directory'];
+}
+
+/**
  * Removes the `advanced` wrapper once its three session keys have moved to the root.
  *
  * Unlike an emptied `server`, which stays as `{}` because 5.0 still HAS a `server` section,
@@ -317,6 +335,7 @@ export function translateConfigFile(raw: Record<string, unknown>): ConfigFileTra
   for (const move of MOVES) applyMove(file, move, report);
   for (const drop of DROPS) applyDrop(file, drop, report);
   removeAdvanced(file, report);
+  dropShippedPromptsDirectory(file);
   file['version'] = 5;
 
   return { file, translated: report.translated, dropped: report.dropped };

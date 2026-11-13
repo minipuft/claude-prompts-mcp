@@ -23,6 +23,7 @@ import path from 'path';
 
 import { ConfigLoader, type ResourcePathSource } from '../../../../src/infra/config/index.js';
 import { PathResolver } from '../../../../src/runtime/paths.js';
+import { isolateResourceLocations } from '../../../helpers/resource-locations.js';
 
 /** A resolver whose every member returns a path far from any config directory. */
 function resolverAt(root: string): ResourcePathSource {
@@ -242,29 +243,21 @@ describe('prompt write destination', () => {
  * loader: a stub returning a project path would assert the path this file wrote.
  */
 describe('project workspace write destination', () => {
-  const PATH_ENV_KEYS = ['MCP_WORKSPACE', 'MCP_RESOURCES_PATH', 'MCP_RUNTIME_ROOT'] as const;
-  const originalPathEnv = new Map<string, string | undefined>(
-    PATH_ENV_KEYS.map((key) => [key, process.env[key]])
-  );
+  const locations = isolateResourceLocations();
   let root: string;
   let workspace: string;
   let project: string;
 
   beforeEach(async () => {
-    for (const key of PATH_ENV_KEYS) delete process.env[key];
     root = await mkdtemp(path.join(tmpdir(), 'project-write-dest-'));
     workspace = path.join(root, 'workspace');
     project = path.join(root, 'project');
     await mkdir(workspace);
     await mkdir(project);
-    process.env['MCP_WORKSPACE'] = workspace;
+    locations.set({ workspace });
   });
 
   afterEach(async () => {
-    for (const [key, value] of originalPathEnv) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
     await rm(root, { recursive: true, force: true });
   });
 

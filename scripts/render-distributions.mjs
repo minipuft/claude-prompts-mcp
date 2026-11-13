@@ -148,22 +148,15 @@ function projectClaudeCodePlugin(canonical, placeholderMap) {
  *                       `.mcp.json` has never carried it. Adding it would be a behavior change to
  *                       every existing install, so it belongs in its own commit with its own
  *                       justification, not smuggled in by a render.
- *   `MCP_WORKSPACE`     takes the runtime root's value — `${PLUGIN_DATA}`, rendered as
- *                       `${CLAUDE_PLUGIN_DATA}` — instead of the canonical `${PLUGIN_ROOT}`. Claude
- *                       Code replaces the plugin root on every update (install paths are
- *                       versioned), so a workspace there keeps nothing across one, while
- *                       `${CLAUDE_PLUGIN_DATA}` is the directory it keeps. Claude Code 2.1.272
- *                       substitutes that placeholder in `env` and creates the directory before the
- *                       server starts (measured 2026-09-14), which matters because the server
- *                       refuses a workspace that does not exist. The canonical file keeps
- *                       `${PLUGIN_ROOT}` because Codex was measured without `PLUGIN_DATA` in the
- *                       MCP server's environment, where a literal placeholder workspace would
- *                       refuse startup.
- *
- * `MCP_RUNTIME_ROOT` crosses with only its placeholder respelled. Claude Code defines a data
- * directory placeholder, `${CLAUDE_PLUGIN_DATA}`, and `placeholderMap` maps `${PLUGIN_DATA}` onto
- * it. A canonical server with `env` but no runtime root throws rather than rendering a workspace in
- * the plugin root.
+ *   path variables      dropped — `MCP_WORKSPACE` and `MCP_RUNTIME_ROOT` (`CLAUDE_PLUGIN_PATH_ENV`).
+ *                       Claude Code hands every plugin's server `CLAUDE_PLUGIN_DATA`, the directory
+ *                       it creates and keeps across plugin updates, and the server takes it as the
+ *                       workspace and runtime root when neither variable is set
+ *                       (`PathResolver.getWorkspace`). Pinning them here would override a
+ *                       `MCP_WORKSPACE` the user set in Claude Code's settings. The canonical file
+ *                       keeps `"MCP_WORKSPACE": "${PLUGIN_ROOT}"` because Codex was measured
+ *                       without a data variable in the MCP server's environment, where the server
+ *                       would fall back to the package root. An `env` left empty is dropped whole.
  *
  * Keys are sorted because the published file is sorted; source order here is the canonical file's,
  * which is grouped for reading rather than alphabetized.
@@ -177,24 +170,23 @@ function projectClaudeCodeMcp(canonical, placeholderMap) {
       kept[key] = value;
     }
     if (kept.env) {
-      kept.env = sortKeys(withPersistentWorkspace(name, kept.env));
+      const env = withoutPluginPathEnv(kept.env);
+      if (Object.keys(env).length === 0) delete kept.env;
+      else kept.env = sortKeys(env);
     }
     servers[name] = sortKeys(kept);
   }
   return rewritePlaceholders({ mcpServers: servers }, placeholderMap);
 }
 
-/** The Claude Code workspace is the runtime root's directory — see `projectClaudeCodeMcp`. */
-function withPersistentWorkspace(serverName, env) {
-  const runtimeRoot = env.MCP_RUNTIME_ROOT;
-  if (typeof runtimeRoot !== "string" || runtimeRoot.trim() === "") {
-    throw new Error(
-      `mcp.json[${serverName}]: env declares no MCP_RUNTIME_ROOT, so the Claude Code projection ` +
-        `has no persistent directory for MCP_WORKSPACE. Rendering the canonical workspace instead ` +
-        `would put it in the plugin root, which Claude Code replaces on every update.`,
-    );
-  }
-  return { ...env, MCP_WORKSPACE: runtimeRoot };
+/** The variables the server resolves from `CLAUDE_PLUGIN_DATA` itself under Claude Code. */
+const CLAUDE_PLUGIN_PATH_ENV = new Set(["MCP_WORKSPACE", "MCP_RUNTIME_ROOT"]);
+
+/** The canonical `env` minus the path variables — see `projectClaudeCodeMcp`. */
+function withoutPluginPathEnv(env) {
+  return Object.fromEntries(
+    Object.entries(env).filter(([key]) => !CLAUDE_PLUGIN_PATH_ENV.has(key)),
+  );
 }
 
 /**
@@ -387,29 +379,32 @@ function selfTest() {
   expect("mcp projection drops $schema", !("$schema" in mcp));
   expect("mcp projection drops type", !("type" in mcp.mcpServers.s));
   expect(
-    "mcp projection keeps MCP_RUNTIME_ROOT on the plugin data directory",
-    mcp.mcpServers.s.env.MCP_RUNTIME_ROOT === "${CLAUDE_PLUGIN_DATA}",
-  );
-  expect(
-    "mcp projection puts MCP_WORKSPACE on the plugin data directory",
-    mcp.mcpServers.s.env.MCP_WORKSPACE === "${CLAUDE_PLUGIN_DATA}",
+    "mcp projection drops an env holding only the path variables",
+    !("env" in mcp.mcpServers.s),
   );
   expect(
     "mcp projection sorts server keys",
-    Object.keys(mcp.mcpServers.s).join() === "args,command,env",
+    Object.keys(mcp.mcpServers.s).join() === "args,command",
   );
   expect(
     "mcp projection keeps the server entry point in the plugin root",
     mcp.mcpServers.s.args[0] === "${CLAUDE_PLUGIN_ROOT}/server/dist/index.js",
   );
+  const mcpWithOtherEnv = projectClaudeCodeMcp(
+    {
+      mcpServers: {
+        s: {
+          command: "node",
+          env: { MCP_WORKSPACE: "w", MCP_RUNTIME_ROOT: "r", LOG_LEVEL: "${PLUGIN_ROOT}" },
+        },
+      },
+    },
+    { "${PLUGIN_ROOT}": "${CLAUDE_PLUGIN_ROOT}" },
+  );
   expect(
-    "mcp projection with env but no MCP_RUNTIME_ROOT throws",
-    throws(() =>
-      projectClaudeCodeMcp(
-        { mcpServers: { s: { command: "node", env: { MCP_WORKSPACE: "w" } } } },
-        {},
-      ),
-    ),
+    "mcp projection keeps every other env variable, placeholders respelled",
+    JSON.stringify(mcpWithOtherEnv.mcpServers.s.env) ===
+      JSON.stringify({ LOG_LEVEL: "${CLAUDE_PLUGIN_ROOT}" }),
   );
 
   expect(
@@ -461,7 +456,7 @@ function selfTest() {
     "a projection left holding an unmapped Agent Plugins placeholder throws",
     throws(() =>
       renderTarget(
-        claudeMcpTarget({ "${PLUGIN_ROOT}": "${CLAUDE_PLUGIN_ROOT}" }),
+        claudeMcpTarget({ "${PLUGIN_DATA}": "${CLAUDE_PLUGIN_DATA}" }),
       ),
     ),
   );

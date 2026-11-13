@@ -8,12 +8,13 @@
  * bundle -> primary -> overlays with a later result winning, and the resource indexer agreed with
  * prompts. Three kinds disagreed with the other two, and the docstring that justified it
  * ("workspace wins") held only while the workspace WAS the primary. P4.27 settled the disagreement
- * by putting overlays above the primary. A project workspace reversed that: it is the root a write
- * lands in AND the nearest root, so the primary now outranks the overlays and the overlays outrank
- * the bundled tree. The documented "same ID = custom wins" over the bundle never moved.
+ * by putting overlays above the primary. The location list (R3l) settled it for good: one ordered
+ * list per type, earlier wins, the project folder first and the bundle where the list puts it
+ * (last when there is no list). The documented "same ID = custom wins" over an unlisted bundle
+ * never moved.
  *
  * TWO HALVES. {@link resourceRootPrecedence} states the order, once, for every caller that has the
- * three root kinds in hand. Everything below it merely WALKS an order it is handed and reports
+ * ordered locations in hand. Everything below it merely WALKS an order it is handed and reports
  * which directory under a root actually holds an id — with one judgement of its own, the fallback
  * in {@link resourceLookupOrder}, for a loader configured by hand rather than through the
  * composition root.
@@ -23,46 +24,26 @@ import { existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 /**
- * THE statement of precedence among the roots that contribute one resource type.
+ * THE statement of precedence among the roots that contribute one resource type: an EARLIER root
+ * wins a duplicate id, for the whole list (R3l) — the bundle included, at its own position.
  *
- * The primary (the root a write lands in) outranks the overlays, the overlays outrank the bundled
- * tree, and a later overlay outranks an earlier one. One rule, not a case for any root kind: under
- * a project workspace it reads project > user workspace > bundle, and under a plain workspace the
- * only pair it orders differently from before R9 is `<ws>/resources/<type>` (the primary) over the
- * legacy `<ws>/<type>` (an overlay).
+ * `ordered` is `PathResolver.getResourceLocations`, already highest first — the project folder,
+ * the profile's folder (or the `MCP_RESOURCES_PATH` folder in its place), the workspace's other
+ * layout, then each `paths.resources` entry, with the bundle where the list names `"bundled"`,
+ * last when there is no list, and absent when a list leaves it out (R3c). Each path appears once,
+ * at its first position.
  *
- * `modules/prompts/prompt-root-loader.ts` produces the same order read backwards, by loading
- * bundle -> overlays -> primary and letting a later result win; the resource indexer produces it by
- * accumulating in that direction, and `classifyOrigin` in `resource-file-set.ts` reads it forwards.
+ * Read forwards by the flat-layout loaders (first hit wins) and by `classifyOrigin` in
+ * `resource-file-set.ts`; read backwards by the resource indexer, which accumulates so the last
+ * write wins, and by `prompt-root-loader.ts` and the category listing, which merge lowest first
+ * with a later result winning. `ResourceRoots.overlays` is this list without the primary,
+ * reversed, for those.
  *
- * It lived in `shared/` because its two callers sat in layers that may not import each other:
- * `runtime/resource-roots.ts` (the composition root's three loaders, and the resource indexer via
- * the reverse of this list) and `mcp/.../prompt-executor.ts` (a style loader the pipeline built
- * for itself). Those two derived the order independently and had to agree by inspection; the
- * second one omitted the primary altogether, which under a first-hit-wins walk ranks the bundled
- * tree above an operator's own styles. P4.31 deleted the second caller along with the second
- * loader — the pipeline now receives the composition root's instance — so `runtime/` is the only
- * caller today. It stays in `shared/` because that is where a statement about resource layout
- * belongs and because `mcp/` still may not import `runtime/`, not because two callers need it.
- *
- * The primary is IN the list, not beside it: a list that left it out could not say where it goes,
- * and every consumer would have to re-derive the boundary between "overlay" and "bundled" from a
- * flat array that cannot express it.
+ * It lives in `shared/` because that is where a statement about resource layout belongs and
+ * because `mcp/` may not import `runtime/`, where its one caller (`runtime/resource-roots.ts`) is.
  */
-export function resourceRootPrecedence(roots: {
-  primary: string | undefined;
-  overlays: readonly string[];
-  bundled: string | undefined;
-}): string[] {
-  return [
-    ...new Set([
-      ...(roots.primary !== undefined ? [roots.primary] : []),
-      // Reversed: `overlays` is stated lowest-first (a later entry wins) and this is a
-      // first-hit-wins lookup order.
-      ...[...roots.overlays].reverse(),
-      ...(roots.bundled !== undefined && roots.bundled !== roots.primary ? [roots.bundled] : []),
-    ]),
-  ];
+export function resourceRootPrecedence(ordered: readonly string[]): string[] {
+  return [...new Set(ordered)];
 }
 
 /**

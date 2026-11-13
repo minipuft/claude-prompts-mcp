@@ -78,7 +78,9 @@ function configFor(primary: string, bundled: string, overlays: string[]): Config
   return {
     getResolvedPromptsDirectory: () => primary,
     getBundledResourceDirectory: () => bundled,
-    getOverlayResourceDirectories: () => overlays,
+    // The port's answer carries the bundle in the list, lowest first, as `PathResolver` does with
+    // no `paths.resources` list in force; the loader merges it at that position.
+    getOverlayResourceDirectories: () => [bundled, ...overlays],
     // `PromptAssetManager` reads this in its constructor; false keeps the fixture off the MCP
     // registration path, which this test does not exercise and does not need a server for.
     getPromptsRegisterWithMcp: () => false,

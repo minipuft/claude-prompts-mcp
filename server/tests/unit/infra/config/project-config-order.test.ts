@@ -14,16 +14,9 @@ import path from 'node:path';
 
 import { PathResolver } from '../../../../src/runtime/paths.js';
 import { PathSettingError } from '../../../../src/shared/utils/path-setting.js';
+import { isolateResourceLocations } from '../../../helpers/resource-locations.js';
 
-const PATH_ENV_KEYS = [
-  'MCP_RUNTIME_ROOT',
-  'MCP_WORKSPACE',
-  'MCP_RESOURCES_PATH',
-  'MCP_CONFIG_PATH',
-] as const;
-const savedEnv = new Map<string, string | undefined>(
-  PATH_ENV_KEYS.map((key) => [key, process.env[key]])
-);
+const locations = isolateResourceLocations();
 
 describe('config file order with a project workspace', () => {
   let root: string;
@@ -34,7 +27,6 @@ describe('config file order with a project workspace', () => {
   let elsewhere: string;
 
   beforeEach(() => {
-    for (const key of PATH_ENV_KEYS) delete process.env[key];
     root = mkdtempSync(path.join(tmpdir(), 'project-config-order-'));
     packageRoot = path.join(root, 'package');
     workspace = path.join(root, 'workspace');
@@ -45,15 +37,11 @@ describe('config file order with a project workspace', () => {
       mkdirSync(dir, { recursive: true });
     }
     writeFileSync(path.join(packageRoot, 'config.json'), '{}');
-    process.env['MCP_WORKSPACE'] = workspace;
+    locations.set({ workspace });
   });
 
   afterEach(() => {
     rmSync(root, { recursive: true, force: true });
-    for (const [key, value] of savedEnv) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
   });
 
   function resolver(
@@ -108,7 +96,7 @@ describe('config file order with a project workspace', () => {
 
     expect(resolver({ cli: { config: explicit } }).getConfigPath()).toBe(explicit);
 
-    process.env['MCP_CONFIG_PATH'] = explicit;
+    locations.set({ configPath: explicit });
     expect(resolver().getConfigPath()).toBe(explicit);
   });
 

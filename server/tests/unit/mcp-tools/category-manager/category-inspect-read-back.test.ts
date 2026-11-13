@@ -168,7 +168,10 @@ describe('CategoryDiscoveryProcessor.handleInspect — which root wins after an 
     const configManager = {
       getResolvedPromptsDirectory: () => primaryDir,
       getBundledResourceDirectory: () => bundled,
-      getOverlayResourceDirectories: () => overlays,
+      // The port's answer carries the bundle in the list, lowest first, as `PathResolver` does
+      // when no `paths.resources` list is in force.
+      getOverlayResourceDirectories: () =>
+        bundled !== undefined ? [bundled, ...overlays] : overlays,
     } as unknown as ConfigManager;
     return new CategoryDiscoveryProcessor({
       logger,

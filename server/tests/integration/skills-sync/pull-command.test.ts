@@ -21,6 +21,9 @@ import {
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
 import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
+
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -107,7 +110,7 @@ describe('Pull Command Integration', () => {
   let tmpDir: string;
   let serverRoot: string;
   let outputDir: string;
-  let savedEnv: Record<string, string | undefined>;
+  let locations: ResourceLocationScope;
 
   beforeEach(async () => {
     tmpDir = createTempDir();
@@ -117,21 +120,11 @@ describe('Pull Command Integration', () => {
     await mkdir(serverRoot, { recursive: true });
     await mkdir(outputDir, { recursive: true });
 
-    // Save and override env
-    savedEnv = {
-      MCP_SERVER_ROOT: process.env['MCP_SERVER_ROOT'],
-      MCP_RESOURCES_PATH: process.env['MCP_RESOURCES_PATH'],
-    };
-    process.env['MCP_SERVER_ROOT'] = serverRoot;
-    delete process.env['MCP_RESOURCES_PATH'];
+    locations = withResourceLocations({ serverRoot });
   });
 
   afterEach(async () => {
-    // Restore env
-    for (const [key, value] of Object.entries(savedEnv)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    locations.cleanup();
     await rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -968,7 +961,7 @@ describe('Pull Command Integration', () => {
       const libraryParent = path.join(tmpDir, 'library');
       const libraryResources = path.join(libraryParent, 'resources');
       await mkdir(path.join(libraryResources, 'prompts'), { recursive: true });
-      process.env['MCP_RESOURCES_PATH'] = libraryResources;
+      locations.set({ resourcesPath: libraryResources });
       const writeRoot = path.join(libraryResources, 'prompts');
 
       const bundledDir = await writePromptResource(serverRoot, 'test', 'bundled-one', {
@@ -1015,7 +1008,7 @@ describe('Pull Command Integration', () => {
 
       // Control: with no resources override the write root IS the bundled tree, and the same
       // edited SKILL.md pulls.
-      delete process.env['MCP_RESOURCES_PATH'];
+      locations.reset({ serverRoot });
       const second = await pullFor('claude-code');
       expect(second.report.failures).toEqual([]);
       expect(await readFile(bundledSys, 'utf-8')).toBe('Bundled edited.');

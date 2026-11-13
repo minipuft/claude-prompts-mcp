@@ -13,6 +13,7 @@ import {
   hasSemanticEvaluation,
   hasToolCheck,
 } from '../core/gate-tier.js';
+import { DEFAULT_FRAMEWORK_GATE_ID } from '../services/gate-set-resolver.js';
 
 import type { Logger } from '#infra/logging/index.js';
 import type { SemanticReviewDefinitionInput } from '../../execution/pipeline/decisions/gates/semantic-review-context.js';
@@ -86,6 +87,24 @@ type GateGuidanceEntry =
   | { kind: 'reminder'; reminder: ReminderEntry }
   | { kind: 'suppressed' }
   | { kind: 'skipped' };
+
+/**
+ * The warning for a gate the renderer was asked for and no location holds.
+ *
+ * The default framework gate is the one nobody named: it is appended whenever a framework is
+ * active (`DEFAULT_FRAMEWORK_GATE_ID`) and ships only in the package. It goes missing when a
+ * `paths.resources` list leaves `"bundled"` out (R3c), so the warning names that cause and both
+ * remedies rather than reading like a typo in a gate id the operator never typed.
+ */
+function gateNotFoundMessage(gateId: string): string {
+  if (gateId === DEFAULT_FRAMEWORK_GATE_ID) {
+    return (
+      `Gate '${gateId}' is not in any listed location; add "bundled" to paths.resources ` +
+      'or ship the gate in a listed folder'
+    );
+  }
+  return `Gate definition not found: ${gateId}`;
+}
 
 /** Ordering weight for a reminder's severity; an unset severity sorts as `medium`. */
 function severityWeight(severity: LightweightGateDefinition['severity']): number {
@@ -398,7 +417,7 @@ export class GateGuidanceRenderer {
     const gate = await this.gateLoader.loadGate(gateId);
 
     if (!gate) {
-      this.logger.warn('[GATE GUIDANCE RENDERER] Gate definition not found:', gateId);
+      this.logger.warn(`[GATE GUIDANCE RENDERER] ${gateNotFoundMessage(gateId)}`);
     }
 
     return gate;

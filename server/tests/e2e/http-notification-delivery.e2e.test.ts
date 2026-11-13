@@ -34,6 +34,7 @@ import {
   PROJECT_ROOT,
 } from './helpers/http-mcp-client.js';
 import { cageerfAnswer } from './helpers/cageerf-answer.js';
+import { resourceLocationEnv } from '../helpers/resource-locations.js';
 
 import type { ChildProcess } from 'child_process';
 
@@ -100,7 +101,7 @@ describe('Streamable HTTP notification delivery', () => {
     const port = await getAvailablePort();
     baseUrl = `http://127.0.0.1:${port}`;
     proc = startServerWithHttp(port, {
-      env: { MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources') },
+      env: resourceLocationEnv({ resourcesPath: path.join(PROJECT_ROOT, 'server', 'resources') }),
     });
     await waitForHealth(baseUrl, { timeout: 45000 });
   }, 60000);

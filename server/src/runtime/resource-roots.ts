@@ -39,14 +39,22 @@ export interface ResourceRoots {
   /** The writable root: where a `resource_manager` write lands, and what the inventory reports. */
   primary: string | undefined;
   /**
-   * Workspace directories layered over the bundled tree and under the primary. Later entry wins.
+   * Every location of the list except the primary, stated LOWEST first (later entry wins):
+   * {@link lookupDirs} without the primary, reversed, for readers that merge in that direction.
+   * The bundle is in it at its own position whenever it contributes ({@link bundled} names it),
+   * so a merging reader recognises it in sequence rather than placing it separately.
    *
    * Includes a candidate that does not exist yet: every consumer of this set fixes it once, at
    * startup, and an overlay created later must still be read and watched. An absent root reads
    * as empty. Report only the ones that exist ({@link existingOverlays}).
    */
   overlays: string[];
-  /** The package's own directory, when it is a source distinct from the primary. Lowest. */
+  /**
+   * The package's own directory, when it CONTRIBUTES (it is in {@link lookupDirs}) and is a source
+   * distinct from the primary. Undefined when a `paths.resources` list leaves `"bundled"` out
+   * (R3c). Its rank is its position in {@link lookupDirs}: last with no list, where the list puts
+   * `"bundled"` otherwise.
+   */
   bundled: string | undefined;
   /**
    * The loader's lookup list: EVERY contributing root, highest precedence first — primary included.
@@ -65,8 +73,10 @@ export interface ResourceRoots {
 /**
  * Resolve the contributing roots for one resource type.
  *
- * Which directories contribute is decided here; their ORDER is decided by
- * `resourceRootPrecedence` in `shared/`. This was one of TWO callers until P4.31 — the pipeline
+ * Built FROM `PathResolver.getResourceLocations`, the one derivation of which folders contribute
+ * and in what order; `resourceRootPrecedence` in `shared/` states that order (earlier wins, for
+ * the whole list, the bundle included at its own position). `primary` is the caller's write root,
+ * normally the list's `writeRoot`; one the list does not hold goes first. This was one of TWO callers until P4.31 — the pipeline
  * derived the style roots a second time for a style loader of its own, and the two could only
  * agree by inspection. That second derivation and the second loader behind it are gone; the
  * composition root resolves the style roots once, here.
@@ -83,10 +93,22 @@ export function resolveResourceRoots(
   resourceType: string,
   primary: string | undefined
 ): ResourceRoots {
-  const overlays = pathResolver?.getOverlayResourceCandidates(resourceType, primary) ?? [];
-  const candidate = pathResolver?.getBundledResourceDir(resourceType);
-  const bundled = candidate !== undefined && candidate !== primary ? candidate : undefined;
-  const lookupDirs = resourceRootPrecedence({ primary, overlays, bundled });
+  if (pathResolver === undefined) {
+    return {
+      primary,
+      overlays: [],
+      bundled: undefined,
+      lookupDirs: primary !== undefined ? [primary] : [],
+    };
+  }
+  const candidate = pathResolver.getBundledResourceDir(resourceType);
+  const listed = pathResolver
+    .getResourceLocations(resourceType)
+    .locations.map((location) => location.path);
+  const ordered = primary === undefined || listed.includes(primary) ? listed : [primary, ...listed];
+  const lookupDirs = resourceRootPrecedence(ordered);
+  const bundled = candidate !== primary && lookupDirs.includes(candidate) ? candidate : undefined;
+  const overlays = pathResolver.getOverlayResourceCandidates(resourceType, primary);
   return { primary, overlays, bundled, lookupDirs };
 }
 
@@ -128,9 +150,12 @@ export function createLoaderRootsSource(
   };
 }
 
-/** The overlays that exist right now — what an inventory line may honestly report. */
+/**
+ * The overlays that exist right now — what an inventory line may honestly report. The bundle is
+ * left out: the inventory reports it as `base`, apart from the overlays.
+ */
 export function existingOverlays(roots: ResourceRoots): string[] {
-  return roots.overlays.filter((dir) => existsSync(dir));
+  return roots.overlays.filter((dir) => dir !== roots.bundled && existsSync(dir));
 }
 
 /**

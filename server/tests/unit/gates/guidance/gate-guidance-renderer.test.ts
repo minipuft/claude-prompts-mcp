@@ -783,8 +783,21 @@ describe('GateGuidanceRenderer — construction, failure isolation, evaluations,
 
       expect(guidance).toBe('');
       expect(logger.warn).toHaveBeenCalledWith(
-        '[GATE GUIDANCE RENDERER] Gate definition not found:',
-        'ghost'
+        '[GATE GUIDANCE RENDERER] Gate definition not found: ghost'
+      );
+    });
+
+    test('a missing default framework gate names the location list as the cause, once', async () => {
+      const guidance = await rendererFor(loaderFor({})).renderGuidance(
+        ['framework-compliance'],
+        {}
+      );
+
+      expect(guidance).toBe('');
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        `[GATE GUIDANCE RENDERER] Gate 'framework-compliance' is not in any listed location; ` +
+          'add "bundled" to paths.resources or ship the gate in a listed folder'
       );
     });
 

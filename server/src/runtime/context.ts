@@ -20,9 +20,10 @@ import { resolvePackageRoot } from './startup.js';
 
 import type { Config, ConfigManager, TransportMode } from '#shared/types/index.js';
 
-import { ConfigLoader } from '#infra/config/index.js';
+import { ConfigLoader, type ProjectConfigScope } from '#infra/config/index.js';
 import { TransportRouter } from '#infra/http/index.js';
 import { createLogger, EnhancedLoggingConfig, Logger } from '#infra/logging/index.js';
+import { findWorkspaceConfigFiles } from '#shared/utils/config-file-format.js';
 import { ServiceOrchestrator } from '#shared/utils/service-orchestrator.js';
 
 export interface RuntimeFoundation {
@@ -82,6 +83,27 @@ export function applyRuntimeIdentityOverrides(
   return derived;
 }
 
+/**
+ * The project's `.claude-prompts/` folder and the workspace config that owns `paths.resources`, so
+ * the loader can refuse the key in a project file and name where it belongs. Undefined when no
+ * project folder applies (HTTP never looks for one).
+ */
+function projectConfigScopeOf(
+  pathResolver: PathResolver,
+  packageRoot: string
+): ProjectConfigScope | undefined {
+  const projectWorkspace = pathResolver.getProjectWorkspace();
+  if (projectWorkspace === undefined) return undefined;
+  const workspace = pathResolver.getWorkspace();
+  return {
+    projectWorkspace,
+    workspaceConfigPath:
+      workspace === packageRoot
+        ? undefined
+        : (findWorkspaceConfigFiles(workspace)[0] ?? path.join(workspace, 'config.jsonc')),
+  };
+}
+
 function normalizeWorkspaceId(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
@@ -133,8 +155,12 @@ export async function createRuntimeFoundation(
     dependencies.configManager ??
     new ConfigLoader(configPath, pathResolver, {
       schemaPath: path.join(serverRoot, 'config.schema.json'),
+      projectConfigScope: projectConfigScopeOf(pathResolver, serverRoot),
     });
   await configManager.loadConfig();
+  // The resolver chose the config file, so it learns that file's `paths.resources` only now. The
+  // loader has already refused an entry naming no directory, on both transports alike.
+  pathResolver.readResourceLocationsFrom(() => configManager.getConfig().paths.resources);
   const derivedProjectScope = applyRuntimeIdentityOverrides(configManager.getConfig(), options);
 
   const serviceOrchestrator = dependencies.serviceOrchestrator ?? new ServiceOrchestrator();

@@ -603,6 +603,27 @@ describe('resourceFileSet — origin', () => {
     expect(overlayAndBundled.origin).toBe('overlay');
   });
 
+  it('classifies by the bundle position the overlay list carries: a listed bundle outranks a lower overlay', async () => {
+    const entry = await write('workspace/gates/a/gate.yaml', 'id: a\n');
+    const workspaceGates = path.join(root, 'workspace', 'gates');
+    const workspace = path.join(root, 'workspace');
+    const classify = (overlays: string[]) =>
+      resourceFileSet({
+        resourceType: 'gate',
+        entryPath: entry,
+        roots: {
+          primary: path.join(root, 'elsewhere', 'gates'),
+          overlays,
+          bundled: workspaceGates,
+        },
+      });
+
+    // Overlays are lowest first: the bundle listed ABOVE the containing overlay answers first.
+    expect((await classify([workspace, workspaceGates])).origin).toBe('bundled');
+    // CONTROL: the bundle listed below it, and the overlay answers.
+    expect((await classify([workspaceGates, workspace])).origin).toBe('overlay');
+  });
+
   it('reports unknown rather than guessing when no root contains the entry', async () => {
     const entry = await write('elsewhere/gates/c/gate.yaml', 'id: c\n');
 
