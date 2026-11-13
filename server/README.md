@@ -346,7 +346,7 @@ Supported presets (other clients: [Client Integration Guide](../docs/guides/clie
 | Variable             | Purpose                                                                                                                                                                           | Example                          |
 | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
 | `MCP_WORKSPACE`      | Base directory for `resources/` and your config file; must exist, or startup is refused. Resources you create are saved under its `resources/<type>/`, created on the first write | `/home/user/my-prompts`          |
-| `MCP_RESOURCES_PATH` | Resources base override (frameworks, gates, styles, scripts); must exist, or startup is refused                                                                                   | `/path/to/resources`             |
+| `MCP_RESOURCES_PATH` | Resources directory used in place of the workspace's own `resources/`; the config's `paths.resources` list still follows it. Must exist, or startup is refused                    | `/path/to/resources`             |
 | `MCP_CONFIG_PATH`    | Custom config file path (`.jsonc` or `.json`); must be readable, or startup is refused                                                                                            | `/path/to/config.jsonc`          |
 | `LOG_LEVEL`          | Logging verbosity                                                                                                                                                                 | `debug`, `info`, `warn`, `error` |
 

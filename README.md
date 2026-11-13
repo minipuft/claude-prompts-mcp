@@ -191,7 +191,7 @@ Prompts, gates, and frameworks are managed through the `resource_manager` tool. 
 
 ### Your own prompts
 
-Your own prompts, gates and frameworks live in a workspace you choose. `--init=~/my-prompts` scaffolds a starter workspace: three example prompts plus `config.jsonc`. Edit them (YAML schema), or have your AI author new prompts, gates, and frameworks via `resource_manager`. Point `MCP_RESOURCES_PATH` at an existing workspace if you already have one in the right shape. Resources that belong to one repository go in `.claude-prompts/` at its root (`cpm init --project` scaffolds it) and load above your workspace over STDIO. See [Custom Resources Guide](docs/guides/custom-resources.md).
+Your own prompts, gates and frameworks live in a workspace you choose. `--init=~/my-prompts` scaffolds a starter workspace: three example prompts plus `config.jsonc`. Edit them (YAML schema), or have your AI author new prompts, gates, and frameworks via `resource_manager`. Point `MCP_RESOURCES_PATH` at an existing resources directory (one holding `prompts/`, `gates/` and so on) to use it in place of your workspace's own `resources/`. Resources that belong to one repository go in `.claude-prompts/` at its root (`cpm init --project` scaffolds it) and load above your workspace over STDIO. See [Custom Resources Guide](docs/guides/custom-resources.md).
 
 ### The Three Tools
 

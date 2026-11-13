@@ -806,8 +806,12 @@ from a config-file path to the directory. Every other type keeps its own watcher
 observed only through that parent.
 
 An overlay counts as a root whether or not it exists yet (`getOverlayResourceCandidates()`): the
-loaders read an absent root as empty, and the watcher arms on it once it appears. Framework files
-take exactly one path, the auxiliary registration; there is no dedicated framework callback.
+loaders read an absent root as empty, and the watcher arms on it once it appears. That list is
+`getResourceLocations()` reversed, lowest precedence first, and it carries the bundle at its listed
+position: first when no `paths.resources` list is in force, where the list names `"bundled"`
+otherwise, and nowhere when a list leaves it out. "Bundled included" in the table above means
+exactly that; the bundle is never a second, separately placed root. Framework files take exactly
+one path, the auxiliary registration; there is no dedicated framework callback.
 
 #### Folders created while the server runs
 

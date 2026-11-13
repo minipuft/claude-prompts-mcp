@@ -63,8 +63,8 @@ Skills Sync reads the resources the server serves. The package's bundled `server
 always contributes. A workspace set with `MCP_WORKSPACE` (or, for a running server, `--workspace`)
 layers its `resources/` over it, and a workspace entry replaces a bundled one with the same
 identity: `{category}/{id}` for a prompt, the id for a gate, framework or style.
-`MCP_RESOURCES_PATH` names a resources directory and takes precedence over the workspace, as it
-does for the server. The `system_control skills_sync` route below resolves through the same
+`MCP_RESOURCES_PATH` names a resources directory used in place of the workspace's own `resources/`,
+as it does for the server. The `system_control skills_sync` route below resolves through the same
 running server the rest of MCP reads from, so it follows `--workspace` even when `MCP_WORKSPACE`
 is unset; the standalone CLI (`npm run skills:export` and friends) has no running server to read
 from, so it resolves from `MCP_WORKSPACE` and the other environment variables only.
