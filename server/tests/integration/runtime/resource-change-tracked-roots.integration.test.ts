@@ -24,12 +24,14 @@ import {
   initializeResourceChangeTracker,
   trackedResourceRoots,
 } from '../../../src/runtime/resource-change-tracking.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 
 import type { ConfigLoader } from '../../../src/infra/config/index.js';
 import type { ResourceChangeTracker } from '../../../src/infra/observability/tracking/index.js';
 import type { AuxiliaryReloadConfig } from '../../../src/modules/hot-reload/hot-reload-observer.js';
 import type { FileChangeOperation, Logger } from '../../../src/shared/types/index.js';
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 const logger: Logger = {
   info: () => {},
@@ -68,14 +70,12 @@ describe('the change tracker spans operator roots, one file per id', () => {
   let dbManager: SqliteEngine;
   let tracker: ResourceChangeTracker;
   let registration: AuxiliaryReloadConfig;
-  const previousWorkspace = process.env['MCP_WORKSPACE'];
-  const previousResources = process.env['MCP_RESOURCES_PATH'];
+  let locations: ResourceLocationScope;
 
   beforeAll(async () => {
     await mkdir(BUNDLED, { recursive: true });
     await mkdir(GATES, { recursive: true });
-    process.env['MCP_WORKSPACE'] = WORKSPACE;
-    delete process.env['MCP_RESOURCES_PATH'];
+    locations = withResourceLocations({ workspace: WORKSPACE });
     dbManager = await SqliteEngine.getInstance(logger, { dbPath: DB_PATH });
     await dbManager.initialize();
     tracker = await initializeResourceChangeTracker(logger, DB_PATH);
@@ -89,9 +89,7 @@ describe('the change tracker spans operator roots, one file per id', () => {
   });
 
   afterAll(async () => {
-    if (previousWorkspace === undefined) delete process.env['MCP_WORKSPACE'];
-    else process.env['MCP_WORKSPACE'] = previousWorkspace;
-    if (previousResources !== undefined) process.env['MCP_RESOURCES_PATH'] = previousResources;
+    locations.cleanup();
     await dbManager.shutdown();
     await rm(TEST_DIR, { recursive: true, force: true, maxRetries: 5 });
   });
@@ -208,16 +206,17 @@ describe('the change tracker spans operator roots, one file per id', () => {
 
     try {
       await writePrompt(PRIMARY, 'general/dup', 'WORKSPACE-COPY');
-      // Registered before the project directory exists: the workspace is the primary, and the
-      // project's folder is a root that does not exist yet, ranked below it.
+      // Registered before the project directory exists: the project's folder is a root that does
+      // not exist yet, and it already outranks the workspace write root (project first, earlier wins).
       expect(trackedResourceRoots(moving, resolver).prompt).toEqual([
-        PRIMARY,
         projectPrompts,
+        PRIMARY,
         OVERLAY,
       ]);
       await compareResourceBaseline(tracker, trackedResourceRoots(moving, resolver), logger);
 
-      // The directory appears holding its own copy of the id, and now outranks the workspace.
+      // The directory appears holding its own copy of the id; its rank is unchanged, but it now
+      // holds a copy, so it serves.
       const projectFile = await writePrompt(projectPrompts, 'general/dup', 'PROJECT-COPY');
       expect(trackedResourceRoots(moving, resolver).prompt).toEqual([
         projectPrompts,

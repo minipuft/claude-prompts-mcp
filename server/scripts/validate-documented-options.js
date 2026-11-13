@@ -82,6 +82,7 @@ const NOT_OUR_OPTIONS = new Set([
   '--subject', // gh pr merge --subject; CONTRIBUTING warns it overrides the PR_BODY squash setting
   '--no', // npx --no; refuses to install a binary the tree does not already have
   '--grep', // git log --grep; how a plan's PRs are listed by their `Plan:` footer
+  '--keep-data', // claude plugin uninstall --keep-data (Claude Code's flag; docs/guides/custom-resources.md)
   '--repo', // delivery-contract --repo; a flag of the managed upstream tool this repo does not own
   '--initiative', // scripts/adr.mjs new --initiative; a flag of a managed script this repo does not own
   '--from', // scripts/create-worktree.mjs --from (npm run worktree:create); a managed script's flag

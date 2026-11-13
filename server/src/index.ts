@@ -393,8 +393,9 @@ PRIORITY ORDER:
   --workspace > MCP_WORKSPACE > Package defaults
   MCP_RESOURCES_PATH replaces the profile's own resources folder; the config's paths.resources entries still follow it.
   Custom workspace resources overlay bundled ones (same ID = custom wins);
-  the bundled definitions stay loaded underneath, so a workspace holding one
-  prompt serves that prompt PLUS the shipped catalog.
+  the bundle loads unless a paths.resources list in the workspace config leaves
+  "bundled" out; when it loads, a workspace holding one prompt serves that
+  prompt PLUS the shipped catalog.
   Point MCP_WORKSPACE at a personal library and MCP_RUNTIME_ROOT elsewhere to
   keep state.db and logs where they were.
 
