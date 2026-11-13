@@ -11,6 +11,7 @@ import {
   type TrackedResourceRoots,
 } from './resource-change-tracking.js';
 import { syncResourceIndex } from './resource-index-resync.js';
+import { ResourceLocationLedger } from './resource-location-report.js';
 import {
   formatIndexReconciliation,
   formatResourceInventory,
@@ -107,6 +108,12 @@ export interface ModuleInitResult {
    * consume it. Live, not a snapshot — see the assembly site for what each leaf reads through.
    */
   indexQuarantine: QuarantineView;
+  /**
+   * The collector every resource-index sync reports its same-id pairs to. Returned for the same
+   * reason as {@link indexQuarantine}: the hot-reload re-sync must record into this one, or the
+   * duplicate warning repeats and `status` keeps the startup catalog.
+   */
+  locationLedger: ResourceLocationLedger;
 }
 
 /**
@@ -555,6 +562,12 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   // the environment the way the standalone CLI wrapper does.
   mcpToolsManager.setSkillsSyncPathsProvider(() => resolveSkillsSyncPaths(pathResolver));
 
+  // One per process, on the tools manager rather than any registered `McpServer`, so STDIO and
+  // each per-request HTTP server read the same locations, counts and same-id pairs. Filled by the
+  // index sync below and by every hot-reload re-sync.
+  const locationLedger = new ResourceLocationLedger(pathResolver, logger);
+  mcpToolsManager.setResourceLocationsView(locationLedger.view());
+
   // Wire DatabasePort early so sub-handlers have it before first use
   if (toolsDatabase !== undefined) {
     try {
@@ -625,6 +638,7 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
         // read one view rather than two that can drift. The change tracker's narrower merge is
         // `trackedQuarantine`, which this one extends.
         indexQuarantine,
+        locationLedger,
         afterSync: (database) => logIndexReconciliation(logger, database, convertedPrompts),
       });
     } catch (error) {
@@ -651,5 +665,6 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
     toolDescriptionLoader,
     resourceChangeTracker,
     indexQuarantine,
+    locationLedger,
   };
 }

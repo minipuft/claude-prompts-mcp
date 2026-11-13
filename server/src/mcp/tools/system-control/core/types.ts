@@ -7,6 +7,7 @@ import type { GateStateStore } from '#engine/gates/gate-state-store.js';
 import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type { SkillsSyncPaths } from '#modules/skills-sync/service.js';
+import type { ResourceLocationsView } from '#shared/types/resource-location-report.js';
 import type {
   StateStoreOptions,
   ConfigManager,
@@ -52,6 +53,12 @@ export interface SystemControlContext {
    * environment-only resolution the standalone CLI wrapper uses.
    */
   readonly skillsSyncPaths?: () => SkillsSyncPaths;
+  /**
+   * Where resources come from — the location list, per-location counts, the bundle's state, a
+   * profile registry's label and every same-id pair of the latest index sync. Wired unconditionally
+   * at startup (`module-initializer.ts`); `status` and `config get paths.resources` throw without it.
+   */
+  readonly resourceLocations?: ResourceLocationsView;
   readonly configManager?: ConfigManager;
   readonly onRestart?: (reason: string) => Promise<void>;
   /**

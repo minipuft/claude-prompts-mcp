@@ -19,6 +19,7 @@ import type { Logger } from '#infra/logging/index.js';
 import type { DatabasePort } from '#shared/types/persistence.js';
 import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { PathResolver } from './paths.js';
+import type { ResourceLocationLedger, ServedResourceFile } from './resource-location-report.js';
 
 export interface ResourceIndexSyncParams {
   /** Where the resources are read from AND where `state.db` is — one resolver for both. */
@@ -30,6 +31,11 @@ export interface ResourceIndexSyncParams {
    * that is empty until `initializeModules` has run; see the throw below.
    */
   indexQuarantine: QuarantineView | undefined;
+  /**
+   * The collector each sync hands its same-id pairs and served files to, for `status` and the
+   * custom-location duplicate warning. One per process; startup and every reload pass the same one.
+   */
+  locationLedger: ResourceLocationLedger | undefined;
   /** A step run against the database the sync just wrote. Startup passes one; reload does not. */
   afterSync?: (database: DatabasePort) => void;
 }
@@ -45,11 +51,18 @@ export interface ResourceIndexSyncParams {
  * wiring broke, not that a legitimate state was reached.
  */
 export async function syncResourceIndex(params: ResourceIndexSyncParams): Promise<void> {
-  const { pathResolver, logger, indexQuarantine, afterSync } = params;
+  const { pathResolver, logger, indexQuarantine, locationLedger, afterSync } = params;
 
   if (indexQuarantine === undefined) {
     throw new Error(
       'Resource index sync has no quarantine view: initializeModules() must assemble it first.'
+    );
+  }
+  // Same posture and the same reason: `status` and the duplicate warning read what this sync
+  // records, so a sync that ran without the ledger would leave both describing an older catalog.
+  if (locationLedger === undefined) {
+    throw new Error(
+      'Resource index sync has no location ledger: initializeModules() must build it first.'
     );
   }
 
@@ -81,6 +94,10 @@ export async function syncResourceIndex(params: ResourceIndexSyncParams): Promis
   });
   const syncResult = await indexer.syncAll();
   reportSyncFindings(syncResult, logger);
+  locationLedger.recordSync(
+    syncResult.shadowed,
+    dbManager.query<ServedResourceFile>('SELECT type, file_path AS filePath FROM resource_index')
+  );
   afterSync?.(dbManager);
   logger.info('✅ Resource index synced to SQLite');
 }

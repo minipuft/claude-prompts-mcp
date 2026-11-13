@@ -57,6 +57,7 @@ import type { ChainSessionStore } from '#modules/chains/manager.js';
 import type { StyleManager } from '#modules/formatting/index.js';
 import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { SkillsSyncPaths } from '#modules/skills-sync/service.js';
+import type { ResourceLocationsView } from '#shared/types/resource-location-report.js';
 import type { GateSpecification } from '#shared/types/execution.js';
 import type {
   StateStoreOptions,
@@ -415,6 +416,15 @@ export class McpToolRouter {
    */
   setSkillsSyncPathsProvider(provider: () => SkillsSyncPaths): void {
     this.systemControl.setSkillsSyncPathsProvider(provider);
+  }
+
+  /**
+   * Give `system_control` the resolver-backed view of where resources come from, for `status`
+   * and `config get paths.resources`. Built at the composition root: `mcp/` may not import
+   * `runtime/`, where the one derivation of the location order lives.
+   */
+  setResourceLocationsView(view: ResourceLocationsView): void {
+    this.systemControl.setResourceLocationsView(view);
   }
 
   /**

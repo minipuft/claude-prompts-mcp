@@ -15,13 +15,16 @@
  */
 
 import { afterEach, beforeEach, describe, expect, jest, test } from '@jest/globals';
-import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { ConfigActionHandler } from '../../../../src/mcp/tools/system-control/handlers/config-action-handler.js';
 import { ConfigLoader } from '../../../../src/infra/config/index.js';
+import { PathResolver } from '../../../../src/runtime/paths.js';
+import { ResourceLocationLedger } from '../../../../src/runtime/resource-location-report.js';
+import { isolateResourceLocations } from '../../../helpers/resource-locations.js';
 
 import type { SystemControlContext } from '../../../../src/mcp/tools/system-control/core/types.js';
 import type { ToolResponse } from '../../../../src/shared/types/index.js';
@@ -277,6 +280,46 @@ describe('ConfigActionHandler read surface + refusal controls', () => {
       expect(response.isError).toBe(true);
       expect(text).toContain('server.nope');
       expect(text).toContain('keys');
+    });
+
+    // Row 1.5: each `paths.resources` entry on its own line, with the kind and source the resolver
+    // gave it, `"bundled"` as the package folder; the `source:` footer stays.
+    describe('paths.resources', () => {
+      isolateResourceLocations();
+
+      test('prints one numbered line per entry, with its kind and source', async () => {
+        await mkdir(path.join(tempDir, 'custom'));
+        await writeFile(
+          configPath,
+          JSON.stringify({ version: 5, paths: { resources: ['./custom', 'bundled'] } }),
+          'utf8'
+        );
+        const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+        await manager.loadConfig();
+        const packageRoot = path.join(tempDir, 'package');
+        const resolver = new PathResolver({ cli: {}, packageRoot });
+        resolver.readResourceLocationsFrom(() => ({
+          resources: manager.getConfig().paths.resources,
+        }));
+        const ledger = new ResourceLocationLedger(resolver, makeContext(manager).logger);
+        const handler = new ConfigActionHandler({
+          ...makeContext(manager),
+          resourceLocations: ledger.view(),
+        } as SystemControlContext);
+
+        const response = await handler.execute({
+          operation: 'get',
+          config: { operation: 'get', key: 'paths.resources' },
+        });
+        const lines = textOf(response).split('\n');
+
+        expect(response.isError).toBe(false);
+        expect(lines.filter((line) => /^\d+\. /.test(line))).toEqual([
+          `1. ${path.join(tempDir, 'custom')} (listed, paths.resources[0])`,
+          `2. ${path.join(packageRoot, 'resources')} (bundled, paths.resources[1] "bundled")`,
+        ]);
+        expect(lines.at(-1)).toMatch(/^source: file /);
+      });
     });
 
     test('no key is refused, never answered from a bare `get`', async () => {
