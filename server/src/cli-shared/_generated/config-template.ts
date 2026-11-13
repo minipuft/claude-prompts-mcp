@@ -54,12 +54,17 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 //     "port": 9090,
 //   },
 
+//   — Where resources are read from.
+//   "paths": {
+//     — Resource locations, in order. "bundled" names the package's own resources; any other
+//       entry is a resources directory (holding prompts/, gates/, ...), absolute or relative to
+//       this file.
+//     — no default
+//     "resources": [],
+//   },
+
 //   — Prompt loading and registration.
 //   "prompts": {
-//     — Directory containing prompt definitions (relative to server root).
-//     — default: "resources/prompts"
-//     "directory": "resources/prompts",
-
 //     — Register prompts as MCP resources for client discovery.
 //     — default: true
 //     "registerWithMcp": true,

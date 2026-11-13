@@ -58,9 +58,9 @@ export const CONFIG_VALID_KEYS = [
   'identity.mode',
   'logging.directory',
   'logging.level',
+  'paths.resources',
   'phaseGuards.maxRetries',
   'phaseGuards.mode',
-  'prompts.directory',
   'prompts.registerWithMcp',
   'resources.frameworks.enabled',
   'resources.gates.enabled',
@@ -234,6 +234,10 @@ export const CONFIG_KEY_TABLE: Readonly<Record<ConfigKey, ConfigLeafRule>> = {
     type: 'string',
     enum: ['error', 'warn', 'info', 'debug'],
   },
+  'paths.resources': {
+    type: 'array',
+    items: { type: 'string' },
+  },
   'phaseGuards.maxRetries': {
     type: 'integer',
     minimum: 0,
@@ -242,9 +246,6 @@ export const CONFIG_KEY_TABLE: Readonly<Record<ConfigKey, ConfigLeafRule>> = {
   'phaseGuards.mode': {
     type: 'string',
     enum: ['enforce', 'warn', 'off'],
-  },
-  'prompts.directory': {
-    type: 'string',
   },
   'prompts.registerWithMcp': {
     type: 'boolean',

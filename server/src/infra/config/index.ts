@@ -60,6 +60,7 @@ import {
 } from '#shared/types/index.js';
 import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
+import { PathSettingError } from '#shared/utils/path-setting.js';
 // Removed: ToolDescriptionLoader import to break circular dependency
 // Now injected via dependency injection pattern
 
@@ -516,7 +517,7 @@ function normalizeConfigFile(file: ConfigFile): Config {
       port: file.server?.port ?? DEFAULT_SERVER_CONFIG.port,
     },
     prompts: {
-      directory: file.prompts?.directory ?? DEFAULT_PROMPTS_CONFIG.directory,
+      directory: promptsDirectoryFromLocations(file.paths?.resources),
       registerWithMcp: file.prompts?.registerWithMcp ?? DEFAULT_PROMPTS_CONFIG.registerWithMcp,
     },
     gates: normalizeGates(file),
@@ -531,6 +532,18 @@ function normalizeConfigFile(file: ConfigFile): Config {
     telemetry: normalizeTelemetry(file),
     identity: normalizeIdentity(file),
   };
+}
+
+/** The reserved `paths.resources` entry: the package's own resources, not a path. */
+const BUNDLED_RESOURCES_ENTRY = 'bundled';
+
+/**
+ * `prompts.directory` for the readers that still consult it: the `prompts/` folder of the first
+ * `paths.resources` entry that is a path, else the default.
+ */
+function promptsDirectoryFromLocations(locations: readonly string[] | undefined): string {
+  const first = locations?.find((entry) => entry !== BUNDLED_RESOURCES_ENTRY);
+  return first === undefined ? DEFAULT_PROMPTS_CONFIG.directory : path.join(first, 'prompts');
 }
 
 /** A 5.0 file that declares nothing: what a missing or unreadable config resolves to. */
@@ -589,6 +602,134 @@ function assertServerTransportIsStdio(
       '"server.transport" from the config file and launch the server with ' +
       '--transport=streamable-http (or --transport=both) instead.'
   );
+}
+
+/** How a refused config value reads in a refusal: its kind, and the value when it is short. */
+function describeConfigValue(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'a list';
+  if (typeof value === 'object') return 'an object';
+  return `a ${typeof value} (${JSON.stringify(value)})`;
+}
+
+/** Throws the startup refusal for one config-file setting, in the path-setting refusal's shape. */
+function refuseConfigSetting(configPath: string, problem: string, expected: string): never {
+  throw new PathSettingError(
+    [`Refusing to start: ${configPath} ${problem}.`, `Expected ${expected}.`].join('\n')
+  );
+}
+
+/** True for a plain JSON object. */
+function isConfigObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Refuses a list entry that is not a non-empty string, or that names a location an earlier entry
+ * already named. Paths compare resolved against the config file's directory, so `"lib"` and
+ * `"./lib"` are one location.
+ */
+function assertResourceLocationEntries(locations: readonly unknown[], configPath: string): void {
+  const seen = new Map<string, string>();
+  locations.forEach((entry, index) => {
+    if (typeof entry !== 'string' || entry === '') {
+      refuseConfigSetting(
+        configPath,
+        `sets "paths.resources[${index}]" to ${describeConfigValue(entry)}`,
+        `a non-empty string there: "${BUNDLED_RESOURCES_ENTRY}" or a directory path`
+      );
+    }
+    const location =
+      entry === BUNDLED_RESOURCES_ENTRY ? entry : path.resolve(path.dirname(configPath), entry);
+    const earlier = seen.get(location);
+    if (earlier !== undefined) {
+      const spelling = earlier === entry ? '' : ` (also spelled ${JSON.stringify(earlier)})`;
+      refuseConfigSetting(
+        configPath,
+        `lists ${JSON.stringify(entry)} in "paths.resources" more than once${spelling}`,
+        'each location once in "paths.resources"'
+      );
+    }
+    seen.set(location, entry);
+  });
+}
+
+/** True when a removed `prompts.directory` value resolves to the default, so it says nothing. */
+function namesDefaultPromptsDirectory(value: unknown, configPath: string): boolean {
+  if (typeof value !== 'string') return false;
+  const configDir = path.dirname(configPath);
+  return (
+    path.resolve(configDir, value) === path.resolve(configDir, DEFAULT_PROMPTS_CONFIG.directory)
+  );
+}
+
+/**
+ * The raw file without its `prompts.directory`, which {@link assertResourceLocationSettings} has
+ * already proven names the default (amended ruling R3o: dropped silently). Never mutates `raw`.
+ */
+function withoutPromptsDirectory(raw: Record<string, unknown>): Record<string, unknown> {
+  const prompts = raw['prompts'];
+  if (!isConfigObject(prompts) || !('directory' in prompts)) return raw;
+  const rest: Record<string, unknown> = { ...prompts };
+  delete rest['directory'];
+  return { ...raw, prompts: rest };
+}
+
+/**
+ * Refuses a raw parsed config file whose resource locations cannot be read as written: a
+ * `prompts.directory` naming anything but the default (removed, amended ruling R3o), a `paths`
+ * that is not an object, or a `paths.resources` that is not a non-empty list of distinct
+ * non-empty strings.
+ *
+ * Runs against the RAW record, before {@link translateConfigFile}, like
+ * {@link assertServerTransportIsStdio}, so a 4.x file is held to the same rule.
+ */
+function assertResourceLocationSettings(
+  rawConfig: Record<string, unknown>,
+  configPath: string
+): void {
+  const prompts = rawConfig['prompts'];
+  if (
+    isConfigObject(prompts) &&
+    'directory' in prompts &&
+    !namesDefaultPromptsDirectory(prompts['directory'], configPath)
+  ) {
+    refuseConfigSetting(
+      configPath,
+      `sets "prompts.directory" to ${describeConfigValue(prompts['directory'])}, which is no longer read`,
+      'the resources directory that holds its prompts/ folder listed under "paths.resources" ' +
+        `instead, an ordered list in which "${BUNDLED_RESOURCES_ENTRY}" names the package's own ` +
+        'resources, or remove "prompts.directory" to use the default'
+    );
+  }
+
+  const paths = rawConfig['paths'];
+  if (paths === undefined) return;
+  if (!isConfigObject(paths)) {
+    refuseConfigSetting(
+      configPath,
+      `sets "paths" to ${describeConfigValue(paths)}`,
+      `an object there, such as { "resources": ["./my-resources", "${BUNDLED_RESOURCES_ENTRY}"] }`
+    );
+  }
+
+  const locations = paths['resources'];
+  if (locations === undefined) return;
+  if (!Array.isArray(locations)) {
+    refuseConfigSetting(
+      configPath,
+      `sets "paths.resources" to ${describeConfigValue(locations)}`,
+      `a list of strings there, such as ["./my-resources", "${BUNDLED_RESOURCES_ENTRY}"]`
+    );
+  }
+  if (locations.length === 0) {
+    refuseConfigSetting(
+      configPath,
+      'sets "paths.resources" to an empty list, which names no location',
+      `the key omitted, or a list naming at least "${BUNDLED_RESOURCES_ENTRY}"`
+    );
+  }
+  assertResourceLocationEntries(locations, configPath);
 }
 
 /**
@@ -708,11 +849,12 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       // continuing would silently ignore an explicit operator request instead of naming
       // --transport as the fix.
       assertServerTransportIsStdio(parsedRecord, this.configPath);
+      assertResourceLocationSettings(parsedRecord, this.configPath);
 
       // A file that declares no `version` was written against the 4.x shape: it is translated here,
       // in memory, and everything below reads one shape. `version: 5` (or any other declared
       // value) passes through untouched.
-      const translation = translateConfigFile(parsedRecord);
+      const translation = translateConfigFile(withoutPromptsDirectory(parsedRecord));
       this.warnConfigFileTranslated(translation);
 
       // Checked against the TRANSLATED file, not the raw one (ruling R33): a 4.x key the
@@ -738,6 +880,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       // the server failed to read — propagate it rather than falling back to defaults, or the
       // fallback would silently start the server on the transport the operator refused.
       if (error instanceof TransportConfigError) throw error;
+      // Same for a refused resource-location setting: serving defaults would read other resources.
+      if (error instanceof PathSettingError) throw error;
 
       // Whatever the last check said describes a file this load did not serve.
       this.schemaValidation = undefined;
@@ -1107,7 +1251,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
    */
   getPromptsDirectory(): string {
     const configDir = path.dirname(this.configPath);
-    return path.join(configDir, this.config.prompts.directory);
+    // `resolve`, not `join`: a `paths.resources` entry may be absolute.
+    return path.resolve(configDir, this.config.prompts.directory);
   }
 
   /**

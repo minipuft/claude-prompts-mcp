@@ -75,14 +75,19 @@ interface ConfigFileServer {
   port?: number;
 }
 
+/** Where resources are read from. */
+interface ConfigFilePaths {
+  /**
+   * Resource locations, in order. "bundled" names the package's own resources; any other entry is
+   * a resources directory (holding prompts/, gates/, ...), absolute or relative to this file.
+   *
+   * @uniqueItems true
+   */
+  resources?: string[];
+}
+
 /** Prompt loading and registration. */
 interface ConfigFilePrompts {
-  /**
-   * Directory containing prompt definitions (relative to server root).
-   *
-   * @default "resources/prompts"
-   */
-  directory?: string;
   /**
    * Register prompts as MCP resources for client discovery.
    *
@@ -641,6 +646,8 @@ export interface ConfigFile {
   version: 5;
   /** Server identity and transport settings. */
   server?: ConfigFileServer;
+  /** Where resources are read from. */
+  paths?: ConfigFilePaths;
   /** Prompt loading and registration. */
   prompts?: ConfigFilePrompts;
   /** Identity and client-profile resolution for scope isolation and delegation routing. */
