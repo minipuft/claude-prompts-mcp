@@ -864,6 +864,8 @@ All resource types support these actions:
 
 > **`confirm` rule:** `confirm:true` is declared exactly where a call deletes something you sent no replacement for: `delete`, `rollback`, and a prompt `update` with `tool_operation:"remove"`. Everywhere else, including gate, framework and category `update`, which delete nothing, `confirm` is refused by name.
 
+> **Saved line:** a `create` or `update` of a prompt, gate, framework or category ends its result with one last line, `saved: <absolute path of the prompt.yaml, gate.yaml, framework.yaml or category.yaml>`, and carries the path in `structuredContent.saved`. A `delete`, a refusal and a preview write no file and have no such line. Where the file lands: [Custom Resources](../guides/custom-resources.md#where-created-resources-are-saved).
+
 > **Note:** For `list` and `inspect`, prefer [MCP Resources](#mcp-resources--token-efficient-discovery) (4-30x more token efficient). Use tool actions as fallback when filtering is needed or client doesn't support resources.
 
 ### Prompts
@@ -1517,6 +1519,28 @@ before the action runs. Two names are shared across actions with different value
 and `resource_type` takes `prompt`, `gate`, `framework` or `style` for `skills_sync` while the
 change log records only `prompt` and `gate`. Each action refuses a value that belongs to the other.
 
+### Status: Resource Locations
+
+`system_control(action:"status")` includes a **Resource locations** section: every location of the
+prompt type in precedence order with what it serves, the state of the bundle, a `profile:` line when
+a `workspaces.jsonc` sits in the folder holding your workspace, and the ids one location hides
+behind another.
+
+```text
+**Resource locations**
+1. /home/you/shared/resources (listed) — 2 prompts, 0 gates, 0 frameworks, 0 styles
+2. /usr/lib/node_modules/claude-prompts/server/resources (bundled) — 119 prompts, 12 gates, 6 frameworks, 9 styles
+bundled (listed)
+profile: work (siblings: personal, scratch)
+Shadowed:
+- review (prompt): served from /home/you/shared/resources/prompts/review/prompt.yaml, hidden copy in /usr/lib/node_modules/claude-prompts/server/resources/prompts/review/prompt.yaml
+```
+
+`bundled (...)` is `listed`, `implicit` (no `paths.resources` list, so the shipped resources load
+last) or `absent` (a list that leaves `"bundled"` out). With nothing hidden the last line is
+`Shadowed: none`. Reading the list is
+[Where Resources Come From](configuration.md#where-resources-come-from).
+
 ### Config Operations
 
 Read-only over MCP: `list` (the whole loaded configuration), `keys` (the dot-path keys the
@@ -1539,6 +1563,17 @@ system_control(action:"config", operation:"validate")
 
 # Whether a value would be valid for a key, without writing it
 system_control(action:"config", operation:"validate", config:{key:"logging.level", value:"debug", operation:"validate"})
+```
+
+`get` of `paths.resources` adds one numbered line per entry, `<n>. <absolute path> (<kind>, <source>)`:
+
+```bash
+system_control(action:"config", operation:"get", config:{key:"paths.resources", operation:"get"})
+# 🔎 paths.resources = ["../shared/resources","bundled"]
+# 1. /home/you/shared/resources (listed, paths.resources[0])
+# 2. /usr/lib/node_modules/claude-prompts/server/resources (bundled, paths.resources[1] "bundled")
+#
+# source: file (the config file sets this value)
 ```
 
 `get` answers with the key, its effective value as JSON, and a `source` — `file` (the config file

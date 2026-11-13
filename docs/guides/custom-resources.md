@@ -66,14 +66,28 @@ The list is a machine-level setting: put it in your workspace's `config.jsonc` o
 
 ## Where created resources are saved
 
-Prompts, gates, and frameworks you create through `resource_manager` are written to one folder per type, never to a `paths.resources` entry:
+Prompts, gates, and frameworks you create through `resource_manager` are written to one folder per type. A `paths.resources` entry receives writes only when `paths.writeTarget` names it:
 
 - **`.claude-prompts/` exists at the project root** (STDIO only): `<project>/.claude-prompts/resources/<type>/`, for example `.claude-prompts/resources/prompts/`. The folder does not need to exist; the first write creates it. The rules below apply only when the project has no `.claude-prompts/`.
+- **`paths.writeTarget` is set** in your `config.jsonc` to a folder other than your workspace's own: `<writeTarget>/<type>/`, created by the first write. It names an entry of `paths.resources` or the profile's own `resources/` folder, written as an absolute path or relative to the config file; [Configuration](../reference/configuration.md#where-resources-come-from) lists what is refused.
 - **`MCP_RESOURCES_PATH` is set**: its `<type>/` folder, created by the first write. When that folder does not exist yet and the workspace keeps the type in the older `<workspace>/<type>/` layout, writes go there instead.
 - **A workspace is set** (`MCP_WORKSPACE`, `--workspace`, or the Claude Code plugin's data folder) and `MCP_RESOURCES_PATH` is not: `<workspace>/resources/<type>/`, for example `<workspace>/resources/prompts/`. The folder does not need to exist; the first write creates it. If the workspace already keeps that type in the older `<workspace>/<type>/` layout, writes go there instead, so one collection is not split across two folders.
 - **Neither is set**: the package's own resources folder, which a reinstall replaces.
 
 Editing a bundled prompt copies it into your folder first, and your copy then takes precedence over the bundled one.
+
+Every create or update through `resource_manager` ends its result with one line naming the file it wrote, `saved: <absolute path>` (also `structuredContent.saved`), so you can see which of these folders received it. Skills Sync `pull` writes land in the same folders.
+
+## What status reports
+
+`system_control(action:"status")` has a **Resource locations** section built from the same list:
+
+- every location in precedence order, with how many prompts, gates, frameworks and styles it serves: `1. /home/you/shared/resources (listed) — 2 prompts, 0 gates, 0 frameworks, 0 styles`;
+- `bundled (listed)`, `bundled (implicit)` (no list in force, the shipped resources load last) or `bundled (absent)` (a list that leaves `"bundled"` out);
+- a `profile:` line when a `workspaces.jsonc` sits in the folder holding your workspace: the label it gives the workspace and its sibling workspaces, that it names none for this one, or that the file could not be read;
+- a `Shadowed` list, one line per id a later location defines and an earlier one hides: `review (prompt): served from <path>, hidden copy in <path>`.
+
+When the same id sits in two of your own locations (project, workspace or a listed folder), startup also logs one warning per pair, `Resource 'review' (prompt) is defined in <a> and <b>; the earlier location serves it`. A copy of yours that hides a shipped one is the overlay working as intended and warns about nothing; the `Shadowed` list still names it.
 
 ## What an edit does to a file you wrote by hand
 
