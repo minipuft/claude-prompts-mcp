@@ -29,6 +29,8 @@ import { Application } from '../../../src/runtime/application.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
 import type { RuntimeLaunchOptions } from '../../../src/runtime/options.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const SERVER_ROOT = path.resolve(path.dirname(__filename), '..', '..', '..');
@@ -38,30 +40,14 @@ const TMP_ROOT = testScratchPath('shutdown-order');
  * `PathResolver` reads the environment before its own options, so an operator shell that
  * exports these reaches in-process Jest and points this file at a live resource library.
  */
-const PATH_ENV_KEYS = [
-  'MCP_RESOURCES_PATH',
-  'MCP_WORKSPACE',
-  'MCP_RUNTIME_ROOT',
-  'MCP_CONFIG_PATH',
-] as const;
-const savedEnv = new Map<string, string | undefined>();
+let locations: ResourceLocationScope;
 
 beforeAll(() => {
-  for (const key of PATH_ENV_KEYS) {
-    savedEnv.set(key, process.env[key]);
-    delete process.env[key];
-  }
+  locations = withResourceLocations();
 });
 
 afterAll(() => {
-  for (const key of PATH_ENV_KEYS) {
-    const value = savedEnv.get(key);
-    if (value === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = value;
-    }
-  }
+  locations.cleanup();
 });
 
 afterEach(async () => {

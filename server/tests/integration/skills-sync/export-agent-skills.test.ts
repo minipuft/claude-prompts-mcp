@@ -31,6 +31,9 @@ import {
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
 import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
+
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 function silentOutput(): SkillsSyncOutput & { logs: string[]; warns: string[]; errors: string[] } {
   const logs: string[] = [];
@@ -98,7 +101,8 @@ describe('Export to Agent Skills clients', () => {
   let tmpDir: string;
   let serverRoot: string;
   let outputDir: string;
-  let savedEnv: Record<string, string | undefined>;
+  let savedHome: string | undefined;
+  let locations: ResourceLocationScope;
 
   beforeEach(async () => {
     tmpDir = mkdtempSync(path.join(os.tmpdir(), 'skills-export-agent-skills-'));
@@ -109,23 +113,15 @@ describe('Export to Agent Skills clients', () => {
     await mkdir(path.join(tmpDir, 'home'), { recursive: true });
     await mkdir(outputDir, { recursive: true });
 
-    savedEnv = {
-      HOME: process.env['HOME'],
-      MCP_SERVER_ROOT: process.env['MCP_SERVER_ROOT'],
-      MCP_RESOURCES_PATH: process.env['MCP_RESOURCES_PATH'],
-      MCP_WORKSPACE: process.env['MCP_WORKSPACE'],
-    };
+    savedHome = process.env['HOME'];
     process.env['HOME'] = path.join(tmpDir, 'home');
-    process.env['MCP_SERVER_ROOT'] = serverRoot;
-    delete process.env['MCP_RESOURCES_PATH'];
-    delete process.env['MCP_WORKSPACE'];
+    locations = withResourceLocations({ serverRoot });
   });
 
   afterEach(async () => {
-    for (const [key, value] of Object.entries(savedEnv)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    locations.cleanup();
+    if (savedHome === undefined) delete process.env['HOME'];
+    else process.env['HOME'] = savedHome;
     await rm(tmpDir, { recursive: true, force: true });
   });
 

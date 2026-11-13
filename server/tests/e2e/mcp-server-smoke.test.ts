@@ -27,6 +27,7 @@ import {
 } from './helpers/http-mcp-client.js';
 
 import { buildServerEnv, createHermeticRoots, type HermeticRoots } from './helpers/child-env.js';
+import { resourceLocationEnv } from '../helpers/resource-locations.js';
 
 // ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -74,9 +75,11 @@ function spawnServer(runtimeRoot?: string): ChildProcess {
     cwd: path.join(PROJECT_ROOT, 'server'),
     env: buildServerEnv({
       ...roots.env,
-      MCP_WORKSPACE: PROJECT_ROOT,
-      MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
-      ...(runtimeRoot !== undefined ? { MCP_RUNTIME_ROOT: runtimeRoot } : {}),
+      ...resourceLocationEnv({
+        workspace: PROJECT_ROOT,
+        resourcesPath: path.join(PROJECT_ROOT, 'server', 'resources'),
+        ...(runtimeRoot !== undefined ? { runtimeRoot } : {}),
+      }),
     }),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
@@ -207,9 +210,11 @@ describe('MCP Server Smoke Tests', () => {
           NODE_ENV: 'production',
           CI: 'false',
           GITHUB_ACTIONS: 'false',
-          MCP_RUNTIME_ROOT: runtimeRoot,
-          MCP_WORKSPACE: PROJECT_ROOT,
-          MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
+          ...resourceLocationEnv({
+            runtimeRoot,
+            workspace: PROJECT_ROOT,
+            resourcesPath: path.join(PROJECT_ROOT, 'server', 'resources'),
+          }),
         }),
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -252,8 +257,10 @@ describe('MCP Server Smoke Tests', () => {
           NODE_ENV: 'production',
           CI: 'false',
           GITHUB_ACTIONS: 'false',
-          MCP_WORKSPACE: workspace,
-          MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
+          ...resourceLocationEnv({
+            workspace,
+            resourcesPath: path.join(PROJECT_ROOT, 'server', 'resources'),
+          }),
         }),
         stdio: ['ignore', 'pipe', 'pipe'],
       });

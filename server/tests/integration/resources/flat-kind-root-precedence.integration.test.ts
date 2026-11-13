@@ -39,6 +39,8 @@ import { ResourceIndexer, SqliteEngine } from '../../../src/infra/database/index
 import { StyleDefinitionLoader } from '../../../src/modules/formatting/core/style-definition-loader.js';
 import { PathResolver } from '../../../src/runtime/paths.js';
 import { indexerResourceRoots, resolveResourceRoots } from '../../../src/runtime/resource-roots.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -48,23 +50,12 @@ const mockLogger = {
 };
 
 /**
- * Every path override `PathResolver` honors, neutralized for this file.
- *
- * `MCP_RESOURCES_PATH` in particular: the Claude Code plugin that runs this server exports it into
- * the maintainer's shell, where it silently becomes the resources base and every root below would
- * resolve into the owner's personal library instead of the temp tree. Saved and restored, because
- * the process is shared with the rest of the run. (Same reason, same list, as
- * `tests/unit/runtime/paths.runtime.test.ts`.)
+ * Every path override `PathResolver` honors is cleared for this file and restored after it
+ * (`withResourceLocations`): `MCP_RESOURCES_PATH` in particular is exported into the maintainer's
+ * shell by the Claude Code plugin that runs this server, where it would silently become the
+ * resources base and resolve every root below into the owner's personal library.
  */
-const PATH_ENV_KEYS = [
-  'MCP_RUNTIME_ROOT',
-  'MCP_WORKSPACE',
-  'MCP_RESOURCES_PATH',
-  'MCP_CONFIG_PATH',
-] as const;
-const originalPathEnv = new Map<string, string | undefined>(
-  PATH_ENV_KEYS.map((key) => [key, process.env[key]])
-);
+let locations: ResourceLocationScope;
 
 const gateYaml = (id: string, name: string): string =>
   [
@@ -128,7 +119,7 @@ describe('the primary root outranks an overlay for gates, frameworks and styles'
   const written: Record<string, Record<string, string>> = {};
 
   beforeAll(async () => {
-    for (const key of PATH_ENV_KEYS) delete process.env[key];
+    locations = withResourceLocations();
 
     tmpRoot = mkdtempSync(path.join(tmpdir(), 'flat-kind-precedence-'));
     packageRoot = path.join(tmpRoot, 'package');
@@ -196,7 +187,7 @@ describe('the primary root outranks an overlay for gates, frameworks and styles'
       };
     }
 
-    process.env['MCP_WORKSPACE'] = workspace;
+    locations.set({ workspace });
     pathResolver = new PathResolver({ cli: {}, packageRoot });
 
     dbManager = await SqliteEngine.getInstance(mockLogger as never, {
@@ -208,10 +199,7 @@ describe('the primary root outranks an overlay for gates, frameworks and styles'
   afterAll(async () => {
     if (dbManager) await dbManager.shutdown();
     rmSync(tmpRoot, { recursive: true, force: true });
-    for (const [key, value] of originalPathEnv) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    locations.cleanup();
   });
 
   /**

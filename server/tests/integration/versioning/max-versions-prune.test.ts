@@ -32,6 +32,7 @@ import type { VersioningConfigProvider } from '../../../src/modules/versioning/v
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
 import { createTestDatabaseManager, seedStateDbSchema } from '../../helpers/test-database.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 import { resolveConfiguredMaxVersions } from '../../../src/cli-shared/version-history.js';
 import { saveVersion } from '../../helpers/version-history-writer.js';
 import { DEFAULT_MAX_VERSIONS } from '../../../src/cli-shared/version-history-types.js';
@@ -91,30 +92,18 @@ describe('versioning.maxVersions is one bound for both writers', () => {
 
   describe('the CLI writer, against a real state.db', () => {
     let workspace: string;
-    const savedRuntimeRoot = process.env['MCP_RUNTIME_ROOT'];
-    const savedWorkspace = process.env['MCP_WORKSPACE'];
-    const savedResources = process.env['MCP_RESOURCES_PATH'];
+    // The ambient shell exports MCP_RESOURCES_PATH; nothing here may resolve against it.
+    const locations = isolateResourceLocations();
 
     beforeEach(async () => {
       workspace = testScratchPath('max-versions-cli');
       await fs.rm(workspace, { recursive: true, force: true });
       await fs.mkdir(workspace, { recursive: true });
       await seedStateDbSchema(workspace);
-      // The ambient shell exports MCP_RESOURCES_PATH; nothing here may resolve against it.
-      delete process.env['MCP_RESOURCES_PATH'];
-      delete process.env['MCP_WORKSPACE'];
-      process.env['MCP_RUNTIME_ROOT'] = workspace;
+      locations.set({ runtimeRoot: workspace });
     });
 
     afterEach(async () => {
-      for (const [key, value] of [
-        ['MCP_RUNTIME_ROOT', savedRuntimeRoot],
-        ['MCP_WORKSPACE', savedWorkspace],
-        ['MCP_RESOURCES_PATH', savedResources],
-      ] as const) {
-        if (value === undefined) delete process.env[key];
-        else process.env[key] = value;
-      }
       await fs.rm(workspace, { recursive: true, force: true });
     });
 

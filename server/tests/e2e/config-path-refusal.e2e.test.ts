@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
 import { getAvailablePort } from './helpers/http-mcp-client.js';
+import { resourceLocationEnv } from '../helpers/resource-locations.js';
 
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DIST_ENTRY = path.join(SERVER_ROOT, 'dist', 'index.js');
@@ -239,7 +240,7 @@ describe('a path setting that cannot be used refuses startup', () => {
 
     const run = await runServer(
       ['--transport=streamable-http'],
-      { PORT: String(port), MCP_RESOURCES_PATH: missing, MCP_RUNTIME_ROOT: runtimeRoot },
+      { PORT: String(port), ...resourceLocationEnv({ resourcesPath: missing, runtimeRoot }) },
       { stdin: 'ignore' }
     );
 

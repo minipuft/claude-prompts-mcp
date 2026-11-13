@@ -17,7 +17,7 @@
  * content, and a later byte-exact rollback would restore the wrong state at full confidence.
  */
 
-import { describe, it, expect, afterEach } from '@jest/globals';
+import { describe, it, expect } from '@jest/globals';
 import { DatabaseSync } from 'node:sqlite';
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
@@ -35,6 +35,7 @@ import { readResourceTree } from '../../../src/cli-shared/object-store.js';
 import { resourceFileSet } from '../../../src/shared/utils/resource-file-set.js';
 import { rollbackVersion } from '../../../src/cli-shared/version-history.js';
 import { saveVersion } from '../../helpers/version-history-writer.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 import { resolveTenantId } from '../../../src/cli-shared/version-history-scope.js';
 import {
   DANGLING_ENTRY_SQL,
@@ -85,6 +86,9 @@ function restoreGate(entryPath: string, gatesRoot: string, yamlText: string) {
   };
 }
 
+/** The CLI writer reads `MCP_RUNTIME_ROOT`; every case here names it and nothing else. */
+const locations = isolateResourceLocations();
+
 /** A workspace with a v29 schema, a gate on disk, and two projection-only versions behind it. */
 async function setUpRollbackWorkspace(label: string): Promise<{
   workspace: string;
@@ -99,9 +103,7 @@ async function setUpRollbackWorkspace(label: string): Promise<{
   const gatesRoot = path.join(workspace, 'resources', 'gates');
   const entryPath = await writeGate(gatesRoot, 'alpha');
 
-  delete process.env['MCP_RESOURCES_PATH'];
-  delete process.env['MCP_WORKSPACE'];
-  process.env['MCP_RUNTIME_ROOT'] = workspace;
+  locations.set({ runtimeRoot: workspace });
 
   // Two versions to roll back between, written with no tree — these cases assert what the ROLLBACK
   // records, so the history they start from must contribute nothing to the answer.
@@ -127,21 +129,6 @@ function locatorOver(root: string): ResourceFileLocatorPort {
 }
 
 describe('the two writers produce one checkpoint format', () => {
-  const savedRuntimeRoot = process.env['MCP_RUNTIME_ROOT'];
-  const savedWorkspace = process.env['MCP_WORKSPACE'];
-  const savedResources = process.env['MCP_RESOURCES_PATH'];
-
-  afterEach(() => {
-    for (const [key, value] of [
-      ['MCP_RUNTIME_ROOT', savedRuntimeRoot],
-      ['MCP_WORKSPACE', savedWorkspace],
-      ['MCP_RESOURCES_PATH', savedResources],
-    ] as const) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-  });
-
   it('gives the same tree_hash to the same files, written from either side', async () => {
     const ctx = await createTestDatabaseManager('tree-parity');
     try {
@@ -160,9 +147,7 @@ describe('the two writers produce one checkpoint format', () => {
 
       // The CLI writes the SAME files, through its own exported functions. The CLI has no server
       // process to route through, so calling the exports directly is the whole of its path.
-      delete process.env['MCP_RESOURCES_PATH'];
-      delete process.env['MCP_WORKSPACE'];
-      process.env['MCP_RUNTIME_ROOT'] = ctx.testDir;
+      locations.set({ runtimeRoot: ctx.testDir });
       const files = await resourceFileSet({
         resourceType: 'gate',
         entryPath,
@@ -246,9 +231,7 @@ describe('the two writers produce one checkpoint format', () => {
       description TEXT DEFAULT '', created_at TEXT NOT NULL)`);
     seed.close();
 
-    delete process.env['MCP_RESOURCES_PATH'];
-    delete process.env['MCP_WORKSPACE'];
-    process.env['MCP_RUNTIME_ROOT'] = workspace;
+    locations.set({ runtimeRoot: workspace });
 
     try {
       saveVersion(workspace, 'gate', 'alpha', { name: 'One' }, { description: 'v1' });

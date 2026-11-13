@@ -25,6 +25,9 @@ import {
   type SkillsSyncOutput,
 } from '../../../src/modules/skills-sync/service.js';
 import { resolveSkillsSyncPaths } from '../../../src/runtime/skills-sync-paths.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
+
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 function silentOutput(): SkillsSyncOutput & { logs: string[]; warns: string[]; errors: string[] } {
   const logs: string[] = [];
@@ -56,7 +59,7 @@ describe('Export resource types', () => {
   let tmpDir: string;
   let serverRoot: string;
   let outputDir: string;
-  let savedEnv: Record<string, string | undefined>;
+  let locations: ResourceLocationScope;
 
   beforeEach(async () => {
     tmpDir = mkdtempSync(path.join(os.tmpdir(), 'skills-export-types-'));
@@ -66,21 +69,11 @@ describe('Export resource types', () => {
     await mkdir(path.join(serverRoot, 'resources'), { recursive: true });
     await mkdir(outputDir, { recursive: true });
 
-    savedEnv = {
-      MCP_SERVER_ROOT: process.env['MCP_SERVER_ROOT'],
-      MCP_RESOURCES_PATH: process.env['MCP_RESOURCES_PATH'],
-      MCP_WORKSPACE: process.env['MCP_WORKSPACE'],
-    };
-    process.env['MCP_SERVER_ROOT'] = serverRoot;
-    delete process.env['MCP_RESOURCES_PATH'];
-    delete process.env['MCP_WORKSPACE'];
+    locations = withResourceLocations({ serverRoot });
   });
 
   afterEach(async () => {
-    for (const [key, value] of Object.entries(savedEnv)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    locations.cleanup();
     await rm(tmpDir, { recursive: true, force: true });
   });
 

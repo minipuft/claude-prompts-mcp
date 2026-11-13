@@ -48,6 +48,8 @@ import type { AuxiliaryReloadConfig } from '../../../src/modules/hot-reload/hot-
 import type { StyleDefinitionLoader } from '../../../src/modules/formatting/index.js';
 import type { McpToolRouter } from '../../../src/mcp/tools/index.js';
 import type { HotReloadEvent } from '../../../src/shared/types/index.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 const mockLogger = {
   info: jest.fn() as jest.Mock,
@@ -57,23 +59,12 @@ const mockLogger = {
 };
 
 /**
- * Every path override `PathResolver` honors, neutralized for this file.
- *
- * `MCP_RESOURCES_PATH` in particular: the Claude Code plugin that runs this server exports it into
- * the maintainer's shell, where it becomes the resources base and every root below would resolve
- * into the owner's personal library instead of the temp tree — `PathResolver` reads the
- * environment before its own options, so this reaches in-process jest and not only spawned
- * servers. Saved and restored, because the process is shared with the rest of the run.
+ * Every path override `PathResolver` honors is cleared for this file and restored after it
+ * (`withResourceLocations`): `MCP_RESOURCES_PATH` in particular is exported into the maintainer's
+ * shell by the Claude Code plugin that runs this server, where it would silently become the
+ * resources base and resolve every root below into the owner's personal library.
  */
-const PATH_ENV_KEYS = [
-  'MCP_RUNTIME_ROOT',
-  'MCP_WORKSPACE',
-  'MCP_RESOURCES_PATH',
-  'MCP_CONFIG_PATH',
-] as const;
-const originalPathEnv = new Map<string, string | undefined>(
-  PATH_ENV_KEYS.map((key) => [key, process.env[key]])
-);
+let locations: ResourceLocationScope;
 
 /** Loads cleanly. */
 const validStyle = (id: string, name: string): string =>
@@ -127,7 +118,7 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
   let reloadConfig: AuxiliaryReloadConfig | undefined;
 
   beforeAll(async () => {
-    for (const key of PATH_ENV_KEYS) delete process.env[key];
+    locations = withResourceLocations();
     resetDefaultStyleDefinitionLoader();
 
     tmpRoot = mkdtempSync(path.join(tmpdir(), 'style-single-instance-'));
@@ -153,7 +144,7 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
     writeStyle(primaryRoot, 'shadowed', validStyle('shadowed', 'FROM PRIMARY'));
     writeStyle(overlayRoot, 'overlayonly', validStyle('overlayonly', 'OVERLAY ONLY'));
 
-    process.env['MCP_WORKSPACE'] = workspace;
+    locations.set({ workspace });
     pathResolver = new PathResolver({ cli: {}, packageRoot });
 
     // Exactly what `runtime/module-initializer.ts` wires: the roots resolved once through
@@ -182,10 +173,7 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
     if (dbManager) await dbManager.shutdown();
     resetDefaultStyleDefinitionLoader();
     rmSync(tmpRoot, { recursive: true, force: true });
-    for (const [key, value] of originalPathEnv) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    locations.cleanup();
   });
 
   /** The startup walk: reading every style is what FILLS the refusal record. */

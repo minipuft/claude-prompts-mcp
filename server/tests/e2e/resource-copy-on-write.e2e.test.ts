@@ -31,6 +31,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildServerEnv, createHermeticRoots } from './helpers/child-env.js';
+import { resourceLocationEnv } from '../helpers/resource-locations.js';
 
 const SERVER_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PACKAGE_RESOURCES = path.join(SERVER_ROOT, 'resources');
@@ -70,9 +71,11 @@ class CowServer {
     this.proc = spawn('node', [path.join(SERVER_ROOT, 'dist', 'index.js'), '--transport=stdio'], {
       env: buildServerEnv({
         ...this.roots.env,
-        MCP_RESOURCES_PATH: path.join(this.workspace, 'resources'),
-        MCP_WORKSPACE: this.workspace,
-        MCP_RUNTIME_ROOT: path.join(this.workspace, 'runtime'),
+        ...resourceLocationEnv({
+          resourcesPath: path.join(this.workspace, 'resources'),
+          workspace: this.workspace,
+          runtimeRoot: path.join(this.workspace, 'runtime'),
+        }),
       }),
       stdio: ['pipe', 'pipe', 'pipe'],
     });

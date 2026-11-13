@@ -52,6 +52,7 @@ import type { FrameworkManager } from '../../../src/engine/frameworks/framework-
 import type { McpToolRouter } from '../../../src/mcp/tools/index.js';
 import type { AuxiliaryReloadConfig } from '../../../src/modules/hot-reload/hot-reload-observer.js';
 import type { HotReloadEvent, Logger } from '../../../src/shared/types/index.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
 
 const logger: Logger = {
   info: () => {},
@@ -271,15 +272,8 @@ describe('an overlay that does not exist yet is still a root', () => {
     }
     await writeFile(path.join(packageRoot, 'config.json'), '{}', 'utf8');
 
-    const previous = process.env['MCP_WORKSPACE'];
-    const previousResources = process.env['MCP_RESOURCES_PATH'];
-    process.env['MCP_WORKSPACE'] = workspace;
-    delete process.env['MCP_RESOURCES_PATH'];
-    cleanups.push(async () => {
-      if (previous === undefined) delete process.env['MCP_WORKSPACE'];
-      else process.env['MCP_WORKSPACE'] = previous;
-      if (previousResources !== undefined) process.env['MCP_RESOURCES_PATH'] = previousResources;
-    });
+    const locations = withResourceLocations({ workspace });
+    cleanups.push(async () => locations.cleanup());
     const resolver = new PathResolver({ cli: {}, packageRoot });
 
     for (const type of ['prompts', 'gates', 'frameworks', 'styles']) {
@@ -346,15 +340,8 @@ describe('a project .claude-prompts/ created while the server runs', () => {
     await mkdir(path.join(packageRoot, 'resources', 'gates'), { recursive: true });
     await mkdir(path.join(workspace, 'resources', 'gates'), { recursive: true });
 
-    const previous = process.env['MCP_WORKSPACE'];
-    const previousResources = process.env['MCP_RESOURCES_PATH'];
-    process.env['MCP_WORKSPACE'] = workspace;
-    delete process.env['MCP_RESOURCES_PATH'];
-    cleanups.push(async () => {
-      if (previous === undefined) delete process.env['MCP_WORKSPACE'];
-      else process.env['MCP_WORKSPACE'] = previous;
-      if (previousResources !== undefined) process.env['MCP_RESOURCES_PATH'] = previousResources;
-    });
+    const locations = withResourceLocations({ workspace });
+    cleanups.push(async () => locations.cleanup());
 
     const projectWorkspace = path.join(project, '.claude-prompts');
     const projectGates = path.join(projectWorkspace, 'resources', 'gates');
@@ -435,15 +422,8 @@ describe('a project .claude-prompts/ created while the server runs becomes the w
       await mkdir(path.join(workspace, 'resources', type), { recursive: true });
     }
 
-    const previous = process.env['MCP_WORKSPACE'];
-    const previousResources = process.env['MCP_RESOURCES_PATH'];
-    process.env['MCP_WORKSPACE'] = workspace;
-    delete process.env['MCP_RESOURCES_PATH'];
-    cleanups.push(async () => {
-      if (previous === undefined) delete process.env['MCP_WORKSPACE'];
-      else process.env['MCP_WORKSPACE'] = previous;
-      if (previousResources !== undefined) process.env['MCP_RESOURCES_PATH'] = previousResources;
-    });
+    const locations = withResourceLocations({ workspace });
+    cleanups.push(async () => locations.cleanup());
 
     const resolver = new PathResolver({
       cli: {},

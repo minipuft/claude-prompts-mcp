@@ -57,16 +57,12 @@ import type { Logger } from '../../../src/infra/logging/index.js';
 import type { RuntimeFoundation } from '../../../src/runtime/context.js';
 import type { ModuleInitResult } from '../../../src/runtime/module-initializer.js';
 import type { RuntimeLaunchOptions } from '../../../src/runtime/options.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 /** `MCP_RESOURCES_PATH` outranks the workspace, and a developer shell may export it. */
-const PATH_ENV_KEYS = [
-  'MCP_RUNTIME_ROOT',
-  'MCP_WORKSPACE',
-  'MCP_RESOURCES_PATH',
-  'MCP_CONFIG_PATH',
-];
-const originalEnv = new Map(PATH_ENV_KEYS.map((key) => [key, process.env[key]]));
+let locations: ResourceLocationScope;
 
 const PASS = { overall: 'PASS', rationale: 'ok' };
 const FRAMEWORK_HEADER = 'C.A.G.E.E.R.F Framework Active';
@@ -279,8 +275,7 @@ beforeAll(async () => {
   mkdirSync(workspace, { recursive: true });
   mkdirSync(runtimeRoot, { recursive: true });
   writeWorkspace(workspace);
-  for (const key of PATH_ENV_KEYS) delete process.env[key];
-  process.env['MCP_RUNTIME_ROOT'] = runtimeRoot;
+  locations = withResourceLocations({ runtimeRoot });
 
   const logger = silentLogger();
   const runtimeOptions: RuntimeLaunchOptions = {
@@ -353,10 +348,7 @@ afterAll(async () => {
   modules?.mcpToolsManager.shutdown();
   await SqliteEngine.shutdownInstance();
   rmSync(root, { recursive: true, force: true });
-  for (const [key, value] of originalEnv) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
+  locations.cleanup();
 });
 
 // The jest realm makes `structuredClone` output fail the canonical-JSON plain-object check an

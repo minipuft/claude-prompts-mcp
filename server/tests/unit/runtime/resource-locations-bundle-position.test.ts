@@ -32,15 +32,9 @@ import { indexerResourceRoots, resolveResourceRoots } from '../../../src/runtime
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { PromptAssetManager } from '../../../src/modules/prompts/index.js';
 import type { Category, PromptData } from '../../../src/modules/prompts/types.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 
-const PATH_ENV_KEYS = [
-  'MCP_RUNTIME_ROOT',
-  'MCP_WORKSPACE',
-  'MCP_RESOURCES_PATH',
-  'MCP_CONFIG_PATH',
-  'CLAUDE_PLUGIN_DATA',
-] as const;
-const originalPathEnv = new Map(PATH_ENV_KEYS.map((key) => [key, process.env[key]]));
+const locations = isolateResourceLocations();
 
 /** The package's real frameworks folder: the six shipped definitions, valid by construction. */
 const REAL_FRAMEWORKS = path.resolve(process.cwd(), 'resources', 'frameworks');
@@ -51,7 +45,6 @@ let configDir: string;
 let custom: string;
 
 beforeEach(() => {
-  for (const key of PATH_ENV_KEYS) delete process.env[key];
   dir = mkdtempSync(path.join(tmpdir(), 'bundle-position-'));
   packageRoot = path.join(dir, 'package');
   configDir = path.join(dir, 'cfg');
@@ -61,16 +54,12 @@ beforeEach(() => {
     mkdirSync(path.join(custom, type), { recursive: true });
   }
   // A custom, empty workspace: the profile's own folder is distinct from the package's and absent.
-  process.env['MCP_WORKSPACE'] = path.join(dir, 'workspace');
+  locations.set({ workspace: path.join(dir, 'workspace') });
   mkdirSync(path.join(dir, 'workspace'));
 });
 
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
-  for (const [key, value] of originalPathEnv) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
 });
 
 /** A resolver reading `list` as `paths.resources`, resolved against `configDir`. */
