@@ -60,6 +60,24 @@ export function formatResourceLocations(report: ResourceLocationReport): string 
   return `${lines.join('\n')}\n\n`;
 }
 
+/**
+ * The **Refused files** section: every resource file a loader will not load, with the loader's
+ * reason and since when. The previous definition of each id keeps serving, so without this list a
+ * hand edit that broke a file reads as an edit that changed nothing.
+ */
+export function formatRefusedFiles(report: ResourceLocationReport): string {
+  if (report.refused.length === 0) return '**Refused files**: none\n\n';
+  const lines = ['**Refused files**'];
+  for (const entry of report.refused) {
+    const since = entry.since !== undefined ? ` (since ${entry.since})` : '';
+    // The reason's first line: a parser's message continues with the offending source lines, and
+    // a refused file's content is what no surface returns (`resource-quarantine.ts`).
+    const reason = entry.reason.split('\n')[0]?.trim() ?? '';
+    lines.push(`- ${entry.path} — ${entry.type} \`${entry.id}\`${since}: ${reason}`);
+  }
+  return `${lines.join('\n')}\n\n`;
+}
+
 export class StatusActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
     const operation = args.operation || 'default';
@@ -106,7 +124,9 @@ export class StatusActionHandler extends ActionHandler {
     if (this.context.resourceLocations === undefined) {
       throw new Error('Resource locations view not wired into system_control');
     }
-    response += formatResourceLocations(this.context.resourceLocations.report());
+    const locationReport = this.context.resourceLocations.report();
+    response += formatResourceLocations(locationReport);
+    response += formatRefusedFiles(locationReport);
 
     if (!isFrameworkEnabled && health.activeFramework) {
       response += `⚠️ **Notice**: ${health.activeFramework} is selected but framework injection is disabled.\n`;

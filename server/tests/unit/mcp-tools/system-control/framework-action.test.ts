@@ -133,6 +133,7 @@ describe('System Control framework action scope propagation', () => {
           bundled: 'implicit',
           profile: { state: 'none' },
           shadowed: [],
+          refused: [],
         }),
       });
 

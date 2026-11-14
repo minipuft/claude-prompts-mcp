@@ -132,6 +132,12 @@ export class HotReloadObserver {
   private isStarted: boolean = false;
   private batchTimer: NodeJS.Timeout | undefined;
   private pendingChanges: FileChangeEvent[] = [];
+  /**
+   * Auxiliary handler runs not yet finished. A reload waits for every one of them, so what a
+   * handler records about a change — the change tracker records the version a disk edit produced
+   * and then the change itself — is persisted before the reload that serves the change is reported.
+   */
+  private inFlightAuxiliaryReloads: Set<Promise<void>> = new Set();
   private watchedDirectories: Set<string> = new Set();
 
   constructor(logger: Logger, config?: Partial<HotReloadConfig>, configManager?: ConfigManager) {
@@ -303,8 +309,11 @@ export class HotReloadObserver {
     this.stats.filesChanged++;
     this.logger.debug(`File change detected: ${event.type} - ${event.filename}`);
 
-    // Fire auxiliary reload handlers opportunistically (non-blocking)
-    void this.triggerAuxiliaryReloads(event);
+    // Auxiliary handlers start now, and every reload awaits them before its callback runs
+    // (`settleAuxiliaryReloads`). `triggerAuxiliaryReloads` catches per handler, so it never rejects.
+    const run = this.triggerAuxiliaryReloads(event);
+    this.inFlightAuxiliaryReloads.add(run);
+    void run.finally(() => this.inFlightAuxiliaryReloads.delete(run));
 
     // Auxiliary-only files (gates, scripts) don't need prompt reload processing
     if (event.isAuxiliaryFile && !event.isPromptFile && !event.isConfigFile) {
@@ -521,6 +530,7 @@ export class HotReloadObserver {
           await new Promise((resolve) => setTimeout(resolve, this.config.reloadDelayMs));
         }
 
+        await this.settleAuxiliaryReloads();
         await this.onReloadCallback(event);
 
         // Framework-aware post-processing
@@ -534,6 +544,18 @@ export class HotReloadObserver {
       }
     } else {
       this.logger.info('⏭️ Auto reload is disabled - skipping automatic reload');
+    }
+  }
+
+  /**
+   * Wait for every auxiliary handler run started so far, including any started while waiting.
+   *
+   * The ordering contract a disk edit relies on: the version it produced and its change-log row are
+   * written before the reload callback serves it and reports the reload complete.
+   */
+  private async settleAuxiliaryReloads(): Promise<void> {
+    while (this.inFlightAuxiliaryReloads.size > 0) {
+      await Promise.all([...this.inFlightAuxiliaryReloads]);
     }
   }
 

@@ -213,6 +213,11 @@ export class ResourceChangeTracker implements ResourceChangeLogPort {
     let contentHash: string;
     if (params.content !== undefined && params.content !== '') {
       contentHash = this.computeHash(params.content);
+    } else if (params.operation === 'refused') {
+      // A refused file never entered the catalog, so it has no hash this cache may hold — the
+      // same disposition `compareBaseline` gives it. The repair then logs against the last hash
+      // that DID load.
+      contentHash = '';
     } else if (params.operation !== 'removed') {
       try {
         const fileContent = await fs.readFile(params.filePath, 'utf-8');
@@ -225,8 +230,12 @@ export class ResourceChangeTracker implements ResourceChangeLogPort {
       contentHash = 'sha256:removed';
     }
 
-    // Skip if hash unchanged (no actual change)
-    if (params.operation === 'modified' && previousHash === contentHash) {
+    // Skip if hash unchanged (no actual change). A row that carries a version decision is kept
+    // whatever the hash says: the hash covers the entry file alone, and an edit to a companion
+    // file (`user-message.md`, `guidance.md`) changes the resource without changing it — the
+    // version that edit recorded, or failed to record, is the change.
+    const decided = params.versionRecorded === true || params.reason !== undefined;
+    if (params.operation === 'modified' && previousHash === contentHash && !decided) {
       this.logger.debug(`ResourceChangeTracker: Skipping unchanged resource ${params.resourceId}`);
       return;
     }
@@ -234,7 +243,7 @@ export class ResourceChangeTracker implements ResourceChangeLogPort {
     // Update in-memory cache
     if (params.operation === 'removed') {
       this.hashCache.delete(cacheKey);
-    } else {
+    } else if (params.operation !== 'refused') {
       this.hashCache.set(cacheKey, contentHash);
     }
 
@@ -242,8 +251,8 @@ export class ResourceChangeTracker implements ResourceChangeLogPort {
     const timestamp = new Date().toISOString();
     const scope = this.config.defaultScope;
     this.dbManager!.run(
-      `INSERT INTO resource_changes (tenant_id, organization_id, workspace_id, timestamp, source, operation, resource_type, resource_id, file_path, content_hash, previous_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO resource_changes (tenant_id, organization_id, workspace_id, timestamp, source, operation, resource_type, resource_id, file_path, content_hash, previous_hash, version_recorded, reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         resolveContinuityScopeId(scope),
         scope?.organizationId ?? null,
@@ -256,6 +265,8 @@ export class ResourceChangeTracker implements ResourceChangeLogPort {
         params.filePath,
         contentHash,
         previousHash !== undefined && previousHash !== contentHash ? previousHash : null,
+        params.versionRecorded === undefined ? null : params.versionRecorded ? 1 : 0,
+        params.reason ?? null,
       ]
     );
 
@@ -328,8 +339,10 @@ export class ResourceChangeTracker implements ResourceChangeLogPort {
       file_path: string;
       content_hash: string;
       previous_hash: string | null;
+      version_recorded: number | null;
+      reason: string | null;
     }>(
-      `SELECT timestamp, source, operation, resource_type, resource_id, file_path, content_hash, previous_hash
+      `SELECT timestamp, source, operation, resource_type, resource_id, file_path, content_hash, previous_hash, version_recorded, reason
        FROM resource_changes ${whereClause}
        ORDER BY id DESC LIMIT ?`,
       values
@@ -344,6 +357,8 @@ export class ResourceChangeTracker implements ResourceChangeLogPort {
       filePath: row.file_path,
       contentHash: row.content_hash,
       ...(row.previous_hash ? { previousHash: row.previous_hash } : {}),
+      ...(row.version_recorded !== null ? { versionRecorded: row.version_recorded === 1 } : {}),
+      ...(row.reason !== null ? { reason: row.reason } : {}),
     }));
   }
 

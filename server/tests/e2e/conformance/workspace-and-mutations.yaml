@@ -1238,7 +1238,7 @@ scenarios:
   #
   # The falsifier for P4.7 stated plainly: a tool call writes a `category.yaml`. Before this,
   # `CategorySchema` had a reader for all five of its fields and no writer anywhere in `src/`, so
-  # the only way to author one was by hand — which core principle 1 (MCP Tooling Only) forbids.
+  # the only way to author one was by hand.
   #
   # Both values set below are NON-DEFAULT. `register_with_mcp` resolves to `true` and
   # `mcp_prompt_mode` to `'expand'` when a category declares neither, and `inspect` renders each

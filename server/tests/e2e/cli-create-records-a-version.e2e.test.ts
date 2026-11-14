@@ -12,8 +12,10 @@
  * projection hashes equal to the snapshot `cpm` wrote.
  *
  * The positive control for that absence is a twin resource differing in ONE thing — its gate.yaml
- * is edited out of band before the server's edit — where the bridge row does appear. Without it,
- * "no bridge row" would also be satisfied by a server that recorded nothing at all.
+ * is edited out of band before the server's edit — where an extra row does appear: the running
+ * server's watcher versions the hand edit (R5), which it does only because its projection of the
+ * moved file differs from the row `cpm` wrote. Without it, "no extra row" would also be satisfied
+ * by a server that recorded nothing at all.
  *
  * Everything runs through the BUILT binary (`server/dist/cpm.js`) against the same `state.db` a
  * hermetic server owns, because that is the only arrangement in which the two writers are the two
@@ -113,6 +115,23 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
       .all(type, id) as unknown as VersionRow[];
     db.close();
     return rows;
+  };
+
+  /**
+   * Waits until the watcher has recorded an out-of-band edit. The observer debounces by 1 s, so a
+   * tool write that lands first would bridge instead and the row under test would never exist;
+   * the control case asserts the watcher's row, so it waits for that row rather than a clock.
+   */
+  const waitForHistoryRows = async (
+    type: string,
+    id: string,
+    count: number,
+    timeoutMs = 10000
+  ): Promise<void> => {
+    const deadline = Date.now() + timeoutMs;
+    while (historyRows(type, id).length < count && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
   };
 
   const treeEntries = (rowId: number): Array<{ path: string; object_hash: string }> => {
@@ -259,7 +278,7 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     expect(historyRows('prompt', 'linked_prompt')).toHaveLength(3);
   });
 
-  it('lets the server edit a cpm-created PROMPT without a bridge row, and bridges when the file moved', async () => {
+  it('lets the server edit a cpm-created PROMPT without a bridge row, and versions the file when it moved', async () => {
     // The prompt half of the parity assertion below. The observable is the same: a bridge row
     // appears exactly when the server's live projection does not hash-equal the newest recorded
     // snapshot, so its absence says `cpm`'s loader-backed projection and the server's are one
@@ -281,6 +300,7 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     await writeFile(controlYaml, before.replace('name: Control', 'name: Control OOB'), 'utf8');
 
     await new Promise((resolve) => setTimeout(resolve, WATCHER_RELOAD_MS));
+    await waitForHistoryRows('prompt', 'control_prompt', 2);
 
     for (const id of ['parity_prompt', 'control_prompt']) {
       const updated = await callTool('resource_manager', {
@@ -296,9 +316,16 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
       'Created via cpm',
       'Update via resource_manager',
     ]);
+    // The out-of-band edit is versioned by the running server's watcher (R5), so the server's own
+    // edit then needs no bridge: the extra row is the watcher's, and it appears only because the
+    // watcher's projection of the moved file differs from the row `cpm` wrote. The parity twin
+    // has no such row, which says the two projections of the unmoved file are one value.
     const control = historyRows('prompt', 'control_prompt').map((row) => row.description);
-    expect(control[1]).toContain('Bridge:');
-    expect(control).toHaveLength(3);
+    expect(control).toEqual([
+      'Created via cpm',
+      'Update via filesystem',
+      'Update via resource_manager',
+    ]);
   }, 120000);
 
   it('says a created style records nothing because styles carry no history', () => {
@@ -307,7 +334,7 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     expect(String(reply['not_recorded_reason'])).toContain('no version history');
   });
 
-  it('lets the server edit a cpm-created gate without a bridge row, and bridges when the file moved', async () => {
+  it('lets the server edit a cpm-created gate without a bridge row, and versions the file when it moved', async () => {
     // The parity assertion. A bridge row appears exactly when the newest recorded snapshot does
     // not hash-equal the server's live projection, so its ABSENCE here is the statement that
     // `cpm`'s create snapshot and the server's projection of the same resource are the same
@@ -326,6 +353,7 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     await writeFile(controlYaml, before.replace('name: Control', 'name: Control OOB'), 'utf8');
 
     await new Promise((resolve) => setTimeout(resolve, WATCHER_RELOAD_MS));
+    await waitForHistoryRows('gate', 'control_gate', 2);
 
     for (const id of ['parity_gate', 'control_gate']) {
       const updated = await callTool('resource_manager', {
@@ -341,11 +369,42 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     const control = historyRows('gate', 'control_gate').map((row) => row.description);
 
     expect(parity).toEqual(['Created via cpm', 'Update via resource_manager']);
-    expect(control[1]).toContain('Bridge:');
-    expect(control).toHaveLength(3);
+    expect(control).toEqual([
+      'Created via cpm',
+      'Update via filesystem',
+      'Update via resource_manager',
+    ]);
   }, 120000);
 
-  it('rolls a SERVER-written prompt back from cpm with no bridge row, and bridges when the file moved', async () => {
+  it("records one version for a cpm write the running server watches, under cpm's description", async () => {
+    // One write is one version (R5). `cpm link-gate` writes the file and then its own row; the
+    // watcher sees the same bytes while the catalog still serves the state before them. A watcher
+    // that compared only against the catalog recorded a bridge of that stale state and a second
+    // row for the bytes `cpm` had already recorded — measured on this branch, `Rollback to v1`
+    // followed by `Bridge:` and `Update via filesystem`.
+    createJson('create', 'prompt', 'watched_prompt', '--name', 'W', '--description', 'D');
+    createJson('create', 'gate', 'watched_gate', '--name', 'WG', '--description', 'D');
+    // Served first, so the write below is an UPDATE of a resource the catalog holds.
+    await new Promise((resolve) => setTimeout(resolve, WATCHER_RELOAD_MS));
+
+    const linked = createJson('link-gate', 'watched_prompt', 'watched_gate');
+    expect(linked['recorded']).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, WATCHER_RELOAD_MS));
+
+    expect(historyRows('prompt', 'watched_prompt').map((row) => row.description)).toEqual([
+      'Created via cpm',
+      'Update via cpm',
+    ]);
+    // The control that the watcher saw this file at all: the server serves the linked state.
+    const inspected = await callTool('resource_manager', {
+      resource_type: 'prompt',
+      action: 'inspect',
+      id: 'watched_prompt',
+    });
+    expect(inspected.text).toContain('watched_gate');
+  }, 120000);
+
+  it('rolls a SERVER-written prompt back from cpm with no bridge row, and records the file when it moved', async () => {
     /**
      * The other direction of parity, and the one an operator actually hits: the SERVER wrote the
      * rows and `cpm` is the one reading them. `cpm rollback` records the state it is replacing,
@@ -428,10 +487,21 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     expect(rolled[2]).toContain('Rollback to v1');
     expect(rolled.some((description) => description.includes('Bridge:'))).toBe(false);
 
-    // The control: exactly one bridge row, and it sits before the rollback row.
-    const control = historyRows('prompt', 'server_control').map((row) => row.description);
+    // The control: exactly one row records the moved file, and it sits before the rollback row.
+    // Which writer records it depends on timing and both are correct — `cpm`'s bridge when the
+    // rollback runs first, the running server's watcher (R5) when its debounce fires first — so
+    // the assertion is on the row's VALUE, the out-of-band description, not on its label.
+    const controlRows = historyRows('prompt', 'server_control');
+    const control = controlRows.map((row) => row.description);
     expect(control).toHaveLength(4);
-    expect(control.filter((description) => description.includes('Bridge:'))).toHaveLength(1);
-    expect(control[2]).toContain('Bridge:');
+    expect(control[3]).toContain('Rollback to v1');
+    expect((JSON.parse(controlRows[2]!.snapshot) as Record<string, unknown>)['description']).toBe(
+      'OOB'
+    );
+    expect(
+      control.filter(
+        (description) => description.includes('Bridge:') || description === 'Update via filesystem'
+      )
+    ).toHaveLength(1);
   }, 120000);
 });

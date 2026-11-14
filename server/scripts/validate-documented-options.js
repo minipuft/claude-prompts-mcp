@@ -13,7 +13,8 @@
  *
  * Ground truth is read from source at run time, never from a hardcoded list — a guard carrying
  * its own copy of the flag set would drift exactly like the docs did:
- *   - flags: the `options: { ... }` tables in server/src/runtime/cli.ts and cli/src/cli.ts, plus
+ *   - flags: the `options: { ... }` tables in server/src/runtime/cli.ts, cli/src/cli.ts and the
+ *     skills-sync parser (server/src/modules/skills-sync/service.ts, `parseSkillsSyncArgs`), plus
  *     the argv tests in scripts/ and server/scripts/ (`--apply`, `--self-test`, `--output-dir`)
  *   - env vars: every `process.env['MCP_*']` read anywhere in server/src or cli/src, PLUS every
  *     `MCP_*` name held in a source constant (`const X_ENV = 'MCP_…'`). A module that reads its
@@ -43,7 +44,13 @@ const REPO = path.resolve(new URL('../..', import.meta.url).pathname);
 const DOC_PATHS = ['docs', 'README.md', 'server/README.md', 'CONTRIBUTING.md', 'cli/README.md'];
 
 /** Parsers whose `options:` table defines the real flag set. */
-const PARSER_FILES = ['server/src/runtime/cli.ts', 'cli/src/cli.ts'];
+const PARSER_FILES = [
+  'server/src/runtime/cli.ts',
+  'cli/src/cli.ts',
+  // `skills-sync` parses its own argv (`--id`, `--resource-type`, `--scope`, ...); leaving it out
+  // made every documented skills-sync flag the server CLI does not share read as unbacked.
+  'server/src/modules/skills-sync/service.ts',
+];
 
 /** First-party scripts whose flags the docs also name (`--apply`, `--self-test`, `--output-dir`). */
 const SCRIPT_DIRS = ['scripts', 'server/scripts'];

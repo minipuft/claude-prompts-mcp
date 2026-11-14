@@ -126,7 +126,8 @@ Every create or update through `resource_manager` ends its result with one line 
 - every location in precedence order, with how many prompts, gates, frameworks and styles it serves: `1. /home/you/shared/resources (listed) — 2 prompts, 0 gates, 0 frameworks, 0 styles`;
 - `bundled (listed)`, `bundled (implicit)` (no list in force, the shipped resources load last) or `bundled (absent)` (a list that leaves `"bundled"` out);
 - a `profile:` line when a `workspaces.jsonc` sits in the folder holding your workspace: the label it gives the workspace and its sibling workspaces, that it names none for this one, or that the file could not be read;
-- a `Shadowed` list, one line per id a later location defines and an earlier one hides: `review (prompt): served from <path>, hidden copy in <path>`.
+- a `Shadowed` list, one line per id a later location defines and an earlier one hides: `review (prompt): served from <path>, hidden copy in <path>`;
+- a **Refused files** list, one line per file a loader will not load, with its reason and since when: ``<path> — gate `review` (since <time>): <reason>``.
 
 When the same id sits in two of your own locations (project, workspace or a listed folder), startup also logs one warning per pair, `Resource 'review' (prompt) is defined in <a> and <b>; the earlier location serves it`. A copy of yours that hides a shipped one is the overlay working as intended and warns about nothing; the `Shadowed` list still names it.
 
@@ -147,6 +148,12 @@ file around your change. Two cases, and the difference is worth knowing:
 
 A file the edit does not change is not written at all, so it is untouched either way. Nothing here
 changes what a file _means_ — only how much of its formatting an edit disturbs.
+
+Editing a prompt or gate file on disk while the server runs carries the same guarantees as a tool
+write: the edit gets a version entry and a rollback point (`resource_manager(action:"history")`
+lists it), and a file that fails to load is listed under **Refused files** in
+`system_control(action:"status")` and in `system_control(action:"changes")` with the reason, while
+the last good definition keeps serving.
 
 ## Environment variables
 

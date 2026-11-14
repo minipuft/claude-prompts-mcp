@@ -839,6 +839,7 @@ export class Application {
               promptsDir: this.promptsDirectory ?? undefined,
               configManager: this.configManager,
               pathResolver: this.pathResolver,
+              livePrompts: () => this._convertedPrompts,
             });
 
             await this.promptManager.startHotReload(

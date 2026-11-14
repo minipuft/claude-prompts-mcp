@@ -4,7 +4,7 @@
 
 ## Core Principles
 
-1. **MCP Tooling Only** -- Prompts, templates, chains flow through MCP tools. Manual edits under `server/prompts/**` forbidden.
+1. **MCP Tooling** -- Prompts, templates, chains flow through MCP tools.
 2. **Contract ownership** -- Hand-written schemas in `src/mcp/tools/schemas/` own runtime validation; `tooling/contracts/*.json` own descriptions/parameter metadata generated into `src/mcp/contracts/schemas/_generated/`. Run `npm run generate:contracts`, never edit `_generated/`. `config.schema.json` <- `ConfigFile` (`generate:config-schema`).
 3. **Transport Parity** -- Runtime changes must work in STDIO and Streamable HTTP. The two differ in instance lifetime, and that difference is load-bearing: STDIO pins one `McpServer` per connection, while HTTP builds a fresh one per request. A change that mutates a registered instance passes STDIO and silently no-ops over HTTP. HTTP+SSE was removed in the SDK v2 upgrade.
 4. **Docs/Code Lockstep** -- Update relevant doc in `docs/` when behavior changes.

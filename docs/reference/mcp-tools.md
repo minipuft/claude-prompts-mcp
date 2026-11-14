@@ -1566,6 +1566,15 @@ last) or `absent` (a list that leaves `"bundled"` out). With nothing hidden the 
 `Shadowed: none`. Reading the list is
 [Where Resources Come From](configuration.md#where-resources-come-from).
 
+A **Refused files** section follows it: every resource file a loader will not load, with the
+loader's reason and the time it was first refused for that reason. The previous definition of that
+id keeps serving until the file loads again. With nothing refused it reads `**Refused files**: none`.
+
+```text
+**Refused files**
+- /home/you/shared/resources/gates/review/gate.yaml — gate `review` (since 2026-11-13T10:02:11.402Z): Nested mappings are not allowed in compact mappings at line 2, column 7
+```
+
 ### Config Operations
 
 Read-only over MCP: `list` (the whole loaded configuration), `keys` (the dot-path keys the
@@ -1816,6 +1825,12 @@ system_control(action:"changes", operation:"list", limit:10)
 | `filesystem` | Hot-reload detected file change                                                                               |
 | `mcp-tool`   | Created/updated via `resource_manager`                                                                        |
 | `external`   | Changed while server was down (on startup), or removed before a folder created while it ran was first watched |
+
+A file edited on disk records a version before the change is logged, exactly as a
+`resource_manager` write does, so `resource_manager(action:"history")` lists it and `rollback`
+restores the state before it. Its row in this list says `Version recorded: yes` or `no`, with the
+reason when the database refused the write. A file its loader refuses records no version and is
+listed with `Operation: refused` and the loader's reason; the previous definition keeps serving.
 
 **Which folders are tracked:** your primary prompts and gates folders, and every workspace overlay (`<workspace>/prompts`, `<workspace>/gates`) — including one created while the server runs. A resource that exists in more than one of them is recorded once, for the copy that is served, so editing a copy another folder overrides records nothing. The bundled catalog is tracked only when it is your primary folder (no workspace configured): it changes only when the package is updated.
 

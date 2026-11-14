@@ -66,7 +66,7 @@ describe('SQLite State Backend', () => {
 
     it('should have correct schema version', async () => {
       const version = dbManager.getSchemaVersion();
-      expect(version).toBe(35);
+      expect(version).toBe(36);
     });
 
     // These exercise run/queryOne/transaction, not any particular table. They used `tenants`,

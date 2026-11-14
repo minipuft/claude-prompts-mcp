@@ -18,7 +18,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
 import { mkdir, readFile, writeFile, rm, access, symlink, cp } from 'node:fs/promises';
-import { mkdtempSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1542,7 +1543,7 @@ describe('Export Command Integration', () => {
 
   // ── P6.259: registration writes keep the operator's skills-sync.yaml ───────
 
-  describe('P6.259 an export registers a key without rewriting the rest of skills-sync.yaml', () => {
+  describe('P6.259 a sync registers a key without rewriting the rest of skills-sync.yaml', () => {
     /**
      * R140. `applyRegistrationMutations` wrote the whole config back with `yaml.dump` behind a
      * fixed header, so every comment, the key order and every flow-style list were lost on the
@@ -1569,10 +1570,10 @@ describe('Export Command Integration', () => {
       ].join('\n');
     }
 
-    async function exportOne(id: string) {
+    async function runOne(command: 'export' | 'sync', id: string) {
       const out = silentOutput();
       await runSkillsSyncCommand(
-        { command: 'export', client: 'claude-code', scope: 'user', id } as SkillsSyncOptions,
+        { command, client: 'claude-code', scope: 'user', id } as SkillsSyncOptions,
         out,
         resolveSkillsSyncPaths()
       );
@@ -1586,8 +1587,8 @@ describe('Export Command Integration', () => {
       const fixture = handAuthoredConfig();
       await writeFile(configPath, fixture);
 
-      const out = await exportOne('plain');
-      expect(out.logs.join('\n')).toContain('Updated skills-sync.yaml registrations (+1 key(s))');
+      const out = await runOne('sync', 'plain');
+      expect(out.logs.join('\n')).toContain('updated skills-sync.yaml registrations (+1 key(s))');
 
       // Measured by diff against the fixture, line by line. A key appended to a list is a
       // list-length edit, made on the source tokens: the added entry is its only new line. The
@@ -1603,28 +1604,28 @@ describe('Export Command Integration', () => {
       expect((await readFile(configPath, 'utf-8')).split('\n')).toEqual(expected);
     });
 
-    it('(b) control: an export that registers nothing leaves the file byte-identical', async () => {
+    it('(b) control: a sync that registers nothing leaves the file byte-identical', async () => {
       // This control never reaches the writer: `applyRegistrationMutations` returns before
-      // serializing when no key is added. It proves the export leaves the file alone; the
+      // serializing when no key is added. It proves the sync leaves the file alone; the
       // writer's fidelity rests on (a), the twin that reaches it.
       await writePrompt('general', 'kept');
       const configPath = path.join(serverRoot, 'skills-sync.yaml');
       const fixture = handAuthoredConfig();
       await writeFile(configPath, fixture);
 
-      const out = await exportOne('kept');
-      expect(out.logs.join('\n')).not.toContain('Updated skills-sync.yaml registrations');
+      const out = await runOne('sync', 'kept');
+      expect(out.logs.join('\n')).not.toContain('updated skills-sync.yaml registrations');
       expect(await readFile(configPath, 'utf-8')).toBe(fixture);
     });
   });
 
   // ── P6.262: a scope that received no key keeps its authored order ──────────
 
-  describe('P6.262 an export leaves a scope it added nothing to in its authored order', () => {
+  describe('P6.262 a sync leaves a scope it added nothing to in its authored order', () => {
     /**
      * `addResourceKeys` re-sorted every scope in the batch, including one that received no key,
-     * whenever another scope in the same batch received one: `client: 'all'` exports to every
-     * registered client, so registering a key for one client re-sorted another client's
+     * whenever another scope in the same batch received one: `client: 'all'` syncs every
+     * client, so registering a key for one client re-sorted another client's
      * hand-ordered list. Hand-authored fixture: both lists out of order, every client given its
      * own output directory, the three clients not under test registered `all` (never mutated).
      */
@@ -1663,7 +1664,7 @@ describe('Export Command Integration', () => {
 
       const out = silentOutput();
       await runSkillsSyncCommand(
-        { command: 'export', client: 'all', scope: 'user', id: 'plain' } as SkillsSyncOptions,
+        { command: 'sync', client: 'all', scope: 'user', id: 'plain' } as SkillsSyncOptions,
         out,
         resolveSkillsSyncPaths()
       );
@@ -1671,7 +1672,7 @@ describe('Export Command Integration', () => {
       // added) and claude-code registered it (one key added) in the same batch.
       expect(await exists(path.join(outputDir, 'codex', 'plain', 'SKILL.md'))).toBe(true);
       expect(await exists(path.join(outputDir, 'claude-code', 'plain', 'SKILL.md'))).toBe(true);
-      expect(out.logs.join('\n')).toContain('Updated skills-sync.yaml registrations (+1 key(s))');
+      expect(out.logs.join('\n')).toContain('updated skills-sync.yaml registrations (+1 key(s))');
 
       const lines = (await readFile(configPath, 'utf-8')).split('\n');
       const codexAt = lines.lastIndexOf('  codex:');
@@ -1698,6 +1699,156 @@ describe('Export Command Integration', () => {
       );
       expect(expected).not.toBe(fixture);
       expect(lines.join('\n')).toBe(expected);
+    });
+  });
+
+  // ── R4: export reads registrations and never writes them ───────────────────
+
+  describe('R4 export never registers; --client all reaches registered clients only', () => {
+    const CLIENTS = ['claude-code', 'cursor', 'codex'];
+
+    function sha256(file: string): string {
+      return createHash('sha256').update(readFileSync(file)).digest('hex');
+    }
+
+    /** Every file under `dir` with its digest, so a preview that wrote anything shows up. */
+    function treeDigest(dir: string): Record<string, string> {
+      const digest: Record<string, string> = {};
+      for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true })) {
+        if (!entry.isFile()) continue;
+        const full = path.join(entry.parentPath, entry.name);
+        digest[path.relative(dir, full)] = sha256(full);
+      }
+      return digest;
+    }
+
+    /** Hand-authored, three clients known, `registrations` as the case under test supplies. */
+    async function writeConfigWith(registrations: string[]): Promise<string> {
+      const configPath = path.join(serverRoot, 'skills-sync.yaml');
+      await writeFile(
+        configPath,
+        [
+          '# Hand-written: these comments must survive.',
+          'overrides:',
+          ...CLIENTS.flatMap((client) => [
+            `  ${client}:`,
+            '    outputDir:',
+            `      user: ${path.join(outputDir, client)}`,
+            `      project: ${path.join(outputDir, client)}`,
+          ]),
+          ...(registrations.length === 0
+            ? ['registrations: {}']
+            : ['registrations:', ...registrations]),
+          '',
+        ].join('\n')
+      );
+      return configPath;
+    }
+
+    async function run(command: 'export' | 'sync', client: string, extra: object = {}) {
+      const out = silentOutput();
+      await runSkillsSyncCommand(
+        { command, client, scope: 'user', id: 'plain', ...extra } as SkillsSyncOptions,
+        out,
+        resolveSkillsSyncPaths()
+      );
+      return out;
+    }
+
+    it('(a) --client all with one registered client of three writes one directory and leaves the registrations byte-identical', async () => {
+      await writePrompt('general', 'plain');
+      const configPath = await writeConfigWith([
+        '  codex:',
+        '    user:',
+        '      - prompt:general/other',
+      ]);
+      const before = sha256(configPath);
+
+      const out = await run('export', 'all');
+
+      expect(await exists(path.join(outputDir, 'codex', 'plain', 'SKILL.md'))).toBe(true);
+      expect(await exists(path.join(outputDir, 'claude-code'))).toBe(false);
+      expect(await exists(path.join(outputDir, 'cursor'))).toBe(false);
+      expect(sha256(configPath)).toBe(before);
+      const log = out.logs.join('\n');
+      expect(log).toContain(
+        'not registered: codex; the skill is exported but not registered (run skills-sync sync --client codex --id plain)'
+      );
+      expect(log).not.toContain('updated skills-sync.yaml registrations');
+    });
+
+    it('(b) --client all with no registered client refuses, naming how to register one', async () => {
+      await writePrompt('general', 'plain');
+      const configPath = await writeConfigWith([]);
+      const before = sha256(configPath);
+
+      await expect(run('export', 'all')).rejects.toMatchObject({
+        exitCode: 2,
+        message: expect.stringContaining('skills-sync sync --client <id> --id <resource>'),
+      });
+      expect(await exists(path.join(outputDir, 'codex'))).toBe(false);
+      expect(sha256(configPath)).toBe(before);
+    });
+
+    it('(c) export to an unregistered client writes the files, says so, and leaves the registrations byte-identical', async () => {
+      await writePrompt('general', 'plain');
+      const configPath = await writeConfigWith(['  codex: all']);
+      const before = sha256(configPath);
+
+      const out = await run('export', 'claude-code');
+
+      expect(await exists(path.join(outputDir, 'claude-code', 'plain', 'SKILL.md'))).toBe(true);
+      expect(out.logs.join('\n')).toContain(
+        'not registered: claude-code; the skill is exported but not registered (run skills-sync sync --client claude-code --id plain)'
+      );
+      expect(sha256(configPath)).toBe(before);
+    });
+
+    it('(c2) a scoped client exporting an id its list omits says so and keeps its list as authored', async () => {
+      await writePrompt('general', 'plain');
+      const configPath = await writeConfigWith([
+        '  claude-code:',
+        '    user:',
+        '      - prompt:general/kept',
+      ]);
+      const before = sha256(configPath);
+
+      const out = await run('export', 'claude-code');
+
+      expect(await exists(path.join(outputDir, 'claude-code', 'plain', 'SKILL.md'))).toBe(true);
+      expect(out.logs.join('\n')).toContain('not registered: claude-code;');
+      expect(sha256(configPath)).toBe(before);
+    });
+
+    it('(d) preview prints the files it would write and writes none, leaving the registrations unchanged', async () => {
+      await writePrompt('general', 'plain');
+      const configPath = await writeConfigWith(['  codex: all']);
+      const before = sha256(configPath);
+      const treeBefore = treeDigest(outputDir);
+
+      const out = await run('export', 'all', { preview: true });
+
+      const log = out.logs.join('\n');
+      expect(log).toContain('[preview] plain/SKILL.md');
+      expect(log).toContain('[preview] registrations unchanged');
+      expect(treeDigest(outputDir)).toEqual(treeBefore);
+      expect(sha256(configPath)).toBe(before);
+    });
+
+    it('(e) control: sync still registers the resource it exports', async () => {
+      await writePrompt('general', 'plain');
+      const configPath = await writeConfigWith([
+        '  claude-code:',
+        '    user:',
+        '      - prompt:general/kept',
+      ]);
+      const before = sha256(configPath);
+
+      const out = await run('sync', 'claude-code');
+
+      expect(out.logs.join('\n')).toContain('updated skills-sync.yaml registrations (+1 key(s))');
+      expect(sha256(configPath)).not.toBe(before);
+      expect(readFileSync(configPath, 'utf-8')).toContain('prompt:general/plain');
     });
   });
 });

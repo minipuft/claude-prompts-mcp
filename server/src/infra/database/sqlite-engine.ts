@@ -73,6 +73,13 @@ import {
  * recreate and restore; a durable column the new DDL renames or removes needs a step in
  * `durable-migrations.ts` (`DURABLE_MIGRATIONS`), or the restore refuses the upgrade.
  *
+ * v36: adds `version_recorded` and `reason` to `resource_changes`. A file edited on disk now records
+ * a version before the change is logged, and a file its loader refuses is logged as `refused`; the
+ * row says which happened and why (`version_recorded` 0 with the persistence failure, or the
+ * refusal text). NULL in both on every row that carries no version decision — `mcp-tool` writes
+ * and the startup baseline. `resource_changes` is `derived`, so this bump drops its rows and the
+ * ephemeral run tables with it; nothing durable is touched.
+ *
  * v35: the hook projection key in the `chain_sessions` state document becomes `currentStepReview`,
  * and its `v_execution_status` column `current_step_review` (P6.20, R193; the old names are in
  * `docs/architecture/sqlite-persistence.md`). The key holds the review of the step the run stands
@@ -440,7 +447,7 @@ import {
  * `respondedAt`, which changes the `substate_json` shape in `execution_records`. Rows written by
  * v15 would decode to a lifecycle value outside `StepLifecycle`, so they must not survive.
  */
-const SCHEMA_VERSION = 35;
+const SCHEMA_VERSION = 36;
 
 /**
  * Tables whose rows exist nowhere else and therefore survive a SCHEMA_VERSION bump.
@@ -1347,7 +1354,11 @@ export class SqliteEngine implements DatabasePort {
         resource_id TEXT NOT NULL,
         file_path TEXT,
         content_hash TEXT,
-        previous_hash TEXT
+        previous_hash TEXT,
+        -- 1/0 when the change decided a version_history row (a disk edit), NULL otherwise.
+        version_recorded INTEGER,
+        -- The loader's refusal, or why a version was not recorded. Never resource content.
+        reason TEXT
       );
 
       -- One row per chain run. Replaces the chain_run_registry blob at v22.

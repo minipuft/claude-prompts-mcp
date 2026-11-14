@@ -199,7 +199,7 @@ Choose the path that matches your change:
 
 ### Prompt & Chain Contributions
 
-All prompt/chain changes flow through MCP tools -- never edit files under `server/resources/prompts/` directly.
+Files under `server/resources/prompts/` are the shipped bundle, so a change to them reaches users through a pull request like any other file. Write it with `resource_manager` or by hand: the server records a version for a file edited on disk, and lists a file it cannot load under **Refused files** in `system_control status` and the change log, while the previous definition keeps serving.
 
 - **Create/update/delete**: Use `resource_manager` with `resource_type:"prompt"`
 - **Schema**: Follow [Prompt YAML Schema](docs/reference/prompt-yaml-schema.md)

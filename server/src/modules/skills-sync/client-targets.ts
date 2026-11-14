@@ -308,20 +308,31 @@ export interface ClientTargetPolicy {
    * with a symlink-collision warning, skipped with a logged section line, or visited anyway.
    */
   readonly sharedDirectory: 'warn-and-skip' | 'log-and-skip' | 'visit';
+  /**
+   * What `--client all` (or no `--client`) expands to: the clients `skills-sync.yaml` registers,
+   * or every client the CLI knows. A writer registers nothing it was not told to, so `--id` never
+   * widens the walk to a client the operator left out.
+   */
+  readonly allClients: 'registered' | 'every';
 }
 
-/** `export` and `sync` write, so a directory two clients resolve to is written once. */
-export const WRITER_TARGETS: ClientTargetPolicy = {
+/** `sync` writes, so a directory two clients resolve to is written once. */
+export const SYNC_TARGETS: ClientTargetPolicy = {
   defaultScopes: ['user'],
   unregisteredLine: 'section',
   sharedDirectory: 'warn-and-skip',
+  allClients: 'every',
 };
+
+/** `export` writes the same way, and `--client all` reaches only the clients that are registered. */
+export const EXPORT_TARGETS: ClientTargetPolicy = { ...SYNC_TARGETS, allClients: 'registered' };
 
 /** `diff` reads both scopes and reports a shared directory as part of its drift report. */
 export const DIFF_TARGETS: ClientTargetPolicy = {
   defaultScopes: ['user', 'project'],
   unregisteredLine: 'section',
   sharedDirectory: 'log-and-skip',
+  allClients: 'every',
 };
 
 /** `pull` reads both scopes, reads every client's directory, and logs no sections. */
@@ -329,7 +340,20 @@ export const PULL_TARGETS: ClientTargetPolicy = {
   defaultScopes: ['user', 'project'],
   unregisteredLine: 'bare',
   sharedDirectory: 'visit',
+  allClients: 'every',
 };
+
+/** The clients `config` registers, in any mode, in client-registry order. */
+export function registeredClientIds(config: SyncConfig): string[] {
+  return Object.keys(CLIENT_REGISTRY).filter(
+    (clientId) => resolveClientResourceSelection(config, clientId).mode !== 'unregistered'
+  );
+}
+
+/** Whether `--client` names every client rather than one. */
+export function namesEveryClient(client: string | undefined): boolean {
+  return client == null || client === '' || client === 'all';
+}
 
 /** The options a target walk reads off the command line. */
 export interface ClientTargetRequest {
@@ -364,8 +388,8 @@ export function* clientScopeTargets(
   policy: ClientTargetPolicy
 ): Generator<ClientTarget, void, undefined> {
   const { client } = request;
-  const clientIds =
-    client == null || client === '' || client === 'all' ? Object.keys(CLIENT_REGISTRY) : [client];
+  const everyClient = namesEveryClient(client);
+  const clientIds = everyClient || client == null ? Object.keys(CLIENT_REGISTRY) : [client];
   const scopes = request.scope == null ? policy.defaultScopes : [request.scope];
   const ignoreSelection = request.id != null;
   const claimedDirs = new Map<string, string>(); // `${baseDir}:${scope}` → first client to claim it
@@ -373,7 +397,9 @@ export function* clientScopeTargets(
   for (const clientId of clientIds) {
     const clientConfig = resolveClientConfig(clientId, config);
     const selection = resolveClientResourceSelection(config, clientId);
-    if (!ignoreSelection && selection.mode === 'unregistered') {
+    const mustBeRegistered =
+      !ignoreSelection || (everyClient && policy.allClients === 'registered');
+    if (mustBeRegistered && selection.mode === 'unregistered') {
       const opener = policy.unregisteredLine === 'section' ? '\n── ' : '';
       output.log(`${opener}${clientId}: skipped — no registrations in skills-sync.yaml`);
       continue;

@@ -7,8 +7,8 @@
  * absent from every surface that could repair it: measured 2026-09-11 against `dist/`, `inspect`
  * answers `Prompt not found` for a file the same server had just logged as invalid, and `update`
  * with a full body reported `✅ **Prompt Updated**` while writing a SECOND resource at the default
- * category and leaving the broken file untouched. The only remaining repair path was hand-editing,
- * which this project's MCP-Tooling-Only rule forbids.
+ * category and leaving the broken file untouched. The only remaining repair path was hand-editing
+ * the file.
  *
  * WHY IT LIVES IN `shared/` AND NOT BESIDE THE PROMPT LOADER. It was written for prompts and lived
  * at `modules/prompts/quarantine.ts` (P4.9). The two sibling loaders are in `engine/` and the two
@@ -91,6 +91,15 @@ export interface QuarantinedResource {
   readonly path: string;
   /** Why it was refused. Diagnostic text only — never the content that failed to load. */
   readonly error: string;
+  /**
+   * When this file was first refused for this reason, ISO 8601 — what `status` reports as "since".
+   *
+   * Carried across a re-walk: `PromptLoader` clears a root and re-records on every reload, and a
+   * stamp that reset each time would say "since the last reload" about a file broken for a day. A
+   * different error is a different refusal and starts a new stamp. Optional only so a hand-built
+   * record in a test double need not invent one; every record this module stores carries it.
+   */
+  readonly since?: string;
 }
 
 /**
@@ -99,7 +108,7 @@ export interface QuarantinedResource {
  * Not exported: both come from `beginRoot`, so no caller outside this module ever builds one.
  * Exporting it would invite a caller to construct a record whose root it picked itself.
  */
-type QuarantineEntry = Omit<QuarantinedResource, 'type' | 'root'>;
+type QuarantineEntry = Omit<QuarantinedResource, 'type' | 'root' | 'since'>;
 
 /**
  * The write half, scoped to one type's walk of one root.
@@ -169,8 +178,11 @@ export class ResourceQuarantine implements QuarantineView {
    * simply never gets re-recorded.
    */
   beginRoot(type: QuarantinedResourceType, root: string): QuarantineSink {
+    const previous = new Map(
+      [...this.records].filter(([, record]) => record.type === type && record.root === root)
+    );
     this.forgetRoot(type, root);
-    return this.sinkFor(type, root);
+    return this.sinkFor(type, root, previous);
   }
 
   /**
@@ -184,12 +196,23 @@ export class ResourceQuarantine implements QuarantineView {
    * and `forget` on success instead, which converges on the same set without a walk boundary to
    * hang it on.
    */
-  sinkFor(type: QuarantinedResourceType, root: string): QuarantineSink {
+  sinkFor(
+    type: QuarantinedResourceType,
+    root: string,
+    previous: ReadonlyMap<string, QuarantinedResource> = this.records
+  ): QuarantineSink {
     return {
       type,
       root,
       record: (entry: QuarantineEntry): void => {
-        this.records.set(keyOf(root, entry.path), { ...entry, type, root });
+        const key = keyOf(root, entry.path);
+        // `previous` is what `beginRoot` just cleared, or the live map for a per-file sink.
+        const before = previous.get(key);
+        const since =
+          before?.error === entry.error && before.since !== undefined
+            ? before.since
+            : new Date().toISOString();
+        this.records.set(key, { ...entry, type, root, since });
       },
       forget: (filePath: string): void => {
         this.records.delete(keyOf(root, filePath));
