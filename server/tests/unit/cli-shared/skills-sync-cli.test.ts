@@ -218,6 +218,55 @@ describe('skills-sync CLI option handling', () => {
     }
   });
 
+  it('refuses a missing CLAUDE_PLUGIN_DATA by name when it is the workspace, and lets MCP_WORKSPACE outrank it', async () => {
+    // The Claude Code plugin ships no env, so CLAUDE_PLUGIN_DATA is the workspace when
+    // MCP_WORKSPACE is unset; the refusal must name the variable the operator can unset.
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-plugin-data-'));
+    const missing = path.join(tempRoot, 'no-such-plugin-data');
+    const demo = path.join(tempRoot, 'resources', 'prompts', 'examples', 'demo');
+    await mkdir(demo, { recursive: true });
+    await writeFile(
+      path.join(demo, 'prompt.yaml'),
+      'id: demo\nname: Demo\ndescription: Fixture prompt.\nuserMessageTemplateFile: user-message.md\n',
+      'utf-8'
+    );
+    await writeFile(path.join(demo, 'user-message.md'), 'Say hello.\n', 'utf-8');
+    await writeFile(
+      path.join(tempRoot, 'skills-sync.yaml'),
+      'registrations:\n  agent-plugins:\n    project:\n      - prompt:examples/demo\n',
+      'utf-8'
+    );
+    const projectDiff = () =>
+      runSkillsSyncCommand(
+        parseSkillsSyncArgs([
+          'node',
+          'scripts/skills-sync.ts',
+          'diff',
+          '--client',
+          'agent-plugins',
+          '--scope',
+          'project',
+        ]),
+        output,
+        resolveSkillsSyncPaths()
+      );
+
+    try {
+      locations.set({ serverRoot: tempRoot, pluginData: missing });
+      await expect(projectDiff()).rejects.toThrow(
+        `Refusing to run: the CLAUDE_PLUGIN_DATA environment variable is set to "${missing}", which resolves to ${missing}, and that path does not exist.`
+      );
+      expect(existsSync(missing)).toBe(false);
+
+      // MCP_WORKSPACE outranks it: a usable workspace means the unusable plugin directory is
+      // never the one in effect, so it is not refused.
+      locations.set({ workspace: tempRoot });
+      await expect(projectDiff()).resolves.toBeDefined();
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it('resolves a project-scope export against the checkout that holds .git, and against cwd otherwise', async () => {
     // The checkout marker is `<root>/.git`: a directory in a primary checkout, a file in a linked
     // worktree. Without it a `server/` package root says nothing about where the repository is.

@@ -65,6 +65,7 @@ import type { ArtifactKind } from '#engine/gates/utils/artifact-kinds.js';
 import type { DatabasePort, ToolIndexEntry } from '#shared/types/persistence.js';
 
 import { loadHistory } from '#cli-shared/version-history.js';
+import { workspaceFromEnv } from '#cli-shared/workspace-env.js';
 import { SemanticCriterionSchema, GateDefinitionSchema } from '#engine/gates/core/gate-schema.js';
 import {
   deriveGateTier,
@@ -152,19 +153,33 @@ export interface SkillsSyncPaths {
   sourceRoots: Readonly<Record<SkillsSyncResourceType, readonly string[]>>;
   /** The directory a new resource of a type is written to. */
   writeRoots: Readonly<Record<SkillsSyncResourceType, string>>;
-  /** The package's own directory for a type, which a package update replaces. */
-  bundledRoots: Readonly<Record<SkillsSyncResourceType, string>>;
+  /**
+   * The package's own directory for a type, which a package update replaces — undefined where it
+   * contributes no source apart from the write root: a `paths.resources` list that leaves
+   * `"bundled"` out, or a package-root server whose write root is the bundle itself.
+   */
+  bundledRoots: Readonly<Record<SkillsSyncResourceType, string | undefined>>;
 }
 
 /**
- * Refuse an `MCP_WORKSPACE` or `MCP_RESOURCES_PATH` that names no directory, before any source is
- * read or any resource written. The server refuses both at startup; this runs without it, and
+ * Refuse the workspace variable in effect (`MCP_WORKSPACE`, else `CLAUDE_PLUGIN_DATA`) or an
+ * `MCP_RESOURCES_PATH` that names no directory, before any source is read or any resource written. The server refuses both at startup; this runs without it, and
  * falling through to another tree would export, sync or clone under a name the operator never gave.
  */
 function assertUsableSourceSettings(): void {
-  for (const name of ['MCP_WORKSPACE', 'MCP_RESOURCES_PATH'] as const) {
-    const value = process.env[name];
-    if (value) assertUsableDirectorySetting({ name, value }, { verb: 'run' });
+  const workspace = workspaceFromEnv();
+  if (workspace !== undefined) {
+    assertUsableDirectorySetting(
+      { name: workspace.source, value: workspace.value },
+      { verb: 'run' }
+    );
+  }
+  const resourcesPath = process.env['MCP_RESOURCES_PATH'];
+  if (resourcesPath) {
+    assertUsableDirectorySetting(
+      { name: 'MCP_RESOURCES_PATH', value: resourcesPath },
+      { verb: 'run' }
+    );
   }
 }
 
@@ -4252,7 +4267,7 @@ function describeBundledPullRefusal(
 ): string | undefined {
   const bundledRoot = paths.bundledRoots[ir.resourceType];
   const writeRoot = paths.writeRoots[ir.resourceType];
-  if (writeRoot === bundledRoot) return undefined;
+  if (bundledRoot === undefined || writeRoot === bundledRoot) return undefined;
   const sourcePath = primarySourcePath(ir);
   const relative = path.relative(bundledRoot, sourcePath);
   if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) return undefined;

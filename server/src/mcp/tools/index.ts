@@ -66,6 +66,7 @@ import type {
   HookRegistryPort,
   McpNotificationEmitterPort,
 } from '#shared/types/index.js';
+import type { ResourceLocationsView } from '#shared/types/resource-location-report.js';
 import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
 import type { FrameworkManagerDependencies } from './framework-manager/core/types.js';
 import type { Implementation } from '@modelcontextprotocol/server';
@@ -415,6 +416,15 @@ export class McpToolRouter {
    */
   setSkillsSyncPathsProvider(provider: () => SkillsSyncPaths): void {
     this.systemControl.setSkillsSyncPathsProvider(provider);
+  }
+
+  /**
+   * Give `system_control` the resolver-backed view of where resources come from, for `status`
+   * and `config get paths.resources`. Built at the composition root: `mcp/` may not import
+   * `runtime/`, where the one derivation of the location order lives.
+   */
+  setResourceLocationsView(view: ResourceLocationsView): void {
+    this.systemControl.setResourceLocationsView(view);
   }
 
   /**

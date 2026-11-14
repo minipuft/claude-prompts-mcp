@@ -125,6 +125,16 @@ describe('System Control framework action scope propagation', () => {
         Promise.resolve()
       );
       systemControl.setFrameworkStateStore(frameworkStateStore as any);
+      // `overview` renders the resource-location section; the composition root always wires it.
+      systemControl.setResourceLocationsView({
+        configuredEntries: () => [],
+        report: () => ({
+          locations: [],
+          bundled: 'implicit',
+          profile: { state: 'none' },
+          shadowed: [],
+        }),
+      });
 
       await systemControl.handleAction(
         { action: 'status', operation },

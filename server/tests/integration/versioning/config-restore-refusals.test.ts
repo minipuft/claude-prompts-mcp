@@ -25,6 +25,7 @@ import {
   rollbackConfigVersion,
 } from '../../../src/cli-shared/config-restore.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';
 
 const HAND_AUTHORED = `{
@@ -38,16 +39,15 @@ describe('a config rollback refuses rather than inventing a document', () => {
   let workspace: string;
   let configPath: string;
   let dbPath: string;
-  let previousProjectDir: string | undefined;
+  const locations = isolateResourceLocations();
 
   const openDb = (): DatabaseSync => new DatabaseSync(dbPath);
 
   beforeEach(async () => {
-    previousProjectDir = process.env['CLAUDE_PROJECT_DIR'];
     workspace = testScratchPath(`config-restore-${Math.random().toString(36).slice(2)}`);
     rmSync(workspace, { recursive: true, force: true });
     mkdirSync(workspace, { recursive: true });
-    process.env['CLAUDE_PROJECT_DIR'] = workspace;
+    locations.set({ projectDir: workspace });
     configPath = path.join(workspace, 'config.jsonc');
     dbPath = path.join(workspace, 'runtime-state', 'state.db');
     writeFileSync(configPath, HAND_AUTHORED, 'utf8');
@@ -55,8 +55,6 @@ describe('a config rollback refuses rather than inventing a document', () => {
   });
 
   afterEach(() => {
-    if (previousProjectDir === undefined) delete process.env['CLAUDE_PROJECT_DIR'];
-    else process.env['CLAUDE_PROJECT_DIR'] = previousProjectDir;
     rmSync(workspace, { recursive: true, force: true });
   });
 

@@ -8,6 +8,7 @@ import { PromptAssetManager } from '../../../src/modules/prompts/index.js';
 import { Application } from '../../../src/runtime/application.js';
 import type { RuntimeLaunchOptions } from '../../../src/runtime/options.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
 
 // Resolve the actual server root for test context (Jest's import.meta.url differs from dist/)
 const __filename = fileURLToPath(import.meta.url);
@@ -53,8 +54,8 @@ describe('Application startup (prompt loading)', () => {
     // to the package directory, and startup's `mkdir` of the log directory left an empty
     // `server/logs/` behind on every run (found by the tree-state guard, 2026-09-16). The env
     // variable is the one knob that moves ONLY the writable root; resource resolution is untouched.
-    const previousRuntimeRoot = process.env['MCP_RUNTIME_ROOT'];
-    process.env['MCP_RUNTIME_ROOT'] = testScratchPath('application-startup-runtime');
+    const runtimeRoot = testScratchPath('application-startup-runtime');
+    const locations = withResourceLocations({ runtimeRoot });
 
     const runtimeOptions: Partial<RuntimeLaunchOptions> = {
       serverRoot: SERVER_ROOT,
@@ -86,9 +87,7 @@ describe('Application startup (prompt loading)', () => {
     } finally {
       loadSpy.mockRestore();
       await app.shutdown();
-      const runtimeRoot = process.env['MCP_RUNTIME_ROOT'];
-      if (previousRuntimeRoot === undefined) delete process.env['MCP_RUNTIME_ROOT'];
-      else process.env['MCP_RUNTIME_ROOT'] = previousRuntimeRoot;
+      locations.cleanup();
       await fs.rm(runtimeRoot, { recursive: true, force: true });
     }
   });

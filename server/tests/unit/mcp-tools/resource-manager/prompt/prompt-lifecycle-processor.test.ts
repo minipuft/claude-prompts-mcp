@@ -86,6 +86,8 @@ function createProcessor() {
       return {
         message: 'written',
         affectedFiles: ['/test/prompts/general/review_code/prompt.yaml'],
+        savedPath: '/test/prompts/general/review_code/prompt.yaml',
+        writtenFiles: ['/test/prompts/general/review_code/prompt.yaml'],
       };
     }
   );
@@ -235,7 +237,13 @@ describe('PromptLifecycleProcessor.updatePrompt gate_configuration handling', ()
           currentPrompt = previous;
           throw new Error(`Prompt write failed and was rolled back: ${String(error)}`);
         }
-        return { message: 'written' };
+        return {
+          message: 'written',
+          savedPath: `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          writtenFiles: [
+            `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          ],
+        };
       }
     );
 
@@ -343,7 +351,13 @@ describe('PromptLifecycleProcessor preserved-field parameters (OQ-P7-8)', () => 
           currentPrompt = previous;
           throw new Error(`Prompt write failed and was rolled back: ${String(error)}`);
         }
-        return { message: 'written' };
+        return {
+          message: 'written',
+          savedPath: `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          writtenFiles: [
+            `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          ],
+        };
       }
     );
 
@@ -539,7 +553,13 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
           currentPrompt = previous;
           throw new Error(`Prompt write failed and was rolled back: ${String(error)}`);
         }
-        return { message: 'written' };
+        return {
+          message: 'written',
+          savedPath: `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          writtenFiles: [
+            `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          ],
+        };
       }
     );
     // P7 row 2.4: the update path records through `recordEditResult` (go-forward numbering);
@@ -620,7 +640,13 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
           currentPrompt = previous;
           throw new Error(`Prompt write failed and was rolled back: ${String(error)}`);
         }
-        return { message: 'written' };
+        return {
+          message: 'written',
+          savedPath: `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          writtenFiles: [
+            `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          ],
+        };
       }
     );
     const recordEditResult = jest.fn(async () => ({ success: true, version: 7, bridged: false }));
@@ -901,6 +927,8 @@ describe('PromptLifecycleProcessor.updatePrompt repair outcome (P4.39)', () => {
         updatePromptImplementation: jest.fn(async () => ({
           message: 'written',
           affectedFiles: [`${PRIMARY}/probecat/broken_prompt/prompt.yaml`],
+          savedPath: `${PRIMARY}/probecat/broken_prompt/prompt.yaml`,
+          writtenFiles: [`${PRIMARY}/probecat/broken_prompt/prompt.yaml`],
         })),
         projectPromptWrite: jest.fn(async () => []),
       },

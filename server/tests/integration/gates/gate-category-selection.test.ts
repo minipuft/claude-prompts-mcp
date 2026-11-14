@@ -13,6 +13,8 @@ import { fileURLToPath } from 'node:url';
 
 import { GateManager, createGateManager } from '../../../src/engine/gates/gate-manager.js';
 import type { Logger } from '../../../src/infra/logging/index.js';
+import { withResourceLocations } from '../../helpers/resource-locations.js';
+import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 // Set up server root for gate loader to find resources
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,12 +22,10 @@ const serverRoot = path.resolve(__dirname, '../../..');
 
 describe('Gate Category Selection Integration', () => {
   let gateManager: GateManager;
-  let originalServerRoot: string | undefined;
+  let locations: ResourceLocationScope;
 
   beforeAll(async () => {
-    // Save and set MCP_SERVER_ROOT for gate loader
-    originalServerRoot = process.env.MCP_SERVER_ROOT;
-    process.env.MCP_SERVER_ROOT = serverRoot;
+    locations = withResourceLocations({ serverRoot });
 
     const logger: Logger = {
       info: jest.fn(),
@@ -37,12 +37,7 @@ describe('Gate Category Selection Integration', () => {
   });
 
   afterAll(() => {
-    // Restore original MCP_SERVER_ROOT
-    if (originalServerRoot !== undefined) {
-      process.env.MCP_SERVER_ROOT = originalServerRoot;
-    } else {
-      delete process.env.MCP_SERVER_ROOT;
-    }
+    locations.cleanup();
   });
 
   /**

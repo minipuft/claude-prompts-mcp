@@ -45,6 +45,7 @@ import { deleteVersionRows } from '../../../src/cli-shared/version-history.js';
 import { saveVersion } from '../../helpers/version-history-writer.js';
 import { STATE_DB_WRITER_PRAGMAS } from '../../../src/shared/utils/runtime-state-location.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 
 const logger = {
   info: jest.fn() as jest.Mock,
@@ -59,22 +60,17 @@ const HASH_B = 'sha256:000000000000000000000000000000000000000000000000000000000
 describe('state.db foreign keys hold on both writers', () => {
   let testDir: string;
   let dbPath: string;
-  const savedRuntimeRoot = process.env['MCP_RUNTIME_ROOT'];
+  const locations = isolateResourceLocations();
 
   beforeEach(async () => {
     testDir = testScratchPath('state-db-fk');
     dbPath = path.join(testDir, 'runtime-state', 'state.db');
     await fs.mkdir(path.dirname(dbPath), { recursive: true });
-    process.env['MCP_RUNTIME_ROOT'] = testDir;
+    locations.set({ runtimeRoot: testDir });
   });
 
   afterEach(async () => {
     await SqliteEngine.shutdownInstance();
-    if (savedRuntimeRoot === undefined) {
-      delete process.env['MCP_RUNTIME_ROOT'];
-    } else {
-      process.env['MCP_RUNTIME_ROOT'] = savedRuntimeRoot;
-    }
     await fs.rm(testDir, { recursive: true, force: true });
   });
 

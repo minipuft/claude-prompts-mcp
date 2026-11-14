@@ -84,6 +84,13 @@ interface ConfigFilePaths {
    * @uniqueItems true
    */
   resources?: string[];
+  /**
+   * Where a created or updated resource is written: one of the "resources" entries, or the
+   * profile's own resources folder, absolute or relative to this file. Unset, writes go to the
+   * profile's own folder. A project .claude-prompts/ folder still receives writes on STDIO.
+   * Never "bundled".
+   */
+  writeTarget?: string;
 }
 
 /** Prompt loading and registration. */

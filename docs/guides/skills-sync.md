@@ -59,15 +59,20 @@ exports:
 
 ### Where Sources and Config Are Read From
 
-Skills Sync reads the resources the server serves. The package's bundled `server/resources/`
-always contributes. A workspace set with `MCP_WORKSPACE` (or, for a running server, `--workspace`)
+Skills Sync reads the resources the server serves. Without a `paths.resources` list, the package's
+bundled `server/resources/` contributes beneath everything else. A workspace set with `MCP_WORKSPACE` (or, for a running server, `--workspace`)
 layers its `resources/` over it, and a workspace entry replaces a bundled one with the same
 identity: `{category}/{id}` for a prompt, the id for a gate, framework or style.
 `MCP_RESOURCES_PATH` names a resources directory used in place of the workspace's own `resources/`,
 as it does for the server. The `system_control skills_sync` route below resolves through the same
 running server the rest of MCP reads from, so it follows `--workspace` even when `MCP_WORKSPACE`
-is unset; the standalone CLI (`npm run skills:export` and friends) has no running server to read
-from, so it resolves from `MCP_WORKSPACE` and the other environment variables only.
+is unset, and it reads the `paths.resources` list and `paths.writeTarget` in your config: the
+listed folders contribute sources in the order [Custom Resources](custom-resources.md#where-resources-come-from)
+gives, and `"bundled"` contributes where the list puts it, or nowhere when the list leaves it out.
+The standalone CLI (`npm run skills:export` and friends) has no running server to read from, so it
+resolves from `MCP_WORKSPACE` and the other environment variables only: it does not read the
+list or `paths.writeTarget`, so it sees your workspace over the bundled tree and writes to the
+workspace's own `resources/` folder.
 
 `skills-sync.yaml` is read from the workspace when the workspace holds one, and from the package
 otherwise. Registrations an export adds are written back to the file that was read. Neither file is
@@ -75,8 +80,8 @@ created for you.
 
 Writes follow the same roots:
 
-- `clone` creates the resource under the workspace's `resources/` when a workspace is set, and under
-  the package's otherwise. It refuses an imported prompt, or a companion step's `prompt.yaml`, whose
+- `clone` creates the resource under the workspace's `resources/` when a workspace is set (under
+  `paths.writeTarget` when the server route reads one), and under the package's otherwise. It refuses an imported prompt, or a companion step's `prompt.yaml`, whose
   `gateConfiguration.inline_gate_definitions` carries an entry the loader would drop, naming the
   definition and the field, and restores what was there before. With `--force`, a definition the
   replaced file already carried is printed as a warning and does not block the import.

@@ -16,6 +16,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 import { createTestDatabaseManager } from '../../helpers/test-database.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 import { resolveTenantId as guessCliTenantId } from '../../../src/cli-shared/version-history-scope.js';
 import { ExecutionRecordStore } from '../../../src/modules/chains/execution-record-store.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
@@ -96,19 +97,16 @@ describe('tenant key per caller', () => {
   describe('cli guess (workspace id or launch directory only; it has no organization input)', () => {
     let workDir: string;
     let dbPath: string;
-    let savedProjectDir: string | undefined;
+    const locations = isolateResourceLocations();
 
     beforeEach(() => {
       workDir = mkdtempSync(path.join(tmpdir(), 'tenant-cli-guess-'));
       mkdirSync(path.join(workDir, 'runtime-state'));
       dbPath = path.join(workDir, 'runtime-state', 'state.db');
-      savedProjectDir = process.env['CLAUDE_PROJECT_DIR'];
     });
 
     afterEach(() => {
       jest.restoreAllMocks();
-      if (savedProjectDir === undefined) delete process.env['CLAUDE_PROJECT_DIR'];
-      else process.env['CLAUDE_PROJECT_DIR'] = savedProjectDir;
       rmSync(workDir, { recursive: true, force: true });
     });
 
@@ -117,19 +115,19 @@ describe('tenant key per caller', () => {
         path.join(workDir, 'config.json'),
         JSON.stringify({ identity: { launchDefaults: { workspaceId: 'ws-configured' } } })
       );
-      process.env['CLAUDE_PROJECT_DIR'] = '/srv/launch-dir';
+      locations.set({ projectDir: '/srv/launch-dir' });
 
       expect(guessCliTenantId(dbPath)).toBe('ws-configured');
     });
 
     it('with no configured id, the launch directory names the tenant', () => {
-      process.env['CLAUDE_PROJECT_DIR'] = '/srv/launch-dir';
+      locations.set({ projectDir: '/srv/launch-dir' });
 
       expect(guessCliTenantId(dbPath)).toBe('launch-dir');
     });
 
     it('with neither a configured id nor a launch directory name, the tenant is the shared default', () => {
-      delete process.env['CLAUDE_PROJECT_DIR'];
+      locations.reset();
       jest.spyOn(process, 'cwd').mockReturnValue('/');
 
       expect(guessCliTenantId(dbPath)).toBe('default');

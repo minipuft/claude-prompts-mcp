@@ -128,6 +128,21 @@ function destinationFor(
   };
 }
 
+/**
+ * Why a version recorded from the bundled tree cannot be restored when no location in force holds
+ * the resource. A bundled resource is restored by re-rooting its bundled position onto the write
+ * root ({@link destinationFor}); with the bundle out of the location list (a `paths.resources`
+ * list that leaves `"bundled"` out, R3c) there is no position to re-root, and the projection
+ * fallback would write a resource the operator's list does not serve. Refused, so nothing moves.
+ */
+function bundleNotServedReason(query: ByteRestoreQuery, located: string): string {
+  return (
+    `version ${query.version} of ${query.resourceType} '${query.resourceId}' was recorded from the ` +
+    `bundled resources, and no location in force holds it (${located}). A paths.resources list ` +
+    `that leaves the bundle out serves none of it: add "bundled" to paths.resources to restore it`
+  );
+}
+
 /** Enumerate and hash whatever is under `root` right now, or report an empty resource. */
 async function currentFilesUnder(
   resourceType: ResourceType,
@@ -173,6 +188,9 @@ export async function resolveByteRestore(
     };
   }
   if (!query.location.located) {
+    if (query.recordedOrigin === 'bundled') {
+      return { status: 'refused', reason: bundleNotServedReason(query, query.location.reason) };
+    }
     return { status: 'projection-only', reason: query.location.reason };
   }
 

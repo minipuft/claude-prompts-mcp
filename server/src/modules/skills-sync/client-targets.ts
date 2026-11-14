@@ -11,6 +11,7 @@ import path from 'node:path';
 
 import type { SkillsSyncScope } from './sync-engine.js';
 
+import { workspaceFromEnv } from '#cli-shared/workspace-env.js';
 import { assertUsableDirectorySetting } from '#shared/utils/path-setting.js';
 
 /** The one `SkillsSyncPaths` field target resolution reads, to find project scope's repository root. */
@@ -271,15 +272,12 @@ function resolveOutputDir(
 }
 
 function resolveProjectRoot(paths: PackageRootPaths): string {
-  const fromWorkspaceEnv = process.env['MCP_WORKSPACE'];
-  if (fromWorkspaceEnv !== undefined && fromWorkspaceEnv !== '') {
+  const fromEnv = workspaceFromEnv();
+  if (fromEnv !== undefined) {
     // Refused like the server refuses it: a project-scope export resolved against a workspace that
     // is not there writes skills into a directory tree the operator never named.
     return path.resolve(
-      assertUsableDirectorySetting(
-        { name: 'MCP_WORKSPACE', value: fromWorkspaceEnv },
-        { verb: 'run' }
-      )
+      assertUsableDirectorySetting({ name: fromEnv.source, value: fromEnv.value }, { verb: 'run' })
     );
   }
 

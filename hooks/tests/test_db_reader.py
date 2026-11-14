@@ -1173,9 +1173,10 @@ class TestStateDbPathResolution:
 
 
 class TestClaudePluginDataStateDb:
-    """The Claude Code plugin runs its server with MCP_RUNTIME_ROOT=${CLAUDE_PLUGIN_DATA},
-    so state.db lives in the plugin data directory. Hooks do not inherit that setting;
-    they receive CLAUDE_PLUGIN_DATA and CLAUDE_PLUGIN_ROOT from Claude Code. Without the
+    """The Claude Code plugin's .mcp.json carries no env, so its server falls back to
+    CLAUDE_PLUGIN_DATA as the runtime root and state.db lives in the plugin data
+    directory. Hooks do not inherit the server's environment; they receive
+    CLAUDE_PLUGIN_DATA and CLAUDE_PLUGIN_ROOT from Claude Code. Without the
     data candidate a hook finds nothing, or a state.db an earlier plugin version left
     in the install directory.
     """

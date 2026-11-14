@@ -37,6 +37,7 @@ import type { Category, PromptData } from '#modules/prompts/types.js';
 import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { ListChangeTargets } from './list-change-notifier.js';
 import type { PathResolver } from './paths.js';
+import type { ResourceLocationLedger } from './resource-location-report.js';
 import type { McpServerFactory } from '@modelcontextprotocol/server';
 
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
@@ -75,6 +76,8 @@ export class Application {
    * reference, so a repair between two syncs is reflected without re-registering anything.
    */
   private indexQuarantine?: QuarantineView;
+  /** The collector `initializeModules` built; every hot-reload re-sync records into it. */
+  private locationLedger?: ResourceLocationLedger;
   private hookRegistry!: HookRegistry;
   private notificationEmitter!: McpNotificationEmitter;
   private telemetryLifecycle?: TelemetryLifecycle;
@@ -369,6 +372,7 @@ export class Application {
     this.gateManager = result.gateManager;
     this.mcpToolsManager = result.mcpToolsManager;
     this.indexQuarantine = result.indexQuarantine;
+    this.locationLedger = result.locationLedger;
 
     const currentFrameworkConfig = this.configManager.getFrameworksConfig();
     await this.syncFrameworkSystemStateFromConfig(
@@ -793,6 +797,7 @@ export class Application {
           pathResolver: this.pathResolver,
           logger: this.logger,
           indexQuarantine: this.indexQuarantine,
+          locationLedger: this.locationLedger,
         });
       }
 

@@ -42,7 +42,8 @@ const SCHEMA_PATH = path.join(SERVER_ROOT, 'config.schema.json');
  *
  * 1. **No default in any layer.** `config.schema.json` carries no `@default` for them either, so
  *    absent IS the effective value: the six `identity.launchDefaults.*` leaves,
- *    `gates.evaluation.defaultModel`, `telemetry.attributePolicy.allowlist`.
+ *    `gates.evaluation.defaultModel`, `telemetry.attributePolicy.allowlist`, and
+ *    `paths.writeTarget`, whose absence means writes land in the profile's own folder.
  * 2. **`gates.evaluation.strict`** — the one key row 6.2 deliberately declined to resolve. Its
  *    only code default (`judge-prompt-builder.ts`) is `mode === 'judge'`, a function of the
  *    resolved mode rather than a constant, and folding the schema's `true` in would change what a
@@ -69,6 +70,7 @@ const KEYS_WITH_NO_EFFECTIVE_VALUE = [
   'identity.launchDefaults.delegationProfile',
   'identity.launchDefaults.organizationId',
   'identity.launchDefaults.workspaceId',
+  'paths.writeTarget',
   'telemetry.attributePolicy.allowlist',
 ];
 

@@ -102,6 +102,8 @@ function createHarness(
       return {
         message: 'written',
         affectedFiles: [`/workspace/prompts/general/${String(promptData['id'])}/prompt.yaml`],
+        savedPath: `/workspace/prompts/general/${String(promptData['id'])}/prompt.yaml`,
+        writtenFiles: [`/workspace/prompts/general/${String(promptData['id'])}/prompt.yaml`],
       };
     }
   );
