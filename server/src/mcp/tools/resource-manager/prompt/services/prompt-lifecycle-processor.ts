@@ -10,7 +10,7 @@ import {
 } from './prompt-mutation-receipt-service.js';
 import { isPreviewRequest } from '../../../shared/preview-action.js';
 import { formatRepairServingLine } from '../../../shared/quarantine-report.js';
-import { withSavedLine } from '../../../shared/saved-line.js';
+import { withSavedLine, withWriteOutcome } from '../../../shared/saved-line.js';
 import { ComparisonEngine } from '../analysis/comparison-engine.js';
 import { ObjectDiffGenerator, type DiffResult } from '../analysis/object-diff-generator.js';
 import { PromptAnalyzer } from '../analysis/prompt-analyzer.js';
@@ -305,7 +305,8 @@ export class PromptLifecycleProcessor {
         },
         isError: !verification.verified,
       },
-      writeResult.savedPath
+      writeResult.savedPath,
+      writeResult.writtenFiles
     );
   }
 
@@ -834,7 +835,7 @@ export class PromptLifecycleProcessor {
       response += this.formatRepairOutcome(repairTarget);
     }
 
-    return withSavedLine(
+    return withWriteOutcome(
       {
         content: [
           {
@@ -851,7 +852,7 @@ export class PromptLifecycleProcessor {
         },
         isError: !verification.verified,
       },
-      result.savedPath
+      result
     );
   }
 

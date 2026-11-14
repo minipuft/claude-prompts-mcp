@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rmdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { selectSavedPath } from '../../shared/saved-line.js';
 import { overlayDecidedYamlKeys } from '../../shared/yaml-key-overlay.js';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
@@ -120,6 +121,8 @@ export interface CategoryFileWriteResult {
   paths?: string[];
   /** Absolute path of the `category.yaml` written, set when the write landed, for the `saved:` line. */
   savedPath?: string;
+  /** Absolute paths of the files this write wrote, in write order. Set only when the write landed. */
+  writtenFiles?: string[];
   error?: string;
   verificationFailure?: ResourceVerificationFailurePayload;
 }
@@ -260,7 +263,15 @@ export class CategoryFileWriter {
       };
     }
 
-    return { success: true, paths: transactionResult.result?.paths ?? [], savedPath: yamlPath };
+    // `paths` holds files only: the directory is a container this writer never snapshots or
+    // reports, so every entry is a file this call wrote.
+    const writtenFiles = transactionResult.result?.paths ?? [];
+    return {
+      success: true,
+      paths: writtenFiles,
+      savedPath: selectSavedPath(writtenFiles, yamlPath),
+      writtenFiles,
+    };
   }
 
   /**

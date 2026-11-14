@@ -8,12 +8,13 @@ import { reregisterFramework } from './framework-reregistration.js';
 import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 import { formatRepairServingLine } from '../../shared/quarantine-report.js';
-import { withSavedLine } from '../../shared/saved-line.js';
+import { withSavedLine, withWriteOutcome } from '../../shared/saved-line.js';
 
 import type { ResourceWriteCommitOptions } from '#modules/resources/services/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
 import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 import type { FrameworkDraftValidator } from './framework-draft-validator.js';
+import type { FrameworkFileResult } from './framework-file-writer.js';
 import type { FrameworkResourceContext } from '../core/context.js';
 import type { FrameworkManagerInput, FrameworkCreationData } from '../core/types.js';
 
@@ -159,7 +160,8 @@ export class FrameworkLifecycleProcessor {
 
     return withSavedLine(
       this.success(this.validationService.formatSuccess(id, validation, result.paths ?? [])),
-      this.savedFrameworkPath(id)
+      result.savedPath,
+      result.writtenFiles
     );
   }
 
@@ -310,7 +312,7 @@ export class FrameworkLifecycleProcessor {
         `\`action: "reload"\` retries the same registration and will fail the same way unless the ` +
         `cause was transient — check the server log for the reason, then restart.`;
 
-    return withSavedLine(this.success(response), result.savedPath);
+    return withWriteOutcome(this.success(response), result);
   }
 
   /**
@@ -438,16 +440,9 @@ export class FrameworkLifecycleProcessor {
           versionLine +
           this.formatRepairOutcome(target, writtenPath, writtenRoot)
       ),
-      writtenPath
+      result.savedPath,
+      result.writtenFiles
     );
-  }
-
-  /**
-   * The `framework.yaml` a create of `id` wrote, for the reply's `saved:` line: the
-   * writer resolves its directory through the same `getFrameworkDir`, so the two cannot differ.
-   */
-  private savedFrameworkPath(id: string): string {
-    return path.join(this.ctx.fileService.getFrameworkDir(id), 'framework.yaml');
   }
 
   /**
@@ -874,7 +869,7 @@ export class FrameworkLifecycleProcessor {
     id: string,
     frameworkData: FrameworkCreationData,
     commitOptions: ResourceWriteCommitOptions = {}
-  ): Promise<{ success: boolean; error?: string; paths?: string[] }> {
+  ): Promise<FrameworkFileResult> {
     const normalizedId = id.toLowerCase();
     const registry = this.ctx.frameworkManager.getFrameworkRegistry();
 
@@ -923,7 +918,7 @@ export class FrameworkLifecycleProcessor {
       };
     }
 
-    return { success: true, paths: writeResult.paths };
+    return writeResult;
   }
 
   /**

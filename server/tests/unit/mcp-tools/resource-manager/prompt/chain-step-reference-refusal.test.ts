@@ -64,6 +64,7 @@ function createProcessor(seeded: Array<Record<string, unknown>> = [REGISTERED_PR
       message: `written ${String(promptData['id'])}`,
       affectedFiles: ['/test/prompts/documentation/x/prompt.yaml'],
       savedPath: `/test/prompts/documentation/${String(promptData['id'])}/prompt.yaml`,
+      writtenFiles: [`/test/prompts/documentation/${String(promptData['id'])}/prompt.yaml`],
     };
   });
 

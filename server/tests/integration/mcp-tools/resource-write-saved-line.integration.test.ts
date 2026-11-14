@@ -1,7 +1,10 @@
 /**
- * Every `resource_manager` create and update reply ends with `saved: <absolute path>`, the file
- * the write produced (`guidance.md` or a framework companion file when an update wrote only that),
- * and a delete reply names no saved file (ruling R3j).
+ * Every `resource_manager` create and update reply ends with `saved: <absolute path>`, a file the
+ * write produced (`user-message.md`, `guidance.md` or a framework companion file when an update
+ * wrote only that), and a delete reply names no saved file (ruling R3j). Each step checks that the
+ * named file holds what that call wrote, and `withSavedLine` refuses a path its writer did not
+ * report writing. An update that changed no file ends with `nothing written: the request changed
+ * no file` instead (ruling R3w).
  *
  * Classification: integration. Real lifecycle processors over the real `FileOperations`,
  * `GateFileWriter`, `FrameworkFileWriter` and `CategoryFileWriter` writing into a temp directory,
@@ -10,7 +13,15 @@
  */
 
 import { afterEach, describe, expect, jest, test } from '@jest/globals';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -26,6 +37,11 @@ import { ObjectDiffGenerator } from '../../../src/mcp/tools/resource-manager/pro
 import { PromptAnalyzer } from '../../../src/mcp/tools/resource-manager/prompt/analysis/prompt-analyzer.js';
 import { FileOperations } from '../../../src/mcp/tools/resource-manager/prompt/operations/file-operations.js';
 import { PromptLifecycleProcessor } from '../../../src/mcp/tools/resource-manager/prompt/services/prompt-lifecycle-processor.js';
+import {
+  NOTHING_WRITTEN_LINE,
+  withSavedLine,
+  withWriteOutcome,
+} from '../../../src/mcp/tools/shared/saved-line.js';
 import { PromptConverter } from '../../../src/modules/prompts/converter.js';
 import { PromptLoader } from '../../../src/modules/prompts/loader.js';
 import { EMPTY_QUARANTINE_VIEW } from '../../../src/shared/utils/resource-quarantine.js';
@@ -59,10 +75,49 @@ const textOf = (response: ToolResponse): string =>
 /** The reply's last line, which for a landed write must be `saved: <path>`. */
 const lastLine = (response: ToolResponse): string => textOf(response).trimEnd().split('\n').at(-1)!;
 
-function expectSavedLine(response: ToolResponse, expectedPath: string): void {
+/**
+ * The reply names `expectedPath`, and that file holds `writtenText`, a value only the call under
+ * test supplied — so the named file is one this call wrote, not merely one that exists.
+ */
+function expectSavedLine(response: ToolResponse, expectedPath: string, writtenText: string): void {
   expect(lastLine(response)).toBe(`saved: ${expectedPath}`);
   expect(textOf(response).match(/^saved: /gm)).toHaveLength(1);
   expect(existsSync(expectedPath)).toBe(true);
+  expect(readFileSync(expectedPath, 'utf8')).toContain(writtenText);
+}
+
+/** Every file under `dir` with its mtime, so a call that wrote nothing leaves the map unchanged. */
+function mtimesUnder(dir: string): Record<string, number> {
+  return Object.fromEntries(
+    readdirSync(dir, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => {
+        const file = join(entry.parentPath, entry.name);
+        return [file, statSync(file).mtimeMs];
+      })
+  );
+}
+
+/**
+ * An update that changed no file answers success with the nothing-written line last and no
+ * `saved:` line (ruling R3w); no file under `dir` changed; and the version step was handed a
+ * produced state equal to the prior one, which `VersionHistoryService` records as a match, not a
+ * new row (`unchanged-write-no-version.integration.test.ts`).
+ */
+async function expectNothingWritten(
+  call: () => Promise<ToolResponse>,
+  dir: string,
+  recordEditResult: jest.Mock
+): Promise<void> {
+  const before = mtimesUnder(dir);
+  const response = await call();
+  expect(response.isError).not.toBe(true);
+  expect(lastLine(response)).toBe(NOTHING_WRITTEN_LINE);
+  expect(textOf(response)).not.toMatch(/^saved: /m);
+  expect(response.structuredContent?.['saved']).toBeUndefined();
+  expect(mtimesUnder(dir)).toEqual(before);
+  const [, , prior, produced] = recordEditResult.mock.calls.at(-1) as unknown[];
+  expect(produced).toEqual(prior);
 }
 
 function expectNoSavedLine(response: ToolResponse): void {
@@ -82,7 +137,7 @@ describe('a create or update reply ends with the file it saved', () => {
     for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true });
   });
 
-  test('prompt: create and update end with saved: <prompt.yaml>, in structuredContent too', async () => {
+  test('prompt: create and update end with saved: <the file written>, in structuredContent too', async () => {
     const promptsDir = join(tempRoot(), 'prompts');
     mkdirSync(promptsDir, { recursive: true });
     const logger = createLogger();
@@ -108,13 +163,14 @@ describe('a create or update reply ends with the file it saved', () => {
       onRefresh: jest.fn(reload),
       onRestart: jest.fn(async () => {}),
     };
+    const versions = versionSeam();
     const lifecycle = new PromptLifecycleProcessor({
       dependencies,
       promptAnalyzer: new PromptAnalyzer(),
       gateAnalyzer: new GateAnalyzer(dependencies as never),
       fileOperations: new FileOperations({ logger, configManager }),
       getData: () => ({ convertedPrompts }),
-      versionHistoryService: versionSeam(),
+      versionHistoryService: versions,
       textDiffService: new ObjectDiffGenerator(),
       comparisonEngine: new ComparisonEngine(logger),
     } as unknown as PromptResourceContext);
@@ -127,15 +183,33 @@ describe('a create or update reply ends with the file it saved', () => {
       description: 'Says where it landed',
       user_message_template: 'hello {{x}}',
     } as never);
-    expectSavedLine(created, yamlPath);
+    expectSavedLine(created, yamlPath, 'Says where it landed');
     expect(created.structuredContent?.['saved']).toBe(yamlPath);
 
     const updated = await lifecycle.updatePrompt({
       id: 'saved_probe',
       description: 'Still says where it landed',
     });
-    expectSavedLine(updated, yamlPath);
+    expectSavedLine(updated, yamlPath, 'Still says where it landed');
     expect(updated.structuredContent?.['saved']).toBe(yamlPath);
+
+    // A template-only update writes user-message.md alone; prompt.yaml keeps its bytes and its
+    // mtime, so a line naming it would point the caller at a file this call never opened.
+    const userMessagePath = join(promptsDir, 'probe', 'saved_probe', 'user-message.md');
+    const yamlBefore = statSync(yamlPath).mtimeMs;
+    const templateOnly = await lifecycle.updatePrompt({
+      id: 'saved_probe',
+      user_message_template: 'goodbye {{x}}',
+    });
+    expectSavedLine(templateOnly, userMessagePath, 'goodbye {{x}}');
+    expect(templateOnly.structuredContent?.['saved']).toBe(userMessagePath);
+    expect(statSync(yamlPath).mtimeMs).toBe(yamlBefore);
+
+    await expectNothingWritten(
+      () => lifecycle.updatePrompt({ id: 'saved_probe' }),
+      promptsDir,
+      versions['recordEditResult'] as jest.Mock
+    );
   });
 
   test('gate: create and update end with saved: <the file written>; delete names no saved file', async () => {
@@ -168,12 +242,13 @@ describe('a create or update reply ends with the file it saved', () => {
         return Promise.resolve(true);
       },
     };
+    const versions = versionSeam();
     const lifecycle = new GateLifecycleProcessor({
       logger,
       gateManager: registry,
       configManager,
       textDiffService: new ObjectDiffGenerator(),
-      versionHistoryService: versionSeam(),
+      versionHistoryService: versions,
       gateFileService: new GateFileWriter({ logger, configManager }),
       onRefresh: jest.fn(async () => {}),
     } as unknown as GateResourceContext);
@@ -186,14 +261,14 @@ describe('a create or update reply ends with the file it saved', () => {
       description: 'Says where it landed',
       guidance: 'Check it.',
     } as GateManagerInput);
-    expectSavedLine(created, yamlPath);
+    expectSavedLine(created, yamlPath, 'Says where it landed');
 
     const updated = await lifecycle.handleUpdate({
       action: 'update',
       id: 'saved-gate',
       description: 'Still says where it landed',
     } as GateManagerInput);
-    expectSavedLine(updated, yamlPath);
+    expectSavedLine(updated, yamlPath, 'Still says where it landed');
 
     // A guidance-only update leaves gate.yaml untouched, so the line names the file it did write.
     const guidanceOnly = await lifecycle.handleUpdate({
@@ -201,7 +276,13 @@ describe('a create or update reply ends with the file it saved', () => {
       id: 'saved-gate',
       guidance: 'Check it twice.',
     } as GateManagerInput);
-    expectSavedLine(guidanceOnly, join(gatesDir, 'saved-gate', 'guidance.md'));
+    expectSavedLine(guidanceOnly, join(gatesDir, 'saved-gate', 'guidance.md'), 'Check it twice.');
+
+    await expectNothingWritten(
+      () => lifecycle.handleUpdate({ action: 'update', id: 'saved-gate' } as GateManagerInput),
+      gatesDir,
+      versions['recordEditResult'] as jest.Mock
+    );
 
     const deleted = await lifecycle.handleDelete({
       action: 'delete',
@@ -234,6 +315,7 @@ describe('a create or update reply ends with the file it saved', () => {
       validate: () => ({ valid: true }),
       formatSuccess: (id: string) => `✅ Framework '${id}' created successfully`,
     } as unknown as FrameworkDraftValidator;
+    const versions = versionSeam();
     const lifecycle = new FrameworkLifecycleProcessor(
       {
         logger,
@@ -248,7 +330,7 @@ describe('a create or update reply ends with the file it saved', () => {
         configManager,
         fileService: writer,
         textDiffService: new ObjectDiffGenerator(),
-        versionHistoryService: versionSeam(),
+        versionHistoryService: versions,
         onRefresh: jest.fn(async () => {}),
       } as unknown as FrameworkResourceContext,
       validator
@@ -263,14 +345,14 @@ describe('a create or update reply ends with the file it saved', () => {
       system_prompt_guidance: 'Think.',
       judge_prompt: 'Judge it.\n',
     } as FrameworkManagerInput);
-    expectSavedLine(created, yamlPath);
+    expectSavedLine(created, yamlPath, 'Says where it landed');
 
     const updated = await lifecycle.handleUpdate({
       action: 'update',
       id: 'saved-fw',
       description: 'Still says where it landed',
     } as FrameworkManagerInput);
-    expectSavedLine(updated, yamlPath);
+    expectSavedLine(updated, yamlPath, 'Still says where it landed');
 
     // A judge-prompt-only update leaves framework.yaml untouched, so the line names the file it wrote.
     const judgeOnly = await lifecycle.handleUpdate({
@@ -278,7 +360,23 @@ describe('a create or update reply ends with the file it saved', () => {
       id: 'saved-fw',
       judge_prompt: 'Judge it again.\n',
     } as FrameworkManagerInput);
-    expectSavedLine(judgeOnly, join(frameworksDir, 'saved-fw', 'judge-prompt.md'));
+    expectSavedLine(
+      judgeOnly,
+      join(frameworksDir, 'saved-fw', 'judge-prompt.md'),
+      'Judge it again.'
+    );
+
+    // Repeating the current judge prompt changes no file: the writer's merge drops it.
+    await expectNothingWritten(
+      () =>
+        lifecycle.handleUpdate({
+          action: 'update',
+          id: 'saved-fw',
+          judge_prompt: 'Judge it again.\n',
+        } as FrameworkManagerInput),
+      frameworksDir,
+      versions['recordEditResult'] as jest.Mock
+    );
 
     const deleted = await lifecycle.handleDelete({
       action: 'delete',
@@ -296,11 +394,12 @@ describe('a create or update reply ends with the file it saved', () => {
       getResolvedPromptsDirectory: () => promptsDir,
       getBundledResourceDirectory: () => undefined,
     } as unknown as ConfigManager;
+    const versions = versionSeam();
     const lifecycle = new CategoryLifecycleProcessor({
       logger,
       configManager,
       textDiffService: new ObjectDiffGenerator(),
-      versionHistoryService: versionSeam(),
+      versionHistoryService: versions,
       categoryFileService: new CategoryFileWriter({ logger, configManager }),
       onRefresh: jest.fn(async () => {}),
     } as unknown as CategoryResourceContext);
@@ -312,14 +411,14 @@ describe('a create or update reply ends with the file it saved', () => {
       name: 'Saved Category',
       description: 'Says where it landed',
     } as CategoryManagerInput);
-    expectSavedLine(created, yamlPath);
+    expectSavedLine(created, yamlPath, 'Says where it landed');
 
     const updated = await lifecycle.handleUpdate({
       action: 'update',
       id: 'saved-cat',
       description: 'Still says where it landed',
     } as CategoryManagerInput);
-    expectSavedLine(updated, yamlPath);
+    expectSavedLine(updated, yamlPath, 'Still says where it landed');
 
     const deleted = await lifecycle.handleDelete({
       action: 'delete',
@@ -327,5 +426,28 @@ describe('a create or update reply ends with the file it saved', () => {
       confirm: true,
     } as CategoryManagerInput);
     expectNoSavedLine(deleted);
+  });
+
+  test('withSavedLine refuses a path its writer did not report writing, and a write of no file; withWriteOutcome answers an empty write', () => {
+    const reply: ToolResponse = { content: [{ type: 'text', text: 'updated' }], isError: false };
+
+    expect(() => withSavedLine(reply, '/r/p/prompt.yaml', ['/r/p/user-message.md'])).toThrow(
+      'A resource write names /r/p/prompt.yaml as saved, but that file is not among the files ' +
+        'it wrote: /r/p/user-message.md'
+    );
+    expect(() => withSavedLine(reply, '/r/p/prompt.yaml', [])).toThrow(
+      /no file written .*answers through withWriteOutcome/
+    );
+    expect(lastLine(withSavedLine(reply, '/r/p/user-message.md', ['/r/p/user-message.md']))).toBe(
+      'saved: /r/p/user-message.md'
+    );
+
+    expect(lastLine(withWriteOutcome(reply, { savedPath: undefined, writtenFiles: [] }))).toBe(
+      NOTHING_WRITTEN_LINE
+    );
+    // A writer that reports no list at all is not a no-op: it did not say what it wrote.
+    expect(() => withWriteOutcome(reply, { savedPath: '/r/p/prompt.yaml' })).toThrow(
+      /no file written/
+    );
   });
 });

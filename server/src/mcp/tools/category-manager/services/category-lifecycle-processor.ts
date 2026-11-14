@@ -6,7 +6,7 @@ import * as path from 'node:path';
 import { readCategoryYamlDocument, CATEGORY_YAML_FILENAME } from './category-file-writer.js';
 import { categorySnapshotContract } from './category-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
-import { withSavedLine } from '../../shared/saved-line.js';
+import { withSavedLine, withWriteOutcome } from '../../shared/saved-line.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 import type { CategoryResourceContext } from '../core/context.js';
@@ -89,7 +89,8 @@ export class CategoryLifecycleProcessor {
             : '') +
           `🔄 Prompt data reloaded — the category is live now`
       ),
-      result.savedPath
+      result.savedPath,
+      result.writtenFiles
     );
   }
 
@@ -197,7 +198,7 @@ export class CategoryLifecycleProcessor {
 
     response += `🔄 Prompt data reloaded`;
 
-    return withSavedLine(this.success(response), result.savedPath);
+    return withWriteOutcome(this.success(response), result);
   }
 
   async handleDelete(args: CategoryManagerInput): Promise<ToolResponse> {

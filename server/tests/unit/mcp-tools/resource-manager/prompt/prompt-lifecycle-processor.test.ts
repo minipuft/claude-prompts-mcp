@@ -87,6 +87,7 @@ function createProcessor() {
         message: 'written',
         affectedFiles: ['/test/prompts/general/review_code/prompt.yaml'],
         savedPath: '/test/prompts/general/review_code/prompt.yaml',
+        writtenFiles: ['/test/prompts/general/review_code/prompt.yaml'],
       };
     }
   );
@@ -239,6 +240,9 @@ describe('PromptLifecycleProcessor.updatePrompt gate_configuration handling', ()
         return {
           message: 'written',
           savedPath: `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          writtenFiles: [
+            `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          ],
         };
       }
     );
@@ -350,6 +354,9 @@ describe('PromptLifecycleProcessor preserved-field parameters (OQ-P7-8)', () => 
         return {
           message: 'written',
           savedPath: `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          writtenFiles: [
+            `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          ],
         };
       }
     );
@@ -549,6 +556,9 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
         return {
           message: 'written',
           savedPath: `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          writtenFiles: [
+            `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          ],
         };
       }
     );
@@ -633,6 +643,9 @@ describe('PromptLifecycleProcessor.updatePrompt version-save failure', () => {
         return {
           message: 'written',
           savedPath: `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          writtenFiles: [
+            `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+          ],
         };
       }
     );
@@ -915,6 +928,7 @@ describe('PromptLifecycleProcessor.updatePrompt repair outcome (P4.39)', () => {
           message: 'written',
           affectedFiles: [`${PRIMARY}/probecat/broken_prompt/prompt.yaml`],
           savedPath: `${PRIMARY}/probecat/broken_prompt/prompt.yaml`,
+          writtenFiles: [`${PRIMARY}/probecat/broken_prompt/prompt.yaml`],
         })),
         projectPromptWrite: jest.fn(async () => []),
       },

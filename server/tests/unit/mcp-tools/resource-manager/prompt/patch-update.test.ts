@@ -95,6 +95,9 @@ function createProcessor(
       return {
         message: 'written',
         savedPath: `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+        writtenFiles: [
+          `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+        ],
       };
     }
   );

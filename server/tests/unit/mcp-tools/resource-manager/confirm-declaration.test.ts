@@ -58,6 +58,7 @@ describe('P6.309: confirm is declared where a call deletes, refused where it can
     updatePromptImplementation = jest.fn(async () => ({
       message: 'written',
       savedPath: '/test/prompts/general/tooled/prompt.yaml',
+      writtenFiles: ['/test/prompts/general/tooled/prompt.yaml'],
     }));
     const context = {
       dependencies,

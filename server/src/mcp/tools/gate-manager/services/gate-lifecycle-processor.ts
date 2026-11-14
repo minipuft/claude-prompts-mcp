@@ -7,7 +7,7 @@ import { callerSuppliedGateKeys, ensureTrailingNewline } from './gate-file-write
 import { gateSnapshotContract } from './gate-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
 import { formatRepairServingLine } from '../../shared/quarantine-report.js';
-import { withSavedLine } from '../../shared/saved-line.js';
+import { withSavedLine, withWriteOutcome } from '../../shared/saved-line.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
 import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
@@ -165,7 +165,8 @@ export class GateLifecycleProcessor {
             `did not pick them up, so this gate will not resolve until it does.\n` +
             `Recover with \`action: "reload"\`, or restart the server.`
         ),
-        result.savedPath
+        result.savedPath,
+        result.writtenFiles
       );
     }
 
@@ -175,7 +176,8 @@ export class GateLifecycleProcessor {
           `${filesWritten}\n\n` +
           `🔄 Registered in the gate registry — ready to use now`
       ),
-      result.savedPath
+      result.savedPath,
+      result.writtenFiles
     );
   }
 
@@ -353,7 +355,7 @@ export class GateLifecycleProcessor {
       : `⚠️ Files written, but the gate could not be reloaded into this process — it still holds ` +
         `its previous content. See the server log.`;
 
-    return withSavedLine(this.success(response), result.savedPath);
+    return withWriteOutcome(this.success(response), result);
   }
 
   /**
@@ -498,7 +500,8 @@ export class GateLifecycleProcessor {
           versionLine +
           this.formatRepairOutcome(target, writtenPath, writtenRoot)
       ),
-      result.savedPath
+      result.savedPath,
+      result.writtenFiles
     );
   }
 

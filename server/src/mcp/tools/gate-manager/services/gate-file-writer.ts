@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { selectSavedPath } from '../../shared/saved-line.js';
 import { overlayDecidedYamlKeys } from '../../shared/yaml-key-overlay.js';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
@@ -171,6 +172,8 @@ export interface GateFileWriteResult {
    * was written, `guidance.md` for a guidance-only update. Set only when the write landed.
    */
   savedPath?: string;
+  /** Absolute paths of the files this write wrote, in write order. Set only when the write landed. */
+  writtenFiles?: string[];
   error?: string;
   verificationFailure?: ResourceVerificationFailurePayload;
 }
@@ -220,6 +223,7 @@ export class GateFileWriter {
       targets: [{ path: gateDir, kind: 'directory' }],
       mutate: async () => {
         const paths: string[] = [];
+        const writtenFiles: string[] = [];
         await mkdir(gateDir, { recursive: true });
         paths.push(gateDir);
 
@@ -227,9 +231,10 @@ export class GateFileWriter {
           const filePath = path.join(gateDir, file.relativePath);
           await writeFile(filePath, file.content, 'utf8');
           paths.push(filePath);
+          writtenFiles.push(filePath);
         }
 
-        return { paths };
+        return { paths, writtenFiles };
       },
       validate: () => this.verificationService.validateFile('gates', data.id, yamlPath),
       ...(options.commit !== undefined ? { commit: options.commit } : {}),
@@ -260,14 +265,17 @@ export class GateFileWriter {
       };
     }
 
-    // Names the file this call wrote, not the gate's primary file: a guidance-only update leaves
+    // Names a file this call wrote, not the gate's primary file: a guidance-only update leaves
     // `gate.yaml` untouched, and a `saved:` line naming it would point the caller at a file whose
-    // bytes did not change. `plan.files` is in write order, `gate.yaml` first, so a write of both
-    // names `gate.yaml`. A plan with no file (an update supplying no field) keeps `gate.yaml`.
-    const firstWritten = plan.files[0];
-    const savedPath =
-      firstWritten !== undefined ? path.join(gateDir, firstWritten.relativePath) : yamlPath;
-    return { success: true, paths: transactionResult.result?.paths ?? [], savedPath };
+    // bytes did not change. A plan with no file (an update supplying no field) writes nothing and
+    // reports no saved path, which `withSavedLine` refuses.
+    const writtenFiles = transactionResult.result?.writtenFiles ?? [];
+    return {
+      success: true,
+      paths: transactionResult.result?.paths ?? [],
+      savedPath: selectSavedPath(writtenFiles, yamlPath),
+      writtenFiles,
+    };
   }
 
   /**

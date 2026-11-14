@@ -7,9 +7,11 @@
  */
 
 import { existsSync } from 'fs';
-import { cp, mkdir, readFile } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile } from 'node:fs/promises';
 import { isDeepStrictEqual } from 'node:util';
 import { join, relative, sep } from 'path';
+
+import { selectSavedPath } from '../../shared/saved-line.js';
 
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { FileContentChange } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
@@ -57,6 +59,11 @@ export interface FrameworkFileResult {
    * rewrote alone. Set only when the write landed.
    */
   savedPath?: string;
+  /**
+   * Absolute paths of the files this write wrote, in write order: every file a copy-on-write
+   * copied up, then each planned file not already among them. Set only when the write landed.
+   */
+  writtenFiles?: string[];
   error?: string;
 }
 
@@ -453,9 +460,18 @@ export class FrameworkFileWriter {
       targets: [{ path: frameworkDir, kind: 'directory' }],
       mutate: async () => {
         const paths: string[] = [];
+        const writtenFiles: string[] = [];
 
         if (copyOnWriteSource !== null) {
           await cp(copyOnWriteSource, frameworkDir, { recursive: true });
+          // `frameworkDir` did not exist before the copy (the copy-on-write condition), so every
+          // file under it now is one this call wrote.
+          const copied = await readdir(frameworkDir, { recursive: true, withFileTypes: true });
+          writtenFiles.push(
+            ...copied
+              .filter((entry) => entry.isFile())
+              .map((entry) => join(entry.parentPath, entry.name))
+          );
           this.logger.info(
             `Copied framework '${data.id}' from ${copyOnWriteSource} into ${frameworkDir} before editing — ` +
               'this is now a separate copy, and updates to the bundled framework will not reach it'
@@ -469,9 +485,10 @@ export class FrameworkFileWriter {
           const filePath = join(frameworkDir, file.relativePath);
           await safeWriteFile(filePath, file.content);
           paths.push(filePath);
+          if (!writtenFiles.includes(filePath)) writtenFiles.push(filePath);
         }
 
-        return { paths };
+        return { paths, writtenFiles };
       },
       validate: () =>
         this.verificationService.validateFile('frameworks', data.id, frameworkYamlPath),
@@ -487,16 +504,17 @@ export class FrameworkFileWriter {
       };
     }
 
-    // Names the file this call wrote, not the framework's primary file: a phases-only or
-    // judge-prompt-only update leaves `framework.yaml` untouched. `plan.files` is in write order,
-    // `framework.yaml` first; a copy-on-write lands `framework.yaml` as well, and a plan with no
-    // file keeps it.
-    const firstWritten = plan.files[0];
-    const savedPath =
-      copyOnWriteSource === null && firstWritten !== undefined
-        ? join(frameworkDir, firstWritten.relativePath)
-        : frameworkYamlPath;
-    return { success: true, paths: txResult.result?.paths ?? [], savedPath };
+    // Names a file this call wrote, not the framework's primary file: a phases-only or
+    // judge-prompt-only update leaves `framework.yaml` untouched, while a copy-on-write lands
+    // `framework.yaml` as well. A plan with no file and no copy (an update whose merge changes
+    // nothing) writes nothing and reports no saved path, which `withSavedLine` refuses.
+    const writtenFiles = txResult.result?.writtenFiles ?? [];
+    return {
+      success: true,
+      paths: txResult.result?.paths ?? [],
+      savedPath: selectSavedPath(writtenFiles, frameworkYamlPath),
+      writtenFiles,
+    };
   }
 
   /**
