@@ -139,6 +139,21 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     }
   };
 
+  /**
+   * The control invariant: an out-of-band edit is captured exactly once, by whichever writer saw
+   * it first. The running server's watcher records it as `Update via filesystem` when its 1 s
+   * debounce fires before the tool write; otherwise the versioning service bridges it as
+   * `Bridge: prior live state`. Which one wins is timing (a loaded runner flips it), so the
+   * assertion is on the row's VALUE — the snapshot carries the edited `name` — not its label.
+   */
+  const expectOobCapturedOnce = (rows: VersionRow[]): void => {
+    expect(rows).toHaveLength(3);
+    expect(rows[0]!.description).toBe('Created via cpm');
+    expect(rows[1]!.description).toMatch(/^(Update via filesystem|Bridge: prior live state)/);
+    expect((JSON.parse(rows[1]!.snapshot) as Record<string, unknown>)['name']).toBe('Control OOB');
+    expect(rows[2]!.description).toBe('Update via resource_manager');
+  };
+
   const treeEntries = (rowId: number): Array<{ path: string; object_hash: string }> => {
     const db = new DatabaseSync(path.join(workspace, 'runtime-state', 'state.db'));
     const entries = db
@@ -283,7 +298,7 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     expect(historyRows('prompt', 'linked_prompt')).toHaveLength(3);
   });
 
-  it('lets the server edit a cpm-created PROMPT without a bridge row, and versions the file when it moved', async () => {
+  it('lets the server edit a cpm-created PROMPT without a bridge row, and captures the out-of-band edit once, by whichever writer saw it first', async () => {
     // The prompt half of the parity assertion below. The observable is the same: a bridge row
     // appears exactly when the server's live projection does not hash-equal the newest recorded
     // snapshot, so its absence says `cpm`'s loader-backed projection and the server's are one
@@ -321,16 +336,10 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
       'Created via cpm',
       'Update via resource_manager',
     ]);
-    // The out-of-band edit is versioned by the running server's watcher (R5), so the server's own
-    // edit then needs no bridge: the extra row is the watcher's, and it appears only because the
-    // watcher's projection of the moved file differs from the row `cpm` wrote. The parity twin
-    // has no such row, which says the two projections of the unmoved file are one value.
-    const control = historyRows('prompt', 'control_prompt').map((row) => row.description);
-    expect(control).toEqual([
-      'Created via cpm',
-      'Update via filesystem',
-      'Update via resource_manager',
-    ]);
+    // The extra row exists only because the projection of the moved file differs from the row
+    // `cpm` wrote; the parity twin has no such row, which says the two projections of the unmoved
+    // file are one value.
+    expectOobCapturedOnce(historyRows('prompt', 'control_prompt'));
   }, 120000);
 
   it('says a created style records nothing because styles carry no history', () => {
@@ -339,7 +348,7 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     expect(String(reply['not_recorded_reason'])).toContain('no version history');
   });
 
-  it('lets the server edit a cpm-created gate without a bridge row, and versions the file when it moved', async () => {
+  it('lets the server edit a cpm-created gate without a bridge row, and captures the out-of-band edit once, by whichever writer saw it first', async () => {
     // The parity assertion. A bridge row appears exactly when the newest recorded snapshot does
     // not hash-equal the server's live projection, so its ABSENCE here is the statement that
     // `cpm`'s create snapshot and the server's projection of the same resource are the same
@@ -371,14 +380,9 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     }
 
     const parity = historyRows('gate', 'parity_gate').map((row) => row.description);
-    const control = historyRows('gate', 'control_gate').map((row) => row.description);
 
     expect(parity).toEqual(['Created via cpm', 'Update via resource_manager']);
-    expect(control).toEqual([
-      'Created via cpm',
-      'Update via filesystem',
-      'Update via resource_manager',
-    ]);
+    expectOobCapturedOnce(historyRows('gate', 'control_gate'));
   }, 120000);
 
   it("records one version for a cpm write the running server watches, under cpm's description", async () => {
