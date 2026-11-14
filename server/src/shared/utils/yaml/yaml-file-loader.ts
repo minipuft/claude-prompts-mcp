@@ -10,12 +10,7 @@ import { readFileSync, existsSync, readdirSync } from 'fs';
 import { readFile } from 'fs/promises';
 import { join, extname, basename } from 'path';
 
-import {
-  parseYaml,
-  parseYamlOrThrow,
-  type YamlParseOptions,
-  type YamlParseResult,
-} from './yaml-parser.js';
+import { parseYamlOrThrow, type YamlParseOptions } from './yaml-parser.js';
 
 /**
  * Options for file-based YAML loading
@@ -27,16 +22,6 @@ export interface YamlFileLoadOptions extends Omit<YamlParseOptions, 'filename'> 
   defaultValue?: unknown;
   /** Encoding for file read (default: utf-8) */
   encoding?: BufferEncoding;
-}
-
-/**
- * Result from file loading operation
- */
-export interface YamlFileLoadResult<T> extends YamlParseResult<T> {
-  /** Full path to the file */
-  filePath: string;
-  /** Whether file existed */
-  fileExists: boolean;
 }
 
 /**
@@ -91,57 +76,6 @@ export function loadYamlFileSync<T>(
 
   const content = readFileSync(filePath, encoding);
   return parseYamlOrThrow<T>(content, { ...options, filename: filePath });
-}
-
-/**
- * Load YAML file with full result information (sync)
- *
- * Returns detailed result object including file existence and parse status.
- * Useful when you need to distinguish between missing files and parse errors.
- *
- * @param filePath - Path to YAML file
- * @param options - Loading options
- * @returns Full result object with file and parse status
- */
-export function loadYamlFileWithResult<T>(
-  filePath: string,
-  options?: YamlFileLoadOptions
-): YamlFileLoadResult<T> {
-  const encoding = options?.encoding ?? 'utf-8';
-  const fileExists = existsSync(filePath);
-
-  if (!fileExists) {
-    return {
-      success: false,
-      fileExists: false,
-      filePath,
-      error: {
-        message: `File not found: ${filePath}`,
-        filename: filePath,
-      },
-    };
-  }
-
-  try {
-    const content = readFileSync(filePath, encoding);
-    const parseResult = parseYaml<T>(content, { ...options, filename: filePath });
-
-    return {
-      ...parseResult,
-      filePath,
-      fileExists: true,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      fileExists: true,
-      filePath,
-      error: {
-        message: error instanceof Error ? error.message : String(error),
-        filename: filePath,
-      },
-    };
-  }
 }
 
 /**

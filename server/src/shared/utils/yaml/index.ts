@@ -41,12 +41,10 @@ export {
 export {
   loadYamlFile,
   loadYamlFileSync,
-  loadYamlFileWithResult,
   discoverYamlFiles,
   discoverYamlDirectories,
   discoverNestedYamlDirectories,
   isYamlFile,
   getYamlBaseName,
   type YamlFileLoadOptions,
-  type YamlFileLoadResult,
 } from './yaml-file-loader.js';

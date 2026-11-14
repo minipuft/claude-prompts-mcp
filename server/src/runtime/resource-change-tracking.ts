@@ -136,7 +136,7 @@ export function trackedResourceRoots(
  * (`TrackedResourceType` is prompts and gates), so the startup walk and the removal sweep, which
  * feed the change log, never read them.
  */
-export function versionedFrameworkRoots(
+function versionedFrameworkRoots(
   configManager: ConfigLoader,
   pathResolver: PathResolver | undefined
 ): string[] {
