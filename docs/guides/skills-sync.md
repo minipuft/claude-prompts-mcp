@@ -24,7 +24,7 @@ cd server
 # Copy the example config and customize your exports
 cp skills-sync.example.yaml skills-sync.yaml
 
-# Export prompts to all configured clients
+# Export prompts to every client registered in skills-sync.yaml
 npm run skills:export
 
 # Check for drift between source and exported skills
@@ -75,8 +75,8 @@ list or `paths.writeTarget`, so it sees your workspace over the bundled tree and
 workspace's own `resources/` folder.
 
 `skills-sync.yaml` is read from the workspace when the workspace holds one, and from the package
-otherwise. Registrations an export adds are written back to the file that was read. Neither file is
-created for you.
+otherwise. `sync` writes the registrations it adds back to the file that was read; `export` only reads them.
+Neither file is created for you.
 
 Writes follow the same roots:
 
@@ -330,11 +330,24 @@ does.
 
 | Command  | NPM Script              | Purpose                                                                                                                                       |
 | -------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `export` | `npm run skills:export` | Write skill packages to configured output directories                                                                                         |
+| `export` | `npm run skills:export` | Write skill packages to the output directories of registered clients; never changes `registrations`                                           |
 | `sync`   | —                       | Export, then prune managed skills whose resource is no longer registered                                                                      |
 | `diff`   | `npm run skills:diff`   | Compare exported skills against the saved manifest, or against the would-be export when none is saved; `--output <dir>` writes `.patch` files |
 | `pull`   | `npm run skills:pull`   | Merge prose edited in an exported skill back into the canonical YAML                                                                          |
 | `clone`  | —                       | Create a canonical resource from an external `SKILL.md`                                                                                       |
+
+**`export` reads registrations and never writes them.** `--client all` (and no `--client` at all)
+means every client `skills-sync.yaml` registers, in any mode, so a client you left out of
+`registrations` is never exported to by accident, whatever `--id` says. When no client is registered,
+`--client all` refuses with a usage error rather than exporting to nothing. Naming one client with
+`--id` still exports to it, since `--id` names the resource outright; when that client does not
+register the resource, export writes the skill, prints
+`not registered: <client>; the skill is exported but not registered (run skills-sync sync --client <client> --id <id>)`
+and leaves `skills-sync.yaml` untouched. `export --preview` lists the skill files it would write and
+ends with `[preview] registrations unchanged`. Registering is `sync`'s job (or an edit to
+`registrations:` by hand), because a registration is a decision about what an operator wants served
+natively, and a writer that makes it silently also changes which prompts the MCP server stops
+listing (see [Auto-Deregistration](#auto-deregistration)).
 
 Every command accepts `--json`, which suppresses the progress log and writes a single
 machine-readable run summary to stdout — counts plus a `failures` array naming each resource

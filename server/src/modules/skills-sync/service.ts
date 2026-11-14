@@ -26,8 +26,11 @@ import {
   CLIENT_REGISTRY,
   clientScopeTargets,
   DIFF_TARGETS,
+  EXPORT_TARGETS,
+  namesEveryClient,
   PULL_TARGETS,
-  WRITER_TARGETS,
+  registeredClientIds,
+  SYNC_TARGETS,
   type AgentSkillsClientConfig,
   type ClaudeCodeClientConfig,
   type ClientConfig,
@@ -786,6 +789,36 @@ function filterResourcesForScope(
 
   return candidateResources.filter((ir) =>
     shouldExportForScope(manifestKey(ir), scope, selection.normalized)
+  );
+}
+
+/**
+ * The resources `target` exports that its client's registrations do not name for that scope.
+ * `--id` names a resource outright, so it can reach one the client's list leaves out; export
+ * writes it and registers nothing.
+ */
+function unregisteredResources(
+  resources: SkillIR[],
+  target: Pick<ClientTarget, 'scope' | 'selection'>
+): SkillIR[] {
+  const { scope, selection } = target;
+  if (selection.mode === 'all') return [];
+  if (selection.mode === 'unregistered') return resources;
+  return resources.filter(
+    (ir) => !selection.normalized.some((e) => e.key === manifestKey(ir) && e.scope === scope)
+  );
+}
+
+/**
+ * Refuse `--client all` (or no `--client`) when `skills-sync.yaml` registers no client: every
+ * client would be skipped and the run would write nothing, so say how to register one.
+ */
+function assertEveryClientHasRegistrations(opts: SkillsSyncOptions, config: SyncConfig): void {
+  if (!namesEveryClient(opts.client) || registeredClientIds(config).length > 0) return;
+  throw usageError(
+    '--client all targets the clients registered in skills-sync.yaml, and none is registered. ' +
+      'Add the client under `registrations:` in skills-sync.yaml, or register one resource for it ' +
+      'with `skills-sync sync --client <id> --id <resource>`.'
   );
 }
 
@@ -3417,9 +3450,9 @@ async function exportCommand(
   const configRaw = await readFile(configPath, 'utf-8');
   const configHash = computeContentHash([configRaw]);
 
-  const registrationMutations: RegistrationMutation[] = [];
+  assertEveryClientHasRegistrations(opts, config);
 
-  for (const target of clientScopeTargets(opts, config, paths, output, WRITER_TARGETS)) {
+  for (const target of clientScopeTargets(opts, config, paths, output, EXPORT_TARGETS)) {
     const { clientId, clientConfig, scope, baseDir } = target;
     const manifestEntries = new Map<string, SyncManifestEntry>();
 
@@ -3557,19 +3590,19 @@ async function exportCommand(
           ? `  manifest saved (${manifestEntries.size} entries, scope: ${scope})`
           : `  manifest NOT saved (no database) — ${manifestEntries.size} entries dropped; diff/prune will not see this export`
       );
-      registrationMutations.push({
-        clientId,
-        scope,
-        resourceKeys: scopedResources.map((resource) => manifestKey(resource)),
-      });
+    }
+
+    for (const ir of unregisteredResources(scopedResources, target)) {
+      output.log(
+        `  not registered: ${clientId}; the skill is exported but not registered ` +
+          `(run skills-sync sync --client ${clientId} --id ${ir.id})`
+      );
     }
   }
 
-  if (!opts.preview) {
-    const mutationResult = await applyRegistrationMutations(configPath, registrationMutations);
-    if (mutationResult.updated) {
-      output.log(`Updated skills-sync.yaml registrations (+${mutationResult.addedKeys} key(s))`);
-    }
+  // Export reads registrations and never writes them: `sync` reconciles them.
+  if (opts.preview) {
+    output.log('[preview] registrations unchanged');
   }
 }
 
@@ -3745,7 +3778,7 @@ async function syncCommand(
   );
   output.log(`Loaded ${resources.length} resources`);
 
-  for (const target of clientScopeTargets(opts, config, paths, output, WRITER_TARGETS)) {
+  for (const target of clientScopeTargets(opts, config, paths, output, SYNC_TARGETS)) {
     const { clientId, clientConfig, scope, baseDir } = target;
     const scopedResources = filterResourcesForScope(resources, target);
     const desiredResourceKeys = scopedResources.map((resource) => manifestKey(resource));
