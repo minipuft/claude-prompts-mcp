@@ -74,6 +74,7 @@ import type { Implementation } from '@modelcontextprotocol/server';
 import { FrameworkManager } from '#engine/frameworks/framework-manager.js';
 import { FrameworkStateStore } from '#engine/frameworks/framework-state-store.js';
 import { GateStateStore, createGateStateStore } from '#engine/gates/gate-state-store.js';
+import { createShellVerifyExecutor } from '#engine/gates/shell/index.js';
 import { PromptAssetManager } from '#modules/prompts/index.js';
 // Gate evaluator removed - now using Framework validation
 import { TextReferenceStore } from '#modules/text-refs/index.js';
@@ -304,6 +305,28 @@ export class McpToolRouter {
       configManager: this.configManager,
       onRefresh,
       resourceFileLocator: this.resourceFileLocator,
+      // `validate` runs a gate's examples under the same controls a review does: the operator's
+      // allowlist and allowed directories (read per execution), the gate master switch for the
+      // request's scope, and one log line per command run. A second instance of the pipeline's
+      // executor configuration, not a shared object: the pipeline is built later and lazily.
+      shellVerifyExecutor: createShellVerifyExecutor({
+        gateSystemEnabled: (scope) =>
+          this.gateStateStore?.isGateSystemEnabled(scope ?? this.servingUnitScope) ?? true,
+        onExecuted: (_gate, result, cwd) =>
+          this.logger.info('shell_verify (gate examples)', {
+            command: result.command,
+            cwd: cwd ?? null,
+            outcome:
+              result.refused === true
+                ? 'refused'
+                : result.timedOut === true
+                  ? 'timed out'
+                  : result.passed
+                    ? 'passed'
+                    : 'failed',
+            exitCode: result.exitCode,
+          }),
+      }),
     });
 
     // Initialize category manager tool. Constructed HERE rather than beside the framework tool

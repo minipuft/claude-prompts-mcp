@@ -852,7 +852,7 @@ All resource types support these actions:
 | ---------- | ------------------------ | ------------------------------------ | -------------------------------------- |
 | `list`     | List all resources       | —                                    | _Prefer `resource://` URIs_            |
 | `inspect`  | Get resource details     | `id`                                 | _Prefer `resource://` URIs_            |
-| `validate` | Preview prompt creation  | `id`, `name`, `description`, content | Prompt-only; never writes              |
+| `validate` | Check without writing    | `id`; a prompt adds its draft fields | Prompt and gate; never writes          |
 | `preview`  | Render a mutation        | `id`, `preview_action`               | Never writes; takes no `confirm`       |
 | `create`   | Create new resource      | `id`, type-specific                  |                                        |
 | `update`   | Modify existing resource | `id`, fields to update               |                                        |
@@ -1224,6 +1224,31 @@ resource_manager(resource_type:"gate", action:"update", id:"source-verification"
 # Delete a gate
 resource_manager(resource_type:"gate", action:"delete", id:"old-gate", confirm:true)
 ```
+
+`validate` on a gate runs the examples its author placed beside `gate.yaml` (`examples:`, each a
+file and the outcome it should get) through the gate's own check, with the same allowlist, allowed
+directories and refused environment keys a review uses, and appends one line per example. It
+writes nothing and records no version. A gate that declares no examples answers with its header
+alone; a `✗` or `⛔` line makes the reply an error, and `structuredContent.examples` carries the
+whole report.
+
+```text
+resource_manager(resource_type:"gate", action:"validate", id:"handoff-artifacts")
+
+✅ **Gate loads**: `handoff-artifacts`
+
+Nothing written; no version recorded.
+
+Examples (2)
+✓ examples/pass.md — expected pass, got pass
+✓ examples/fail-missing-artifact.md — expected fail, got fail
+```
+
+The other three line shapes: `✗ <file> — expected pass, got fail (mismatch): <exit status>`;
+`⛔ <file> — expected pass, refused: <reason>` when the executor would not run the command (an
+unset `MCP_SHELL_VERIFY_ALLOWLIST` refuses every example); and, for a gate judged by the client
+model, a header reading `Examples (2) — executed: no (judged by the client model; examples are not
+executed)` over `· <file> — expected pass, not executed: <reason>` lines.
 
 ### Frameworks
 

@@ -16,6 +16,16 @@ pass_criteria:
     shell_stdin_source: agent_response
     shell_timeout: 10000
 
+# Replies this gate's check must pass and fail. `resource_manager` validate on this gate runs
+# each one through the command above; paths in them are read where the check runs.
+examples:
+  - file: examples/pass.md
+    expect: pass
+  - file: examples/fail-missing-artifact.md
+    expect: fail
+  - file: examples/fail-no-artifacts-line.md
+    expect: fail
+
 retry_config:
   max_attempts: 2
   improvement_hints: true

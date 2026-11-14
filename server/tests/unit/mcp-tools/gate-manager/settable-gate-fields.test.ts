@@ -632,11 +632,27 @@ describe('settable gate fields (P4.4)', () => {
  */
 describe('callerSuppliedGateKeys covers every settable gate-data key (P4.100)', () => {
   /**
-   * Every gate-data key a caller can address. There is no exception list: `evaluation` was the
-   * last key without a parameter, and P4.121 declared it, so every key the writer can narrow by is
-   * one a caller can supply.
+   * Gate-data keys no caller addresses, each with why and what flips it. `evaluation` was the last
+   * key without a parameter until P4.121 declared it; `examples` is the one exception since.
    */
-  const settableKeys = (): string[] => [...ALL_GATE_DATA_KEYS].sort();
+  const NOT_CALLER_SETTABLE: ReadonlyMap<string, string> = new Map([
+    [
+      'examples',
+      'data an author places beside a gate; resource_manager validates and runs examples but ' +
+        'does not write them (ruling R3x) · flips when a writer writes example files',
+    ],
+  ]);
+
+  /** Every gate-data key a caller can address. */
+  const settableKeys = (): string[] =>
+    [...ALL_GATE_DATA_KEYS].filter((key) => !NOT_CALLER_SETTABLE.has(key)).sort();
+
+  it('names only exceptions that are gate-data keys', () => {
+    // An exception for a key the schema no longer declares would read as coverage for nothing.
+    for (const key of NOT_CALLER_SETTABLE.keys()) {
+      expect(ALL_GATE_DATA_KEYS.has(key)).toBe(true);
+    }
+  });
 
   /** One value per key, under the TOOL's spelling of it. */
   const everyKeySupplied: GateManagerInput = {
