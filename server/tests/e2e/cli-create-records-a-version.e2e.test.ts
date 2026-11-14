@@ -117,6 +117,23 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     return rows;
   };
 
+  /**
+   * Waits until the watcher has recorded an out-of-band edit. The observer debounces by 1 s, so a
+   * tool write that lands first would bridge instead and the row under test would never exist;
+   * the control case asserts the watcher's row, so it waits for that row rather than a clock.
+   */
+  const waitForHistoryRows = async (
+    type: string,
+    id: string,
+    count: number,
+    timeoutMs = 10000
+  ): Promise<void> => {
+    const deadline = Date.now() + timeoutMs;
+    while (historyRows(type, id).length < count && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  };
+
   const treeEntries = (rowId: number): Array<{ path: string; object_hash: string }> => {
     const db = new DatabaseSync(path.join(workspace, 'runtime-state', 'state.db'));
     const entries = db
@@ -283,6 +300,7 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     await writeFile(controlYaml, before.replace('name: Control', 'name: Control OOB'), 'utf8');
 
     await new Promise((resolve) => setTimeout(resolve, WATCHER_RELOAD_MS));
+    await waitForHistoryRows('prompt', 'control_prompt', 2);
 
     for (const id of ['parity_prompt', 'control_prompt']) {
       const updated = await callTool('resource_manager', {
@@ -335,6 +353,7 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     await writeFile(controlYaml, before.replace('name: Control', 'name: Control OOB'), 'utf8');
 
     await new Promise((resolve) => setTimeout(resolve, WATCHER_RELOAD_MS));
+    await waitForHistoryRows('gate', 'control_gate', 2);
 
     for (const id of ['parity_gate', 'control_gate']) {
       const updated = await callTool('resource_manager', {
