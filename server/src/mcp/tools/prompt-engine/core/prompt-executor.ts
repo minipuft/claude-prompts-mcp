@@ -69,6 +69,11 @@ import {
 import { GateManagerProvider } from '#engine/gates/registry/gate-provider-adapter.js';
 import { GateReferenceResolver } from '#engine/gates/services/gate-reference-resolver.js';
 import {
+  ShellVerifyExecutor,
+  createShellVerifyExecutor,
+  logShellVerifyRuns,
+} from '#engine/gates/shell/index.js';
+import {
   createVerifyActiveStateStore,
   type VerifyActiveStateStore,
 } from '#engine/gates/shell/verify-active-state-store.js';
@@ -122,6 +127,8 @@ export class PromptExecutor {
   private readonly lightweightGateSystem: LightweightGateSystem;
   private readonly gateReferenceResolver: GateReferenceResolver;
   private readonly gateGuidanceRenderer: GateGuidanceRenderer;
+  /** The process's one shell executor; see {@link getShellVerifyExecutor}. */
+  private readonly shellVerifyExecutor: ShellVerifyExecutor;
   private readonly chainSessionStore: ChainSessionService;
   /**
    * The same instance as `chainSessionStore`, kept at its concrete type for the one call that
@@ -277,6 +284,12 @@ export class PromptExecutor {
     const gateProvider = new GateManagerProvider(gateManager, temporaryGateRegistry);
     this.lightweightGateSystem = new LightweightGateSystem(gateProvider, temporaryGateRegistry);
     this.gateReferenceResolver = new GateReferenceResolver(this.lightweightGateSystem.gateLoader);
+    // Built here, not with the pipeline: the pipeline is built lazily on the first request, and
+    // `resource_manager validate` needs the same instance before that.
+    this.shellVerifyExecutor = createShellVerifyExecutor({
+      gateSystemEnabled: (scope) => this.lightweightGateSystem.isGateSystemEnabled(scope),
+      onExecuted: logShellVerifyRuns(logger),
+    });
     this.gateGuidanceRenderer = createGateGuidanceRenderer(logger, {
       gateLoader: this.lightweightGateSystem.gateLoader,
       temporaryGateRegistry:
@@ -427,6 +440,15 @@ export class PromptExecutor {
 
   getGateGuidanceRenderer(): GateGuidanceRenderer {
     return this.gateGuidanceRenderer;
+  }
+
+  /**
+   * The one executor every shell check runs through: the pipeline's verify stage and gate
+   * reviews, and `resource_manager validate` running a gate's examples. Same allowlist, allowed
+   * directories, master switch and log line on every path.
+   */
+  getShellVerifyExecutor(): ShellVerifyExecutor {
+    return this.shellVerifyExecutor;
   }
 
   /**
@@ -1270,6 +1292,7 @@ export class PromptExecutor {
         gateManager: this.gateManager,
         gateReferenceResolver: this.gateReferenceResolver,
         gateGuidanceRenderer: this.gateGuidanceRenderer,
+        shellVerifyExecutor: this.shellVerifyExecutor,
         chainOperatorExecutor: this.chainOperatorExecutor,
         responseFormatter: this.responseFormatter,
         referenceResolver: this.referenceResolver,

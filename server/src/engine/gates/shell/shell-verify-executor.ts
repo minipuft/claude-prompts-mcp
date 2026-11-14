@@ -24,6 +24,7 @@ import {
 import { isWorkingDirAllowed, loadShellVerifyAllowedDirs } from './shell-working-dir-policy.js';
 import { SHELL_OUTPUT_MAX_CHARS } from './types.js';
 
+import type { Logger } from '#infra/logging/index.js';
 import type { StateStoreOptions } from '#shared/types/persistence.js';
 import type { ShellVerifyGate, ShellVerifyResult, ShellVerifyExecutorConfig } from './types.js';
 
@@ -38,7 +39,7 @@ import { executeProcess, findUnsafeEnvironmentKeys } from '#shared/utils/process
  *
  * @example
  * ```typescript
- * const executor = new ShellVerifyExecutor({ gateSystemEnabled: () => true });
+ * const executor = createShellVerifyExecutor({ gateSystemEnabled: () => true });
  *
  * const result = await executor.execute({
  *   command: 'npm test',
@@ -252,7 +253,38 @@ export class ShellVerifyExecutor {
 
 /**
  * Factory function; `gateSystemEnabled` is required, the rest default.
+ *
+ * The server builds ONE executor, in `PromptExecutor`, and hands that instance to every path that
+ * runs a shell check: the pipeline's inline `:: verify:` stage, gate-review criteria, and
+ * `resource_manager validate` running a gate's examples. Two instances built from the same
+ * settings agree only until one of them is configured differently, which is how a review once
+ * ran under controls the inline stage did not.
  */
 export function createShellVerifyExecutor(config: ShellVerifyExecutorConfig): ShellVerifyExecutor {
   return new ShellVerifyExecutor(config);
+}
+
+/**
+ * The observer the server's executor logs through: one `shell_verify` line per run, so the
+ * operator who allowlisted a command can see each time a gate ran it — the command, where, and
+ * what came back. Refusals are logged as refusals.
+ */
+export function logShellVerifyRuns(
+  logger: Logger
+): NonNullable<ShellVerifyExecutorConfig['onExecuted']> {
+  return (_gate, result, cwd) =>
+    logger.info('shell_verify', {
+      command: result.command,
+      cwd: cwd ?? null,
+      outcome:
+        result.refused === true
+          ? 'refused'
+          : result.timedOut === true
+            ? 'timed out'
+            : result.passed
+              ? 'passed'
+              : 'failed',
+      exitCode: result.exitCode,
+      durationMs: result.durationMs,
+    });
 }

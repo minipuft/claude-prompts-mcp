@@ -22,6 +22,7 @@ import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
 import type { GateReferenceResolver } from '#engine/gates/services/gate-reference-resolver.js';
 import type { ScriptToolRuntimeProvider } from '#engine/gates/services/script-tool-criterion-runner.js';
+import type { ShellVerifyExecutor } from '#engine/gates/shell/shell-verify-executor.js';
 import type { VerifyActiveStateStore } from '#engine/gates/shell/verify-active-state-store.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type { StyleManager } from '#modules/formatting/index.js';
@@ -67,6 +68,12 @@ export interface PipelineDependencies {
   gateManager: GateManager;
   gateReferenceResolver: GateReferenceResolver;
   gateGuidanceRenderer: GateGuidanceRenderer;
+  /**
+   * The process's one shell executor, built by `PromptExecutor` and shared with
+   * `resource_manager validate` (`getShellVerifyExecutor`), so every shell check runs under one
+   * configuration.
+   */
+  shellVerifyExecutor: ShellVerifyExecutor;
 
   // ── Execution ──
   chainOperatorExecutor: ChainOperatorExecutor;
