@@ -14,11 +14,11 @@ tags: [resources, config, gates, skills-sync, runtime]
 
 # Resource locations, hand edits and gate examples
 
-## Now (2026-11-12)
+## Now (2026-11-13)
 
 Goal: a user keeps resources in labelled profiles that `cpm` manages and a client selects with one variable, the profile's config lists any further locations in one validated key, the server reports what it resolved and where it wrote, a file edited by hand gets the same guarantees as a tool write, and a command-checked gate ships the examples that prove it.
-Slice: T1b on `feat/resource-locations-t1b` from `main` (#539 merged as 35150934): #540 and #541 merged. T3 rows 3.1–3.5 done on `feat/resource-locations-t3`, boundary green, at its PR (3.6 opened from its findings); T2 rows 2.1–2.4 built on `feat/resource-locations-t2`, at its boundary. T2 follows from `main`; T4 rows 4.1–4.4 are built in the linked worktree `claude-prompts-mcp-t4` (`69e28475`). T0 is measured (notes §Tier T0).
-Next decision: none open; T1b (1.5, 1.8, 1.9, 1.11, 1.12, 1.6b, 1.13) follows T1a on its own branch from `main`.
+Slice: T3 on `feat/resource-locations-t3`: rows 3.1–3.5 done, boundary green (90 steps, unit 8131, integration 1919, verify:mcp 20/20), at its PR; row 3.6 opened from its findings. Merged: T1a #539, T1b #540, T4 #541. T2 rows 2.1–2.4 are built on `feat/resource-locations-t2` with its boundary green; its PR follows T3's merge.
+Next decision: none open.
 Constraint: Tier T1 changes what an existing variable serves, so it ships in 6.0.0. Tiers T2, T3 and T4 are additive and may land in 6.0.0 or the next minor. No new default directory is created under a user's home, and the server never writes a config file.
 
 ## Intent
