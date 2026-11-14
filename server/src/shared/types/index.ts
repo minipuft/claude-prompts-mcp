@@ -324,8 +324,14 @@ export type ChangeSource = 'filesystem' | 'mcp-tool' | 'external';
 /** Type of tracked resource */
 export type TrackedResourceType = 'prompt' | 'gate';
 
-/** Kind of change recorded against a resource */
-export type ChangeOperation = 'added' | 'modified' | 'removed';
+/**
+ * Kind of change recorded against a resource.
+ *
+ * `refused` is a file that changed on disk and that its loader will not load: the previous
+ * definition keeps serving, so nothing entered or left the catalog, and the row exists so the
+ * operator can see the edit and why it did not take effect.
+ */
+export type ChangeOperation = 'added' | 'modified' | 'removed' | 'refused';
 
 /** Individual change entry in the audit log */
 export interface ResourceChangeEntry {
@@ -337,6 +343,10 @@ export interface ResourceChangeEntry {
   filePath: string;
   contentHash: string;
   previousHash?: string;
+  /** See {@link LogChangeParams.versionRecorded}; absent when the row carries no version decision. */
+  versionRecorded?: boolean;
+  /** See {@link LogChangeParams.reason}. */
+  reason?: string;
 }
 
 /** Parameters for recording one change */
@@ -347,6 +357,17 @@ export interface LogChangeParams {
   resourceId: string;
   filePath: string;
   content?: string;
+  /**
+   * Whether this change wrote a `version_history` row, for a change whose version was decided
+   * before it was logged — a disk edit. Absent for rows that carry no version decision (a
+   * `resource_manager` write records its version itself; a startup baseline records none).
+   */
+  versionRecorded?: boolean;
+  /**
+   * Why: the loader's refusal for a `refused` row, or the persistence failure for a row with
+   * `versionRecorded: false`. Diagnostic text only, never resource content.
+   */
+  reason?: string;
 }
 
 /** Query parameters for reading back recorded changes */

@@ -2,9 +2,22 @@
 
 import { ActionHandler } from '../core/action-handler-base.js';
 
-import type { ToolResponse, ChangeSource, TrackedResourceType } from '#shared/types/index.js';
+import type {
+  ToolResponse,
+  ChangeOperation,
+  ChangeSource,
+  TrackedResourceType,
+} from '#shared/types/index.js';
 
 import { getResourceChangeLog } from '#shared/core/resource-change-log.js';
+
+/** One icon per operation; a `refused` row is an edit the loader would not load. */
+const OPERATION_ICONS: Record<ChangeOperation, string> = {
+  added: '➕',
+  removed: '➖',
+  modified: '✏️',
+  refused: '⛔',
+};
 
 export class ChangesActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
@@ -71,12 +84,18 @@ export class ChangesActionHandler extends ActionHandler {
 
       for (const change of srcChanges.slice(0, 10)) {
         const timestamp = new Date(change.timestamp).toLocaleString();
-        const opIcon =
-          change.operation === 'added' ? '➕' : change.operation === 'removed' ? '➖' : '✏️';
-
-        response += `${opIcon} **${change.resourceType}**: \`${change.resourceId}\`\n`;
+        response += `${OPERATION_ICONS[change.operation]} **${change.resourceType}**: \`${change.resourceId}\`\n`;
         response += `   - Time: ${timestamp}\n`;
         response += `   - Operation: ${change.operation}\n`;
+        if (change.operation === 'refused') {
+          response += `   - File: ${change.filePath}\n`;
+        }
+        if (change.versionRecorded !== undefined) {
+          response += `   - Version recorded: ${change.versionRecorded ? 'yes' : 'no'}\n`;
+        }
+        if (change.reason !== undefined) {
+          response += `   - Reason: ${change.reason}\n`;
+        }
         if (change.contentHash !== '') {
           response += `   - Hash: \`${change.contentHash.slice(0, 16)}...\`\n`;
         }

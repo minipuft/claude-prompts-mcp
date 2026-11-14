@@ -67,7 +67,25 @@ describe('ResourceQuarantine', () => {
       root: '/roots/a',
       path: '/roots/a/probecat/broken/prompt.yaml',
       error: 'arguments: expected array',
+      since: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
     });
+  });
+
+  it('keeps the first-refused time across a re-walk, and restarts it for a different reason', () => {
+    jest.useFakeTimers({ now: new Date('2026-11-01T00:00:00Z') });
+    try {
+      const quarantine = new ResourceQuarantine();
+      quarantine.beginRoot('prompt', '/roots/a').record(entry());
+
+      jest.setSystemTime(new Date('2026-11-02T00:00:00Z'));
+      quarantine.beginRoot('prompt', '/roots/a').record(entry());
+      expect(quarantine.list()[0]?.since).toBe('2026-11-01T00:00:00.000Z');
+
+      quarantine.beginRoot('prompt', '/roots/a').record(entry({ error: 'name: required' }));
+      expect(quarantine.list()[0]?.since).toBe('2026-11-02T00:00:00.000Z');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('carries no field that could be executed or rendered as instruction', () => {
@@ -81,6 +99,7 @@ describe('ResourceQuarantine', () => {
       'id',
       'path',
       'root',
+      'since',
       'type',
     ]);
   });

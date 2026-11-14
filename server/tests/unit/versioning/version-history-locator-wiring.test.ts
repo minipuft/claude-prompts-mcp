@@ -78,9 +78,10 @@ describe('VersionHistoryService locator wiring (source scan)', () => {
     }
 
     expect(unwired).toEqual([]);
-    // Four resource types, four tool handlers, four services. A different number means a site was
-    // added or removed and this gate's coverage claim needs re-reading, not adjusting.
-    expect(sites).toBe(4);
+    // Four resource types, four tool handlers, four services — plus the one the hot-reload watcher
+    // records disk edits through (`runtime/hot-reload-auxiliaries.ts`). A different number means a
+    // site was added or removed and this gate's coverage claim needs re-reading, not adjusting.
+    expect(sites).toBe(5);
   });
 
   it('observes an unwired site (positive control)', () => {

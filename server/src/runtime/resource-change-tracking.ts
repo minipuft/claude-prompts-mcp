@@ -20,6 +20,7 @@ import type {
 } from '#modules/hot-reload/hot-reload-observer.js';
 import type { FileChangeOperation } from '#shared/types/index.js';
 import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
+import type { DiskEditOutcome, DiskEditVersioning } from './disk-edit-versioning.js';
 import type { PathResolver } from './paths.js';
 
 import { ConfigLoader } from '#infra/config/index.js';
@@ -413,14 +414,113 @@ function servedChange(
     : { operation: 'modified', filePath: ownPath };
 }
 
+/** The entry files a resource directory can hold, in the order a companion is resolved against. */
+const RESOURCE_ENTRY_FILES = ['prompt.yaml', 'gate.yaml'] as const;
+
+/**
+ * The entry file a changed file belongs to: itself for a YAML file, and for a companion
+ * (`user-message.md`, `system-message.md`, `guidance.md`) the entry file beside it. A companion is
+ * part of its resource — the loader inlines it — so editing one changes what that id serves even
+ * though the entry file's bytes did not move. `undefined` for a file that is neither.
+ */
+function entryFileOf(filePath: string): { entryPath: string; companion: boolean } | undefined {
+  if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+    return { entryPath: filePath, companion: false };
+  }
+  const dir = path.dirname(filePath);
+  const entry = RESOURCE_ENTRY_FILES.map((name) => path.join(dir, name)).find((candidate) =>
+    existsSync(candidate)
+  );
+  return entry === undefined ? undefined : { entryPath: entry, companion: true };
+}
+
+/** The version half of a change-log row, from what the disk-edit recorder did or why it failed. */
+function versionFields(
+  outcome: DiskEditOutcome | undefined,
+  failure: string | undefined
+): { versionRecorded?: boolean; reason?: string } {
+  if (failure !== undefined) return { versionRecorded: false, reason: failure };
+  if (outcome?.kind === 'recorded') return { versionRecorded: true };
+  if (outcome?.kind === 'unchanged') return { versionRecorded: false };
+  // A purge records no version; the row says what a `resource_manager` delete row says.
+  return {};
+}
+
+/**
+ * Record what a served disk change did to the resource's history, THEN log the change.
+ *
+ * This is the boundary that catches. `DiskEditVersioning.record` throws when the database refuses
+ * a version write (persistence throws, architecture.md); the reload still runs, and the change-log
+ * row carries `versionRecorded: false` with the reason, so the gap is on the record rather than in
+ * a log line. A refused file records no version — the previous definition keeps serving — and is
+ * logged as `refused` with the loader's reason, against the file that changed.
+ */
+async function recordDiskChange(input: {
+  tracker: ResourceChangeTracker;
+  versions: DiskEditVersioning;
+  located: LocatedChange;
+  change: { operation: FileChangeOperation; filePath: string };
+  changedFile: string;
+  logger: Logger;
+}): Promise<void> {
+  const { tracker, versions, located, change, changedFile, logger } = input;
+  let outcome: DiskEditOutcome | undefined;
+  let failure: string | undefined;
+  try {
+    outcome = await versions.record({
+      resourceType: located.resourceType,
+      resourceId: located.resourceId,
+      operation: change.operation,
+      entryPath: change.filePath,
+    });
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error);
+    logger.error(
+      `Disk edit of ${located.resourceType} '${located.resourceId}' recorded no version: ${failure}`
+    );
+  }
+
+  const row =
+    outcome?.kind === 'refused'
+      ? { operation: 'refused' as const, filePath: changedFile, reason: outcome.reason }
+      : {
+          operation: change.operation,
+          filePath: change.filePath,
+          ...versionFields(outcome, failure),
+        };
+  if (outcome?.kind === 'refused') {
+    logger.warn(
+      `${located.resourceType} '${located.resourceId}' was edited on disk and refused by its ` +
+        `loader; the previous definition keeps serving: ${outcome.reason}`
+    );
+  }
+
+  try {
+    await tracker.logChange({
+      source: 'filesystem',
+      resourceType: located.resourceType,
+      resourceId: located.resourceId,
+      ...row,
+    });
+  } catch (error) {
+    logger.warn(`Failed to log filesystem change for ${located.resourceId}:`, error);
+  }
+}
+
 /**
  * Build auxiliary reload config for resource change tracking
  * Hooks into HotReloadObserver to track filesystem changes
+ *
+ * `versions` records the version each served disk edit produced, before the change is logged and
+ * — because the observer settles every auxiliary handler before its reload callback — before the
+ * reload that serves the edit. Required: a watcher that logged edits without versioning them is
+ * the gap this registration closes.
  */
 export function buildResourceChangeTrackerAuxiliaryReloadConfig(
   logger: Logger,
   configManager: ConfigLoader,
-  pathResolver: PathResolver | undefined
+  pathResolver: PathResolver | undefined,
+  versions: DiskEditVersioning
 ): AuxiliaryReloadConfig | undefined {
   const tracker = getResourceChangeTracker();
   if (tracker === undefined) {
@@ -448,36 +548,29 @@ export function buildResourceChangeTrackerAuxiliaryReloadConfig(
         return;
       }
 
-      const located = locateTrackedFile(
-        filePath,
-        trackedResourceRoots(configManager, pathResolver)
-      );
-      if (located === undefined) {
+      const entry = entryFileOf(filePath);
+      const located =
+        entry === undefined
+          ? undefined
+          : locateTrackedFile(entry.entryPath, trackedResourceRoots(configManager, pathResolver));
+      if (entry === undefined || located === undefined) {
         logger.debug(`Not a tracked resource file: ${filePath}`);
         return;
       }
-      const change = servedChange(located, event.changeType ?? 'modified');
+      // A companion added, edited or removed changes its resource; it never creates or deletes one.
+      const change = servedChange(
+        located,
+        entry.companion ? 'modified' : (event.changeType ?? 'modified')
+      );
       if (change === undefined) {
         logger.debug(`Shadowed by a higher-precedence root, not a served change: ${filePath}`);
         return;
       }
 
-      try {
-        await tracker.logChange({
-          source: 'filesystem',
-          operation: change.operation,
-          resourceType: located.resourceType,
-          resourceId: located.resourceId,
-          filePath: change.filePath,
-        });
-      } catch (error) {
-        logger.warn(`Failed to log filesystem change for ${located.resourceId}:`, error);
-      }
+      await recordDiskChange({ tracker, versions, located, change, changedFile: filePath, logger });
     },
-    match: (event) => {
-      // Only track YAML files
-      return event.filePath.endsWith('.yaml') || event.filePath.endsWith('.yml');
-    },
+    // YAML entry files, and the companion files beside one (`entryFileOf`).
+    match: (event) => entryFileOf(event.filePath) !== undefined,
     // Only the removal half: a newly watched folder reports every file in it as added, and a
     // removal needs no content, so no quarantine is consulted — a refused file is still on disk
     // and keeps its key.

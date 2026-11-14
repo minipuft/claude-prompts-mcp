@@ -565,7 +565,9 @@ export async function initializeModules(params: ModuleInitParams): Promise<Modul
   // One per process, on the tools manager rather than any registered `McpServer`, so STDIO and
   // each per-request HTTP server read the same locations, counts and same-id pairs. Filled by the
   // index sync below and by every hot-reload re-sync.
-  const locationLedger = new ResourceLocationLedger(pathResolver, logger);
+  // `indexQuarantine` is every loader's refusal record, the same collections the change tracker
+  // reads; `status` lists them under **Refused files**.
+  const locationLedger = new ResourceLocationLedger(pathResolver, logger, indexQuarantine);
   mcpToolsManager.setResourceLocationsView(locationLedger.view());
 
   // Wire DatabasePort early so sub-handlers have it before first use

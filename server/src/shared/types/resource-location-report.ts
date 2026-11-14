@@ -61,6 +61,22 @@ export interface ShadowedEntry {
   hiddenIn: string;
 }
 
+/**
+ * A resource file on disk that its loader refused, read from the loaders' own quarantine.
+ *
+ * The previous definition of that id, if there was one, is still the one served; this entry is
+ * how an operator who edited the file learns the edit did not take effect, and why.
+ */
+export interface RefusedFileEntry {
+  type: ReportedResourceKind;
+  id: string;
+  path: string;
+  /** The loader's reason. Diagnostic text only, never the file's content. */
+  reason: string;
+  /** ISO 8601 time the file was first refused for this reason; absent when the loader did not say. */
+  since?: string;
+}
+
 /** Everything `status` reports under **Resource locations**. */
 export interface ResourceLocationReport {
   /** Highest precedence first, as the prompt type's location list orders them. */
@@ -69,6 +85,8 @@ export interface ResourceLocationReport {
   profile: ProfileRegistryReading;
   /** Every same-id pair of the most recent index sync, served side first. */
   shadowed: ShadowedEntry[];
+  /** Every file a loader refuses right now, read live rather than from the latest sync. */
+  refused: RefusedFileEntry[];
 }
 
 /** The port the composition root wires into `system_control`. */

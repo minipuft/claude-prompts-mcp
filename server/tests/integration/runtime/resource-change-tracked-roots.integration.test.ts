@@ -30,6 +30,7 @@ import { testScratchPath } from '../../helpers/scratch-path.js';
 import type { ConfigLoader } from '../../../src/infra/config/index.js';
 import type { ResourceChangeTracker } from '../../../src/infra/observability/tracking/index.js';
 import type { AuxiliaryReloadConfig } from '../../../src/modules/hot-reload/hot-reload-observer.js';
+import type { DiskEditVersioning } from '../../../src/runtime/disk-edit-versioning.js';
 import type { FileChangeOperation, Logger } from '../../../src/shared/types/index.js';
 import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
@@ -48,6 +49,13 @@ const OVERLAY = path.join(WORKSPACE, 'prompts');
 const GATES = path.join(WORKSPACE, 'resources', 'gates');
 const BUNDLED = path.join(PACKAGE_ROOT, 'resources', 'prompts');
 const DB_PATH = path.join(TEST_DIR, 'runtime-state', 'state.db');
+
+/**
+ * This file pins WHICH change is logged under which id; what a disk edit records in
+ * `version_history` is `disk-edit-versioning.integration.test.ts`. A recorder that records nothing
+ * keeps the two questions apart.
+ */
+const NO_VERSIONS: DiskEditVersioning = { record: () => Promise.resolve({ kind: 'unchanged' }) };
 
 const configManager = {
   getResolvedPromptsDirectory: () => PRIMARY,
@@ -82,7 +90,8 @@ describe('the change tracker spans operator roots, one file per id', () => {
     const built = buildResourceChangeTrackerAuxiliaryReloadConfig(
       logger,
       configManager,
-      new PathResolver({ cli: {}, packageRoot: PACKAGE_ROOT })
+      new PathResolver({ cli: {}, packageRoot: PACKAGE_ROOT }),
+      NO_VERSIONS
     );
     if (built === undefined) throw new Error('tracker registration was not built');
     registration = built;
@@ -201,7 +210,12 @@ describe('the change tracker spans operator roots, one file per id', () => {
       getResolvedPromptsDirectory: () => resolver.getPromptsPath(),
       getGatesDirectory: () => resolver.getGatesPath(),
     } as unknown as ConfigLoader;
-    const built = buildResourceChangeTrackerAuxiliaryReloadConfig(logger, moving, resolver);
+    const built = buildResourceChangeTrackerAuxiliaryReloadConfig(
+      logger,
+      moving,
+      resolver,
+      NO_VERSIONS
+    );
     if (built === undefined) throw new Error('tracker registration was not built');
 
     try {

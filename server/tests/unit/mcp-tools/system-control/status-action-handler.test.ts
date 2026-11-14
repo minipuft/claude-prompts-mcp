@@ -42,6 +42,7 @@ const REPORT: ResourceLocationReport = {
       hiddenIn: '/ws/custom2/prompts/x/review/prompt.yaml',
     },
   ],
+  refused: [],
 };
 
 function makeContext(resourceLocations: ResourceLocationsView | undefined): SystemControlContext {

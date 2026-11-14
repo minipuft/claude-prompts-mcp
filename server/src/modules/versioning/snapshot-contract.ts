@@ -22,8 +22,11 @@ import type { ResourceType } from './types.js';
  *
  * Sibling of `BRIDGE_DESCRIPTION` (`cli-shared/version-history-rows.ts`), which already had to be
  * shared for exactly this reason.
+ *
+ * `filesystem` is a file edited on disk while the server ran, recorded by the hot-reload watcher
+ * (`runtime/disk-edit-versioning.ts`) before the reload that serves it.
  */
-export type VersionRowSurface = 'resource_manager' | 'cpm';
+export type VersionRowSurface = 'resource_manager' | 'cpm' | 'filesystem';
 
 export function createRowDescription(surface: VersionRowSurface): string {
   return `Created via ${surface}`;

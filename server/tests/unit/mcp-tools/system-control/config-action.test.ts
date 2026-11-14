@@ -24,6 +24,7 @@ import { ConfigActionHandler } from '../../../../src/mcp/tools/system-control/ha
 import { ConfigLoader } from '../../../../src/infra/config/index.js';
 import { PathResolver } from '../../../../src/runtime/paths.js';
 import { ResourceLocationLedger } from '../../../../src/runtime/resource-location-report.js';
+import { EMPTY_QUARANTINE_VIEW } from '../../../../src/shared/utils/resource-quarantine.js';
 import { isolateResourceLocations } from '../../../helpers/resource-locations.js';
 
 import type { SystemControlContext } from '../../../../src/mcp/tools/system-control/core/types.js';
@@ -301,7 +302,11 @@ describe('ConfigActionHandler read surface + refusal controls', () => {
         resolver.readResourceLocationsFrom(() => ({
           resources: manager.getConfig().paths.resources,
         }));
-        const ledger = new ResourceLocationLedger(resolver, makeContext(manager).logger);
+        const ledger = new ResourceLocationLedger(
+          resolver,
+          makeContext(manager).logger,
+          EMPTY_QUARANTINE_VIEW
+        );
         const handler = new ConfigActionHandler({
           ...makeContext(manager),
           resourceLocations: ledger.view(),

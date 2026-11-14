@@ -13,7 +13,7 @@ module wins and this file is stale.
 
 Not 11, and not 13. `tenants` was deleted at v19 (F10); `chain_run_registry` was deleted at v22
 (P3 Tier 4), replaced by the two per-row tables below; `objects` and `version_entries` were added
-at v29. The schema is at v35. SQLite auto-creates `sqlite_sequence` for
+at v29. The schema is at v36. SQLite auto-creates `sqlite_sequence` for
 any table declaring `AUTOINCREMENT`; it is never declared in `applySchema()` and is excluded via
 `SQLITE_INTERNAL_TABLES`. A startup assert written against a raw `sqlite_master` count throws on
 every boot.
@@ -178,6 +178,13 @@ changed, and the view is recreated on every boot, but the bump drops the rows a 
 under the old key. `chain_sessions` is `derived`, and `chain_runs` is `ephemeral`, so no
 `chain_runs` row older than v35 survives. That is what retired the pre-3.1 residual reader in
 `run-registry.ts`. No durable row was discarded.
+
+At v36 `resource_changes` gained `version_recorded` and `reason`. A file edited on disk records its
+version before the change is logged, so the row says whether a version was written (`1`), or not
+(`0`, with the persistence failure in `reason`); a file its loader refuses is logged with operation
+`refused` and the loader's reason. Both columns are NULL on rows that carry no version decision:
+`mcp-tool` writes, which record their own version, and the startup baseline. `resource_changes` is
+`derived`, so the bump drops its rows; no durable row was discarded.
 
 ## Live Run Ownership and Fresh-Process Handoff
 

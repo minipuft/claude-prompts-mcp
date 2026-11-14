@@ -28,12 +28,14 @@ import type {
   ConfiguredLocationEntry,
   ProfileRegistryReading,
   ReportedLocation,
+  RefusedFileEntry,
   ReportedResourceKind,
   ResourceLocationKind,
   ResourceLocationReport,
   ResourceLocationsView,
   ShadowedEntry,
 } from '#shared/types/resource-location-report.js';
+import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
 import type { PathResolver } from './paths.js';
 
 import { parseConfigText } from '#shared/utils/config-file-format.js';
@@ -175,9 +177,15 @@ export class ResourceLocationLedger {
   private served: ServedResourceFile[] = [];
   private readonly warned = new Set<string>();
 
+  /**
+   * @param refusals - the loaders' quarantine, merged across every kind the index walks. Read on
+   *   each `report()` rather than captured at a sync: a loader refuses a file in its own reload,
+   *   which does not always run an index sync (a gate edit reloads the gate alone).
+   */
   constructor(
     private readonly pathResolver: PathResolver,
-    private readonly logger: Logger
+    private readonly logger: Logger,
+    private readonly refusals: QuarantineView
   ) {}
 
   /**
@@ -293,6 +301,13 @@ export class ResourceLocationLedger {
         ? readProfileRegistry(this.pathResolver.getWorkspace())
         : { state: 'none' },
       shadowed,
+      refused: this.refusals.list().map((record): RefusedFileEntry => ({
+        type: record.type,
+        id: record.id,
+        path: record.path,
+        reason: record.error,
+        ...(record.since !== undefined ? { since: record.since } : {}),
+      })),
     };
   }
 

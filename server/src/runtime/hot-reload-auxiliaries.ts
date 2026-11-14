@@ -9,13 +9,15 @@
  * and one assembly call, not two.
  */
 
+import { DiskEditVersionRecorder } from './disk-edit-versioning.js';
 import { buildFrameworkAuxiliaryReloadConfig } from './framework-hot-reload.js';
 import { buildGateAuxiliaryReloadConfig } from './gate-hot-reload.js';
 import { buildResourceChangeTrackerAuxiliaryReloadConfig } from './resource-change-tracking.js';
-import { resolveResourceRoots } from './resource-roots.js';
+import { createResourceFileLocator, resolveResourceRoots } from './resource-roots.js';
 import { buildScriptAuxiliaryReloadConfig } from './script-hot-reload.js';
 import { buildStyleAuxiliaryReloadConfig } from './style-hot-reload.js';
 
+import type { ConvertedPrompt } from '#engine/execution/types.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { ConfigLoader } from '#infra/config/index.js';
 import type { Logger } from '#infra/logging/index.js';
@@ -25,6 +27,9 @@ import type { AuxiliaryReloadConfig } from '#modules/hot-reload/hot-reload-obser
 import type { PromptAssetManager } from '#modules/prompts/index.js';
 import type { PathResolver } from './paths.js';
 
+import { SqliteEngine } from '#infra/database/sqlite-engine.js';
+import { VersionHistoryService } from '#modules/versioning/index.js';
+
 export interface HotReloadAuxiliaryContext {
   logger: Logger;
   mcpToolsManager?: McpToolRouter;
@@ -33,9 +38,43 @@ export interface HotReloadAuxiliaryContext {
   promptsDir?: string;
   configManager: ConfigLoader;
   pathResolver: PathResolver;
+  /**
+   * The prompts the catalog serves right now. Read when a disk edit is recorded, which is before
+   * the reload replaces them — the state the edit changed (`disk-edit-versioning.ts`).
+   */
+  livePrompts: () => readonly ConvertedPrompt[];
 }
 
-/** Build every auxiliary reload config, in the order they were historically added. */
+/**
+ * The recorder the change tracker versions disk edits through: a `VersionHistoryService` over the
+ * same state database, launch workspace and file locator the `resource_manager` handlers use, and
+ * the live catalog as the prior state.
+ *
+ * Built here, beside the registration that uses it, because only the hot-reload path records
+ * versions for edits nobody made through a tool. The database is the process singleton the
+ * composition root already claimed and initialized (`module-initializer.ts`).
+ */
+async function createDiskEditVersioning(
+  context: HotReloadAuxiliaryContext
+): Promise<DiskEditVersionRecorder> {
+  const { logger, configManager, pathResolver, gateManager, livePrompts } = context;
+  const workspaceId = configManager.getConfig().identity.launchDefaults.workspaceId;
+  const versionHistory = new VersionHistoryService({
+    logger,
+    configManager,
+    resourceFileLocator: createResourceFileLocator(pathResolver),
+  });
+  const db = await SqliteEngine.getInstance(logger, {
+    dbPath: pathResolver.getStateDatabasePath(),
+  });
+  versionHistory.setDatabasePort(db, workspaceId != null ? { workspaceId } : undefined);
+  return new DiskEditVersionRecorder(versionHistory, {
+    prompt: (id) => livePrompts().find((prompt) => prompt.id === id),
+    gate: (id) => gateManager?.getGateRegistry().getGuide(id),
+  });
+}
+
+/** Build every auxiliary reload config, in the order the observer runs them. */
 async function buildHotReloadAuxiliaryConfigs(
   context: HotReloadAuxiliaryContext
 ): Promise<AuxiliaryReloadConfig[]> {
@@ -50,11 +89,19 @@ async function buildHotReloadAuxiliaryConfigs(
         })
       : undefined;
 
+  // The change tracker runs FIRST. The observer runs auxiliary handlers in this order, one after
+  // another, and the tracker records a disk edit's version with the catalog's current definition
+  // as the prior state — which the gate and framework handlers below replace when they reload.
   const configs = [
+    buildResourceChangeTrackerAuxiliaryReloadConfig(
+      logger,
+      configManager,
+      pathResolver,
+      await createDiskEditVersioning(context)
+    ),
     buildFrameworkAuxiliaryReloadConfig(logger, mcpToolsManager),
     buildGateAuxiliaryReloadConfig(logger, gateManager),
     scriptAux,
-    buildResourceChangeTrackerAuxiliaryReloadConfig(logger, configManager, pathResolver),
     await buildStyleAuxiliaryReloadConfig(logger, mcpToolsManager),
   ];
 

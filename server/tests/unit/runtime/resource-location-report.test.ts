@@ -24,6 +24,7 @@ import { TextReferenceStore } from '../../../src/modules/text-refs/index.js';
 import { PathResolver } from '../../../src/runtime/paths.js';
 import { syncResourceIndex } from '../../../src/runtime/resource-index-resync.js';
 import { ResourceLocationLedger } from '../../../src/runtime/resource-location-report.js';
+import { EMPTY_QUARANTINE_VIEW } from '../../../src/shared/utils/resource-quarantine.js';
 
 import type { ConfigManager, Logger } from '../../../src/shared/types/index.js';
 import type { QuarantineView } from '../../../src/shared/utils/resource-quarantine.js';
@@ -153,7 +154,7 @@ describe('status: the resolved stack, in order, with a count per location', () =
     writeGate(custom, 'tidy');
     writePrompt(custom2, 'gamma', 'Gamma.', 'G');
     const resolver = resolverWith([custom, custom2]);
-    const ledger = new ResourceLocationLedger(resolver, logger);
+    const ledger = new ResourceLocationLedger(resolver, logger, EMPTY_QUARANTINE_VIEW);
 
     await sync(resolver, ledger);
     const section = formatResourceLocations(ledger.view().report());
@@ -175,12 +176,12 @@ describe('status: the resolved stack, in order, with a count per location', () =
     writePrompt(custom, 'alpha', 'Alpha.', 'A');
 
     const listed = resolverWith([custom, 'bundled']);
-    const listedLedger = new ResourceLocationLedger(listed, logger);
+    const listedLedger = new ResourceLocationLedger(listed, logger, EMPTY_QUARANTINE_VIEW);
     await sync(listed, listedLedger);
     expect(formatResourceLocations(listedLedger.view().report())).toContain('bundled (listed)');
 
     const implicit = resolverWith([]);
-    const implicitLedger = new ResourceLocationLedger(implicit, logger);
+    const implicitLedger = new ResourceLocationLedger(implicit, logger, EMPTY_QUARANTINE_VIEW);
     await sync(implicit, implicitLedger);
     expect(formatResourceLocations(implicitLedger.view().report())).toContain('bundled (implicit)');
   });
@@ -195,14 +196,18 @@ describe('status: the profile registry beside the workspace parent', () => {
       '// cpm profiles\n{ "shadow": "./shadow", "team": "./team", "shared": "./shared", }\n'
     );
     const resolver = resolverWith([]);
-    const report = new ResourceLocationLedger(resolver, logger).view().report();
+    const report = new ResourceLocationLedger(resolver, logger, EMPTY_QUARANTINE_VIEW)
+      .view()
+      .report();
 
     expect(formatResourceLocations(report)).toContain('profile: shadow (siblings: team, shared)');
   });
 
   it('says unlabelled, with the labels it does name, when no label names this workspace', () => {
     writeFileSync(registry(), '{ "dev": "./dev" }');
-    const report = new ResourceLocationLedger(resolverWith([]), logger).view().report();
+    const report = new ResourceLocationLedger(resolverWith([]), logger, EMPTY_QUARANTINE_VIEW)
+      .view()
+      .report();
 
     expect(formatResourceLocations(report)).toContain(
       `profile: unlabelled (registry at ${registry()} names: dev)`
@@ -211,7 +216,9 @@ describe('status: the profile registry beside the workspace parent', () => {
 
   it('gives a malformed registry one line and does not throw', () => {
     writeFileSync(registry(), '{ "shadow": ');
-    const report = new ResourceLocationLedger(resolverWith([]), logger).view().report();
+    const report = new ResourceLocationLedger(resolverWith([]), logger, EMPTY_QUARANTINE_VIEW)
+      .view()
+      .report();
     const profileLines = formatResourceLocations(report)
       .split('\n')
       .filter((line) => line.startsWith('profile:'));
@@ -221,7 +228,9 @@ describe('status: the profile registry beside the workspace parent', () => {
   });
 
   it('prints no profile line when no registry sits beside the parent', () => {
-    const report = new ResourceLocationLedger(resolverWith([]), logger).view().report();
+    const report = new ResourceLocationLedger(resolverWith([]), logger, EMPTY_QUARANTINE_VIEW)
+      .view()
+      .report();
 
     expect(formatResourceLocations(report)).not.toContain('profile:');
   });
@@ -234,7 +243,7 @@ describe('a same-id pair between two custom locations (row 1.8)', () => {
     const earlier = writePrompt(custom, 'review', 'Review from custom.', 'EARLIER');
     const later = writePrompt(custom2, 'review', 'Review from custom2.', 'LATER');
     const resolver = resolverWith([custom, custom2]);
-    const ledger = new ResourceLocationLedger(resolver, logger);
+    const ledger = new ResourceLocationLedger(resolver, logger, EMPTY_QUARANTINE_VIEW);
 
     // Startup, then a hot-reload re-sync, then two status reads: still one warning.
     await sync(resolver, ledger);
@@ -258,7 +267,7 @@ describe('a same-id pair between two custom locations (row 1.8)', () => {
     const earlier = writePrompt(custom, 'review', 'Review from custom.', 'EARLIER', 'alpha');
     const later = writePrompt(custom2, 'review', 'Review from custom2.', 'LATER', 'beta');
     const resolver = resolverWith([custom, custom2]);
-    const ledger = new ResourceLocationLedger(resolver, logger);
+    const ledger = new ResourceLocationLedger(resolver, logger, EMPTY_QUARANTINE_VIEW);
 
     await sync(resolver, ledger);
     await sync(resolver, ledger);
@@ -274,7 +283,7 @@ describe('a same-id pair between two custom locations (row 1.8)', () => {
     writePrompt(custom, 'review', 'Review from custom.', 'CUSTOM', 'alpha');
     writePrompt(path.join(packageRoot, 'resources'), 'review', 'Bundled.', 'BUNDLED', 'beta');
     const resolver = resolverWith([custom, 'bundled']);
-    const ledger = new ResourceLocationLedger(resolver, logger);
+    const ledger = new ResourceLocationLedger(resolver, logger, EMPTY_QUARANTINE_VIEW);
 
     await sync(resolver, ledger);
 
@@ -293,7 +302,7 @@ describe('a same-id pair between two custom locations (row 1.8)', () => {
       'BUNDLED'
     );
     const resolver = resolverWith([custom, 'bundled']);
-    const ledger = new ResourceLocationLedger(resolver, logger);
+    const ledger = new ResourceLocationLedger(resolver, logger, EMPTY_QUARANTINE_VIEW);
 
     await sync(resolver, ledger);
 
