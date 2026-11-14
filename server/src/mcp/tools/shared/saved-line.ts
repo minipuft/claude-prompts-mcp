@@ -1,6 +1,11 @@
-// @lifecycle canonical - The `saved: <path>` line every resource_manager create and update ends with.
+// @lifecycle canonical - The `saved: <path>` line every resource_manager create, update and rollback ends with.
 
+import * as path from 'node:path';
+
+import type { RestorePlan } from '#modules/versioning/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
+
+import { resourceEntryFileName } from '#shared/utils/resource-file-set.js';
 
 /**
  * The file a write's `saved:` line names, chosen from the files the write actually wrote: the
@@ -20,7 +25,7 @@ export function selectSavedPath(
 }
 
 /**
- * End a create or update reply with where the write landed (ruling R3j): one final line,
+ * End a create, update or rollback reply with where the write landed (ruling R3j): one final line,
  * `saved: <absolute path of a file this write wrote>`, so the caller learns which of several
  * resource folders received the file without a follow-up `inspect`. A structured reply carries
  * the same path as `structuredContent.saved`, for a client that reads only the JSON half.
@@ -83,6 +88,28 @@ export function withWriteOutcome(
     return appendLastLine(response, NOTHING_WRITTEN_LINE);
   }
   return withSavedLine(response, result.savedPath, result.writtenFiles);
+}
+
+/**
+ * End a byte-exact rollback reply with what its restore wrote, as `withWriteOutcome` ends an
+ * update: the `saved:` line naming the resource's entry file when the restore wrote it, otherwise
+ * the first file it wrote, or the nothing-written line when every file already matched.
+ *
+ * The plan is the restore's own account of its writes: `applyByteRestore` writes exactly
+ * `plan.write`, each at its `absolutePath` under the root the resource is served from, so the
+ * line names where the restored bytes landed rather than where a write would go by default.
+ */
+export function withRestoreOutcome(response: ToolResponse, plan: RestorePlan): ToolResponse {
+  if (plan.resourceType === 'config') {
+    // `config` has no resource_manager rollback; `cpm` restores it (`cli-shared/config-restore.ts`).
+    throw new Error('A config restore reached a resource_manager rollback reply');
+  }
+  const writtenFiles = plan.write.map((file) => file.absolutePath);
+  const entryPath = path.resolve(plan.destinationRoot, resourceEntryFileName(plan.resourceType));
+  return withWriteOutcome(response, {
+    savedPath: selectSavedPath(writtenFiles, entryPath),
+    writtenFiles,
+  });
 }
 
 function appendLastLine(response: ToolResponse, line: string): ToolResponse {

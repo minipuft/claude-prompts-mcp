@@ -90,6 +90,8 @@ function createHarness(workspaceDir: string): Harness {
     getConfigPath: () => join(workspaceDir, 'config.yaml'),
     getServerRoot: () => workspaceDir,
     getResolvedPromptsDirectory: () => promptsDir,
+    // A rollback asks it to tell a bundled prompt from one served elsewhere (`rebuildRoot`).
+    getBundledResourceDirectory: () => undefined,
   } as unknown as ConfigManager;
   const dependencies = {
     logger,

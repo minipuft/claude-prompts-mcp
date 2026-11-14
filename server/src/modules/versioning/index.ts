@@ -22,7 +22,7 @@ export { describeRestorePlan, restoreWritesNothing } from './restore-plan.js';
 // `ByteRestoreAvailability` is deliberately NOT re-exported here: every consumer discriminates on
 // `.status` off the service method's return type and never names it, so the re-export would stand
 // in front of no importer.
-export { applyByteRestore } from './byte-restore.js';
+export { applyByteRestore, rebuildRoot } from './byte-restore.js';
 export {
   createRowDescription,
   updateRowDescription,

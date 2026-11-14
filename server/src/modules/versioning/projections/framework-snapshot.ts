@@ -99,6 +99,6 @@ export function projectFrameworkSnapshot(
     snapshot['system_prompt_guidance'] = systemPrompt;
   }
 
-  // Declared key order, always — `latestSnapshotMatches` is JSON.stringify equality (F18).
+  // Declared key order and key set, always — see `canonicalizeSnapshot` (F18).
   return canonicalizeSnapshot(snapshot, FRAMEWORK_SNAPSHOT_PROJECTED_KEYS);
 }

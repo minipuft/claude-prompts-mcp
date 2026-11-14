@@ -16,7 +16,11 @@ export type {
 
 export { SHELL_OUTPUT_MAX_CHARS, SHELL_VERIFY_DEFAULT_MAX_ITERATIONS } from './types.js';
 
-export { ShellVerifyExecutor, createShellVerifyExecutor } from './shell-verify-executor.js';
+export {
+  ShellVerifyExecutor,
+  createShellVerifyExecutor,
+  logShellVerifyRuns,
+} from './shell-verify-executor.js';
 
 // `shell-command-allowlist.js` is deliberately NOT re-exported here. Its only
 // production consumer is the executor beside it, which imports it directly, and

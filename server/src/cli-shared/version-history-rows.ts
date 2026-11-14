@@ -19,6 +19,10 @@ import type { HistoryResponse, HistoryRow, HistoryRowRequest } from './version-h
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 
 import { RESOURCE_SUBTREE_MATCH } from '#modules/versioning/history-key.js';
+import {
+  createRowDescription,
+  updateRowDescription,
+} from '#modules/versioning/snapshot-contract.js';
 import { hashCanonical } from '#shared/utils/hash.js';
 
 const ENTRY_COLUMNS = 'version, snapshot, diff_summary, description, created_at';
@@ -46,7 +50,10 @@ function snapshotIdentity(persistedJson: string): string {
  */
 export const BRIDGE_DESCRIPTION = 'Bridge: prior live state (era transition or out-of-band edit)';
 
-/** What one append did: the version that is now newest, and whether this call created it. */
+/**
+ * What one append did: the version that is now newest, and whether it records this call's write —
+ * a row this call inserted, or the watcher's identical row it renamed ({@link appendVersion}).
+ */
 export interface AppendOutcome {
   version: number;
   recorded: boolean;
@@ -90,20 +97,46 @@ function latestVersion(db: DatabaseSync, tenantId: string, request: HistoryRowRe
   return Number(row?.latest ?? 0);
 }
 
-/** The newest row's number and stored snapshot text, or `undefined` when there is no history. */
+/** The newest row: its id, number, stored snapshot text and description, or `undefined`. */
 function latestRow(
   db: DatabaseSync,
   tenantId: string,
   request: HistoryRowRequest
-): { version: number; snapshot: string } | undefined {
+): { id: number; version: number; snapshot: string; description: string | null } | undefined {
   return db
     .prepare(
-      `SELECT version, snapshot FROM version_history
+      `SELECT id, version, snapshot, description FROM version_history
        WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
        ORDER BY version DESC LIMIT 1`
     )
     .get(tenantId, request.resource_type, request.resource_id) as
-    { version: number; snapshot: string } | undefined;
+    { id: number; version: number; snapshot: string; description: string | null } | undefined;
+}
+
+/** What the running server's watcher calls the row it records for a file edited on disk. */
+const FILESYSTEM_ROW_DESCRIPTIONS: ReadonlySet<string> = new Set([
+  createRowDescription('filesystem'),
+  updateRowDescription('filesystem'),
+]);
+
+/**
+ * Whether the newest row is the watcher's record of the very write this call is recording.
+ *
+ * `cpm` writes its files and then its row; a server watching the same files records their bytes
+ * as `Update via filesystem` once its debounce settles. When the watcher's row lands first, the
+ * bytes are identical and skipping would leave the write named after the watcher rather than the
+ * command that made it. A bridge row is never this case: it records the state BEFORE the write,
+ * and a filesystem row holding that state is a real edit the bridge must not rename.
+ */
+function isWatcherRowOfThisWrite(
+  latest: { description: string | null },
+  description: string
+): boolean {
+  return (
+    description !== BRIDGE_DESCRIPTION &&
+    latest.description !== null &&
+    FILESYSTEM_ROW_DESCRIPTIONS.has(latest.description)
+  );
 }
 
 /**
@@ -124,6 +157,12 @@ function latestRow(
  * the numbering is: decided above the `BEGIN`, this process and the server could each compare
  * against a newest row the other was about to replace, and each conclude "unchanged" against a
  * stale maximum — so a real change would go unrecorded by both.
+ *
+ * **One exception renames instead of skipping**: when the identical newest row is the server
+ * watcher's record of this same write ({@link isWatcherRowOfThisWrite}), it takes this call's
+ * description, so one write is one row under the name of the command that made it whichever
+ * writer landed first. That row is the version this write produced, so `recorded` is `true`.
+ * The server's own recorder keeps skipping an identical newest row whatever it is called.
  */
 export function appendVersion(
   db: DatabaseSync,
@@ -165,7 +204,14 @@ function appendVersionRow(
   const payload = JSON.stringify(snapshot);
   const latest = latestRow(db, tenantId, request);
   if (latest !== undefined && snapshotIdentity(latest.snapshot) === snapshotIdentity(payload)) {
-    return { version: Number(latest.version), recorded: false };
+    if (!isWatcherRowOfThisWrite(latest, description)) {
+      return { version: Number(latest.version), recorded: false };
+    }
+    db.prepare(`UPDATE version_history SET description = ? WHERE id = ?`).run(
+      description,
+      latest.id
+    );
+    return { version: Number(latest.version), recorded: true };
   }
 
   const version = latestVersion(db, tenantId, request) + 1;

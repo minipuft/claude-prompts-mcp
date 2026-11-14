@@ -93,7 +93,6 @@ export {
   formatYamlError,
   loadYamlFile,
   loadYamlFileSync,
-  loadYamlFileWithResult,
   discoverYamlFiles,
   discoverYamlDirectories,
   discoverNestedYamlDirectories,
@@ -103,7 +102,6 @@ export {
   type YamlParseError,
   type YamlParseResult,
   type YamlFileLoadOptions,
-  type YamlFileLoadResult,
 } from '#shared/utils/yaml/index.js';
 
 // ── Versioning types (pure interfaces) ───────────────────────────────────────

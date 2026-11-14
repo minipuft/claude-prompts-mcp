@@ -55,7 +55,10 @@ const DB_PATH = path.join(TEST_DIR, 'runtime-state', 'state.db');
  * `version_history` is `disk-edit-versioning.integration.test.ts`. A recorder that records nothing
  * keeps the two questions apart.
  */
-const NO_VERSIONS: DiskEditVersioning = { record: () => Promise.resolve({ kind: 'unchanged' }) };
+const NO_VERSIONS: DiskEditVersioning = {
+  record: () => Promise.resolve({ kind: 'unchanged' }),
+  rememberLoadedCategories: () => {},
+};
 
 const configManager = {
   getResolvedPromptsDirectory: () => PRIMARY,

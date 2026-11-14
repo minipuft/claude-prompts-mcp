@@ -556,15 +556,20 @@ describe('Version History Workflow Integration', () => {
       promptsDir = path.join(tempDir, 'prompts');
       onRefreshCalls = 0;
       convertedPrompts = [];
+      // One double for both readers: the writer asks where to write, and the rollback asks for the
+      // bundled root to tell a bundled prompt from one served elsewhere (`rebuildRoot`).
+      const configManager = {
+        getResolvedPromptsDirectory: () => promptsDir,
+        getBundledResourceDirectory: () => undefined,
+      } as unknown as ConfigManager;
       fileOperations = new FileOperations({
         logger: mockLogger as unknown as Logger,
-        configManager: {
-          getResolvedPromptsDirectory: () => promptsDir,
-        } as unknown as ConfigManager,
+        configManager,
       });
       processor = new PromptVersioningProcessor({
         dependencies: {
           logger: mockLogger as unknown as Logger,
+          configManager,
           onRefresh: async () => {
             onRefreshCalls += 1;
           },

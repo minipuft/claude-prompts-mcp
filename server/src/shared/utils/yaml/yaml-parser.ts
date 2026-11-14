@@ -146,9 +146,8 @@ function parseStrictly<T>(content: string): T {
 
   // `parseDocument` COLLECTS problems instead of throwing them, so every one of these has to be
   // read explicitly. Reading them HERE is what makes the check universal: this function is the
-  // only parse in the codebase — `loadYamlFile`, `loadYamlFileSync` and `loadYamlFileWithResult`
-  // all route through `parseYaml` — so a per-caller check would be a rule each new caller could
-  // forget. Warnings are refused alongside errors because for untrusted input "the parser
+  // only parse in the codebase — `loadYamlFile` and `loadYamlFileSync` both route through
+  // `parseYaml` — so a per-caller check would be a rule each new caller could forget. Warnings are refused alongside errors because for untrusted input "the parser
   // resolved something it was not sure about" is not a thing to continue past.
   //
   // SUBSUMED, NOT DEAD (measured 2026-09-21 on yaml 2.9.1 · flips when a warning code appears

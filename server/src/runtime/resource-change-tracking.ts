@@ -6,7 +6,7 @@
  * and integrates with the ResourceChangeTracker for audit logging.
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import * as path from 'node:path';
 
@@ -20,7 +20,12 @@ import type {
 } from '#modules/hot-reload/hot-reload-observer.js';
 import type { FileChangeOperation } from '#shared/types/index.js';
 import type { QuarantineView } from '#shared/utils/resource-quarantine.js';
-import type { DiskEditOutcome, DiskEditVersioning } from './disk-edit-versioning.js';
+import type {
+  DiskEditOutcome,
+  DiskEditResourceType,
+  DiskEditVersioning,
+  LoadedCategoryFile,
+} from './disk-edit-versioning.js';
 import type { PathResolver } from './paths.js';
 
 import { ConfigLoader } from '#infra/config/index.js';
@@ -118,15 +123,35 @@ export function trackedResourceRoots(
   configManager: ConfigLoader,
   pathResolver: PathResolver | undefined
 ): TrackedResourceRoots {
-  const operatorRoots = (resourceType: string, primary: string | undefined): string[] => {
-    if (primary === undefined || primary === '') return [];
-    const roots = resolveResourceRoots(pathResolver, resourceType, primary);
-    return roots.lookupDirs.filter((dir) => dir !== roots.bundled);
-  };
   return {
-    prompt: operatorRoots('prompts', configManager.getResolvedPromptsDirectory()),
-    gate: operatorRoots('gates', gatesDirectoryOf(configManager)),
+    prompt: operatorRoots(pathResolver, 'prompts', configManager.getResolvedPromptsDirectory()),
+    gate: operatorRoots(pathResolver, 'gates', gatesDirectoryOf(configManager)),
   };
+}
+
+/**
+ * The framework roots a disk edit is versioned in, by the same rule as {@link
+ * trackedResourceRoots}: the primary and every overlay, never the bundled tree unless it is the
+ * primary. Apart from that record because frameworks are versioned but not change-logged
+ * (`TrackedResourceType` is prompts and gates), so the startup walk and the removal sweep, which
+ * feed the change log, never read them.
+ */
+function versionedFrameworkRoots(
+  configManager: ConfigLoader,
+  pathResolver: PathResolver | undefined
+): string[] {
+  return operatorRoots(pathResolver, 'frameworks', frameworksDirectoryOf(configManager));
+}
+
+/** One type's contributing roots, highest precedence first, without the bundled tree. */
+function operatorRoots(
+  pathResolver: PathResolver | undefined,
+  resourceType: string,
+  primary: string | undefined
+): string[] {
+  if (primary === undefined || primary === '') return [];
+  const roots = resolveResourceRoots(pathResolver, resourceType, primary);
+  return roots.lookupDirs.filter((dir) => dir !== roots.bundled);
 }
 
 /** The gates directory, or `undefined` when none is configured. */
@@ -137,6 +162,36 @@ function gatesDirectoryOf(configManager: ConfigLoader): string | undefined {
     // Gates directory may not be configured
     return undefined;
   }
+}
+
+/** The frameworks directory, or `undefined` when none is configured — the gates twin above. */
+function frameworksDirectoryOf(configManager: ConfigLoader): string | undefined {
+  try {
+    return configManager.getFrameworksDirectory();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The `category.yaml` each category id is served from: the highest-precedence prompts root holding
+ * one, the merge rule `prompt-root-loader.ts` applies to category metadata. A category directory
+ * is what the loader counts as one (`isExcludedCategoryDirectoryName`).
+ */
+function servedCategoryFiles(promptRoots: readonly string[]): LoadedCategoryFile[] {
+  const files: LoadedCategoryFile[] = [];
+  const seen = new Set<string>();
+  for (const root of promptRoots) {
+    if (!existsSync(root)) continue;
+    for (const entry of readdirSync(root, { withFileTypes: true })) {
+      if (!entry.isDirectory() || isExcludedCategoryDirectoryName(entry.name)) continue;
+      const entryPath = path.join(root, entry.name, CATEGORY_ENTRY_FILE);
+      if (seen.has(entry.name) || !existsSync(entryPath)) continue;
+      seen.add(entry.name);
+      files.push({ resourceId: entry.name, entryPath });
+    }
+  }
+  return files;
 }
 
 /** One resource as the tracker compares it: the id, and the file that serves it. */
@@ -314,7 +369,7 @@ export async function compareResourceBaseline(
 
 /** Where a changed file sits among the tracked roots, and what it is. */
 interface LocatedChange {
-  resourceType: TrackedResourceType;
+  resourceType: DiskEditResourceType;
   resourceId: string;
   /** Every tracked root of this type, highest precedence first. */
   roots: readonly string[];
@@ -323,11 +378,14 @@ interface LocatedChange {
   relative: string;
 }
 
+/** A category's one file, `{promptsRoot}/{category}/category.yaml`. */
+const CATEGORY_ENTRY_FILE = 'category.yaml';
+
+/** What a located file is: its kind, and its id when the layout gives it one. */
+type ResourceAt = { resourceType: DiskEditResourceType; resourceId: string | undefined };
+
 /** The resource a file in a prompts tree is, by the walk's own rules, or `undefined`. */
-function promptTreeResourceAt(
-  root: string,
-  filePath: string
-): { resourceType: TrackedResourceType; resourceId: string | undefined } | undefined {
+function promptTreeResourceAt(root: string, filePath: string): ResourceAt | undefined {
   const dir = path.dirname(filePath);
   const segments = path
     .relative(root, dir)
@@ -343,6 +401,13 @@ function promptTreeResourceAt(
   );
   const fileName = path.basename(filePath);
   if (skipped || isIgnoredPromptEntryName(fileName)) return undefined;
+  // A category is declared one level below the root and nowhere else; deeper, the name is a
+  // reserved prompt filename (`prompt-layout.ts`) and declares nothing the loader reads.
+  if (fileName === CATEGORY_ENTRY_FILE) {
+    return segments.length === 1
+      ? { resourceType: 'category', resourceId: segments[0] }
+      : undefined;
+  }
   if (fileName === 'prompt.yaml') {
     return { resourceType: 'prompt', resourceId: promptIdFromDirectory(root, dir) };
   }
@@ -353,13 +418,23 @@ function promptTreeResourceAt(
 }
 
 /** The resource a file in a flat gate root is, or `undefined`. */
-function gateRootResourceAt(
-  root: string,
-  filePath: string
-): { resourceType: TrackedResourceType; resourceId: string | undefined } | undefined {
+function gateRootResourceAt(root: string, filePath: string): ResourceAt | undefined {
   const segments = path.relative(root, filePath).split(path.sep);
   if (segments.length !== 2 || segments[1] !== 'gate.yaml') return undefined;
   return { resourceType: 'gate', resourceId: segments[0] };
+}
+
+/**
+ * The resource a file in a flat framework root is: `{root}/{id}/framework.yaml`, or `undefined`.
+ *
+ * The entry file only. A framework's `phases.yaml` and `judge-prompt.md` are outside what its
+ * version snapshot records (`FRAMEWORK_SNAPSHOT_PROJECTED_KEYS`), so an edit of one changes no
+ * recorded state and records nothing.
+ */
+function frameworkRootResourceAt(root: string, filePath: string): ResourceAt | undefined {
+  const segments = path.relative(root, filePath).split(path.sep);
+  if (segments.length !== 2 || segments[1] !== 'framework.yaml') return undefined;
+  return { resourceType: 'framework', resourceId: segments[0] };
 }
 
 /**
@@ -370,11 +445,17 @@ function gateRootResourceAt(
  */
 function locateTrackedFile(
   filePath: string,
-  roots: TrackedResourceRoots
+  roots: TrackedResourceRoots,
+  frameworkRoots: readonly string[]
 ): LocatedChange | undefined {
   const candidates = [
     ...roots.gate.map((root) => ({ root, typeRoots: roots.gate, at: gateRootResourceAt })),
     ...roots.prompt.map((root) => ({ root, typeRoots: roots.prompt, at: promptTreeResourceAt })),
+    ...frameworkRoots.map((root) => ({
+      root,
+      typeRoots: frameworkRoots,
+      at: frameworkRootResourceAt,
+    })),
   ]
     .filter(({ root }) => filePath.startsWith(`${root}${path.sep}`))
     .sort((a, b) => b.root.length - a.root.length);
@@ -495,10 +576,14 @@ async function recordDiskChange(input: {
     );
   }
 
+  // Frameworks and categories are versioned, not change-logged: the log's vocabulary is
+  // `TrackedResourceType`. Their refusal and failure reach the log lines above.
+  const resourceType = located.resourceType;
+  if (resourceType !== 'prompt' && resourceType !== 'gate') return;
   try {
     await tracker.logChange({
       source: 'filesystem',
-      resourceType: located.resourceType,
+      resourceType,
       resourceId: located.resourceId,
       ...row,
     });
@@ -533,11 +618,20 @@ export function buildResourceChangeTrackerAuxiliaryReloadConfig(
   // appears — so the handler and the reconciliation resolve the roots again rather than reading
   // the order at startup.
   const startupRoots = trackedResourceRoots(configManager, pathResolver);
-  const directories = [...new Set([...startupRoots.gate, ...startupRoots.prompt])];
+  const directories = [
+    ...new Set([
+      ...startupRoots.gate,
+      ...startupRoots.prompt,
+      ...versionedFrameworkRoots(configManager, pathResolver),
+    ]),
+  ];
   if (directories.length === 0) {
     logger.debug('No resource directories to watch for change tracking');
     return undefined;
   }
+  // The catalog has loaded by now: every served `category.yaml` is read once, as the prior state
+  // its first edit replaces (`disk-edit-versioning.ts`).
+  versions.rememberLoadedCategories(servedCategoryFiles(startupRoots.prompt));
 
   return {
     id: 'resource-change-tracker',
@@ -552,7 +646,11 @@ export function buildResourceChangeTrackerAuxiliaryReloadConfig(
       const located =
         entry === undefined
           ? undefined
-          : locateTrackedFile(entry.entryPath, trackedResourceRoots(configManager, pathResolver));
+          : locateTrackedFile(
+              entry.entryPath,
+              trackedResourceRoots(configManager, pathResolver),
+              versionedFrameworkRoots(configManager, pathResolver)
+            );
       if (entry === undefined || located === undefined) {
         logger.debug(`Not a tracked resource file: ${filePath}`);
         return;
@@ -575,10 +673,11 @@ export function buildResourceChangeTrackerAuxiliaryReloadConfig(
     // removal needs no content, so no quarantine is consulted — a refused file is still on disk
     // and keeps its key.
     reconcile: async () => {
-      const present = await collectTrackedResources(
-        trackedResourceRoots(configManager, pathResolver),
-        logger
-      );
+      const roots = trackedResourceRoots(configManager, pathResolver);
+      // A root that armed late serves its categories from now on; each one not already held is
+      // read before an edit of it can arrive.
+      versions.rememberLoadedCategories(servedCategoryFiles(roots.prompt));
+      const present = await collectTrackedResources(roots, logger);
       const removed = await tracker.sweepRemovals(present);
       if (removed > 0) {
         logger.info(`ResourceChangeTracker: reconciliation logged ${removed} removal(s)`);

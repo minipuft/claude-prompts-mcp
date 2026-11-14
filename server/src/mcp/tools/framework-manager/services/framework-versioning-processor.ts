@@ -3,6 +3,7 @@
 import { reregisterFramework } from './framework-reregistration.js';
 import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
+import { withRestoreOutcome, withWriteOutcome } from '../../shared/saved-line.js';
 
 import type { RestorePlan } from '#modules/versioning/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
@@ -15,6 +16,7 @@ import {
   describeRestorePlan,
   describeRollbackPreview,
   describeRollbackRecord,
+  rebuildRoot,
 } from '#modules/versioning/index.js';
 
 export class FrameworkVersioningProcessor {
@@ -63,8 +65,17 @@ export class FrameworkVersioningProcessor {
       return this.error(`Framework '${id}' not found`);
     }
 
+    // Where the framework is served from, unless that is the bundle: the projection rebuild below
+    // writes there, as a byte restore does (`rebuildRoot`), and the current state is read from the
+    // same files. A framework in a `paths.resources` folder is in neither root the file service
+    // looks in by itself, so without it this read found nothing and the rollback was refused.
+    const root = rebuildRoot(
+      existingFramework.sourceRoot,
+      this.ctx.configManager.getBundledResourceDirectory('frameworks')
+    );
+
     // Load existing data to capture current state
-    const existingData = await this.ctx.fileService.loadExistingFramework(id);
+    const existingData = await this.ctx.fileService.loadExistingFramework(id, root);
     if (existingData === null) {
       return this.error(`Failed to load current framework state`);
     }
@@ -117,7 +128,9 @@ export class FrameworkVersioningProcessor {
           id,
           version,
           this.ctx.textDiffService.generateFileChangeDiff(
-            await this.ctx.fileService.projectFrameworkWrite(restore.writeModel, existingData)
+            await this.ctx.fileService.projectFrameworkWrite(restore.writeModel, existingData, {
+              root,
+            })
           ),
           restore.unrecordedFields
         )
@@ -138,6 +151,7 @@ export class FrameworkVersioningProcessor {
       restore.writeModel,
       existingData,
       {
+        root,
         commit: async (): Promise<void> => {
           try {
             const saveResult = await this.ctx.versionHistoryService.commitEdit(
@@ -196,16 +210,15 @@ export class FrameworkVersioningProcessor {
         `left at the current value\n`;
     }
 
-    if (!registered) {
-      return this.success(
-        `${response}⚠️ The files were written, but the in-memory framework still holds its ` +
-          `pre-rollback content and will until the server restarts. See the server log for why ` +
-          `registration failed.`
-      );
-    }
-
-    return this.success(
-      `${response}🔄 Re-registered — the restored content is live in this process`
+    return withWriteOutcome(
+      this.success(
+        registered
+          ? `${response}🔄 Re-registered — the restored content is live in this process`
+          : `${response}⚠️ The files were written, but the in-memory framework still holds its ` +
+              `pre-rollback content and will until the server restarts. See the server log for ` +
+              `why registration failed.`
+      ),
+      writeResult
     );
   }
 
@@ -291,12 +304,15 @@ export class FrameworkVersioningProcessor {
       `${describeRestorePlan(plan)}\n\n` +
       `${describeRollbackRecord(restoreOutcome)}\n`;
 
-    return this.success(
-      registered
-        ? `${response}🔄 Re-registered — the restored content is live in this process`
-        : `${response}⚠️ The files were written, but the in-memory framework still holds its ` +
-            `pre-rollback content and will until the server restarts. See the server log for why ` +
-            `registration failed.`
+    return withRestoreOutcome(
+      this.success(
+        registered
+          ? `${response}🔄 Re-registered — the restored content is live in this process`
+          : `${response}⚠️ The files were written, but the in-memory framework still holds its ` +
+              `pre-rollback content and will until the server restarts. See the server log for ` +
+              `why registration failed.`
+      ),
+      plan
     );
   }
 

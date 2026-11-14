@@ -2,6 +2,7 @@
 
 import { gateSnapshotContract } from './gate-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
+import { withRestoreOutcome, withWriteOutcome } from '../../shared/saved-line.js';
 
 import type { RestorePlan } from '#modules/versioning/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
@@ -14,6 +15,7 @@ import {
   describeRestorePlan,
   describeRollbackPreview,
   describeRollbackRecord,
+  rebuildRoot,
 } from '#modules/versioning/index.js';
 
 export class GateVersioningProcessor {
@@ -100,6 +102,13 @@ export class GateVersioningProcessor {
       return this.error(describeIncompleteSnapshot('gate', id, version, restore.missingFields));
     }
 
+    // The rebuild writes where the gate is served from, as a byte restore does — see the same
+    // line in `prompt-versioning-processor.ts`. Bundled → `undefined`, the write root.
+    const root = rebuildRoot(
+      existingGate.getDefinition().sourceRoot,
+      this.ctx.configManager.getBundledResourceDirectory('gates')
+    );
+
     // A preview returns here — after validation, so it refuses an unrestorable version the same
     // way the real call does, and BEFORE the version row is recorded, so neither of the two
     // side-effect surfaces moves. The diff is projected from the write the rollback below performs
@@ -112,7 +121,9 @@ export class GateVersioningProcessor {
           id,
           version,
           this.ctx.textDiffService.generateFileChangeDiff(
-            await this.ctx.gateFileService.projectGateWrite(restore.writeModel)
+            await this.ctx.gateFileService.projectGateWrite(restore.writeModel, undefined, {
+              root,
+            })
           )
         )
       );
@@ -138,6 +149,7 @@ export class GateVersioningProcessor {
       restore.writeModel,
       undefined,
       {
+        root,
         commit: async (): Promise<void> => {
           try {
             const saveResult = await this.ctx.versionHistoryService.commitEdit(
@@ -174,13 +186,16 @@ export class GateVersioningProcessor {
 
     const reloaded = await this.ctx.gateManager.reload(id);
 
-    return this.success(
-      `✅ Gate '${id}' rolled back to version ${version}\n\n` +
-        `${describeRollbackRecord(restoreOutcome)}\n` +
-        (reloaded
-          ? `🔄 Gate reloaded with restored content`
-          : `⚠️ Files restored, but the gate could not be reloaded into this process — it still ` +
-            `holds its pre-rollback content. See the server log.`)
+    return withWriteOutcome(
+      this.success(
+        `✅ Gate '${id}' rolled back to version ${version}\n\n` +
+          `${describeRollbackRecord(restoreOutcome)}\n` +
+          (reloaded
+            ? `🔄 Gate reloaded with restored content`
+            : `⚠️ Files restored, but the gate could not be reloaded into this process — it ` +
+              `still holds its pre-rollback content. See the server log.`)
+      ),
+      writeResult
     );
   }
 
@@ -231,14 +246,17 @@ export class GateVersioningProcessor {
     }
 
     const reloaded = await this.ctx.gateManager.reload(id);
-    return this.success(
-      `✅ Gate '${id}' rolled back to version ${version}, byte for byte\n\n` +
-        `${describeRestorePlan(plan)}\n\n` +
-        `${describeRollbackRecord(restoreOutcome)}\n` +
-        (reloaded
-          ? `🔄 Gate reloaded with restored content`
-          : `⚠️ Files restored, but the gate could not be reloaded into this process — it still ` +
-            `holds its pre-rollback content. See the server log.`)
+    return withRestoreOutcome(
+      this.success(
+        `✅ Gate '${id}' rolled back to version ${version}, byte for byte\n\n` +
+          `${describeRestorePlan(plan)}\n\n` +
+          `${describeRollbackRecord(restoreOutcome)}\n` +
+          (reloaded
+            ? `🔄 Gate reloaded with restored content`
+            : `⚠️ Files restored, but the gate could not be reloaded into this process — it ` +
+              `still holds its pre-rollback content. See the server log.`)
+      ),
+      plan
     );
   }
 

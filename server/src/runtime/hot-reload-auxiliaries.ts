@@ -27,6 +27,7 @@ import type { AuxiliaryReloadConfig } from '#modules/hot-reload/hot-reload-obser
 import type { PromptAssetManager } from '#modules/prompts/index.js';
 import type { PathResolver } from './paths.js';
 
+import { GenericFrameworkGuide } from '#engine/frameworks/definitions/generic-framework-guide.js';
 import { SqliteEngine } from '#infra/database/sqlite-engine.js';
 import { VersionHistoryService } from '#modules/versioning/index.js';
 
@@ -48,7 +49,7 @@ export interface HotReloadAuxiliaryContext {
 /**
  * The recorder the change tracker versions disk edits through: a `VersionHistoryService` over the
  * same state database, launch workspace and file locator the `resource_manager` handlers use, and
- * the live catalog as the prior state.
+ * the live catalog — prompts, gates and the framework registry — as the prior state.
  *
  * Built here, beside the registration that uses it, because only the hot-reload path records
  * versions for edits nobody made through a tool. The database is the process singleton the
@@ -57,7 +58,8 @@ export interface HotReloadAuxiliaryContext {
 async function createDiskEditVersioning(
   context: HotReloadAuxiliaryContext
 ): Promise<DiskEditVersionRecorder> {
-  const { logger, configManager, pathResolver, gateManager, livePrompts } = context;
+  const { logger, configManager, pathResolver, gateManager, mcpToolsManager, livePrompts } =
+    context;
   const workspaceId = configManager.getConfig().identity.launchDefaults.workspaceId;
   const versionHistory = new VersionHistoryService({
     logger,
@@ -71,6 +73,15 @@ async function createDiskEditVersioning(
   return new DiskEditVersionRecorder(versionHistory, {
     prompt: (id) => livePrompts().find((prompt) => prompt.id === id),
     gate: (id) => gateManager?.getGateRegistry().getGuide(id),
+    // The registry's guide, not its loader's cache: a framework reload clears that cache for
+    // every id (`loadAndRegisterById`), while the guide holds the definition until it is replaced.
+    framework: (id) => {
+      const registry = mcpToolsManager?.getFrameworkManager()?.getFrameworkRegistry();
+      const guide = registry
+        ?.getGuideEntries(false)
+        .find((entry) => entry.guide.frameworkId.toLowerCase() === id.toLowerCase())?.guide;
+      return guide instanceof GenericFrameworkGuide ? guide.getDefinition() : undefined;
+    },
   });
 }
 

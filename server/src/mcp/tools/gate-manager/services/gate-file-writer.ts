@@ -185,6 +185,17 @@ export interface GateFileWriteResult {
  * gate's fields rendered as one `gate.yaml`, say — hides the `guidance.md` the write also lands and
  * shows `gate.yaml` lines the file never holds (tutorial-rework B.20).
  */
+/**
+ * A write's commit step, and the root it lands in when that is not the write root.
+ *
+ * `root` is for a rollback rebuilt from a snapshot, which writes where the gate is served from
+ * (`rebuildRoot` in `modules/versioning/byte-restore.ts`). Every other write leaves it unset and
+ * lands under `getGatesDirectory()`.
+ */
+interface GateWriteOptions extends ResourceWriteCommitOptions {
+  root?: string;
+}
+
 interface GateWritePlan {
   gatesDir: string;
   gateDir: string;
@@ -210,12 +221,12 @@ export class GateFileWriter {
   async writeGateFiles(
     data: GateCreationData,
     suppliedKeys: ReadonlySet<string> = ALL_GATE_DATA_KEYS,
-    options: ResourceWriteCommitOptions = {}
+    options: GateWriteOptions = {}
   ): Promise<GateFileWriteResult> {
     // Every byte this write lands is decided here, before the transaction opens; the mutation
     // below applies the plan and decides nothing of its own, which is what keeps
     // `projectGateWrite` reporting the same files and contents.
-    const plan = await this.planGateWrite(data, suppliedKeys);
+    const plan = await this.planGateWrite(data, suppliedKeys, options.root);
     const { gateDir } = plan;
     const yamlPath = path.join(gateDir, 'gate.yaml');
 
@@ -289,9 +300,10 @@ export class GateFileWriter {
    */
   async projectGateWrite(
     data: GateCreationData,
-    suppliedKeys: ReadonlySet<string> = ALL_GATE_DATA_KEYS
+    suppliedKeys: ReadonlySet<string> = ALL_GATE_DATA_KEYS,
+    options: Pick<GateWriteOptions, 'root'> = {}
   ): Promise<FileContentChange[]> {
-    const plan = await this.planGateWrite(data, suppliedKeys);
+    const plan = await this.planGateWrite(data, suppliedKeys, options.root);
     const prefix = path.relative(plan.gatesDir, plan.gateDir);
 
     const changes: FileContentChange[] = [];
@@ -325,9 +337,11 @@ export class GateFileWriter {
    */
   private async planGateWrite(
     data: GateCreationData,
-    suppliedKeys: ReadonlySet<string> = ALL_GATE_DATA_KEYS
+    suppliedKeys: ReadonlySet<string> = ALL_GATE_DATA_KEYS,
+    root?: string
   ): Promise<GateWritePlan> {
-    const gatesDir = this.configManager.getGatesDirectory();
+    // `root` only for a rebuilt rollback (`GateWriteOptions`); every other write lands here.
+    const gatesDir = root ?? this.configManager.getGatesDirectory();
     // `data.id` is caller-supplied and unvalidated for path segments. Measured 2026-08-30:
     // `id: '../../ESCAPED_GATE'` wrote gate.yaml and guidance.md outside the resources root, and
     // the tool reported the write. Contained before the directory is created.

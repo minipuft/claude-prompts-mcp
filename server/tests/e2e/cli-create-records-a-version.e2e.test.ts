@@ -32,7 +32,12 @@ import { fileURLToPath } from 'node:url';
 
 import { DatabaseSync } from 'node:sqlite';
 
+import { projectResourceSnapshot } from '../../src/cli-shared/resource-snapshot.js';
+import { recordResourceWrite } from '../../src/cli-shared/version-history.js';
+import { updateRowDescription } from '../../src/modules/versioning/snapshot-contract.js';
 import { hashBytes } from '../../src/shared/utils/hash.js';
+import { resourceFileSet } from '../../src/shared/utils/resource-file-set.js';
+import { loadYamlFileSync } from '../../src/shared/utils/yaml/yaml-file-loader.js';
 import { buildServerEnv } from './helpers/child-env.js';
 import {
   getAvailablePort,
@@ -132,6 +137,21 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     while (historyRows(type, id).length < count && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
+  };
+
+  /**
+   * The control invariant: an out-of-band edit is captured exactly once, by whichever writer saw
+   * it first. The running server's watcher records it as `Update via filesystem` when its 1 s
+   * debounce fires before the tool write; otherwise the versioning service bridges it as
+   * `Bridge: prior live state`. Which one wins is timing (a loaded runner flips it), so the
+   * assertion is on the row's VALUE — the snapshot carries the edited `name` — not its label.
+   */
+  const expectOobCapturedOnce = (rows: VersionRow[]): void => {
+    expect(rows).toHaveLength(3);
+    expect(rows[0]!.description).toBe('Created via cpm');
+    expect(rows[1]!.description).toMatch(/^(Update via filesystem|Bridge: prior live state)/);
+    expect((JSON.parse(rows[1]!.snapshot) as Record<string, unknown>)['name']).toBe('Control OOB');
+    expect(rows[2]!.description).toBe('Update via resource_manager');
   };
 
   const treeEntries = (rowId: number): Array<{ path: string; object_hash: string }> => {
@@ -278,7 +298,7 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     expect(historyRows('prompt', 'linked_prompt')).toHaveLength(3);
   });
 
-  it('lets the server edit a cpm-created PROMPT without a bridge row, and versions the file when it moved', async () => {
+  it('lets the server edit a cpm-created PROMPT without a bridge row, and captures the out-of-band edit once, by whichever writer saw it first', async () => {
     // The prompt half of the parity assertion below. The observable is the same: a bridge row
     // appears exactly when the server's live projection does not hash-equal the newest recorded
     // snapshot, so its absence says `cpm`'s loader-backed projection and the server's are one
@@ -316,16 +336,10 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
       'Created via cpm',
       'Update via resource_manager',
     ]);
-    // The out-of-band edit is versioned by the running server's watcher (R5), so the server's own
-    // edit then needs no bridge: the extra row is the watcher's, and it appears only because the
-    // watcher's projection of the moved file differs from the row `cpm` wrote. The parity twin
-    // has no such row, which says the two projections of the unmoved file are one value.
-    const control = historyRows('prompt', 'control_prompt').map((row) => row.description);
-    expect(control).toEqual([
-      'Created via cpm',
-      'Update via filesystem',
-      'Update via resource_manager',
-    ]);
+    // The extra row exists only because the projection of the moved file differs from the row
+    // `cpm` wrote; the parity twin has no such row, which says the two projections of the unmoved
+    // file are one value.
+    expectOobCapturedOnce(historyRows('prompt', 'control_prompt'));
   }, 120000);
 
   it('says a created style records nothing because styles carry no history', () => {
@@ -334,7 +348,7 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     expect(String(reply['not_recorded_reason'])).toContain('no version history');
   });
 
-  it('lets the server edit a cpm-created gate without a bridge row, and versions the file when it moved', async () => {
+  it('lets the server edit a cpm-created gate without a bridge row, and captures the out-of-band edit once, by whichever writer saw it first', async () => {
     // The parity assertion. A bridge row appears exactly when the newest recorded snapshot does
     // not hash-equal the server's live projection, so its ABSENCE here is the statement that
     // `cpm`'s create snapshot and the server's projection of the same resource are the same
@@ -366,14 +380,9 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
     }
 
     const parity = historyRows('gate', 'parity_gate').map((row) => row.description);
-    const control = historyRows('gate', 'control_gate').map((row) => row.description);
 
     expect(parity).toEqual(['Created via cpm', 'Update via resource_manager']);
-    expect(control).toEqual([
-      'Created via cpm',
-      'Update via filesystem',
-      'Update via resource_manager',
-    ]);
+    expectOobCapturedOnce(historyRows('gate', 'control_gate'));
   }, 120000);
 
   it("records one version for a cpm write the running server watches, under cpm's description", async () => {
@@ -402,6 +411,91 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
       id: 'watched_prompt',
     });
     expect(inspected.text).toContain('watched_gate');
+  }, 120000);
+
+  /**
+   * `cpm`'s own write path — `recordResourceWrite`, which every `cpm` command that edits a resource
+   * calls — run in this process, so its row can be held back. The seam is the `write` callback the
+   * command supplies: it returns the produced state, and the row is appended only after it does.
+   * Run against the server's `state.db` under the tenant `cpm` resolves, with the variables the
+   * binary is spawned with above.
+   */
+  const cpmWrite = async (
+    id: string,
+    hold: (write: () => Promise<void>) => Promise<void>
+  ): Promise<Awaited<ReturnType<typeof recordResourceWrite>>> => {
+    const gatesRoot = path.join(workspace, 'resources', 'gates');
+    const entryPath = path.join(gatesRoot, id, 'gate.yaml');
+    const project = async (): Promise<Record<string, unknown>> => {
+      const declared = loadYamlFileSync<Record<string, unknown>>(entryPath) ?? {};
+      return (await projectResourceSnapshot('gate', id, entryPath, declared)).snapshot;
+    };
+    const before = await readFile(entryPath, 'utf8');
+    const cliEnv: Record<string, string> = {
+      MCP_WORKSPACE: workspace,
+      MCP_RUNTIME_ROOT: workspace,
+      CLAUDE_PROJECT_DIR: SERVER_ROOT,
+    };
+    const saved = Object.fromEntries(Object.keys(cliEnv).map((key) => [key, process.env[key]]));
+    Object.assign(process.env, cliEnv);
+    try {
+      return await recordResourceWrite(
+        entryPath,
+        { resourceType: 'gate', resourceId: id },
+        {
+          enumerate: () =>
+            resourceFileSet({ resourceType: 'gate', entryPath, roots: { primary: gatesRoot } }),
+          targets: [{ path: entryPath, kind: 'file' }],
+          priorSnapshot: await project(),
+          write: async () => {
+            await hold(() => writeFile(entryPath, before.replace(/^name: .*$/m, 'name: Edited')));
+            return await project();
+          },
+          description: updateRowDescription('cpm'),
+        }
+      );
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  };
+
+  it("names a cpm write after cpm even when the watcher's row for the same bytes lands first", async () => {
+    // One write is one version, under the name of the command that made it (R5). The watcher
+    // debounces by 1 s, so `cpm`'s row normally lands first and the watcher skips the identical
+    // bytes (the CONTROL below). Here `cpm`'s row is held until the watcher has recorded the
+    // bytes: `cpm` then renames that identical newest row instead of skipping it.
+    createJson('create', 'gate', 'late_gate', '--name', 'Late', '--description', 'D');
+    createJson('create', 'gate', 'prompt_gate', '--name', 'Prompt', '--description', 'D');
+    // Served first, so each write below is an UPDATE the watcher records against the catalog.
+    await new Promise((resolve) => setTimeout(resolve, WATCHER_RELOAD_MS));
+
+    const late = await cpmWrite('late_gate', async (write) => {
+      await write();
+      await waitForHistoryRows('gate', 'late_gate', 2);
+      // The order under test: the watcher's row is there before `cpm` appends its own.
+      expect(historyRows('gate', 'late_gate').map((row) => row.description)).toEqual([
+        'Created via cpm',
+        'Update via filesystem',
+      ]);
+    });
+    expect(late).toEqual(expect.objectContaining({ written: true, recorded: true, version: 2 }));
+    expect(historyRows('gate', 'late_gate').map((row) => row.description)).toEqual([
+      'Created via cpm',
+      'Update via cpm',
+    ]);
+    expect(JSON.parse(historyRows('gate', 'late_gate')[1]!.snapshot)['name']).toBe('Edited');
+
+    // CONTROL: the same seam, not held — `cpm`'s row lands first and the watcher adds nothing.
+    const prompt = await cpmWrite('prompt_gate', (write) => write());
+    expect(prompt).toEqual(expect.objectContaining({ written: true, recorded: true, version: 2 }));
+    await new Promise((resolve) => setTimeout(resolve, WATCHER_RELOAD_MS));
+    expect(historyRows('gate', 'prompt_gate').map((row) => row.description)).toEqual([
+      'Created via cpm',
+      'Update via cpm',
+    ]);
   }, 120000);
 
   it('rolls a SERVER-written prompt back from cpm with no bridge row, and records the file when it moved', async () => {

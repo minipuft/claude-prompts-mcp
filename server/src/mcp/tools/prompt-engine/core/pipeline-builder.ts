@@ -79,7 +79,6 @@ import {
 } from '#engine/gates/services/request-gate-admission.js';
 import { createRunStepViewProvider } from '#engine/gates/services/run-step-view.js';
 import { TemporaryGateRegistrar } from '#engine/gates/services/temporary-gate-registrar.js';
-import { createShellVerifyExecutor } from '#engine/gates/shell/index.js';
 import { createToolDetectionService } from '#modules/automation/detection/tool-detection-service.js';
 import { createScriptExecutor } from '#modules/automation/execution/script-executor.js';
 import { createToolTriggerFilter } from '#modules/automation/execution/tool-trigger-filter.js';
@@ -332,31 +331,12 @@ export class PipelineBuilder {
 
     // ── Stages 16-22: Capture, Execution, Review, Formatting ──
 
-    // One executor for BOTH shell paths — the inline `:: verify:` stage below and the
-    // gate-YAML `shell_verify` criteria (stage 20, and a detached node's review in stage 16).
-    // They used to hold different instances (this one, and a module singleton), which is how
-    // row 1.5's control could have covered one and silently missed the other.
-    const shellVerifyExecutor = createShellVerifyExecutor({
-      debug: false,
-      gateSystemEnabled: (scope) => deps.lightweightGateSystem.isGateSystemEnabled(scope),
-      // One log line per run, so the operator who allowlisted the command can see each time a
-      // gate ran it: the command, where, and what came back. Refusals are logged as refusals.
-      onExecuted: (_gate, result, cwd) =>
-        deps.logger.info('shell_verify', {
-          command: result.command,
-          cwd: cwd ?? null,
-          outcome:
-            result.refused === true
-              ? 'refused'
-              : result.timedOut === true
-                ? 'timed out'
-                : result.passed
-                  ? 'passed'
-                  : 'failed',
-          exitCode: result.exitCode,
-          durationMs: result.durationMs,
-        }),
-    });
+    // One executor for every shell path — the inline `:: verify:` stage below, the gate-YAML
+    // `shell_verify` criteria (stage 20, and a detached node's review in stage 16), and
+    // `resource_manager validate` outside the pipeline. They used to hold different instances
+    // (this one, and a module singleton), which is how row 1.5's control could have covered one
+    // and silently missed the other; the instance now arrives built, from `PromptExecutor`.
+    const shellVerifyExecutor = deps.shellVerifyExecutor;
     const gateVerdictProcessor = new GateVerdictProcessor(
       deps.chainSessionStore,
       deps.logger,

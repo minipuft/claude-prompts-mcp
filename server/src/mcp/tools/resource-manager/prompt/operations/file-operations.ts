@@ -334,6 +334,17 @@ const MESSAGE_FILE_POINTERS: ReadonlyArray<{ file: string; pointerKey: string }>
   { file: 'user-message.md', pointerKey: 'userMessageTemplateFile' },
 ];
 
+/**
+ * A write's commit step, and the root it lands in when that is not the write root.
+ *
+ * `root` is for a rollback rebuilt from a snapshot, which writes where the prompt is served from
+ * (`rebuildRoot` in `modules/versioning/byte-restore.ts`). Every other write leaves it unset and
+ * lands under `getResolvedPromptsDirectory()`.
+ */
+interface PromptWriteOptions extends ResourceWriteCommitOptions {
+  root?: string;
+}
+
 /** A file a prompt write produces, addressed relative to the prompt's own directory. */
 interface PlannedPromptFile {
   relativePath: string;
@@ -425,12 +436,18 @@ export class FileOperations {
     suppliedKeys?: ReadonlySet<string>,
     sourceRoot?: string,
     writeIntent: PromptWriteIntent = NO_WRITE_INTENT,
-    options: ResourceWriteCommitOptions = {}
+    options: PromptWriteOptions = {}
   ): Promise<PromptWriteResult> {
     // Everything this write does is resolved here, before the transaction opens, and the mutation
     // below applies the plan and decides nothing of its own. `projectPromptWrite` reads a
     // preview's diff off the same plan, which is what keeps the two from naming different files.
-    const plan = await this.planPromptWrite(promptData, suppliedKeys, sourceRoot, writeIntent);
+    const plan = await this.planPromptWrite(
+      promptData,
+      suppliedKeys,
+      sourceRoot,
+      writeIntent,
+      options.root
+    );
     const { promptsDir, effectiveCategory, promptDir, moveSource, fileSource, copyOnWriteSource } =
       plan;
     const yamlPath = path.join(promptDir, 'prompt.yaml');
@@ -626,9 +643,16 @@ export class FileOperations {
     promptData: any,
     suppliedKeys?: ReadonlySet<string>,
     sourceRoot?: string,
-    writeIntent: PromptWriteIntent = NO_WRITE_INTENT
+    writeIntent: PromptWriteIntent = NO_WRITE_INTENT,
+    options: Pick<PromptWriteOptions, 'root'> = {}
   ): Promise<FileContentChange[]> {
-    const plan = await this.planPromptWrite(promptData, suppliedKeys, sourceRoot, writeIntent);
+    const plan = await this.planPromptWrite(
+      promptData,
+      suppliedKeys,
+      sourceRoot,
+      writeIntent,
+      options.root
+    );
 
     // Keyed by path in the order the writer applies them, so a file one plan touches twice shows
     // once, with the content that is left on disk — a later write or a deletion wins there too.
@@ -688,9 +712,11 @@ export class FileOperations {
     promptData: any,
     suppliedKeys: ReadonlySet<string> | undefined,
     sourceRoot: string | undefined,
-    writeIntent: PromptWriteIntent
+    writeIntent: PromptWriteIntent,
+    root: string | undefined
   ): Promise<PromptWritePlan> {
-    const promptsDir = this.configManager.getResolvedPromptsDirectory();
+    // `root` only for a rebuilt rollback (`PromptWriteOptions`); every other write lands here.
+    const promptsDir = root ?? this.configManager.getResolvedPromptsDirectory();
     const effectiveCategory = slugifyCategoryDirectory(promptData.category);
     // `category` reaches this line straight from the tool payload. Validated here because
     // `validateCategoryName` had no call site at all — a category of `../../x` walked out of the

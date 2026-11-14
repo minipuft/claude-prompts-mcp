@@ -129,6 +129,30 @@ function destinationFor(
 }
 
 /**
+ * The root a rollback REBUILT from a snapshot writes into, or `undefined` for the writer's own
+ * write root.
+ *
+ * The rebuild twin of {@link destinationFor}, so both kinds of restore put a resource back in the
+ * same place: where it is served from. A resource in a `paths.resources` folder is rewritten in
+ * that folder; writing the profile's write root instead would leave a second copy there that
+ * outranks the listed one, and the listed file the operator rolled back would never change. A
+ * bundled resource, or one the loader stamped no root on, gets `undefined`: the writer then copies
+ * it into its write root, exactly as an update does, and the package's own tree is never written.
+ *
+ * `servedRoot` is the loader's `sourceRoot` stamp, the same string the writer joins the id onto.
+ */
+export function rebuildRoot(
+  servedRoot: string | undefined,
+  bundledRoot: string | undefined
+): string | undefined {
+  if (servedRoot === undefined) return undefined;
+  if (bundledRoot !== undefined && path.resolve(servedRoot) === path.resolve(bundledRoot)) {
+    return undefined;
+  }
+  return servedRoot;
+}
+
+/**
  * Why a version recorded from the bundled tree cannot be restored when no location in force holds
  * the resource. A bundled resource is restored by re-rooting its bundled position onto the write
  * root ({@link destinationFor}); with the bundle out of the location list (a `paths.resources`

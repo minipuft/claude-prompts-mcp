@@ -67,6 +67,18 @@ export class GenericFrameworkGuide extends BaseFrameworkGuide {
   }
 
   /**
+   * The definition this guide serves, as the loader read it.
+   *
+   * The framework's state BEFORE an edit on disk: by the time the watcher reports the edit the
+   * file already holds the new bytes, and this guide is what still holds the old ones until the
+   * framework reload replaces it (`runtime/disk-edit-versioning.ts`). Read-only by contract — the
+   * guide's behaviour is derived from this object.
+   */
+  getDefinition(): Readonly<FrameworkResourceDefinition> {
+    return this.definition;
+  }
+
+  /**
    * Guide prompt creation using the framework's structure
    */
   guidePromptCreation(_intent: string, _context?: Record<string, unknown>): PromptCreationGuidance {

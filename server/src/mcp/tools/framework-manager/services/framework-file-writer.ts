@@ -81,6 +81,24 @@ interface PlannedFrameworkFile {
  * `phases.yaml` and `judge-prompt.md`, and shows `framework.yaml` lines the
  * merged file never holds (tutorial-rework B.20).
  */
+/**
+ * A write's commit step, the root it lands in when that is not the write root, and the root the
+ * framework is served from.
+ *
+ * `root` is for a rollback rebuilt from a snapshot, which writes where the framework is served
+ * from (`rebuildRoot` in `modules/versioning/byte-restore.ts`). Every other write leaves it unset
+ * and lands under `getFrameworksDirectory()`.
+ *
+ * `servedRoot` is the loader's `sourceRoot` stamp, and only says where the framework's current
+ * files are: an update of a framework in a `paths.resources` folder copies that folder's files into
+ * the write root before editing, as an edit of a bundled one does. Without it the copy found no
+ * source, and the write root received a lone `framework.yaml` naming a phases file it lacked.
+ */
+interface FrameworkWriteOptions extends ResourceWriteCommitOptions {
+  root?: string;
+  servedRoot?: string;
+}
+
 interface FrameworkWritePlan {
   frameworksDir: string;
   frameworkDir: string;
@@ -303,13 +321,16 @@ export class FrameworkFileWriter {
   /**
    * Load existing framework files from disk
    */
-  async loadExistingFramework(id: string): Promise<ExistingFrameworkData | null> {
+  async loadExistingFramework(
+    id: string,
+    servedRoot?: string
+  ): Promise<ExistingFrameworkData | null> {
     // Read from wherever the framework ACTUALLY lives, which is not always where a write would go
     // (P1.2). A framework served from the bundled tree has no directory under the writable root,
     // so this returned null and `handleUpdate` reported `Files may be corrupted` — a false
     // statement about a framework that loads and serves correctly. Measured 2026-08-30: updating
     // bundled `cageerf` under a distinct resources root failed outright.
-    const frameworkDir = this.resolveExistingFrameworkDir(id);
+    const frameworkDir = this.resolveExistingFrameworkDir(id, servedRoot);
     if (frameworkDir === null) {
       return null;
     }
@@ -447,12 +468,12 @@ export class FrameworkFileWriter {
   async writeFrameworkFiles(
     data: Partial<FrameworkCreationData> & { id: string },
     existingData?: ExistingFrameworkData | null,
-    options: ResourceWriteCommitOptions = {}
+    options: FrameworkWriteOptions = {}
   ): Promise<FrameworkFileResult> {
     // Every byte this write lands is decided here, before the transaction opens; the mutation
     // below applies the plan and decides nothing of its own, which is what keeps
     // `projectFrameworkWrite` reporting the same files and contents.
-    const plan = this.planFrameworkWrite(data, existingData);
+    const plan = this.planFrameworkWrite(data, existingData, options);
     const { frameworkDir, copyOnWriteSource } = plan;
     const frameworkYamlPath = join(frameworkDir, 'framework.yaml');
 
@@ -528,9 +549,10 @@ export class FrameworkFileWriter {
    */
   async projectFrameworkWrite(
     data: Partial<FrameworkCreationData> & { id: string },
-    existingData?: ExistingFrameworkData | null
+    existingData?: ExistingFrameworkData | null,
+    options: Pick<FrameworkWriteOptions, 'root' | 'servedRoot'> = {}
   ): Promise<FileContentChange[]> {
-    const plan = this.planFrameworkWrite(data, existingData);
+    const plan = this.planFrameworkWrite(data, existingData, options);
     const prefix = relative(plan.frameworksDir, plan.frameworkDir);
 
     const changes: FileContentChange[] = [];
@@ -556,29 +578,36 @@ export class FrameworkFileWriter {
    */
   private planFrameworkWrite(
     data: Partial<FrameworkCreationData> & { id: string },
-    existingData: ExistingFrameworkData | null | undefined
+    existingData: ExistingFrameworkData | null | undefined,
+    { root, servedRoot }: Pick<FrameworkWriteOptions, 'root' | 'servedRoot'>
   ): FrameworkWritePlan {
-    const frameworkDir = this.getFrameworkDir(data.id);
+    // `root` only for a rebuilt rollback (`FrameworkWriteOptions`); every other write lands in the
+    // write root.
+    const frameworkDir =
+      root !== undefined
+        ? resolveContainedPath(root, data.id.toLowerCase())
+        : this.getFrameworkDir(data.id);
 
     // P1.2 — copy the whole source subtree up before editing, when the framework lives in the
     // bundled tree and the write goes elsewhere. Same reasoning as prompts: the files below are
     // reconstructed from data, so anything else in the directory — `judge-prompt.md`,
     // `system-prompt.md`, any file a future framework carries — would simply not exist at the
     // destination.
-    const existingDir = this.resolveExistingFrameworkDir(data.id);
+    const existingDir = this.resolveExistingFrameworkDir(data.id, servedRoot);
     const copyOnWriteSource =
       existingDir !== null && existingDir !== frameworkDir && !existsSync(frameworkDir)
         ? existingDir
         : null;
+    // A copy puts the prior tree at `frameworkDir` before any file is written, so the content a
+    // write replaces is the copy source's.
+    const priorDir = existsSync(frameworkDir) ? frameworkDir : copyOnWriteSource;
 
     return {
-      frameworksDir: this.configManager.getFrameworksDirectory(),
+      frameworksDir: root ?? this.configManager.getFrameworksDirectory(),
       frameworkDir,
       copyOnWriteSource,
-      // A copy puts the prior tree at `frameworkDir` before any file is written, so the content a
-      // write replaces is the copy source's.
-      priorDir: existsSync(frameworkDir) ? frameworkDir : copyOnWriteSource,
-      files: this.planFrameworkFiles(data, existingData ?? null, frameworkDir),
+      priorDir,
+      files: this.planFrameworkFiles(data, existingData ?? null, frameworkDir, priorDir),
     };
   }
 
@@ -602,7 +631,8 @@ export class FrameworkFileWriter {
   private planFrameworkFiles(
     data: Partial<FrameworkCreationData> & { id: string },
     existingData: ExistingFrameworkData | null,
-    frameworkDir: string
+    frameworkDir: string,
+    priorFrameworkDir: string | null
   ): PlannedFrameworkFile[] {
     // The framework's OWN declared names win over the defaults — a hand-authored or seeded
     // `framework.yaml` naming `custom-phases.yaml` keeps that name across every future write.
@@ -627,15 +657,12 @@ export class FrameworkFileWriter {
 
     const files: PlannedFrameworkFile[] = [];
 
-    // Where the files this write replaces live RIGHT NOW. For the first local edit of a bundled
-    // framework, `frameworkDir` does not exist yet and the prior text — comments included — is
-    // still in the bundled tree that copy-on-write is about to duplicate. Reading `frameworkDir`
-    // alone would find nothing there and re-render the framework from scratch, which is exactly
-    // the layout loss this write is avoiding, on the one edit most likely to hit an authored file.
-    const priorFrameworkDir = existsSync(frameworkDir)
-      ? frameworkDir
-      : this.resolveExistingFrameworkDir(data.id);
-
+    // `priorFrameworkDir` is where the files this write replaces live RIGHT NOW. For the first
+    // local edit of a bundled or listed framework, `frameworkDir` does not exist yet and the prior
+    // text — comments included — is still in the tree that copy-on-write is about to duplicate.
+    // Reading `frameworkDir` alone would find nothing there and re-render the framework from
+    // scratch, which is exactly the layout loss this write is avoiding, on the one edit most likely
+    // to hit an authored file.
     const frameworkYaml = this.planFrameworkYamlData(
       data,
       existingData?.framework ?? null,
@@ -870,8 +897,16 @@ export class FrameworkFileWriter {
    * Distinct from `getFrameworkDir`, which answers where a write GOES. Keeping the two questions
    * separate is the whole of P1.2 — collapsing them is what made a bundled framework unreadable
    * to its own updater.
+   *
+   * `servedRoot`, the loader's `sourceRoot` stamp, is consulted first when a caller has it: a
+   * framework in a `paths.resources` folder is in neither of the two roots above. Every caller
+   * reading a registered framework passes it: update, inspect, reload's error and rollback.
    */
-  public resolveExistingFrameworkDir(id: string): string | null {
+  public resolveExistingFrameworkDir(id: string, servedRoot?: string): string | null {
+    if (servedRoot !== undefined) {
+      const served = resolveContainedPath(servedRoot, id.toLowerCase());
+      if (existsSync(join(served, 'framework.yaml'))) return served;
+    }
     const writable = this.getFrameworkDir(id);
     if (existsSync(join(writable, 'framework.yaml'))) return writable;
 

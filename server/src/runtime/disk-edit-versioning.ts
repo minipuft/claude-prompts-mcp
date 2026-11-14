@@ -13,9 +13,18 @@
  * the newest row does not already hold it (`recordEditResult`), and that state is what makes the
  * first edit of a never-versioned resource rollback-reachable. On disk it is already gone when the
  * watcher fires; what still holds it is the catalog, because the change-tracker registration runs
- * ahead of every reload (`hot-reload-auxiliaries.ts` orders it first). A bridge row carries no file
- * tree for the reason `recordEditResult` states, so a rollback to it restores through the
- * resource's snapshot contract rather than byte for byte.
+ * ahead of every reload (`hot-reload-auxiliaries.ts` orders it first): the prompt catalog, the gate
+ * registry, and the framework registry's guide, which keeps the definition its loader read. A
+ * bridge row carries no file tree for the reason `recordEditResult` states, so a rollback to it
+ * restores through the resource's snapshot contract rather than byte for byte.
+ *
+ * A CATEGORY HAS NO REGISTRY THAT CAN ANSWER, so its prior state is the last bytes seen. The
+ * catalog's `Category` substitutes a formatted name and a generated description for the ones a
+ * `category.yaml` leaves out, and adds a category for a directory with no file at all, so a
+ * projection of it records defaults as though an author had written them (the reason
+ * `projectCategorySnapshot` reads the raw document). What still knows the authored state is the
+ * file as it was: {@link DiskEditVersioning.rememberLoadedCategories} reads every served
+ * `category.yaml` when the watcher starts, and each record keeps the bytes it projected.
  *
  * THE PRODUCED STATE COMES FROM THE DISK, through the projection `cpm` uses
  * (`cli-shared/resource-snapshot.ts`), which is the server's own projection fed from the files —
@@ -24,10 +33,12 @@
  * newest row is asked at record time (`compareWithLatest`), because the catalog lags every write
  * made outside this process.
  *
- * Prompts and gates only: they are the kinds the change tracker locates (`TrackedResourceType`).
+ * Prompts, gates, frameworks and categories: every kind `version_history` records. A style records
+ * nothing (`StoredResourceType` has no `style`), and a script tool is not loaded through a resource
+ * loader. Only prompts and gates also reach the change log (`TrackedResourceType`).
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import type { ConvertedPrompt } from '#engine/execution/types.js';
@@ -36,22 +47,37 @@ import type { VersionHistoryService } from '#modules/versioning/index.js';
 import type { FileChangeOperation, TrackedResourceType } from '#shared/types/index.js';
 
 import { projectResourceSnapshot } from '#cli-shared/resource-snapshot.js';
+import { RuntimeFrameworkLoader } from '#engine/frameworks/definitions/runtime-framework-loader.js';
 import { GateDefinitionLoader } from '#engine/gates/core/gate-definition-loader.js';
 import { gateSnapshotContract } from '#mcp/tools/gate-manager/services/gate-snapshot-contract.js';
+import { projectCategorySnapshot } from '#modules/versioning/projections/category-snapshot.js';
+import { projectFrameworkSnapshot } from '#modules/versioning/projections/framework-snapshot.js';
 import { canonicalPromptSnapshot } from '#modules/versioning/projections/prompt-snapshot.js';
 import {
   createRowDescription,
   updateRowDescription,
 } from '#modules/versioning/snapshot-contract.js';
 import { hashCanonical } from '#shared/utils/hash.js';
-import { loadYamlFileWithResult } from '#shared/utils/yaml/yaml-file-loader.js';
+import { parseYaml } from '#shared/utils/yaml/yaml-parser.js';
+
+/** The kinds a disk edit is versioned for: the change log's two, plus frameworks and categories. */
+export type DiskEditResourceType = TrackedResourceType | 'framework' | 'category';
 
 /** One served change, located by the change tracker: which resource, and its entry file. */
 export interface DiskEditChange {
-  resourceType: TrackedResourceType;
+  resourceType: DiskEditResourceType;
   resourceId: string;
   operation: FileChangeOperation;
-  /** The resource's entry file (`prompt.yaml`, `{id}.yaml`, `gate.yaml`) — never a companion. */
+  /**
+   * The resource's entry file (`prompt.yaml`, `{id}.yaml`, `gate.yaml`, `framework.yaml`,
+   * `category.yaml`) — never a companion.
+   */
+  entryPath: string;
+}
+
+/** A `category.yaml` the catalog serves, by the category id it declares metadata for. */
+export interface LoadedCategoryFile {
+  resourceId: string;
   entryPath: string;
 }
 
@@ -65,16 +91,24 @@ export type DiskEditOutcome =
 /** The port the change tracker's watcher registration records through. */
 export interface DiskEditVersioning {
   record(change: DiskEditChange): Promise<DiskEditOutcome>;
+  /**
+   * Read the `category.yaml` files the catalog serves, so a later edit of one has a prior state.
+   * Called when the watcher starts and when a root arms; a category already held keeps the bytes
+   * it has, which are the ones last recorded or seen serving.
+   */
+  rememberLoadedCategories(files: readonly LoadedCategoryFile[]): void;
 }
 
 /** The catalog as it stands before the reload: what each id serves right now. */
 export interface LiveResources {
   prompt(id: string): ConvertedPrompt | undefined;
   gate(id: string): GateGuide | undefined;
+  /** The parsed `framework.yaml` the framework registry serves for this id. */
+  framework(id: string): Readonly<Record<string, unknown>> | undefined;
 }
 
 type ProjectionResult =
-  { ok: true; snapshot: Record<string, unknown> } | { ok: false; reason: string };
+  { ok: true; snapshot: Record<string, unknown>; text: string } | { ok: false; reason: string };
 
 /**
  * Why the gate loader refuses this gate file, or `undefined` when it loads.
@@ -94,52 +128,130 @@ function gateRefusal(resourceId: string, entryPath: string): string | undefined 
     .find((record) => record.path === entryPath)?.error;
 }
 
+/** Why the framework loader refuses this file, or `undefined` — {@link gateRefusal}'s twin. */
+function frameworkRefusal(resourceId: string, entryPath: string): string | undefined {
+  const loader = new RuntimeFrameworkLoader({
+    frameworksDir: dirname(dirname(entryPath)),
+    enableCache: false,
+  });
+  loader.loadFramework(resourceId);
+  return loader
+    .getQuarantine()
+    .list()
+    .find((record) => record.path === entryPath)?.error;
+}
+
+/** The loader's refusal of this entry file, for the kinds whose loader can refuse one. */
+function loaderRefusal(
+  resourceType: DiskEditResourceType,
+  resourceId: string,
+  entryPath: string
+): string | undefined {
+  if (resourceType === 'gate') return gateRefusal(resourceId, entryPath);
+  if (resourceType === 'framework') return frameworkRefusal(resourceId, entryPath);
+  return undefined;
+}
+
+/** Parse YAML text into the mapping an entry file must hold, or say why it does not. */
+function parseMapping(
+  text: string,
+  entryPath: string
+): { ok: true; declared: Record<string, unknown> } | { ok: false; reason: string } {
+  const parsed = parseYaml<unknown>(text, { filename: entryPath });
+  if (!parsed.success) {
+    return { ok: false, reason: `YAML parse error: ${parsed.error?.message ?? 'unreadable file'}` };
+  }
+  const data = parsed.data;
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) {
+    return { ok: false, reason: `${entryPath} does not hold a YAML mapping` };
+  }
+  return { ok: true, declared: data as Record<string, unknown> };
+}
+
 /**
  * Project the entry file the way the loader will read it, or say why the loader will refuse it.
  *
  * Every refusal is answered by code the loader itself runs: the YAML parser (whose message is the
- * reason a hand edit most often needs), the gate loader, and for a prompt the prompt loader and
- * converter (`projectPromptFromDisk`, which reports a prompt they do not serve).
+ * reason a hand edit most often needs), the gate and framework loaders, and for a prompt the
+ * prompt loader and converter (`projectPromptFromDisk`, which reports a prompt they do not serve).
+ * The file is read ONCE, and the text comes back with the snapshot: a category keeps exactly the
+ * bytes it projected as its next prior state.
  */
 async function projectEntryFile(
-  resourceType: TrackedResourceType,
+  resourceType: DiskEditResourceType,
   resourceId: string,
   entryPath: string
 ): Promise<ProjectionResult> {
-  const loaded = loadYamlFileWithResult<unknown>(entryPath);
-  if (!loaded.success) {
-    return { ok: false, reason: `YAML parse error: ${loaded.error?.message ?? 'unreadable file'}` };
+  let text: string;
+  try {
+    text = readFileSync(entryPath, 'utf8');
+  } catch (error) {
+    return {
+      ok: false,
+      reason: `YAML parse error: ${error instanceof Error ? error.message : String(error)}`,
+    };
   }
-  const data = loaded.data;
-  if (data === null || typeof data !== 'object' || Array.isArray(data)) {
-    return { ok: false, reason: `${entryPath} does not hold a YAML mapping` };
-  }
-  const declared = data as Record<string, unknown>;
+  const parsed = parseMapping(text, entryPath);
+  if (!parsed.ok) return parsed;
+  const { declared } = parsed;
 
-  const refusal = resourceType === 'gate' ? gateRefusal(resourceId, entryPath) : undefined;
+  const refusal = loaderRefusal(resourceType, resourceId, entryPath);
   if (refusal !== undefined) return { ok: false, reason: refusal };
 
+  if (resourceType === 'category') {
+    return { ok: true, snapshot: projectCategorySnapshot(resourceId, declared), text };
+  }
   const projected = await projectResourceSnapshot(resourceType, resourceId, entryPath, declared);
   return projected.shared
-    ? { ok: true, snapshot: projected.snapshot }
+    ? { ok: true, snapshot: projected.snapshot, text }
     : { ok: false, reason: projected.reason };
 }
 
 /** The live resource projected through the same contract a tool write projects it with. */
 function projectLive(
   live: LiveResources,
-  resourceType: TrackedResourceType,
+  lastSeenCategories: ReadonlyMap<string, string>,
+  resourceType: DiskEditResourceType,
   resourceId: string
 ): Record<string, unknown> | undefined {
-  if (resourceType === 'prompt') {
-    const prompt = live.prompt(resourceId);
-    return prompt === undefined ? undefined : canonicalPromptSnapshot(resourceId, prompt);
+  switch (resourceType) {
+    case 'prompt': {
+      const prompt = live.prompt(resourceId);
+      return prompt === undefined ? undefined : canonicalPromptSnapshot(resourceId, prompt);
+    }
+    case 'gate': {
+      const gate = live.gate(resourceId);
+      return gate === undefined ? undefined : gateSnapshotContract.project(resourceId, gate);
+    }
+    case 'framework': {
+      const framework = live.framework(resourceId);
+      return framework === undefined
+        ? undefined
+        : projectFrameworkSnapshot(resourceId, { framework: { ...framework } });
+    }
+    case 'category': {
+      const text = lastSeenCategories.get(resourceId);
+      if (text === undefined) return undefined;
+      // Bytes the loader would not read leave no prior state: there is no authored one to bridge.
+      const parsed = parseMapping(text, resourceId);
+      return parsed.ok ? projectCategorySnapshot(resourceId, parsed.declared) : undefined;
+    }
   }
-  const gate = live.gate(resourceId);
-  return gate === undefined ? undefined : gateSnapshotContract.project(resourceId, gate);
+}
+
+/** The bytes of a file, or `undefined` when it cannot be read. */
+function readIfPresent(filePath: string): string | undefined {
+  try {
+    return readFileSync(filePath, 'utf8');
+  } catch {
+    return undefined;
+  }
 }
 
 export class DiskEditVersionRecorder implements DiskEditVersioning {
+  /** The last `category.yaml` bytes seen serving each category id — its prior state. */
+  private readonly lastSeenCategories = new Map<string, string>();
+
   constructor(
     private readonly versions: Pick<
       VersionHistoryService,
@@ -147,6 +259,14 @@ export class DiskEditVersionRecorder implements DiskEditVersioning {
     >,
     private readonly live: LiveResources
   ) {}
+
+  rememberLoadedCategories(files: readonly LoadedCategoryFile[]): void {
+    for (const { resourceId, entryPath } of files) {
+      if (this.lastSeenCategories.has(resourceId)) continue;
+      const text = readIfPresent(entryPath);
+      if (text !== undefined) this.lastSeenCategories.set(resourceId, text);
+    }
+  }
 
   /**
    * Record what this change did to the resource's history. Throws when the database refuses a
@@ -157,6 +277,7 @@ export class DiskEditVersionRecorder implements DiskEditVersioning {
 
     // A removal event for a file that is there again is an editor's write-by-rename, not a delete.
     if (change.operation === 'removed' && !existsSync(entryPath)) {
+      if (resourceType === 'category') this.lastSeenCategories.delete(resourceId);
       // What `resource_manager delete` records: the history of a deleted resource is purged.
       return {
         kind: 'purged',
@@ -174,7 +295,11 @@ export class DiskEditVersionRecorder implements DiskEditVersioning {
     // The catalog already serves exactly this state (a save with no edit, a touch, a comment).
     // Nothing changed, so nothing is recorded — not even the bridge `commitEdit` would write for
     // a resource with no history yet, which would read as an edit nobody made.
-    const prior = projectLive(this.live, resourceType, resourceId);
+    const prior = projectLive(this.live, this.lastSeenCategories, resourceType, resourceId);
+    // From here on the file is served: a category's next prior state is these bytes, whatever
+    // this call records. Kept before the writes, so a write the database refuses still leaves the
+    // category's prior state at what is serving.
+    if (resourceType === 'category') this.lastSeenCategories.set(resourceId, produced.text);
     if (prior !== undefined && hashCanonical(prior) === hashCanonical(produced.snapshot)) {
       return { kind: 'unchanged' };
     }

@@ -64,6 +64,6 @@ export function projectCategorySnapshot(
     ...CATEGORY_OPTIONAL_SNAPSHOT_FIELDS,
   ]);
 
-  // Declared key order, always — `latestSnapshotMatches` is JSON.stringify equality.
+  // Declared key order and key set, always — see `canonicalizeSnapshot`.
   return canonicalizeSnapshot(snapshot, CATEGORY_SNAPSHOT_PROJECTED_KEYS);
 }

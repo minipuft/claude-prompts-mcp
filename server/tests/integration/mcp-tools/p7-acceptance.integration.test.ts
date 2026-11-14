@@ -79,6 +79,8 @@ async function createHarness(workspaceDir: string): Promise<Harness> {
     getConfigPath: () => join(workspaceDir, 'config.yaml'),
     getServerRoot: () => workspaceDir,
     getResolvedPromptsDirectory: () => promptsDir,
+    // A rollback asks it to tell a bundled prompt from one served elsewhere (`rebuildRoot`).
+    getBundledResourceDirectory: () => undefined,
   } as unknown as ConfigManager;
   const dependencies = {
     logger,
@@ -417,6 +419,8 @@ describe('P7 acceptance — create records version 1', () => {
       getConfigPath: () => join(workspaceDir, 'config.yaml'),
       getServerRoot: () => workspaceDir,
       getResolvedPromptsDirectory: () => promptsDir,
+      // A rollback asks it to tell a bundled prompt from one served elsewhere (`rebuildRoot`).
+      getBundledResourceDirectory: () => undefined,
     } as unknown as ConfigManager;
     const dependencies = {
       logger,

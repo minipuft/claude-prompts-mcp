@@ -123,7 +123,12 @@ export class FrameworkDiscoveryProcessor {
     let validationInfo = '';
     let advancedFieldsInfo = '';
     try {
-      const existingData = await this.ctx.fileService.loadExistingFramework(id);
+      // From where the framework is served, so a framework in a `paths.resources` folder is read
+      // back too; neither root the file service knows by itself holds it.
+      const existingData = await this.ctx.fileService.loadExistingFramework(
+        id,
+        framework.sourceRoot
+      );
       if (existingData !== null) {
         const creationData = this.ctx.fileService.toFrameworkCreationData(id, existingData);
         if (creationData !== null) {
