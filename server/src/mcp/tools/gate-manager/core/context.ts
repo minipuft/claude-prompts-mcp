@@ -1,6 +1,7 @@
 // @lifecycle canonical - Shared context for gate resource services.
 
 import type { GateManager } from '#engine/gates/gate-manager.js';
+import type { ShellVerifyExecutor } from '#engine/gates/shell/shell-verify-executor.js';
 import type { VersionHistoryService } from '#modules/versioning/index.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { ObjectDiffGenerator } from '../../resource-manager/prompt/analysis/object-diff-generator.js';
@@ -14,4 +15,6 @@ export interface GateResourceContext {
   versionHistoryService: VersionHistoryService;
   gateFileService: GateFileWriter;
   onRefresh?: () => Promise<void>;
+  /** Runs a gate's examples on `validate`; absent, each example is refused. */
+  shellVerifyExecutor?: ShellVerifyExecutor;
 }

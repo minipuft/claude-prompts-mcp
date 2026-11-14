@@ -192,6 +192,7 @@ describe('gate.yaml keys survive an update that did not name them (P4.67)', () =
       activation: 'activation:\n  prompt_categories: [code]',
       blockResponseOnFail: 'blockResponseOnFail: true',
       evaluation: 'evaluation:\n  mode: judge',
+      examples: 'examples:\n  - file: examples/pass.md\n    expect: pass',
     };
 
     /** The schema is `.passthrough()`, so an unknown key loads — and must survive a write too. */

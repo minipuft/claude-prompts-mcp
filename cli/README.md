@@ -38,6 +38,22 @@ The published copy is emitted to `server/dist/cpm.js` by `npm --prefix server ru
 
 All commands support `--json` for machine-readable output and `-w`/`--workspace` for workspace selection.
 
+## `cpm workspace`
+
+Manages the `workspaces.jsonc` registry that labels the workspace folders sitting side by side under one parent. The registry is in the parent of the workspace `cpm` resolves (`-w`, then `MCP_WORKSPACE`, then the current directory), so run the commands from inside a profile folder or pass `-w`. Its shape:
+
+```jsonc
+{ "dev": "./dev", "shared": "./shared" }
+```
+
+- `cpm workspace add <label> [dir]` registers a folder in the registry's parent, creating the file if needed; with no `dir` it takes the folder `MCP_RESOURCES_PATH` names (its parent when that folder is called `resources`).
+- `cpm workspace remove <label>` drops the label and leaves the folder on disk.
+- `cpm workspace list` prints each label and folder, marks the current one, and lists an `MCP_RESOURCES_PATH` folder no profile holds under `unregistered:`.
+- `cpm workspace show <label>` prints the folder, its `config.jsonc` or `config.json`, and how many prompts, gates, frameworks and styles it holds.
+- `cpm workspace use <label>` prints the `MCP_WORKSPACE=<folder>` line to put in your MCP client's server env; it writes nothing.
+
+There is no stacking command: a profile reads further folders through `paths.resources` in its own config. Worked example, the refusals and the stacking line: [Custom Resources, Profiles](../docs/guides/custom-resources.md#profiles).
+
 ## Architecture
 
 Self-contained esbuild bundle (~260KB) with zero runtime dependencies. Shares validation logic with the server via `server/src/cli-shared/` (Zod schemas, YAML utilities). A dependency-cruiser rule prevents transitive imports of server runtime modules.

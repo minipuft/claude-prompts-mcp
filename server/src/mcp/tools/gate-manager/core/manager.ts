@@ -4,7 +4,7 @@
  *
  * Thin routing layer for gate lifecycle management.
  * Domain logic delegated to:
- * - GateLifecycleProcessor: create, update, delete, reload
+ * - GateLifecycleProcessor: create, update, delete, reload, validate
  * - GateDiscoveryProcessor: list, inspect
  * - GateVersioningProcessor: history, rollback, compare
  */
@@ -46,6 +46,7 @@ export class GateToolHandler {
         configManager: deps.configManager,
       }),
       onRefresh: deps.onRefresh,
+      shellVerifyExecutor: deps.shellVerifyExecutor,
     };
 
     this.lifecycle = new GateLifecycleProcessor(ctx);
@@ -84,6 +85,8 @@ export class GateToolHandler {
         return this.discovery.handleList(args);
       case 'inspect':
         return this.discovery.handleInspect(args);
+      case 'validate':
+        return this.lifecycle.handleValidate(args);
       case 'history':
         return this.versioning.handleHistory(args);
       case 'rollback':

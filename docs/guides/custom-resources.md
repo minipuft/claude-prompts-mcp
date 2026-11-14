@@ -64,6 +64,47 @@ A custom list replaces the shipped content: a list that leaves `"bundled"` out s
 
 The list is a machine-level setting: put it in your workspace's `config.jsonc` or the file `MCP_CONFIG_PATH` names. Every entry must be an existing directory, listed once; the server refuses to start otherwise, and the [refusal table in Configuration](../reference/configuration.md#where-the-workspace-comes-from) lists each case. With a list in force, startup prints one line to stderr, `Resource locations: N prompts across M locations (...)`, naming the listed locations even when it found no prompts.
 
+## Profiles
+
+A profile is a workspace folder that a client selects by setting `MCP_WORKSPACE`; the workspace you already use is one, and registering it only gives it a label. Profiles that sit side by side under one parent folder can be listed in a registry file there, `workspaces.jsonc`, which maps each label to a folder beside it:
+
+```text
+~/prompts/
+  workspaces.jsonc      { "dev": "./dev", "shared": "./shared" }
+  dev/                  config.jsonc, resources/prompts/, ...
+  shared/               resources/prompts/, ...
+```
+
+The registry lives in the parent of the workspace `cpm` resolves (`-w`, then `MCP_WORKSPACE`, then the current directory), never in your home directory. Five commands manage it:
+
+- `cpm workspace add <label> [dir]` registers a folder that sits beside the registry, creating the file if needed. With no `dir` it takes the folder `MCP_RESOURCES_PATH` names (its parent when that folder is called `resources`). A folder outside the registry's parent or one that does not exist, a label already taken and a label that is not lowercase letters, digits, `-` and `_` are refused.
+- `cpm workspace remove <label>` drops the label and leaves the folder on disk.
+- `cpm workspace list` prints each label and folder, marks the current one `(current)`, and lists an `MCP_RESOURCES_PATH` folder no profile holds under `unregistered:`.
+- `cpm workspace show <label>` prints the folder, its config file and how many prompts, gates, frameworks and styles it holds.
+- `cpm workspace use <label>` prints the line to set, and writes nothing:
+
+  ```text
+  $ npx -p claude-prompts cpm workspace use dev
+  MCP_WORKSPACE=/home/you/prompts/dev
+  Set this in your MCP client's server env, in the env block of the claude-prompts server entry.
+  ```
+
+  Put that line in the `env` of the client's `claude-prompts` server entry ([Config examples per client](#config-examples-per-client)); switching profiles is changing that value and restarting the client.
+
+The commands find the registry from the workspace they resolve, so run them from inside a profile folder or pass `-w <profile folder>`. Standing in the parent folder itself looks for `workspaces.jsonc` one level too high. Editing an existing registry keeps its comments.
+
+To read a second library from a profile, list its folder in that profile's `paths.resources`; there is no command for it. With `shared/` holding a `resources/` folder, `dev/config.jsonc` reads it behind its own:
+
+```jsonc
+{
+  "paths": {
+    "resources": ["../shared/resources", "bundled"],
+  },
+}
+```
+
+Labels exist only in `cpm` and the registry. The server never resolves one: it reads `MCP_WORKSPACE`, and [`status`](#what-status-reports) shows `profile: <label> (siblings: ...)` when a registry sits beside the workspace.
+
 ## Where created resources are saved
 
 Prompts, gates, and frameworks you create through `resource_manager` are written to one folder per type. A `paths.resources` entry receives writes only when `paths.writeTarget` names it:

@@ -6,6 +6,7 @@
  * that routes to prompt, gate, and framework handlers.
  */
 
+import type { ResourceType } from '#modules/versioning/types.js';
 import type { Logger, ToolResponse } from '#shared/types/index.js';
 import type { CategoryToolHandler } from '../../category-manager/index.js';
 import type { FrameworkToolHandler } from '../../framework-manager/index.js';
@@ -29,7 +30,7 @@ export type ResourceAction =
   | 'delete'
   | 'list'
   | 'inspect'
-  | 'validate' // prompt only, non-mutating draft validation
+  | 'validate' // prompt (draft) and gate (examples); never writes
   | 'preview' // names its target in `preview_action`; never writes
   | 'reload'
   | 'analyze_type' // prompt only
@@ -94,12 +95,12 @@ export const CROSS_WORKSPACE_READ_ACTIONS: ReadonlySet<ResourceAction> = new Set
   'compare',
 ]);
 
-export const PROMPT_ONLY_ACTIONS: ResourceAction[] = [
-  'validate',
-  'analyze_type',
-  'analyze_gates',
-  'guide',
-];
+export const PROMPT_ONLY_ACTIONS: ResourceAction[] = ['analyze_type', 'analyze_gates', 'guide'];
+/**
+ * The types `validate` answers for: a prompt validates a creation draft, a gate runs the examples
+ * its author placed beside its definition. Neither writes.
+ */
+export const VALIDATE_RESOURCE_TYPES: readonly ResourceType[] = ['prompt', 'gate'];
 export const FRAMEWORK_ONLY_ACTIONS: ResourceAction[] = ['switch'];
 export const VERSIONING_ACTIONS: ResourceAction[] = ['history', 'rollback', 'compare'];
 export const COMMON_ACTIONS: ResourceAction[] = [

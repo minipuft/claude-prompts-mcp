@@ -392,6 +392,149 @@ User gates are hot-reloaded. Editing `gate.yaml` or `guidance.md` in workspace g
 
 </details>
 
+## Gate Examples
+
+**A gate ships the replies that prove its check.** Each example is a file beside `gate.yaml` and
+the outcome the gate should give it. `resource_manager` `validate` runs them through the gate's own
+check; a review never reads them.
+
+```yaml
+id: reply-cites-a-ticket
+name: Reply Cites a Ticket
+type: validation
+description: Fails a reply that names no ticket id
+guidance: Name the ticket the change belongs to, as `TICKET-<number>`.
+pass_criteria:
+  - type: shell_verify
+    shell_command: ["node", "check-ticket.js"]
+    shell_stdin_source: agent_response
+examples:
+  - file: examples/pass.md
+    expect: pass
+  - file: examples/fail-no-ticket.md
+    expect: fail
+```
+
+```
+reply-cites-a-ticket/
+├── gate.yaml
+├── check-ticket.js
+└── examples/
+    ├── pass.md
+    └── fail-no-ticket.md
+```
+
+`file` is relative to the gate's directory and `expect` is `pass` or `fail`. The gate does not load,
+and its file is quarantined like any other refused gate, when an example:
+
+- is an absolute path, contains a `..` segment, or is empty;
+- names a file that does not exist in the gate directory;
+- expects anything other than `pass` or `fail`.
+
+The refusal names the gate, the example's index, the path and the rule, for example
+`examples.1.file: example file 'examples/fail-no-ticket.md' does not exist in the gate directory
+(<gate dir>/examples/fail-no-ticket.md)`. A gate without `examples:` loads exactly as before.
+
+### What `validate` runs, and what it does not
+
+| The gate's check                                                               | What `validate` does with each example                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `shell_verify`                                                                 | Runs the example as the reply, on the path a review takes: a script the gate ships resolved to its absolute path, the reply on stdin under `shell_stdin_source: agent_response` (and in `shell_response_env_var` when set), the same allowlist, allowed directories and refused environment keys |
+| `script_tool` only                                                             | Not executed: examples run only for `shell_verify` gates                                                                                                                                                                                                                                         |
+| None (criteria or `semantic_evaluation`, judged by the client model)           | Not executed: there is no command to run                                                                                                                                                                                                                                                         |
+| Any command, with `MCP_SHELL_VERIFY_ALLOWLIST` unset or the command outside it | Refused, every example. A refusal never counts as a pass                                                                                                                                                                                                                                         |
+
+The reply reaches the command only through `shell_stdin_source: agent_response`. A command that
+does not read it still runs, but its outcome cannot depend on the example, and the line says so.
+That is why the shipped `test-suite` gate, whose `npm test` reads no reply, declares no examples.
+The working directory is not changed, so a path an example names is read where the check runs.
+
+```text
+resource_manager(resource_type:"gate", action:"validate", id:"reply-cites-a-ticket")
+
+✅ **Gate loads**: `reply-cites-a-ticket`
+
+Nothing written; no version recorded.
+
+Examples (2)
+✓ examples/pass.md — expected pass, got pass
+✓ examples/fail-no-ticket.md — expected fail, got fail
+```
+
+| Line | Meaning                                                                                                             |
+| ---- | ------------------------------------------------------------------------------------------------------------------- |
+| `✓`  | The gate gave the expected outcome                                                                                  |
+| `✗`  | `✗ <file> — expected pass, got fail (mismatch): <command> exited N`, with the command's stderr when it wrote any    |
+| `⛔` | `⛔ <file> — expected pass, refused: <reason>`: the executor would not run the command, so nothing was compared     |
+| `·`  | `· <file> — expected pass, not executed: <reason>`, under a header reading `Examples (N) — executed: no (<reason>)` |
+
+A `✗` or `⛔` line replaces the headline with `❌ **Gate examples not confirmed**`, naming how many
+examples missed and how many of those were refused, and makes the reply an error.
+`structuredContent.examples` carries the same report: `executed`, `mismatches`, `reason` when nothing
+ran, and one `{file, expect, outcome, detail}` per example. A gate that declares no examples answers
+with the headline alone. `validate` writes nothing and records no version.
+
+### Testing a gate you author
+
+1. Write the check so it reads the reply on stdin and exits 0 to pass, non-zero to fail.
+2. Write at least one reply it must pass and one it must fail, under `examples/` in the gate
+   directory, and declare them under `examples:`.
+3. Allow the command the server will actually run. The allowlist is matched after a script the gate
+   ships is resolved to its absolute path, so the entry names that path
+   (`node /abs/path/to/gates/reply-cites-a-ticket/check-ticket.js`) or a prefix covering it
+   (`node /abs/path/to/gates/*`). See [Allowlist entry format](#allowlist-entry-format).
+4. Run `resource_manager(resource_type:"gate", action:"validate", id:"<gate id>")` and read the lines.
+   Every line `✓` is the bar. A `⛔` line reading `no shell-verification allowlist is configured`
+   means step 3 is missing; one reading `command is not in MCP_SHELL_VERIFY_ALLOWLIST` means the
+   entry does not match the resolved command.
+
+**Examples are not versioned.** No `resource_manager` parameter writes `examples:` or the files
+beside the gate: an update carries the declaration forward unchanged, a gate's version snapshot
+holds neither the key nor the files, and a rollback leaves both as they are on disk. Edit them in
+the gate directory.
+
+### Worked example: `handoff-artifacts`
+
+The shipped `handoff-artifacts` gate fails a delegated step whose handoff names no artifacts, or
+names one that does not exist where the check runs. Its definition, without comments:
+
+```yaml
+id: handoff-artifacts
+name: Handoff Artifacts Exist
+type: validation
+description: Fails a delegated step whose handoff names no artifacts, or names one that does not exist where the check runs
+subject: evidence
+severity: high
+gate_type: custom
+guidanceFile: guidance.md
+
+pass_criteria:
+  - type: shell_verify
+    shell_command: ["node", "check-artifacts.js"]
+    shell_stdin_source: agent_response
+    shell_timeout: 10000
+
+examples:
+  - file: examples/pass.md
+    expect: pass
+  - file: examples/fail-missing-artifact.md
+    expect: fail
+  - file: examples/fail-no-artifacts-line.md
+    expect: fail
+
+retry_config:
+  max_attempts: 2
+  improvement_hints: true
+  preserve_context: true
+
+activation:
+  explicit_request: true
+```
+
+`pass.md` is a handoff whose `artifacts:` line names `./`, the directory the check runs in, so it
+passes wherever the gate is installed. `fail-missing-artifact.md` names a file no worker wrote, and
+`fail-no-artifacts-line.md` has a `done` heading with no `artifacts:` line at all.
+
 ## Gate Responses
 
 > [!WARNING]

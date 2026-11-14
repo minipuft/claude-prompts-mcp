@@ -523,7 +523,7 @@ describe('cpm guide', () => {
     expect(exitCode).toBe(0);
     const data = JSON.parse(stdout);
     expect(Array.isArray(data)).toBe(true);
-    expect(data.length).toBe(16);
+    expect(data.length).toBe(17);
   });
 
   it('ranks versioning commands for version goal', () => {

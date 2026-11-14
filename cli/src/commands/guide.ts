@@ -126,6 +126,13 @@ const CLI_ACTIONS: CliAction[] = [
     description: 'Disable a subsystem (shorthand for config set)',
     keywords: ['disable', 'off', 'deactivate', 'stop', 'mode'],
   },
+  {
+    id: 'workspace',
+    command: 'cpm workspace <add|remove|list|show|use>',
+    category: 'workspace',
+    description: 'Manage workspace profiles in workspaces.jsonc',
+    keywords: ['profile', 'profiles', 'switch', 'label', 'registry', 'workspaces'],
+  },
 ];
 
 const CATEGORIES = ['lifecycle', 'discovery', 'versioning', 'workspace'] as const;

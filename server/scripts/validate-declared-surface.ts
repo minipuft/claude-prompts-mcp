@@ -79,6 +79,14 @@ const EXEMPTIONS: Readonly<Record<string, readonly Exemption[]>> = {
         'value would name a file the writer does not produce.',
       stillExempt: () => true,
     },
+    {
+      key: 'examples',
+      reason:
+        'Data an author places beside a gate (example replies and their expected outcomes), not ' +
+        'a tool parameter: resource_manager validates and runs examples but does not write them ' +
+        '(ruling R3x). Flips when a writer writes example files.',
+      stillExempt: () => true,
+    },
   ],
   framework: [
     {

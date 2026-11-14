@@ -113,7 +113,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'action',
     type: 'enum[create|validate|update|delete|reload|list|inspect|preview|analyze_type|analyze_gates|guide|switch|history|rollback|compare]',
     description:
-      'Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. preview renders what update/delete/rollback would do without writing, naming its target in `preview_action`; it is not destructive, so it takes no `confirm`. Framework-only: switch. Versioning: history/rollback/compare. A create or update reply ends with a `saved: <absolute path>` line naming the file it wrote.',
+      'Operation to perform. Prompt-only: analyze_type/analyze_gates/guide. validate checks a prompt creation draft without writing; on a gate it runs the examples declared beside the gate through its own check and returns one line per example, listing them as not executed for a gate judged by the client model. preview renders what update/delete/rollback would do without writing, naming its target in `preview_action`; it is not destructive, so it takes no `confirm`. Framework-only: switch. Versioning: history/rollback/compare. A create or update reply ends with a `saved: <absolute path>` line naming the file it wrote.',
     required: true,
     status: 'working',
     compatibility: 'canonical',
@@ -938,6 +938,13 @@ export const resource_managerCommands: ToolCommand[] = [
     id: 'gate:list',
     summary: 'List all registered gates.',
     parameters: ['resource_type', 'action', 'enabled_only'],
+    status: 'working',
+  },
+  {
+    id: 'gate:validate',
+    summary:
+      "Run the examples declared beside a gate through the gate's own check and report each outcome against its expectation, one line per example. Writes nothing; a gate judged by the client model lists its examples as not executed.",
+    parameters: ['resource_type', 'action', 'id'],
     status: 'working',
   },
   {
