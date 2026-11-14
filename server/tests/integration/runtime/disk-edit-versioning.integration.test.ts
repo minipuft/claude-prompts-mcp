@@ -6,16 +6,21 @@
  * and the previous definition keeps serving.
  *
  * Driven through the change tracker's real watcher registration, a real `VersionHistoryService`
- * over a real SQLite file, the real prompt and gate loaders, and — for the ordering case — a real
- * `HotReloadObserver`, whose file-event input is the one thing simulated (no `fs.watch` timing).
+ * over a real SQLite file, the real prompt, gate and framework loaders, and — for the ordering
+ * case — a real `HotReloadObserver`, whose file-event input is the one thing simulated (no
+ * `fs.watch` timing). Frameworks and categories (f–h) are versioned the same way; their prior state
+ * comes from the framework registry and from the category bytes last seen, never from the disk the
+ * edit already changed. A rollback is driven through the server's byte-restore path.
  *
  * Classification: Integration (real SQLite, real filesystem, real loaders).
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import { GenericFrameworkGuide } from '../../../src/engine/frameworks/definitions/generic-framework-guide.js';
+import { FrameworkRegistry } from '../../../src/engine/frameworks/definitions/registry.js';
 import { GateRegistry } from '../../../src/engine/gates/registry/gate-registry.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
 import { ChangesActionHandler } from '../../../src/mcp/tools/system-control/handlers/changes-action-handler.js';
@@ -23,6 +28,9 @@ import { StatusActionHandler } from '../../../src/mcp/tools/system-control/handl
 import { HotReloadObserver } from '../../../src/modules/hot-reload/hot-reload-observer.js';
 import { PromptConverter } from '../../../src/modules/prompts/converter.js';
 import { PromptLoader } from '../../../src/modules/prompts/loader.js';
+import { applyByteRestore } from '../../../src/modules/versioning/byte-restore.js';
+import { projectCategorySnapshot } from '../../../src/modules/versioning/projections/category-snapshot.js';
+import { projectFrameworkSnapshot } from '../../../src/modules/versioning/projections/framework-snapshot.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
 import { DiskEditVersionRecorder } from '../../../src/runtime/disk-edit-versioning.js';
 import { PathResolver } from '../../../src/runtime/paths.js';
@@ -39,6 +47,7 @@ import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { ConfigLoader } from '../../../src/infra/config/index.js';
 import type { ResourceChangeTracker } from '../../../src/infra/observability/tracking/index.js';
 import type { SystemControlContext } from '../../../src/mcp/tools/system-control/core/types.js';
+import type { ResourceType } from '../../../src/modules/versioning/types.js';
 import type { AuxiliaryReloadConfig } from '../../../src/modules/hot-reload/hot-reload-observer.js';
 import type {
   DiskEditVersioning,
@@ -55,17 +64,46 @@ const PACKAGE_ROOT = path.join(TEST_DIR, 'package');
 const WORKSPACE = path.join(TEST_DIR, 'workspace');
 const PROMPTS = path.join(WORKSPACE, 'resources', 'prompts');
 const GATES = path.join(WORKSPACE, 'resources', 'gates');
+const FRAMEWORKS = path.join(WORKSPACE, 'resources', 'frameworks');
 const DB_PATH = path.join(TEST_DIR, 'runtime-state', 'state.db');
 
 const configManager = {
   getResolvedPromptsDirectory: () => PROMPTS,
   getGatesDirectory: () => GATES,
+  getFrameworksDirectory: () => FRAMEWORKS,
   getVersioningConfig: () => ({ enabled: true, autoVersion: true, maxVersions: 50 }),
   getServerRoot: () => TEST_DIR,
 } as unknown as ConfigLoader;
 
 const promptDir = (id: string): string => path.join(PROMPTS, 'general', id);
 const gateFile = (id: string): string => path.join(GATES, id, 'gate.yaml');
+const frameworkFile = (id: string): string => path.join(FRAMEWORKS, id, 'framework.yaml');
+const categoryFile = (id: string): string => path.join(PROMPTS, id, 'category.yaml');
+
+/** A framework's bytes, with a comment no projection writes back — a byte restore is visible. */
+const frameworkYaml = (id: string, name: string, guidance: string): string =>
+  [
+    `# ${id}, authored by hand`,
+    `id: ${id}`,
+    `name: ${name}`,
+    'type: custom',
+    'version: 1.0.0',
+    'enabled: true',
+    'description: a framework',
+    `systemPromptGuidance: ${guidance}`,
+    '',
+  ].join('\n');
+
+/** A category's bytes, with the same hand-authored comment. */
+const categoryYaml = (id: string, description: string): string =>
+  [`# ${id}, authored by hand`, `id: ${id}`, `name: ${id}`, `description: ${description}`, ''].join(
+    '\n'
+  );
+
+async function writeAt(file: string, content: string): Promise<void> {
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, content);
+}
 
 async function writePrompt(id: string, body: string): Promise<void> {
   await mkdir(promptDir(id), { recursive: true });
@@ -105,11 +143,37 @@ describe('a disk edit records a version, or its refusal, before the reload', () 
   let gates: GateRegistry;
   let locations: ResourceLocationScope;
   let livePrompts: ConvertedPrompt[] = [];
+  let frameworks: FrameworkRegistry;
 
+  // The framework accessor `hot-reload-auxiliaries.ts` hands the recorder: the registry's guide.
   const live: LiveResources = {
     prompt: (id) => livePrompts.find((prompt) => prompt.id === id),
     gate: (id) => gates.getGuide(id),
+    framework: (id) => {
+      const guide = frameworks
+        .getGuideEntries(false)
+        .find((entry) => entry.guide.frameworkId === id)?.guide;
+      return guide instanceof GenericFrameworkGuide ? guide.getDefinition() : undefined;
+    },
   };
+
+  /** What the framework handler does after the tracker: the registry serves the file again. */
+  async function loadFramework(id: string): Promise<void> {
+    if (!(await frameworks.loadAndRegisterById(id))) throw new Error(`framework ${id} not loaded`);
+  }
+
+  /** Roll back through the server's byte-restore path; the restored file's bytes. */
+  async function rollBack(type: ResourceType, id: string, version: number, file: string) {
+    const available = await versions.planByteRestore(type, id, version);
+    if (available.status !== 'ready') throw new Error(`v${version} not byte-restorable`);
+    const outcome = await applyByteRestore({
+      plan: available.plan,
+      bytes: available.bytes,
+      commit: async () => {},
+    });
+    expect(outcome.applied).toBe(true);
+    return await readFile(file, 'utf8');
+  }
 
   /** What `fullServerRefresh` does to the catalog: the prompt loader and converter, over the root. */
   async function reloadPrompts(): Promise<void> {
@@ -146,7 +210,7 @@ describe('a disk edit records a version, or its refusal, before the reload', () 
       requiresFullReload: false,
     });
 
-  const historyOf = async (type: 'prompt' | 'gate', id: string) =>
+  const historyOf = async (type: ResourceType, id: string) =>
     (await versions.loadHistory(type, id))?.versions ?? [];
 
   const changeRows = (id: string) =>
@@ -219,8 +283,16 @@ describe('a disk edit records a version, or its refusal, before the reload', () 
   beforeEach(async () => {
     await rm(PROMPTS, { recursive: true, force: true });
     await rm(GATES, { recursive: true, force: true });
+    await rm(FRAMEWORKS, { recursive: true, force: true });
     await mkdir(PROMPTS, { recursive: true });
     await mkdir(GATES, { recursive: true });
+    await mkdir(FRAMEWORKS, { recursive: true });
+    frameworks = new FrameworkRegistry(logger, {
+      autoLoadBuiltIn: false,
+      validateOnRegistration: false,
+      runtimeLoaderConfig: { frameworksDir: FRAMEWORKS },
+    });
+    await frameworks.initialize();
     db.run('DELETE FROM resource_changes');
     db.run('DELETE FROM version_history');
     livePrompts = [];
@@ -234,6 +306,7 @@ describe('a disk edit records a version, or its refusal, before the reload', () 
     // Slower than the batch window, so a reload that does not wait for the handler fires first.
     const recorder = new DiskEditVersionRecorder(versions, live);
     const slow: DiskEditVersioning = {
+      rememberLoadedCategories: (files) => recorder.rememberLoadedCategories(files),
       record: async (change) => {
         await new Promise((resolve) => setTimeout(resolve, 150));
         const outcome = await recorder.record(change);
@@ -405,4 +478,123 @@ describe('a disk edit records a version, or its refusal, before the reload', () 
     expect(changes).not.toContain('[unclosed');
     expect(refusedSection).not.toContain('[unclosed');
   });
+
+  it('(f) a framework edited on disk records a version from the registry, and rolls back to its bytes', async () => {
+    const oldBytes = frameworkYaml('fw_kept', 'Old name', 'OLD GUIDANCE');
+    await writeAt(frameworkFile('fw_kept'), oldBytes);
+    await writeAt(frameworkFile('fw_new'), frameworkYaml('fw_new', 'Was', 'WAS GUIDANCE'));
+    await loadFramework('fw_kept');
+    await loadFramework('fw_new');
+    // `fw_kept` was versioned when it was written; `fw_new` never was.
+    const v1 = await versions.saveVersion(
+      'framework',
+      'fw_kept',
+      projectFrameworkSnapshot('fw_kept', {
+        framework: {
+          name: 'Old name',
+          type: 'custom',
+          enabled: true,
+          description: 'a framework',
+          systemPromptGuidance: 'OLD GUIDANCE',
+        },
+      }),
+      { description: 'Created via resource_manager' }
+    );
+    expect(v1.version).toBe(1);
+    const registration = registrationFor(new DiskEditVersionRecorder(versions, live));
+
+    for (const id of ['fw_kept', 'fw_new']) {
+      await writeFile(frameworkFile(id), frameworkYaml(id, 'New name', 'NEW GUIDANCE'));
+      await fileEvent(registration, frameworkFile(id), 'modified');
+      await loadFramework(id);
+    }
+
+    // The edit is one row after the recorded one: the registry's state WAS version 1, so no bridge.
+    const kept = await historyOf('framework', 'fw_kept');
+    expect(kept.map((entry) => [entry.version, entry.description])).toEqual([
+      [2, 'Update via filesystem'],
+      [1, 'Created via resource_manager'],
+    ]);
+    expect(kept[0]?.snapshot['system_prompt_guidance']).toBe('NEW GUIDANCE');
+
+    // Never versioned: the bridge holds the state only the registry still knew when the event came.
+    const fresh = await historyOf('framework', 'fw_new');
+    expect(fresh.map((entry) => [entry.snapshot['name'], entry.description])).toEqual([
+      ['New name', 'Update via filesystem'],
+      ['Was', 'Bridge: prior live state (era transition or out-of-band edit)'],
+    ]);
+    expect(fresh[1]?.snapshot['system_prompt_guidance']).toBe('WAS GUIDANCE');
+
+    // Versioned, not change-logged: the change log's vocabulary is prompts and gates.
+    expect(changeRows('fw_kept')).toEqual([]);
+
+    // Rollback restores the bytes version 1 recorded, comment included.
+    expect(await rollBack('framework', 'fw_kept', 1, frameworkFile('fw_kept'))).toBe(oldBytes);
+  });
+
+  it('(g) a category.yaml edited on disk records a version from the bytes last seen, and rolls back to them', async () => {
+    const oldBytes = categoryYaml('notes', 'old description');
+    await writeAt(categoryFile('notes'), oldBytes);
+    await writeAt(categoryFile('drafts'), categoryYaml('drafts', 'was'));
+    const v1 = await versions.saveVersion(
+      'category',
+      'notes',
+      projectCategorySnapshot('notes', {
+        id: 'notes',
+        name: 'notes',
+        description: 'old description',
+      }),
+      { description: 'Created via resource_manager' }
+    );
+    expect(v1.version).toBe(1);
+    // Built after the files exist: the registration reads every served `category.yaml` as it starts.
+    const registration = registrationFor(new DiskEditVersionRecorder(versions, live));
+
+    for (const id of ['notes', 'drafts']) {
+      await writeFile(categoryFile(id), categoryYaml(id, 'new description'));
+      await fileEvent(registration, categoryFile(id), 'modified');
+    }
+
+    const notes = await historyOf('category', 'notes');
+    expect(
+      notes.map((entry) => [entry.version, entry.snapshot['description'], entry.description])
+    ).toEqual([
+      [2, 'new description', 'Update via filesystem'],
+      [1, 'old description', 'Created via resource_manager'],
+    ]);
+    const drafts = await historyOf('category', 'drafts');
+    expect(drafts.map((entry) => [entry.snapshot['description'], entry.description])).toEqual([
+      ['new description', 'Update via filesystem'],
+      ['was', 'Bridge: prior live state (era transition or out-of-band edit)'],
+    ]);
+
+    // The bytes a record projected are the next prior state: the same file again records nothing.
+    await fileEvent(registration, categoryFile('notes'), 'modified');
+    expect(await historyOf('category', 'notes')).toHaveLength(2);
+
+    expect(await rollBack('category', 'notes', 1, categoryFile('notes'))).toBe(oldBytes);
+  });
+
+  it('(h) a category.yaml added beside served prompts is a creation, with no bridge of derived defaults', async () => {
+    // The catalog serves a `fresh` category already — with a formatted name and a generated
+    // description, because no file declares them. None of that is an authored state to bridge.
+    await writePrompt('in_fresh', 'BODY');
+    await mkdir(path.join(PROMPTS, 'fresh'), { recursive: true });
+    const registration = registrationFor(new DiskEditVersionRecorder(versions, live));
+
+    await writeAt(categoryFile('fresh'), categoryYaml('fresh', 'declared now'));
+    await fileEvent(registration, categoryFile('fresh'), 'added');
+
+    const history = await historyOf('category', 'fresh');
+    expect(history.map((entry) => [entry.snapshot['description'], entry.description])).toEqual([
+      ['declared now', 'Created via filesystem'],
+    ]);
+  });
+
+  // Row 2.5 asks for style versioning or the reason it cannot be. It is not a bounded addition:
+  // `version_history` has no `style` type (`StoredResourceType`), and adding one widens
+  // `ResourceType`, which `resource_manager` routes on (a public MCP contract change), plus
+  // `FileBackedResourceType`'s enumerator and byte-restore tables, a style snapshot contract with a
+  // restore writer that no server surface has, and `cpm`'s `HistoryResourceType`.
+  it.skip('row 2.5: a style file edited on disk records a version — refused, styles carry no history', () => {});
 });

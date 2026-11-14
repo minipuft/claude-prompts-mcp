@@ -32,7 +32,12 @@ import { fileURLToPath } from 'node:url';
 
 import { DatabaseSync } from 'node:sqlite';
 
+import { projectResourceSnapshot } from '../../src/cli-shared/resource-snapshot.js';
+import { recordResourceWrite } from '../../src/cli-shared/version-history.js';
+import { updateRowDescription } from '../../src/modules/versioning/snapshot-contract.js';
 import { hashBytes } from '../../src/shared/utils/hash.js';
+import { resourceFileSet } from '../../src/shared/utils/resource-file-set.js';
+import { loadYamlFileSync } from '../../src/shared/utils/yaml/yaml-file-loader.js';
 import { buildServerEnv } from './helpers/child-env.js';
 import {
   getAvailablePort,
@@ -402,6 +407,91 @@ describe('cpm create records what it wrote (Streamable HTTP)', () => {
       id: 'watched_prompt',
     });
     expect(inspected.text).toContain('watched_gate');
+  }, 120000);
+
+  /**
+   * `cpm`'s own write path — `recordResourceWrite`, which every `cpm` command that edits a resource
+   * calls — run in this process, so its row can be held back. The seam is the `write` callback the
+   * command supplies: it returns the produced state, and the row is appended only after it does.
+   * Run against the server's `state.db` under the tenant `cpm` resolves, with the variables the
+   * binary is spawned with above.
+   */
+  const cpmWrite = async (
+    id: string,
+    hold: (write: () => Promise<void>) => Promise<void>
+  ): Promise<Awaited<ReturnType<typeof recordResourceWrite>>> => {
+    const gatesRoot = path.join(workspace, 'resources', 'gates');
+    const entryPath = path.join(gatesRoot, id, 'gate.yaml');
+    const project = async (): Promise<Record<string, unknown>> => {
+      const declared = loadYamlFileSync<Record<string, unknown>>(entryPath) ?? {};
+      return (await projectResourceSnapshot('gate', id, entryPath, declared)).snapshot;
+    };
+    const before = await readFile(entryPath, 'utf8');
+    const cliEnv: Record<string, string> = {
+      MCP_WORKSPACE: workspace,
+      MCP_RUNTIME_ROOT: workspace,
+      CLAUDE_PROJECT_DIR: SERVER_ROOT,
+    };
+    const saved = Object.fromEntries(Object.keys(cliEnv).map((key) => [key, process.env[key]]));
+    Object.assign(process.env, cliEnv);
+    try {
+      return await recordResourceWrite(
+        entryPath,
+        { resourceType: 'gate', resourceId: id },
+        {
+          enumerate: () =>
+            resourceFileSet({ resourceType: 'gate', entryPath, roots: { primary: gatesRoot } }),
+          targets: [{ path: entryPath, kind: 'file' }],
+          priorSnapshot: await project(),
+          write: async () => {
+            await hold(() => writeFile(entryPath, before.replace(/^name: .*$/m, 'name: Edited')));
+            return await project();
+          },
+          description: updateRowDescription('cpm'),
+        }
+      );
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  };
+
+  it("names a cpm write after cpm even when the watcher's row for the same bytes lands first", async () => {
+    // One write is one version, under the name of the command that made it (R5). The watcher
+    // debounces by 1 s, so `cpm`'s row normally lands first and the watcher skips the identical
+    // bytes (the CONTROL below). Here `cpm`'s row is held until the watcher has recorded the
+    // bytes: `cpm` then renames that identical newest row instead of skipping it.
+    createJson('create', 'gate', 'late_gate', '--name', 'Late', '--description', 'D');
+    createJson('create', 'gate', 'prompt_gate', '--name', 'Prompt', '--description', 'D');
+    // Served first, so each write below is an UPDATE the watcher records against the catalog.
+    await new Promise((resolve) => setTimeout(resolve, WATCHER_RELOAD_MS));
+
+    const late = await cpmWrite('late_gate', async (write) => {
+      await write();
+      await waitForHistoryRows('gate', 'late_gate', 2);
+      // The order under test: the watcher's row is there before `cpm` appends its own.
+      expect(historyRows('gate', 'late_gate').map((row) => row.description)).toEqual([
+        'Created via cpm',
+        'Update via filesystem',
+      ]);
+    });
+    expect(late).toEqual(expect.objectContaining({ written: true, recorded: true, version: 2 }));
+    expect(historyRows('gate', 'late_gate').map((row) => row.description)).toEqual([
+      'Created via cpm',
+      'Update via cpm',
+    ]);
+    expect(JSON.parse(historyRows('gate', 'late_gate')[1]!.snapshot)['name']).toBe('Edited');
+
+    // CONTROL: the same seam, not held — `cpm`'s row lands first and the watcher adds nothing.
+    const prompt = await cpmWrite('prompt_gate', (write) => write());
+    expect(prompt).toEqual(expect.objectContaining({ written: true, recorded: true, version: 2 }));
+    await new Promise((resolve) => setTimeout(resolve, WATCHER_RELOAD_MS));
+    expect(historyRows('gate', 'prompt_gate').map((row) => row.description)).toEqual([
+      'Created via cpm',
+      'Update via cpm',
+    ]);
   }, 120000);
 
   it('rolls a SERVER-written prompt back from cpm with no bridge row, and records the file when it moved', async () => {

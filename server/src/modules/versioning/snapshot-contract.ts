@@ -143,18 +143,15 @@ export function copyPresentFields(
 /**
  * Re-emit a snapshot's keys in the contract's declared order.
  *
- * Every projection MUST end here. `latestSnapshotMatches` decides whether an edit needs a bridge
- * row by comparing `JSON.stringify(recorded) === JSON.stringify(live)`, and `JSON.stringify`
- * preserves insertion order — so two records holding identical data in different key orders
- * compare unequal and every single edit bridges. That is not a hypothetical: it shipped in
- * Tier 3 and was caught only by driving a live server (F18). `project` built its required fields
- * first and appended the optional ones, while `projectWriteModel` emitted `projectedFields` order;
- * the two never matched, so a gate's history filled with bridge rows at two rows per edit.
+ * Every projection MUST end here. Whether a state is already recorded is decided by
+ * `hashCanonical` over the snapshot (`snapshotIdentity` in `version-history-service.ts` and
+ * `cli-shared/version-history-rows.ts`), which ignores key order but not key SET — so what this
+ * function guarantees is that two projections of one state carry the same keys, and that the text
+ * a row stores lists them in one order for every writer. When the identity was `JSON.stringify`
+ * equality, two projections emitting different orders bridged every edit, two rows per edit (F18).
  *
- * Ordering by the contract's own `projectedFields` makes the two directions agree by construction
- * rather than by each implementation remembering to. Keys outside `projectedFields` are dropped —
- * a projection has no business carrying them, and silently keeping one would reintroduce exactly
- * the order-dependence this removes.
+ * Keys outside `projectedFields` are dropped: a projection has no business carrying them, and one
+ * kept by a single writer would make the two writers' snapshots of one state compare unequal.
  */
 export function canonicalizeSnapshot(
   record: Record<string, unknown>,

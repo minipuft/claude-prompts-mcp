@@ -95,6 +95,6 @@ export function projectGateSnapshot(
 
   copyPresentFields(snapshot, source.definition, [...GATE_OPTIONAL_SNAPSHOT_FIELDS]);
 
-  // Declared key order, always — `latestSnapshotMatches` is JSON.stringify equality (F18).
+  // Declared key order and key set, always — see `canonicalizeSnapshot` (F18).
   return canonicalizeSnapshot(snapshot, GATE_SNAPSHOT_PROJECTED_KEYS);
 }
