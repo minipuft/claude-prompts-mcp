@@ -15,6 +15,7 @@ import type { CategoryCreationData, CategoryManagerInput } from '../core/types.j
 import { discoverYamlPromptsInCategory } from '#modules/prompts/category-maintenance.js';
 import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
 import {
+  createRowDescription,
   updateRowDescription,
   describeVersionRecord,
   projectWriteModel,
@@ -64,7 +65,37 @@ export class CategoryLifecycleProcessor {
       mcpPromptMode,
     };
 
-    const result = await this.ctx.categoryFileService.writeCategoryFiles(categoryData);
+    // The created declaration is recorded as its own version, inside the write's transaction, the
+    // way the gate and framework creates record theirs: a failed record writes nothing, history
+    // names `resource_manager` as the author, and the watcher, which sees the file land a moment
+    // later, finds the same state already recorded and adds nothing. Without it the first row was
+    // the watcher's `Created via filesystem`, crediting a hand edit nobody made.
+    //
+    // Recorded from the write model with no merge base: a create writes `category.yaml` where
+    // none existed, so the document holds exactly the fields supplied, and this projection is the
+    // one the watcher reads back off it. No `skip_version`: the `create` command does not declare
+    // the parameter, so nothing could supply it.
+    const commitOptions = this.ctx.versionHistoryService.isAutoVersionEnabled()
+      ? {
+          commit: async (): Promise<void> => {
+            await this.ctx.versionHistoryService.saveVersion(
+              'category',
+              id,
+              projectWriteModel(
+                id,
+                categoryData as unknown as Record<string, unknown>,
+                categorySnapshotContract.projectedFields
+              ),
+              { description: createRowDescription('resource_manager'), diff_summary: '' }
+            );
+          },
+        }
+      : {};
+
+    const result = await this.ctx.categoryFileService.writeCategoryFiles(
+      categoryData,
+      commitOptions
+    );
     if (!result.success) {
       return this.error(`Failed to create category: ${result.error}`);
     }

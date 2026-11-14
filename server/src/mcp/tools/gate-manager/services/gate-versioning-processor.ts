@@ -14,6 +14,7 @@ import {
   describeRestorePlan,
   describeRollbackPreview,
   describeRollbackRecord,
+  rebuildRoot,
 } from '#modules/versioning/index.js';
 
 export class GateVersioningProcessor {
@@ -100,6 +101,13 @@ export class GateVersioningProcessor {
       return this.error(describeIncompleteSnapshot('gate', id, version, restore.missingFields));
     }
 
+    // The rebuild writes where the gate is served from, as a byte restore does — see the same
+    // line in `prompt-versioning-processor.ts`. Bundled → `undefined`, the write root.
+    const root = rebuildRoot(
+      existingGate.getDefinition().sourceRoot,
+      this.ctx.configManager.getBundledResourceDirectory('gates')
+    );
+
     // A preview returns here — after validation, so it refuses an unrestorable version the same
     // way the real call does, and BEFORE the version row is recorded, so neither of the two
     // side-effect surfaces moves. The diff is projected from the write the rollback below performs
@@ -112,7 +120,9 @@ export class GateVersioningProcessor {
           id,
           version,
           this.ctx.textDiffService.generateFileChangeDiff(
-            await this.ctx.gateFileService.projectGateWrite(restore.writeModel)
+            await this.ctx.gateFileService.projectGateWrite(restore.writeModel, undefined, {
+              root,
+            })
           )
         )
       );
@@ -138,6 +148,7 @@ export class GateVersioningProcessor {
       restore.writeModel,
       undefined,
       {
+        root,
         commit: async (): Promise<void> => {
           try {
             const saveResult = await this.ctx.versionHistoryService.commitEdit(

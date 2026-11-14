@@ -104,15 +104,17 @@ export interface RestorePlanInput {
   resourceId: string;
   version: number;
   /**
-   * Absolute directory the restore writes into — the WORKSPACE root for this resource, always.
+   * Absolute directory the restore writes into: the root the resource is SERVED from, except that
+   * a bundled resource is written into the workspace's write root instead.
    *
-   * Not derived from `recordedOrigin`. `resource_manager rollback` already copy-on-writes a
-   * bundled resource into the workspace today (`gate-file-writer.ts` `isFreshDirectory`, and the
-   * same force in `file-operations.ts` for prompts): the writer resolves the workspace directory
-   * and creates the files there rather than editing the package's own tree. The byte path matches
-   * that rather than inventing a second rule, so a rollback of a bundled resource materialises a
-   * workspace override exactly as it does today — it simply carries the recorded bytes instead of
-   * a re-rendered projection.
+   * Not derived from `recordedOrigin`. A resource in the workspace, an overlay or a
+   * `paths.resources` folder is rewritten where it is served, so the restored copy is the one the
+   * loader reads rather than a second copy that would shadow it (`destinationFor` in
+   * `byte-restore.ts`, and `rebuildRoot` beside it for a restore rebuilt from a snapshot). A
+   * bundled resource is copied into the write root, as `resource_manager` already does for any
+   * edit of one (`gate-file-writer.ts` `isFreshDirectory`, and the same force in
+   * `file-operations.ts` for prompts): the package's own tree is never written, and the rollback
+   * materialises a workspace override that carries the recorded bytes.
    */
   destinationRoot: string;
   /**

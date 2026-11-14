@@ -81,6 +81,17 @@ interface PlannedFrameworkFile {
  * `phases.yaml` and `judge-prompt.md`, and shows `framework.yaml` lines the
  * merged file never holds (tutorial-rework B.20).
  */
+/**
+ * A write's commit step, and the root it lands in when that is not the write root.
+ *
+ * `root` is for a rollback rebuilt from a snapshot, which writes where the framework is served
+ * from (`rebuildRoot` in `modules/versioning/byte-restore.ts`). Every other write leaves it unset
+ * and lands under `getFrameworksDirectory()`.
+ */
+interface FrameworkWriteOptions extends ResourceWriteCommitOptions {
+  root?: string;
+}
+
 interface FrameworkWritePlan {
   frameworksDir: string;
   frameworkDir: string;
@@ -303,13 +314,16 @@ export class FrameworkFileWriter {
   /**
    * Load existing framework files from disk
    */
-  async loadExistingFramework(id: string): Promise<ExistingFrameworkData | null> {
+  async loadExistingFramework(
+    id: string,
+    servedRoot?: string
+  ): Promise<ExistingFrameworkData | null> {
     // Read from wherever the framework ACTUALLY lives, which is not always where a write would go
     // (P1.2). A framework served from the bundled tree has no directory under the writable root,
     // so this returned null and `handleUpdate` reported `Files may be corrupted` — a false
     // statement about a framework that loads and serves correctly. Measured 2026-08-30: updating
     // bundled `cageerf` under a distinct resources root failed outright.
-    const frameworkDir = this.resolveExistingFrameworkDir(id);
+    const frameworkDir = this.resolveExistingFrameworkDir(id, servedRoot);
     if (frameworkDir === null) {
       return null;
     }
@@ -447,12 +461,12 @@ export class FrameworkFileWriter {
   async writeFrameworkFiles(
     data: Partial<FrameworkCreationData> & { id: string },
     existingData?: ExistingFrameworkData | null,
-    options: ResourceWriteCommitOptions = {}
+    options: FrameworkWriteOptions = {}
   ): Promise<FrameworkFileResult> {
     // Every byte this write lands is decided here, before the transaction opens; the mutation
     // below applies the plan and decides nothing of its own, which is what keeps
     // `projectFrameworkWrite` reporting the same files and contents.
-    const plan = this.planFrameworkWrite(data, existingData);
+    const plan = this.planFrameworkWrite(data, existingData, options.root);
     const { frameworkDir, copyOnWriteSource } = plan;
     const frameworkYamlPath = join(frameworkDir, 'framework.yaml');
 
@@ -528,9 +542,10 @@ export class FrameworkFileWriter {
    */
   async projectFrameworkWrite(
     data: Partial<FrameworkCreationData> & { id: string },
-    existingData?: ExistingFrameworkData | null
+    existingData?: ExistingFrameworkData | null,
+    options: Pick<FrameworkWriteOptions, 'root'> = {}
   ): Promise<FileContentChange[]> {
-    const plan = this.planFrameworkWrite(data, existingData);
+    const plan = this.planFrameworkWrite(data, existingData, options.root);
     const prefix = relative(plan.frameworksDir, plan.frameworkDir);
 
     const changes: FileContentChange[] = [];
@@ -556,9 +571,15 @@ export class FrameworkFileWriter {
    */
   private planFrameworkWrite(
     data: Partial<FrameworkCreationData> & { id: string },
-    existingData: ExistingFrameworkData | null | undefined
+    existingData: ExistingFrameworkData | null | undefined,
+    root: string | undefined
   ): FrameworkWritePlan {
-    const frameworkDir = this.getFrameworkDir(data.id);
+    // `root` only for a rebuilt rollback (`FrameworkWriteOptions`); every other write lands in the
+    // write root.
+    const frameworkDir =
+      root !== undefined
+        ? resolveContainedPath(root, data.id.toLowerCase())
+        : this.getFrameworkDir(data.id);
 
     // P1.2 — copy the whole source subtree up before editing, when the framework lives in the
     // bundled tree and the write goes elsewhere. Same reasoning as prompts: the files below are
@@ -572,7 +593,7 @@ export class FrameworkFileWriter {
         : null;
 
     return {
-      frameworksDir: this.configManager.getFrameworksDirectory(),
+      frameworksDir: root ?? this.configManager.getFrameworksDirectory(),
       frameworkDir,
       copyOnWriteSource,
       // A copy puts the prior tree at `frameworkDir` before any file is written, so the content a
@@ -870,8 +891,16 @@ export class FrameworkFileWriter {
    * Distinct from `getFrameworkDir`, which answers where a write GOES. Keeping the two questions
    * separate is the whole of P1.2 — collapsing them is what made a bundled framework unreadable
    * to its own updater.
+   *
+   * `servedRoot`, the loader's `sourceRoot` stamp, is consulted first when a caller has it: a
+   * framework in a `paths.resources` folder is in neither of the two roots above. Only a rollback
+   * passes it today.
    */
-  public resolveExistingFrameworkDir(id: string): string | null {
+  public resolveExistingFrameworkDir(id: string, servedRoot?: string): string | null {
+    if (servedRoot !== undefined) {
+      const served = resolveContainedPath(servedRoot, id.toLowerCase());
+      if (existsSync(join(served, 'framework.yaml'))) return served;
+    }
     const writable = this.getFrameworkDir(id);
     if (existsSync(join(writable, 'framework.yaml'))) return writable;
 

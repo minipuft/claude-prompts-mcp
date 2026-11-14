@@ -117,6 +117,8 @@ Prompts, gates, and frameworks you create through `resource_manager` are written
 
 Editing a bundled prompt copies it into your folder first, and your copy then takes precedence over the bundled one.
 
+A rollback is the one exception to these rules. It writes where the resource is served from, so rolling back a prompt, gate or framework that lives in a `paths.resources` entry changes that entry's files rather than leaving a copy in your write folder that would hide them. This holds whether the version restores its recorded files byte for byte or is rebuilt from its recorded fields. A bundled resource is still copied into your write folder, as an edit copies it.
+
 Every create or update through `resource_manager` ends its result with one line naming the file it wrote, `saved: <absolute path>` (also `structuredContent.saved`), so you can see which of these folders received it. Skills Sync `pull` writes land in the same folders.
 
 ## What status reports

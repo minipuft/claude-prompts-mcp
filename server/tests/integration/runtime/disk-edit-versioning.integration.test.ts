@@ -23,6 +23,9 @@ import { GenericFrameworkGuide } from '../../../src/engine/frameworks/definition
 import { FrameworkRegistry } from '../../../src/engine/frameworks/definitions/registry.js';
 import { GateRegistry } from '../../../src/engine/gates/registry/gate-registry.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
+import { CategoryFileWriter } from '../../../src/mcp/tools/category-manager/services/category-file-writer.js';
+import { CategoryLifecycleProcessor } from '../../../src/mcp/tools/category-manager/services/category-lifecycle-processor.js';
+import { ObjectDiffGenerator } from '../../../src/mcp/tools/resource-manager/prompt/analysis/object-diff-generator.js';
 import { ChangesActionHandler } from '../../../src/mcp/tools/system-control/handlers/changes-action-handler.js';
 import { StatusActionHandler } from '../../../src/mcp/tools/system-control/handlers/status-action-handler.js';
 import { HotReloadObserver } from '../../../src/modules/hot-reload/hot-reload-observer.js';
@@ -45,6 +48,7 @@ import { testScratchPath } from '../../helpers/scratch-path.js';
 
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
 import type { ConfigLoader } from '../../../src/infra/config/index.js';
+import type { CategoryResourceContext } from '../../../src/mcp/tools/category-manager/core/context.js';
 import type { ResourceChangeTracker } from '../../../src/infra/observability/tracking/index.js';
 import type { SystemControlContext } from '../../../src/mcp/tools/system-control/core/types.js';
 import type { ResourceType } from '../../../src/modules/versioning/types.js';
@@ -589,6 +593,44 @@ describe('a disk edit records a version, or its refusal, before the reload', () 
     expect(history.map((entry) => [entry.snapshot['description'], entry.description])).toEqual([
       ['declared now', 'Created via filesystem'],
     ]);
+  });
+
+  it('(i) a category created through resource_manager is recorded by the tool, and the watcher that sees its file adds nothing', async () => {
+    await writePrompt('in_made', 'BODY');
+    const registration = registrationFor(new DiskEditVersionRecorder(versions, live));
+    const ctx: CategoryResourceContext = {
+      logger,
+      configManager: configManager as unknown as CategoryResourceContext['configManager'],
+      textDiffService: new ObjectDiffGenerator(),
+      versionHistoryService: versions,
+      categoryFileService: new CategoryFileWriter({
+        logger,
+        configManager: configManager as unknown as CategoryResourceContext['configManager'],
+      }),
+    };
+
+    const created = await new CategoryLifecycleProcessor(ctx).handleCreate({
+      action: 'create',
+      id: 'made',
+      name: 'Made',
+      description: 'made by the tool',
+    });
+    expect(created.isError).toBe(false);
+    // The tool's own row, before the watcher has seen anything.
+    expect((await historyOf('category', 'made')).map((entry) => entry.description)).toEqual([
+      'Created via resource_manager',
+    ]);
+
+    // The file the create wrote reaches the watcher as an addition, as it does on a live server.
+    await fileEvent(registration, categoryFile('made'), 'added');
+
+    const history = await historyOf('category', 'made');
+    expect(history.map((entry) => [entry.version, entry.description])).toEqual([
+      [1, 'Created via resource_manager'],
+    ]);
+    expect(history[0]?.snapshot).toEqual(
+      projectCategorySnapshot('made', { id: 'made', name: 'Made', description: 'made by the tool' })
+    );
   });
 
   // Row 2.5 asks for style versioning or the reason it cannot be. It is not a bounded addition:

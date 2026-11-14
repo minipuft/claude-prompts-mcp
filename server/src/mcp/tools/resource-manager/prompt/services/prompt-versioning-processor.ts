@@ -14,6 +14,7 @@ import {
   describeRestorePlan,
   describeRollbackPreview,
   describeRollbackRecord,
+  rebuildRoot,
   restoreWritesNothing,
   type RestorePlan,
   type SnapshotContract,
@@ -315,14 +316,28 @@ export class PromptVersioningProcessor {
       );
     }
 
+    // The rebuild writes where the prompt is served from, as a byte restore does: a prompt in a
+    // `paths.resources` folder is rewritten there rather than copied into the write root, where
+    // the copy would outrank it. Bundled → `undefined`, the write root, as for any edit.
+    const root = rebuildRoot(
+      currentPrompt.sourceRoot,
+      this.context.dependencies.configManager.getBundledResourceDirectory('prompts')
+    );
+
     // A preview returns here — after validation, so it refuses an unrestorable version the same
     // way the real call does, and BEFORE the version row is recorded, so neither the file nor the
     // table moves. The diff is projected from the same write the rollback below performs — same
-    // payload, same scope — so it names the files that write lands in rather than the snapshot's
-    // fields rendered as one YAML document.
+    // payload, same scope, same root — so it names the files that write lands in rather than the
+    // snapshot's fields rendered as one YAML document.
     if (isPreviewRequest(args)) {
       const diff = this.textDiffService.generateFileChangeDiff(
-        await this.fileOperations.projectPromptWrite(restore.promptData, ALL_PROMPT_DATA_KEYS)
+        await this.fileOperations.projectPromptWrite(
+          restore.promptData,
+          ALL_PROMPT_DATA_KEYS,
+          undefined,
+          undefined,
+          { root }
+        )
       );
       return {
         content: [
@@ -373,6 +388,7 @@ export class PromptVersioningProcessor {
         undefined,
         undefined,
         {
+          root,
           commit: async (): Promise<void> => {
             try {
               const saveResult = await this.context.versionHistoryService.commitEdit(
