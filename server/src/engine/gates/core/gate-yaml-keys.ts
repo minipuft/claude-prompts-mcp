@@ -52,9 +52,12 @@ export const GATE_YAML_EXCLUDED_KEYS = ['guidance'] as const;
  * (`resource-manager/prompt/operations/file-operations.ts`).
  *
  * Derived from `GATE_YAML_DECLARED_KEYS` (the walk of `GateDefinitionSchema`'s declared object
- * keys above), minus the projected and excluded sets (currently `severity`, `enforcementMode`,
- * `gate_type`, `blockResponseOnFail`). A future schema field lands here
- * automatically — nothing to update by hand.
+ * keys above), minus the projected and excluded sets (currently `subject`, `severity`,
+ * `enforcementMode`, `gate_type`, `blockResponseOnFail`, `examples`). A future schema field lands
+ * here automatically — nothing to update by hand.
+ *
+ * `examples` is here because no tool parameter writes it: an update carries the declaration
+ * forward, and the example files beside `gate.yaml` are left as they are.
  *
  * `GateCreationData` carries `severity` and `enforcementMode` since P4.4 and `gate_type` since
  * P4.10, so the "caller supplied a value" branch of `resolvePreservedGateYamlFields` is reachable
