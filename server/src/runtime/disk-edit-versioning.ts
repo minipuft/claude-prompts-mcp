@@ -20,6 +20,9 @@
  * THE PRODUCED STATE COMES FROM THE DISK, through the projection `cpm` uses
  * (`cli-shared/resource-snapshot.ts`), which is the server's own projection fed from the files —
  * one projection, so an unchanged file records nothing and a later tool write bridges nothing.
+ * The same identity decides that a file a tool already recorded records nothing either: the
+ * newest row is asked at record time (`compareWithLatest`), because the catalog lags every write
+ * made outside this process.
  *
  * Prompts and gates only: they are the kinds the change tracker locates (`TrackedResourceType`).
  */
@@ -140,7 +143,7 @@ export class DiskEditVersionRecorder implements DiskEditVersioning {
   constructor(
     private readonly versions: Pick<
       VersionHistoryService,
-      'saveVersion' | 'commitEdit' | 'deleteHistory'
+      'saveVersion' | 'commitEdit' | 'deleteHistory' | 'compareWithLatest'
     >,
     private readonly live: LiveResources
   ) {}
@@ -176,11 +179,25 @@ export class DiskEditVersionRecorder implements DiskEditVersioning {
       return { kind: 'unchanged' };
     }
 
+    // A tool already recorded exactly this state: `cpm` writes its files and then its own row
+    // (`Rollback to v1`, `Created via cpm`), and the catalog still serves the state before it, so
+    // the check above cannot see that. One write is one version (R5) — recording here would add
+    // a bridge of the stale catalog entry and a second row for the same bytes. Asked now, at
+    // record time, not when the event arrived, so a row that landed during the debounce counts.
+    const latest = await this.versions.compareWithLatest(
+      resourceType,
+      resourceId,
+      produced.snapshot
+    );
+    if (latest === 'same') return { kind: 'unchanged' };
+
     const result =
       prior === undefined
         ? await this.versions.saveVersion(resourceType, resourceId, produced.snapshot, {
+            // `added` with history already recorded is a file the catalog has not loaded yet
+            // (a `cpm create` then a hand edit, inside one debounce): an update of that history.
             description:
-              change.operation === 'added'
+              change.operation === 'added' && latest === 'none'
                 ? createRowDescription('filesystem')
                 : updateRowDescription('filesystem'),
           })

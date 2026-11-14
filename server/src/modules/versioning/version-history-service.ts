@@ -198,6 +198,38 @@ export class VersionHistoryService {
   }
 
   /**
+   * Where `snapshot` stands against the newest recorded row: no row yet, the same state, or not.
+   *
+   * The identity `appendVersion` skips on (`snapshotIdentity`, from the persisted text), asked
+   * without writing, under the tenant a write would use. For a caller that must decide whether a
+   * state is ALREADY recorded before it writes anything at all: the disk-edit recorder, whose
+   * bridge row would otherwise record its stale catalog entry over a row `cpm` already wrote for
+   * the same bytes (`runtime/disk-edit-versioning.ts`). Read when the caller is about to write,
+   * not when its event arrived, so a row another writer committed in between is seen.
+   *
+   * `none` when versioning is disabled: nothing is recorded then, so nothing is "already" there.
+   * Throws when the database refuses the read, by the contract `saveVersion` has.
+   */
+  async compareWithLatest(
+    resourceType: ResourceType,
+    resourceId: string,
+    snapshot: Record<string, unknown>
+  ): Promise<'none' | 'same' | 'different'> {
+    if (!this.getConfig().enabled) return 'none';
+    const tenantId = resolveContinuityScopeId(this.effectiveScope());
+    const row = this.getDb().queryOne<{ snapshot: string }>(
+      `SELECT snapshot FROM version_history
+       WHERE tenant_id = ? AND resource_type = ? AND resource_id = ?
+       ORDER BY version DESC LIMIT 1`,
+      [tenantId, resourceType, resourceId]
+    );
+    if (row === null) return 'none';
+    return snapshotIdentity(row.snapshot) === snapshotIdentity(JSON.stringify(snapshot))
+      ? 'same'
+      : 'different';
+  }
+
+  /**
    * Save a version snapshot before an update.
    *
    * **Throws on persistence failure.** `version_history` is a DURABLE table whose rows nothing
