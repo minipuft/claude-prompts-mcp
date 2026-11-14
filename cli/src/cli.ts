@@ -15,6 +15,7 @@ import { linkGateCmd } from './commands/link-gate.js';
 import { guide } from './commands/guide.js';
 import { config } from './commands/config.js';
 import { enableDisable } from './commands/enable-disable.js';
+import { workspace } from './commands/workspace.js';
 import { output } from './lib/output.js';
 
 const VERSION = process.env['CPM_VERSION'] ?? 'development';
@@ -37,6 +38,7 @@ const COMMANDS = [
   'config',
   'enable',
   'disable',
+  'workspace',
 ] as const;
 type CommandName = (typeof COMMANDS)[number];
 
@@ -443,6 +445,30 @@ Examples:
   cpm config history --limit 20
   cpm config rollback 3 --preview
   cpm config rollback 3`,
+
+  workspace: `cpm workspace - Manage workspace profiles (workspaces.jsonc)
+
+Usage: cpm workspace <subcommand> [options]
+
+The registry is workspaces.jsonc in the parent of the resolved workspace, mapping each label
+to a folder beside it: { "dev": "./dev", "shared": "./shared" }.
+
+Subcommands:
+  add <label> [dir]       Register a folder (default: the folder MCP_RESOURCES_PATH names)
+  remove <label>          Drop a label; the folder stays on disk
+  list                    List labels, mark the current one, show an unregistered MCP_RESOURCES_PATH
+  show <label>            Print a profile's folder, config file and resource counts
+  use <label>             Print the MCP_WORKSPACE line for your client config; writes nothing
+
+Options:
+  -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
+      --json              JSON output
+
+Examples:
+  cpm workspace add dev ./dev -w ./dev
+  cpm workspace list
+  cpm workspace show dev --json
+  cpm workspace use dev`,
 };
 
 function printHelp(command?: CommandName): void {
@@ -473,6 +499,7 @@ Commands:
   config     Manage workspace configuration (config.jsonc)
   enable     Enable a subsystem (shorthand for config set)
   disable    Disable a subsystem (shorthand for config set)
+  workspace  Manage workspace profiles (workspaces.jsonc)
 
 Options:
   -w, --workspace <path>  Workspace directory (default: MCP_WORKSPACE or cwd)
@@ -678,6 +705,14 @@ export async function run(args?: string[]): Promise<void> {
         json: parsed.global.json,
         action: 'disable',
         subsystem: parsed.positionals[0],
+      });
+      break;
+    case 'workspace':
+      exitCode = await workspace({
+        workspace: parsed.global.workspace,
+        json: parsed.global.json,
+        subcommand: parsed.positionals[0],
+        positionals: parsed.positionals.slice(1),
       });
       break;
     default: {

@@ -97,6 +97,10 @@ load from the package. With no `paths.resources` key, the shipped resources load
 workspace. With a list in force, startup prints one line to stderr counting the prompts it found
 and naming the listed locations, zero included.
 
+| Setting              | Precedence                                                                                                                                                              |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MCP_RESOURCES_PATH` | Its `<type>/` folder takes the place of the workspace's own `resources/<type>/`: read before the `paths.resources` list, and the folder created resources are saved to. |
+
 Your workspace's own `resources/` folder and a project's `.claude-prompts/resources/` are not
 listed: they always come before the list. The full order, and where a created resource is saved:
 [Custom Resources](../guides/custom-resources.md#where-resources-come-from).
