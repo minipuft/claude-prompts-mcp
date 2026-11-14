@@ -166,7 +166,10 @@ export interface GateFileWriterDependencies {
 export interface GateFileWriteResult {
   success: boolean;
   paths?: string[];
-  /** Absolute path of the gate's `gate.yaml`, set when the write landed, for the `saved:` line. */
+  /**
+   * Absolute path of the file this write landed, for the `saved:` line: `gate.yaml` whenever it
+   * was written, `guidance.md` for a guidance-only update. Set only when the write landed.
+   */
   savedPath?: string;
   error?: string;
   verificationFailure?: ResourceVerificationFailurePayload;
@@ -257,7 +260,14 @@ export class GateFileWriter {
       };
     }
 
-    return { success: true, paths: transactionResult.result?.paths ?? [], savedPath: yamlPath };
+    // Names the file this call wrote, not the gate's primary file: a guidance-only update leaves
+    // `gate.yaml` untouched, and a `saved:` line naming it would point the caller at a file whose
+    // bytes did not change. `plan.files` is in write order, `gate.yaml` first, so a write of both
+    // names `gate.yaml`. A plan with no file (an update supplying no field) keeps `gate.yaml`.
+    const firstWritten = plan.files[0];
+    const savedPath =
+      firstWritten !== undefined ? path.join(gateDir, firstWritten.relativePath) : yamlPath;
+    return { success: true, paths: transactionResult.result?.paths ?? [], savedPath };
   }
 
   /**

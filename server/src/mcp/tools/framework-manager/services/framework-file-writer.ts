@@ -51,6 +51,12 @@ export interface ExistingFrameworkData {
 export interface FrameworkFileResult {
   success: boolean;
   paths?: string[];
+  /**
+   * Absolute path of the file this write landed, for the `saved:` line: `framework.yaml` whenever
+   * it was written (a copy-on-write writes it too), otherwise the companion file an update
+   * rewrote alone. Set only when the write landed.
+   */
+  savedPath?: string;
   error?: string;
 }
 
@@ -481,7 +487,16 @@ export class FrameworkFileWriter {
       };
     }
 
-    return { success: true, paths: txResult.result?.paths ?? [] };
+    // Names the file this call wrote, not the framework's primary file: a phases-only or
+    // judge-prompt-only update leaves `framework.yaml` untouched. `plan.files` is in write order,
+    // `framework.yaml` first; a copy-on-write lands `framework.yaml` as well, and a plan with no
+    // file keeps it.
+    const firstWritten = plan.files[0];
+    const savedPath =
+      copyOnWriteSource === null && firstWritten !== undefined
+        ? join(frameworkDir, firstWritten.relativePath)
+        : frameworkYamlPath;
+    return { success: true, paths: txResult.result?.paths ?? [], savedPath };
   }
 
   /**

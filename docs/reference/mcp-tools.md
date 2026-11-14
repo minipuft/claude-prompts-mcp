@@ -864,7 +864,7 @@ All resource types support these actions:
 
 > **`confirm` rule:** `confirm:true` is declared exactly where a call deletes something you sent no replacement for: `delete`, `rollback`, and a prompt `update` with `tool_operation:"remove"`. Everywhere else, including gate, framework and category `update`, which delete nothing, `confirm` is refused by name.
 
-> **Saved line:** a `create` or `update` of a prompt, gate, framework or category ends its result with one last line, `saved: <absolute path of the prompt.yaml, gate.yaml, framework.yaml or category.yaml>`, and carries the path in `structuredContent.saved`. A `delete`, a refusal and a preview write no file and have no such line. Where the file lands: [Custom Resources](../guides/custom-resources.md#where-created-resources-are-saved).
+> **Saved line:** a `create` or `update` of a prompt, gate, framework or category ends its result with one last line, `saved: <absolute path of the file written>` (the resource's own YAML, or the one file an update rewrote alone, such as a gate's `guidance.md`), and carries the path in `structuredContent.saved`. A `delete`, a refusal and a preview write no file and have no such line. Where the file lands: [Custom Resources](../guides/custom-resources.md#where-created-resources-are-saved).
 
 > **Note:** For `list` and `inspect`, prefer [MCP Resources](#mcp-resources--token-efficient-discovery) (4-30x more token efficient). Use tool actions as fallback when filtering is needed or client doesn't support resources.
 

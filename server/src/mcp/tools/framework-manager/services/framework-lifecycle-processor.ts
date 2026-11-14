@@ -310,7 +310,7 @@ export class FrameworkLifecycleProcessor {
         `\`action: "reload"\` retries the same registration and will fail the same way unless the ` +
         `cause was transient — check the server log for the reason, then restart.`;
 
-    return withSavedLine(this.success(response), this.savedFrameworkPath(id));
+    return withSavedLine(this.success(response), result.savedPath);
   }
 
   /**
@@ -443,7 +443,7 @@ export class FrameworkLifecycleProcessor {
   }
 
   /**
-   * The `framework.yaml` a create or update of `id` wrote, for the reply's `saved:` line: the
+   * The `framework.yaml` a create of `id` wrote, for the reply's `saved:` line: the
    * writer resolves its directory through the same `getFrameworkDir`, so the two cannot differ.
    */
   private savedFrameworkPath(id: string): string {

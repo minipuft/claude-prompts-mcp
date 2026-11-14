@@ -1,6 +1,7 @@
 /**
- * Every `resource_manager` create and update reply ends with `saved: <absolute path>`, the primary
- * file the write produced, and a delete reply names no saved file (ruling R3j).
+ * Every `resource_manager` create and update reply ends with `saved: <absolute path>`, the file
+ * the write produced (`guidance.md` or a framework companion file when an update wrote only that),
+ * and a delete reply names no saved file (ruling R3j).
  *
  * Classification: integration. Real lifecycle processors over the real `FileOperations`,
  * `GateFileWriter`, `FrameworkFileWriter` and `CategoryFileWriter` writing into a temp directory,
@@ -137,7 +138,7 @@ describe('a create or update reply ends with the file it saved', () => {
     expect(updated.structuredContent?.['saved']).toBe(yamlPath);
   });
 
-  test('gate: create and update end with saved: <gate.yaml>; delete names no saved file', async () => {
+  test('gate: create and update end with saved: <the file written>; delete names no saved file', async () => {
     const gatesDir = join(tempRoot(), 'gates');
     const logger = createLogger();
     const configManager = {
@@ -190,9 +191,17 @@ describe('a create or update reply ends with the file it saved', () => {
     const updated = await lifecycle.handleUpdate({
       action: 'update',
       id: 'saved-gate',
-      guidance: 'Check it twice.',
+      description: 'Still says where it landed',
     } as GateManagerInput);
     expectSavedLine(updated, yamlPath);
+
+    // A guidance-only update leaves gate.yaml untouched, so the line names the file it did write.
+    const guidanceOnly = await lifecycle.handleUpdate({
+      action: 'update',
+      id: 'saved-gate',
+      guidance: 'Check it twice.',
+    } as GateManagerInput);
+    expectSavedLine(guidanceOnly, join(gatesDir, 'saved-gate', 'guidance.md'));
 
     const deleted = await lifecycle.handleDelete({
       action: 'delete',
@@ -202,7 +211,7 @@ describe('a create or update reply ends with the file it saved', () => {
     expectNoSavedLine(deleted);
   });
 
-  test('framework: create and update end with saved: <framework.yaml>; delete names no saved file', async () => {
+  test('framework: create and update end with saved: <the file written>; delete names no saved file', async () => {
     const frameworksDir = join(tempRoot(), 'frameworks');
     const logger = createLogger();
     const configManager = {
@@ -252,6 +261,7 @@ describe('a create or update reply ends with the file it saved', () => {
       name: 'Saved Framework',
       description: 'Says where it landed',
       system_prompt_guidance: 'Think.',
+      judge_prompt: 'Judge it.\n',
     } as FrameworkManagerInput);
     expectSavedLine(created, yamlPath);
 
@@ -261,6 +271,14 @@ describe('a create or update reply ends with the file it saved', () => {
       description: 'Still says where it landed',
     } as FrameworkManagerInput);
     expectSavedLine(updated, yamlPath);
+
+    // A judge-prompt-only update leaves framework.yaml untouched, so the line names the file it wrote.
+    const judgeOnly = await lifecycle.handleUpdate({
+      action: 'update',
+      id: 'saved-fw',
+      judge_prompt: 'Judge it again.\n',
+    } as FrameworkManagerInput);
+    expectSavedLine(judgeOnly, join(frameworksDir, 'saved-fw', 'judge-prompt.md'));
 
     const deleted = await lifecycle.handleDelete({
       action: 'delete',

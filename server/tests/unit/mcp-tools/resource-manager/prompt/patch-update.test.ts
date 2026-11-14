@@ -92,7 +92,10 @@ function createProcessor(
         currentPrompt = previous;
         throw new Error(`Prompt write failed and was rolled back: ${String(error)}`);
       }
-      return { message: 'written' };
+      return {
+        message: 'written',
+        savedPath: `/test/prompts/${String(promptData['category'])}/${String(promptData['id'])}/prompt.yaml`,
+      };
     }
   );
   const recordEditResult = jest.fn(
