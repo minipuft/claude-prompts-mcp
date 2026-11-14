@@ -1058,6 +1058,8 @@ describe('Framework lifecycle error messages name the resolved directory (B.26)'
       }),
       // Force `reregisterFramework` to fail, driving `handleReload`'s failure branch.
       registerFramework: async () => false,
+      // No served root to consult: the failure message falls back to the roots the writer knows.
+      getFramework: () => undefined,
       // `handleReload` asks the quarantine whether the reload failed because the file was READ
       // and refused, so it can name the cause instead of guessing. Nothing here refused a file,
       // and this double owns no loader, so the empty view is the honest answer — the test is

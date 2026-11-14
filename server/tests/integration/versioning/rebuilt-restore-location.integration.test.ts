@@ -8,6 +8,11 @@
  * from the wrong place. A rebuilt restore now writes where the resource is served from, as a
  * byte-exact restore already did; a bundled resource is still copied into the write root.
  *
+ * Every rollback reply ends with `saved: <the file it wrote>` (R3j), so the reply names where the
+ * restored bytes landed; a preview names none. A framework served from a listed folder is found by
+ * `update` and `inspect` too, which read where the loader stamped it as served rather than only the
+ * write root and the bundle.
+ *
  * Driven through the real `ConfigLoader` and `PathResolver`, composed as `runtime/context.ts`
  * composes them, reading a real `config.jsonc` list; the real prompt and gate loaders over the
  * roots they resolve; the real writers and versioning processors; and a real
@@ -21,10 +26,23 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+import {
+  getDefaultRuntimeLoader,
+  resetDefaultRuntimeLoader,
+} from '../../../src/engine/frameworks/definitions/runtime-framework-loader.js';
+import { createFrameworkManager } from '../../../src/engine/frameworks/framework-manager.js';
 import { createGateManager } from '../../../src/engine/gates/gate-manager.js';
 import { ConfigLoader } from '../../../src/infra/config/index.js';
 import { SqliteEngine } from '../../../src/infra/database/index.js';
+import { CategoryFileWriter } from '../../../src/mcp/tools/category-manager/services/category-file-writer.js';
+import { categorySnapshotContract } from '../../../src/mcp/tools/category-manager/services/category-snapshot-contract.js';
+import { CategoryVersioningProcessor } from '../../../src/mcp/tools/category-manager/services/category-versioning-processor.js';
+import { FrameworkDiscoveryProcessor } from '../../../src/mcp/tools/framework-manager/services/framework-discovery-processor.js';
+import { FrameworkDraftValidator } from '../../../src/mcp/tools/framework-manager/services/framework-draft-validator.js';
 import { FrameworkFileWriter } from '../../../src/mcp/tools/framework-manager/services/framework-file-writer.js';
+import { FrameworkLifecycleProcessor } from '../../../src/mcp/tools/framework-manager/services/framework-lifecycle-processor.js';
+import { frameworkSnapshotContract } from '../../../src/mcp/tools/framework-manager/services/framework-snapshot-contract.js';
+import { FrameworkVersioningProcessor } from '../../../src/mcp/tools/framework-manager/services/framework-versioning-processor.js';
 import { GateFileWriter } from '../../../src/mcp/tools/gate-manager/services/gate-file-writer.js';
 import { gateSnapshotContract } from '../../../src/mcp/tools/gate-manager/services/gate-snapshot-contract.js';
 import { GateVersioningProcessor } from '../../../src/mcp/tools/gate-manager/services/gate-versioning-processor.js';
@@ -39,6 +57,7 @@ import { rebuildRoot } from '../../../src/modules/versioning/byte-restore.js';
 import { canonicalPromptSnapshot } from '../../../src/modules/versioning/projections/prompt-snapshot.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
 import { PathResolver } from '../../../src/runtime/paths.js';
+import { parseYamlOrThrow } from '../../../src/shared/utils/yaml/yaml-parser.js';
 import {
   createResourceFileLocator,
   resolveResourceRoots,
@@ -47,7 +66,10 @@ import { withResourceLocations } from '../../helpers/resource-locations.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
 
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
+import type { FrameworkManager } from '../../../src/engine/frameworks/framework-manager.js';
 import type { GateManager } from '../../../src/engine/gates/gate-manager.js';
+import type { CategoryResourceContext } from '../../../src/mcp/tools/category-manager/core/context.js';
+import type { FrameworkResourceContext } from '../../../src/mcp/tools/framework-manager/core/context.js';
 import type { GateResourceContext } from '../../../src/mcp/tools/gate-manager/core/context.js';
 import type { PromptResourceContext } from '../../../src/mcp/tools/resource-manager/prompt/core/context.js';
 import type { ConfigManager, Logger, ToolResponse } from '../../../src/shared/types/index.js';
@@ -61,6 +83,20 @@ const CATEGORY = 'shelf';
 
 const textOf = (response: ToolResponse): string =>
   response.content.map((block) => ('text' in block ? block.text : '')).join('\n');
+
+/** The reply's last line: `saved: <path>` for a rollback that wrote a file. */
+const lastLine = (response: ToolResponse): string =>
+  textOf(response).trimEnd().split('\n').at(-1) ?? '';
+
+/** The package's own frameworks, which the registry refuses to start without. */
+const SHIPPED_FRAMEWORKS = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname),
+  '..',
+  '..',
+  '..',
+  'resources',
+  'frameworks'
+);
 
 /** Every `prompt.yaml` or `gate.yaml` under `dir`, relative to it; `[]` when `dir` is absent. */
 async function entryFilesUnder(dir: string): Promise<string[]> {
@@ -240,6 +276,11 @@ describe('a rollback rebuilt from a snapshot writes where the resource is served
 
       expect(response.isError).toBe(false);
       expect(textOf(response)).toContain('rolled back to version 1');
+      // The reply names the listed file the rebuild wrote, not a write-root path.
+      expect(lastLine(response)).toBe(
+        `saved: ${path.join(listedFor('prompts'), CATEGORY, PROMPT_ID, 'prompt.yaml')}`
+      );
+      expect(textOf(response).match(/^saved: /gm)).toHaveLength(1);
       expect(await readFile(userMessage, 'utf8')).toContain('ORIGINAL BODY');
       expect(await entryFilesUnder(writeRootFor('prompts'))).toEqual([]);
       // The restored state is the one served, from the listed folder.
@@ -259,6 +300,9 @@ describe('a rollback rebuilt from a snapshot writes where the resource is served
 
       expect(response.isError).toBe(false);
       expect(textOf(response)).toContain('byte for byte');
+      // The one file the restore put back, where it put it.
+      expect(lastLine(response)).toBe(`saved: ${userMessage}`);
+      expect(response.structuredContent?.['saved']).toBe(userMessage);
       expect(await readFile(userMessage, 'utf8')).toBe('EDITED BODY\n');
       expect(await entryFilesUnder(writeRootFor('prompts'))).toEqual([]);
     });
@@ -293,6 +337,8 @@ describe('a rollback rebuilt from a snapshot writes where the resource is served
       const preview = await rollBack(1, true);
 
       expect(preview.isError).toBe(false);
+      // A preview writes nothing, so it names no saved file.
+      expect(textOf(preview)).not.toMatch(/^saved: /m);
       const diff = String((preview.structuredContent as { diff?: unknown }).diff);
       // A diff against the listed file removes its current line; one against an empty write-root
       // folder would only add.
@@ -365,9 +411,251 @@ describe('a rollback rebuilt from a snapshot writes where the resource is served
       });
 
       expect(response.isError).toBe(false);
+      expect(lastLine(response)).toBe(`saved: ${gateFile}`);
       expect(await readFile(gateFile, 'utf8')).toContain('original description');
       expect(await entryFilesUnder(writeRootFor('gates'))).toEqual([]);
       expect(live().description).toBe('original description');
+    });
+  });
+
+  describe('framework', () => {
+    const FRAMEWORK_ID = 'listed_fw';
+    let frameworkManager: FrameworkManager;
+    let lifecycle: FrameworkLifecycleProcessor;
+    let discovery: FrameworkDiscoveryProcessor;
+    let processor: FrameworkVersioningProcessor;
+
+    /** A framework with a phases file, so a write that lost the companion file is visible. */
+    async function writeFrameworkAt(frameworksRoot: string, description: string): Promise<string> {
+      const dir = path.join(frameworksRoot, FRAMEWORK_ID);
+      await mkdir(dir, { recursive: true });
+      await writeFile(
+        path.join(dir, 'phases.yaml'),
+        [
+          'phases:',
+          '  - id: listed_step',
+          '    name: Listed step',
+          '    description: the step this framework lists',
+          '',
+        ].join('\n')
+      );
+      const file = path.join(dir, 'framework.yaml');
+      await writeFile(
+        file,
+        [
+          `id: ${FRAMEWORK_ID}`,
+          'name: Listed Framework',
+          'type: LISTED',
+          'version: 1.0.0',
+          'enabled: true',
+          `description: ${description}`,
+          'systemPromptGuidance: think in listed steps',
+          'phasesFile: phases.yaml',
+          '',
+        ].join('\n')
+      );
+      return file;
+    }
+
+    /**
+     * The real framework manager over the roots the resolver names, configured as the composition
+     * root configures it, with the real processors over the real file service.
+     */
+    async function startFrameworks(list: string[]): Promise<void> {
+      await start(list);
+      const roots = resolveResourceRoots(resolver, 'frameworks', resolver.getFrameworksPath());
+      resetDefaultRuntimeLoader();
+      getDefaultRuntimeLoader({
+        ...(roots.primary !== undefined ? { frameworksDir: roots.primary } : {}),
+        additionalFrameworksDirs: [...roots.lookupDirs],
+        shippedFrameworksDir: SHIPPED_FRAMEWORKS,
+      });
+      frameworkManager = await createFrameworkManager(logger);
+      const ctx = {
+        logger,
+        frameworkManager,
+        configManager,
+        fileService: new FrameworkFileWriter({ logger, configManager }),
+        textDiffService: new ObjectDiffGenerator(),
+        versionHistoryService: versions,
+        onRefresh: async () => {},
+      } as FrameworkResourceContext;
+      const validator = new FrameworkDraftValidator();
+      lifecycle = new FrameworkLifecycleProcessor(ctx, validator);
+      discovery = new FrameworkDiscoveryProcessor(ctx, validator);
+      processor = new FrameworkVersioningProcessor(ctx);
+    }
+
+    const live = () => {
+      const framework = frameworkManager.getFramework(FRAMEWORK_ID);
+      if (framework === undefined) throw new Error(`${FRAMEWORK_ID} is not registered`);
+      return framework;
+    };
+
+    afterEach(() => {
+      resetDefaultRuntimeLoader();
+    });
+
+    it('(a) update finds a framework served only from the listed folder and copies it whole into the write root', async () => {
+      await startFrameworks(['./custom']);
+      const listedFile = await writeFrameworkAt(listedFor('frameworks'), 'listed description');
+      expect(await frameworkManager.registerFramework(FRAMEWORK_ID)).toBe(true);
+      expect(live().sourceRoot).toBe(listedFor('frameworks'));
+
+      const response = await lifecycle.handleUpdate({
+        action: 'update',
+        id: FRAMEWORK_ID,
+        description: 'updated description',
+      });
+
+      expect(response.isError).toBe(false);
+      const copied = path.join(writeRootFor('frameworks'), FRAMEWORK_ID);
+      expect(lastLine(response)).toBe(`saved: ${path.join(copied, 'framework.yaml')}`);
+      // An edit lands in the write root, as for a bundled framework, carrying the listed folder's
+      // companion file with it: the copy is a whole framework, not a lone framework.yaml.
+      expect(await readFile(path.join(copied, 'phases.yaml'), 'utf8')).toContain('listed_step');
+      expect(await readFile(path.join(copied, 'framework.yaml'), 'utf8')).toContain(
+        'updated description'
+      );
+      expect(await readFile(listedFile, 'utf8')).toContain('listed description');
+      // Re-registered from the copy, which now outranks the listed folder.
+      expect(live().sourceRoot).toBe(writeRootFor('frameworks'));
+    });
+
+    it('(b) inspect reads a listed framework back from its files', async () => {
+      await startFrameworks(['./custom']);
+      await writeFrameworkAt(listedFor('frameworks'), 'listed description');
+      expect(await frameworkManager.registerFramework(FRAMEWORK_ID)).toBe(true);
+      expect(live().sourceRoot).toBe(listedFor('frameworks'));
+
+      const response = await discovery.handleInspect({ action: 'inspect', id: FRAMEWORK_ID });
+
+      expect(response.isError).toBe(false);
+      // The quality score is computed only from the files the file service read back.
+      expect(textOf(response)).toContain('**Quality:**');
+    });
+
+    it('(c) CONTROL: a framework in the write root still updates and inspects', async () => {
+      await startFrameworks(['./custom']);
+      const file = await writeFrameworkAt(writeRootFor('frameworks'), 'workspace description');
+      expect(await frameworkManager.registerFramework(FRAMEWORK_ID)).toBe(true);
+      expect(live().sourceRoot).toBe(writeRootFor('frameworks'));
+
+      const updated = await lifecycle.handleUpdate({
+        action: 'update',
+        id: FRAMEWORK_ID,
+        description: 'updated description',
+      });
+      const inspected = await discovery.handleInspect({ action: 'inspect', id: FRAMEWORK_ID });
+
+      expect(updated.isError).toBe(false);
+      expect(lastLine(updated)).toBe(`saved: ${file}`);
+      expect(await readFile(file, 'utf8')).toContain('updated description');
+      expect(textOf(inspected)).toContain('**Quality:**');
+      expect(existsSync(listedFor('frameworks'))).toBe(false);
+    });
+
+    it('(d) a rebuilt rollback rewrites the listed framework and names that file', async () => {
+      await startFrameworks(['./custom']);
+      const listedFile = await writeFrameworkAt(listedFor('frameworks'), 'original description');
+      expect(await frameworkManager.registerFramework(FRAMEWORK_ID)).toBe(true);
+      const writer = new FrameworkFileWriter({ logger, configManager });
+      const project = async (): Promise<Record<string, unknown>> => {
+        const loaded = await writer.loadExistingFramework(FRAMEWORK_ID, listedFor('frameworks'));
+        if (loaded === null) throw new Error('the listed framework did not load');
+        return frameworkSnapshotContract.project(FRAMEWORK_ID, loaded);
+      };
+      const before = await project();
+      await writeFrameworkAt(listedFor('frameworks'), 'edited description');
+      const recorded = await versions.commitEdit(
+        'framework',
+        FRAMEWORK_ID,
+        before,
+        await project(),
+        {
+          description: 'Update via filesystem',
+        }
+      );
+      expect(recorded).toMatchObject({ bridged: true, version: 2 });
+
+      const preview = await processor.handleRollback({
+        action: 'preview',
+        preview_action: 'rollback',
+        id: FRAMEWORK_ID,
+        version: 1,
+      });
+      expect(preview.isError).toBe(false);
+      expect(textOf(preview)).not.toMatch(/^saved: /m);
+
+      const response = await processor.handleRollback({
+        action: 'rollback',
+        id: FRAMEWORK_ID,
+        version: 1,
+        confirm: true,
+      });
+
+      expect(response.isError).toBe(false);
+      expect(lastLine(response)).toBe(`saved: ${listedFile}`);
+      expect(await readFile(listedFile, 'utf8')).toContain('original description');
+      expect(existsSync(writeRootFor('frameworks'))).toBe(false);
+    });
+  });
+
+  describe('category', () => {
+    const CATEGORY_ID = 'shelf';
+
+    it('a rebuilt rollback names the category.yaml it wrote, and its preview names none', async () => {
+      await start(['./custom']);
+      const ctx = {
+        logger,
+        configManager,
+        textDiffService: new ObjectDiffGenerator(),
+        versionHistoryService: versions,
+        categoryFileService: new CategoryFileWriter({ logger, configManager }),
+        onRefresh: async () => {},
+      } as CategoryResourceContext;
+      const processor = new CategoryVersioningProcessor(ctx);
+      const file = path.join(writeRootFor('prompts'), CATEGORY_ID, 'category.yaml');
+      const declare = async (description: string): Promise<Record<string, unknown>> => {
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(
+          file,
+          [`id: ${CATEGORY_ID}`, 'name: Shelf', `description: ${description}`, ''].join('\n')
+        );
+        return categorySnapshotContract.project(
+          CATEGORY_ID,
+          parseYamlOrThrow<Record<string, unknown>>(await readFile(file, 'utf8'))
+        );
+      };
+      const before = await declare('original description');
+      const after = await declare('edited description');
+      const recorded = await versions.commitEdit('category', CATEGORY_ID, before, after, {
+        description: 'Update via filesystem',
+      });
+      expect(recorded).toMatchObject({ bridged: true, version: 2 });
+      expect((await versions.planByteRestore('category', CATEGORY_ID, 1)).status).toBe(
+        'projection-only'
+      );
+
+      const preview = await processor.handleRollback({
+        action: 'preview',
+        preview_action: 'rollback',
+        id: CATEGORY_ID,
+        version: 1,
+      });
+      expect(preview.isError).toBe(false);
+      expect(textOf(preview)).not.toMatch(/^saved: /m);
+
+      const response = await processor.handleRollback({
+        action: 'rollback',
+        id: CATEGORY_ID,
+        version: 1,
+        confirm: true,
+      });
+
+      expect(response.isError).toBe(false);
+      expect(lastLine(response)).toBe(`saved: ${file}`);
+      expect(await readFile(file, 'utf8')).toContain('original description');
     });
   });
 

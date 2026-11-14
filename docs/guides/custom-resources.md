@@ -115,11 +115,11 @@ Prompts, gates, and frameworks you create through `resource_manager` are written
 - **A workspace is set** (`MCP_WORKSPACE`, `--workspace`, or the Claude Code plugin's data folder) and `MCP_RESOURCES_PATH` is not: `<workspace>/resources/<type>/`, for example `<workspace>/resources/prompts/`. The folder does not need to exist; the first write creates it. If the workspace already keeps that type in the older `<workspace>/<type>/` layout, writes go there instead, so one collection is not split across two folders.
 - **Neither is set**: the package's own resources folder, which a reinstall replaces.
 
-Editing a bundled prompt copies it into your folder first, and your copy then takes precedence over the bundled one.
+Editing a bundled prompt copies it into your folder first, and your copy then takes precedence over the bundled one. Editing a framework that lives in a `paths.resources` entry does the same: its files are copied into your write folder and edited there, and the entry's own files are left unchanged.
 
 A rollback is the one exception to these rules. It writes where the resource is served from, so rolling back a prompt, gate or framework that lives in a `paths.resources` entry changes that entry's files rather than leaving a copy in your write folder that would hide them. This holds whether the version restores its recorded files byte for byte or is rebuilt from its recorded fields. A bundled resource is still copied into your write folder, as an edit copies it.
 
-Every create or update through `resource_manager` ends its result with one line naming the file it wrote, `saved: <absolute path>` (also `structuredContent.saved`), so you can see which of these folders received it. Skills Sync `pull` writes land in the same folders.
+Every create, update or rollback through `resource_manager` ends its result with one line naming the file it wrote, `saved: <absolute path>` (also `structuredContent.saved`), so you can see which of these folders received it. Skills Sync `pull` writes land in the same folders.
 
 ## What status reports
 

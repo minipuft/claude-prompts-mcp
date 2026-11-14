@@ -2,6 +2,7 @@
 
 import { gateSnapshotContract } from './gate-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
+import { withRestoreOutcome, withWriteOutcome } from '../../shared/saved-line.js';
 
 import type { RestorePlan } from '#modules/versioning/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
@@ -185,13 +186,16 @@ export class GateVersioningProcessor {
 
     const reloaded = await this.ctx.gateManager.reload(id);
 
-    return this.success(
-      `✅ Gate '${id}' rolled back to version ${version}\n\n` +
-        `${describeRollbackRecord(restoreOutcome)}\n` +
-        (reloaded
-          ? `🔄 Gate reloaded with restored content`
-          : `⚠️ Files restored, but the gate could not be reloaded into this process — it still ` +
-            `holds its pre-rollback content. See the server log.`)
+    return withWriteOutcome(
+      this.success(
+        `✅ Gate '${id}' rolled back to version ${version}\n\n` +
+          `${describeRollbackRecord(restoreOutcome)}\n` +
+          (reloaded
+            ? `🔄 Gate reloaded with restored content`
+            : `⚠️ Files restored, but the gate could not be reloaded into this process — it ` +
+              `still holds its pre-rollback content. See the server log.`)
+      ),
+      writeResult
     );
   }
 
@@ -242,14 +246,17 @@ export class GateVersioningProcessor {
     }
 
     const reloaded = await this.ctx.gateManager.reload(id);
-    return this.success(
-      `✅ Gate '${id}' rolled back to version ${version}, byte for byte\n\n` +
-        `${describeRestorePlan(plan)}\n\n` +
-        `${describeRollbackRecord(restoreOutcome)}\n` +
-        (reloaded
-          ? `🔄 Gate reloaded with restored content`
-          : `⚠️ Files restored, but the gate could not be reloaded into this process — it still ` +
-            `holds its pre-rollback content. See the server log.`)
+    return withRestoreOutcome(
+      this.success(
+        `✅ Gate '${id}' rolled back to version ${version}, byte for byte\n\n` +
+          `${describeRestorePlan(plan)}\n\n` +
+          `${describeRollbackRecord(restoreOutcome)}\n` +
+          (reloaded
+            ? `🔄 Gate reloaded with restored content`
+            : `⚠️ Files restored, but the gate could not be reloaded into this process — it ` +
+              `still holds its pre-rollback content. See the server log.`)
+      ),
+      plan
     );
   }
 

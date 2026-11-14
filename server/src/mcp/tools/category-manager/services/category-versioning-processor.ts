@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { CATEGORY_YAML_FILENAME, readCategoryYamlDocument } from './category-file-writer.js';
 import { categorySnapshotContract } from './category-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
+import { withRestoreOutcome, withWriteOutcome } from '../../shared/saved-line.js';
 
 import type { RestorePlan } from '#modules/versioning/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
@@ -175,10 +176,13 @@ export class CategoryVersioningProcessor {
 
     await this.ctx.onRefresh?.();
 
-    return this.success(
-      `✅ Category '${id}' rolled back to version ${version}\n\n` +
-        `${describeRollbackRecord(restoreOutcome)}\n` +
-        `🔄 Prompt data reloaded with the restored declaration`
+    return withWriteOutcome(
+      this.success(
+        `✅ Category '${id}' rolled back to version ${version}\n\n` +
+          `${describeRollbackRecord(restoreOutcome)}\n` +
+          `🔄 Prompt data reloaded with the restored declaration`
+      ),
+      writeResult
     );
   }
 
@@ -223,11 +227,14 @@ export class CategoryVersioningProcessor {
 
     await this.ctx.onRefresh?.();
 
-    return this.success(
-      `✅ Category '${id}' rolled back to version ${version}, byte for byte\n\n` +
-        `${describeRestorePlan(plan)}\n\n` +
-        `${describeRollbackRecord(restoreOutcome)}\n` +
-        `🔄 Prompt data reloaded with the restored declaration`
+    return withRestoreOutcome(
+      this.success(
+        `✅ Category '${id}' rolled back to version ${version}, byte for byte\n\n` +
+          `${describeRestorePlan(plan)}\n\n` +
+          `${describeRollbackRecord(restoreOutcome)}\n` +
+          `🔄 Prompt data reloaded with the restored declaration`
+      ),
+      plan
     );
   }
 

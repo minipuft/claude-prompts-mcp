@@ -3,6 +3,7 @@
 import { reregisterFramework } from './framework-reregistration.js';
 import { frameworkSnapshotContract } from './framework-snapshot-contract.js';
 import { isPreviewRequest } from '../../shared/preview-action.js';
+import { withRestoreOutcome, withWriteOutcome } from '../../shared/saved-line.js';
 
 import type { RestorePlan } from '#modules/versioning/index.js';
 import type { ToolResponse } from '#shared/types/index.js';
@@ -209,16 +210,15 @@ export class FrameworkVersioningProcessor {
         `left at the current value\n`;
     }
 
-    if (!registered) {
-      return this.success(
-        `${response}⚠️ The files were written, but the in-memory framework still holds its ` +
-          `pre-rollback content and will until the server restarts. See the server log for why ` +
-          `registration failed.`
-      );
-    }
-
-    return this.success(
-      `${response}🔄 Re-registered — the restored content is live in this process`
+    return withWriteOutcome(
+      this.success(
+        registered
+          ? `${response}🔄 Re-registered — the restored content is live in this process`
+          : `${response}⚠️ The files were written, but the in-memory framework still holds its ` +
+              `pre-rollback content and will until the server restarts. See the server log for ` +
+              `why registration failed.`
+      ),
+      writeResult
     );
   }
 
@@ -304,12 +304,15 @@ export class FrameworkVersioningProcessor {
       `${describeRestorePlan(plan)}\n\n` +
       `${describeRollbackRecord(restoreOutcome)}\n`;
 
-    return this.success(
-      registered
-        ? `${response}🔄 Re-registered — the restored content is live in this process`
-        : `${response}⚠️ The files were written, but the in-memory framework still holds its ` +
-            `pre-rollback content and will until the server restarts. See the server log for why ` +
-            `registration failed.`
+    return withRestoreOutcome(
+      this.success(
+        registered
+          ? `${response}🔄 Re-registered — the restored content is live in this process`
+          : `${response}⚠️ The files were written, but the in-memory framework still holds its ` +
+              `pre-rollback content and will until the server restarts. See the server log for ` +
+              `why registration failed.`
+      ),
+      plan
     );
   }
 

@@ -186,8 +186,12 @@ export class FrameworkLifecycleProcessor {
       return this.error(`Framework '${id}' not found. Use create action to add new framework.`);
     }
 
-    // Load existing YAML files from disk
-    const existingData = await this.ctx.fileService.loadExistingFramework(id);
+    // Read the files from where the framework is served (the loader's `sourceRoot` stamp): a
+    // framework in a `paths.resources` folder is in neither root the file service looks in by
+    // itself, so without it this read found nothing and the update was refused as corrupted. The
+    // write still lands in the write root, copying the served files in first (`servedRoot`).
+    const servedRoot = existingFramework.sourceRoot;
+    const existingData = await this.ctx.fileService.loadExistingFramework(id, servedRoot);
     if (existingData === null) {
       return this.error(`Failed to load framework files for '${id}'. Files may be corrupted.`);
     }
@@ -225,7 +229,7 @@ export class FrameworkLifecycleProcessor {
     // is resolved from the plan the writer applies, with the arguments the writer is handed below,
     // so both name the files the write lands in and the lines that change in them.
     const diffResult = this.ctx.textDiffService.generateFileChangeDiff(
-      await this.ctx.fileService.projectFrameworkWrite(frameworkData, existingData)
+      await this.ctx.fileService.projectFrameworkWrite(frameworkData, existingData, { servedRoot })
     );
 
     // Auto-versioning — go-forward: version N holds the state edit N produced, matching prompts
@@ -266,11 +270,10 @@ export class FrameworkLifecycleProcessor {
         : {};
 
     // Write framework files with merge from existing data
-    const result = await this.ctx.fileService.writeFrameworkFiles(
-      frameworkData,
-      existingData,
-      commitOptions
-    );
+    const result = await this.ctx.fileService.writeFrameworkFiles(frameworkData, existingData, {
+      ...commitOptions,
+      servedRoot,
+    });
 
     if (!result.success) {
       return this.error(`Failed to update framework: ${result.error}`);
@@ -684,13 +687,15 @@ export class FrameworkLifecycleProcessor {
       // "the file is missing". The previous text sent operators to check a file that exists.
       //
       // Resolved through the same roots the loader itself reads (`resolveExistingFrameworkDir`
-      // checks the writable root first, then the bundled root — matching
-      // `RuntimeFrameworkLoader`'s primary-then-additional-dirs order). Falls back to the write
-      // target (`getFrameworkDir`) when the id resolves nowhere, since that is where an operator
-      // would place the file.
+      // checks the root the framework was last served from, then the writable root, then the
+      // bundled root — matching `RuntimeFrameworkLoader`'s primary-then-additional-dirs order).
+      // Falls back to the write target (`getFrameworkDir`) when the id resolves nowhere, since
+      // that is where an operator would place the file.
       const frameworkDir =
-        this.ctx.fileService.resolveExistingFrameworkDir(id) ??
-        this.ctx.fileService.getFrameworkDir(id);
+        this.ctx.fileService.resolveExistingFrameworkDir(
+          id,
+          this.ctx.frameworkManager.getFramework(id)?.sourceRoot
+        ) ?? this.ctx.fileService.getFrameworkDir(id);
       return this.error(
         `Failed to reload framework '${id}' — it could not be registered from disk. Check the ` +
           `server log for the reason, then verify that ` +

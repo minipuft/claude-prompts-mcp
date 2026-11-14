@@ -1,9 +1,14 @@
 // @lifecycle canonical - Prompt version history operations.
 
 import { isPreviewRequest } from '../../../shared/preview-action.js';
+import { withRestoreOutcome, withWriteOutcome } from '../../../shared/saved-line.js';
 import { ObjectDiffGenerator } from '../analysis/object-diff-generator.js';
 import { PromptResourceContext } from '../core/context.js';
-import { ALL_PROMPT_DATA_KEYS, FileOperations } from '../operations/file-operations.js';
+import {
+  ALL_PROMPT_DATA_KEYS,
+  FileOperations,
+  type PromptWriteResult,
+} from '../operations/file-operations.js';
 import { validateRequiredFields } from '../utils/validation.js';
 
 import type { PromptResourceInput } from '../../core/types.js';
@@ -371,6 +376,7 @@ export class PromptVersioningProcessor {
     // canonicalPromptSnapshot).
     let restoreOutcome: { version?: number; recorded: boolean } | undefined;
     let recordFailure: string | undefined;
+    let writeResult: PromptWriteResult;
 
     // Same write model as `update`: one writer (`createOrUpdateYamlPrompt`) means
     // rollback inherits the on-disk field preservation Tier 1.4 established, so the
@@ -382,7 +388,7 @@ export class PromptVersioningProcessor {
     // writer resolves that purely from `restore.promptData.category` vs the on-disk directory,
     // with no rollback-specific code needed here.
     try {
-      await this.fileOperations.updatePromptImplementation(
+      writeResult = await this.fileOperations.updatePromptImplementation(
         restore.promptData,
         ALL_PROMPT_DATA_KEYS,
         undefined,
@@ -432,27 +438,32 @@ export class PromptVersioningProcessor {
 
     await this.context.dependencies.onRefresh();
 
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text:
-            `✅ Prompt '${id}' rolled back to version ${version}\n\n` +
-            `${describeRollbackRecord(restoreOutcome)}\n` +
-            describeUnversionedScriptTools(currentPrompt) +
-            `🔄 Prompts reloaded`,
+    // Ends with where the rebuilt files landed, as an update does: the served folder for a listed
+    // prompt, the write root for a bundled one.
+    return withWriteOutcome(
+      {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `✅ Prompt '${id}' rolled back to version ${version}\n\n` +
+              `${describeRollbackRecord(restoreOutcome)}\n` +
+              describeUnversionedScriptTools(currentPrompt) +
+              `🔄 Prompts reloaded`,
+          },
+        ],
+        structuredContent: {
+          action: 'rollback',
+          id,
+          restored_version: version,
+          current_version: restoreOutcome.version,
+          mutated: true,
+          refreshed: true,
         },
-      ],
-      structuredContent: {
-        action: 'rollback',
-        id,
-        restored_version: version,
-        current_version: restoreOutcome.version,
-        mutated: true,
-        refreshed: true,
+        isError: false,
       },
-      isError: false,
-    };
+      writeResult
+    );
   }
 
   /** One error reply shape, so a new refusal cannot arrive in a different one. */
@@ -529,29 +540,32 @@ export class PromptVersioningProcessor {
 
     await this.context.dependencies.onRefresh();
 
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text:
-            `✅ Prompt '${id}' rolled back to version ${version}, byte for byte\n\n` +
-            `${describeRestorePlan(plan)}\n\n` +
-            `${describeRollbackRecord(restoreOutcome)}\n` +
-            `🔄 Prompts reloaded`,
+    return withRestoreOutcome(
+      {
+        content: [
+          {
+            type: 'text' as const,
+            text:
+              `✅ Prompt '${id}' rolled back to version ${version}, byte for byte\n\n` +
+              `${describeRestorePlan(plan)}\n\n` +
+              `${describeRollbackRecord(restoreOutcome)}\n` +
+              `🔄 Prompts reloaded`,
+          },
+        ],
+        structuredContent: {
+          action: 'rollback',
+          id,
+          restored_version: version,
+          current_version: restoreOutcome.version,
+          mutated: true,
+          refreshed: true,
+          files_written: plan.write.map((file) => file.path),
+          files_left_in_place: plan.leftInPlace,
         },
-      ],
-      structuredContent: {
-        action: 'rollback',
-        id,
-        restored_version: version,
-        current_version: restoreOutcome.version,
-        mutated: true,
-        refreshed: true,
-        files_written: plan.write.map((file) => file.path),
-        files_left_in_place: plan.leftInPlace,
+        isError: false,
       },
-      isError: false,
-    };
+      plan
+    );
   }
 
   async handleCompare(args: PromptResourceInput): Promise<ToolResponse> {
