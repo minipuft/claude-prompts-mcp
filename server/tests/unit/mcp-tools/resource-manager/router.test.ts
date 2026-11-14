@@ -486,6 +486,37 @@ describe('ResourceManagerRouter', () => {
       expect(result.isError).toBeFalsy();
       expect(mockPromptResourceHandler.handleAction).toHaveBeenCalledTimes(1);
     });
+
+    test('allows validate action for gate resources and forwards it to the gate handler', async () => {
+      const result = await router.handleAction(
+        { resource_type: 'gate', action: 'validate', id: 'handoff-artifacts' },
+        {}
+      );
+
+      expect(result.isError).toBeFalsy();
+      expect(mockGateManager.handleAction).toHaveBeenCalledTimes(1);
+      expect(mockGateManager.handleAction).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'validate', id: 'handoff-artifacts' }),
+        {}
+      );
+    });
+
+    test.each(['framework', 'category'] as const)(
+      'rejects validate action for %s resources and names the types that take it',
+      async (resource_type) => {
+        const result = await router.handleAction(
+          { resource_type, action: 'validate', id: 'some-id' },
+          {}
+        );
+
+        expect(result.isError).toBe(true);
+        expect((result.content[0] as { text: string }).text).toContain(
+          'Action "validate" is only valid for resource_type: "prompt" or "gate"'
+        );
+        expect(mockFrameworkManager.handleAction).not.toHaveBeenCalled();
+        expect(mockCategoryManager.handleAction).not.toHaveBeenCalled();
+      }
+    );
   });
 
   describe('common actions', () => {
