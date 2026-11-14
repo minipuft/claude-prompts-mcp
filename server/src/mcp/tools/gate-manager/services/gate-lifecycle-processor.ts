@@ -1,4 +1,4 @@
-// @lifecycle canonical - Gate CRUD operations: create, update, delete, reload.
+// @lifecycle canonical - Gate CRUD operations: create, update, delete, reload; validate runs examples.
 import { existsSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -9,11 +9,13 @@ import { isPreviewRequest } from '../../shared/preview-action.js';
 import { formatRepairServingLine } from '../../shared/quarantine-report.js';
 import { withSavedLine, withWriteOutcome } from '../../shared/saved-line.js';
 
+import type { GateExampleReport } from '#engine/gates/services/gate-example-runner.js';
 import type { ToolResponse } from '#shared/types/index.js';
 import type { QuarantinedResource } from '#shared/utils/resource-quarantine.js';
 import type { GateResourceContext } from '../core/context.js';
 import type { GateManagerInput, GateCreationData } from '../core/types.js';
 
+import { runGateExamples } from '#engine/gates/services/gate-example-runner.js';
 import { purgeHistoryOnDelete } from '#modules/versioning/delete-purge.js';
 import {
   createRowDescription,
@@ -23,6 +25,7 @@ import {
 } from '#modules/versioning/index.js';
 import { logMcpToolChange } from '#shared/core/resource-change-log.js';
 import { resolveContainedPath } from '#shared/utils/path-containment.js';
+import { currentRequestStateScope } from '#shared/utils/request-state-scope.js';
 import { preferredRepairTarget } from '#shared/utils/resource-quarantine.js';
 
 export class GateLifecycleProcessor {
@@ -705,6 +708,58 @@ export class GateLifecycleProcessor {
     return this.success(`🔄 Gate '${id}' reloaded successfully${reasonText}`);
   }
 
+  /**
+   * Runs the examples a gate's author placed beside its definition, through the executor a review
+   * uses, and reports one line per example. Writes nothing and records no version. A gate that
+   * declares no examples answers with the header alone.
+   */
+  async handleValidate(args: GateManagerInput): Promise<ToolResponse> {
+    const { id } = args;
+    if (id === undefined || id === '') {
+      return this.error('Gate ID is required for validate action');
+    }
+
+    const gate = this.ctx.gateManager.get(id);
+    if (gate === undefined) return this.error(`Gate '${id}' not found`);
+
+    const definition = gate.getDefinition();
+    const loads = `✅ **Gate loads**: \`${definition.id}\``;
+    const nothingWritten = 'Nothing written; no version recorded.';
+    if ((definition.examples ?? []).length === 0) {
+      return {
+        content: [{ type: 'text', text: `${loads}\n\n${nothingWritten}` }],
+        structuredContent: { action: 'validate', valid: true, id: definition.id, mutated: false },
+        isError: false,
+      };
+    }
+
+    const scope = currentRequestStateScope();
+    const report = await runGateExamples(definition, {
+      executor: this.ctx.shellVerifyExecutor,
+      ...(scope !== undefined ? { scope } : {}),
+    });
+    const valid = report.mismatches === 0;
+    const refused = report.results.filter((result) => result.outcome === 'refused').length;
+    const headline = valid
+      ? loads
+      : `❌ **Gate examples not confirmed**: \`${definition.id}\` — ${report.mismatches} of ` +
+        `${report.results.length} example(s) did not give their expected outcome` +
+        (refused > 0 ? `, ${refused} because the check was refused` : '') +
+        '.';
+    const text = `${headline}\n\n${nothingWritten}\n\n${formatGateExampleSection(report)}`;
+    return {
+      content: [{ type: 'text', text }],
+      structuredContent: {
+        action: 'validate',
+        valid,
+        id: definition.id,
+        examples: report,
+        mutated: false,
+      },
+      isError: !valid,
+    };
+  }
+
   private trackChange(operation: 'added' | 'modified' | 'removed', id: string): void {
     try {
       const gatesDir = this.ctx.configManager.getGatesDirectory();
@@ -727,4 +782,30 @@ export class GateLifecycleProcessor {
   private error(text: string): ToolResponse {
     return { content: [{ type: 'text', text: `❌ ${text}` }], isError: true };
   }
+}
+
+/** The `Examples (<n>)` section of a gate `validate` reply: one line per example. */
+function formatGateExampleSection(report: GateExampleReport): string {
+  const heading =
+    `Examples (${report.results.length})` +
+    (report.executed ? '' : ` — executed: no (${report.reason ?? 'no example ran'})`);
+  const lines = report.results.map((result) => {
+    const subject = `${result.file} — expected ${result.expect}`;
+    switch (result.outcome) {
+      case 'not_executed':
+        return `· ${subject}, not executed: ${oneLine(result.detail)}`;
+      case 'refused':
+        return `⛔ ${subject}, refused: ${oneLine(result.detail)}`;
+      default:
+        return result.outcome === result.expect
+          ? `✓ ${subject}, got ${result.outcome}`
+          : `✗ ${subject}, got ${result.outcome} (mismatch): ${oneLine(result.detail)}`;
+    }
+  });
+  return [heading, ...lines].join('\n');
+}
+
+/** A detail on its example's one line: a multi-line refusal or stderr collapsed to spaces. */
+function oneLine(text: string): string {
+  return text.trim().replace(/\s*\n\s*/g, ' ');
 }

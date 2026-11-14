@@ -40,6 +40,8 @@
  * For deeper documentation: docs/guides/gates.md (Enforcement Modes section).
  */
 
+import * as path from 'node:path';
+
 import { z } from 'zod/v4';
 
 import { ARTIFACT_KINDS } from '../utils/artifact-kinds.js';
@@ -426,6 +428,47 @@ export const GateRetryConfigSchema = z
 export type GateRetryConfigYaml = z.infer<typeof GateRetryConfigSchema>;
 
 // ============================================
+// Examples Schema
+// ============================================
+
+/**
+ * One example reply a gate ships with, and the outcome the gate is expected to give it.
+ *
+ * `file` names a file inside the gate's own directory: relative, with no `..` segment, so an
+ * example is data that ships, checkpoints and rolls back WITH its gate and can never point the
+ * runner at the operator's tree. The schema refuses the shape; that the file exists is a fact
+ * about the disk, which only `GateDefinitionLoader` holds, so it refuses a missing one there.
+ * Both refusals name the example's index, its path and the rule.
+ *
+ * Only a command-checked gate's examples are executed (`gate-example-runner.ts`); a gate judged by
+ * the client model lists them as not executed.
+ */
+const GateExampleSchema = z.object({
+  /** Path of the example reply, relative to the gate's directory (e.g. `examples/pass.md`). */
+  file: z.string().superRefine((file, ctx) => {
+    if (isBlank(file)) {
+      ctx.addIssue({ code: 'custom', message: 'example file is empty; name a file' });
+    } else if (path.posix.isAbsolute(file) || path.win32.isAbsolute(file)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `example file '${file}' is an absolute path; name it relative to the gate directory`,
+      });
+    } else if (file.split(/[\\/]/).includes('..')) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `example file '${file}' contains a '..' segment; it must stay inside the gate directory`,
+      });
+    }
+  }),
+  /** The outcome the gate is expected to give this reply. */
+  expect: z.enum(['pass', 'fail'], {
+    error: (issue) => `expect must be 'pass' or 'fail', got '${String(issue.input)}'`,
+  }),
+});
+
+export type GateExample = z.output<typeof GateExampleSchema>;
+
+// ============================================
 // Judge Evaluation Schema
 // ============================================
 
@@ -559,6 +602,12 @@ export const GateDefinitionSchema = z
      * context-isolated sub-agent instead of self-review.
      */
     evaluation: GateJudgeEvaluationSchema.optional(),
+
+    /**
+     * Example replies shipped beside the gate, each with its expected outcome — see
+     * `GateExampleSchema`. Absent, the gate loads exactly as a gate without examples always has.
+     */
+    examples: z.array(GateExampleSchema).optional(),
   })
   .passthrough(); // Allow additional fields not in schema for extensibility
 

@@ -59,11 +59,18 @@ const FRAMEWORKS = path.join(RESOURCES, 'frameworks');
  * relative to the SERVER's working directory, which no containment-preserving rule can reach from
  * the gate's own directory. P4.105 moved the reference into the gate root, where it is an ordinary
  * declared reference — so the script is claimed now, and this list is one shorter.
+ * - `gates/handoff-artifacts/examples/*.md` are the example replies the gate declares under
+ *   `examples:` (row 3.4). They sit inside the gate directory and ship with it, but a gate's
+ *   version snapshot does not carry its examples, so no checkpoint claims them; they move into the
+ *   claimed set when a writer writes example files.
  */
 const EXPECTED_UNCLAIMED = [
   'gates/_index.md',
   'gates/config/shell-presets.yaml',
   'gates/config/verdict-patterns.yaml',
+  'gates/handoff-artifacts/examples/fail-missing-artifact.md',
+  'gates/handoff-artifacts/examples/fail-no-artifacts-line.md',
+  'gates/handoff-artifacts/examples/pass.md',
 ];
 
 interface BundledResource {
@@ -166,7 +173,7 @@ describe('resourceFileSet over the bundled catalog', () => {
     }
   });
 
-  it('claims every bundled file except the four that are deliberately outside a resource', async () => {
+  it('claims every bundled file except the ones deliberately outside a checkpoint', async () => {
     const resources = await discoverBundledResources();
     const claimed = new Set<string>();
     for (const resource of resources) {

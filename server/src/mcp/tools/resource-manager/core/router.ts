@@ -11,6 +11,7 @@ import {
   CROSS_WORKSPACE_READ_ACTIONS,
   PROMPT_ONLY_ACTIONS,
   FRAMEWORK_ONLY_ACTIONS,
+  VALIDATE_RESOURCE_TYPES,
   DESTRUCTIVE_ACTIONS,
   HANDLER_OWNED_CONFIRMATION,
 } from './types.js';
@@ -212,6 +213,13 @@ export class ResourceManagerRouter {
       return {
         valid: false,
         error: `Action "${action}" is only valid for resource_type: "prompt"`,
+      };
+    }
+
+    if (action === 'validate' && !VALIDATE_RESOURCE_TYPES.includes(resourceType)) {
+      return {
+        valid: false,
+        error: `Action "validate" is only valid for resource_type: ${VALIDATE_RESOURCE_TYPES.map((type) => `"${type}"`).join(' or ')}`,
       };
     }
 

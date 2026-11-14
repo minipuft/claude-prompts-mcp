@@ -16,7 +16,7 @@
  * @see RuntimeFrameworkLoader for the pattern this follows
  */
 
-import { existsSync, readdirSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -346,6 +346,13 @@ export class GateDefinitionLoader {
 
       const definition = validation.data;
 
+      // The schema refused an absolute or `..` example path; whether the named file is there is
+      // a fact about this directory, so it is checked here and refused through the same record.
+      const missingExample = findMissingExampleFile(definition, gateDir);
+      if (missingExample !== undefined) {
+        return refuse(missingExample);
+      }
+
       if (this.debug) {
         console.error(`[GateDefinitionLoader] Loaded from YAML: ${definition.name} (${id})`);
       }
@@ -527,6 +534,28 @@ export class GateDefinitionLoader {
       return false;
     }
   }
+}
+
+/**
+ * The refusal for the first declared example whose file is not a regular file in the gate's
+ * directory, or undefined when every one is. Named like the schema's own example refusals —
+ * `examples.<index>.file` — so the record reads the same whichever side refused it.
+ */
+function findMissingExampleFile(
+  definition: LoadedGateDefinition,
+  gateDir: string
+): string | undefined {
+  const examples = definition.examples ?? [];
+  for (const [index, example] of examples.entries()) {
+    const examplePath = join(gateDir, example.file);
+    if (!existsSync(examplePath) || !statSync(examplePath).isFile()) {
+      return (
+        `examples.${index}.file: example file '${example.file}' does not exist in the gate ` +
+        `directory (${examplePath})`
+      );
+    }
+  }
+  return undefined;
 }
 
 /**

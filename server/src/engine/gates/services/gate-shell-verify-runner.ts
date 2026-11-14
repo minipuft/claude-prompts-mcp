@@ -170,58 +170,88 @@ export async function runGateShellVerifications(
   const gates = checkedDefinitions ?? (await gateDefinitionProvider.loadGates(gateIds));
 
   for (const gate of gates) {
-    const shellCriteria = gate.pass_criteria?.filter(
-      (
-        c
-      ): c is Exclude<
-        NonNullable<LightweightGateDefinition['pass_criteria']>[number],
-        { type: 'semantic_evaluation' }
-      > => c.type === 'shell_verify'
-    );
-    if (!shellCriteria || shellCriteria.length === 0) {
+    results.push(...(await runGateShellVerification(gate, runContext, executor, scope)));
+  }
+
+  return results;
+}
+
+/**
+ * The directory a loaded gate was served from, `{sourceRoot}/{id}`; undefined for a gate with no
+ * `sourceRoot` (a temporary, in-memory gate). The one derivation the shipped-script resolution
+ * and the example runner both read.
+ */
+export function gateDirectoryOf(gate: LightweightGateDefinition): string | undefined {
+  return gate.sourceRoot !== undefined ? path.join(gate.sourceRoot, gate.id) : undefined;
+}
+
+/**
+ * Run one gate's `shell_verify` criteria, exactly as a review runs them: shipped scripts resolved
+ * against the gate directory, the reply injected per `shell_stdin_source`, every command through
+ * `executor` (its allowlist, allowed directories and refused environment keys). Empty when the
+ * gate declares no runnable `shell_verify` criterion.
+ *
+ * Exported for `runGateExamples`, which hands an example file's content in as `agentResponse` so
+ * an example is judged by the same path a real reply is.
+ */
+export async function runGateShellVerification(
+  gate: LightweightGateDefinition,
+  runContext: GateShellVerifyRunContext | undefined,
+  executor: ShellVerifyExecutor | undefined,
+  scope?: StateStoreOptions
+): Promise<GateShellVerifyResult[]> {
+  const results: GateShellVerifyResult[] = [];
+  const shellCriteria = gate.pass_criteria?.filter(
+    (
+      c
+    ): c is Exclude<
+      NonNullable<LightweightGateDefinition['pass_criteria']>[number],
+      { type: 'semantic_evaluation' }
+    > => c.type === 'shell_verify'
+  );
+  if (!shellCriteria || shellCriteria.length === 0) {
+    return results;
+  }
+
+  const gateDir = gateDirectoryOf(gate);
+
+  for (const criteria of shellCriteria) {
+    const gateConfig = buildGateConfig(criteria, runContext, gateDir);
+    if (gateConfig === null) {
       continue;
     }
 
-    const gateDir = gate.sourceRoot !== undefined ? path.join(gate.sourceRoot, gate.id) : undefined;
+    // Fail closed when no executor is wired, matching the `script_tool` sibling. A gate
+    // declaring ground-truth verification that silently contributes nothing is the defect
+    // this criteria type already suffered once; an unmistakable failure is recoverable,
+    // a silent pass is not.
+    const result =
+      executor !== undefined
+        ? await executor.execute(gateConfig, scope)
+        : {
+            passed: false,
+            refused: true,
+            exitCode: -1,
+            stdout: '',
+            stderr:
+              'shell_verify could not run: no ShellVerifyExecutor is wired into GateReviewStage.',
+            durationMs: 0,
+            command: formatCommandForDisplay(gateConfig.command),
+            timedOut: undefined,
+          };
 
-    for (const criteria of shellCriteria) {
-      const gateConfig = buildGateConfig(criteria, runContext, gateDir);
-      if (gateConfig === null) {
-        continue;
-      }
-
-      // Fail closed when no executor is wired, matching the `script_tool` sibling. A gate
-      // declaring ground-truth verification that silently contributes nothing is the defect
-      // this criteria type already suffered once; an unmistakable failure is recoverable,
-      // a silent pass is not.
-      const result =
-        executor !== undefined
-          ? await executor.execute(gateConfig, scope)
-          : {
-              passed: false,
-              refused: true,
-              exitCode: -1,
-              stdout: '',
-              stderr:
-                'shell_verify could not run: no ShellVerifyExecutor is wired into GateReviewStage.',
-              durationMs: 0,
-              command: formatCommandForDisplay(gateConfig.command),
-              timedOut: undefined,
-            };
-
-      results.push({
-        gateId: gate.id,
-        gateName: gate.name,
-        command: formatCommandForDisplay(gateConfig.command),
-        passed: result.passed,
-        exitCode: result.exitCode,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        durationMs: result.durationMs,
-        timedOut: result.timedOut,
-        refused: result.refused,
-      });
-    }
+    results.push({
+      gateId: gate.id,
+      gateName: gate.name,
+      command: formatCommandForDisplay(gateConfig.command),
+      passed: result.passed,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      durationMs: result.durationMs,
+      timedOut: result.timedOut,
+      refused: result.refused,
+    });
   }
 
   return results;

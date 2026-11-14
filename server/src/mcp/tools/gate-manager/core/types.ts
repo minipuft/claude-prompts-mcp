@@ -6,6 +6,7 @@
 import type { GatePassCriteriaYaml } from '#engine/gates/core/gate-schema.js';
 import type { GateManager } from '#engine/gates/gate-manager.js';
 import type { JudgeEvaluationConfig } from '#engine/gates/judge/types.js';
+import type { ShellVerifyExecutor } from '#engine/gates/shell/shell-verify-executor.js';
 import type { SemanticCriterionInput } from '#shared/types/gate-evaluation.js';
 import type { ConfigManager, Logger } from '#shared/types/index.js';
 import type { ResourceFileLocatorPort } from '#shared/utils/resource-file-set.js';
@@ -20,6 +21,7 @@ export type GateManagerActionId =
   | 'delete'
   | 'list'
   | 'inspect'
+  | 'validate'
   | 'preview'
   | 'reload'
   | 'history'
@@ -130,6 +132,11 @@ export interface GateManagerDependencies {
    * Absent, a version row is recorded without a file tree — today's behaviour.
    */
   resourceFileLocator?: ResourceFileLocatorPort;
+  /**
+   * The executor `validate` runs a gate's examples through. Absent, every example is refused, as a
+   * review without an executor is.
+   */
+  shellVerifyExecutor?: ShellVerifyExecutor;
 }
 
 /**
