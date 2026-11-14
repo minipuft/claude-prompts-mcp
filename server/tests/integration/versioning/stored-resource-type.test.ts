@@ -25,6 +25,7 @@ import {
 } from '../../../src/modules/versioning/byte-restore.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 
 import type { HistoryResourceType } from '../../../src/cli-shared/version-history-types.js';
 import type { ResourceType } from '../../../src/modules/versioning/types.js';
@@ -85,14 +86,13 @@ describe('version_history.resource_type has one vocabulary', () => {
 
 describe('a config row the server writes is one cpm reads', () => {
   let workspace: string;
-  let previousProjectDir: string | undefined;
+  const locations = isolateResourceLocations();
 
   beforeEach(async () => {
-    previousProjectDir = process.env['CLAUDE_PROJECT_DIR'];
     workspace = testScratchPath(`stored-resource-type-${Math.random().toString(36).slice(2)}`);
     rmSync(workspace, { recursive: true, force: true });
     mkdirSync(workspace, { recursive: true });
-    process.env['CLAUDE_PROJECT_DIR'] = workspace;
+    locations.set({ projectDir: workspace });
     writeFileSync(
       path.join(workspace, 'config.jsonc'),
       '{\n  "version": 5,\n  "gates": { "enabled": true }\n}\n',
@@ -102,8 +102,6 @@ describe('a config row the server writes is one cpm reads', () => {
   });
 
   afterEach(() => {
-    if (previousProjectDir === undefined) delete process.env['CLAUDE_PROJECT_DIR'];
-    else process.env['CLAUDE_PROJECT_DIR'] = previousProjectDir;
     rmSync(workspace, { recursive: true, force: true });
   });
 

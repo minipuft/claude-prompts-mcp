@@ -128,9 +128,10 @@ def get_state_db_path() -> Path | None:
     Mirrors the server's own derivation (paths.ts getRuntimeRoot): the server
     writes {MCP_RUNTIME_ROOT || MCP_WORKSPACE}/runtime-state/state.db. Hooks do
     not inherit the server's environment, so CLAUDE_PLUGIN_DATA is probed next:
-    the Claude Code plugin's .mcp.json runs the server with
-    MCP_RUNTIME_ROOT=${CLAUDE_PLUGIN_DATA}, and Claude Code gives hooks that
-    variable but not the server's. Unset or blank, it adds no candidate. The
+    the Claude Code plugin's .mcp.json carries no env, so the server takes
+    CLAUDE_PLUGIN_DATA as its runtime root when MCP_RUNTIME_ROOT and
+    MCP_WORKSPACE are unset, and Claude Code gives hooks that same variable.
+    Unset or blank, it adds no candidate. The
     {workspace}/server/runtime-state layout is probed last for servers whose
     MCP_WORKSPACE (or package root) resolves to the server directory itself —
     reading only that layout made the hook read a database its own session's

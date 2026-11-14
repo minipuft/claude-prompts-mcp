@@ -265,15 +265,13 @@ describe('objects are swept by every path that removes the rows referencing them
       .run(legacyTenant, legacyTenant, new Date().toISOString());
     raw.close();
 
-    const saved = process.env['MCP_RUNTIME_ROOT'];
-    process.env['MCP_RUNTIME_ROOT'] = legacyDir;
+    const locations = withResourceLocations({ runtimeRoot: legacyDir });
     try {
       expect(deleteVersionRows(legacyDir, { resourceType: 'gate', resourceId: 'alpha' })).toBe(
         true
       );
     } finally {
-      if (saved === undefined) delete process.env['MCP_RUNTIME_ROOT'];
-      else process.env['MCP_RUNTIME_ROOT'] = saved;
+      locations.cleanup();
     }
 
     const after = new DatabaseSync(legacyDb);

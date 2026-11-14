@@ -3,6 +3,62 @@
 import { ActionHandler } from '../core/action-handler-base.js';
 
 import type { ToolResponse } from '#shared/types/index.js';
+import type {
+  ProfileRegistryReading,
+  ResourceLocationReport,
+} from '#shared/types/resource-location-report.js';
+
+function namesOrNone(names: readonly string[]): string {
+  return names.length > 0 ? names.join(', ') : 'none';
+}
+
+/** `profile: …` for a registry beside the workspace's parent; nothing when there is none. */
+function profileLine(profile: ProfileRegistryReading): string | undefined {
+  switch (profile.state) {
+    case 'none':
+      return undefined;
+    case 'labelled':
+      return `profile: ${profile.label} (siblings: ${namesOrNone(profile.siblings)})`;
+    case 'unlabelled':
+      return (
+        `profile: unlabelled (registry at ${profile.registryPath} names: ` +
+        `${namesOrNone(profile.labels)})`
+      );
+    case 'unreadable':
+      return `profile: registry at ${profile.registryPath} could not be read (${profile.reason})`;
+  }
+}
+
+/**
+ * The **Resource locations** section: every location in precedence order with what each kind
+ * serves from it, the bundle's state, the profile's label, and each definition a same-id copy in
+ * an earlier location hides. Rendering only — the report is built at the composition root.
+ */
+export function formatResourceLocations(report: ResourceLocationReport): string {
+  const lines = ['**Resource locations**'];
+  report.locations.forEach((location, index) => {
+    const { prompt, gate, framework, style } = location.counts;
+    lines.push(
+      `${index + 1}. ${location.path} (${location.kind}) — ${prompt} prompts, ${gate} gates, ` +
+        `${framework} frameworks, ${style} styles`
+    );
+  });
+  lines.push(`bundled (${report.bundled})`);
+  const profile = profileLine(report.profile);
+  if (profile !== undefined) lines.push(profile);
+  if (report.shadowed.length === 0) {
+    lines.push('Shadowed: none');
+  } else {
+    lines.push('Shadowed:');
+    for (const entry of report.shadowed) {
+      lines.push(
+        `- ${entry.id} (${entry.type}): served from ${entry.servedFrom}, ` +
+          `hidden copy in ${entry.hiddenIn}`
+      );
+    }
+  }
+  return `${lines.join('\n')}\n\n`;
+}
 
 export class StatusActionHandler extends ActionHandler {
   async execute(args: any): Promise<ToolResponse> {
@@ -44,6 +100,13 @@ export class StatusActionHandler extends ActionHandler {
     response += `**Framework System**: ${frameworkStatusText}\n`;
     response += `**Status**: ${health.status}\n`;
     response += `**Uptime**: ${Math.floor((Date.now() - this.startTime) / 1000 / 60)} minutes\n\n`;
+
+    // Wired unconditionally at startup, so an absent view is a composition-root regression and
+    // fails here rather than rendering a status that silently omits where resources come from.
+    if (this.context.resourceLocations === undefined) {
+      throw new Error('Resource locations view not wired into system_control');
+    }
+    response += formatResourceLocations(this.context.resourceLocations.report());
 
     if (!isFrameworkEnabled && health.activeFramework) {
       response += `⚠️ **Notice**: ${health.activeFramework} is selected but framework injection is disabled.\n`;

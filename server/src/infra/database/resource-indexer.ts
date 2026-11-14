@@ -201,15 +201,32 @@ function emptySyncResult(): SyncResult {
   };
 }
 
+/** What the caller reporting a sync knows that the indexer does not. */
+export interface SyncFindingOptions {
+  /**
+   * True for a pair another reporter already warns about. The runtime's location ledger knows
+   * which LOCATION each file sits in, which this module cannot (it may not import `runtime/`), and
+   * warns about every pair between two custom locations; a pair it owns gets one warning, its own.
+   */
+  warnedElsewhere?: (pair: ShadowedResource) => boolean;
+}
+
 /**
  * Log every duplicated id by path, at a severity matching its cause.
  *
  * Deliberately reports identity, not a count: "5 shadowed" tells a reader something is wrong and
  * nothing about which prompt they can no longer reach. The counts belong on the startup inventory
  * line; the paths belong here.
+ *
+ * A collision another reporter owns (`warnedElsewhere`) is left to it, so an id draws one warning;
+ * what remains here is what that reporter does not warn about, such as a collision with the bundle.
  */
-export function reportShadowedResources(result: SyncResult, logger: Logger): void {
-  const collisions = result.shadowed.filter((s) => !s.sameCategory);
+export function reportShadowedResources(
+  result: SyncResult,
+  logger: Logger,
+  warnedElsewhere: (pair: ShadowedResource) => boolean = () => false
+): void {
+  const collisions = result.shadowed.filter((s) => !s.sameCategory && !warnedElsewhere(s));
   const overrides = result.shadowed.filter((s) => s.sameCategory);
 
   for (const { type, id, winner, shadowed } of collisions) {
@@ -278,9 +295,13 @@ export function reportRefusedResources(result: SyncResult, logger: Logger): void
  * adding a fourth finding meant remembering two places. They remain exported for tests that assert
  * one report's text in isolation; production reports through here.
  */
-export function reportSyncFindings(result: SyncResult, logger: Logger): void {
+export function reportSyncFindings(
+  result: SyncResult,
+  logger: Logger,
+  options: SyncFindingOptions = {}
+): void {
   reportResourceSyncFailures(result, logger);
-  reportShadowedResources(result, logger);
+  reportShadowedResources(result, logger, options.warnedElsewhere);
   reportRefusedResources(result, logger);
 }
 

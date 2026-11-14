@@ -31,6 +31,7 @@ import {
 import { saveVersion as cliSaveVersion } from '../../helpers/version-history-writer.js';
 import { VersionHistoryService } from '../../../src/modules/versioning/version-history-service.js';
 import { createTestDatabaseManager } from '../../helpers/test-database.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 
 import type { TestDatabaseContext } from '../../helpers/test-database.js';
 import type { VersioningConfigProvider } from '../../../src/modules/versioning/version-history-service.js';
@@ -89,15 +90,14 @@ describe('an unchanged write creates no version row', () => {
   let service: VersionHistoryService;
   /** What the CLI writer is handed to locate `state.db` — it walks UP to `runtime-state/`. */
   let resourceDir: string;
-  let previousProjectDir: string | undefined;
+  const locations = isolateResourceLocations();
 
   const countRows = (): number =>
     cliLoadHistory(resourceDir, { resourceType: 'gate', resourceId: 'shared-gate' })?.versions
       .length ?? 0;
 
   beforeEach(async () => {
-    previousProjectDir = process.env['CLAUDE_PROJECT_DIR'];
-    process.env['CLAUDE_PROJECT_DIR'] = TENANT_DIR;
+    locations.set({ projectDir: TENANT_DIR });
 
     dbCtx = await createTestDatabaseManager('unchanged-write');
     resourceDir = path.join(dbCtx.testDir, 'resources', 'gates');
@@ -112,8 +112,6 @@ describe('an unchanged write creates no version row', () => {
   });
 
   afterEach(async () => {
-    if (previousProjectDir === undefined) delete process.env['CLAUDE_PROJECT_DIR'];
-    else process.env['CLAUDE_PROJECT_DIR'] = previousProjectDir;
     await dbCtx.cleanup();
   });
 

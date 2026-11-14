@@ -56,6 +56,12 @@ export interface GateGuidanceRendererOptions {
    * as `frameworkIdentifierProvider` above and as `GatesConfigProvider` in the pipeline stages.
    */
   gatesConfigProvider: () => GateGuidanceConfig | undefined;
+  /**
+   * Whether a `paths.resources` list is in force, read when a gate is missing. A provider for the
+   * same reason as `gatesConfigProvider`: a config reload can add or drop the list. Unset reads as
+   * no list, which is what a renderer built without a config means.
+   */
+  resourceListInForce?: () => boolean;
 }
 
 /** Severity ordering weights, most severe first. */
@@ -92,18 +98,24 @@ type GateGuidanceEntry =
  * The warning for a gate the renderer was asked for and no location holds.
  *
  * The default framework gate is the one nobody named: it is appended whenever a framework is
- * active (`DEFAULT_FRAMEWORK_GATE_ID`) and ships only in the package. It goes missing when a
- * `paths.resources` list leaves `"bundled"` out (R3c), so the warning names that cause and both
- * remedies rather than reading like a typo in a gate id the operator never typed.
+ * active (`DEFAULT_FRAMEWORK_GATE_ID`) and ships only in the package. Under a `paths.resources`
+ * list it goes missing when the list leaves `"bundled"` out (R3c), so the warning names that cause
+ * and both remedies. With no list the bundle is always served, so its absence means the installed
+ * package lacks a file it ships with, and blaming a list the operator never wrote would send them
+ * to the wrong fix.
  */
-function gateNotFoundMessage(gateId: string): string {
-  if (gateId === DEFAULT_FRAMEWORK_GATE_ID) {
+function gateNotFoundMessage(gateId: string, listInForce: boolean): string {
+  if (gateId !== DEFAULT_FRAMEWORK_GATE_ID) return `Gate definition not found: ${gateId}`;
+  if (listInForce) {
     return (
       `Gate '${gateId}' is not in any listed location; add "bundled" to paths.resources ` +
       'or ship the gate in a listed folder'
     );
   }
-  return `Gate definition not found: ${gateId}`;
+  return (
+    `Gate '${gateId}' is missing from the package's own resources, which ship it; ` +
+    'the installed package is incomplete, reinstall it'
+  );
 }
 
 /** Ordering weight for a reminder's severity; an unset severity sorts as `medium`. */
@@ -120,6 +132,7 @@ export class GateGuidanceRenderer {
   private readonly temporaryGateRegistry: TemporaryGateRegistry | undefined;
   private readonly frameworkIdentifierProvider: () => readonly string[] | undefined;
   private readonly gatesConfigProvider: () => GateGuidanceConfig | undefined;
+  private readonly resourceListInForce: () => boolean;
 
   constructor(logger: Logger, options: GateGuidanceRendererOptions) {
     if (!options?.gateLoader) {
@@ -131,6 +144,7 @@ export class GateGuidanceRenderer {
     this.temporaryGateRegistry = options.temporaryGateRegistry;
     this.frameworkIdentifierProvider = options.frameworkIdentifierProvider;
     this.gatesConfigProvider = options.gatesConfigProvider;
+    this.resourceListInForce = options.resourceListInForce ?? (() => false);
 
     if (this.temporaryGateRegistry) {
       this.logger.debug('[GATE GUIDANCE RENDERER] Temporary gate registry enabled');
@@ -417,7 +431,9 @@ export class GateGuidanceRenderer {
     const gate = await this.gateLoader.loadGate(gateId);
 
     if (!gate) {
-      this.logger.warn(`[GATE GUIDANCE RENDERER] ${gateNotFoundMessage(gateId)}`);
+      this.logger.warn(
+        `[GATE GUIDANCE RENDERER] ${gateNotFoundMessage(gateId, this.resourceListInForce())}`
+      );
     }
 
     return gate;

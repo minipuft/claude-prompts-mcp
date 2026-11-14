@@ -54,9 +54,14 @@ export const DEFAULT_PROMPTS_CONFIG: PromptsConfig = {
  * (resolved against the config file's directory by the loader) and the reserved `"bundled"` kept
  * as that literal. Empty when the file names no list. `PathResolver.getResourceLocations` is its
  * one reader; nothing else derives a location from it.
+ *
+ * `writeTarget` is the file's `paths.writeTarget`, absolute, and absent when the file names none.
+ * The loader has already proven it names one of `resources` or the profile's own resources
+ * folder. `PathResolver`'s write root is its one reader.
  */
 interface PathsConfig {
   resources: string[];
+  writeTarget?: string;
 }
 
 /**

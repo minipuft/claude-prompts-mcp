@@ -43,6 +43,7 @@ function resolverAt(root: string): ResourcePathSource {
     getRuntimeStatePath: () => path.join(root, '..', 'runtime-root', 'runtime-state'),
     // A file name the loader could not produce by joining, so a hand-join is caught.
     getStateDatabasePath: () => path.join(root, '..', 'runtime-root', 'db', 'resolver-state.db'),
+    getProfileResourcesDir: () => root,
   };
 }
 

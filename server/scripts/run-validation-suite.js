@@ -413,6 +413,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:test-location-env',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked'],
+    converse:
+      "CHECKED — a planted `process.env['MCP_WORKSPACE'] = '/tmp/x';` in an existing test file is reported by file:line and the run exits 1; removing it returns the run to exit 0. UNCHECKED and known — a computed key (`process.env[key] = ...`) and `Object.assign(process.env, ...)` are not matched, and neither occurs outside the helper",
+  },
+  {
     script: 'validate:documented-tool-actions',
     io: 'read',
     reads: ['file', 'spawn', 'tracked'],

@@ -35,6 +35,7 @@ import { resolveEffectiveTenantId } from '../../../src/cli-shared/version-histor
 import { loadHistory } from '../../../src/cli-shared/version-history.js';
 import { configTenantId } from '../../../src/shared/utils/config-scope.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';
 
 const CONFIG_BODY = `{
@@ -46,7 +47,7 @@ const CONFIG_BODY = `{
 
 describe('a config file owns its version history, whatever wrote it', () => {
   let root: string;
-  let previousProjectDir: string | undefined;
+  const locations = isolateResourceLocations();
   let previousCwd: string;
 
   const makeWorkspace = (name: string): string => {
@@ -60,7 +61,6 @@ describe('a config file owns its version history, whatever wrote it', () => {
     (loadConfigHistory(workspace)?.versions ?? []).map((entry) => entry.description);
 
   beforeEach(() => {
-    previousProjectDir = process.env['CLAUDE_PROJECT_DIR'];
     previousCwd = process.cwd();
     root = testScratchPath(`config-tenant-${Math.random().toString(36).slice(2)}`);
     rmSync(root, { recursive: true, force: true });
@@ -69,8 +69,6 @@ describe('a config file owns its version history, whatever wrote it', () => {
 
   afterEach(() => {
     process.chdir(previousCwd);
-    if (previousProjectDir === undefined) delete process.env['CLAUDE_PROJECT_DIR'];
-    else process.env['CLAUDE_PROJECT_DIR'] = previousProjectDir;
     rmSync(root, { recursive: true, force: true });
   });
 
@@ -79,7 +77,7 @@ describe('a config file owns its version history, whatever wrote it', () => {
     await seedStateDbSchema(workspace);
 
     // Writer 1: the shape of `cpm`, run from the workspace itself.
-    delete process.env['CLAUDE_PROJECT_DIR'];
+    locations.reset();
     process.chdir(workspace);
     await setConfigValueRecorded(workspace, 'gates.enabled', 'false');
 
@@ -88,7 +86,7 @@ describe('a config file owns its version history, whatever wrote it', () => {
     const installDir = path.join(root, 'install');
     mkdirSync(installDir, { recursive: true });
     process.chdir(installDir);
-    process.env['CLAUDE_PROJECT_DIR'] = installDir;
+    locations.set({ projectDir: installDir });
     await setConfigValueRecorded(workspace, 'server.port', '4321');
 
     const db = new DatabaseSync(path.join(workspace, 'runtime-state', 'state.db'));
@@ -118,23 +116,17 @@ describe('a config file owns its version history, whatever wrote it', () => {
 
     // ONE database for both: `MCP_RUNTIME_ROOT` is what a shared `state.db` looks like, and it is
     // `resolveStateDbPath`'s first branch for every process here.
-    const previousRuntimeRoot = process.env['MCP_RUNTIME_ROOT'];
-    process.env['MCP_RUNTIME_ROOT'] = alpha;
-    try {
-      await setConfigValueRecorded(alpha, 'server.port', '4101');
-      await setConfigValueRecorded(beta, 'gates.enabled', 'false');
+    locations.set({ runtimeRoot: alpha });
+    await setConfigValueRecorded(alpha, 'server.port', '4101');
+    await setConfigValueRecorded(beta, 'gates.enabled', 'false');
 
-      // Positive control FIRST: each workspace can see its own write. Without this, the
-      // cross-workspace assertions below would pass against a reader that finds nothing anywhere.
-      expect(descriptions(alpha)).toContain('Set server.port');
-      expect(descriptions(beta)).toContain('Set gates.enabled');
+    // Positive control FIRST: each workspace can see its own write. Without this, the
+    // cross-workspace assertions below would pass against a reader that finds nothing anywhere.
+    expect(descriptions(alpha)).toContain('Set server.port');
+    expect(descriptions(beta)).toContain('Set gates.enabled');
 
-      expect(descriptions(alpha)).not.toContain('Set gates.enabled');
-      expect(descriptions(beta)).not.toContain('Set server.port');
-    } finally {
-      if (previousRuntimeRoot === undefined) delete process.env['MCP_RUNTIME_ROOT'];
-      else process.env['MCP_RUNTIME_ROOT'] = previousRuntimeRoot;
-    }
+    expect(descriptions(alpha)).not.toContain('Set gates.enabled');
+    expect(descriptions(beta)).not.toContain('Set server.port');
   });
 
   it('resolves a workspace reached through a symlink to the same history as its real path', async () => {

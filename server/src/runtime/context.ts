@@ -158,9 +158,10 @@ export async function createRuntimeFoundation(
       projectConfigScope: projectConfigScopeOf(pathResolver, serverRoot),
     });
   await configManager.loadConfig();
-  // The resolver chose the config file, so it learns that file's `paths.resources` only now. The
-  // loader has already refused an entry naming no directory, on both transports alike.
-  pathResolver.readResourceLocationsFrom(() => configManager.getConfig().paths.resources);
+  // The resolver chose the config file, so it learns that file's `paths.resources` and
+  // `paths.writeTarget` only now. The loader has already refused an entry naming no directory and
+  // a write target naming no listed folder, on both transports alike.
+  pathResolver.readResourceLocationsFrom(() => configManager.getConfig().paths);
   const derivedProjectScope = applyRuntimeIdentityOverrides(configManager.getConfig(), options);
 
   const serviceOrchestrator = dependencies.serviceOrchestrator ?? new ServiceOrchestrator();

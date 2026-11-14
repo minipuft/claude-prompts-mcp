@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "lastUpdated": "2026-11-10T08:09:47.111Z",
+  "lastUpdated": "2026-11-13T18:46:03.940Z",
   "generatedFrom": "contracts",
   "tools": {
     "prompt_engine": {
@@ -40,7 +40,7 @@
       "category": "management",
       "parameters": {
         "resource_type": "Type of resource to manage. Routes to appropriate handler. `category` manages a prompt category's `category.yaml` — the directory holding the prompts is NOT the resource, so `delete` removes the declaration and leaves every prompt in place.",
-        "action": "Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. preview renders what update/delete/rollback would do without writing, naming its target in `preview_action`; it is not destructive, so it takes no `confirm`. Framework-only: switch. Versioning: history/rollback/compare.",
+        "action": "Operation to perform. Prompt-only: validate/analyze_type/analyze_gates/guide. validate checks a creation draft without writing. preview renders what update/delete/rollback would do without writing, naming its target in `preview_action`; it is not destructive, so it takes no `confirm`. Framework-only: switch. Versioning: history/rollback/compare. A create or update reply ends with a `saved: <absolute path>` line naming the file it wrote.",
         "id": "Resource identifier. Required for create, update, delete, inspect, reload, switch.",
         "name": "Human-friendly name for the resource (create/update).",
         "description": "Resource description explaining its purpose (create/update).",

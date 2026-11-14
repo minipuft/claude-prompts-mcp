@@ -790,14 +790,14 @@ MCP notification sent to clients
 
 #### Watched Directories
 
-| Resource     | Directory Source                                                                                               | Registration                                              |
-| ------------ | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Prompts      | every root the catalog is composed from — primary, bundled, and each workspace overlay — plus category subdirs | `buildWatchTargets()` in `prompt-watch-setup.ts`          |
-| Gates        | `getWatchDirectories()` (primary gates dir plus every overlay, bundled included)                               | `createGateHotReloadRegistration()` auxiliary reload      |
-| Frameworks   | `getWatchDirectories()` (primary frameworks dir plus every overlay, bundled included)                          | `createFrameworkHotReloadRegistration()` auxiliary reload |
-| Styles       | `loader.getWatchDirectories()` (primary workspace styles dir plus every overlay, bundled included)             | `createStyleHotReloadRegistration()` auxiliary reload     |
-| Script tools | the prompts folder (prompt-local `tools/` folders) plus the workspace scripts folder (`getScriptsDirectory()`) | `buildScriptAuxiliaryReloadConfig()` auxiliary reload     |
-| Change log   | `trackedResourceRoots()` — primary prompts and gates dirs plus every overlay, **not** the bundled tree         | `buildResourceChangeTrackerAuxiliaryReloadConfig()`       |
+| Resource     | Directory Source                                                                                                                            | Registration                                              |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Prompts      | every root the catalog is composed from — the primary and each overlay candidate, the bundle at its listed position — plus category subdirs | `buildWatchTargets()` in `prompt-watch-setup.ts`          |
+| Gates        | `getWatchDirectories()` (primary gates dir plus every overlay candidate, the bundle at its listed position)                                 | `createGateHotReloadRegistration()` auxiliary reload      |
+| Frameworks   | `getWatchDirectories()` (primary frameworks dir plus every overlay candidate, the bundle at its listed position)                            | `createFrameworkHotReloadRegistration()` auxiliary reload |
+| Styles       | `loader.getWatchDirectories()` (primary workspace styles dir plus every overlay candidate, the bundle at its listed position)               | `createStyleHotReloadRegistration()` auxiliary reload     |
+| Script tools | the prompts folder (prompt-local `tools/` folders) plus the workspace scripts folder (`getScriptsDirectory()`)                              | `buildScriptAuxiliaryReloadConfig()` auxiliary reload     |
+| Change log   | `trackedResourceRoots()` — primary prompts and gates dirs plus every overlay candidate, **not** the bundled tree                            | `buildResourceChangeTrackerAuxiliaryReloadConfig()`       |
 
 The prompts row watches each prompts root itself. Until 2026-09-17 the primary was watched through
 its PARENT — `<workspace>/resources`, or the whole workspace for a legacy `<workspace>/prompts` —
@@ -809,8 +809,9 @@ An overlay counts as a root whether or not it exists yet (`getOverlayResourceCan
 loaders read an absent root as empty, and the watcher arms on it once it appears. That list is
 `getResourceLocations()` reversed, lowest precedence first, and it carries the bundle at its listed
 position: first when no `paths.resources` list is in force, where the list names `"bundled"`
-otherwise, and nowhere when a list leaves it out. "Bundled included" in the table above means
-exactly that; the bundle is never a second, separately placed root. Framework files take exactly
+otherwise, and nowhere when a list leaves it out. "The bundle at its listed position" in the table
+above means exactly that, and the change log is the one row that leaves the bundle out; the bundle
+is never a second, separately placed root. Framework files take exactly
 one path, the auxiliary registration; there is no dedicated framework callback.
 
 #### Folders created while the server runs

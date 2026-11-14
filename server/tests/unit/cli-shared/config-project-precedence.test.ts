@@ -29,8 +29,7 @@ import {
   validateConfig,
 } from '../../../src/cli-shared/config-operations.js';
 import { resolveTenantId } from '../../../src/cli-shared/version-history-scope.js';
-
-const ENV_KEYS = ['CLAUDE_PROJECT_DIR', 'MCP_CONFIG_PATH'] as const;
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 
 const WORKSPACE_CONFIG = `{
   "gates": { "enabled": true },
@@ -46,9 +45,7 @@ const PROJECT_CONFIG = `// the project's own settings
 `;
 
 describe('cpm follows the server order for a project config', () => {
-  const savedEnv = new Map<string, string | undefined>(
-    ENV_KEYS.map((key) => [key, process.env[key]])
-  );
+  const locations = isolateResourceLocations();
   let root: string;
   let workspace: string;
   let project: string;
@@ -71,16 +68,11 @@ describe('cpm follows the server order for a project config', () => {
     mkdirSync(workspace, { recursive: true });
     mkdirSync(projectWorkspace, { recursive: true });
     writeFileSync(workspaceJsonc(), WORKSPACE_CONFIG, 'utf8');
-    delete process.env['MCP_CONFIG_PATH'];
-    process.env['CLAUDE_PROJECT_DIR'] = project;
+    locations.set({ projectDir: project });
   });
 
   afterEach(() => {
     rmSync(root, { recursive: true, force: true });
-    for (const [key, value] of savedEnv) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
   });
 
   describe('reading', () => {
@@ -131,7 +123,7 @@ describe('cpm follows the server order for a project config', () => {
       writeFileSync(projectJsonc(), PROJECT_CONFIG, 'utf8');
       const explicit = join(root, 'explicit.json');
       writeFileSync(explicit, '{ "gates": { "enabled": true } }\n', 'utf8');
-      process.env['MCP_CONFIG_PATH'] = explicit;
+      locations.set({ configPath: explicit });
 
       expect(readConfig(workspace).configPath).toBe(explicit);
     });

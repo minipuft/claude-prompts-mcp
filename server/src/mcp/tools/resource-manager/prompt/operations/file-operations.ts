@@ -8,6 +8,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
+import { selectSavedPath } from '../../../shared/saved-line.js';
 import { overlayDecidedYamlKeys } from '../../../shared/yaml-key-overlay.js';
 import { OperationResult, PromptResourceDependencies } from '../core/types.js';
 import { validateCategoryName } from '../utils/validation.js';
@@ -184,6 +185,22 @@ export const ALL_PROMPT_DATA_KEYS: ReadonlySet<string> = new Set([
  * ones because they always arrive together from a single `update` call, and a call site reading
  * `undefined, new Set([...]), 'replace', []` tells a reader nothing about which is which.
  */
+/** A landed prompt write: the operation report plus the files it wrote. */
+export interface PromptWriteResult extends OperationResult {
+  /**
+   * Absolute path of the file the reply's `saved:` line names: `prompt.yaml` when this write wrote
+   * it, otherwise the first file it did write (`user-message.md` for a template-only update).
+   * Undefined only when the write wrote no file, which `withSavedLine` refuses.
+   */
+  savedPath: string | undefined;
+  /**
+   * Absolute paths of the files this write wrote, in write order: every file a copy-on-write
+   * copied up, then the prompt's own files, scaffolded step files and tool files. A relocated or
+   * deleted file is not a written one.
+   */
+  writtenFiles: string[];
+}
+
 export interface PromptWriteIntent {
   /** `promptData` keys to CLEAR. See `resolvePreservedPromptYamlFields` for why deletion is not enough. */
   unsetKeys: ReadonlySet<string>;
@@ -409,7 +426,7 @@ export class FileOperations {
     sourceRoot?: string,
     writeIntent: PromptWriteIntent = NO_WRITE_INTENT,
     options: ResourceWriteCommitOptions = {}
-  ): Promise<OperationResult> {
+  ): Promise<PromptWriteResult> {
     // Everything this write does is resolved here, before the transaction opens, and the mutation
     // below applies the plan and decides nothing of its own. `projectPromptWrite` reads a
     // preview's diff off the same plan, which is what keeps the two from naming different files.
@@ -445,6 +462,7 @@ export class FileOperations {
       mutate: async () => {
         const messages: string[] = [];
         const affectedFiles: string[] = [];
+        const writtenFiles: string[] = [];
 
         // Ensure category directory exists
         const categoryDir = path.join(promptsDir, effectiveCategory);
@@ -473,6 +491,9 @@ export class FileOperations {
         if (copyOnWriteSource !== null) {
           // Before the content write, so everything below operates on the full prior state.
           await fs.cp(copyOnWriteSource, promptDir, { recursive: true });
+          // `promptDir` did not exist before the copy (the copy-on-write condition), so every file
+          // under it now is one this call wrote.
+          writtenFiles.push(...(await this.listFilesUnder(promptDir)));
           // Said out loud, and said as a FORK rather than as a copy: the caller now owns a
           // detached copy, and updates to the bundled original will no longer reach it. That
           // consequence is the part a caller cannot see from the file list.
@@ -485,7 +506,9 @@ export class FileOperations {
         // `fileSource` is a prior state too — `priorDir` alone would call this a `Created` prompt
         // for what is, from the caller's side, an update of the flat file it just converted.
         const promptExists = plan.priorDir !== null || fileSource !== null;
-        affectedFiles.push(...(await this.createOrUpdateYamlPrompt(plan, promptId, promptExists)));
+        const ownFiles = await this.createOrUpdateYamlPrompt(plan, promptId, promptExists);
+        affectedFiles.push(...ownFiles.affectedFiles);
+        writtenFiles.push(...ownFiles.writtenFiles);
         messages.push(`${promptExists ? 'Updated' : 'Created'} prompt: ${promptData.id}`);
 
         // Scaffold chain step directories for nested sub-prompts
@@ -494,12 +517,15 @@ export class FileOperations {
           this.logger.info(`Scaffolded sub-prompt directories for '${promptId}'`);
           messages.push(`Scaffolded sub-prompt directories (${scaffolded.length} files)`);
           affectedFiles.push(...scaffolded);
+          writtenFiles.push(...scaffolded);
         }
 
         for (const tool of plan.toolFiles) {
           const toolDir = path.join(promptDir, 'tools', tool.id);
           await fs.mkdir(toolDir, { recursive: true });
-          affectedFiles.push(toolDir, ...(await this.writePlannedFiles(promptDir, tool.files)));
+          const toolFiles = await this.writePlannedFiles(promptDir, tool.files);
+          affectedFiles.push(toolDir, ...toolFiles);
+          writtenFiles.push(...toolFiles);
           const verb = tool.existed ? 'Updated' : 'Created';
           messages.push(`✅ ${verb} tool '${tool.id}' in ${toolDir}`);
           this.logger.info(`${verb} script tool '${tool.id}' for prompt '${promptId}'`);
@@ -526,7 +552,7 @@ export class FileOperations {
           affectedFiles.push(toolDir);
         }
 
-        return { messages, affectedFiles };
+        return { messages, affectedFiles, writtenFiles };
       },
       validate: () => this.validateProducedPrompt(yamlId, yamlPath, plan.promptFiles),
       ...(options.commit !== undefined ? { commit: options.commit } : {}),
@@ -539,10 +565,14 @@ export class FileOperations {
       throw new Error(errorMsg);
     }
 
-    const result = txResult.result ?? { messages: [], affectedFiles: [] };
+    const result = txResult.result ?? { messages: [], affectedFiles: [], writtenFiles: [] };
+    // A file a copy wrote and the content write then rewrote is one written file, not two.
+    const writtenFiles = [...new Set(result.writtenFiles)];
     return {
       message: result.messages.join('\n'),
       affectedFiles: result.affectedFiles,
+      savedPath: selectSavedPath(writtenFiles, yamlPath),
+      writtenFiles,
     };
   }
 
@@ -1075,12 +1105,10 @@ export class FileOperations {
     plan: PromptWritePlan,
     promptId: string,
     promptExists: boolean
-  ): Promise<string[]> {
+  ): Promise<{ affectedFiles: string[]; writtenFiles: string[] }> {
     await fs.mkdir(plan.promptDir, { recursive: true });
-    const paths = [
-      plan.promptDir,
-      ...(await this.writePlannedFiles(plan.promptDir, plan.promptFiles)),
-    ];
+    const writtenFiles = await this.writePlannedFiles(plan.promptDir, plan.promptFiles);
+    const paths = [plan.promptDir, ...writtenFiles];
 
     if (plan.removesSystemMessage) {
       // `force` because an `unset` on a prompt that never had a system message is a valid, and
@@ -1091,7 +1119,7 @@ export class FileOperations {
     }
 
     this.logger.info(`${promptExists ? 'Updated' : 'Created'} YAML prompt: ${promptId}`);
-    return paths;
+    return { affectedFiles: paths, writtenFiles };
   }
 
   /**
@@ -1508,6 +1536,14 @@ export class FileOperations {
   }
 
   /** Write planned files beneath `baseDir`, creating their directories; returns the paths written. */
+  /** Absolute paths of every file under `dir`, at any depth. */
+  private async listFilesUnder(dir: string): Promise<string[]> {
+    const entries = await fs.readdir(dir, { recursive: true, withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => path.join(entry.parentPath, entry.name));
+  }
+
   private async writePlannedFiles(
     baseDir: string,
     files: readonly PlannedPromptFile[]

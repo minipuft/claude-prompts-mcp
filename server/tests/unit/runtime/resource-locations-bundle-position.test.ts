@@ -69,7 +69,7 @@ async function resolverWith(list: string[]): Promise<PathResolver> {
   const loader = new ConfigLoader(configPath);
   await loader.loadConfig();
   const resolver = new PathResolver({ cli: {}, packageRoot });
-  resolver.readResourceLocationsFrom(() => loader.getConfig().paths.resources);
+  resolver.readResourceLocationsFrom(() => loader.getConfig().paths);
   return resolver;
 }
 

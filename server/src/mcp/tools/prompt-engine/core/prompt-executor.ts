@@ -299,6 +299,7 @@ export class PromptExecutor {
       // A provider, not a snapshot: `system_control` can change `gates.harnessCovers` /
       // `gates.reminderTokenBudget` after startup, and the renderer reads it per render.
       gatesConfigProvider: () => this.configManager.getGatesConfig(),
+      resourceListInForce: () => this.configManager.getConfig().paths.resources.length > 0,
     });
 
     this.chainSessionRouter = new ChainSessionRouter(

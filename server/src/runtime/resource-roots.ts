@@ -176,9 +176,10 @@ function orderedResourceRoots(roots: ResourceRoots): string[] {
  * The resource-type subdirectory each indexed type is loaded from.
  *
  * The indexer names types in the singular (`prompt`) because that is what the `resource_index.type`
- * column holds; the path resolver names directories in the plural. One mapping, stated once.
+ * column holds; the path resolver names directories in the plural. One mapping, stated once —
+ * `resource-location-report.ts` reads it to place each indexed file in its location.
  */
-const INDEXED_TYPE_DIRS = {
+export const INDEXED_TYPE_DIRS = {
   prompt: 'prompts',
   gate: 'gates',
   framework: 'frameworks',

@@ -16,6 +16,7 @@ import type { Application } from './runtime/application.js';
 import type { HealthReport } from './runtime/health.js';
 
 import { initConfig } from '#cli-shared/config-operations.js';
+import { workspaceFromEnv } from '#cli-shared/workspace-env.js';
 import { initWorkspace } from '#cli-shared/workspace-init.js';
 import { selectLaunchConfigFile } from '#shared/utils/config-file-selection.js';
 import { PathSettingError } from '#shared/utils/path-setting.js';
@@ -390,7 +391,7 @@ ENVIRONMENT VARIABLES:
   LOG_LEVEL                Override log level (debug, info, warn, error)
 
 PRIORITY ORDER:
-  --workspace > MCP_WORKSPACE > Package defaults
+  --workspace > MCP_WORKSPACE > CLAUDE_PLUGIN_DATA (Claude Code plugins) > Package defaults
   MCP_RESOURCES_PATH replaces the profile's own resources folder; the config's paths.resources entries still follow it.
   Custom workspace resources overlay bundled ones (same ID = custom wins);
   the bundle loads unless a paths.resources list in the workspace config leaves
@@ -520,6 +521,12 @@ function validateAndHandleEarlyExit(cli: ServerCliArgs): { shouldExit: boolean; 
   return { shouldExit: false, exitCode: 0 };
 }
 
+/** The workspace the environment names, for the startup-test debug line. */
+function envWorkspaceLabel(): string {
+  const fromEnv = workspaceFromEnv();
+  return fromEnv === undefined ? 'not set' : JSON.stringify(fromEnv);
+}
+
 /**
  * Main application entry point with comprehensive error handling and validation
  */
@@ -544,7 +551,7 @@ async function main(): Promise<void> {
       debugLog(`DEBUG: Platform: ${process.platform}`);
       debugLog(`DEBUG: Node.js version: ${process.version}`);
       debugLog(`DEBUG: Working directory: ${process.cwd()}`);
-      debugLog(`DEBUG: MCP_WORKSPACE: ${process.env['MCP_WORKSPACE'] ?? 'not set'}`);
+      debugLog(`DEBUG: Workspace from env: ${envWorkspaceLabel()}`);
     }
 
     // Setup error handlers first
@@ -586,7 +593,7 @@ async function main(): Promise<void> {
         const fs = await import('fs');
         const path = await import('path');
 
-        const workspace = process.env['MCP_WORKSPACE'] ?? process.cwd();
+        const workspace = workspaceFromEnv()?.value ?? process.cwd();
         debugLog(`DEBUG: Checking workspace: ${workspace}`);
         debugLog(`DEBUG: Workspace exists: ${fs.existsSync(workspace)}`);
 

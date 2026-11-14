@@ -114,13 +114,13 @@ const createMockFileService = () => {
     ),
     writeFrameworkFiles: jest.fn(async (data: FrameworkCreationData) => {
       writtenFiles.set(data.id.toLowerCase(), data);
-      return {
-        success: true,
-        paths: [
-          `/test/server/resources/frameworks/${data.id}/framework.yaml`,
-          `/test/server/resources/frameworks/${data.id}/phases.yaml`,
-        ],
-      };
+      // Reports what the real writer reports for a create: the files written, framework.yaml
+      // first, and framework.yaml as the saved path.
+      const files = [
+        `/test/server/resources/frameworks/${data.id}/framework.yaml`,
+        `/test/server/resources/frameworks/${data.id}/phases.yaml`,
+      ];
+      return { success: true, paths: files, savedPath: files[0], writtenFiles: files };
     }),
     loadExistingFramework: jest.fn(async (id: string) => {
       const data = writtenFiles.get(id.toLowerCase());

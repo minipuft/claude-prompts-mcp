@@ -49,23 +49,27 @@ same way for a workspace. The message names both paths. Delete whichever file yo
 
 **What refuses startup, and what falls back:**
 
-| Setting                                                   | Problem                                                                                            | Result                                                               |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| `--workspace` / `MCP_WORKSPACE` / `CLAUDE_PLUGIN_DATA`    | Not an existing directory                                                                          | Refuses to start                                                     |
-| `--config` / `MCP_CONFIG_PATH`                            | Missing, a directory, unreadable, or invalid for its extension                                     | Refuses to start                                                     |
-| A project or workspace `config.jsonc`/`config.json`       | Unreadable, a directory, or valid JSON that is not an object                                       | Refuses to start                                                     |
-| A workspace holding both `config.jsonc` and `config.json` | Ambiguous                                                                                          | Refuses to start                                                     |
-| A project `.claude-prompts/` holding both files           | Ambiguous                                                                                          | Refuses to start                                                     |
-| A project `.claude-prompts/config.jsonc`/`config.json`    | Sets `paths.resources`, a machine-level setting                                                    | Refuses to start; the message names the file and the config to use   |
-| `paths` in a config file                                  | Not an object                                                                                      | Refuses to start                                                     |
-| `paths.resources`                                         | Not a list                                                                                         | Refuses to start                                                     |
-| `paths.resources`                                         | An empty list, which names no location                                                             | Refuses to start; omit the key, or list at least `"bundled"`         |
-| A `paths.resources` entry                                 | Not a string, or an empty string                                                                   | Refuses to start; the message names the entry's position             |
-| A `paths.resources` entry                                 | Names a location an earlier entry names, compared by resolved path (`"lib"` and `"./lib"` are one) | Refuses to start                                                     |
-| A `paths.resources` entry                                 | Does not resolve to an existing directory                                                          | Refuses to start; a missing folder is never skipped                  |
-| `prompts.directory`                                       | Any value that does not resolve to the default `resources/prompts` beside the config file          | Refuses to start; the message names `paths.resources`                |
-| A workspace with no config file at all                    | n/a                                                                                                | Falls back to the packaged default                                   |
-| The packaged `config.json`                                | Invalid JSON                                                                                       | Falls back to built-in defaults, logs a warning, does **not** refuse |
+| Setting                                                   | Problem                                                                                            | Result                                                                                       |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `--workspace` / `MCP_WORKSPACE` / `CLAUDE_PLUGIN_DATA`    | Not an existing directory                                                                          | Refuses to start                                                                             |
+| `--config` / `MCP_CONFIG_PATH`                            | Missing, a directory, unreadable, or invalid for its extension                                     | Refuses to start                                                                             |
+| A project or workspace `config.jsonc`/`config.json`       | Unreadable, a directory, or valid JSON that is not an object                                       | Refuses to start                                                                             |
+| A workspace holding both `config.jsonc` and `config.json` | Ambiguous                                                                                          | Refuses to start                                                                             |
+| A project `.claude-prompts/` holding both files           | Ambiguous                                                                                          | Refuses to start                                                                             |
+| A project `.claude-prompts/config.jsonc`/`config.json`    | Sets `paths.resources`, a machine-level setting                                                    | Refuses to start; the message names the file and the config to use                           |
+| `paths` in a config file                                  | Not an object                                                                                      | Refuses to start                                                                             |
+| `paths.resources`                                         | Not a list                                                                                         | Refuses to start                                                                             |
+| `paths.resources`                                         | An empty list, which names no location                                                             | Refuses to start; omit the key, or list at least `"bundled"`                                 |
+| A `paths.resources` entry                                 | Not a string, or an empty string                                                                   | Refuses to start; the message names the entry's position                                     |
+| A `paths.resources` entry                                 | Names a location an earlier entry names, compared by resolved path (`"lib"` and `"./lib"` are one) | Refuses to start                                                                             |
+| A `paths.resources` entry                                 | Does not resolve to an existing directory                                                          | Refuses to start; a missing folder is never skipped                                          |
+| `paths.writeTarget`                                       | Not a string, or an empty string                                                                   | Refuses to start; the message names the key and the folders it may name                      |
+| `paths.writeTarget`                                       | `"bundled"`: the package's own resources are never written                                         | Refuses to start; the message names the folders it may name                                  |
+| `paths.writeTarget`                                       | Resolves to neither a listed `paths.resources` entry nor the profile's own `resources/` folder     | Refuses to start; the message names the value, its resolved path and the folders it may name |
+| `paths.writeTarget`                                       | Names a folder that does not exist                                                                 | Refuses to start; create the folder or remove the key                                        |
+| `prompts.directory`                                       | Any value that does not resolve to the default `resources/prompts` beside the config file          | Refuses to start; the message names `paths.resources`                                        |
+| A workspace with no config file at all                    | n/a                                                                                                | Falls back to the packaged default                                                           |
+| The packaged `config.json`                                | Invalid JSON                                                                                       | Falls back to built-in defaults, logs a warning, does **not** refuse                         |
 
 The refusal only applies to a setting an operator actually named. The one file that still falls
 back silently on a parse error is the packaged one nobody configured; refusing there would mean a
@@ -96,6 +100,40 @@ and naming the listed locations, zero included.
 Your workspace's own `resources/` folder and a project's `.claude-prompts/resources/` are not
 listed: they always come before the list. The full order, and where a created resource is saved:
 [Custom Resources](../guides/custom-resources.md#where-resources-come-from).
+
+`system_control(action:"config", operation:"get", config:{key:"paths.resources"})` prints the list
+one entry per line, each with the kind and source the resolver gave it, `"bundled"` as the package
+folder:
+
+```text
+🔎 **paths.resources** = ["../shared/resources","bundled"]
+1. /home/you/shared/resources (listed, paths.resources[0])
+2. /usr/lib/node_modules/claude-prompts/server/resources (bundled, paths.resources[1] "bundled")
+
+source: file (the config file sets this value)
+```
+
+`paths.writeTarget` names the folder `resource_manager` writes land in. It is the one key besides
+the list that places files:
+
+```jsonc
+{
+  "paths": {
+    "resources": ["../shared/resources", "bundled"],
+    "writeTarget": "../shared/resources",
+  },
+}
+```
+
+The value is a folder written as an absolute path or relative to the config file, and it names
+either an entry of `paths.resources` or the profile's own `resources/` folder (the
+`MCP_RESOURCES_PATH` folder when that is set, else the workspace's `resources/`). Each type is
+written to `<writeTarget>/<type>/`. With the key unset, writes land in the profile's own folder.
+`"bundled"`, a folder the list and the profile do not name, and a folder that does not exist refuse
+startup, and the message names the key, the value and the folders it may name. A project
+`.claude-prompts/` folder that exists on STDIO still receives writes ahead of the key. Every create
+or update answers with a last line naming the file it wrote
+([`saved:`](mcp-tools.md#common-actions)).
 
 `prompts.directory` is not a key. A file that carries it with the default value
 (`resources/prompts`) loads as if it were absent; any other value is refused at startup with a

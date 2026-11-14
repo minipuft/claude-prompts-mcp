@@ -28,6 +28,7 @@ import type { PromptGuidanceService } from '#engine/frameworks/prompt-guidance/i
 import type { GateGuidanceRenderer } from '#engine/gates/guidance/GateGuidanceRenderer.js';
 import type { ExecutionRecordStore } from '#modules/chains/execution-record-store.js';
 import type { SkillsSyncPaths } from '#modules/skills-sync/service.js';
+import type { ResourceLocationsView } from '#shared/types/resource-location-report.js';
 import type { SystemControlInput } from '../schemas/system-control.schema.js';
 import type { ActionHandler } from './core/action-handler-base.js';
 import type { SystemControlContext } from './core/types.js';
@@ -80,6 +81,7 @@ export class ConsolidatedSystemControl implements SystemControlContext {
   executionRecordStore?: ExecutionRecordStore;
   databasePort?: DatabasePort;
   skillsSyncPaths?: () => SkillsSyncPaths;
+  resourceLocations?: ResourceLocationsView;
   configManager?: ConfigManager;
   safeConfigWriter?: SafeConfigWriter;
   onRestart?: (reason: string) => Promise<void>;
@@ -140,6 +142,10 @@ export class ConsolidatedSystemControl implements SystemControlContext {
 
   setSkillsSyncPathsProvider(provider: () => SkillsSyncPaths): void {
     this.skillsSyncPaths = provider;
+  }
+
+  setResourceLocationsView(view: ResourceLocationsView): void {
+    this.resourceLocations = view;
   }
 
   setChainSessionStore(chainSessionStore: ChainSessionService): void {

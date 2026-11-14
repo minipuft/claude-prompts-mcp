@@ -18,6 +18,7 @@ import { saveVersion } from '../../helpers/version-history-writer.js';
 import type { HistoryFile } from '../../../src/modules/versioning/types.js';
 import type { HistoryResourceRef } from '../../../src/cli-shared/version-history.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 
 const SAMPLE_HISTORY: HistoryFile = {
   resource_type: 'prompt',
@@ -438,25 +439,14 @@ describe('version-history', () => {
   // resolveStateDbPath actually reads, so a wrong precedence fails loudly instead of both
   // candidates looking equally plausible.
   describe('runtime root resolution honors MCP_RUNTIME_ROOT / MCP_WORKSPACE', () => {
-    const envKeys = ['MCP_RUNTIME_ROOT', 'MCP_WORKSPACE'] as const;
-    const savedEnv: Record<string, string | undefined> = {};
-
-    beforeEach(() => {
-      for (const key of envKeys) savedEnv[key] = process.env[key];
-    });
-
-    afterEach(() => {
-      for (const key of envKeys) {
-        if (savedEnv[key] === undefined) delete process.env[key];
-        else process.env[key] = savedEnv[key];
-      }
-    });
+    // A plugin session exports CLAUDE_PLUGIN_DATA; each case below names the variables it means.
+    const locations = isolateResourceLocations();
 
     it('MCP_RUNTIME_ROOT wins over the workspace-ancestor ambient database', async () => {
       const runtimeRootDir = mkdtempSync(join(tmpdir(), 'cpm-vh-runtime-root-'));
       try {
         await seedStateDbSchema(runtimeRootDir);
-        process.env['MCP_RUNTIME_ROOT'] = runtimeRootDir;
+        locations.set({ runtimeRoot: runtimeRootDir });
 
         const result = saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt' });
         expect(result.success).toBe(true);
@@ -465,7 +455,7 @@ describe('version-history', () => {
         // Positive control: the workspace ancestor (tempDir, seeded by the outer beforeEach)
         // received nothing — proving the write above actually went to runtimeRootDir and did
         // not merely also land where the old ancestor walk would have looked.
-        delete process.env['MCP_RUNTIME_ROOT'];
+        locations.reset();
         expect(loadHistory(promptDir, PROMPT_REF)).toBeNull();
       } finally {
         rmSync(runtimeRootDir, { recursive: true, force: true });
@@ -473,20 +463,38 @@ describe('version-history', () => {
     });
 
     it('MCP_WORKSPACE wins over the workspace-ancestor ambient database when MCP_RUNTIME_ROOT is unset', async () => {
-      delete process.env['MCP_RUNTIME_ROOT'];
       const workspaceDir = mkdtempSync(join(tmpdir(), 'cpm-vh-workspace-'));
       try {
         await seedStateDbSchema(workspaceDir);
-        process.env['MCP_WORKSPACE'] = workspaceDir;
+        locations.set({ workspace: workspaceDir });
 
         const result = saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt' });
         expect(result.success).toBe(true);
         expect(loadHistory(promptDir, PROMPT_REF)?.current_version).toBe(1);
 
-        delete process.env['MCP_WORKSPACE'];
+        locations.reset();
         expect(loadHistory(promptDir, PROMPT_REF)).toBeNull();
       } finally {
         rmSync(workspaceDir, { recursive: true, force: true });
+      }
+    });
+
+    it('CLAUDE_PLUGIN_DATA is the runtime root when MCP_RUNTIME_ROOT and MCP_WORKSPACE are unset', async () => {
+      const pluginDataDir = mkdtempSync(join(tmpdir(), 'cpm-vh-plugin-data-'));
+      try {
+        await seedStateDbSchema(pluginDataDir);
+        locations.set({ pluginData: pluginDataDir });
+
+        const result = saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt' });
+        expect(result.success).toBe(true);
+        expect(loadHistory(promptDir, PROMPT_REF)?.current_version).toBe(1);
+
+        // Positive control: with the variable gone the same read finds the ancestor database,
+        // which received nothing, so the write above went to the plugin data directory.
+        locations.reset();
+        expect(loadHistory(promptDir, PROMPT_REF)).toBeNull();
+      } finally {
+        rmSync(pluginDataDir, { recursive: true, force: true });
       }
     });
 
@@ -496,19 +504,17 @@ describe('version-history', () => {
       try {
         await seedStateDbSchema(runtimeRootDir);
         await seedStateDbSchema(workspaceDir);
-        process.env['MCP_RUNTIME_ROOT'] = runtimeRootDir;
-        process.env['MCP_WORKSPACE'] = workspaceDir;
+        locations.set({ runtimeRoot: runtimeRootDir, workspace: workspaceDir });
 
         const result = saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt' });
         expect(result.success).toBe(true);
 
         // Read the runtime-root candidate directly (bypassing resolveStateDbPath) to confirm
         // the write landed there and not in the workspace candidate.
-        delete process.env['MCP_WORKSPACE'];
+        locations.reset({ runtimeRoot: runtimeRootDir });
         expect(loadHistory(promptDir, PROMPT_REF)?.current_version).toBe(1);
 
-        delete process.env['MCP_RUNTIME_ROOT'];
-        process.env['MCP_WORKSPACE'] = workspaceDir;
+        locations.reset({ workspace: workspaceDir });
         expect(loadHistory(promptDir, PROMPT_REF)).toBeNull();
       } finally {
         rmSync(runtimeRootDir, { recursive: true, force: true });
@@ -517,9 +523,6 @@ describe('version-history', () => {
     });
 
     it('falls back to the workspace-ancestor walk when neither variable is set (regression control)', () => {
-      delete process.env['MCP_RUNTIME_ROOT'];
-      delete process.env['MCP_WORKSPACE'];
-
       const result = saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt' });
       expect(result.success).toBe(true);
       expect(loadHistory(promptDir, PROMPT_REF)?.current_version).toBe(1);
@@ -585,16 +588,7 @@ describe('version-history', () => {
   // unrelated cwd with no `CLAUDE_PROJECT_DIR` set). `resolveEffectiveTenantId` corrects the guess
   // against the db's own `tenant_id` column, which records what the writer actually used.
   describe('effective tenant correction when the guess disagrees with recorded history', () => {
-    let savedProjectDir: string | undefined;
-
-    beforeEach(() => {
-      savedProjectDir = process.env['CLAUDE_PROJECT_DIR'];
-    });
-
-    afterEach(() => {
-      if (savedProjectDir === undefined) delete process.env['CLAUDE_PROJECT_DIR'];
-      else process.env['CLAUDE_PROJECT_DIR'] = savedProjectDir;
-    });
+    const locations = isolateResourceLocations();
 
     function tenantsFor(resourceType: string, resourceId: string): string[] {
       const db = new DatabaseSync(join(tempDir, 'runtime-state', 'state.db'));
@@ -612,13 +606,13 @@ describe('version-history', () => {
 
     it('corrects a read when the guess has no rows but exactly one other tenant does', () => {
       // "The server" writes under a scope derived from ITS launch cwd.
-      process.env['CLAUDE_PROJECT_DIR'] = '/srv/server-tenant';
+      locations.set({ projectDir: '/srv/server-tenant' });
       saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v1' });
       saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v2' });
       expect(tenantsFor('prompt', 'test-prompt')).toEqual(['server-tenant']);
 
       // "The CLI" runs later from an unrelated cwd.
-      process.env['CLAUDE_PROJECT_DIR'] = '/home/user/cli-tenant';
+      locations.set({ projectDir: '/home/user/cli-tenant' });
 
       const history = loadHistory(promptDir, PROMPT_REF);
       expect(history).not.toBeNull();
@@ -627,11 +621,11 @@ describe('version-history', () => {
     });
 
     it('rollback records the restored version under the corrected tenant, never a new one', async () => {
-      process.env['CLAUDE_PROJECT_DIR'] = '/srv/server-tenant';
+      locations.set({ projectDir: '/srv/server-tenant' });
       saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v1' });
       saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v2' });
 
-      process.env['CLAUDE_PROJECT_DIR'] = '/home/user/cli-tenant';
+      locations.set({ projectDir: '/home/user/cli-tenant' });
       const result = await rollbackVersion(
         promptDir,
         PROMPT_REF,
@@ -648,10 +642,10 @@ describe('version-history', () => {
     });
 
     it('does not correct, and REFUSES rather than reads as empty, when two other tenants both hold rows', () => {
-      process.env['CLAUDE_PROJECT_DIR'] = '/srv/tenant-a';
+      locations.set({ projectDir: '/srv/tenant-a' });
       saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'a' });
 
-      process.env['CLAUDE_PROJECT_DIR'] = '/srv/tenant-b';
+      locations.set({ projectDir: '/srv/tenant-b' });
       saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'b' });
 
       expect(tenantsFor('prompt', 'test-prompt').sort()).toEqual(['tenant-a', 'tenant-b']);
@@ -661,26 +655,26 @@ describe('version-history', () => {
       // returning null here would be indistinguishable from a resource with no history anywhere,
       // which is the exact "nothing found" symptom this whole fix exists to remove, just one layer
       // further out. `null` stays reserved for the genuinely-empty case (control right below).
-      process.env['CLAUDE_PROJECT_DIR'] = '/home/user/tenant-c';
+      locations.set({ projectDir: '/home/user/tenant-c' });
       expect(() => loadHistory(promptDir, PROMPT_REF)).toThrow(/2 other scopes/);
     });
 
     it('CONTROL: a genuinely empty history (no tenant anywhere) still reads as empty, not a refusal', () => {
       // No saveVersion call for this resource under ANY tenant — nothing to be ambiguous between.
-      process.env['CLAUDE_PROJECT_DIR'] = '/home/user/tenant-c';
+      locations.set({ projectDir: '/home/user/tenant-c' });
       expect(tenantsFor('prompt', 'test-prompt')).toEqual([]);
       expect(loadHistory(promptDir, PROMPT_REF)).toBeNull();
     });
 
     it('CONTROL: a write starts its own tenant rather than joining an existing one it collides with', () => {
-      process.env['CLAUDE_PROJECT_DIR'] = '/srv/tenant-a';
+      locations.set({ projectDir: '/srv/tenant-a' });
       saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'a' });
 
       // A second, genuinely different, correctly-resolved tenant writes a resource under the SAME
       // resource_type/resource_id (a shared state.db serving two unrelated projects). Correcting
       // this write into tenant-a's history — the naive "one candidate exists" rule applied to
       // writes too — would silently merge two unrelated projects' resources.
-      process.env['CLAUDE_PROJECT_DIR'] = '/srv/tenant-b';
+      locations.set({ projectDir: '/srv/tenant-b' });
       const result = saveVersion(promptDir, 'prompt', 'test-prompt', {
         id: 'test-prompt',
         description: 'b',
@@ -692,10 +686,10 @@ describe('version-history', () => {
     });
 
     it('corrects a delete too — cpm delete has the same shape as cpm rollback', () => {
-      process.env['CLAUDE_PROJECT_DIR'] = '/srv/server-tenant';
+      locations.set({ projectDir: '/srv/server-tenant' });
       saveVersion(promptDir, 'prompt', 'test-prompt', { id: 'test-prompt', description: 'v1' });
 
-      process.env['CLAUDE_PROJECT_DIR'] = '/home/user/cli-tenant';
+      locations.set({ projectDir: '/home/user/cli-tenant' });
       expect(deleteVersionRows(promptDir, PROMPT_REF)).toBe(true);
 
       // The rows are gone under the tenant that actually held them, not left behind as an orphan

@@ -24,6 +24,9 @@ interface ConfigGetRequest {
   operation: 'get';
 }
 
+/** The key whose `get` lists each location with its kind and source. */
+const RESOURCE_LOCATIONS_KEY = 'paths.resources';
+
 /** One plain sentence per {@link ConfigValueSource} label, shown after `source:` in a `get` reply. */
 const CONFIG_SOURCE_DESCRIPTIONS: Record<ConfigValueSource, string> = {
   file: 'the config file sets this value',
@@ -161,13 +164,32 @@ export class ConfigActionHandler extends ActionHandler {
           ? `🔎 **${key}** is not set`
           : `🔎 **${key}** = ${JSON.stringify(value)}`;
       return this.createMinimalSystemResponse(
-        [headline, '', `source: ${source} (${CONFIG_SOURCE_DESCRIPTIONS[source]})`].join('\n'),
+        [
+          headline,
+          ...this.locationLines(key),
+          '',
+          `source: ${source} (${CONFIG_SOURCE_DESCRIPTIONS[source]})`,
+        ].join('\n'),
         'config_get'
       );
     } catch (error) {
       const result = utilsHandleError(error, 'config_management', this.logger);
       return createStructuredResponse(result.message, result.isError, { action: 'config' });
     }
+  }
+
+  /**
+   * For `paths.resources`, each entry on its own line with the kind and source the resolver gave
+   * it, `"bundled"` as the package folder. Every other key prints its value alone.
+   */
+  private locationLines(key: string): string[] {
+    if (key !== RESOURCE_LOCATIONS_KEY) return [];
+    if (this.context.resourceLocations === undefined) {
+      throw new Error('Resource locations view not wired into system_control');
+    }
+    return this.context.resourceLocations
+      .configuredEntries()
+      .map((entry, index) => `${index + 1}. ${entry.path} (${entry.kind}, ${entry.source})`);
   }
 
   private async handleConfigValidate(configRequest: ConfigValidateRequest): Promise<ToolResponse> {

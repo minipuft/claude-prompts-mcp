@@ -10,6 +10,8 @@
 import { existsSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
 
+import { workspaceFromEnv } from './workspace-env.js';
+
 import { resolveSettingPath } from '#shared/utils/path-setting.js';
 import {
   RUNTIME_STATE_DIR_NAME,
@@ -39,23 +41,21 @@ function firstNonEmptyEnvValue(...values: (string | undefined)[]): string | unde
  *
  *   1. `MCP_RUNTIME_ROOT`, if set to a non-empty value — matches `getRuntimeRoot()`'s own first
  *      branch exactly.
- *   2. `MCP_WORKSPACE`, if set to a non-empty value — matches `getRuntimeRoot()` falling back to
- *      `getWorkspace()`, whose own first two branches (`--workspace` flag, then this variable)
- *      collapse to this one for a CLI process.
+ *   2. `MCP_WORKSPACE`, else `CLAUDE_PLUGIN_DATA` (`workspaceFromEnv`), if set to a non-empty value
+ *      — matches `getRuntimeRoot()` falling back to `getWorkspace()`, whose own first three
+ *      branches (`--workspace` flag, then these two variables) collapse to this one for a CLI
+ *      process.
  *   3. Neither set: fall back to discovering an existing `runtime-state/` by walking up from the
  *      resource directory, as this function always did. There is no env-derived root to trust in
  *      that case, and this keeps a bare local checkout — no plugin, no env vars — working as it
  *      always has.
  *
  * Branches 1 and 2 resolve through `resolveSettingPath`, the exact function `PathResolver` itself
- * calls for both variables, so a relative value is resolved against the CLI's cwd the same way the
+ * calls for these variables, so a relative value is resolved against the CLI's cwd the same way the
  * server resolves it against its own.
  */
 export function resolveStateDbPath(resourceDir: string): string | null {
-  const envRoot = firstNonEmptyEnvValue(
-    process.env['MCP_RUNTIME_ROOT'],
-    process.env['MCP_WORKSPACE']
-  );
+  const envRoot = firstNonEmptyEnvValue(process.env['MCP_RUNTIME_ROOT'], workspaceFromEnv()?.value);
   if (envRoot !== undefined) {
     return join(resolveSettingPath(envRoot), RUNTIME_STATE_DIR_NAME, STATE_DB_FILE_NAME);
   }

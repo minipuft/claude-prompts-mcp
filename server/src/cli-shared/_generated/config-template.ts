@@ -61,6 +61,13 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 //       this file.
 //     — no default
 //     "resources": [],
+
+//     — Where a created or updated resource is written: one of the "resources" entries, or the
+//       profile's own resources folder, absolute or relative to this file. Unset, writes go to
+//       the profile's own folder. A project .claude-prompts/ folder still receives writes on
+//       STDIO. Never "bundled".
+//     — no default
+//     "writeTarget": "<writeTarget>",
 //   },
 
 //   — Prompt loading and registration.

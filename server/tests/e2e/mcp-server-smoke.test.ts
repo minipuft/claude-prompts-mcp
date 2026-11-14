@@ -237,9 +237,9 @@ describe('MCP Server Smoke Tests', () => {
     }, 30000);
 
     // The sibling above pins MCP_RUNTIME_ROOT, which every consumer reads through one resolver
-    // call. The Claude Code `.mcp.json` sets both MCP_WORKSPACE and MCP_RUNTIME_ROOT to
-    // ${CLAUDE_PLUGIN_DATA}, but a host that sets MCP_WORKSPACE with no runtime root, or a blank
-    // one, reaches the same place only via getRuntimeRoot()'s fallback — a different branch, and
+    // call. The Claude Code `.mcp.json` carries no env: the server falls back to
+    // CLAUDE_PLUGIN_DATA itself. A host that sets MCP_WORKSPACE with no runtime root, or a blank
+    // one, reaches the workspace only via getRuntimeRoot()'s fallback — a different branch, and
     // the one that was never asserted. It stayed correct
     // only because ResourceChangeTracker happened to claim the SqliteEngine singleton first;
     // five of the six getInstance call sites pass no dbPath and fall back to the PACKAGE

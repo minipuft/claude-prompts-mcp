@@ -28,6 +28,7 @@ import { Application } from '../../../src/runtime/application.js';
 import { initializeModules } from '../../../src/runtime/module-initializer.js';
 import type { RuntimeLaunchOptions } from '../../../src/runtime/options.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const SERVER_ROOT = path.resolve(path.dirname(__filename), '..', '..', '..');
@@ -56,16 +57,13 @@ function buildApp(): Application {
 // Every app here names the package as `serverRoot` and no workspace, so its runtime root would
 // fall back to the package directory and startup would leave an empty `server/logs/` behind
 // (found by the tree-state guard, 2026-09-16). `MCP_RUNTIME_ROOT` moves only the writable root.
-let previousRuntimeRoot: string | undefined;
+const locations = isolateResourceLocations();
 beforeEach(() => {
-  previousRuntimeRoot = process.env['MCP_RUNTIME_ROOT'];
-  process.env['MCP_RUNTIME_ROOT'] = path.join(TMP_ROOT, 'runtime-root');
+  locations.set({ runtimeRoot: path.join(TMP_ROOT, 'runtime-root') });
 });
 
 afterEach(async () => {
   await SqliteEngine.shutdownInstance();
-  if (previousRuntimeRoot === undefined) delete process.env['MCP_RUNTIME_ROOT'];
-  else process.env['MCP_RUNTIME_ROOT'] = previousRuntimeRoot;
   await fs.rm(TMP_ROOT, { recursive: true, force: true });
 });
 

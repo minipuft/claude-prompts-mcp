@@ -29,6 +29,7 @@ import { loadConfigHistory } from '../../../src/cli-shared/config-restore.js';
 import { hashBytes } from '../../../src/shared/utils/hash.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';
 import { testScratchPath } from '../../helpers/scratch-path.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 
 import { DatabaseSync } from 'node:sqlite';
 import { rmSync } from 'node:fs';
@@ -60,7 +61,7 @@ const HAND_AUTHORED_JSONC = `{
 describe('a config write is recorded as a version', () => {
   let workspace: string;
   let configPath: string;
-  let previousProjectDir: string | undefined;
+  const locations = isolateResourceLocations();
 
   /** Oldest first — `loadHistory` returns newest first, and every assertion below reads forward. */
   const rows = (): Array<{ version: number; description: string; snapshot: unknown }> =>
@@ -86,19 +87,16 @@ describe('a config write is recorded as a version', () => {
   };
 
   beforeEach(async () => {
-    previousProjectDir = process.env['CLAUDE_PROJECT_DIR'];
     workspace = testScratchPath(`config-checkpoint-${Math.random().toString(36).slice(2)}`);
     rmSync(workspace, { recursive: true, force: true });
     mkdirSync(workspace, { recursive: true });
-    process.env['CLAUDE_PROJECT_DIR'] = workspace;
+    locations.set({ projectDir: workspace });
     configPath = path.join(workspace, 'config.jsonc');
     writeFileSync(configPath, HAND_AUTHORED_JSONC, 'utf8');
     await seedStateDbSchema(workspace);
   });
 
   afterEach(() => {
-    if (previousProjectDir === undefined) delete process.env['CLAUDE_PROJECT_DIR'];
-    else process.env['CLAUDE_PROJECT_DIR'] = previousProjectDir;
     rmSync(workspace, { recursive: true, force: true });
   });
 
