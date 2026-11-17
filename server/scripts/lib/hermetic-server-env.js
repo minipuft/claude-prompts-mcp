@@ -8,10 +8,12 @@
  *
  *   - `NODE_ENV=test` / `JEST_WORKER_ID`: `src/index.ts` declines to run `main()`, so the child
  *     starts, does nothing, and exits 0. The only symptom is a request that never gets an answer.
- *   - `MCP_RESOURCES_PATH` / `MCP_WORKSPACE` / `MCP_RUNTIME_ROOT` / `MCP_CONFIG_PATH`: the child
- *     reads the operator's own library, state and config instead of the tree the spawner meant.
- *     Measured 2026-08-29: `bundled-resource-fallback.e2e.test.ts` booted against 121 personal
- *     prompts while asserting about a fixture holding one.
+ *   - `MCP_WORKSPACE` / `MCP_RUNTIME_ROOT` / `MCP_CONFIG_PATH`: the child reads the operator's own
+ *     library, state and config instead of the tree the spawner meant. Measured 2026-08-29:
+ *     `bundled-resource-fallback.e2e.test.ts` booted against 121 personal prompts while asserting
+ *     about a fixture holding one.
+ *   - `MCP_RESOURCES_PATH`: no longer read, and the server refuses to start while it is set, so an
+ *     operator's leftover export would stop every spawned child before it answers.
  *
  * WHY PLAIN JS IN `scripts/lib`. The consumers straddle a boundary: `node`-run `.mjs`/`.js`
  * scripts cannot import TypeScript without a build step, while the Jest suite can import a `.js`

@@ -36,8 +36,8 @@ module.exports = function globalTeardown() {
       `A suite that spawns a server must give it BOTH temp roots — createHermeticRoots() hands\n` +
       `back HOME and MCP_RUNTIME_ROOT as one object, and without the runtime root the server\n` +
       `writes runtime-state/ and logs/ into whatever it resolves as its workspace, which here is\n` +
-      `the repository. A suite that mutates resources must redirect them too: MCP_RESOURCES_PATH\n` +
-      `outranks MCP_WORKSPACE in PathResolver.\n\n` +
+      `the repository. A suite that mutates resources must redirect them too: set MCP_WORKSPACE\n` +
+      `to a temp profile whose resources/ holds the fixtures.\n\n` +
       `If a path genuinely belongs to a generator, add it to DECLARED in\n` +
       `tests/helpers/tree-state-guard.cjs WITH a reason naming that generator.\n\n` +
       `Root: ${REPO_ROOT}\n` +

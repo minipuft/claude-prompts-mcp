@@ -18,7 +18,7 @@
  *
  * WHY IT TAKES A ROOT
  * The defects that motivated it mostly live OUTSIDE this repo: a personal prompt library reached
- * through `MCP_RESOURCES_PATH` is where most authoring happens, and no CI can ever see it. A gate
+ * through a profile (`MCP_WORKSPACE`) is where most authoring happens, and no CI can ever see it. A gate
  * that could only check the bundled tree would have caught 2 of 11. Pointing it at a root is what
  * makes it usable by the person who can actually fix the other 9:
  *

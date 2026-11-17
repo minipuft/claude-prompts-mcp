@@ -330,6 +330,8 @@ function cleanProbeEnvironment(workspace, pluginRoot) {
     "MCP_CONFIG_PATH",
     "CODEX_PROMPTS_CONFIG_PATH",
     "CLAUDE_PLUGIN_DATA",
+    // The server refuses to start while it is set; an owner's export must not reach the probe.
+    "MCP_RESOURCES_PATH",
     "PYTHONPATH",
   ])
     delete env[key];
@@ -337,7 +339,6 @@ function cleanProbeEnvironment(workspace, pluginRoot) {
     ...env,
     MCP_WORKSPACE: workspace,
     MCP_RUNTIME_ROOT: workspace,
-    MCP_RESOURCES_PATH: join(pluginRoot, PACKAGE_PREFIX, "resources"),
     CLAUDE_PLUGIN_ROOT: pluginRoot,
     PLUGIN_ROOT: pluginRoot,
     PYTHONDONTWRITEBYTECODE: "1",

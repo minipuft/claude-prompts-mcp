@@ -137,7 +137,7 @@ export function locateSkillsSyncPackageRoot(): string {
 /**
  * Every directory a run reads from or writes to, resolved by the caller.
  *
- * The precedence (`MCP_RESOURCES_PATH`, then `MCP_WORKSPACE`, then the package) and the root set
+ * The precedence (`MCP_WORKSPACE`, then `CLAUDE_PLUGIN_DATA`, then the package) and the root set
  * (the bundled tree with workspace overlays over it) belong to the server's `PathResolver` and
  * `runtime/resource-roots.ts`. `modules/` may not import `runtime/`, so the caller resolves them
  * (`runtime/skills-sync-paths.ts`) and this module reads the result. A second derivation here is
@@ -165,22 +165,16 @@ export interface SkillsSyncPaths {
 }
 
 /**
- * Refuse the workspace variable in effect (`MCP_WORKSPACE`, else `CLAUDE_PLUGIN_DATA`) or an
- * `MCP_RESOURCES_PATH` that names no directory, before any source is read or any resource written. The server refuses both at startup; this runs without it, and
- * falling through to another tree would export, sync or clone under a name the operator never gave.
+ * Refuse the workspace variable in effect (`MCP_WORKSPACE`, else `CLAUDE_PLUGIN_DATA`) when it
+ * names no directory, before any source is read or any resource written. The server refuses it at
+ * startup; this runs without it, and falling through to another tree would export, sync or clone
+ * under a name the operator never gave.
  */
 function assertUsableSourceSettings(): void {
   const workspace = workspaceFromEnv();
   if (workspace !== undefined) {
     assertUsableDirectorySetting(
       { name: workspace.source, value: workspace.value },
-      { verb: 'run' }
-    );
-  }
-  const resourcesPath = process.env['MCP_RESOURCES_PATH'];
-  if (resourcesPath) {
-    assertUsableDirectorySetting(
-      { name: 'MCP_RESOURCES_PATH', value: resourcesPath },
       { verb: 'run' }
     );
   }

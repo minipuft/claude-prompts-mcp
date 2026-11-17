@@ -9,8 +9,8 @@
  *   - jest's own markers (`NODE_ENV=test`, `JEST_WORKER_ID`) make `src/index.ts` decline to run
  *     `main()`. The child starts, does nothing, exits 0. The only symptom is a request with no
  *     answer, which reads like a protocol bug rather than a server that never booted.
- *   - an inherited `MCP_RESOURCES_PATH` — a supported way to point the server at a personal
- *     library — makes the child read the developer's own catalog instead of the fixture.
+ *   - an inherited `MCP_WORKSPACE` — the way to point the server at a personal profile — makes
+ *     the child read the developer's own catalog instead of the fixture.
  *
  * Measured 2026-08-29: five e2e spawn sites had grown five different partial scrubs, and
  * `bundled-resource-fallback.e2e.test.ts` booted against 121 personal prompts while asserting

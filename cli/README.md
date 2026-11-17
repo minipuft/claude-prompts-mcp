@@ -40,7 +40,7 @@ All commands support `--json` for machine-readable output and `-w`/`--workspace`
 
 ## `cpm workspace`
 
-Manages the `workspaces.jsonc` registry that labels the workspace folders sitting side by side under one parent. The registry is in the parent of the workspace `cpm` resolves (`-w`, then `MCP_WORKSPACE`, then the current directory), so run the commands from inside a profile folder or pass `-w`. Its shape:
+Manages the `workspaces.jsonc` registry that labels the profile folders sitting side by side under one parent. It lives in the parent of the profile `cpm` resolves, so run the commands from inside a profile or pass `-w`. Its shape:
 
 ```jsonc
 { "dev": "./dev", "shared": "./shared" }
@@ -52,7 +52,7 @@ Manages the `workspaces.jsonc` registry that labels the workspace folders sittin
 - `cpm workspace show <label>` prints the folder, its `config.jsonc` or `config.json`, and how many prompts, gates, frameworks and styles it holds.
 - `cpm workspace use <label>` prints the `MCP_WORKSPACE=<folder>` line to put in your MCP client's server env; it writes nothing.
 
-There is no stacking command: a profile reads further folders through `paths.resources` in its own config. Worked example, the refusals and the stacking line: [Custom Resources, Profiles](../docs/guides/custom-resources.md#profiles).
+A profile reads further folders through `paths.resources` in its own config; setup and the refusals are in [Custom Resources](../docs/guides/custom-resources.md).
 
 ## Architecture
 

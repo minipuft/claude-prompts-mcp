@@ -1,24 +1,19 @@
-import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, rmSync, readFileSync, writeFileSync, cpSync } from 'node:fs';
 
+import { runCpm } from '../helpers/child-process.js';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CLI = join(__dirname, '../../dist/cpm.js');
 const VERSIONED_WS = join(__dirname, '../fixtures/versioned-workspace');
 
 function run(args: string[]): { stdout: string; stderr: string; exitCode: number } {
-  const result = spawnSync('node', [CLI, ...args], {
-    encoding: 'utf-8',
-    timeout: 10_000,
-  });
-  const stdout = result.stdout ?? '';
-  const stderr = result.stderr ?? '';
+  const { status, stdout, stderr } = runCpm(args);
   return {
     // Merge stderr into stdout for backward-compatible assertions on error paths
-    stdout: result.status === 0 ? stdout : stdout + stderr,
+    stdout: status === 0 ? stdout : stdout + stderr,
     stderr,
-    exitCode: result.status ?? 1,
+    exitCode: status,
   };
 }
 

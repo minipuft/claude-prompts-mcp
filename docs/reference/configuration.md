@@ -67,6 +67,7 @@ same way for a workspace. The message names both paths. Delete whichever file yo
 | `paths.writeTarget`                                       | `"bundled"`: the package's own resources are never written                                         | Refuses to start; the message names the folders it may name                                  |
 | `paths.writeTarget`                                       | Resolves to neither a listed `paths.resources` entry nor the profile's own `resources/` folder     | Refuses to start; the message names the value, its resolved path and the folders it may name |
 | `paths.writeTarget`                                       | Names a folder that does not exist                                                                 | Refuses to start; create the folder or remove the key                                        |
+| `MCP_RESOURCES_PATH`                                      | Set to any value; the server no longer reads it                                                    | Refuses to start; the message names `MCP_WORKSPACE` and `paths.resources` as the replacement |
 | `prompts.directory`                                       | Any value that does not resolve to the default `resources/prompts` beside the config file          | Refuses to start; the message names `paths.resources`                                        |
 | A workspace with no config file at all                    | n/a                                                                                                | Falls back to the packaged default                                                           |
 | The packaged `config.json`                                | Invalid JSON                                                                                       | Falls back to built-in defaults, logs a warning, does **not** refuse                         |
@@ -77,8 +78,9 @@ plain `npx claude-prompts` with no arguments could fail on a corrupted install.
 
 ## Where Resources Come From
 
-`paths.resources` is an ordered list of resource locations, read from the workspace config or the
-file `MCP_CONFIG_PATH` names:
+`paths.resources` is an ordered list of resource locations, read from the profile's config or the
+file `MCP_CONFIG_PATH` names. Setting up a profile, reading a second library and where a created
+resource is saved: [Custom Resources](../guides/custom-resources.md).
 
 ```jsonc
 {
@@ -94,16 +96,7 @@ names the prompts, gates, frameworks and styles the package ships, at the positi
 An earlier entry wins when two locations define the same id. A list that leaves `"bundled"` out
 serves no shipped prompt, gate or style; only the six frameworks the server needs to run still
 load from the package. With no `paths.resources` key, the shipped resources load last, beneath your
-workspace. With a list in force, startup prints one line to stderr counting the prompts it found
-and naming the listed locations, zero included.
-
-| Setting              | Precedence                                                                                                                                                                                                                                                                                                                                                                                |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MCP_RESOURCES_PATH` | Its `<type>/` folder takes the place of the workspace's own `resources/<type>/`: read before the `paths.resources` list, and the folder created resources are saved to. Existing setups keep working: `cpm workspace list` shows the folder as `unregistered:`, and `cpm workspace add <label>` with no directory registers it. New setups use a profile folder named by `MCP_WORKSPACE`. |
-
-Your workspace's own `resources/` folder and a project's `.claude-prompts/resources/` are not
-listed: they always come before the list. The full order, and where a created resource is saved:
-[Custom Resources](../guides/custom-resources.md#where-resources-come-from).
+profile.
 
 `system_control(action:"config", operation:"get", config:{key:"paths.resources"})` prints the list
 one entry per line, each with the kind and source the resolver gave it, `"bundled"` as the package
@@ -130,14 +123,9 @@ the list that places files:
 ```
 
 The value is a folder written as an absolute path or relative to the config file, and it names
-either an entry of `paths.resources` or the profile's own `resources/` folder (see
-[the table above](#where-resources-come-from)). Each type is
-written to `<writeTarget>/<type>/`. With the key unset, writes land in the profile's own folder.
-`"bundled"`, a folder the list and the profile do not name, and a folder that does not exist refuse
-startup, and the message names the key, the value and the folders it may name. A project
-`.claude-prompts/` folder that exists on STDIO still receives writes ahead of the key. Every create
-or update answers with a last line naming the file it wrote
-([`saved:`](mcp-tools.md#common-actions)).
+either an entry of `paths.resources` or the profile's own `resources/` folder. Each type is written
+to `<writeTarget>/<type>/`; with the key unset, writes land in the profile's own folder. The
+refusals are in the table above.
 
 `prompts.directory` is not a key. A file that carries it with the default value
 (`resources/prompts`) loads as if it were absent; any other value is refused at startup with a

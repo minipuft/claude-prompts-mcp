@@ -4,8 +4,8 @@
  *
  * CLI flags take precedence over their workspace/config environment settings.
  * Each resource type reads from one ordered location list, `getResourceLocations`: the project's
- * `.claude-prompts/` (STDIO discovery), the profile's own folder or the `MCP_RESOURCES_PATH`
- * folder in its place, the config's `paths.resources` entries, then the bundle — where the list
+ * `.claude-prompts/` (STDIO discovery), the profile's own `resources/` folder, the config's
+ * `paths.resources` entries, then the bundle — where the list
  * names `"bundled"`, last when there is no list, and nowhere when a list leaves it out. An earlier
  * location wins a duplicate id. An absent type directory is created by its first write.
  *
@@ -13,8 +13,7 @@
  * - MCP_WORKSPACE: Full plugin/workspace directory (server/, hooks/, etc.)
  * - CLAUDE_PLUGIN_DATA: Claude Code's plugin data directory; the workspace when MCP_WORKSPACE is unset
  * - MCP_RUNTIME_ROOT: Writable directory for state and logs
- * - MCP_RESOURCES_PATH: One folder that replaces the profile's own resources folder; the config's
- *   paths.resources entries still follow it. This file is its only reader.
+ * - MCP_RESOURCES_PATH: no longer read; a set value refuses startup (`assertUsablePathSettings`).
  */
 
 import { existsSync, readFileSync, statSync } from 'fs';
@@ -60,7 +59,7 @@ interface ResourceLocationEntry {
   path: string;
   /**
    * `project`: `<project>/.claude-prompts/resources/<type>`. `profile`: the profile's own folder
-   * (or the `MCP_RESOURCES_PATH` folder in its place) and the workspace's other layout beside it.
+   * and the workspace's other layout beside it.
    * `listed`: a `paths.resources` entry. `bundled`: the package's own folder.
    */
   kind: 'project' | 'profile' | 'listed' | 'bundled';
@@ -331,46 +330,25 @@ export class PathResolver {
   }
 
   /**
-   * Get the resources base directory
-   *
-   * Priority:
-   *   1. MCP_RESOURCES_PATH environment variable (user's custom resources)
-   *   2. ${workspace}/resources (workspace subdirectory)
-   *   3. ${packageRoot}/resources (default)
+   * Get the resources base directory: the profile's `${workspace}/resources` when it exists, else
+   * the package's `${packageRoot}/resources`.
    *
    * This is the resource base; each type getter also preserves existing legacy workspace dirs.
    */
   getResourcesPath(): string {
     if (this.cache.resources) return this.cache.resources;
 
-    let resolved: string;
-    let source: string;
-
-    // 1. MCP_RESOURCES_PATH environment variable (user's custom resources location)
-    if (process.env['MCP_RESOURCES_PATH']) {
-      resolved = this.resolvePath(process.env['MCP_RESOURCES_PATH']);
-      source = 'MCP_RESOURCES_PATH env var';
-    }
-    // 2. Workspace resources directory, else 3. package default
-    else {
-      ({ resolved, source } = this.resolveDefaultResourcesPath());
-    }
+    const workspaceResources = join(this.getWorkspace(), 'resources');
+    const { resolved, source } = existsSync(workspaceResources)
+      ? { resolved: workspaceResources, source: 'workspace resources/' }
+      : {
+          resolved: join(this.config.packageRoot, 'resources'),
+          source: 'package resources/ (default)',
+        };
 
     this.cache.resources = resolved;
     this.logResolution('resources', resolved, source);
     return resolved;
-  }
-
-  /** Where resources resolve when `MCP_RESOURCES_PATH` names nothing: the workspace's, else the package's. */
-  private resolveDefaultResourcesPath(): { resolved: string; source: string } {
-    const workspaceResources = join(this.getWorkspace(), 'resources');
-    if (existsSync(workspaceResources)) {
-      return { resolved: workspaceResources, source: 'workspace resources/' };
-    }
-    return {
-      resolved: join(this.config.packageRoot, 'resources'),
-      source: 'package resources/ (default)',
-    };
   }
 
   /**
@@ -383,30 +361,27 @@ export class PathResolver {
    * created a missing workspace, a missing resources path fell through to the bundled catalog one
    * subfolder at a time, and a malformed workspace config.json booted on built-in defaults.
    *
-   * The workspace goes first because it decides both the resources fallback and the default config.
-   * An empty value counts as unset, as it does in the getters, and a workspace with no config file
-   * still uses the packaged one.
+   * A set `MCP_RESOURCES_PATH` goes first: the server no longer reads it, and serving without the
+   * folder it names would drop that folder's resources with no word to the operator. The workspace
+   * goes next because it decides both the resources folder and the default config. An empty value
+   * counts as unset, and a workspace with no config file still uses the packaged one.
    */
   assertUsablePathSettings(): void {
+    const removedResourcesPath = process.env['MCP_RESOURCES_PATH'];
+    if (removedResourcesPath !== undefined && removedResourcesPath !== '') {
+      throw new PathSettingError(
+        [
+          'Refusing to start: MCP_RESOURCES_PATH is no longer read.',
+          "Expected MCP_WORKSPACE set to a profile folder that holds resources/ (move the <type>/ folders under it), or the folder listed in paths.resources of the profile's config.jsonc.",
+        ].join('\n')
+      );
+    }
+
     const workspace = this.readWorkspaceSource();
     if (workspace !== undefined) {
       assertUsableDirectorySetting(workspace, {
         fallback: this.describeWorkspaceFallback(workspace),
       });
-    }
-
-    const resources = process.env['MCP_RESOURCES_PATH'];
-    if (resources !== undefined && resources !== '') {
-      const { resolved, source } = this.resolveDefaultResourcesPath();
-      // With no custom workspace the "workspace" resources ARE the package's, so say so.
-      const label =
-        source === 'workspace resources/' && this.isUsingCustomWorkspace()
-          ? 'the workspace resources'
-          : 'the packaged resources';
-      assertUsableDirectorySetting(
-        { name: 'MCP_RESOURCES_PATH', value: resources },
-        { fallback: { label, resolved } }
-      );
     }
 
     this.getConfigPath();
@@ -698,13 +673,11 @@ export class PathResolver {
 
   /**
    * The profile's own resources folder, the one whose `<type>` folders are entry two of
-   * {@link getResourceLocations}: the `MCP_RESOURCES_PATH` folder when set, else the custom
-   * workspace's `resources/`. Undefined when neither applies, because the profile's folder is
-   * then the package's own, which is never written. `paths.writeTarget` may name it besides the
-   * listed entries.
+   * {@link getResourceLocations}: the custom workspace's `resources/`. Undefined without a custom
+   * workspace, because the profile's folder is then the package's own, which is never written.
+   * `paths.writeTarget` may name it besides the listed entries.
    */
   getProfileResourcesDir(): string | undefined {
-    if (this.hasExplicitResourcesPath()) return this.getResourcesPath();
     if (this.isUsingCustomWorkspace()) return join(this.getWorkspace(), 'resources');
     return undefined;
   }
@@ -724,11 +697,11 @@ export class PathResolver {
    * overlay getters below, the per-type write roots).
    *
    * 1. the project folder `<project>/.claude-prompts/resources/<type>` whenever discovery names a
-   *    project, with or without `MCP_RESOURCES_PATH`. Listed before `.claude-prompts/` exists too:
+   *    project. Listed before `.claude-prompts/` exists too:
    *    loaders read it as empty and the file observer watches it, so a folder created while the
    *    server runs is served without a restart. It is the write root only once it exists.
-   * 2. the profile's own folder, or the `MCP_RESOURCES_PATH` folder in its place
-   *    ({@link resolveResourceSubdir}), then the custom workspace's other layout beside it, so a
+   * 2. the profile's own folder ({@link resolveResourceSubdir}), then the custom workspace's
+   *    other layout beside it, so a
    *    workspace whose collection sits in both `resources/<type>` and `<type>` keeps both.
    * 3. each `paths.resources` entry as `<entry>/<type>`, in the file's order.
    * 4. the bundle at the position `"bundled"` is listed; appended last when no list is in force;
@@ -753,7 +726,7 @@ export class PathResolver {
 
     const bundledDir = this.getBundledResourceDir(resourceType);
     const profile = this.profileResourceDir(resourceType);
-    // With neither a custom workspace nor `MCP_RESOURCES_PATH`, the profile's folder IS the
+    // Without a custom workspace, the profile's folder IS the
     // package's: it is the bundle, and is placed by the bundle's rule (entry 4) rather than ranked
     // as entry two — otherwise a list that leaves `"bundled"` out, or names it later, would still
     // serve the bundle second.
@@ -889,11 +862,6 @@ export class PathResolver {
     return resolveSettingPath(inputPath);
   }
 
-  private hasExplicitResourcesPath(): boolean {
-    const explicitResources = process.env['MCP_RESOURCES_PATH'];
-    return explicitResources !== undefined && explicitResources !== '';
-  }
-
   /** Entry two of the location list for `subdir`, resolved once per type. */
   private profileResourceDir(subdir: string): { resolved: string; source: string } {
     const cached = this.typePaths[subdir];
@@ -906,7 +874,7 @@ export class PathResolver {
 
   /**
    * The directory a type is written to: the project folder when `.claude-prompts/` exists
-   * (R3j keeps its precedence, whether or not `MCP_RESOURCES_PATH` or `paths.writeTarget` is set),
+   * (R3j keeps its precedence, whether or not `paths.writeTarget` is set),
    * else `<paths.writeTarget>/<type>` when the config names a folder other than the profile's,
    * else the profile's own folder — unless that folder is the package's own and a
    * `paths.resources` list is in force: the package folder is then the bundle, never written, and
@@ -939,30 +907,24 @@ export class PathResolver {
    * Resolve the profile's own folder for a type: entry two of {@link getResourceLocations}, and
    * the write root whenever no project `.claude-prompts/` exists.
    *
-   * A custom workspace with no `MCP_RESOURCES_PATH` resolves inside the workspace:
+   * A custom workspace resolves inside the workspace:
    *   1. ${workspace}/resources/${subdir}/ (if exists)
    *   2. ${workspace}/${subdir}/ (legacy, if exists, so an existing collection does not split)
    *   3. ${workspace}/resources/${subdir}/ (not created yet; the first write creates it)
    *
-   * An explicit `MCP_RESOURCES_PATH` takes the profile folder's place (R3p), each type through:
-   *   1. ${resources}/${subdir}/ (if exists)
-   *   2. ${workspace}/${subdir}/ (legacy, if exists)
-   *   3. ${resources}/${subdir}/ (not created yet; the first write creates it)
-   *
-   * With neither an explicit base nor a custom workspace, existing resource and legacy dirs
-   * retain their priority, then the package resource directory is the default.
+   * Without a custom workspace, existing resource and legacy dirs retain their priority, then the
+   * package resource directory is the default.
    *
    * A write root may not exist yet. Existence-based fallback would send first writes into the
-   * install directory, which a plugin update replaces, or outside an explicit resource boundary.
+   * install directory, which a plugin update replaces.
    * Readers treat the absent directory as empty; bundled resources still load underneath
    * (`getBundledResourceDir`).
    */
   private resolveResourceSubdir(subdir: string): { resolved: string; source: string } {
     const workspace = this.getWorkspace();
     const legacyDir = join(workspace, subdir);
-    const hasExplicitResources = this.hasExplicitResourcesPath();
 
-    if (!hasExplicitResources && this.isUsingCustomWorkspace()) {
+    if (this.isUsingCustomWorkspace()) {
       const workspaceDir = join(workspace, 'resources', subdir);
       if (existsSync(workspaceDir)) {
         return { resolved: workspaceDir, source: `workspace resources/${subdir}/` };
@@ -983,13 +945,6 @@ export class PathResolver {
 
     if (existsSync(legacyDir)) {
       return { resolved: legacyDir, source: `workspace ${subdir}/ (legacy)` };
-    }
-
-    if (hasExplicitResources) {
-      return {
-        resolved: resourcesDir,
-        source: `resources/${subdir}/ (created on first write)`,
-      };
     }
 
     return {

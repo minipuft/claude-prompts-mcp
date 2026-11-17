@@ -233,29 +233,30 @@ describe('a path setting that cannot be used refuses startup', () => {
     expect(existsSync(missing)).toBe(false);
   }, 30_000);
 
-  it('Streamable HTTP: a missing MCP_RESOURCES_PATH exits 1 without serving or creating the runtime root', async () => {
-    const missing = path.join(dir, 'missing-resources');
+  it('Streamable HTTP: a set MCP_RESOURCES_PATH exits 1 naming its replacements, without serving or creating the runtime root', async () => {
+    const resources = path.join(dir, 'personal-resources');
     const runtimeRoot = path.join(dir, 'resources-http-runtime');
     const port = await getAvailablePort();
 
     const run = await runServer(
       ['--transport=streamable-http'],
-      { PORT: String(port), ...resourceLocationEnv({ resourcesPath: missing, runtimeRoot }) },
+      {
+        PORT: String(port),
+        MCP_RESOURCES_PATH: resources,
+        ...resourceLocationEnv({ runtimeRoot }),
+      },
       { stdin: 'ignore' }
     );
 
     expect(run.timedOut).toBe(false);
     expect(run.exitCode).toBe(1);
     expect(run.stdout).toBe('');
+    expect(run.stderr).toContain('Refusing to start: MCP_RESOURCES_PATH is no longer read.');
     expect(run.stderr).toContain(
-      `Refusing to start: the MCP_RESOURCES_PATH environment variable is set to "${missing}", which resolves to ${missing}, and that path does not exist.`
-    );
-    // No workspace is set, so the fallback is the packaged tree, not a "workspace" one.
-    expect(run.stderr).toContain(
-      `Expected an existing directory at that path, or unset MCP_RESOURCES_PATH to use the packaged resources at ${path.join(SERVER_ROOT, 'resources')}.`
+      "Expected MCP_WORKSPACE set to a profile folder that holds resources/ (move the <type>/ folders under it), or the folder listed in paths.resources of the profile's config.jsonc."
     );
     expect(run.stderr.split('Refusing to start').length - 1).toBe(1);
-    expect(existsSync(missing)).toBe(false);
+    expect(existsSync(resources)).toBe(false);
     expect(existsSync(runtimeRoot)).toBe(false);
   }, 30_000);
 

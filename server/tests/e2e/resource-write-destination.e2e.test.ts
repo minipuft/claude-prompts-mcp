@@ -63,7 +63,6 @@ class ProbeServer {
       env: buildServerEnv({
         ...this.roots.env,
         ...resourceLocationEnv({
-          resourcesPath: path.join(this.workspace, 'resources'),
           workspace: this.workspace,
         }),
       }),
@@ -196,7 +195,7 @@ describe('resource writes resolve through PathResolver (D8 Arc 1)', () => {
       id,
       name: 'Write destination probe',
       category: 'analysis',
-      description: 'Asserts prompt writes honor MCP_RESOURCES_PATH.',
+      description: 'Asserts prompt writes land in the workspace resources folder.',
       user_message_template: 'probe body',
     });
 
@@ -217,7 +216,7 @@ describe('resource writes resolve through PathResolver (D8 Arc 1)', () => {
       id,
       name: 'Write destination gate probe',
       type: 'validation',
-      description: 'Asserts gate writes honor MCP_RESOURCES_PATH.',
+      description: 'Asserts gate writes land in the workspace resources folder.',
       guidance: 'probe guidance',
       // `description` is not a declared pass-criterion field. It used to be stripped here, so
       // this fixture believed it wrote a criterion description and did not (P4.97).
@@ -239,7 +238,7 @@ describe('resource writes resolve through PathResolver (D8 Arc 1)', () => {
       action: 'create',
       id,
       name: 'Write destination framework probe',
-      description: 'Asserts framework writes honor MCP_RESOURCES_PATH.',
+      description: 'Asserts framework writes land in the workspace resources folder.',
       system_prompt_guidance: 'Probe framework guidance for the write-destination check.',
       phases: [{ id: 'probe', name: 'Probe', description: 'probe phase' }],
       framework_gates: [

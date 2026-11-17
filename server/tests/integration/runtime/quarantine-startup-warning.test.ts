@@ -100,7 +100,7 @@ describe('the startup quarantine warning names the root that is answering (P4.23
   beforeEach(async () => {
     warnings.length = 0;
     // `PathResolver` reads the environment before its `cli` options, and a developer shell here
-    // commonly exports `MCP_RESOURCES_PATH` at a personal prompt library — measured while writing
+    // commonly exports `MCP_WORKSPACE` at a personal prompt library — measured while writing
     // this file: the fixture control below reported 90-odd ids from that library instead of the two
     // written above. Without clearing them the test asserts against a tree it did not create.
     locations = withResourceLocations();

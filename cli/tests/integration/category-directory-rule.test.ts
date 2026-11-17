@@ -9,14 +9,14 @@
  * except an excluded one is a category, `_`/`.` entries are ignored, `tools/` is reserved below
  * the root only, and a `prompt.yaml` directly inside a root directory is not a prompt.
  */
-import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { runCpm } from '../helpers/child-process.js';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CLI = join(__dirname, '../../dist/cpm.js');
 const VALID_WS = join(__dirname, '../fixtures/valid-workspace');
 const BROKEN_PROMPT = join(
   __dirname,
@@ -24,11 +24,8 @@ const BROKEN_PROMPT = join(
 );
 
 function cpm(args: string[]): { status: number; stdout: string } {
-  const result = spawnSync('node', [CLI, ...args], {
-    encoding: 'utf-8',
-    timeout: 10_000,
-  });
-  return { status: result.status ?? 1, stdout: result.stdout ?? '' };
+  const { status, stdout } = runCpm(args);
+  return { status, stdout };
 }
 
 function listedIds(type: string, workspace: string): string[] {

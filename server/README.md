@@ -350,19 +350,10 @@ Supported presets (other clients: [Client Integration Guide](../docs/guides/clie
 | `MCP_CONFIG_PATH`  | Custom config file path (`.jsonc` or `.json`); must be readable, or startup is refused                                                                                            | `/path/to/config.jsonc`          |
 | `LOG_LEVEL`        | Logging verbosity                                                                                                                                                                 | `debug`, `info`, `warn`, `error` |
 
-Per-resource-type path overrides (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_STYLES_PATH`,
-`MCP_SCRIPTS_PATH`, and the former `MCP_METHODOLOGIES_PATH`) were documented here but are not read
-anywhere in the server. Set `MCP_WORKSPACE` to a profile folder instead; its `resources/` overlay
-the bundled ones.
-
-**Resolution priority:** CLI flags > Environment variables > Workspace subdirectory > Package defaults
-
-A path you set is not skipped when it is unusable: a workspace or resources directory that does not
-exist, a config file that is not readable JSON (or JSONC, for a `.jsonc` path), or a workspace
-config that is not a JSON object stops the server at startup with a message naming the setting and
-the resolved path. Falling through to the next tier instead served the bundled catalog, or built-in
-defaults, as if they were yours. A workspace with no config file still uses the packaged one, and a
-workspace holding both `config.jsonc` and `config.json` refuses to start rather than picking one.
+Your prompts, gates, frameworks and styles live in the profile folder `MCP_WORKSPACE` names; further
+libraries are listed in its `paths.resources`. Setup, and where a created resource is saved:
+[Custom Resources](../docs/guides/custom-resources.md). A path you set that is unusable stops the
+server at startup with a message naming the setting and the resolved path; it is never skipped.
 
 ---
 
@@ -415,7 +406,7 @@ npx claude-prompts --startup-test --verbose
 
 **"No prompts found"**
 
-- Check `MCP_WORKSPACE` points to your workspace. Prompts you create are saved under its `resources/prompts/`, created on the first write, and a workspace that does not exist at all refuses startup, with the resolved path on stderr
+- Check `MCP_WORKSPACE` points to your profile. Prompts you create are saved under its `resources/prompts/`; a folder that does not exist refuses startup, with the resolved path on stderr
 - Run `npx claude-prompts --startup-test --verbose` to see resolved paths
 
 **"Framework not found"**

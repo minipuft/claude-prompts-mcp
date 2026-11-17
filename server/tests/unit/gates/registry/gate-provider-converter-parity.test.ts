@@ -129,8 +129,8 @@ describe('GateManagerProvider carries the gate file (P4.133)', () => {
   });
 
   test('every bundled gate converts identically through both classes', async () => {
-    // Named explicitly: the default resolution honours MCP_RESOURCES_PATH, which a developer
-    // shell may export, and this case is about what the package ships.
+    // Named explicitly: the default resolution honours MCP_WORKSPACE, which a developer shell
+    // may export, and this case is about what the package ships.
     const bundledDir = path.resolve(
       fileURLToPath(import.meta.url),
       '../../../../../resources/gates'

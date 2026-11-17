@@ -76,8 +76,8 @@ function spawnServer(runtimeRoot?: string): ChildProcess {
     env: buildServerEnv({
       ...roots.env,
       ...resourceLocationEnv({
-        workspace: PROJECT_ROOT,
-        resourcesPath: path.join(PROJECT_ROOT, 'server', 'resources'),
+        // The package root as the workspace: the package tree, stated rather than inherited.
+        workspace: path.join(PROJECT_ROOT, 'server'),
         ...(runtimeRoot !== undefined ? { runtimeRoot } : {}),
       }),
     }),
@@ -212,8 +212,7 @@ describe('MCP Server Smoke Tests', () => {
           GITHUB_ACTIONS: 'false',
           ...resourceLocationEnv({
             runtimeRoot,
-            workspace: PROJECT_ROOT,
-            resourcesPath: path.join(PROJECT_ROOT, 'server', 'resources'),
+            workspace: path.join(PROJECT_ROOT, 'server'),
           }),
         }),
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -257,10 +256,7 @@ describe('MCP Server Smoke Tests', () => {
           NODE_ENV: 'production',
           CI: 'false',
           GITHUB_ACTIONS: 'false',
-          ...resourceLocationEnv({
-            workspace,
-            resourcesPath: path.join(PROJECT_ROOT, 'server', 'resources'),
-          }),
+          ...resourceLocationEnv({ workspace }),
         }),
         stdio: ['ignore', 'pipe', 'pipe'],
       });

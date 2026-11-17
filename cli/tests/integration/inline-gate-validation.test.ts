@@ -8,18 +8,17 @@
  * definition the file already carried never blocks an unrelated edit, and only a problem the
  * mutation introduced is refused.
  */
-import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { runCpm } from '../helpers/child-process.js';
 import { runValidatedMutation } from '@cli-shared/resource-operations.js';
 
 import { seedVersionHistory } from '../helpers/seed-version-history.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CLI = join(__dirname, '../../dist/cpm.js');
 const VERSIONED_WS = join(__dirname, '../fixtures/versioned-workspace');
 
 /** One inline definition with every field the loader requires except `scope`. */
@@ -34,8 +33,8 @@ const DROPPED_DEFINITION = [
 ].join('\n');
 
 function run(args: string[]): { output: string; exitCode: number } {
-  const result = spawnSync('node', [CLI, ...args], { encoding: 'utf-8', timeout: 10_000 });
-  return { output: (result.stdout ?? '') + (result.stderr ?? ''), exitCode: result.status ?? 1 };
+  const { status, stdout, stderr } = runCpm(args);
+  return { output: stdout + stderr, exitCode: status };
 }
 
 describe('inline gate definitions the loader drops (P6.231)', () => {

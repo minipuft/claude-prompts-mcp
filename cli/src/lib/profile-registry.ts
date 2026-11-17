@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { basename, dirname, join, resolve, sep } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 
 import { writeConfigBytesAtomic, writeConfigKeyAtomic } from '@cli-shared/config-operations.js';
 import { findWorkspaceConfigFiles, parseConfigText } from '@shared/utils/config-file-format.js';
@@ -75,21 +75,6 @@ export function currentEntry(
 }
 
 /**
- * The folder `MCP_RESOURCES_PATH` names as a profile: the variable's folder, or its parent when
- * the folder is literally named `resources` (a profile holds `resources/<type>/`).
- */
-export function resourcesPathFolder(resourcesPath: string): string {
-  const folder = resolve(expandHome(resourcesPath));
-  return basename(folder) === 'resources' ? dirname(folder) : folder;
-}
-
-/** True when a registered folder equals `path` or contains it. */
-export function isHeldByRegistry(entries: readonly ProfileEntry[], path: string): boolean {
-  const target = resolve(expandHome(path));
-  return entries.some((entry) => target === entry.folder || target.startsWith(entry.folder + sep));
-}
-
-/**
  * Why `folder` cannot be registered under `label`, or undefined when it can.
  * The folder must already exist and sit directly in the registry's parent.
  */
@@ -158,10 +143,6 @@ function countResources(folder: string, type: ResourceType): number {
   }
   const config = TYPE_CONFIG[type];
   return discoverResourcePaths(baseDir, config.entryFile, config.nested).length;
-}
-
-function expandHome(path: string): string {
-  return path.startsWith('~') ? path.replace('~', process.env['HOME'] ?? '') : path;
 }
 
 function errorText(error: unknown): string {

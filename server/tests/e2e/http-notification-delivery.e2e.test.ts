@@ -21,8 +21,6 @@
 
 import { afterAll, beforeAll, describe, expect, test } from '@jest/globals';
 
-import path from 'path';
-
 import {
   allStreamMessages,
   httpPost,
@@ -31,10 +29,8 @@ import {
   notificationsOf,
   startServerWithHttp,
   waitForHealth,
-  PROJECT_ROOT,
 } from './helpers/http-mcp-client.js';
 import { cageerfAnswer } from './helpers/cageerf-answer.js';
-import { resourceLocationEnv } from '../helpers/resource-locations.js';
 
 import type { ChildProcess } from 'child_process';
 
@@ -100,9 +96,8 @@ describe('Streamable HTTP notification delivery', () => {
   beforeAll(async () => {
     const port = await getAvailablePort();
     baseUrl = `http://127.0.0.1:${port}`;
-    proc = startServerWithHttp(port, {
-      env: resourceLocationEnv({ resourcesPath: path.join(PROJECT_ROOT, 'server', 'resources') }),
-    });
+    // The client's default workspace is the package root, so the server serves the package tree.
+    proc = startServerWithHttp(port);
     await waitForHealth(baseUrl, { timeout: 45000 });
   }, 60000);
 

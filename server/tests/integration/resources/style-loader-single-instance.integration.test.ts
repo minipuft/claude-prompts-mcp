@@ -60,9 +60,9 @@ const mockLogger = {
 
 /**
  * Every path override `PathResolver` honors is cleared for this file and restored after it
- * (`withResourceLocations`): `MCP_RESOURCES_PATH` in particular is exported into the maintainer's
- * shell by the Claude Code plugin that runs this server, where it would silently become the
- * resources base and resolve every root below into the owner's personal library.
+ * (`withResourceLocations`): `MCP_WORKSPACE` in particular is exported into the maintainer's
+ * shell, where it would silently become the profile and resolve every root below into the
+ * owner's personal library.
  */
 let locations: ResourceLocationScope;
 

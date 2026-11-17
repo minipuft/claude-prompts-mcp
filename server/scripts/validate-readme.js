@@ -426,8 +426,8 @@ function checkShippedPromptCount(lines) {
  * package ships.
  *
  * WHY: until 2026-09-13 all three install paths ended with a command naming a prompt that lived
- * only in the author's personal store. The author's shell exports `MCP_RESOURCES_PATH` at that
- * store, so every local run of the quick start passed, and every installer got prompt-not-found.
+ * only in the author's personal store. The author's shell pointed the server at that store, so
+ * every local run of the quick start passed, and every installer got prompt-not-found.
  * This is the same author-machine blind spot `checkShippedPromptCount` closes for the count.
  *
  * A reader cannot tell a grammar illustration from a command, so neither can this check unless the

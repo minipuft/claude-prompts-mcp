@@ -9,9 +9,9 @@
  *   - `NODE_ENV=test` / `JEST_WORKER_ID`: `src/index.ts` refuses to run `main()`, so the child
  *     starts, does nothing, and exits 0. No output, no error, no spawn failure — the only symptom
  *     is a request that never gets an answer, which reads like a protocol bug.
- *   - `MCP_RESOURCES_PATH` / `MCP_WORKSPACE` / `MCP_RUNTIME_ROOT` / `MCP_CONFIG_PATH`: the child
- *     reads the developer's own resource library instead of the fixture. Measured 2026-08-29: with
- *     `MCP_RESOURCES_PATH` exported — a supported way to point the server at a personal store —
+ *   - `MCP_WORKSPACE` / `MCP_RUNTIME_ROOT` / `MCP_CONFIG_PATH`: the child reads the developer's
+ *     own resource library instead of the fixture. Measured 2026-08-29: with `MCP_RESOURCES_PATH`
+ *     exported — then a way to point the server at a personal store, now a startup refusal —
  *     `bundled-resource-fallback.e2e.test.ts` booted against 121 personal prompts while asserting
  *     about a fixture holding one. Its assertion was `> 1`, so it passed, and the leak stayed
  *     invisible until a stricter case landed beside it.

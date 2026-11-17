@@ -864,7 +864,7 @@ All resource types support these actions:
 
 > **`confirm` rule:** `confirm:true` is declared exactly where a call deletes something you sent no replacement for: `delete`, `rollback`, and a prompt `update` with `tool_operation:"remove"`. Everywhere else, including gate, framework and category `update`, which delete nothing, `confirm` is refused by name.
 
-> **Saved line:** a `create`, `update` or `rollback` of a prompt, gate, framework or category ends its result with one last line, `saved: <absolute path of the file written>` (the resource's own YAML, or the one file an update or rollback rewrote alone, such as a prompt's `user-message.md`), and carries the path in `structuredContent.saved` where the result has structured content. An `update` that changes no file (it supplies no field, or repeats what is already on disk), or a `rollback` to a version every file already matches, succeeds with `nothing written: the request changed no file` as its last line instead; such an update records no new version. A `delete`, a refusal and a preview write no file and have no such line. Where the file lands: [Custom Resources](../guides/custom-resources.md#where-created-resources-are-saved).
+> **Saved line:** a `create`, `update` or `rollback` of a prompt, gate, framework or category ends its result with one last line, `saved: <absolute path of the file written>` (the resource's own YAML, or the one file an update or rollback rewrote alone, such as a prompt's `user-message.md`), and carries the path in `structuredContent.saved` where the result has structured content. An `update` that changes no file (it supplies no field, or repeats what is already on disk), or a `rollback` to a version every file already matches, succeeds with `nothing written: the request changed no file` as its last line instead; such an update records no new version. A `delete`, a refusal and a preview write no file and have no such line. Where the file lands: [Custom Resources](../guides/custom-resources.md#where-a-new-resource-is-saved).
 
 > **Note:** For `list` and `inspect`, prefer [MCP Resources](#mcp-resources--token-efficient-discovery) (4-30x more token efficient). Use tool actions as fallback when filtering is needed or client doesn't support resources.
 
@@ -2539,25 +2539,10 @@ success. The same check applies to `transport` in your config file.
 | `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file                                                                                                                                          |
 | `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict validation settings file (rationale requirements)                                                                                                              |
 
-Per-resource-type variables (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_FRAMEWORKS_PATH`,
-`MCP_STYLES_PATH`, `MCP_SCRIPTS_PATH`) were documented here but are read nowhere in the server.
+Which folders serve resources, in what order, and where a created resource is saved:
+[Custom Resources](../guides/custom-resources.md). A path that does not exist refuses startup.
 
-### Resolution Priority
-
-Each resource type reads one ordered list of folders, and the first to define an id wins:
-
-1. **Project** — `<project>/.claude-prompts/resources/<type>/` (STDIO only)
-2. **Workspace** — `<workspace>/resources/<type>/`
-3. **`paths.resources`** — each entry in your config, in order; `"bundled"` names the package's own resources
-4. **Package defaults** — `server/resources/<type>/`, last, only when the config has no `paths.resources` list
-
-The full rules, and where a created resource is saved, are in
-[Custom Resources](../guides/custom-resources.md#where-resources-come-from). There is no per-resource-type override layer —
-the two tiers previously documented above these (CLI flags and individual env vars) do not exist.
-An `MCP_WORKSPACE` or `paths.resources` entry that does not exist is not "no match": it refuses startup rather than
-falling through to the package defaults, which would serve the bundled catalog under your name.
-
-**Example: MCP config with custom resources**
+**Example: MCP config with a profile**
 
 ```json
 {

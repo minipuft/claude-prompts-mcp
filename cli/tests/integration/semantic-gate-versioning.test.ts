@@ -5,14 +5,13 @@
  * All private/sibling data here is synthetic; no model evaluation is claimed.
  */
 import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 
+import { CPM, LOCATION_ENV_KEYS, runCpm } from "../helpers/child-process.js";
 import { SqliteEngine } from "../../../server/src/infra/database/sqlite-engine.js";
 import { recordResourceWrite } from "@cli-shared/version-history.js";
 import { projectResourceSnapshot } from "@cli-shared/resource-snapshot.js";
@@ -21,7 +20,6 @@ import { resourceFileSet } from "@shared/utils/resource-file-set.js";
 import { parseYamlOrThrow } from "@shared/utils/yaml/yaml-parser.js";
 import type { Logger } from "@shared/types/index.js";
 
-const CLI = join(dirname(fileURLToPath(import.meta.url)), "../../dist/cpm.js");
 const ID = "semantic-cli-proof";
 const SCOPE = "semantic-cli-private-fixture";
 
@@ -82,25 +80,10 @@ function run(args: string[]): {
   stderr: string;
   exitCode: number;
 } {
-  const result = spawnSync(
-    process.execPath,
-    [CLI, ...args, "--workspace", workspace],
-    {
-      encoding: "utf8",
-      timeout: 10_000,
-      env: {
-        ...process.env,
-        MCP_RUNTIME_ROOT: workspace,
-        MCP_WORKSPACE: workspace,
-      },
-    },
-  );
-  if (result.error !== undefined) throw result.error;
-  return {
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
-    exitCode: result.status ?? 1,
-  };
+  const { status, stdout, stderr } = runCpm([...args, "--workspace", workspace], {
+    env: { MCP_RUNTIME_ROOT: workspace, MCP_WORKSPACE: workspace },
+  });
+  return { stdout, stderr, exitCode: status };
 }
 
 async function recordState(
@@ -171,12 +154,12 @@ function expectExcludedBytesUntouched(): void {
 }
 
 beforeEach(async () => {
-  expect(existsSync(CLI)).toBe(true); // Explicit prerequisite: build the current CLI before this row check.
+  expect(existsSync(CPM)).toBe(true); // Explicit prerequisite: build the current CLI before this row check.
   workspace = mkdtempSync(join(tmpdir(), "cpm-semantic-byte-tree-"));
-  savedEnvironment = {
-    MCP_RUNTIME_ROOT: process.env["MCP_RUNTIME_ROOT"],
-    MCP_WORKSPACE: process.env["MCP_WORKSPACE"],
-  };
+  // The in-process recordState below resolves its tenant from these too: an exported
+  // MCP_CONFIG_PATH scoped its rows away from the ones the child `cpm` reads.
+  savedEnvironment = Object.fromEntries(LOCATION_ENV_KEYS.map((key) => [key, process.env[key]]));
+  for (const key of LOCATION_ENV_KEYS) delete process.env[key];
   process.env["MCP_RUNTIME_ROOT"] = workspace;
   process.env["MCP_WORKSPACE"] = workspace;
   entry = join(workspace, "resources/gates", ID, "gate.yaml");

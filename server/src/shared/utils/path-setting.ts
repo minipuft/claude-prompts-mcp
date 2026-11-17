@@ -5,7 +5,7 @@
  * WHY THIS LIVES IN shared/
  * `runtime/paths.ts` (the server's composition-root `PathResolver`) and
  * `modules/skills-sync/service.ts` (a domain module, Layer 3) both refuse the same operator
- * setting -- an `MCP_WORKSPACE` or `MCP_RESOURCES_PATH` that resolves to a path that is not a
+ * setting -- an `MCP_WORKSPACE` or `CLAUDE_PLUGIN_DATA` that resolves to a path that is not a
  * usable directory -- with byte-identical wording. `shared/` (Layer 0) is the one layer both a
  * domain module and the composition root may import, so it is the check's only home that keeps
  * both callers on the correct side of the module boundary. `runtime/paths.ts` keeps its own
@@ -18,13 +18,7 @@ import { isAbsolute, resolve } from 'path';
 
 /** An operator path setting: the flag or environment variable, and the value it was given. */
 export interface PathSetting {
-  name:
-    | '--config'
-    | 'MCP_CONFIG_PATH'
-    | '--workspace'
-    | 'MCP_WORKSPACE'
-    | 'CLAUDE_PLUGIN_DATA'
-    | 'MCP_RESOURCES_PATH';
+  name: '--config' | 'MCP_CONFIG_PATH' | '--workspace' | 'MCP_WORKSPACE' | 'CLAUDE_PLUGIN_DATA';
   value: string;
 }
 

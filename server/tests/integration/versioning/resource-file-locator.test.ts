@@ -10,10 +10,9 @@
  * (`resolveResourceRoots`), never restated here. Both roots hold a gate named `shared`, which is
  * the case the precedence rule exists for.
  *
- * Environment: the ambient shell exports `MCP_RESOURCES_PATH`, and `resolveResourceSubdir` reads
- * it directly — left set, every workspace lookup below resolves somewhere else entirely and the
- * suite would be measuring the developer's own resource library. It is cleared per test, with
- * `MCP_WORKSPACE` beside it for the same reason.
+ * Environment: the ambient shell exports `MCP_WORKSPACE`, and `resolveResourceSubdir` reads it
+ * through `getWorkspace` — left set, every workspace lookup below resolves somewhere else entirely
+ * and the suite would be measuring the developer's own resource library. It is cleared per test.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';

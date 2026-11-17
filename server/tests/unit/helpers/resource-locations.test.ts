@@ -45,11 +45,11 @@ describe('withResourceLocations', () => {
   afterAll(restoreOuter);
 
   it('hides every exported location variable during the test and returns all of them after', () => {
-    const scope = withResourceLocations({ resourcesPath: '/tmp/chosen' });
+    const scope = withResourceLocations({ runtimeRoot: '/tmp/chosen' });
 
-    expect(process.env['MCP_RESOURCES_PATH']).toBe('/tmp/chosen');
+    expect(process.env['MCP_RUNTIME_ROOT']).toBe('/tmp/chosen');
     for (const key of RESOURCE_LOCATION_ENV_KEYS) {
-      if (key !== 'MCP_RESOURCES_PATH') expect(process.env[key]).toBeUndefined();
+      if (key !== 'MCP_RUNTIME_ROOT') expect(process.env[key]).toBeUndefined();
     }
 
     scope.cleanup();
@@ -59,31 +59,40 @@ describe('withResourceLocations', () => {
   });
 
   it('does not carry one setup into the next when two run back to back', () => {
-    const first = withResourceLocations({ resourcesPath: '/tmp/first', workspace: '/tmp/ws' });
+    const first = withResourceLocations({ runtimeRoot: '/tmp/first', workspace: '/tmp/ws' });
     first.cleanup();
-    expect(process.env['MCP_RESOURCES_PATH']).toBe(`${AMBIENT}/MCP_RESOURCES_PATH`);
+    expect(process.env['MCP_RUNTIME_ROOT']).toBe(`${AMBIENT}/MCP_RUNTIME_ROOT`);
 
     const second = withResourceLocations({ workspace: '/tmp/ws-two' });
-    expect(process.env['MCP_RESOURCES_PATH']).toBeUndefined();
+    expect(process.env['MCP_RUNTIME_ROOT']).toBeUndefined();
     expect(process.env['MCP_WORKSPACE']).toBe('/tmp/ws-two');
     second.cleanup();
-    expect(process.env['MCP_RESOURCES_PATH']).toBe(`${AMBIENT}/MCP_RESOURCES_PATH`);
+    expect(process.env['MCP_RUNTIME_ROOT']).toBe(`${AMBIENT}/MCP_RUNTIME_ROOT`);
     expect(process.env['MCP_WORKSPACE']).toBe(`${AMBIENT}/MCP_WORKSPACE`);
   });
 
   it('reset clears what an earlier set named, then applies the new options', () => {
     const scope = withResourceLocations({ workspace: '/tmp/ws' });
-    scope.set({ resourcesPath: '/tmp/res' });
-    expect(scope.env).toEqual({ MCP_WORKSPACE: '/tmp/ws', MCP_RESOURCES_PATH: '/tmp/res' });
+    scope.set({ runtimeRoot: '/tmp/rt' });
+    expect(scope.env).toEqual({ MCP_WORKSPACE: '/tmp/ws', MCP_RUNTIME_ROOT: '/tmp/rt' });
 
     scope.reset({ serverRoot: '/tmp/pkg' });
     expect(process.env['MCP_WORKSPACE']).toBeUndefined();
-    expect(process.env['MCP_RESOURCES_PATH']).toBeUndefined();
+    expect(process.env['MCP_RUNTIME_ROOT']).toBeUndefined();
     expect(process.env['MCP_SERVER_ROOT']).toBe('/tmp/pkg');
     expect(scope.env).toEqual({ MCP_SERVER_ROOT: '/tmp/pkg' });
 
     scope.cleanup();
     expect(process.env['MCP_WORKSPACE']).toBe(`${AMBIENT}/MCP_WORKSPACE`);
+  });
+
+  it('clears an exported MCP_RESOURCES_PATH, which no option sets, and restores it after', () => {
+    // The server refuses to start while it is set, so the helper keeps it out of every test.
+    expect(RESOURCE_LOCATION_ENV_KEYS).toContain('MCP_RESOURCES_PATH');
+    const scope = withResourceLocations({ workspace: '/tmp/ws' });
+    expect(process.env['MCP_RESOURCES_PATH']).toBeUndefined();
+    scope.cleanup();
+    expect(process.env['MCP_RESOURCES_PATH']).toBe(`${AMBIENT}/MCP_RESOURCES_PATH`);
   });
 });
 
@@ -94,7 +103,6 @@ describe('resourceLocationEnv', () => {
   it('names each option by its variable and leaves this process alone', () => {
     const env = resourceLocationEnv({
       workspace: '/tmp/ws',
-      resourcesPath: '/tmp/res',
       runtimeRoot: '/tmp/rt',
       configPath: '/tmp/cfg.jsonc',
       pluginData: '/tmp/plugin',
@@ -103,13 +111,12 @@ describe('resourceLocationEnv', () => {
 
     expect(env).toEqual({
       MCP_WORKSPACE: '/tmp/ws',
-      MCP_RESOURCES_PATH: '/tmp/res',
       MCP_RUNTIME_ROOT: '/tmp/rt',
       MCP_CONFIG_PATH: '/tmp/cfg.jsonc',
       CLAUDE_PLUGIN_DATA: '/tmp/plugin',
       CLAUDE_PROJECT_DIR: '/tmp/project',
     });
-    expect(process.env['MCP_RESOURCES_PATH']).toBe(`${AMBIENT}/MCP_RESOURCES_PATH`);
+    expect(process.env['MCP_WORKSPACE']).toBe(`${AMBIENT}/MCP_WORKSPACE`);
   });
 });
 
@@ -146,8 +153,8 @@ describe('isolateResourceLocations', () => {
 
   // Ordered pair: the second case reads what the first one left behind.
   it('lets a test set a location', () => {
-    handle.set({ resourcesPath: '/tmp/set-in-first-test' });
-    expect(process.env['MCP_RESOURCES_PATH']).toBe('/tmp/set-in-first-test');
+    handle.set({ runtimeRoot: '/tmp/set-in-first-test' });
+    expect(process.env['MCP_RUNTIME_ROOT']).toBe('/tmp/set-in-first-test');
   });
 
   it('hands the next test a clean slate rather than the previous test or the shell', () => {

@@ -1,29 +1,18 @@
-import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 
+import { runCpm } from '../helpers/child-process.js';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CLI = join(__dirname, '../../dist/cpm.js');
 const SERVER_PACKAGE = join(__dirname, '../../../server/package.json');
 const VALID_WS = join(__dirname, '../fixtures/valid-workspace');
 const INVALID_WS = join(__dirname, '../fixtures/invalid-workspace');
 const EMPTY_WS = join(__dirname, '../fixtures/empty-workspace');
 
 function run(args: string[]): { stdout: string; exitCode: number } {
-  try {
-    const stdout = execFileSync('node', [CLI, ...args], {
-      encoding: 'utf-8',
-      timeout: 10_000,
-    });
-    return { stdout, exitCode: 0 };
-  } catch (err: unknown) {
-    const e = err as { stdout?: string; stderr?: string; status?: number };
-    return {
-      stdout: (e.stdout ?? '') + (e.stderr ?? ''),
-      exitCode: e.status ?? 1,
-    };
-  }
+  const { status, stdout, stderr } = runCpm(args);
+  return { stdout: status === 0 ? stdout : stdout + stderr, exitCode: status };
 }
 
 describe('cpm CLI', () => {

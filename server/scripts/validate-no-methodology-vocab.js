@@ -64,7 +64,6 @@ const RETIREMENT = {
     'never while the retirement is worth pinning — these name the old spelling to prove it is inert, so deleting them would remove the proof rather than a fold',
   BAN_WANTED:
     'never, while the ban is wanted — the pre-rename path must stay named in order to stay banned',
-  REMOVAL_OLD: 'when the env-var removal is old enough to stop mentioning',
   WITH_COMMENT: 'with the comment that explains the defect',
   GUARD_DELETED: 'when this guard is deleted',
 };
@@ -162,10 +161,6 @@ const ALLOWLIST = [
   // --- Banned-path regexes that keep the pre-rename directory name unusable. RETIREMENT: never
   // --- while the ban is wanted; the old path must stay named to stay banned.
   { file: 'eslint.config.js', match: 'methodology', closedBy: RETIREMENT.BAN_WANTED },
-
-  // --- Names a removed env var so a user who copied it from an older revision can tell what
-  // --- happened (Tier 6 policy). RETIREMENT: when the removal is old enough to stop mentioning.
-  { file: 'server/README.md', match: 'MCP_METHODOLOGIES_PATH', closedBy: RETIREMENT.REMOVAL_OLD },
 
   // --- Explains a defect whose cause was the pre-rename key. RETIREMENT: with the comment.
   {

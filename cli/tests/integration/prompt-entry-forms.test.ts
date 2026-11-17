@@ -17,25 +17,21 @@
  *
  * Every command is driven through the built `dist/cpm.js`.
  */
-import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { fileURLToPath } from 'node:url';
 
+import { runCpm } from '../helpers/child-process.js';
 import { PromptLoader } from '../../../server/src/modules/prompts/loader.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const CLI = join(__dirname, '../../dist/cpm.js');
 const SCOPE = 'cli-entry-forms-scope';
 
 /** What the loader serves for the fixture below, stated literally. */
 const SERVED_IDS = ['chain', 'chain/step_dir', 'chain/step_file', 'single', 'single_dir', 'twin'];
 
 function cpm(args: string[]): { status: number; stdout: string; stderr: string } {
-  const result = spawnSync('node', [CLI, ...args], { encoding: 'utf-8', timeout: 10_000 });
-  return { status: result.status ?? 1, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+  return runCpm(args);
 }
 
 const body = (id: string, name = `${id} prompt`): string =>

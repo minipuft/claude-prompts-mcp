@@ -1,9 +1,10 @@
 /**
  * Version-history seeding shared by the CLI integration suites.
  */
-import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+import { runChild } from './child-process.js';
 
 /**
  * The workspace id the CLI resolves for these fixtures. Pinned via
@@ -64,14 +65,14 @@ db.commit()
 db.close()
 `;
 
-  const result = spawnSync('python3', [
+  const result = runChild('python3', [
     '-c', script,
     dbPath,
     JSON.stringify(versions),
     resourceType,
     resourceId,
     FIXTURE_SCOPE,
-  ], { encoding: 'utf-8', timeout: 5000 });
+  ], { timeout: 5000 });
 
   if (result.status !== 0) {
     throw new Error(`Failed to seed version history: ${result.stderr}`);

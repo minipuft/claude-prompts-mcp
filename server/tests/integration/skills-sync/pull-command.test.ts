@@ -955,13 +955,13 @@ describe('Pull Command Integration', () => {
   });
 
   describe('a pull that would edit the bundled package tree', () => {
-    it('is refused naming the resources directory when no workspace is set, and a library prompt still pulls', async () => {
-      // `MCP_RESOURCES_PATH` moves the write root without setting a workspace; the bundled tree
-      // (`<serverRoot>/resources`) stays loaded underneath.
+    it('is refused naming the workspace profile, and a library prompt still pulls', async () => {
+      // The profile's `resources/` is the write root; the bundled tree (`<serverRoot>/resources`)
+      // stays loaded underneath.
       const libraryParent = path.join(tmpDir, 'library');
       const libraryResources = path.join(libraryParent, 'resources');
       await mkdir(path.join(libraryResources, 'prompts'), { recursive: true });
-      locations.set({ resourcesPath: libraryResources });
+      locations.set({ workspace: libraryParent });
       const writeRoot = path.join(libraryResources, 'prompts');
 
       const bundledDir = await writePromptResource(serverRoot, 'test', 'bundled-one', {
@@ -998,15 +998,14 @@ describe('Pull Command Integration', () => {
       const refusal = out.warns.find((w) => w.includes('Refusing to pull prompt bundled-one'));
       expect(refusal).toBeDefined();
       expect(refusal).toContain(`${bundledSys} is in the bundled package tree`);
-      expect(refusal).toContain(`while the resources directory ${writeRoot} is configured`);
+      expect(refusal).toContain(`while the workspace ${libraryParent} is configured`);
       expect(refusal).toContain(`Copy the prompt into ${writeRoot} and pull again.`);
-      expect(refusal).not.toContain('the workspace');
       expect(report.failures).toEqual([{ id: 'bundled-one', reason: refusal }]);
       expect(await readFile(bundledSys, 'utf-8')).toBe('Bundled original.');
       // The prompt that lives in the write root is not bundled, so it is not refused.
       expect(await readFile(librarySys, 'utf-8')).toBe('Library edited.');
 
-      // Control: with no resources override the write root IS the bundled tree, and the same
+      // Control: with no workspace the write root IS the bundled tree, and the same
       // edited SKILL.md pulls.
       locations.reset({ serverRoot });
       const second = await pullFor('claude-code');
