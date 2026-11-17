@@ -46,9 +46,9 @@ Manages the `workspaces.jsonc` registry that labels the workspace folders sittin
 { "dev": "./dev", "shared": "./shared" }
 ```
 
-- `cpm workspace add <label> [dir]` registers a folder in the registry's parent, creating the file if needed; with no `dir` it takes the folder `MCP_RESOURCES_PATH` names (its parent when that folder is called `resources`).
+- `cpm workspace add <label> <dir>` registers a folder in the registry's parent, creating the file if needed.
 - `cpm workspace remove <label>` drops the label and leaves the folder on disk.
-- `cpm workspace list` prints each label and folder, marks the current one, and lists an `MCP_RESOURCES_PATH` folder no profile holds under `unregistered:`.
+- `cpm workspace list` prints each label and folder, and marks the current one.
 - `cpm workspace show <label>` prints the folder, its `config.jsonc` or `config.json`, and how many prompts, gates, frameworks and styles it holds.
 - `cpm workspace use <label>` prints the `MCP_WORKSPACE=<folder>` line to put in your MCP client's server env; it writes nothing.
 

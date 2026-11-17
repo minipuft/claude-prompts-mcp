@@ -97,9 +97,9 @@ load from the package. With no `paths.resources` key, the shipped resources load
 workspace. With a list in force, startup prints one line to stderr counting the prompts it found
 and naming the listed locations, zero included.
 
-| Setting              | Precedence                                                                                                                                                              |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MCP_RESOURCES_PATH` | Its `<type>/` folder takes the place of the workspace's own `resources/<type>/`: read before the `paths.resources` list, and the folder created resources are saved to. |
+| Setting              | Precedence                                                                                                                                                                                                                                                                                                                                                                                |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MCP_RESOURCES_PATH` | Its `<type>/` folder takes the place of the workspace's own `resources/<type>/`: read before the `paths.resources` list, and the folder created resources are saved to. Existing setups keep working: `cpm workspace list` shows the folder as `unregistered:`, and `cpm workspace add <label>` with no directory registers it. New setups use a profile folder named by `MCP_WORKSPACE`. |
 
 Your workspace's own `resources/` folder and a project's `.claude-prompts/resources/` are not
 listed: they always come before the list. The full order, and where a created resource is saved:
@@ -130,8 +130,8 @@ the list that places files:
 ```
 
 The value is a folder written as an absolute path or relative to the config file, and it names
-either an entry of `paths.resources` or the profile's own `resources/` folder (the
-`MCP_RESOURCES_PATH` folder when that is set, else the workspace's `resources/`). Each type is
+either an entry of `paths.resources` or the profile's own `resources/` folder (see
+[the table above](#where-resources-come-from)). Each type is
 written to `<writeTarget>/<type>/`. With the key unset, writes land in the profile's own folder.
 `"bundled"`, a folder the list and the profile do not name, and a folder that does not exist refuse
 startup, and the message names the key, the value and the folders it may name. A project

@@ -63,8 +63,7 @@ Skills Sync reads the resources the server serves. Without a `paths.resources` l
 bundled `server/resources/` contributes beneath everything else. A workspace set with `MCP_WORKSPACE` (or, for a running server, `--workspace`)
 layers its `resources/` over it, and a workspace entry replaces a bundled one with the same
 identity: `{category}/{id}` for a prompt, the id for a gate, framework or style.
-`MCP_RESOURCES_PATH` names a resources directory used in place of the workspace's own `resources/`,
-as it does for the server. The `system_control skills_sync` route below resolves through the same
+The `system_control skills_sync` route below resolves through the same
 running server the rest of MCP reads from, so it follows `--workspace` even when `MCP_WORKSPACE`
 is unset, and it reads the `paths.resources` list and `paths.writeTarget` in your config: the
 listed folders contribute sources in the order [Custom Resources](custom-resources.md#where-resources-come-from)
@@ -86,7 +85,7 @@ Writes follow the same roots:
   definition and the field, and restores what was there before. With `--force`, a definition the
   replaced file already carried is printed as a warning and does not block the import.
 - `pull` writes an edit back to the resource's own source files. It refuses a resource whose source
-  is in the bundled package tree while a workspace or `MCP_RESOURCES_PATH` is set, because a package
+  is in the bundled package tree while a workspace is set, because a package
   update replaces that tree. Copy the resource into your workspace and pull again.
 - `patch` writes to `runtime-state/patches` under `MCP_RUNTIME_ROOT` when it is set, and under the
   workspace otherwise.
