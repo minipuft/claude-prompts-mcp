@@ -14,11 +14,11 @@ tags: [resources, config, gates, skills-sync, runtime]
 
 # Resource locations, hand edits and gate examples
 
-## Now (2026-11-13)
+## Now (2026-11-17)
 
 Goal: a user keeps resources in labelled profiles that `cpm` manages and a client selects with one variable, the profile's config lists any further locations in one validated key, the server reports what it resolved and where it wrote, a file edited by hand gets the same guarantees as a tool write, and a command-checked gate ships the examples that prove it.
-Slice: T6 on `feat/resource-locations-t6`: rows 6.1, 6.2, 6.3 done, boundary green (91 steps, unit 8126, integration 1946, e2e 831+12, cli 163, verify:mcp 20/20), at its PR; 6.4 is draft PR codex-prompts#7 awaiting the `^6.0.0` bump; 6.5 opened. Merged: #539, #540, #541, #542, #543, #544, #546.
-Next decision: whether 2.9 runs now or waits for the owner; the planner's default is to leave it open with its stamp.
+Slice: every tier is on `main`: #539, #540, #541, #542, #543, #544, #546, #547 (T6: `MCP_RESOURCES_PATH` refused at startup, one 45-line resources guide), #548 (the state.db downgrade incident and its recovery, row 6.5 widened). The owner's machine runs profile `main` and starts clean on the restored database. Open: 2.9 (framework/category change-log entries), 6.4 (draft codex-prompts#7 merges with the `^6.0.0` bump), 6.5 (`codex-dev-plugin.test.mjs` refuses a real checkout and scrubs the location variables).
+Next decision: the owner cuts 6.0.0 (release-please PR) so codex-prompts#7 can merge; 2.9 and 6.5 are worker-sized rows that run whenever the owner wants them, and the plan retires when the three are terminal.
 Constraint: Tier T1 changes what an existing variable serves, so it ships in 6.0.0. Tiers T2, T3 and T4 are additive and may land in 6.0.0 or the next minor. No new default directory is created under a user's home, and the server never writes a config file.
 
 ## Intent
