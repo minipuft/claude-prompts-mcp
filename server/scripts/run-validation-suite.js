@@ -420,6 +420,13 @@ export const SUITE = [
       "CHECKED — a planted `process.env['MCP_WORKSPACE'] = '/tmp/x';` in an existing test file is reported by file:line and the run exits 1; removing it returns the run to exit 0. UNCHECKED and known — a computed key (`process.env[key] = ...`) and `Object.assign(process.env, ...)` are not matched, and neither occurs outside the helper",
   },
   {
+    script: 'validate:profile-docs',
+    io: 'read',
+    reads: ['file', 'spawn', 'tracked'],
+    converse:
+      'CHECKED — a planted line naming `MCP_RESOURCES_PATH` appended to a tracked guide under `docs/` is reported by file:line and the run exits 1; removing it returns the run to exit 0. UNCHECKED and known — an untracked doc is not scanned until it is staged',
+  },
+  {
     script: 'validate:documented-tool-actions',
     io: 'read',
     reads: ['file', 'spawn', 'tracked'],

@@ -2500,8 +2500,8 @@ A path setting the server cannot use stops it before it serves anything, on ever
 exiting non-zero with the reason on stderr: the variable or flag, the value, the resolved path,
 what is wrong, and what removing the setting would fall back to. `--config` and `MCP_CONFIG_PATH`
 must name a readable config file, parsed strictly as JSON unless the path ends `.jsonc`, in which
-case comments and a trailing comma are accepted; `--workspace`, `MCP_WORKSPACE` and
-`MCP_RESOURCES_PATH` must name an existing directory; and a workspace config, when one exists, must
+case comments and a trailing comma are accepted; `--workspace` and `MCP_WORKSPACE`
+must name an existing directory; and a workspace config, when one exists, must
 be a readable JSON object. A workspace naming both `config.jsonc` and `config.json` also refuses to
 start, naming both paths — keep one. Each of these used to start a server on something else —
 ignored settings, a freshly created empty workspace, the bundled catalog in place of yours — with
@@ -2509,8 +2509,8 @@ nothing reporting it. A workspace with no config file uses the packaged one, and
 counts as unset.
 
 There are no per-resource-type flags. `--prompts`, `--gates`, `--frameworks`, `--styles` and
-`--scripts` were documented here but are parsed nowhere in the server; point `--workspace` (or
-`MCP_RESOURCES_PATH`) at a directory instead. The full parsed set (17, from `server/src/runtime/cli.ts`) is `--client`, `--config`,
+`--scripts` were documented here but are parsed nowhere in the server; point `--workspace` at a
+profile folder instead. The full parsed set (17, from `server/src/runtime/cli.ts`) is `--client`, `--config`,
 `--debug-startup`, `--help`, `--identity-mode`, `--init`, `--log-level`,
 `--organization-id`, `--quiet`, `--server-root`, `--startup-test`, `--suppress-debug`,
 `--test-mode`, `--transport`, `--verbose`, `--workspace`, `--workspace-id`.
@@ -2530,14 +2530,14 @@ success. The same check applies to `transport` in your config file.
 
 ### Environment Variables
 
-| Variable                    | Description                                                                                                                                                                                                           |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MCP_WORKSPACE`             | Workspace root for config resolution; must be an existing directory, or the server refuses to start. When unset, `CLAUDE_PLUGIN_DATA` (set by Claude Code for a plugin) is the workspace                              |
-| `MCP_RESOURCES_PATH`        | A resources directory (prompts/, gates/, etc.) used in place of the workspace's own `resources/`; the config's `paths.resources` list still follows it. Must be an existing directory, or the server refuses to start |
-| `MCP_CONFIG_PATH`           | Override the config file path (`.jsonc` or `.json`); must name a readable file, or the server refuses to start                                                                                                        |
-| `MCP_SERVER_ROOT`           | Server package root, used by skills export                                                                                                                                                                            |
-| `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file                                                                                                                                                                       |
-| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict validation settings file (rationale requirements)                                                                                                                                           |
+| Variable                    | Description                                                                                                                                                                              |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MCP_WORKSPACE`             | Workspace root for config resolution; must be an existing directory, or the server refuses to start. When unset, `CLAUDE_PLUGIN_DATA` (set by Claude Code for a plugin) is the workspace |
+| `MCP_RUNTIME_ROOT`          | Root for runtime state (`state.db` and the files beside it); defaults to the workspace                                                                                                   |
+| `MCP_CONFIG_PATH`           | Override the config file path (`.jsonc` or `.json`); must name a readable file, or the server refuses to start                                                                           |
+| `MCP_SERVER_ROOT`           | Server package root, used by skills export                                                                                                                                               |
+| `MCP_SHELL_PRESETS_PATH`    | Override the gate shell-preset definitions file                                                                                                                                          |
+| `MCP_VERDICT_PATTERNS_PATH` | Override the gate verdict validation settings file (rationale requirements)                                                                                                              |
 
 Per-resource-type variables (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_FRAMEWORKS_PATH`,
 `MCP_STYLES_PATH`, `MCP_SCRIPTS_PATH`) were documented here but are read nowhere in the server.
@@ -2547,14 +2547,14 @@ Per-resource-type variables (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_FRAMEWOR
 Each resource type reads one ordered list of folders, and the first to define an id wins:
 
 1. **Project** — `<project>/.claude-prompts/resources/<type>/` (STDIO only)
-2. **Workspace** — `<workspace>/resources/<type>/`, or `MCP_RESOURCES_PATH/<type>/` in its place
+2. **Workspace** — `<workspace>/resources/<type>/`
 3. **`paths.resources`** — each entry in your config, in order; `"bundled"` names the package's own resources
 4. **Package defaults** — `server/resources/<type>/`, last, only when the config has no `paths.resources` list
 
 The full rules, and where a created resource is saved, are in
 [Custom Resources](../guides/custom-resources.md#where-resources-come-from). There is no per-resource-type override layer —
 the two tiers previously documented above these (CLI flags and individual env vars) do not exist.
-A set `MCP_RESOURCES_PATH` that does not exist is not "no match": it refuses startup rather than
+An `MCP_WORKSPACE` or `paths.resources` entry that does not exist is not "no match": it refuses startup rather than
 falling through to the package defaults, which would serve the bundled catalog under your name.
 
 **Example: MCP config with custom resources**
@@ -2566,7 +2566,7 @@ falling through to the package defaults, which would serve the bundled catalog u
       "command": "npx",
       "args": ["-y", "claude-prompts@latest"],
       "env": {
-        "MCP_RESOURCES_PATH": "/home/user/my-resources"
+        "MCP_WORKSPACE": "/home/user/my-workspace"
       }
     }
   }

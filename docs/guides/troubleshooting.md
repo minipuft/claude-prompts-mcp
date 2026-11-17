@@ -35,8 +35,8 @@ MCP_WORKSPACE=/path/to/workspace npx claude-prompts
 something you did not ask for. The message names the variable or flag, its value, the path it
 resolved to, what is wrong, and what removing the setting would fall back to. It fires for:
 
-- `MCP_WORKSPACE` / `--workspace` or `MCP_RESOURCES_PATH` naming a path that does not exist or is
-  not a directory. The server no longer creates a missing workspace.
+- `MCP_WORKSPACE` / `--workspace` or a `paths.resources` entry naming a path that does not exist or
+  is not a directory. The server no longer creates a missing workspace.
 - `MCP_CONFIG_PATH` / `--config` naming a file that is missing, a directory, unreadable, or invalid
   (JSON for a `.json` path, JSONC for a `.jsonc` path).
 - A config file inside your workspace (`config.jsonc` or `config.json`) that is unreadable, a

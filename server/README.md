@@ -343,17 +343,17 @@ Supported presets (other clients: [Client Integration Guide](../docs/guides/clie
 
 ### Environment Variables
 
-| Variable             | Purpose                                                                                                                                                                           | Example                          |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| `MCP_WORKSPACE`      | Base directory for `resources/` and your config file; must exist, or startup is refused. Resources you create are saved under its `resources/<type>/`, created on the first write | `/home/user/my-prompts`          |
-| `MCP_RESOURCES_PATH` | Resources directory used in place of the workspace's own `resources/`; the config's `paths.resources` list still follows it. Must exist, or startup is refused                    | `/path/to/resources`             |
-| `MCP_CONFIG_PATH`    | Custom config file path (`.jsonc` or `.json`); must be readable, or startup is refused                                                                                            | `/path/to/config.jsonc`          |
-| `LOG_LEVEL`          | Logging verbosity                                                                                                                                                                 | `debug`, `info`, `warn`, `error` |
+| Variable           | Purpose                                                                                                                                                                           | Example                          |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `MCP_WORKSPACE`    | Base directory for `resources/` and your config file; must exist, or startup is refused. Resources you create are saved under its `resources/<type>/`, created on the first write | `/home/user/my-prompts`          |
+| `MCP_RUNTIME_ROOT` | Root for runtime state (`state.db` and the files beside it); defaults to the workspace                                                                                            | `/home/user/runtime`             |
+| `MCP_CONFIG_PATH`  | Custom config file path (`.jsonc` or `.json`); must be readable, or startup is refused                                                                                            | `/path/to/config.jsonc`          |
+| `LOG_LEVEL`        | Logging verbosity                                                                                                                                                                 | `debug`, `info`, `warn`, `error` |
 
 Per-resource-type path overrides (`MCP_PROMPTS_PATH`, `MCP_GATES_PATH`, `MCP_STYLES_PATH`,
 `MCP_SCRIPTS_PATH`, and the former `MCP_METHODOLOGIES_PATH`) were documented here but are not read
-anywhere in the server. Point `MCP_RESOURCES_PATH` at a resources directory instead; workspace
-resources overlay the bundled ones.
+anywhere in the server. Set `MCP_WORKSPACE` to a profile folder instead; its `resources/` overlay
+the bundled ones.
 
 **Resolution priority:** CLI flags > Environment variables > Workspace subdirectory > Package defaults
 
@@ -421,7 +421,7 @@ npx claude-prompts --startup-test --verbose
 **"Framework not found"**
 
 - Custom frameworks need `framework.yaml` in each subdirectory of `resources/frameworks/`
-- Use `MCP_RESOURCES_PATH` to point at the resources directory that contains them
+- Put them under your profile's `resources/frameworks/` folder, the profile `MCP_WORKSPACE` names
 
 **"Permission denied"**
 
@@ -429,7 +429,7 @@ npx claude-prompts --startup-test --verbose
 
 **Changes not appearing**
 
-- Confirm you're editing files under your configured `MCP_WORKSPACE` / `MCP_RESOURCES_PATH`
+- Confirm you're editing files under your profile's `resources/` folder (the folder `MCP_WORKSPACE` names)
 - If needed, restart Claude Desktop (most clients restart MCP servers on reconnect)
 
 ---
