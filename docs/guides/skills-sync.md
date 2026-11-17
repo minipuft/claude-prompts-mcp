@@ -66,7 +66,7 @@ identity: `{category}/{id}` for a prompt, the id for a gate, framework or style.
 The `system_control skills_sync` route below resolves through the same
 running server the rest of MCP reads from, so it follows `--workspace` even when `MCP_WORKSPACE`
 is unset, and it reads the `paths.resources` list and `paths.writeTarget` in your config: the
-listed folders contribute sources in the order [Custom Resources](custom-resources.md#where-resources-come-from)
+listed folders contribute sources in the order [Custom Resources](custom-resources.md#read-from-a-second-library)
 gives, and `"bundled"` contributes where the list puts it, or nowhere when the list leaves it out.
 The standalone CLI (`npm run skills:export` and friends) has no running server to read from, so it
 resolves from `MCP_WORKSPACE` and the other environment variables only: it does not read the

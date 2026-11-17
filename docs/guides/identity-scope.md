@@ -181,7 +181,7 @@ Explicit configuration always outranks derivation, so setting `--workspace-id` c
 overwritten by the directory the server happens to start in.
 
 Under STDIO the same directory is where the server looks for a project's own resources in
-`.claude-prompts/` (see [Custom Resources](custom-resources.md#option-c--project-workspace)).
+`.claude-prompts/` (see [Custom Resources](custom-resources.md#a-projects-own-resources)).
 HTTP serves many projects from one process, so it does not read the project directory and never
 loads `.claude-prompts/`.
 
