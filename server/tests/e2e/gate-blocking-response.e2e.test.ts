@@ -91,8 +91,8 @@ function writeFixtureGate(workspace: string, gateId: string, blocking: boolean):
 
 /**
  * One server process over Streamable HTTP, with its own workspace holding exactly one fixture
- * gate. `MCP_WORKSPACE` (not `MCP_RESOURCES_PATH`) because only the former turns on the overlay
- * that keeps the bundled catalog loaded underneath — `quick_decision` has to still be there.
+ * gate. The bundled catalog stays loaded underneath the workspace — `quick_decision` has to
+ * still be there.
  */
 async function startHttpSession(env: Record<string, string>): Promise<Session> {
   const port = await getAvailablePort();

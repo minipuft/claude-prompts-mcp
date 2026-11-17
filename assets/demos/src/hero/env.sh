@@ -17,7 +17,7 @@ export MCP_RUNTIME_ROOT="$DEMO/claude-prompts"
 export MCP_SHELL_VERIFY_ALLOWLIST="npm test"
 export MCP_SHELL_VERIFY_ALLOWED_DIRS="$DEMO/greeter"
 export LC_ALL=C.UTF-8              # the driver greps "…" and "·" from the pane; a C locale makes those bytes never match
-unset MCP_RESOURCES_PATH            # a shell export here would override MCP_WORKSPACE (measured 2026-10)
+unset MCP_RESOURCES_PATH            # the server refuses to start while an operator's export is set
 # Markers and cast start times use the monotonic clock, never `date`: under WSL2 the wall clock is
 # corrected in forward jumps of ~3 s (measured 2026-10-21, ten seconds lost over one take) while
 # asciinema timestamps events monotonically, so wall-clock markers landed late and the two casts

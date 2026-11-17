@@ -279,9 +279,8 @@ function reservePort() {
  * the server skips `main()` when JEST_WORKER_ID is set, and an inherited
  * `--experimental-vm-modules` leaks the parent's flags into a plain node process.
  *
- * The path overrides are scrubbed by the same list. MCP_WORKSPACE is then set explicitly;
- * MCP_RESOURCES_PATH would override it for resources, so a shell pointed at a personal library
- * had this check prove the tools answer against a catalog no
+ * The path overrides are scrubbed by the same list, and MCP_WORKSPACE is then set explicitly: a
+ * shell pointed at a personal library had this check prove the tools answer against a catalog no
  * installed user has — which is how README commands naming prompts the package did not ship
  * passed every local check (plans/readme-install-path-2026-09-13.md). MCP_CONFIG_PATH and
  * MCP_RUNTIME_ROOT would likewise hand the answer to whoever ran the script.

@@ -147,28 +147,7 @@ describe('skills-sync CLI option handling', () => {
     }
   });
 
-  it('refuses a missing MCP_RESOURCES_PATH by name instead of falling through to another tree', async () => {
-    // Before this refusal, a missing directory fell through to the checkout's own server root, so
-    // a diff or sync ran against a tree the operator never named.
-    const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'skills-sync-cli-missing-'));
-    const missing = path.join(tempRoot, 'no-such-resources');
-
-    try {
-      locations.set({ resourcesPath: missing });
-      await expect(
-        runSkillsSyncCommand(
-          parseSkillsSyncArgs(['node', 'scripts/skills-sync.ts', 'diff']),
-          output,
-          resolveSkillsSyncPaths()
-        )
-      ).rejects.toThrow(
-        `Refusing to run: the MCP_RESOURCES_PATH environment variable is set to "${missing}", which resolves to ${missing}, and that path does not exist.`
-      );
-      expect(existsSync(missing)).toBe(false);
-    } finally {
-      await rm(tempRoot, { recursive: true, force: true });
-    }
-  });
+  // The missing-MCP_RESOURCES_PATH refusal was removed with the variable; the server refuses any set value.
 
   it('refuses a missing MCP_WORKSPACE before resolving a project-scope output dir, and treats an empty one as unset', async () => {
     // Before this refusal, the project root was path.resolve(MCP_WORKSPACE) with no check, so a
@@ -386,7 +365,7 @@ name: Broken Gate
 // Every case below runs the real command against a temp package root that holds its own
 // `resources/` and `skills-sync.yaml`. A root without `resources/` silently falls back to the cwd,
 // which is the real `server/`, so the layout is built before any command runs. The shell that runs
-// the suite may export MCP_RESOURCES_PATH or MCP_WORKSPACE, so every variable the path resolution
+// the suite may export MCP_WORKSPACE or MCP_RUNTIME_ROOT, so every variable the path resolution
 // reads is saved, cleared and restored per case (`withResourceLocations`), with HOME and the cwd.
 
 type SavedProcessState = {

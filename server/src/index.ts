@@ -381,9 +381,6 @@ RUNTIME OPTIONS:
 ENVIRONMENT VARIABLES:
   MCP_WORKSPACE            Base workspace directory (same as --workspace); the server
                            refuses to start if it is not an existing directory
-  MCP_RESOURCES_PATH       Replaces the profile's own resources folder; the config's
-                           paths.resources entries still follow it. The server refuses
-                           to start if it is not an existing directory
   MCP_RUNTIME_ROOT         Writable root for runtime-state/ and relative logs/
                            (defaults to the workspace)
   MCP_CONFIG_PATH          Direct path to your config file (same as --config); the server
@@ -392,7 +389,6 @@ ENVIRONMENT VARIABLES:
 
 PRIORITY ORDER:
   --workspace > MCP_WORKSPACE > CLAUDE_PLUGIN_DATA (Claude Code plugins) > Package defaults
-  MCP_RESOURCES_PATH replaces the profile's own resources folder; the config's paths.resources entries still follow it.
   Custom workspace resources overlay bundled ones (same ID = custom wins);
   the bundle loads unless a paths.resources list in the workspace config leaves
   "bundled" out; when it loads, a workspace holding one prompt serves that

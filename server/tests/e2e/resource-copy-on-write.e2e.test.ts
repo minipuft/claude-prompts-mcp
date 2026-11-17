@@ -72,7 +72,6 @@ class CowServer {
       env: buildServerEnv({
         ...this.roots.env,
         ...resourceLocationEnv({
-          resourcesPath: path.join(this.workspace, 'resources'),
           workspace: this.workspace,
           runtimeRoot: path.join(this.workspace, 'runtime'),
         }),

@@ -23,7 +23,7 @@ interface RunResult {
 }
 
 /**
- * Run `cpm` with no inherited MCP_WORKSPACE or MCP_RESOURCES_PATH, a fake HOME, and the given cwd.
+ * Run `cpm` with no inherited MCP_WORKSPACE, a fake HOME, and the given cwd.
  */
 function run(
   args: string[],
@@ -31,7 +31,6 @@ function run(
 ): RunResult {
   const env: NodeJS.ProcessEnv = { ...process.env, HOME: opts.home, ...opts.env };
   if (!opts.env?.['MCP_WORKSPACE']) delete env['MCP_WORKSPACE'];
-  if (!opts.env?.['MCP_RESOURCES_PATH']) delete env['MCP_RESOURCES_PATH'];
   delete env['CLAUDE_PLUGIN_DATA'];
   const result = spawnSync('node', [CLI, ...args], {
     cwd: opts.cwd,
@@ -299,45 +298,23 @@ describe('cpm workspace (profile registry)', () => {
     });
   });
 
-  describe('unregistered MCP_RESOURCES_PATH (4.4)', () => {
-    it('lists an unregistered MCP_RESOURCES_PATH folder and add with no dir registers it', () => {
-      writeFileSync(registryPath(), '{ "dev": "./dev" }\n');
-      const env = { MCP_RESOURCES_PATH: join(parent, 'extra') };
-      const listed = run(['workspace', 'list', ...devFlag()], { cwd: scratch, home, env });
-      expect(listed.stdout).toContain(`unregistered:\n  ${join(parent, 'extra')}`);
-
-      const added = run(['workspace', 'add', 'shared', ...devFlag()], { cwd: scratch, home, env });
-      expect(added.exitCode).toBe(0);
-      expect(JSON.parse(readFileSync(registryPath(), 'utf8'))).toEqual({
-        dev: './dev',
-        shared: './extra',
-      });
-      const relisted = run(['workspace', 'list', ...devFlag()], { cwd: scratch, home, env });
-      expect(relisted.stdout).not.toContain('unregistered:');
-    });
-
-    it('takes the parent when MCP_RESOURCES_PATH names a folder called resources', () => {
-      mkdirSync(join(parent, 'extra/resources'), { recursive: true });
-      const env = { MCP_RESOURCES_PATH: join(parent, 'extra/resources') };
-      const added = run(['workspace', 'add', 'extra', ...devFlag()], { cwd: scratch, home, env });
-      expect(added.exitCode).toBe(0);
-      expect(JSON.parse(readFileSync(registryPath(), 'utf8'))).toEqual({ extra: './extra' });
-    });
-
-    it('control: with MCP_RESOURCES_PATH unset, list prints no unregistered heading', () => {
-      writeFileSync(registryPath(), '{ "dev": "./dev" }\n');
-      const listed = run(['workspace', 'list', ...devFlag()], { cwd: scratch, home });
-      expect(listed.exitCode).toBe(0);
-      expect(listed.stdout).not.toContain('unregistered:');
-    });
-
-    it('refuses add with no dir when MCP_RESOURCES_PATH is unset', () => {
+  // Removed with MCP_RESOURCES_PATH: the unregistered-folder listing and `add` with no directory.
+  describe('add without a directory', () => {
+    it('refuses add with no dir, naming the missing directory', () => {
       const { stderr, exitCode } = run(['workspace', 'add', 'shared', ...devFlag()], {
         cwd: scratch,
         home,
       });
       expect(exitCode).toBe(1);
-      expect(stderr).toContain('Give a directory or set MCP_RESOURCES_PATH.');
+      expect(stderr).toContain('A directory is required.');
+    });
+
+    it('list ignores a set MCP_RESOURCES_PATH: no unregistered heading', () => {
+      writeFileSync(registryPath(), '{ "dev": "./dev" }\n');
+      const env = { MCP_RESOURCES_PATH: join(parent, 'extra') };
+      const listed = run(['workspace', 'list', ...devFlag()], { cwd: scratch, home, env });
+      expect(listed.exitCode).toBe(0);
+      expect(listed.stdout).not.toContain('unregistered:');
     });
   });
 });

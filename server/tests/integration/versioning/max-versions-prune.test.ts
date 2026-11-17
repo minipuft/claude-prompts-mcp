@@ -92,7 +92,7 @@ describe('versioning.maxVersions is one bound for both writers', () => {
 
   describe('the CLI writer, against a real state.db', () => {
     let workspace: string;
-    // The ambient shell exports MCP_RESOURCES_PATH; nothing here may resolve against it.
+    // The ambient shell exports MCP_WORKSPACE; nothing here may resolve against it.
     const locations = isolateResourceLocations();
 
     beforeEach(async () => {

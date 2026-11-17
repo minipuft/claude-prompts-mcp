@@ -121,7 +121,6 @@ export const MCP_REGISTRATION = (repo, workspace) => ({
       args: [path.join(repo, "server/dist/index.js"), "--transport=stdio"],
       env: {
         MCP_WORKSPACE: workspace,
-        MCP_RESOURCES_PATH: path.join(repo, "server/resources"),
       },
     },
   },

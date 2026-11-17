@@ -101,9 +101,8 @@ export function startServerWithHttp(
 
   // A caller that redirects the workspace redirects the RESOURCES too.
   //
-  // `MCP_RESOURCES_PATH` outranks `MCP_WORKSPACE` in `PathResolver.getResourcesPath()` (priority 1
-  // vs 2), so defaulting it here silently defeated any caller that set only `MCP_WORKSPACE` to get
-  // an isolated tree. claims-conformance did exactly that: its "isolated workspace" server copied
+  // A resources default that outranked `MCP_WORKSPACE` once silently defeated any caller that set
+  // only `MCP_WORKSPACE` to get an isolated tree. claims-conformance did exactly that: its "isolated workspace" server copied
   // `server/resources` to a temp dir, set `MCP_WORKSPACE`, and then read AND WROTE the package tree
   // anyway — leaving 7 `examples/conformance_*` directories in `server/resources/prompts` on a
   // fully PASSING run (measured 2026-08-30, 105/105 green). `examples/` is tracked, so they surface
@@ -114,8 +113,7 @@ export function startServerWithHttp(
   // The defaults exist to pin a server that has no caller intent at the package tree. Once a caller
   // states where the tree is, a default that outranks that statement is not a default.
   const callerEnv = options.env ?? {};
-  const callerRedirectsResources =
-    callerEnv['MCP_WORKSPACE'] !== undefined || callerEnv['MCP_RESOURCES_PATH'] !== undefined;
+  const callerRedirectsResources = callerEnv['MCP_WORKSPACE'] !== undefined;
 
   // The two directories this child WRITES into, created as a pair per spawn.
   //
@@ -136,10 +134,9 @@ export function startServerWithHttp(
       ...roots.env,
       ...(callerRedirectsResources
         ? {}
-        : {
-            MCP_WORKSPACE: PROJECT_ROOT,
-            MCP_RESOURCES_PATH: path.join(PROJECT_ROOT, 'server', 'resources'),
-          }),
+        : // The package root as the workspace: resources resolve to the package tree, as with
+          // no workspace at all, and the default is stated rather than inherited.
+          { MCP_WORKSPACE: path.join(PROJECT_ROOT, 'server') }),
       // NODE_ENV stays unset — the server runs in normal mode.
       ...callerEnv,
     }),

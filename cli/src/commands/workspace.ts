@@ -3,14 +3,12 @@ import { resolve } from 'node:path';
 import { output } from '../lib/output.js';
 import {
   currentEntry,
-  isHeldByRegistry,
   isValidLabel,
   LABEL_RULE,
   noRegistryMessage,
   readProfileRegistry,
   refuseAdd,
   removeProfileEntry,
-  resourcesPathFolder,
   summarizeProfile,
   writeProfileEntry,
 } from '../lib/profile-registry.js';
@@ -22,7 +20,7 @@ type WorkspaceSubcommand = 'add' | 'remove' | 'list' | 'show' | 'use';
 const SUBCOMMANDS: readonly WorkspaceSubcommand[] = ['add', 'remove', 'list', 'show', 'use'];
 
 const USAGE =
-  'Usage: cpm workspace <add <label> [dir]|remove <label>|list|show <label>|use <label>>';
+  'Usage: cpm workspace <add <label> <dir>|remove <label>|list|show <label>|use <label>>';
 
 interface WorkspaceOptions {
   workspace?: string;
@@ -68,16 +66,12 @@ export async function workspace(options: WorkspaceOptions): Promise<number> {
   }
 }
 
-/** `cpm workspace add <label> [dir]` — with no dir, the folder `MCP_RESOURCES_PATH` names. */
+/** `cpm workspace add <label> <dir>` — registers an existing folder beside the registry. */
 function workspaceAdd({ options, registry }: WorkspaceContext): number {
   const [label, dir] = options.positionals;
   if (!label) return fail(options, `${USAGE}\nA label is required.`);
-
-  const resourcesPath = process.env['MCP_RESOURCES_PATH'];
-  if (dir === undefined && !resourcesPath) {
-    return fail(options, 'Give a directory or set MCP_RESOURCES_PATH.');
-  }
-  const folder = dir !== undefined ? resolve(dir) : resourcesPathFolder(resourcesPath as string);
+  if (dir === undefined) return fail(options, `${USAGE}\nA directory is required.`);
+  const folder = resolve(dir);
 
   const refusal = refuseAdd(registry, label, folder);
   if (refusal !== undefined) return fail(options, refusal);
@@ -116,15 +110,10 @@ function workspaceRemove({ options, registry }: WorkspaceContext): number {
   return 0;
 }
 
-/** `cpm workspace list` — every label, the current one marked, then an unregistered resources folder. */
+/** `cpm workspace list` — every label, the current one marked. */
 function workspaceList({ options, workspace, registry }: WorkspaceContext): number {
   const entries = registry.entries ?? [];
   const current = currentEntry(entries, workspace);
-  const resourcesPath = process.env['MCP_RESOURCES_PATH'];
-  const unregistered =
-    resourcesPath && !isHeldByRegistry(entries, resourcesPath)
-      ? resourcesPathFolder(resourcesPath)
-      : null;
 
   if (options.json) {
     output(
@@ -136,7 +125,6 @@ function workspaceList({ options, workspace, registry }: WorkspaceContext): numb
           folder: entry.folder,
           current: entry === current,
         })),
-        unregistered,
       },
       { json: true }
     );
@@ -151,11 +139,6 @@ function workspaceList({ options, workspace, registry }: WorkspaceContext): numb
       const marker = entry === current ? '  (current)' : '';
       console.log(`${entry.label.padEnd(width)}  ${entry.folder}${marker}`);
     }
-  }
-  if (unregistered !== null) {
-    console.log(
-      `\nunregistered:\n  ${unregistered}  (from MCP_RESOURCES_PATH; cpm workspace add <label>)`
-    );
   }
   return 0;
 }

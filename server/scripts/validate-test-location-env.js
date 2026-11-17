@@ -5,9 +5,9 @@
  * Usage: `node scripts/validate-test-location-env.js` (from `server/`; registered as
  * `validate:test-location-env` in `validate:all`).
  *
- * Why. The Claude Code plugin exports `MCP_RESOURCES_PATH` into the maintainer's shell, so a test
- * that does not decide where resources, runtime state, config and the project folder come from
- * resolves against the owner's personal library. Thirty-odd test files each saved some of the
+ * Why. A maintainer's shell exports `MCP_WORKSPACE` and `MCP_RUNTIME_ROOT` at a personal library,
+ * so a test that does not decide where resources, runtime state, config and the project folder
+ * come from resolves against the owner's own tree. Thirty-odd test files each saved some of the
  * variables, deleted them and restored them by hand, each choosing a different subset; one that
  * forgot `CLAUDE_PROJECT_DIR` left the same hole one variable over. `tests/helpers/resource-locations.ts`
  * is the one place a test says where things come from and the one place that snapshots, clears and
@@ -44,14 +44,14 @@ import { assertNonEmptyScope, trackedFilesUnder } from './lib/tracked-scope.js';
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /**
- * Every variable the helper snapshots, clears and restores (`RESOURCE_LOCATION_ENV_KEYS`): the six
- * that decide where resources, runtime state, config and the project folder come from, and
- * `MCP_SERVER_ROOT`, the package root the skills-sync CLI reads. A test that
- * writes `MCP_SERVER_ROOT` by hand restores only that one key, so it is checked like the rest.
+ * Every variable a helper option sets (`OPTION_VARIABLES`): the five that decide where resources,
+ * runtime state, config and the project folder come from, and `MCP_SERVER_ROOT`, the package root
+ * the skills-sync CLI reads. A test that writes `MCP_SERVER_ROOT` by hand restores only that one
+ * key, so it is checked like the rest. `MCP_RESOURCES_PATH` is cleared and restored by the helper
+ * but no option sets it: the server refuses it, and the refusal's own test sets it directly.
  */
 const LOCATION_VARIABLES = [
   'MCP_WORKSPACE',
-  'MCP_RESOURCES_PATH',
   'MCP_RUNTIME_ROOT',
   'MCP_CONFIG_PATH',
   'CLAUDE_PLUGIN_DATA',

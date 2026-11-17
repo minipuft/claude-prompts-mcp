@@ -454,9 +454,9 @@ The registry is workspaces.jsonc in the parent of the resolved workspace, mappin
 to a folder beside it: { "dev": "./dev", "shared": "./shared" }.
 
 Subcommands:
-  add <label> [dir]       Register a folder (default: the folder MCP_RESOURCES_PATH names)
+  add <label> <dir>       Register a folder beside workspaces.jsonc
   remove <label>          Drop a label; the folder stays on disk
-  list                    List labels, mark the current one, show an unregistered MCP_RESOURCES_PATH
+  list                    List labels and mark the current one
   show <label>            Print a profile's folder, config file and resource counts
   use <label>             Print the MCP_WORKSPACE line for your client config; writes nothing
 

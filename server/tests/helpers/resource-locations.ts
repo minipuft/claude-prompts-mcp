@@ -5,17 +5,18 @@
  *
  * Why one helper. Before it, thirty-odd files each saved some of the path variables, deleted them,
  * and restored them by hand, and each chose a different subset. The reason is the same everywhere:
- * the Claude Code plugin that runs this server exports `MCP_RESOURCES_PATH` into the maintainer's
- * shell, where it names the profile's own resources folder, so a test that does not decide the
- * answer resolves against the owner's personal library. On a maintainer's machine such a test
- * fails (or, worse, passes against the wrong tree) while CI, where nothing exports it, stays
- * green. A subset that forgot `CLAUDE_PROJECT_DIR` or `MCP_CONFIG_PATH` left the same hole one
+ * a maintainer's shell exports `MCP_WORKSPACE` and `MCP_RUNTIME_ROOT` at a personal library, so a
+ * test that does not decide the answer resolves against the owner's own tree. On a maintainer's
+ * machine such a test fails (or, worse, passes against the wrong tree) while CI, where nothing
+ * exports them, stays green. A subset that forgot `CLAUDE_PROJECT_DIR` or `MCP_CONFIG_PATH` left the same hole one
  * variable over.
  *
  * What it owns:
  *   - `RESOURCE_LOCATION_ENV_KEYS`: every variable `PathResolver` consults to place resources, the
- *     config file or the project folder. Every setup here snapshots all of them, clears all of
- *     them, and restores all of them, so a test names only the ones it means to set.
+ *     config file or the project folder, plus `MCP_RESOURCES_PATH`, which no option sets: the
+ *     server no longer reads it and refuses to start while it is set, so an exported one must not
+ *     reach a test. Every setup here snapshots all of them, clears all of them, and restores all
+ *     of them, so a test names only the ones it means to set.
  *   - `resourceLocationEnv`: the same option-to-variable mapping as a plain object, for a test that
  *     builds a CHILD process environment and must not touch its own.
  *   - `withResourceLocations`: sets the variables on `process.env` and hands back the matching
@@ -35,7 +36,6 @@ import { afterEach, beforeEach } from '@jest/globals';
 /** Where each option lands. `serverRoot` is the skills-sync CLI's package root, not a location. */
 const OPTION_VARIABLES = {
   workspace: 'MCP_WORKSPACE',
-  resourcesPath: 'MCP_RESOURCES_PATH',
   runtimeRoot: 'MCP_RUNTIME_ROOT',
   configPath: 'MCP_CONFIG_PATH',
   pluginData: 'CLAUDE_PLUGIN_DATA',
@@ -45,8 +45,17 @@ const OPTION_VARIABLES = {
 
 type LocationOption = keyof typeof OPTION_VARIABLES;
 
-/** Every variable a setup snapshots, clears and restores, in `OPTION_VARIABLES` order. */
-export const RESOURCE_LOCATION_ENV_KEYS = Object.values(OPTION_VARIABLES);
+/**
+ * Cleared and restored but never set: the server refuses a set `MCP_RESOURCES_PATH` at startup, so
+ * a maintainer's exported value would refuse every in-process startup a test drives.
+ */
+const CLEARED_ONLY_VARIABLES = ['MCP_RESOURCES_PATH'] as const;
+
+/** Every variable a setup snapshots, clears and restores: `OPTION_VARIABLES` order, then the cleared-only ones. */
+export const RESOURCE_LOCATION_ENV_KEYS: readonly string[] = [
+  ...Object.values(OPTION_VARIABLES),
+  ...CLEARED_ONLY_VARIABLES,
+];
 
 /**
  * What a test says. Each string is the value of the variable it names; leave it out and the
@@ -55,8 +64,6 @@ export const RESOURCE_LOCATION_ENV_KEYS = Object.values(OPTION_VARIABLES);
 export interface ResourceLocationOptions {
   /** `MCP_WORKSPACE`: the profile folder (config, runtime state, `resources/<type>`). */
   workspace?: string;
-  /** `MCP_RESOURCES_PATH`: the profile's own resources folder. */
-  resourcesPath?: string;
   /** `MCP_RUNTIME_ROOT`. */
   runtimeRoot?: string;
   /** `MCP_CONFIG_PATH`. */
@@ -120,8 +127,8 @@ export function resourceLocationEnv(options: ResourceLocationOptions = {}): Reso
 /**
  * Clear every location variable, then set the ones `options` names, on `process.env`. The returned
  * `cleanup` restores all of them — the ones set and the ones merely cleared — to their prior
- * values, so a maintainer's exported `MCP_RESOURCES_PATH` is absent during the test and present
- * again afterward.
+ * values, so a maintainer's exported `MCP_WORKSPACE` is absent during the test and present again
+ * afterward.
  */
 export function withResourceLocations(
   options: ResourceLocationOptions = {}

@@ -28,8 +28,7 @@ import { join } from 'path';
  * wins a duplicate id, for the whole list (R3l) — the bundle included, at its own position.
  *
  * `ordered` is `PathResolver.getResourceLocations`, already highest first — the project folder,
- * the profile's folder (or the `MCP_RESOURCES_PATH` folder in its place), the workspace's other
- * layout, then each `paths.resources` entry, with the bundle where the list names `"bundled"`,
+ * the profile's own `resources/` folder, the workspace's other layout, then each `paths.resources` entry, with the bundle where the list names `"bundled"`,
  * last when there is no list, and absent when a list leaves it out (R3c). Each path appears once,
  * at its first position.
  *

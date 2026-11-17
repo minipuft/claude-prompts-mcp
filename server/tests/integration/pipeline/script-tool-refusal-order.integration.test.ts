@@ -50,7 +50,7 @@ import { withResourceLocations } from '../../helpers/resource-locations.js';
 import type { ResourceLocationScope } from '../../helpers/resource-locations.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-/** `MCP_RESOURCES_PATH` outranks the workspace, and a developer shell may export it. */
+/** A developer shell may export the location variables at a personal library. */
 let locations: ResourceLocationScope;
 const BODY = 'BODY-sr_tool';
 
