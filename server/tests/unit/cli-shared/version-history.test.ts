@@ -103,12 +103,17 @@ const ROWS_ONLY_RESTORE = {
 };
 
 describe('version-history', () => {
+  // A maintainer's shell exports MCP_RUNTIME_ROOT at a live state.db, and every write below would
+  // land there. Each case clears all six location variables and names `tempDir` as its runtime
+  // root; the describes that test the precedence itself clear them again and set their own.
+  const fileLocations = isolateResourceLocations();
   let tempDir: string;
   let promptDir: string;
   let gateDir: string;
 
   beforeEach(async () => {
     tempDir = mkdtempSync(join(tmpdir(), 'cpm-vh-'));
+    fileLocations.set({ runtimeRoot: tempDir });
     // The engine owns this DDL. `version-history.ts` deliberately no longer creates it —
     // its old `ensure_schema` predated the scope columns and broke server startup.
     await seedStateDbSchema(tempDir);

@@ -1,6 +1,4 @@
-import { spawnSync } from 'node:child_process';
 import { dirname, join, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   existsSync,
   mkdirSync,
@@ -13,8 +11,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const CLI = join(__dirname, '../../dist/cpm.js');
+import { runCpm } from '../helpers/child-process.js';
 
 interface RunResult {
   stdout: string;
@@ -23,22 +20,17 @@ interface RunResult {
 }
 
 /**
- * Run `cpm` with no inherited MCP_WORKSPACE, a fake HOME, and the given cwd.
+ * Run `cpm` with no inherited location variable, a fake HOME, and the given cwd.
  */
 function run(
   args: string[],
   opts: { cwd: string; home: string; env?: Record<string, string> }
 ): RunResult {
-  const env: NodeJS.ProcessEnv = { ...process.env, HOME: opts.home, ...opts.env };
-  if (!opts.env?.['MCP_WORKSPACE']) delete env['MCP_WORKSPACE'];
-  delete env['CLAUDE_PLUGIN_DATA'];
-  const result = spawnSync('node', [CLI, ...args], {
+  const { status, stdout, stderr } = runCpm(args, {
     cwd: opts.cwd,
-    env,
-    encoding: 'utf-8',
-    timeout: 10_000,
+    env: { HOME: opts.home, ...opts.env },
   });
-  return { stdout: result.stdout ?? '', stderr: result.stderr ?? '', exitCode: result.status ?? 1 };
+  return { stdout, stderr, exitCode: status };
 }
 
 /** Every file under `root`, relative path to bytes. */

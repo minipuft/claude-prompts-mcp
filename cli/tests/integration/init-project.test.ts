@@ -1,27 +1,12 @@
-import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const CLI = join(__dirname, '../../dist/cpm.js');
+import { runCpm } from '../helpers/child-process.js';
 
 function run(args: string[], cwd: string): { stdout: string; exitCode: number } {
-  try {
-    const stdout = execFileSync('node', [CLI, ...args], {
-      encoding: 'utf-8',
-      timeout: 10_000,
-      cwd,
-    });
-    return { stdout, exitCode: 0 };
-  } catch (err: unknown) {
-    const e = err as { stdout?: string; stderr?: string; status?: number };
-    return {
-      stdout: (e.stdout ?? '') + (e.stderr ?? ''),
-      exitCode: e.status ?? 1,
-    };
-  }
+  const { status, stdout, stderr } = runCpm(args, { cwd });
+  return { stdout: status === 0 ? stdout : stdout + stderr, exitCode: status };
 }
 
 describe('cpm init --project', () => {

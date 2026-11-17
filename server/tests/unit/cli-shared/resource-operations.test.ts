@@ -18,8 +18,12 @@ import { loadHistory } from '../../../src/cli-shared/version-history.js';
 import { saveVersion } from '../../helpers/version-history-writer.js';
 import type { ResourceVerificationResult } from '../../../src/modules/resources/services/resource-verification-service.js';
 import { seedStateDbSchema } from '../../helpers/test-database.js';
+import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 
 describe('resource-operations', () => {
+  // An exported MCP_RUNTIME_ROOT or MCP_WORKSPACE would send every history write below to the
+  // maintainer's live state.db instead of the one seeded under `tempDir`.
+  isolateResourceLocations();
   let tempDir: string;
 
   beforeEach(() => {
