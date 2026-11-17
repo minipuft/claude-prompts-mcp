@@ -58,7 +58,8 @@ def _tree_state_guard():
         "nothing declares.\n\n"
         "A hook test that reaches workspace.get_workspace_root()'s self-resolution fallback (no "
         "MCP_WORKSPACE / CLAUDE_PLUGIN_ROOT / PLUGIN_ROOT / GEMINI_EXTENSION_PATH set — the CI "
-        "shape) resolves to this checkout. Use the `patch_workspace` fixture (or set MCP_WORKSPACE "
+        "shape, which `_scrub_ambient_locations` now gives every test by removing MCP_WORKSPACE "
+        "and the other location variables) resolves to this checkout. Use the `patch_workspace` fixture (or set MCP_WORKSPACE "
         "to a tmp_path yourself) before driving any code path that touches session_tracker, "
         "hook_state_store, task_protocol, cli_spawner, or verify_active_store.\n\n"
         "If a path genuinely belongs to a generator, add it to DECLARED_SUFFIXES in "
@@ -67,6 +68,31 @@ def _tree_state_guard():
         "These entries are still on disk. Remove them before committing.",
         pytrace=False,
     )
+
+
+# Variables a host (Claude Code injects the owner's settings `env` into every subprocess) or a
+# shell export can use to point workspace, runtime-state and project resolution at a real checkout.
+_AMBIENT_LOCATION_VARS = (
+    "MCP_WORKSPACE",
+    "MCP_RUNTIME_ROOT",
+    "MCP_RESOURCES_PATH",
+    "MCP_CONFIG_PATH",
+    "CLAUDE_PLUGIN_DATA",
+    "CLAUDE_PROJECT_DIR",
+)
+
+
+@pytest.fixture(autouse=True)
+def _scrub_ambient_locations(monkeypatch):
+    """Removes the ambient workspace/runtime/resource location variables before every test.
+
+    Without this a test that never sets them reads the machine's real library and state (41
+    test_db_reader.py failures when MCP_WORKSPACE and MCP_RUNTIME_ROOT were exported). A test that
+    needs a location sets its own after this runs: autouse fixtures are set up before the ones a
+    test requests, and `patch_workspace` also depends on this one by name.
+    """
+    for name in _AMBIENT_LOCATION_VARS:
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture
@@ -90,12 +116,14 @@ def tmp_workspace(tmp_path):
 
 
 @pytest.fixture
-def patch_workspace(tmp_workspace, monkeypatch):
+def patch_workspace(_scrub_ambient_locations, tmp_workspace, monkeypatch):
     """Patch workspace resolution to use tmp_workspace.
 
-    The runtime-root variables are cleared too: verify-state.db and state.db are
-    found through them first, so an ambient value would point a test at a real
-    server's files.
+    The ambient location variables are already scrubbed for every test by
+    `_scrub_ambient_locations` (verify-state.db and state.db are found through
+    the runtime-root variables first, so an ambient value would point a test at
+    a real server's files); the runtime-root clears below are kept so the
+    fixture stays correct if it is used outside this scrub.
     """
     monkeypatch.setenv("MCP_WORKSPACE", str(tmp_workspace["root"]))
     for ambient in ("MCP_RUNTIME_ROOT", "CLAUDE_PLUGIN_DATA"):
